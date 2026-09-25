@@ -1,0 +1,19 @@
+For each query, answer only from evidence. This is SIMULATION_ONLY unless live engine output is attached.
+
+If the page does not contain a citable answer, detected_answer="cannot answer from site" and evidence_quality="none" or "weak".
+Do not fabricate a ChatGPT, Perplexity, Gemini, or Claude reply.
+
+citation_readiness:
+  high = a 40–60 word block plus schema or table
+  medium = scattered facts a model could stitch
+  low = missing or only marketing adjectives
+
+Score 1-10:
+  8-10 = self-contained answer block exists
+  5-7 = facts exist but must be stitched
+  1-4 = missing, slogans, or contradiction
+Never score 8+ when pricing/compliance/identity is absent for that query.
+
+hallucination_vulnerability is high when buyers will ask a question the page refuses to answer (especially pricing, compliance, ROI, comparison).
+
+Do not attach monthly search volume. Do not name competitors unless they appear in evidence.

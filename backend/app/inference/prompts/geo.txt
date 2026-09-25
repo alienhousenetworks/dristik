@@ -1,0 +1,16 @@
+Evaluate AI-citation readiness from on-page structure only. This is not a live engine measurement.
+
+Audit extractability using provided schema inventory and copy blocks.
+Treat <site_facts>.schemas_detected as ground truth.
+Do not invent sameAs profile URLs.
+Do not invent citation rates, share of voice, or "will rank #1 in Perplexity".
+
+direct answer: a block is usable if it is a 40–60 word self-contained declarative under an H2/H3.
+information_gain: high only if evidence contains original numbers, named customers, or unique definitions; generic adjectives are low.
+
+Build production_jsonld_patch with only observed entities.
+If logo URL unknown, omit logo. If social URLs unknown, "sameAs": [].
+sameas_recommended may list likely directories as hints, not as confirmed profiles.
+
+Score extractability as a band (high/medium/low) plus a 0-100 only if you can point to the blocks that earned it.
+Max 3 claims. Each names the missing or present structure.

@@ -1,0 +1,270 @@
+"""
+Dristik AI Strategic Intelligence API Routes
+Exposes Competitor Discovery, Search Console Attribution, Real AI Citation Tracking,
+Commercial Lead-Gen Opportunities, and Agency Multi-Client Workspaces.
+"""
+from typing import Optional, List
+from fastapi import APIRouter, HTTPException, Query
+from pydantic import BaseModel, Field
+
+from app.intelligence.competitive.discovery import competitor_discovery_engine, CompetitorBenchmarkMatrix
+from app.intelligence.competitive.benchmark import (
+    competitor_benchmark_engine,
+    CompetitiveBenchmarkResult,
+    CompetitorPillarScores,
+)
+from app.intelligence.business.search_console import search_console_engine, SearchConsoleAttributionReport
+from app.intelligence.citations.tracker import ai_citation_tracker, AiCitationTrackingDashboard
+from app.intelligence.geo.benchmark_runner import benchmark_runner, GeoBenchmarkReport
+from app.intelligence.business.lead_gen import lead_gen_engine, CommercialOpportunity
+from app.tenancy.agency import agency_manager, AgencyWorkspaceSummary, AgencyClientAccount
+from app.orchestration.orchestrator import orchestrator
+
+router = APIRouter(prefix="/intelligence", tags=["Strategic Commercial Intelligence"])
+
+class AddAgencyClientRequest(BaseModel):
+    client_name: str = Field(..., description="Legal or display name of the client")
+    domain: str = Field(..., description="Target domain to manage")
+
+@router.get("/competitors", response_model=CompetitorBenchmarkMatrix)
+async def get_competitor_benchmark(
+    analysis_id: Optional[str] = None,
+    website_url: Optional[str] = None,
+    competitor_urls: Optional[List[str]] = Query(None)
+):
+    """
+    Automated Competitor Discovery & 7-Vector Benchmark Matrix.
+    Identifies competitors without requiring manual entry and compares across:
+    SEO Visibility, Content Authority, AI Citation, Commercial Clarity, Trust, Tech Health, CRO.
+    """
+    bp = None
+    honest_scores = None
+    url = website_url
+    if analysis_id:
+        run = orchestrator.get_run(analysis_id)
+        if run and run.report:
+            bp = run.report.business_profile
+            honest_scores = run.report.honest_scores
+            url = run.website_url or url
+
+    if not url:
+        raise HTTPException(status_code=400, detail="Either website_url or a valid analysis_id is required.")
+
+    return await competitor_discovery_engine.discover_and_benchmark(
+        bp,
+        url,
+        competitor_urls=competitor_urls,
+        honest_scores=honest_scores
+    )
+
+class CompetitiveBenchmarkRequest(BaseModel):
+    target_domain: str = Field(..., description="Your target website domain")
+    competitor_1_url: str = Field(..., description="First competitor website URL or domain")
+    competitor_2_url: str = Field(..., description="Second competitor website URL or domain")
+    analysis_id: Optional[str] = Field(None, description="Optional active audit run ID")
+
+@router.post("/competitors/benchmark", response_model=CompetitiveBenchmarkResult)
+async def run_live_competitor_benchmark(req: CompetitiveBenchmarkRequest):
+    """
+    Live Scrapes 2 Competitor Homepages with the identical CrawlerService pipeline.
+    Calculates side-by-side 5-pillar scores, relative ranks, peer average deltas,
+    and isolates empirical competitive moats and vulnerability gaps.
+    """
+    target_ev = None
+    target_scores = None
+
+    if req.analysis_id:
+        run = orchestrator.get_run(req.analysis_id)
+        if run and run.report:
+            if run.report.crawl_manifest and run.report.crawl_manifest.pages:
+                target_ev = run.report.crawl_manifest.pages[0]
+
+    result = await competitor_benchmark_engine.benchmark_two_competitors(
+        target_domain=req.target_domain,
+        competitor_1_url=req.competitor_1_url,
+        competitor_2_url=req.competitor_2_url,
+        target_evidence=target_ev,
+        target_scores=target_scores
+    )
+    return result
+
+@router.get("/competitors/suggestions")
+async def get_competitor_suggestions(
+    domain: str = Query(..., description="Target domain"),
+    niche: Optional[str] = Query(None, description="Industry niche")
+):
+    """Suggests 2-3 direct competitor peers based on domain and niche."""
+    clean = domain.lower().replace("https://", "").replace("http://", "").split("/")[0]
+    n = (niche or "").lower()
+
+    if any(k in n or k in clean for k in ["cloud", "network", "mesh", "hosting", "infra", "cdn", "vpn"]):
+        return {
+            "target": clean,
+            "suggestions": [
+                {"domain": "tailscale.com", "brand": "Tailscale", "category": "Secure Network Mesh"},
+                {"domain": "cloudflare.com", "brand": "Cloudflare Zero Trust", "category": "Edge & Zero Trust"}
+            ]
+        }
+    elif any(k in n or k in clean for k in ["crm", "sales", "lead", "marketing"]):
+        return {
+            "target": clean,
+            "suggestions": [
+                {"domain": "hubspot.com", "brand": "HubSpot", "category": "Inbound Marketing & CRM"},
+                {"domain": "pipedrive.com", "brand": "Pipedrive", "category": "Pipeline Sales CRM"}
+            ]
+        }
+    elif any(k in n or k in clean for k in ["shop", "store", "commerce", "cart", "retail"]):
+        return {
+            "target": clean,
+            "suggestions": [
+                {"domain": "shopify.com", "brand": "Shopify", "category": "Hosted Commerce"},
+                {"domain": "bigcommerce.com", "brand": "BigCommerce", "category": "Open Enterprise Commerce"}
+            ]
+        }
+    else:
+        # Generic direct tech peers
+        return {
+            "target": clean,
+            "suggestions": [
+                {"domain": "vercel.com", "brand": "Vercel", "category": "Web Experience & Edge Platform"},
+                {"domain": "webflow.com", "brand": "Webflow", "category": "Visual Web Development"}
+            ]
+        }
+
+@router.get("/search-console", response_model=SearchConsoleAttributionReport)
+async def get_search_console_attribution(
+    domain: Optional[str] = None,
+    analysis_id: Optional[str] = None
+):
+    """
+    Google Search Console & Analytics Attribution Report.
+    Connects: Technical problem -> Search visibility -> Traffic -> Conversion opportunity.
+    """
+    if not domain and not analysis_id:
+        raise HTTPException(status_code=400, detail="Either domain or analysis_id must be provided.")
+    return search_console_engine.generate_search_attribution(domain=domain or "", analysis_id=analysis_id)
+
+@router.get("/ai-citations", response_model=AiCitationTrackingDashboard)
+async def get_real_ai_citations(
+    domain: Optional[str] = None,
+    biz_name: Optional[str] = None,
+    niche: Optional[str] = None,
+    analysis_id: Optional[str] = None
+):
+    """
+    Hero Real AI Citation Tracker.
+    Monitors live commercial buyer queries across ChatGPT, Perplexity, Gemini, Google AI, and Claude.
+    Records mention status, ranking position, cited URLs, and competitor substitution.
+    """
+    resolved_domain = domain
+    resolved_biz_name = biz_name
+    resolved_niche = niche
+
+    if analysis_id:
+        run = orchestrator.get_run(analysis_id)
+        if run and run.report and run.report.business_profile:
+            bp = run.report.business_profile
+            resolved_domain = resolved_domain or bp.primary_domain or run.website_url
+            resolved_biz_name = resolved_biz_name or bp.business_name
+            resolved_niche = resolved_niche or bp.industry
+
+    if not resolved_domain and not resolved_biz_name:
+        raise HTTPException(status_code=400, detail="Target domain or business name is required for AI citation tracking.")
+
+    return await ai_citation_tracker.track_buyer_queries(
+        domain=resolved_domain or "",
+        biz_name=resolved_biz_name or "",
+        niche=resolved_niche or "",
+        analysis_id=analysis_id
+    )
+
+@router.get("/geo-benchmark", response_model=GeoBenchmarkReport)
+async def run_live_geo_benchmark(
+    domain: Optional[str] = None,
+    biz_name: Optional[str] = None,
+    industry: Optional[str] = None,
+    locale: str = "en-US",
+    mode: str = "concise",
+    analysis_id: Optional[str] = None
+):
+    """
+    Live AI Retrieval Benchmark (Layer 2).
+    Executes standardized multi-category benchmark suites across active AI engines
+    (ChatGPT, Perplexity, Gemini, Claude, Groq). Stores immutable raw responses.
+    """
+    resolved_domain = domain
+    resolved_biz_name = biz_name
+    resolved_industry = industry
+
+    if analysis_id:
+        run = orchestrator.get_run(analysis_id)
+        if run and run.report and run.report.business_profile:
+            bp = run.report.business_profile
+            resolved_domain = resolved_domain or bp.primary_domain or run.website_url
+            resolved_biz_name = resolved_biz_name or bp.business_name
+            resolved_industry = resolved_industry or bp.industry
+
+    if not resolved_domain and not resolved_biz_name:
+        raise HTTPException(status_code=400, detail="Target domain or business name is required for GEO benchmark.")
+
+    benchmark_mode = "comprehensive" if mode.lower() == "comprehensive" else "concise"
+    return await benchmark_runner.execute_benchmark(
+        domain=resolved_domain or "",
+        brand_name=resolved_biz_name,
+        industry=resolved_industry,
+        locale=locale,
+        mode=benchmark_mode,
+    )
+
+@router.get("/lead-gen", response_model=list[CommercialOpportunity])
+async def get_commercial_opportunities(
+    domain: Optional[str] = None,
+    biz_name: Optional[str] = None,
+    niche: Optional[str] = None,
+    analysis_id: Optional[str] = None
+):
+    """
+    Commercial Lead-Generation Void Detector & 1-Click Landing Page Generator.
+    Identifies lucrative buyer queries that competitors cite, generating instant landing page blueprints.
+    """
+    resolved_domain = domain
+    resolved_biz_name = biz_name
+    resolved_niche = niche
+
+    if analysis_id:
+        run = orchestrator.get_run(analysis_id)
+        if run and run.report and run.report.business_profile:
+            bp = run.report.business_profile
+            resolved_domain = resolved_domain or bp.primary_domain or run.website_url
+            resolved_biz_name = resolved_biz_name or bp.business_name
+            resolved_niche = resolved_niche or bp.industry
+
+    if not resolved_domain and not resolved_biz_name:
+        raise HTTPException(status_code=400, detail="Target domain or business name is required for commercial opportunity detection.")
+
+    return lead_gen_engine.detect_commercial_opportunities(
+        domain=resolved_domain or "",
+        biz_name=resolved_biz_name or "",
+        niche=resolved_niche or "",
+        analysis_id=analysis_id
+    )
+
+@router.get("/agency", response_model=AgencyWorkspaceSummary)
+async def get_agency_workspace():
+    """
+    Agency Mode Workspace: Manage Client A, B, C, D, E with white-label reports & client dashboards.
+    """
+    return agency_manager.get_workspace_summary()
+
+@router.post("/agency/clients", response_model=AgencyClientAccount)
+async def add_agency_client(req: AddAgencyClientRequest):
+    """Add a new client domain to the Agency Workspace."""
+    return agency_manager.add_client(client_name=req.client_name, domain=req.domain)
+
+@router.delete("/agency/clients/{client_id}")
+async def delete_agency_client(client_id: str):
+    """Remove a managed client domain from the Agency Workspace."""
+    success = agency_manager.remove_client(client_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Client not found")
+    return {"deleted": True, "client_id": client_id}

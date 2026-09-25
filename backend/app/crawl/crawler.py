@@ -1,0 +1,673 @@
+"""
+Dristik AI Async Multi-Page Web Ingestion & Crawler Engine
+Performs recursive multi-page crawling, sitemap discovery, robots.txt parsing,
+Firecrawl dynamic fallback for SPAs/WAFs, and deterministic multi-page SEO & AI-search evidence extraction.
+"""
+import time
+import re
+import asyncio
+import logging
+import xml.etree.ElementTree as ET
+from urllib.parse import urlparse, urljoin, urldefrag
+from typing import List, Dict, Any, Set, Tuple, Optional, Callable
+import httpx
+from bs4 import BeautifulSoup
+
+logger = logging.getLogger("dristik.crawler")
+
+from app.core.config import settings
+from app.domain.models import PageEvidence, CrawlManifest
+from app.core.security.ssrf import is_safe_url
+from app.evidence.store import EvidenceStore
+
+# Deterministic Analyzers
+from app.crawl.analyzers.html import analyze_html_content, distill_semantic_content
+from app.crawl.analyzers.meta import analyze_meta_tags
+from app.crawl.analyzers.dom import analyze_dom_structure
+from app.crawl.analyzers.schema import analyze_schema_markup
+from app.crawl.analyzers.links import analyze_link_graph
+from app.crawl.analyzers.performance import analyze_performance_metrics
+from app.crawl.analyzers.security import analyze_security_headers
+from app.crawl.analyzers.dynamic_content import extract_embedded_cms_content, needs_js_render
+from app.crawl.analyzers.visible import extract_visible_page
+from app.crawl.browser import BrowserRenderService
+
+class CrawlerService:
+    def __init__(self):
+        self.headers = {
+            "User-Agent": settings.USER_AGENT,
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+            "Accept-Language": "en-US,en;q=0.9",
+            "Sec-Ch-Ua": '"Chromium";v="124", "Google Chrome";v="124", "Not-A.Brand";v="99"',
+            "Sec-Ch-Ua-Mobile": "?0",
+            "Sec-Ch-Ua-Platform": '"macOS"',
+            "Sec-Fetch-Dest": "document",
+            "Sec-Fetch-Mode": "navigate",
+            "Sec-Fetch-Site": "none",
+            "Sec-Fetch-User": "?1",
+            "Upgrade-Insecure-Requests": "1"
+        }
+
+    def _classify_page_type(self, path: str) -> str:
+        p = path.lower().strip("/")
+        if not p or p == "":
+            return "homepage"
+        if any(k in p for k in ["privacy", "terms", "legal", "cookie", "gdpr", "compliance"]):
+            return "legal"
+        if any(k in p for k in ["blog", "news", "articles", "posts", "insights", "resources"]):
+            return "blog"
+        if any(k in p for k in ["pricing", "price", "plans", "tier", "subscription", "cost"]):
+            return "pricing"
+        if any(k in p for k in ["docs", "documentation", "guide", "learn", "developer"]):
+            return "docs"
+        if any(k in p for k in ["contact", "support", "help", "sales", "demo"]):
+            return "contact"
+        if any(k in p for k in ["features", "product", "solutions", "platform", "integrations", "services"]):
+            return "product"
+        if any(k in p for k in ["about", "team", "story", "mission", "leadership", "careers"]):
+            return "about"
+        return "general"
+
+    def _get_page_priority(self, url: str) -> int:
+        parsed = urlparse(url)
+        ptype = self._classify_page_type(parsed.path)
+        weights = {
+            "homepage": 100,
+            "pricing": 95,
+            "product": 85,
+            "about": 80,
+            "contact": 75,
+            "docs": 70,
+            "blog": 55,
+            "legal": 45,
+            "general": 40
+        }
+        return weights.get(ptype, 30)
+
+    def _normalize_url(self, raw_url: str, base_domain: str, base_origin: str) -> Optional[str]:
+        if not raw_url or raw_url.startswith(("javascript:", "mailto:", "tel:", "#", "data:")):
+            return None
+        joined = urljoin(base_origin, raw_url)
+        clean_url, _ = urldefrag(joined)
+        parsed = urlparse(clean_url)
+        if parsed.scheme.lower() not in ["http", "https"]:
+            return None
+
+        # Clean netloc & default ports
+        netloc = parsed.netloc.lower()
+        if ":" in netloc:
+            parts = netloc.split(":", 1)
+            if (parsed.scheme.lower() == "http" and parts[1] == "80") or (parsed.scheme.lower() == "https" and parts[1] == "443"):
+                netloc = parts[0]
+
+        # Must match base domain or root domain (www and apex are the same site)
+        def _host(value: str) -> str:
+            host = (value or "").lower().split(":")[0]
+            return host[4:] if host.startswith("www.") else host
+
+        base_dom = _host(base_domain)
+        if _host(netloc) != base_dom and not _host(netloc).endswith("." + base_dom):
+            return None
+
+        # Strip index.html / index.php files that point to folder root
+        path = parsed.path
+        if path.endswith(("/index.html", "/index.htm", "/index.php")):
+            path = path.rsplit("/", 1)[0]
+
+        # Standardize path: always strip trailing slash consistently
+        path = path.rstrip("/")
+
+        # Filter tracking and analytics query parameters
+        query = parsed.query
+        if query:
+            filtered_params = []
+            for param in query.split("&"):
+                k = param.split("=")[0].lower()
+                if not any(k.startswith(p) for p in ["utm_", "fbclid", "gclid", "ref", "mc_cid"]):
+                    filtered_params.append(param)
+            query = "&".join(filtered_params)
+
+        normalized = f"{parsed.scheme.lower()}://{netloc}{path}"
+        if query:
+            normalized += f"?{query}"
+        return normalized
+
+    async def _fetch_robots_txt(self, base_origin: str, client: httpx.AsyncClient) -> Tuple[bool, Optional[str], List[str]]:
+        robots_url = f"{base_origin}/robots.txt"
+        sitemap_urls: List[str] = []
+        try:
+            resp = await client.get(robots_url, headers=self.headers, timeout=5.0)
+            if resp.status_code == 200 and resp.text:
+                content = resp.text
+                for line in content.splitlines():
+                    if line.lower().startswith("sitemap:"):
+                        s_url = line.split(":", 1)[1].strip()
+                        if s_url.startswith("http"):
+                            sitemap_urls.append(s_url)
+                return True, content[:2000], sitemap_urls
+        except Exception:
+            pass
+        return False, None, sitemap_urls
+
+    async def _fetch_sitemap_urls(self, base_origin: str, base_domain: str, declared_sitemaps: List[str], client: httpx.AsyncClient) -> Tuple[bool, Optional[str], List[str]]:
+        candidate_sitemaps = declared_sitemaps + [
+            f"{base_origin}/sitemap.xml",
+            f"{base_origin}/sitemap_index.xml",
+            f"{base_origin}/wp-sitemap.xml"
+        ]
+        discovered_urls: List[str] = []
+        found_sitemap_url: Optional[str] = None
+
+        for s_url in candidate_sitemaps:
+            try:
+                resp = await client.get(s_url, headers=self.headers, timeout=6.0)
+                if resp.status_code == 200 and ("xml" in resp.headers.get("content-type", "") or resp.text.startswith("<?xml") or "<urlset" in resp.text or "<sitemapindex" in resp.text):
+                    found_sitemap_url = s_url
+                    locs = re.findall(r"<loc>(.*?)</loc>", resp.text, re.IGNORECASE)
+                    for loc in locs:
+                        loc_clean = loc.strip()
+                        if loc_clean.endswith(".xml"):
+                            if len(discovered_urls) < 15:
+                                try:
+                                    sub_resp = await client.get(loc_clean, headers=self.headers, timeout=4.0)
+                                    if sub_resp.status_code == 200:
+                                        sub_locs = re.findall(r"<loc>(.*?)</loc>", sub_resp.text, re.IGNORECASE)
+                                        for s_loc in sub_locs:
+                                            norm = self._normalize_url(s_loc.strip(), base_domain, base_origin)
+                                            if norm and norm not in discovered_urls:
+                                                discovered_urls.append(norm)
+                                except Exception:
+                                    pass
+                        else:
+                            norm = self._normalize_url(loc_clean, base_domain, base_origin)
+                            if norm and norm not in discovered_urls:
+                                discovered_urls.append(norm)
+                    if discovered_urls:
+                        return True, found_sitemap_url, discovered_urls[:50]
+            except Exception:
+                continue
+
+        return False, None, discovered_urls
+
+    async def _js_render_page(
+        self,
+        url: str,
+        client: httpx.AsyncClient,
+        start_time: float,
+    ) -> Tuple[Optional[str], Optional[str], int, float, Dict[str, str], int, Optional[str]]:
+        """
+        Enterprise 2-Tier Dynamic Rendering:
+        Tier 1 (Free / Local): Headless Chromium via Playwright with asset-blocking for fast zero-cost hydration.
+        Tier 2 (Cloud Fallback): Firecrawl API with waitFor if local browser is unavailable or cloud WAF blocks it.
+        Returns (html, markdown, status, ttfb_ms, headers, bytes, error)
+        markdown is Playwright innerText when the local browser rendered the page —
+        that is the closest analogue to what a human actually sees.
+        """
+        # Tier 1: Local High-Speed Playwright ($0 API cost, fast asset-blocked execution)
+        if BrowserRenderService.is_available():
+            try:
+                pw_html, pw_status, pw_ttfb, pw_headers, pw_err, pw_text = await BrowserRenderService.render_page(url)
+                if pw_html:
+                    headers = pw_headers or {"x-crawler": "playwright-local-js"}
+                    return (
+                        pw_html,
+                        pw_text,
+                        pw_status or 200,
+                        pw_ttfb or ((time.time() - start_time) * 1000),
+                        headers,
+                        len(pw_html.encode("utf-8")),
+                        None,
+                    )
+            except Exception:
+                pass
+
+        # Tier 2: Cloud Firecrawl Dynamic Rendering Fallback
+        if not settings.FIRECRAWL_API_KEY or not settings.FIRECRAWL_API_KEY.strip():
+            return None, None, 0, (time.time() - start_time) * 1000, {}, 0, "js_render_unavailable"
+
+        try:
+            fc_resp = await client.post(
+                "https://api.firecrawl.dev/v1/scrape",
+                json={
+                    "url": url,
+                    "formats": ["html", "markdown"],
+                    "waitFor": max(800, int(settings.FIRECRAWL_WAIT_MS)),
+                    "timeout": 25000,
+                    "onlyMainContent": False,
+                },
+                headers={
+                    "Authorization": f"Bearer {settings.FIRECRAWL_API_KEY.strip()}",
+                    "Content-Type": "application/json",
+                },
+                timeout=30.0,
+            )
+            if fc_resp.status_code == 200:
+                data = fc_resp.json().get("data") or {}
+                html_content = data.get("html") or ""
+                markdown = data.get("markdown") or ""
+                if html_content or markdown:
+                    ttfb_ms = (time.time() - start_time) * 1000
+                    payload = html_content or f"<html><body><article>{markdown}</article></body></html>"
+                    return (
+                        payload,
+                        markdown,
+                        200,
+                        ttfb_ms,
+                        {"x-crawler": "firecrawl-js"},
+                        len(payload.encode("utf-8")),
+                        None,
+                    )
+            return None, None, fc_resp.status_code, (time.time() - start_time) * 1000, {}, 0, f"firecrawl HTTP {fc_resp.status_code}"
+        except Exception as exc:
+            return None, None, 0, (time.time() - start_time) * 1000, {}, 0, str(exc)
+
+    async def _fetch_page_with_fallbacks(
+        self,
+        url: str,
+        client: httpx.AsyncClient,
+        force_js: bool = False,
+    ) -> Tuple[Optional[str], int, float, Dict[str, str], int, Optional[str], Optional[str]]:
+        """
+        Direct HTTP first. If blocked, or force_js for CMS/SPA shells, render in a browser via Firecrawl.
+        Returns (html_content, status_code, ttfb_ms, headers, content_bytes, error_msg, markdown)
+        """
+        start_time = time.time()
+        direct_err = None
+        ttfb_ms = 0.0
+
+        if not force_js:
+            try:
+                resp = await client.get(url)
+                ttfb_ms = (time.time() - start_time) * 1000
+                if resp.status_code < 400 and resp.text:
+                    return resp.text, resp.status_code, ttfb_ms, dict(resp.headers), len(resp.content), None, None
+                direct_err = f"HTTP {resp.status_code}"
+            except Exception as e:
+                ttfb_ms = (time.time() - start_time) * 1000
+                direct_err = str(e)
+
+        html, markdown, status, ttfb_ms, headers, nbytes, js_err = await self._js_render_page(url, client, start_time)
+        if html:
+            return html, status, ttfb_ms, headers, nbytes, None, markdown
+        return None, 0, ttfb_ms, {}, 0, js_err or direct_err, None
+
+    async def crawl_and_analyze(self, target_url: str, evidence_store: EvidenceStore) -> PageEvidence:
+        """
+        Backwards-compatible single-page crawl entry point.
+        """
+        manifest = await self.crawl_site_and_analyze(target_url, evidence_store, max_pages=1)
+        if not manifest.pages:
+            raise RuntimeError(f"Failed to crawl website '{target_url}'. The target URL is unreachable or offline.")
+        return manifest.pages[0]
+
+    async def crawl_site_and_analyze(
+        self,
+        target_url: str,
+        evidence_store: EvidenceStore,
+        max_pages: Any = 5,
+        progress_callback: Optional[Callable[[str, int], Any]] = None
+    ) -> CrawlManifest:
+        """
+        Executes recursive multi-page crawl across the website.
+        Supports page limit options: 5, 10, 20, 50, or 'all' (deep crawl).
+        Discovers robots.txt, sitemaps, internal links, ranks URLs, and extracts multi-page SEO evidence.
+        """
+        target_max_pages = settings.get_max_crawl_pages(max_pages)
+        raw_url = target_url.strip()
+        if not raw_url.startswith(("http://", "https://")):
+            raw_url = f"https://{raw_url}"
+            
+        parsed_target = urlparse(raw_url)
+        base_domain = parsed_target.netloc
+        base_origin = f"{parsed_target.scheme}://{parsed_target.netloc}"
+        normalized_root = self._normalize_url(raw_url, base_domain, base_origin) or raw_url
+
+        # 1. SSRF Verification
+        if settings.SSRF_PROTECTION_ENABLED:
+            is_safe, reason = is_safe_url(normalized_root)
+            if not is_safe:
+                raise ValueError(f"Security Alert: {reason}")
+
+        crawled_pages: List[PageEvidence] = []
+        crawled_page_urls: Set[str] = set()
+        discovered_urls_pool: Set[str] = {normalized_root}
+        visited_urls: Set[str] = set()
+        broken_links: List[Dict[str, str]] = []
+        last_fetch_error: Optional[str] = None
+
+        timeout = httpx.Timeout(settings.CRAWL_TIMEOUT_SECONDS, connect=8.0)
+        limits = httpx.Limits(max_keepalive_connections=5, max_connections=10)
+
+        async with httpx.AsyncClient(headers=self.headers, timeout=timeout, limits=limits, follow_redirects=True, verify=False) as client:
+            
+            # Step A: Discover robots.txt & Sitemap
+            if progress_callback:
+                progress_callback(f"Connecting to {base_origin}...", 15)
+                
+            robots_found, robots_content, declared_sitemaps = await self._fetch_robots_txt(base_origin, client)
+            sitemap_found, sitemap_url, sitemap_urls = await self._fetch_sitemap_urls(base_origin, base_domain, declared_sitemaps, client)
+            
+            for u in sitemap_urls:
+                norm_s = self._normalize_url(u, base_domain, base_origin)
+                if norm_s:
+                    discovered_urls_pool.add(norm_s)
+
+            if progress_callback:
+                progress_callback(
+                    f"Discovered {len(discovered_urls_pool)} pages ({'Sitemap detected' if sitemap_found else 'Link graph discovery'}). Ingesting key pages...",
+                    22
+                )
+
+            # Step B: Priority Queue Crawl Loop
+            semaphore = asyncio.Semaphore(settings.CRAWL_CONCURRENCY)
+
+            async def fetch_and_analyze_single_page(page_url: str) -> Optional[PageEvidence]:
+                nonlocal last_fetch_error
+                async with semaphore:
+                    html_content, status_code, ttfb_ms, resp_headers, content_bytes, err, markdown = await self._fetch_page_with_fallbacks(page_url, client)
+                    
+                    if not html_content:
+                        last_fetch_error = err or "Connection failed"
+                        broken_links.append({"url": page_url, "error": last_fetch_error})
+                        return None
+
+                    soup = BeautifulSoup(html_content, "lxml")
+                    page_path = urlparse(page_url).path
+                    page_type = self._classify_page_type(page_path)
+                    crawler_hdr = (resp_headers or {}).get("x-crawler", "")
+                    if crawler_hdr.startswith("playwright"):
+                        render_mode = "playwright_js"
+                    elif crawler_hdr.startswith("firecrawl"):
+                        render_mode = "firecrawl_js"
+                    else:
+                        render_mode = "static"
+
+                    snapshot = extract_visible_page(soup)
+                    visible_text = snapshot["main_text"] or distill_semantic_content(soup)
+                    visible_words = snapshot["word_count"] or len(re.findall(r"\b\w+\b", visible_text))
+                    embedded = extract_embedded_cms_content(soup)
+                    is_thin_shell = needs_js_render(soup, visible_words) or (
+                        visible_words < 80 and (soup.find_all("script") and len(soup.find_all("script")) >= 3)
+                    )
+
+                    if (
+                        settings.JS_RENDER_THIN_PAGES
+                        and render_mode == "static"
+                        and is_thin_shell
+                        and embedded.get("word_count", 0) < 80
+                    ):
+                        js_html, js_status, js_ttfb, js_headers, js_bytes, js_err, js_md = await self._fetch_page_with_fallbacks(
+                            page_url, client, force_js=True
+                        )
+                        if js_html:
+                            html_content = js_html
+                            status_code = js_status or status_code
+                            ttfb_ms = js_ttfb or ttfb_ms
+                            resp_headers = js_headers or resp_headers
+                            content_bytes = js_bytes or content_bytes
+                            markdown = js_md or markdown
+                            soup = BeautifulSoup(html_content, "lxml")
+                            render_mode = "playwright_js" if (resp_headers or {}).get("x-crawler") == "playwright-local-js" else "firecrawl_js"
+                        elif embedded.get("word_count"):
+                            render_mode = "embedded_cms"
+                    elif embedded.get("sources"):
+                        render_mode = "embedded_cms"
+
+                    evidence_store.record_fetch(
+                        page_url,
+                        html_content,
+                        source="crawler",
+                        source_type="http",
+                        media_type="text/html",
+                    )
+
+                    # Record dynamic content architectural discovery in evidence store
+                    if is_thin_shell:
+                        evidence_store.add_evidence(
+                            source_type="architecture",
+                            analyzer="dynamic_content_analyzer",
+                            url=page_url,
+                            text="Dynamic client-side hydration detected: content relies on JavaScript/API to populate database copy.",
+                            value={
+                                "render_mode": render_mode,
+                                "is_thin_shell": True,
+                                "cms_sources": embedded.get("sources", []),
+                                "recovered_words": embedded.get("word_count", 0),
+                            }
+                        )
+
+                    # Run Deterministic Analyzers
+                    html_res = analyze_html_content(
+                        soup,
+                        page_url,
+                        evidence_store,
+                        extra_text=markdown or snapshot.get("visible_text") or "",
+                        extra_h1=embedded.get("h1"),
+                        extra_h2=embedded.get("h2"),
+                    )
+                    meta_res = analyze_meta_tags(soup, page_url, evidence_store)
+                    dom_res = analyze_dom_structure(soup, page_url, evidence_store)
+                    schema_res = analyze_schema_markup(soup, page_url, evidence_store)
+                    links_res = analyze_link_graph(soup, page_url, normalized_root, evidence_store)
+                    perf_res = analyze_performance_metrics(page_url, ttfb_ms, content_bytes, resp_headers, evidence_store)
+                    sec_res = analyze_security_headers(page_url, resp_headers, evidence_store)
+
+                    # Extract newly found internal links
+                    internal_links = links_res.get("internal_links", [])
+                    for link in internal_links:
+                        norm = self._normalize_url(link, base_domain, base_origin)
+                        if norm:
+                            discovered_urls_pool.add(norm)
+
+                    return PageEvidence(
+                        url=page_url,
+                        status_code=status_code,
+                        title=meta_res.get("title"),
+                        meta_description=meta_res.get("meta_description"),
+                        h1=html_res.get("h1", []),
+                        h2=html_res.get("h2", []),
+                        h3=html_res.get("h3", []),
+                        word_count=html_res.get("word_count", 0),
+                        readability_score=html_res.get("readability_score", 0.0),
+                        canonical_url=meta_res.get("canonical_url"),
+                        robots_meta=meta_res.get("robots_meta"),
+                        viewport=meta_res.get("viewport"),
+                        og_tags=meta_res.get("og_tags", {}),
+                        twitter_tags=meta_res.get("twitter_tags", {}),
+                        schema_types=schema_res.get("schema_types", []),
+                        raw_schema=schema_res.get("raw_schema", []),
+                        internal_links=internal_links,
+                        external_links=links_res.get("external_links", []),
+                        images_without_alt=dom_res.get("images_without_alt", 0),
+                        total_images=dom_res.get("total_images", 0),
+                        ttfb_ms=perf_res.get("ttfb_ms", 0.0),
+                        dom_elements_count=dom_res.get("dom_elements_count", 0),
+                        scripts_count=dom_res.get("scripts_count", 0),
+                        stylesheets_count=dom_res.get("stylesheets_count", 0),
+                        page_type=page_type,
+                        body_text=(html_res.get("distilled_text") or html_res.get("visible_text") or "")[:100000] or None,
+                        ctas=dom_res.get("cta_candidates", [])[:8],
+                        render_mode=render_mode,
+                    )
+
+            # Iteratively fetch top priority pages until target_max_pages reached or queue empty
+            while len(crawled_pages) < target_max_pages:
+                remaining_candidates = [
+                    u for u in discovered_urls_pool 
+                    if (self._normalize_url(u, base_domain, base_origin) or u) not in visited_urls
+                ]
+                if not remaining_candidates:
+                    break
+                
+                sorted_candidates = sorted(remaining_candidates, key=self._get_page_priority, reverse=True)
+                batch = sorted_candidates[: (target_max_pages - len(crawled_pages))]
+                
+                for u in batch:
+                    norm_b = self._normalize_url(u, base_domain, base_origin) or u
+                    visited_urls.add(norm_b)
+                    
+                tasks = [fetch_and_analyze_single_page(u) for u in batch]
+                results = await asyncio.gather(*tasks)
+                
+                for res in results:
+                    if res:
+                        norm_res = self._normalize_url(res.url, base_domain, base_origin) or res.url
+                        if norm_res not in crawled_page_urls:
+                            crawled_page_urls.add(norm_res)
+                            crawled_pages.append(res)
+                            if progress_callback:
+                                progress_callback(
+                                    f"Audited ({len(crawled_pages)}/{target_max_pages}) pages: {res.page_type.upper()} [{res.url}]",
+                                    22 + int((len(crawled_pages) / max(target_max_pages, 1)) * 12)
+                                )
+
+        # Check if any pages could be reached
+        if not crawled_pages:
+            diag_msg = f"Failed to connect to or crawl website '{target_url}'."
+            if last_fetch_error:
+                if "nodename nor servname" in last_fetch_error or "NameResolutionError" in last_fetch_error:
+                    diag_msg = f"DNS Resolution Error: Could not find domain '{base_domain}'. Please verify the spelling or domain registration."
+                elif "403" in last_fetch_error:
+                    diag_msg = f"Access Blocked (HTTP 403): The website '{base_domain}' is blocking automated requests. Configure FIRECRAWL_API_KEY in .env to bypass bot protection."
+                elif "Timeout" in last_fetch_error:
+                    diag_msg = f"Connection Timed Out: '{base_domain}' took too long to respond. The server may be offline or slow."
+                else:
+                    diag_msg += f" (Detail: {last_fetch_error})"
+            raise RuntimeError(diag_msg)
+
+        # Step C: Compute Site-Wide SEO Crawl Metrics
+        manifest = self._build_crawl_manifest(
+            base_domain=base_domain,
+            base_url=normalized_root,
+            crawled_pages=crawled_pages,
+            total_discovered=len(discovered_urls_pool),
+            sitemap_found=sitemap_found,
+            sitemap_url=sitemap_url,
+            robots_txt_found=robots_found,
+            robots_txt_content=robots_content,
+            broken_links=broken_links
+        )
+
+        # Step D: Index page chunks into VectorStore using E5-Large
+        try:
+            from app.crawl.vector_store import vector_store
+            from app.crawl.embeddings import embedding_service
+            for page in crawled_pages:
+                chunks = self._chunk_page_content(page)
+                if chunks:
+                    vectors = embedding_service.embed_documents(chunks)
+                    vector_store.save_chunks(
+                        domain=base_domain,
+                        url=page.url,
+                        page_type=page.page_type,
+                        chunks=chunks,
+                        vectors=vectors,
+                        analysis_id=getattr(evidence_store, "run_id", None),
+                    )
+        except Exception as exc:
+            logger.warning("[Crawler] VectorStore indexing error (non-fatal): %s", exc)
+
+        return manifest
+
+    def _chunk_page_content(self, page: PageEvidence, chunk_size_words: int = 350, overlap_words: int = 50) -> List[str]:
+        text_parts = []
+        if page.title:
+            text_parts.append(f"Title: {page.title}")
+        if page.meta_description:
+            text_parts.append(f"Description: {page.meta_description}")
+        if page.h1:
+            text_parts.append(f"H1: {', '.join(page.h1)}")
+        if page.h2:
+            text_parts.append(f"H2: {', '.join(page.h2)}")
+        if page.h3:
+            text_parts.append(f"H3: {', '.join(page.h3)}")
+        if page.body_text:
+            text_parts.append(page.body_text)
+
+        full_text = "\n\n".join(text_parts).strip()
+        words = full_text.split()
+        if not words:
+            return []
+
+        chunks = []
+        i = 0
+        step = max(chunk_size_words - overlap_words, 1)
+        while i < len(words):
+            chunk = " ".join(words[i:i + chunk_size_words])
+            if chunk.strip():
+                chunks.append(chunk.strip())
+            i += step
+        return chunks
+
+    def _build_crawl_manifest(
+        self,
+        base_domain: str,
+        base_url: str,
+        crawled_pages: List[PageEvidence],
+        total_discovered: int,
+        sitemap_found: bool,
+        sitemap_url: Optional[str],
+        robots_txt_found: bool,
+        robots_txt_content: Optional[str],
+        broken_links: List[Dict[str, str]]
+    ) -> CrawlManifest:
+        title_map: Dict[str, List[str]] = {}
+        desc_map: Dict[str, List[str]] = {}
+        missing_h1: List[str] = []
+        missing_meta: List[str] = []
+        missing_schema: List[str] = []
+        total_words = 0
+        total_ttfb = 0.0
+
+        for p in crawled_pages:
+            total_words += p.word_count
+            total_ttfb += p.ttfb_ms
+            if p.title:
+                title_map.setdefault(p.title.strip(), []).append(p.url)
+            if p.meta_description:
+                desc_map.setdefault(p.meta_description.strip(), []).append(p.url)
+            else:
+                missing_meta.append(p.url)
+            if not p.h1:
+                missing_h1.append(p.url)
+            if not p.schema_types:
+                missing_schema.append(p.url)
+
+        duplicate_titles = {t: urls for t, urls in title_map.items() if len(urls) > 1}
+        duplicate_descriptions = {d: urls for d, urls in desc_map.items() if len(urls) > 1}
+
+        avg_ttfb = round(total_ttfb / max(len(crawled_pages), 1), 1)
+
+        crawl_health = {
+            "total_pages_crawled": len(crawled_pages),
+            "total_pages_discovered": max(total_discovered, len(crawled_pages)),
+            "sitemap_status": "Verified" if sitemap_found else "Missing / Inaccessible",
+            "robots_txt_status": "Configured" if robots_txt_found else "Missing",
+            "duplicate_titles_count": len(duplicate_titles),
+            "duplicate_titles": duplicate_titles,
+            "duplicate_descriptions_count": len(duplicate_descriptions),
+            "duplicate_descriptions": duplicate_descriptions,
+            "missing_h1_count": len(missing_h1),
+            "missing_h1_urls": missing_h1,
+            "missing_meta_count": len(missing_meta),
+            "missing_meta_urls": missing_meta,
+            "missing_schema_count": len(missing_schema),
+            "missing_schema_urls": missing_schema,
+            "broken_links_count": len(broken_links),
+            "broken_links": broken_links,
+            "avg_ttfb_ms": avg_ttfb,
+            "total_words_across_site": total_words,
+            "page_breakdown": [{"url": p.url, "type": p.page_type, "status": p.status_code, "words": p.word_count, "ttfb_ms": p.ttfb_ms, "schema_count": len(p.schema_types)} for p in crawled_pages]
+        }
+
+        return CrawlManifest(
+            domain=base_domain,
+            base_url=base_url,
+            total_pages_discovered=max(total_discovered, len(crawled_pages)),
+            pages=crawled_pages,
+            sitemap_found=sitemap_found,
+            sitemap_url=sitemap_url,
+            robots_txt_found=robots_txt_found,
+            robots_txt_content=robots_txt_content,
+            crawl_health=crawl_health
+        )

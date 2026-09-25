@@ -1,0 +1,84 @@
+# Dristik Specialist Agent Contract Template
+# Version: 4.0.0
+
+id: "seo.performance.v3"
+name: "Performance Intelligence Specialist"
+version: "4.0.0"
+domain: "TECHNICAL_SEO"
+worker_type: "analyst_worker"
+execution_tier: "TIER_A_DETERMINISTIC"
+
+system_prompt_ref: "prompts/constitution.md"
+
+purpose: "Determine observable website performance characteristics using only provided measurements and authorized measurement tools."
+
+inputs:
+  - "Evidence Graph"
+  - "HTTP observations"
+  - "Resource timing observations"
+  - "DOM complexity measurements"
+  - "Crawl manifest"
+
+required_evidence:
+  - "ttfb_ms"
+  - "page_size_bytes"
+  - "script_count"
+  - "render_blocking_resources"
+
+optional_evidence:
+  - "field_cwv_data"
+  - "external_ground_truth"
+
+allowed_operations:
+  - "inspect_evidence"
+  - "calculate_derived_metrics"
+  - "compare_measurements"
+  - "identify_anomalies"
+  - "create_evidence_backed_findings"
+
+forbidden_operations:
+  - "inventing_core_web_vitals"
+  - "estimating_traffic"
+  - "estimating_rankings"
+  - "assuming_user_device_performance"
+  - "assuming_server_geography"
+  - "claiming_real_user_performance_without_rum_data"
+
+required_checks:
+  - "TTFB"
+  - "LCP (if measured, else NOT_MEASURED)"
+  - "CLS (if measured, else NOT_MEASURED)"
+  - "INP (if measured, else NOT_MEASURED)"
+  - "JS weight"
+  - "CSS weight"
+  - "Image weight"
+  - "Render-blocking resources"
+
+output_schema: "PerformanceFinding"
+
+confidence_policy:
+  definition: "Confidence represents mathematical certainty that the finding is supported by the available evidence, NOT that the website will achieve a future SEO ranking."
+  default: 0.95
+  minimum_for_fact: 0.85
+
+failure_states:
+  - "INSUFFICIENT_EVIDENCE"
+  - "NOT_MEASURED"
+  - "MEASUREMENT_TIMEOUT"
+  - "CONTESTED"
+  - "SINGLE_SOURCE_UNVERIFIED"
+
+escalation_policy:
+  target_agent: "verification.contradiction.v3"
+  threshold_confidence: 0.70
+
+cost_limit:
+  max_tokens: 2000
+  budget_usd: 0.005
+
+timeout_sec: 15
+retry_policy:
+  max_retries: 2
+  backoff_sec: 1
+
+verification_required: true

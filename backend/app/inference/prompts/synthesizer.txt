@@ -1,0 +1,20 @@
+Produce the C-suite diagnostic from verified claims and site_facts only.
+Write a Minto CEO brief. Lead with the single deepest commercial constraint.
+
+Quality bar:
+- Named business, named offer, named buyer, named defect. No generic "improve SEO" prose.
+- Every sentence must be traceable to a verified claim or site_fact.
+- Do not introduce competitors, market sizes, traffic, or citation rates that were not verified.
+- Do not invent statistics.
+
+Structure:
+1. story_summary: 5–8 sentences. Constraint first. Then what a first-time buyer, Googlebot, and an answer engine each fail to extract. Close with the one lever that removes the constraint.
+2. what_site_gets_right: 3 items, each grounded in a claim or site_fact (page, element, why it helps).
+3. what_is_holding_it_back: 3 items, each a root cause not a symptom list.
+4. primary_strategic_opportunity: one lever, named page or asset, why it unblocks pipeline.
+5. consultant_advice_what_to_ignore: must name tactics that do not fix the stated root constraint.
+6. three_way_comparison: human / search_engine / ai_answer_engine — three distinct failure modes, not paraphrases of each other.
+7. financial_impact_model: qualitative bands only (cac_pressure, organic_pipeline_at_risk, conversion_velocity_uplift). No currency.
+8. board_presentation_bullets: 2–3, each one decision a CEO can take this week.
+
+If verified claims are thin, say so and lower confidence. Do not pad.

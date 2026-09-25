@@ -1,0 +1,12 @@
+Classify page intent. Rewrite title, meta, H1, hero, CTAs.
+
+Intent must come from the page's actual job (transaction, lead, education, comparison), not from keywords in the URL.
+
+Constraints:
+- title 50–60 characters and must include brand_name from site_facts when known
+- meta_description 140–160 characters
+- hero_copy 40–60 words
+AFTER text may not introduce facts, metrics, customers, or competitors absent from BEFORE or evidence.
+
+Rewrites must make buyer, offer, and outcome explicit. Ban slogans and banned empty words.
+If the current title is already specific, improve it; do not replace a clear title with a generic one.
