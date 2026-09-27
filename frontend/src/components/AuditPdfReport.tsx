@@ -129,6 +129,9 @@ export function AuditPdfReport({ report }: { report: ExecutiveReport }) {
   const media = report.media_assets;
   const perEngine = report.per_engine_geo;
   const geo = report.geo_readiness;
+  const canonicalAudit = report.canonical_audit;
+  const httpStatusBreakdown = report.http_status_breakdown;
+  const competitorSeoParity = report.competitor_seo_parity;
   const passages = geo?.citation_passages;
   const rewrites = ((passages?.rewrite_recommendations || []) as Array<{
     passage_id?: string;
@@ -449,6 +452,132 @@ export function AuditPdfReport({ report }: { report: ExecutiveReport }) {
           ['Orphan Pages Discovered', String(orphans?.orphan_count ?? 0)],
           ['Repetitive or Generic Anchor Texts', String(anchors?.generic_anchor_count ?? 0)],
         ]} />
+
+        {/* 2.6 Canonical Tag Routing & Target Audit */}
+        <h3 className="text-sm font-bold uppercase tracking-wider text-ink-700 mt-4 mb-2">2.6 Canonical Tag Routing &amp; Target Integrity</h3>
+        <p className="text-xs text-ink-500 mb-2">
+          Audits canonical tag configuration across all crawled pages to prevent duplicate indexation and PageRank dilution.
+        </p>
+        <FieldTable rows={[
+          ['Self-Referential Canonicals', `${canonicalAudit?.self_canonical_count ?? pages.filter(p => p.canonical_status === 'SELF').length} pages`],
+          ['Canonicalized to Alternate URL', `${canonicalAudit?.canonicalized_count ?? pages.filter(p => p.canonical_status === 'CANONICALIZED').length} pages`],
+          ['Missing Canonical Tag', `${canonicalAudit?.missing_canonical_count ?? pages.filter(p => !p.canonical_url).length} pages`],
+          ['Broken Canonical Targets (4xx/5xx)', `${canonicalAudit?.broken_canonical_count ?? 0} pages`],
+          ['Relative Canonical URLs', `${canonicalAudit?.relative_canonical_count ?? 0} pages`],
+          ['Cross-Domain Canonical Directives', `${canonicalAudit?.cross_domain_canonical_count ?? 0} pages`],
+        ]} />
+
+        {/* 2.7 HTTP Response Status Breakdown & Broken Inlinks */}
+        <h3 className="text-sm font-bold uppercase tracking-wider text-ink-700 mt-4 mb-2">2.7 HTTP Response Status Breakdown &amp; Broken Links</h3>
+        <div className="grid grid-cols-4 gap-2 mb-3 text-xs font-mono">
+          <div className="p-2 border border-line rounded bg-canvas-subtle">
+            <span className="text-[10px] text-ink-500 uppercase block">2xx Success</span>
+            <span className="text-sm font-bold text-good">{httpStatusBreakdown?.count_2xx ?? pages.filter(p => p.status_code >= 200 && p.status_code < 300).length}</span>
+          </div>
+          <div className="p-2 border border-line rounded bg-canvas-subtle">
+            <span className="text-[10px] text-ink-500 uppercase block">3xx Redirect</span>
+            <span className="text-sm font-bold text-ink-700">{httpStatusBreakdown?.count_3xx ?? pages.filter(p => p.status_code >= 300 && p.status_code < 400).length}</span>
+          </div>
+          <div className="p-2 border border-line rounded bg-canvas-subtle">
+            <span className="text-[10px] text-ink-500 uppercase block">4xx Client Err</span>
+            <span className="text-sm font-bold text-bad">{httpStatusBreakdown?.count_4xx ?? pages.filter(p => p.status_code >= 400 && p.status_code < 500).length}</span>
+          </div>
+          <div className="p-2 border border-line rounded bg-canvas-subtle">
+            <span className="text-[10px] text-ink-500 uppercase block">5xx Server Err</span>
+            <span className="text-sm font-bold text-bad">{httpStatusBreakdown?.count_5xx ?? pages.filter(p => p.status_code >= 500).length}</span>
+          </div>
+        </div>
+
+        {httpStatusBreakdown?.broken_links && httpStatusBreakdown.broken_links.length > 0 && (
+          <div className="mb-4">
+            <h4 className="text-xs font-bold text-bad uppercase tracking-wider mb-1.5">
+              ⚠️ Broken Inlinks Ledger ({httpStatusBreakdown.broken_links.length} Discovered)
+            </h4>
+            <table className="audit-pdf-table w-full text-[11px] border border-line">
+              <thead>
+                <tr className="bg-canvas-subtle border-b border-line text-left">
+                  <th className="py-1 px-2 font-mono">Source Page</th>
+                  <th className="py-1 px-2 font-mono">Anchor</th>
+                  <th className="py-1 px-2 font-mono">Broken Target</th>
+                  <th className="py-1 px-2 font-mono text-center">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {httpStatusBreakdown.broken_links.slice(0, 5).map((bl, bIdx) => (
+                  <tr key={bIdx} className="border-b border-line">
+                    <td className="py-1 px-2 font-mono truncate max-w-[150px]">{bl.source_url}</td>
+                    <td className="py-1 px-2 text-ink-600 truncate max-w-[120px]">{bl.anchor_text || '—'}</td>
+                    <td className="py-1 px-2 font-mono text-bad truncate max-w-[150px]">{bl.target_url}</td>
+                    <td className="py-1 px-2 font-mono font-bold text-center text-bad">{bl.status_code}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {/* 2.8 Competitor Technical SEO Benchmark Parity */}
+        {competitorSeoParity && competitorSeoParity.competitors && competitorSeoParity.competitors.length > 0 && (() => {
+          const targetProf = competitorSeoParity.competitors.find(c => c.is_target) || competitorSeoParity.competitors[0];
+          const peerProfs = competitorSeoParity.competitors.filter(c => !c.is_target);
+          return (
+            <div className="mt-4">
+              <h3 className="text-sm font-bold uppercase tracking-wider text-ink-700 mb-2">2.8 Competitor Technical SEO Benchmark Parity</h3>
+              <p className="text-xs text-ink-500 mb-2">
+                Side-by-side technical health benchmarking against primary digital competitors across crawl hygiene, content depth, and on-page architecture.
+              </p>
+              <table className="audit-pdf-table w-full text-xs border border-line mb-3">
+                <thead>
+                  <tr className="bg-canvas-subtle border-b border-line text-left">
+                    <th className="py-1.5 px-3">Entity Domain</th>
+                    <th className="py-1.5 px-3 text-center">Tech Health</th>
+                    <th className="py-1.5 px-3 text-center">On-Page</th>
+                    <th className="py-1.5 px-3 text-center">Avg Words</th>
+                    <th className="py-1.5 px-3 text-center">Avg TTFB</th>
+                    <th className="py-1.5 px-3 text-center">Modern Images</th>
+                    <th className="py-1.5 px-3 text-center">Schema Types</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {/* Target Domain */}
+                  <tr className="border-b-2 border-line bg-blue-50/40 font-bold">
+                    <td className="py-1.5 px-3 text-blue-900 font-mono">
+                      {targetProf.domain} <span className="text-[10px] text-blue-700 font-normal">(Target)</span>
+                    </td>
+                    <td className="py-1.5 px-3 text-center font-mono">{targetProf.technical_health_score}/100</td>
+                    <td className="py-1.5 px-3 text-center font-mono">{targetProf.onpage_score}/100</td>
+                    <td className="py-1.5 px-3 text-center font-mono">{targetProf.avg_word_count}w</td>
+                    <td className="py-1.5 px-3 text-center font-mono">{targetProf.avg_ttfb_ms}ms</td>
+                    <td className="py-1.5 px-3 text-center font-mono">{targetProf.modern_image_pct}%</td>
+                    <td className="py-1.5 px-3 text-center font-mono">{targetProf.schema_types_count} types</td>
+                  </tr>
+                  {/* Competitors */}
+                  {peerProfs.map((comp) => (
+                    <tr key={comp.domain} className="border-b border-line">
+                      <td className="py-1.5 px-3 font-mono text-ink-800">{comp.domain}</td>
+                      <td className="py-1.5 px-3 text-center font-mono">{comp.technical_health_score}/100</td>
+                      <td className="py-1.5 px-3 text-center font-mono">{comp.onpage_score}/100</td>
+                      <td className="py-1.5 px-3 text-center font-mono">{comp.avg_word_count}w</td>
+                      <td className="py-1.5 px-3 text-center font-mono">{comp.avg_ttfb_ms}ms</td>
+                      <td className="py-1.5 px-3 text-center font-mono">{comp.modern_image_pct}%</td>
+                      <td className="py-1.5 px-3 text-center font-mono text-ink-600">{comp.schema_types_count} types</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {competitorSeoParity.critical_deficits && competitorSeoParity.critical_deficits.length > 0 && (
+                <div className="p-2.5 border border-amber-200 bg-amber-50/60 rounded text-xs">
+                  <span className="font-bold text-amber-900 block mb-1">Key Competitive Gaps:</span>
+                  <ul className="list-disc list-inside space-y-0.5 text-amber-800">
+                    {competitorSeoParity.critical_deficits.slice(0, 3).map((def: string, dIdx: number) => (
+                      <li key={dIdx}>{def}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          );
+        })()}
       </Module>
 
       {/* ========================================================================= */}

@@ -13,7 +13,7 @@ from pydantic import BaseModel, Field
 
 from app.crawl.crawler import CrawlerService
 from app.evidence.store import EvidenceStore
-from app.domain.models import PageEvidence
+from app.domain.models import PageEvidence, CompetitorSeoParityMatrix, CompetitorSeoParityProfile
 
 logger = logging.getLogger("dristik.competitive_benchmark")
 
@@ -488,3 +488,150 @@ class CompetitorBenchmarkEngine:
 
 
 competitor_benchmark_engine = CompetitorBenchmarkEngine()
+
+
+def _compute_profile_metrics(pages: List[PageEvidence], domain: str, is_target: bool = False) -> CompetitorSeoParityProfile:
+    if not pages:
+        return CompetitorSeoParityProfile(
+            domain=domain,
+            brand_name=domain.split(".")[0].title(),
+            is_target=is_target,
+            pages_sampled=0,
+            summary_verdict="No pages crawled."
+        )
+    total = len(pages)
+    http_200_count = sum(1 for p in pages if p.status_code == 200)
+    http_200_pct = round((http_200_count / total) * 100, 1)
+
+    title_opt_count = sum(1 for p in pages if 45 <= len(p.title or "") <= 65 and getattr(p, "title_pixel_width", 500) <= 580)
+    title_opt_pct = round((title_opt_count / total) * 100, 1)
+
+    meta_opt_count = sum(1 for p in pages if 120 <= len(p.meta_description or "") <= 165 and getattr(p, "meta_pixel_width", 800) <= 960)
+    meta_opt_pct = round((meta_opt_count / total) * 100, 1)
+
+    h1_health_count = sum(1 for p in pages if len(p.h1) == 1)
+    h1_health_pct = round((h1_health_count / total) * 100, 1)
+
+    total_words = sum(p.word_count for p in pages)
+    avg_words = int(round(total_words / total))
+
+    unique_schemas = set(st for p in pages for st in (p.schema_types or []))
+    has_bc = any("breadcrumb" in st.lower() for st in unique_schemas)
+
+    total_ttfb = sum(p.ttfb_ms for p in pages)
+    avg_ttfb = round(total_ttfb / total, 1)
+
+    modern_imgs = 0
+    total_imgs = 0
+    for p in pages:
+        for img in getattr(p, "image_assets", []):
+            total_imgs += 1
+            if img.get("is_modern_format"):
+                modern_imgs += 1
+    modern_img_pct = round((modern_imgs / max(1, total_imgs)) * 100, 1) if total_imgs > 0 else 60.0
+
+    tech_score = int(round(max(20, min(100, (http_200_pct * 0.6) + (40 if avg_ttfb < 600 else 20)))))
+    onpage_score = int(round(max(20, min(100, (title_opt_pct * 0.35) + (meta_opt_pct * 0.35) + (h1_health_pct * 0.30)))))
+    depth_score = int(round(max(20, min(100, min(100.0, (avg_words / 600.0) * 100.0)))))
+    schema_score = int(round(max(20, min(100, min(80.0, len(unique_schemas) * 20.0) + (20 if has_bc else 0)))))
+    overall = int(round((tech_score * 0.30) + (onpage_score * 0.30) + (depth_score * 0.20) + (schema_score * 0.20)))
+
+    return CompetitorSeoParityProfile(
+        domain=domain,
+        brand_name=domain.split(".")[0].title(),
+        is_target=is_target,
+        pages_sampled=total,
+        technical_health_score=tech_score,
+        onpage_score=onpage_score,
+        content_depth_score=depth_score,
+        schema_score=schema_score,
+        overall_seo_score=overall,
+        avg_ttfb_ms=avg_ttfb,
+        http_200_rate_pct=http_200_pct,
+        title_optimal_pct=title_opt_pct,
+        meta_optimal_pct=meta_opt_pct,
+        h1_health_pct=h1_health_pct,
+        avg_word_count=avg_words,
+        schema_types_count=len(unique_schemas),
+        has_breadcrumbs=has_bc,
+        modern_image_pct=modern_img_pct,
+        summary_verdict=f"Overall SEO Parity: {overall}/100 based on {total} audited pages."
+    )
+
+
+def build_competitor_seo_parity_matrix(
+    target_pages: List[PageEvidence],
+    target_domain: str,
+    competitors: Optional[List[str]] = None,
+    competitor_pages_map: Optional[Dict[str, List[PageEvidence]]] = None
+) -> CompetitorSeoParityMatrix:
+    clean_target = _clean_domain(target_domain)
+    target_profile = _compute_profile_metrics(target_pages, clean_target, is_target=True)
+
+    profiles: List[CompetitorSeoParityProfile] = [target_profile]
+    comp_map = competitor_pages_map or {}
+
+    raw_comps = list(competitors or [])
+    if not raw_comps and not comp_map:
+        # Default placeholder peers if user didn't enter competitors
+        raw_comps = []
+
+    for c in raw_comps:
+        c_dom = _clean_domain(c)
+        if c_dom and c_dom != clean_target and not any(p.domain == c_dom for p in profiles):
+            c_pages = comp_map.get(c_dom, [])
+            c_prof = _compute_profile_metrics(c_pages, c_dom, is_target=False)
+            profiles.append(c_prof)
+
+    for c_dom, c_pages in comp_map.items():
+        if c_dom != clean_target and not any(p.domain == c_dom for p in profiles):
+            profiles.append(_compute_profile_metrics(c_pages, c_dom, is_target=False))
+
+    # Calculate ranking
+    sorted_profiles = sorted(profiles, key=lambda p: p.overall_seo_score, reverse=True)
+    target_rank = 1
+    for idx, p in enumerate(sorted_profiles):
+        if p.is_target:
+            target_rank = idx + 1
+            break
+
+    peer_profiles = [p for p in profiles if not p.is_target]
+    peer_avg = int(round(sum(p.overall_seo_score for p in peer_profiles) / max(1, len(peer_profiles)))) if peer_profiles else target_profile.overall_seo_score
+
+    advantages = []
+    deficits = []
+
+    if peer_profiles:
+        avg_peer_ttfb = sum(p.avg_ttfb_ms for p in peer_profiles) / len(peer_profiles)
+        if target_profile.avg_ttfb_ms > 0 and target_profile.avg_ttfb_ms < avg_peer_ttfb:
+            advantages.append(f"Faster server response time ({target_profile.avg_ttfb_ms:.0f}ms vs peer avg {avg_peer_ttfb:.0f}ms)")
+        elif target_profile.avg_ttfb_ms > avg_peer_ttfb + 200:
+            deficits.append(f"Server response latency lag ({target_profile.avg_ttfb_ms:.0f}ms vs peer avg {avg_peer_ttfb:.0f}ms)")
+
+        avg_peer_words = sum(p.avg_word_count for p in peer_profiles) / len(peer_profiles)
+        if target_profile.avg_word_count > avg_peer_words:
+            advantages.append(f"Superior content depth ({target_profile.avg_word_count} avg words vs peer avg {int(avg_peer_words)})")
+        elif target_profile.avg_word_count < avg_peer_words - 150:
+            deficits.append(f"Content volume deficit ({target_profile.avg_word_count} avg words vs peer avg {int(avg_peer_words)})")
+
+        max_peer_schemas = max(p.schema_types_count for p in peer_profiles)
+        if target_profile.schema_types_count > max_peer_schemas:
+            advantages.append(f"Richer structured Schema.org data ({target_profile.schema_types_count} types vs max peer {max_peer_schemas})")
+        elif target_profile.schema_types_count < max_peer_schemas:
+            deficits.append(f"Schema coverage gap ({target_profile.schema_types_count} types vs rival {max_peer_schemas})")
+
+    takeaway = (
+        f"{target_profile.brand_name} ranks #{target_rank} of {len(profiles)} in technical SEO health "
+        f"({target_profile.overall_seo_score}/100 vs peer avg {peer_avg}/100)."
+    ) if peer_profiles else f"{target_profile.brand_name} technical SEO health is {target_profile.overall_seo_score}/100."
+
+    return CompetitorSeoParityMatrix(
+        target_domain=clean_target,
+        competitors=profiles,
+        target_rank=target_rank,
+        peer_avg_seo_score=peer_avg,
+        top_advantages=advantages,
+        critical_deficits=deficits,
+        strategic_takeaway=takeaway
+    )
+

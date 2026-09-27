@@ -18,23 +18,19 @@ Computes estimated pixel rendering width and tracks affected URL lists.
 from typing import List, Dict, Optional
 from collections import defaultdict
 from app.domain.models import PageEvidence, MetaBucketItem, MetaBucketRollup
-
-# Proportional character width estimation for standard Google SERP font (Arial / Roboto)
-_CHAR_PIXEL_WIDTHS: Dict[str, float] = {
-    "i": 3.8, "l": 3.8, "j": 3.8, "f": 4.5, "r": 5.0, "t": 5.0,
-    "m": 13.0, "w": 12.0, "M": 13.5, "W": 14.0,
-    "A": 9.5, "B": 9.0, "C": 9.5, "D": 9.5, "E": 8.5,
-    " ": 4.0, "-": 5.0, "|": 3.8, ".": 3.8, ",": 3.8,
-}
-_DEFAULT_CHAR_WIDTH = 8.5
+from app.crawl.analyzers.pixel_calculator import (
+    calculate_title_pixel_width,
+    calculate_meta_pixel_width,
+    GOOGLE_TITLE_MAX_PX,
+    GOOGLE_META_MAX_PX,
+)
 
 
 def estimate_pixel_width(text: Optional[str]) -> int:
-    """Estimates SERP pixel width for a text string."""
+    """Estimates SERP pixel width for a text string using Arial 18px metric."""
     if not text:
         return 0
-    width = sum(_CHAR_PIXEL_WIDTHS.get(c, _DEFAULT_CHAR_WIDTH) for c in text)
-    return int(round(width))
+    return calculate_title_pixel_width(text)
 
 
 class MetaRollupAnalyzer:
@@ -63,20 +59,22 @@ class MetaRollupAnalyzer:
                 desc_url_map[d.lower()].append(p.url)
 
         # -------------------------------------------------------------
-        # 2. Bucket Titles
+        # 2. Bucket Titles & Pixel Truncations
         # -------------------------------------------------------------
         missing_titles: List[MetaBucketItem] = []
         too_short_titles: List[MetaBucketItem] = []
         optimal_titles: List[MetaBucketItem] = []
         too_long_titles: List[MetaBucketItem] = []
         duplicate_titles: List[MetaBucketItem] = []
+        truncated_pixel_titles: List[MetaBucketItem] = []
 
-        seen_dup_titles = set()
+        # H1-Title collisions (wasted keyword diversification)
+        h1_title_collision_urls: List[str] = []
 
         for p in pages:
             t = (p.title or "").strip()
             t_len = len(t)
-            px = estimate_pixel_width(t)
+            px = calculate_title_pixel_width(t)
             item = MetaBucketItem(url=p.url, text=t or None, char_length=t_len, pixel_length=px)
 
             if t_len == 0:
@@ -88,23 +86,33 @@ class MetaRollupAnalyzer:
             elif t_len > 60:
                 too_long_titles.append(item)
 
+            if px > GOOGLE_TITLE_MAX_PX:
+                truncated_pixel_titles.append(item)
+
             # Check duplicate collision
             if t and len(title_url_map[t.lower()]) > 1:
                 duplicate_titles.append(item)
 
+            # Check H1 vs Title collision
+            if t and p.h1:
+                first_h1 = (p.h1[0] or "").strip().lower()
+                if first_h1 == t.lower():
+                    h1_title_collision_urls.append(p.url)
+
         # -------------------------------------------------------------
-        # 3. Bucket Descriptions
+        # 3. Bucket Descriptions & Pixel Truncations
         # -------------------------------------------------------------
         missing_descriptions: List[MetaBucketItem] = []
         too_short_descriptions: List[MetaBucketItem] = []
         optimal_descriptions: List[MetaBucketItem] = []
         too_long_descriptions: List[MetaBucketItem] = []
         duplicate_descriptions: List[MetaBucketItem] = []
+        truncated_pixel_descriptions: List[MetaBucketItem] = []
 
         for p in pages:
             d = (p.meta_description or "").strip()
             d_len = len(d)
-            px = estimate_pixel_width(d)
+            px = calculate_meta_pixel_width(d)
             item = MetaBucketItem(url=p.url, text=d or None, char_length=d_len, pixel_length=px)
 
             if d_len == 0:
@@ -116,6 +124,9 @@ class MetaRollupAnalyzer:
             elif d_len > 160:
                 too_long_descriptions.append(item)
 
+            if px > GOOGLE_META_MAX_PX:
+                truncated_pixel_descriptions.append(item)
+
             # Check duplicate collision
             if d and len(desc_url_map[d.lower()]) > 1:
                 duplicate_descriptions.append(item)
@@ -125,24 +136,28 @@ class MetaRollupAnalyzer:
             + len(too_short_titles)
             + len(too_long_titles)
             + len(duplicate_titles)
+            + len(truncated_pixel_titles)
         )
         desc_issues = (
             len(missing_descriptions)
             + len(too_short_descriptions)
             + len(too_long_descriptions)
             + len(duplicate_descriptions)
+            + len(truncated_pixel_descriptions)
         )
 
         title_summary = (
             f"Evaluated {total} pages: {len(optimal_titles)} optimal (50-60 chars), "
             f"{len(missing_titles)} missing, {len(too_short_titles)} short (<30), "
-            f"{len(too_long_titles)} long (>60), {len(duplicate_titles)} duplicates."
+            f"{len(too_long_titles)} long (>60), {len(truncated_pixel_titles)} exceed Google 580px width, "
+            f"{len(duplicate_titles)} duplicates across URLs."
         )
 
         desc_summary = (
             f"Evaluated {total} pages: {len(optimal_descriptions)} optimal (150-160 chars), "
             f"{len(missing_descriptions)} missing, {len(too_short_descriptions)} short (<70), "
-            f"{len(too_long_descriptions)} long (>160), {len(duplicate_descriptions)} duplicates."
+            f"{len(too_long_descriptions)} long (>160), {len(truncated_pixel_descriptions)} exceed Google 960px width, "
+            f"{len(duplicate_descriptions)} duplicates."
         )
 
         return MetaBucketRollup(
@@ -159,6 +174,10 @@ class MetaRollupAnalyzer:
             too_long_descriptions=too_long_descriptions,
             duplicate_descriptions=duplicate_descriptions,
             description_issue_count=desc_issues,
+            truncated_pixel_titles=truncated_pixel_titles,
+            truncated_pixel_descriptions=truncated_pixel_descriptions,
+            h1_title_collision_count=len(h1_title_collision_urls),
+            h1_title_collision_urls=h1_title_collision_urls,
             title_summary=title_summary,
             description_summary=desc_summary
         )

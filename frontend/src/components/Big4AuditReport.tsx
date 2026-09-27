@@ -40,6 +40,10 @@ export function Big4AuditReport({
   const pageReports = report.page_reports || [];
   const aiQueries = report.ai_search_matrix || [];
   const telemetry = report.telemetry;
+  const canonicalAudit = report.canonical_audit;
+  const httpStatusBreakdown = report.http_status_breakdown;
+  const competitorSeoParity = report.competitor_seo_parity;
+  const metaRollup = report.meta_rollup;
   const [selectedVerificationFindingId, setSelectedVerificationFindingId] = useState<string>(
     findings[0]?.finding_id || ''
   );
@@ -1744,6 +1748,291 @@ export function Big4AuditReport({
         <div className="mt-8 pt-4 border-t border-slate-200 flex justify-between text-[10px] text-slate-400 font-mono">
           <span>{display(report.domain)} — Executive Audit Report</span>
           <span>Section 6.0 // Page 7</span>
+        </div>
+      </section>
+
+      {/* ========================================================================= */}
+      {/* SECTION 6.5: ENTERPRISE TECHNICAL SEO & COMPETITIVE CRAWL PARITY           */}
+      {/* ========================================================================= */}
+      <section className="big4-page-break p-8 md:p-14 min-h-[960px] flex flex-col justify-between border-b-2 border-slate-300 bg-white">
+        <div>
+          {/* Running Section Header */}
+          <div className="border-b border-slate-300 pb-3 flex items-center justify-between text-xs text-slate-500 uppercase tracking-widest font-mono">
+            <span>Dristik Strategic Advisory // {display(report.domain)}</span>
+            <span>Section 6.5</span>
+          </div>
+
+          <div className="mt-8 space-y-1">
+            <span className="text-xs font-mono font-bold uppercase tracking-widest text-blue-900">
+              6.5 Enterprise Technical SEO &amp; Competitive Parity
+            </span>
+            <h2 className="text-2xl font-serif text-slate-900 font-normal">
+              Crawl Indexability, Canonical Integrity &amp; Competitor Benchmark
+            </h2>
+            <p className="text-xs text-slate-600">
+              Industry-standard technical audit (Ahrefs / Screaming Frog parity) measuring HTTP status codes, canonical directive routing, SERP pixel widths, and side-by-side competitor performance.
+            </p>
+          </div>
+
+          {/* Module Grid: Status Codes & Canonical Routing */}
+          <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Left: HTTP Status Code Breakdown */}
+            <div className="border border-slate-200 rounded p-4 bg-slate-50/50">
+              <div className="flex items-center justify-between mb-3 border-b border-slate-200 pb-2">
+                <span className="text-xs font-mono font-bold uppercase text-slate-800">
+                  HTTP Status Code Distribution
+                </span>
+                <span className="text-[10px] font-mono text-slate-500">
+                  {pages.length} URLs Crawled
+                </span>
+              </div>
+              <div className="grid grid-cols-4 gap-2 text-center font-mono">
+                <div className="p-2.5 bg-emerald-50 border border-emerald-200 rounded">
+                  <span className="text-[9px] uppercase tracking-wider text-emerald-800 font-bold block">2xx OK</span>
+                  <span className="text-base font-bold text-emerald-950">
+                    {httpStatusBreakdown?.count_2xx ?? pages.filter(p => p.status_code >= 200 && p.status_code < 300).length}
+                  </span>
+                </div>
+                <div className="p-2.5 bg-blue-50 border border-blue-200 rounded">
+                  <span className="text-[9px] uppercase tracking-wider text-blue-800 font-bold block">3xx Redir</span>
+                  <span className="text-base font-bold text-blue-950">
+                    {httpStatusBreakdown?.count_3xx ?? pages.filter(p => p.status_code >= 300 && p.status_code < 400).length}
+                  </span>
+                </div>
+                <div className="p-2.5 bg-red-50 border border-red-200 rounded">
+                  <span className="text-[9px] uppercase tracking-wider text-red-800 font-bold block">4xx Error</span>
+                  <span className="text-base font-bold text-red-950">
+                    {httpStatusBreakdown?.count_4xx ?? pages.filter(p => p.status_code >= 400 && p.status_code < 500).length}
+                  </span>
+                </div>
+                <div className="p-2.5 bg-orange-50 border border-orange-200 rounded">
+                  <span className="text-[9px] uppercase tracking-wider text-orange-800 font-bold block">5xx Server</span>
+                  <span className="text-base font-bold text-orange-950">
+                    {httpStatusBreakdown?.count_5xx ?? pages.filter(p => p.status_code >= 500).length}
+                  </span>
+                </div>
+              </div>
+
+              {httpStatusBreakdown?.broken_links && httpStatusBreakdown.broken_links.length > 0 ? (
+                <div className="mt-3">
+                  <span className="text-[10px] font-mono font-bold text-red-800 block mb-1">
+                    ⚠️ Broken Inlinks Ledger ({httpStatusBreakdown.broken_links.length} Discovered):
+                  </span>
+                  <div className="max-h-24 overflow-y-auto border border-red-200 bg-white rounded text-[10px] font-mono divide-y divide-red-100">
+                    {httpStatusBreakdown.broken_links.slice(0, 4).map((bl, bIdx) => (
+                      <div key={bIdx} className="p-1.5 flex items-center justify-between">
+                        <span className="text-slate-600 truncate max-w-[140px]" title={bl.source_url}>
+                          {bl.source_url.replace(/^https?:\/\/[^/]+/, '') || '/'}
+                        </span>
+                        <span className="text-red-700 font-bold">→ {bl.status_code}</span>
+                        <span className="text-slate-900 truncate max-w-[140px]" title={bl.target_url}>
+                          {bl.target_url.replace(/^https?:\/\/[^/]+/, '') || '/'}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <p className="mt-3 text-[11px] text-emerald-800 bg-emerald-50/60 p-2 rounded border border-emerald-200 font-mono">
+                  ✓ Zero internal broken inlinks detected across crawled topology.
+                </p>
+              )}
+            </div>
+
+            {/* Right: Canonical Directive Matrix */}
+            <div className="border border-slate-200 rounded p-4 bg-slate-50/50">
+              <div className="flex items-center justify-between mb-3 border-b border-slate-200 pb-2">
+                <span className="text-xs font-mono font-bold uppercase text-slate-800">
+                  Canonical Tag Routing &amp; Link Equity
+                </span>
+                <span className="text-[10px] font-mono text-slate-500">
+                  Consolidation Health
+                </span>
+              </div>
+              <div className="grid grid-cols-3 gap-2 text-center font-mono">
+                <div className="p-2 bg-emerald-50 border border-emerald-200 rounded">
+                  <span className="text-[9px] uppercase tracking-wider text-emerald-800 font-bold block">Self-Ref</span>
+                  <span className="text-sm font-bold text-emerald-950">
+                    {canonicalAudit?.self_canonical_count ?? pages.filter(p => p.canonical_status === 'SELF').length}
+                  </span>
+                </div>
+                <div className="p-2 bg-blue-50 border border-blue-200 rounded">
+                  <span className="text-[9px] uppercase tracking-wider text-blue-800 font-bold block">Canonicalized</span>
+                  <span className="text-sm font-bold text-blue-950">
+                    {canonicalAudit?.canonicalized_count ?? pages.filter(p => p.canonical_status === 'CANONICALIZED').length}
+                  </span>
+                </div>
+                <div className="p-2 bg-amber-50 border border-amber-200 rounded">
+                  <span className="text-[9px] uppercase tracking-wider text-amber-800 font-bold block">Missing</span>
+                  <span className="text-sm font-bold text-amber-950">
+                    {canonicalAudit?.missing_canonical_count ?? pages.filter(p => !p.canonical_url).length}
+                  </span>
+                </div>
+              </div>
+
+              <div className="mt-3 grid grid-cols-3 gap-2 text-center font-mono text-[10px]">
+                <div className="p-1.5 bg-white border border-slate-200 rounded">
+                  <span className="text-slate-500 block">Broken Target</span>
+                  <span className={`font-bold ${canonicalAudit?.broken_canonical_count ? 'text-red-700' : 'text-slate-700'}`}>
+                    {canonicalAudit?.broken_canonical_count ?? 0}
+                  </span>
+                </div>
+                <div className="p-1.5 bg-white border border-slate-200 rounded">
+                  <span className="text-slate-500 block">Relative Canon</span>
+                  <span className={`font-bold ${canonicalAudit?.relative_canonical_count ? 'text-amber-700' : 'text-slate-700'}`}>
+                    {canonicalAudit?.relative_canonical_count ?? 0}
+                  </span>
+                </div>
+                <div className="p-1.5 bg-white border border-slate-200 rounded">
+                  <span className="text-slate-500 block">Cross-Domain</span>
+                  <span className="font-bold text-slate-700">
+                    {canonicalAudit?.cross_domain_canonical_count ?? 0}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Google SERP Pixel Width & Truncation Risk Ribbon */}
+          <div className="mt-4 p-3 border border-slate-200 bg-slate-50 rounded">
+            <div className="flex items-center justify-between text-xs font-mono font-bold uppercase text-slate-800 mb-2">
+              <span>Google SERP Pixel Truncation Compliance (Arial Font Metrics)</span>
+              <span className="text-[10px] text-blue-800 font-normal">Desktop Viewport Standards</span>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs font-mono">
+              <div className="p-2 bg-white border border-slate-200 rounded flex justify-between items-center">
+                <div>
+                  <span className="text-[10px] text-slate-500 block">Pixel-Truncated Titles (&gt;580px)</span>
+                  <span className="text-xs font-bold text-slate-900">
+                    {metaRollup?.truncated_pixel_titles?.length ?? 0} pages affected
+                  </span>
+                </div>
+                <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                  (metaRollup?.truncated_pixel_titles?.length ?? 0) === 0
+                    ? 'bg-emerald-100 text-emerald-800'
+                    : 'bg-amber-100 text-amber-800'
+                }`}>
+                  {(metaRollup?.truncated_pixel_titles?.length ?? 0) === 0 ? '✓ Compliant' : 'Clipping Risk'}
+                </span>
+              </div>
+              <div className="p-2 bg-white border border-slate-200 rounded flex justify-between items-center">
+                <div>
+                  <span className="text-[10px] text-slate-500 block">Pixel-Truncated Snippets (&gt;960px)</span>
+                  <span className="text-xs font-bold text-slate-900">
+                    {metaRollup?.truncated_pixel_descriptions?.length ?? 0} pages affected
+                  </span>
+                </div>
+                <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                  (metaRollup?.truncated_pixel_descriptions?.length ?? 0) === 0
+                    ? 'bg-emerald-100 text-emerald-800'
+                    : 'bg-amber-100 text-amber-800'
+                }`}>
+                  {(metaRollup?.truncated_pixel_descriptions?.length ?? 0) === 0 ? '✓ Compliant' : 'Clipping Risk'}
+                </span>
+              </div>
+              <div className="p-2 bg-white border border-slate-200 rounded flex justify-between items-center">
+                <div>
+                  <span className="text-[10px] text-slate-500 block">H1 vs Title Collisions</span>
+                  <span className="text-xs font-bold text-slate-900">
+                    {metaRollup?.h1_title_collision_count ?? 0} duplicates
+                  </span>
+                </div>
+                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-100 text-blue-800">
+                  Keyword Redundancy
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Competitor Technical SEO Parity Table */}
+          {competitorSeoParity && competitorSeoParity.competitors && competitorSeoParity.competitors.length > 0 && (() => {
+            const targetProf = competitorSeoParity.competitors.find(c => c.is_target) || competitorSeoParity.competitors[0];
+            const peerProfs = competitorSeoParity.competitors.filter(c => !c.is_target);
+            return (
+              <div className="mt-5 border border-slate-300 overflow-hidden">
+                <div className="p-2.5 bg-paper-100 border-b border-line flex items-center justify-between text-xs font-mono">
+                  <span className="font-bold text-slate-900 uppercase">
+                    Competitor Technical SEO Parity Matrix
+                  </span>
+                  <span className="text-[10px] text-slate-500">
+                    Target vs Primary Domain Competitors
+                  </span>
+                </div>
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="bg-slate-50 border-b border-slate-200 text-[10px] uppercase font-mono text-slate-600">
+                      <th className="p-2.5">Domain</th>
+                      <th className="p-2.5 text-center">Tech Health</th>
+                      <th className="p-2.5 text-center">On-Page Health</th>
+                      <th className="p-2.5 text-center">Content Depth</th>
+                      <th className="p-2.5 text-center">Avg TTFB</th>
+                      <th className="p-2.5 text-center">Modern Images</th>
+                      <th className="p-2.5 text-center">Schema Types</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-200 font-mono text-[11px]">
+                    {/* Target Row */}
+                    <tr className="bg-blue-50/60 font-bold text-slate-900">
+                      <td className="p-2.5 text-blue-900">
+                        {targetProf.domain} <span className="text-[9px] text-blue-700 font-normal">(Target)</span>
+                      </td>
+                      <td className="p-2.5 text-center text-blue-950">
+                        {targetProf.technical_health_score}/100
+                      </td>
+                      <td className="p-2.5 text-center text-blue-950">
+                        {targetProf.onpage_score}/100
+                      </td>
+                      <td className="p-2.5 text-center">
+                        {targetProf.avg_word_count}w
+                      </td>
+                      <td className="p-2.5 text-center">
+                        {targetProf.avg_ttfb_ms}ms
+                      </td>
+                      <td className="p-2.5 text-center">
+                        {targetProf.modern_image_pct}%
+                      </td>
+                      <td className="p-2.5 text-center text-[10px] text-blue-900">
+                        {targetProf.schema_types_count} types
+                      </td>
+                    </tr>
+                    {/* Competitor Rows */}
+                    {peerProfs.map((comp) => (
+                      <tr key={comp.domain} className="hover:bg-slate-50">
+                        <td className="p-2.5 text-slate-800">{comp.domain}</td>
+                        <td className="p-2.5 text-center">{comp.technical_health_score}/100</td>
+                        <td className="p-2.5 text-center">{comp.onpage_score}/100</td>
+                        <td className="p-2.5 text-center">{comp.avg_word_count}w</td>
+                        <td className="p-2.5 text-center">{comp.avg_ttfb_ms}ms</td>
+                        <td className="p-2.5 text-center">{comp.modern_image_pct}%</td>
+                        <td className="p-2.5 text-center text-[10px] text-slate-500">
+                          {comp.schema_types_count} types
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+
+                {competitorSeoParity.critical_deficits && competitorSeoParity.critical_deficits.length > 0 && (
+                  <div className="p-3 bg-amber-50/50 border-t border-amber-200 text-xs">
+                    <span className="font-bold text-amber-900 text-[11px] block mb-1">
+                      Competitive Deficits &amp; Strategic Opportunities:
+                    </span>
+                    <ul className="list-disc list-inside space-y-0.5 text-amber-800 text-[11px]">
+                      {competitorSeoParity.critical_deficits.map((gap: string, gIdx: number) => (
+                        <li key={gIdx}>{gap}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+        </div>
+
+        {/* Footer */}
+        <div className="mt-8 pt-4 border-t border-slate-200 flex justify-between text-[10px] text-slate-400 font-mono">
+          <span>{display(report.domain)} — Executive Audit Report</span>
+          <span>Section 6.5 // Technical SEO Parity</span>
         </div>
       </section>
 

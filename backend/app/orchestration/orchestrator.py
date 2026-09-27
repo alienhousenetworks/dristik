@@ -823,6 +823,26 @@ class AnalysisOrchestrator:
             media_assets_rep = analyze_media_assets(eval_pages)
             schema_validation_rep = analyze_schema_rich_results(eval_pages)
 
+            from app.analyzers.canonical_auditor import analyze_canonicals
+            from app.analyzers.http_status_auditor import analyze_http_statuses
+            from app.intelligence.competitive.benchmark import build_competitor_seo_parity_matrix
+
+            canonical_audit_rep, can_findings = analyze_canonicals(eval_pages)
+            for f in can_findings:
+                if not any(x.finding_id == f.finding_id for x in final_findings):
+                    final_findings.append(f)
+
+            broken_raw = manifest.crawl_health.get("broken_links") if manifest and manifest.crawl_health else []
+            http_status_rep, http_findings = analyze_http_statuses(eval_pages, broken_links_raw=broken_raw)
+            for f in http_findings:
+                if not any(x.finding_id == f.finding_id for x in final_findings):
+                    final_findings.append(f)
+
+            competitor_seo_parity_rep = build_competitor_seo_parity_matrix(
+                target_pages=eval_pages,
+                target_domain=domain
+            )
+
             first_page_headers = {}
             if eval_pages and getattr(eval_pages[0], "response_headers", None):
                 first_page_headers = eval_pages[0].response_headers
@@ -924,6 +944,9 @@ class AnalysisOrchestrator:
                 per_engine_geo=per_engine_geo_rep,
                 security_audit=security_audit_rep,
                 schema_validation=schema_validation_rep,
+                canonical_audit=canonical_audit_rep,
+                http_status_breakdown=http_status_rep,
+                competitor_seo_parity=competitor_seo_parity_rep,
             )
 
             # -------------------------------------------------------------

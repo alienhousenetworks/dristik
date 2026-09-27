@@ -595,6 +595,27 @@ class CrawlerService:
                         if norm:
                             discovered_urls_pool.add(norm)
 
+                    # Compute Industry-Standard SEO Metrics
+                    sc_class = "2xx" if 200 <= status_code < 300 else ("3xx" if 300 <= status_code < 400 else ("4xx" if 400 <= status_code < 500 else "5xx"))
+                    robots_str = f"{meta_res.get('robots_meta') or ''} {meta_res.get('x_robots_tag') or ''}".lower()
+                    is_idx = "noindex" not in robots_str
+
+                    raw_can = meta_res.get("canonical_url")
+                    if not raw_can:
+                        can_stat = "missing"
+                    elif not raw_can.startswith(("http://", "https://")):
+                        can_stat = "relative"
+                    elif raw_can.rstrip("/") == page_url.rstrip("/"):
+                        can_stat = "self"
+                    else:
+                        can_stat = "canonicalized"
+
+                    from app.crawl.analyzers.pixel_calculator import evaluate_title_pixel_status, evaluate_meta_pixel_status
+                    t_px, t_status = evaluate_title_pixel_status(meta_res.get("title") or "")
+                    m_px, m_status = evaluate_meta_pixel_status(meta_res.get("meta_description") or "")
+                    w_cnt = html_res.get("word_count", 0)
+                    is_thin = bool(w_cnt < 250 and page_type not in ("contact", "legal"))
+
                     return PageEvidence(
                         url=page_url,
                         status_code=status_code,
@@ -603,9 +624,9 @@ class CrawlerService:
                         h1=html_res.get("h1", []),
                         h2=html_res.get("h2", []),
                         h3=html_res.get("h3", []),
-                        word_count=html_res.get("word_count", 0),
+                        word_count=w_cnt,
                         readability_score=html_res.get("readability_score", 0.0),
-                        canonical_url=meta_res.get("canonical_url"),
+                        canonical_url=raw_can,
                         robots_meta=meta_res.get("robots_meta"),
                         viewport=meta_res.get("viewport"),
                         og_tags=meta_res.get("og_tags", {}),
@@ -633,6 +654,14 @@ class CrawlerService:
                         observed_at=datetime.now(timezone.utc).isoformat(),
                         image_assets=dom_res.get("image_assets", []),
                         x_robots_tag=meta_res.get("x_robots_tag"),
+                        status_code_class=sc_class,
+                        is_indexable=is_idx,
+                        canonical_status=can_stat,
+                        title_pixel_width=t_px,
+                        meta_pixel_width=m_px,
+                        title_pixel_status=t_status,
+                        meta_pixel_status=m_status,
+                        thin_content=is_thin,
                     )
 
             # Iteratively fetch top priority pages until target_max_pages reached or queue empty

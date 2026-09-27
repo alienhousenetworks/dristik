@@ -51,14 +51,24 @@ class LinkDepthAnalyzer:
 
         # Build internal graph: source_url -> set(target_urls)
         graph: Dict[str, Set[str]] = defaultdict(set)
+        inlink_counts: Dict[str, int] = defaultdict(int)
         all_crawled = set()
+
         for p in pages:
             src = _normalize_url(p.url)
             all_crawled.add(src)
+            p.outlinks_internal_count = len(p.internal_links or [])
+            p.outlinks_external_count = len(p.external_links or [])
             for link in (p.internal_links or []):
                 tgt = _normalize_url(link)
                 if tgt and tgt != src:
                     graph[src].add(tgt)
+                    inlink_counts[tgt] += 1
+
+        # Populate inlinks_count on PageEvidence objects
+        for p in pages:
+            src = _normalize_url(p.url)
+            p.inlinks_count = inlink_counts.get(src, 0)
 
         # BFS shortest-path from homepage
         depths: Dict[str, int] = {}

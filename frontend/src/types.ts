@@ -578,6 +578,18 @@ export interface PageEvidence {
   body_text?: string;
   ctas?: string[];
   render_mode?: string;
+  status_code_class?: string;
+  is_indexable?: boolean;
+  canonical_status?: string;
+  title_pixel_width?: number;
+  meta_pixel_width?: number;
+  title_pixel_status?: string;
+  meta_pixel_status?: string;
+  inlinks_count?: number;
+  outlinks_internal_count?: number;
+  outlinks_external_count?: number;
+  thin_content?: boolean;
+  hreflang_tags?: Record<string, string>;
 }
 
 export interface CopyIssue {
@@ -866,6 +878,96 @@ export interface ExecutiveReport {
   security_audit?: SecurityAuditReport;
   schema_validation?: SchemaValidationReport;
   remediation_patches?: RemediationPatch[];
+  canonical_audit?: CanonicalAuditRollup;
+  http_status_breakdown?: HttpStatusBreakdown;
+  competitor_seo_parity?: CompetitorSeoParityMatrix;
+}
+
+export interface CanonicalAuditItem {
+  url: string;
+  canonical_url?: string | null;
+  status: 'self' | 'canonicalized' | 'missing' | 'broken' | 'relative' | 'multiple' | 'cross_domain' | string;
+  detail: string;
+  is_issue: boolean;
+  severity: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'INFO' | string;
+}
+
+export interface CanonicalAuditRollup {
+  total_pages_evaluated: number;
+  self_canonical_count: number;
+  canonicalized_count: number;
+  missing_canonical_count: number;
+  broken_canonical_count: number;
+  relative_canonical_count: number;
+  multiple_canonical_count: number;
+  cross_domain_canonical_count: number;
+  canonical_health_score: number;
+  items: CanonicalAuditItem[];
+  summary: string;
+}
+
+export interface HttpStatusItem {
+  url: string;
+  status_code: number;
+  status_class: '2xx' | '3xx' | '4xx' | '5xx' | string;
+  status_text: string;
+  redirect_target?: string | null;
+  inlinks_count: number;
+}
+
+export interface BrokenLinkRecord {
+  source_url: string;
+  target_url: string;
+  anchor_text: string;
+  status_code: number;
+  error_type: string;
+}
+
+export interface HttpStatusBreakdown {
+  total_urls_checked: number;
+  count_2xx: number;
+  count_3xx: number;
+  count_4xx: number;
+  count_5xx: number;
+  status_health_score: number;
+  pages_2xx: HttpStatusItem[];
+  pages_3xx: HttpStatusItem[];
+  pages_4xx: HttpStatusItem[];
+  pages_5xx: HttpStatusItem[];
+  broken_links: BrokenLinkRecord[];
+  summary: string;
+}
+
+export interface CompetitorSeoParityProfile {
+  domain: string;
+  brand_name: string;
+  is_target: boolean;
+  pages_sampled: number;
+  technical_health_score: number;
+  onpage_score: number;
+  content_depth_score: number;
+  schema_score: number;
+  overall_seo_score: number;
+  avg_ttfb_ms: number;
+  http_200_rate_pct: number;
+  title_optimal_pct: number;
+  meta_optimal_pct: number;
+  h1_health_pct: number;
+  avg_word_count: number;
+  schema_types_count: number;
+  has_breadcrumbs: boolean;
+  modern_image_pct: number;
+  summary_verdict: string;
+}
+
+export interface CompetitorSeoParityMatrix {
+  target_domain: string;
+  competitors: CompetitorSeoParityProfile[];
+  target_rank: number;
+  peer_avg_seo_score: number;
+  top_advantages: string[];
+  critical_deficits: string[];
+  strategic_takeaway: string;
 }
 
 export interface SchemaIssue {
@@ -913,6 +1015,10 @@ export interface MetaBucketRollup {
   too_long_descriptions: MetaBucketItem[];
   duplicate_descriptions: MetaBucketItem[];
   description_issue_count: number;
+  truncated_pixel_titles?: MetaBucketItem[];
+  truncated_pixel_descriptions?: MetaBucketItem[];
+  h1_title_collision_count?: number;
+  h1_title_collision_urls?: string[];
   title_summary: string;
   description_summary: string;
 }

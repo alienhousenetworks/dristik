@@ -887,6 +887,18 @@ class PageEvidence(BaseModel):
     observed_at: Optional[str] = None
     image_assets: List[Dict[str, Any]] = Field(default_factory=list)
     x_robots_tag: Optional[str] = None
+    status_code_class: str = "2xx"
+    is_indexable: bool = True
+    canonical_status: str = "self"
+    title_pixel_width: int = 0
+    meta_pixel_width: int = 0
+    title_pixel_status: str = "optimal"
+    meta_pixel_status: str = "optimal"
+    inlinks_count: int = 0
+    outlinks_internal_count: int = 0
+    outlinks_external_count: int = 0
+    thin_content: bool = False
+    hreflang_tags: Dict[str, str] = Field(default_factory=dict)
 
 class CopyIssue(BaseModel):
     area: str
@@ -1068,6 +1080,12 @@ class MetaBucketRollup(BaseModel):
     too_long_descriptions: List[MetaBucketItem] = Field(default_factory=list)   # >160 chars
     duplicate_descriptions: List[MetaBucketItem] = Field(default_factory=list)
     description_issue_count: int = 0
+    # Pixel Truncation
+    truncated_pixel_titles: List[MetaBucketItem] = Field(default_factory=list)  # >580px
+    truncated_pixel_descriptions: List[MetaBucketItem] = Field(default_factory=list)  # >960px
+    # Title / H1 Collision
+    h1_title_collision_count: int = 0
+    h1_title_collision_urls: List[str] = Field(default_factory=list)
     title_summary: str = ""
     description_summary: str = ""
 
@@ -1265,6 +1283,86 @@ class PerEngineAiMatrix(BaseModel):
     information_gain: InformationGainReport
     ai_bot_directives: AiBotDirectivesReport
 
+class CanonicalAuditItem(BaseModel):
+    url: str
+    canonical_url: Optional[str] = None
+    status: str = "self"  # "self" | "canonicalized" | "missing" | "broken" | "relative" | "multiple" | "cross_domain"
+    detail: str = ""
+    is_issue: bool = False
+    severity: str = "INFO"
+
+class CanonicalAuditRollup(BaseModel):
+    total_pages_evaluated: int = 0
+    self_canonical_count: int = 0
+    canonicalized_count: int = 0
+    missing_canonical_count: int = 0
+    broken_canonical_count: int = 0
+    relative_canonical_count: int = 0
+    multiple_canonical_count: int = 0
+    cross_domain_canonical_count: int = 0
+    canonical_health_score: float = 100.0
+    items: List[CanonicalAuditItem] = Field(default_factory=list)
+    summary: str = ""
+
+class HttpStatusItem(BaseModel):
+    url: str
+    status_code: int = 200
+    status_class: str = "2xx"  # "2xx" | "3xx" | "4xx" | "5xx"
+    status_text: str = "OK"
+    redirect_target: Optional[str] = None
+    inlinks_count: int = 0
+
+class BrokenLinkRecord(BaseModel):
+    source_url: str
+    target_url: str
+    anchor_text: str = ""
+    status_code: int = 404
+    error_type: str = "404 Not Found"
+
+class HttpStatusBreakdown(BaseModel):
+    total_urls_checked: int = 0
+    count_2xx: int = 0
+    count_3xx: int = 0
+    count_4xx: int = 0
+    count_5xx: int = 0
+    status_health_score: float = 100.0
+    pages_2xx: List[HttpStatusItem] = Field(default_factory=list)
+    pages_3xx: List[HttpStatusItem] = Field(default_factory=list)
+    pages_4xx: List[HttpStatusItem] = Field(default_factory=list)
+    pages_5xx: List[HttpStatusItem] = Field(default_factory=list)
+    broken_links: List[BrokenLinkRecord] = Field(default_factory=list)
+    summary: str = ""
+
+class CompetitorSeoParityProfile(BaseModel):
+    domain: str
+    brand_name: str
+    is_target: bool = False
+    pages_sampled: int = 1
+    technical_health_score: int = 80
+    onpage_score: int = 80
+    content_depth_score: int = 80
+    schema_score: int = 80
+    overall_seo_score: int = 80
+    avg_ttfb_ms: float = 0.0
+    http_200_rate_pct: float = 100.0
+    title_optimal_pct: float = 100.0
+    meta_optimal_pct: float = 100.0
+    h1_health_pct: float = 100.0
+    avg_word_count: int = 0
+    schema_types_count: int = 0
+    has_breadcrumbs: bool = False
+    modern_image_pct: float = 0.0
+    summary_verdict: str = ""
+
+class CompetitorSeoParityMatrix(BaseModel):
+    target_domain: str
+    competitors: List[CompetitorSeoParityProfile] = Field(default_factory=list)
+    target_rank: int = 1
+    peer_avg_seo_score: int = 80
+    top_advantages: List[str] = Field(default_factory=list)
+    critical_deficits: List[str] = Field(default_factory=list)
+    strategic_takeaway: str = ""
+
 class ExecutiveReport(BaseModel):
     report_id: str
     analysis_id: Optional[str] = None
@@ -1333,6 +1431,9 @@ class ExecutiveReport(BaseModel):
     per_engine_geo: Optional[PerEngineAiMatrix] = None
     security_audit: Optional[SecurityAuditReport] = None
     schema_validation: Optional[SchemaValidationReport] = None
+    canonical_audit: Optional[CanonicalAuditRollup] = None
+    http_status_breakdown: Optional[HttpStatusBreakdown] = None
+    competitor_seo_parity: Optional[CompetitorSeoParityMatrix] = None
 
 class AnalysisRequest(BaseModel):
     website_url: str

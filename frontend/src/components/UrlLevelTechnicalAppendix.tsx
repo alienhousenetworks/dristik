@@ -13,7 +13,9 @@ export function UrlLevelTechnicalAppendix({
   domain = 'target.com',
 }: UrlLevelTechnicalAppendixProps) {
   const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'ALL' | '200' | 'REDIRECT' | 'ERROR' | 'CANONICAL_ISSUE' | 'MISSING_H1'>('ALL');
+  const [statusFilter, setStatusFilter] = useState<
+    'ALL' | '200' | 'REDIRECT' | 'ERROR' | 'CANONICAL_ISSUE' | 'MISSING_H1' | 'THIN_CONTENT' | 'PIXEL_TRUNCATED'
+  >('ALL');
 
   // Summary Metrics
   const totalUrls = pages.length;
@@ -27,6 +29,10 @@ export function UrlLevelTechnicalAppendix({
     return cleanUrl !== cleanCanon;
   }).length;
   const missingH1Count = pages.filter((p) => !p.h1 || p.h1.length === 0).length;
+  const thinContentCount = pages.filter((p) => (p.word_count || 0) < 250).length;
+  const pixelTruncatedCount = pages.filter(
+    (p) => (p.title_pixel_width && p.title_pixel_width > 580) || p.title_pixel_status === 'TRUNCATED'
+  ).length;
 
   const avgTtfb = useMemo(() => {
     if (!pages.length) return 0;
@@ -57,6 +63,12 @@ export function UrlLevelTechnicalAppendix({
       if (statusFilter === 'MISSING_H1') {
         return !p.h1 || p.h1.length === 0;
       }
+      if (statusFilter === 'THIN_CONTENT') {
+        return (p.word_count || 0) < 250;
+      }
+      if (statusFilter === 'PIXEL_TRUNCATED') {
+        return (p.title_pixel_width && p.title_pixel_width > 580) || p.title_pixel_status === 'TRUNCATED';
+      }
       return true;
     });
   }, [pages, searchTerm, statusFilter]);
@@ -65,14 +77,19 @@ export function UrlLevelTechnicalAppendix({
     const headers = [
       'URL',
       'Status Code',
+      'Indexable',
+      'Inlinks',
       'TTFB (ms)',
       'Canonical URL',
       'Canonical Status',
       'Title',
       'Title Length',
+      'Title Pixel Width (px)',
+      'Title Pixel Status',
       'Primary H1',
       'H1 Count',
       'Word Count',
+      'Thin Content',
       'Schema Types',
       'Images Without Alt',
       'Total Images',
@@ -90,14 +107,19 @@ export function UrlLevelTechnicalAppendix({
       return [
         `"${p.url}"`,
         p.status_code,
+        p.is_indexable !== false ? 'YES' : 'NO',
+        p.inlinks_count ?? 0,
         p.ttfb_ms ? Math.round(p.ttfb_ms) : '',
         `"${p.canonical_url || ''}"`,
         `"${canonStatus}"`,
         `"${(p.title || '').replace(/"/g, '""')}"`,
         (p.title || '').length,
+        p.title_pixel_width ?? '',
+        p.title_pixel_status ?? 'OPTIMAL',
         `"${((p.h1 && p.h1[0]) || '').replace(/"/g, '""')}"`,
         (p.h1 || []).length,
         p.word_count || 0,
+        (p.word_count || 0) < 250 ? 'YES' : 'NO',
         `"${(p.schema_types || []).join('; ')}"`,
         p.images_without_alt ?? 0,
         p.total_images ?? 0,
@@ -125,14 +147,14 @@ export function UrlLevelTechnicalAppendix({
               Diagnostic Appendix
             </span>
             <span className="text-xs text-slate-500 font-mono">
-              Deterministic Ingestion Proof
+              Enterprise Crawl &amp; Indexability Ledger
             </span>
           </div>
           <h3 className="text-base font-bold text-slate-900 mt-1">
             URL-Level Technical Appendix
           </h3>
           <p className="text-xs text-slate-600 mt-0.5">
-            Full tabular audit inventory of all {totalUrls} crawled URLs with HTTP codes, latency, canonical tags, schema, and heading structures.
+            Full tabular audit inventory of all {totalUrls} crawled URLs with HTTP codes, internal inlinks, SERP pixel widths, canonical status, schema, and heading structures.
           </p>
         </div>
 
@@ -146,30 +168,34 @@ export function UrlLevelTechnicalAppendix({
       </div>
 
       {/* Metric Scorecards Ribbon */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2 mt-4 font-mono text-xs">
-        <div className="p-2.5 bg-slate-50 border border-slate-200 rounded">
-          <span className="text-[10px] text-slate-500 uppercase">Total Crawled</span>
-          <p className="text-base font-bold text-slate-900 mt-0.5">{totalUrls}</p>
+      <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-7 gap-2 mt-4 font-mono text-xs">
+        <div className="p-2 bg-slate-50 border border-slate-200 rounded">
+          <span className="text-[9px] text-slate-500 uppercase">Total Crawled</span>
+          <p className="text-sm font-bold text-slate-900 mt-0.5">{totalUrls}</p>
         </div>
-        <div className="p-2.5 bg-emerald-50 border border-emerald-200 rounded">
-          <span className="text-[10px] text-emerald-800 uppercase">200 OK</span>
-          <p className="text-base font-bold text-emerald-950 mt-0.5">{okCount}</p>
+        <div className="p-2 bg-emerald-50 border border-emerald-200 rounded">
+          <span className="text-[9px] text-emerald-800 uppercase">200 OK</span>
+          <p className="text-sm font-bold text-emerald-950 mt-0.5">{okCount}</p>
         </div>
-        <div className="p-2.5 bg-blue-50 border border-blue-200 rounded">
-          <span className="text-[10px] text-blue-800 uppercase">Redirects (3xx)</span>
-          <p className="text-base font-bold text-blue-950 mt-0.5">{redirectCount}</p>
+        <div className="p-2 bg-blue-50 border border-blue-200 rounded">
+          <span className="text-[9px] text-blue-800 uppercase">Redirects (3xx)</span>
+          <p className="text-sm font-bold text-blue-950 mt-0.5">{redirectCount}</p>
         </div>
-        <div className="p-2.5 bg-red-50 border border-red-200 rounded">
-          <span className="text-[10px] text-red-800 uppercase">Errors (4xx/5xx)</span>
-          <p className="text-base font-bold text-red-950 mt-0.5">{errorCount}</p>
+        <div className="p-2 bg-red-50 border border-red-200 rounded">
+          <span className="text-[9px] text-red-800 uppercase">Errors (4xx/5xx)</span>
+          <p className="text-sm font-bold text-red-950 mt-0.5">{errorCount}</p>
         </div>
-        <div className="p-2.5 bg-amber-50 border border-amber-200 rounded">
-          <span className="text-[10px] text-amber-800 uppercase">Canonical Issues</span>
-          <p className="text-base font-bold text-amber-950 mt-0.5">{canonicalIssueCount}</p>
+        <div className="p-2 bg-amber-50 border border-amber-200 rounded">
+          <span className="text-[9px] text-amber-800 uppercase">Canonical Issues</span>
+          <p className="text-sm font-bold text-amber-950 mt-0.5">{canonicalIssueCount}</p>
         </div>
-        <div className="p-2.5 bg-slate-50 border border-slate-200 rounded">
-          <span className="text-[10px] text-slate-500 uppercase">Avg TTFB</span>
-          <p className="text-base font-bold text-slate-900 mt-0.5">{avgTtfb}ms</p>
+        <div className="p-2 bg-purple-50 border border-purple-200 rounded">
+          <span className="text-[9px] text-purple-800 uppercase">Thin Content</span>
+          <p className="text-sm font-bold text-purple-950 mt-0.5">{thinContentCount}</p>
+        </div>
+        <div className="p-2 bg-orange-50 border border-orange-200 rounded">
+          <span className="text-[9px] text-orange-800 uppercase">SERP Truncated</span>
+          <p className="text-sm font-bold text-orange-950 mt-0.5">{pixelTruncatedCount}</p>
         </div>
       </div>
 
@@ -180,10 +206,12 @@ export function UrlLevelTechnicalAppendix({
           {[
             { key: 'ALL', label: `All (${totalUrls})` },
             { key: '200', label: `200 OK (${okCount})` },
-            { key: 'REDIRECT', label: `Redirects (${redirectCount})` },
-            { key: 'ERROR', label: `Errors (${errorCount})` },
-            { key: 'CANONICAL_ISSUE', label: `Canonical Mismatches (${canonicalIssueCount})` },
+            { key: 'REDIRECT', label: `3xx (${redirectCount})` },
+            { key: 'ERROR', label: `4xx/5xx (${errorCount})` },
+            { key: 'CANONICAL_ISSUE', label: `Non-Canonical (${canonicalIssueCount})` },
             { key: 'MISSING_H1', label: `Missing H1 (${missingH1Count})` },
+            { key: 'THIN_CONTENT', label: `Thin Content (${thinContentCount})` },
+            { key: 'PIXEL_TRUNCATED', label: `Pixel &gt; 580px (${pixelTruncatedCount})` },
           ].map((item) => (
             <button
               key={item.key}
@@ -195,7 +223,7 @@ export function UrlLevelTechnicalAppendix({
                   : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
               }`}
             >
-              {item.label}
+              <span dangerouslySetInnerHTML={{ __html: item.label }} />
             </button>
           ))}
         </div>
@@ -217,19 +245,21 @@ export function UrlLevelTechnicalAppendix({
           <thead>
             <tr className="bg-slate-100 border-b border-slate-300 text-slate-700 font-mono text-[11px]">
               <th className="py-2 px-2.5 font-bold w-1/4">URL &amp; Path</th>
-              <th className="py-2 px-2.5 font-bold">Status</th>
-              <th className="py-2 px-2.5 font-bold">TTFB</th>
+              <th className="py-2 px-2.5 font-bold text-center">Status</th>
+              <th className="py-2 px-2.5 font-bold text-center">Indexable</th>
+              <th className="py-2 px-2.5 font-bold text-center">Inlinks</th>
+              <th className="py-2 px-2.5 font-bold text-center">TTFB</th>
               <th className="py-2 px-2.5 font-bold">Canonical Status</th>
-              <th className="py-2 px-2.5 font-bold w-1/5">Title &amp; H1</th>
-              <th className="py-2 px-2.5 font-bold">Schema Types</th>
-              <th className="py-2 px-2.5 font-bold">Images / Alt</th>
-              <th className="py-2 px-2.5 font-bold">Words</th>
+              <th className="py-2 px-2.5 font-bold w-1/4">Title &amp; Pixel Width</th>
+              <th className="py-2 px-2.5 font-bold">Primary H1</th>
+              <th className="py-2 px-2.5 font-bold">Schema</th>
+              <th className="py-2 px-2.5 font-bold text-right">Words</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-200 font-mono text-[11px]">
             {filteredPages.length === 0 ? (
               <tr>
-                <td colSpan={8} className="py-6 text-center text-slate-400 font-sans italic">
+                <td colSpan={10} className="py-6 text-center text-slate-400 font-sans italic">
                   No URLs match the selected filter criteria.
                 </td>
               </tr>
@@ -258,11 +288,14 @@ export function UrlLevelTechnicalAppendix({
                     : 'text-red-800 font-bold';
 
                 const pathDisplay = p.url.replace(/^https?:\/\/[^/]+/, '') || '/';
+                const pixelWidth = p.title_pixel_width || (p.title ? Math.round(p.title.length * 9.5) : 0);
+                const isPixelTruncated = pixelWidth > 580;
+                const isThin = (p.word_count || 0) < 250;
 
                 return (
                   <tr key={idx} className="hover:bg-slate-50 transition-colors">
                     {/* URL Path */}
-                    <td className="py-2.5 px-2.5 max-w-[220px]">
+                    <td className="py-2 px-2.5 max-w-[220px]">
                       <a
                         href={p.url}
                         target="_blank"
@@ -278,19 +311,37 @@ export function UrlLevelTechnicalAppendix({
                     </td>
 
                     {/* Status Code */}
-                    <td className="py-2.5 px-2.5">
+                    <td className="py-2 px-2.5 text-center">
                       <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold border ${statusColor}`}>
                         {p.status_code}
                       </span>
                     </td>
 
+                    {/* Indexable */}
+                    <td className="py-2 px-2.5 text-center">
+                      <span
+                        className={`text-[9px] px-1 py-0.5 rounded font-bold ${
+                          p.is_indexable !== false
+                            ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                            : 'bg-red-50 text-red-800 border border-red-200'
+                        }`}
+                      >
+                        {p.is_indexable !== false ? 'Indexable' : 'Blocked'}
+                      </span>
+                    </td>
+
+                    {/* Inlinks */}
+                    <td className="py-2 px-2.5 text-center font-bold text-slate-700">
+                      {p.inlinks_count ?? 0}
+                    </td>
+
                     {/* TTFB */}
-                    <td className={`py-2.5 px-2.5 ${ttfbColor}`}>
+                    <td className={`py-2 px-2.5 text-center ${ttfbColor}`}>
                       {p.ttfb_ms ? `${Math.round(p.ttfb_ms)}ms` : '—'}
                     </td>
 
                     {/* Canonical Status */}
-                    <td className="py-2.5 px-2.5">
+                    <td className="py-2 px-2.5">
                       {canonStatus === 'SELF' ? (
                         <span className="text-[10px] text-emerald-800 font-semibold">
                           ✓ Self
@@ -300,39 +351,62 @@ export function UrlLevelTechnicalAppendix({
                           Missing
                         </span>
                       ) : (
-                        <span
-                          className="text-[10px] text-red-800 font-semibold bg-red-50 px-1 py-0.5 rounded border border-red-200 truncate max-w-[120px] block"
-                          title={`Canonical points to: ${p.canonical_url}`}
-                        >
-                          Mismatch
-                        </span>
+                        <div className="max-w-[140px]">
+                          <span className="text-[9px] font-bold text-amber-900 bg-amber-50 px-1 py-0.5 rounded border border-amber-300 block mb-0.5">
+                            Points to:
+                          </span>
+                          <span
+                            className="text-[9px] text-slate-500 font-mono truncate block"
+                            title={p.canonical_url}
+                          >
+                            {p.canonical_url?.replace(/^https?:\/\/[^/]+/, '') || p.canonical_url}
+                          </span>
+                        </div>
                       )}
                     </td>
 
-                    {/* Title & Primary H1 */}
-                    <td className="py-2.5 px-2.5 font-sans max-w-[200px]">
+                    {/* Title & SERP Pixel Width */}
+                    <td className="py-2 px-2.5 font-sans max-w-[220px]">
                       <p className="font-bold text-slate-900 text-[11px] truncate" title={p.title || 'No Title'}>
                         {p.title || <span className="text-red-600 italic">Missing Title</span>}
                       </p>
-                      <p className="text-slate-500 text-[10px] truncate mt-0.5" title={(p.h1 && p.h1[0]) || 'No H1'}>
-                        H1: {(p.h1 && p.h1[0]) || <span className="text-amber-700 italic">No H1</span>}
+                      <div className="flex items-center gap-1.5 mt-0.5">
+                        <span
+                          className={`font-mono text-[9px] px-1 py-0.2 rounded font-semibold ${
+                            isPixelTruncated
+                              ? 'bg-red-50 text-red-700 border border-red-200'
+                              : 'bg-slate-100 text-slate-600'
+                          }`}
+                        >
+                          {pixelWidth}px {isPixelTruncated ? '⚠️ Truncated' : '✓'}
+                        </span>
+                        <span className="text-[9px] text-slate-400 font-mono">
+                          ({(p.title || '').length}ch)
+                        </span>
+                      </div>
+                    </td>
+
+                    {/* Primary H1 */}
+                    <td className="py-2 px-2.5 font-sans max-w-[160px]">
+                      <p className="text-slate-700 text-[10px] truncate" title={(p.h1 && p.h1[0]) || 'No H1'}>
+                        {(p.h1 && p.h1[0]) || <span className="text-amber-700 italic font-mono text-[9px]">✕ Missing H1</span>}
                       </p>
                     </td>
 
                     {/* Schema Types */}
-                    <td className="py-2.5 px-2.5">
+                    <td className="py-2 px-2.5">
                       {(p.schema_types || []).length > 0 ? (
-                        <div className="flex flex-wrap gap-1 max-w-[160px]">
+                        <div className="flex flex-wrap gap-0.5 max-w-[120px]">
                           {p.schema_types.slice(0, 2).map((s, sIdx) => (
                             <span
                               key={sIdx}
-                              className="px-1 py-0.5 rounded bg-blue-50 border border-blue-200 text-blue-900 text-[9px]"
+                              className="px-1 py-0.2 rounded bg-blue-50 border border-blue-200 text-blue-900 text-[8px] font-mono"
                             >
                               {s}
                             </span>
                           ))}
                           {p.schema_types.length > 2 && (
-                            <span className="text-[9px] text-slate-400">
+                            <span className="text-[8px] text-slate-400 font-mono">
                               +{p.schema_types.length - 2}
                             </span>
                           )}
@@ -342,20 +416,11 @@ export function UrlLevelTechnicalAppendix({
                       )}
                     </td>
 
-                    {/* Images / Alt */}
-                    <td className="py-2.5 px-2.5 text-[10px]">
-                      {p.images_without_alt && p.images_without_alt > 0 ? (
-                        <span className="text-amber-800 font-semibold">
-                          {p.images_without_alt} missing alt
-                        </span>
-                      ) : (
-                        <span className="text-slate-500">{p.total_images || 0} images</span>
-                      )}
-                    </td>
-
                     {/* Words */}
-                    <td className="py-2.5 px-2.5 text-[10px] text-slate-700">
-                      {p.word_count || 0}
+                    <td className="py-2 px-2.5 text-right font-mono text-[10px]">
+                      <span className={isThin ? 'text-amber-700 font-bold bg-amber-50 px-1 py-0.5 rounded border border-amber-200' : 'text-slate-700'}>
+                        {p.word_count || 0}
+                      </span>
                     </td>
                   </tr>
                 );
@@ -371,9 +436,11 @@ export function UrlLevelTechnicalAppendix({
           Showing {filteredPages.length} of {totalUrls} URLs
         </span>
         <span>
-          Verified against HTTP crawl layer · <strong className="text-slate-800">Dristik Methodology v2.1</strong>
+          Audited against Screaming Frog &amp; Ahrefs parity · <strong className="text-slate-800">Dristik Methodology v2.2</strong>
         </span>
       </div>
     </div>
   );
 }
+
+
