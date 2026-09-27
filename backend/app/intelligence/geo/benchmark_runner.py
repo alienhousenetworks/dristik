@@ -64,6 +64,22 @@ class EngineBenchmarkAggregate(BaseModel):
     status: str = "AVAILABLE"  # AVAILABLE | UNAVAILABLE | RATE_LIMITED | KEY_MISSING
 
 
+class ShareOfModelMetric(BaseModel):
+    """
+    Enterprise Share of Model (SoM) and Competitor Displacement metrics,
+    benchmarking brand presence vs rivals across AI answer engines.
+    """
+    target_domain: str
+    brand_name: str
+    total_evaluated_queries: int
+    share_of_model_pct: float
+    first_party_citation_share_pct: float
+    recommendation_rank_score: float  # 0 to 100 based on position weighting
+    ordinal_distribution: Dict[str, int] = Field(default_factory=dict)  # rank_1, rank_2_3, rank_4_plus, unranked
+    competitor_shares: Dict[str, float] = Field(default_factory=dict)
+    competitor_displacements: List[Dict[str, Any]] = Field(default_factory=list)
+
+
 class GeoBenchmarkReport(BaseModel):
     benchmark_id: str
     target_domain: str
@@ -75,6 +91,7 @@ class GeoBenchmarkReport(BaseModel):
     engine_aggregates: Dict[str, EngineBenchmarkAggregate] = Field(default_factory=dict)
     overall_mention_rate_pct: Optional[float] = None
     overall_first_party_citation_rate_pct: Optional[float] = None
+    share_of_model: Optional[ShareOfModelMetric] = None
     repeats: int = 1
     failed_runs: int = 0
     matrix_grounding: Optional[str] = None
@@ -352,6 +369,14 @@ class GeoBenchmarkRunner:
             f"{len(blindspots)} category blindspots identified."
         )
 
+        # Compute Share of Model (SoM) and Competitor Displacement
+        som_metric = self.calculate_share_of_model(
+            evaluations=evaluations,
+            target_domain=clean_domain,
+            brand_name=brand,
+            competitors=competitors,
+        )
+
         return GeoBenchmarkReport(
             benchmark_id=benchmark_id,
             target_domain=clean_domain,
@@ -363,6 +388,7 @@ class GeoBenchmarkRunner:
             engine_aggregates=engine_aggregates,
             overall_mention_rate_pct=overall_mention_rate,
             overall_first_party_citation_rate_pct=overall_1p_citation_rate,
+            share_of_model=som_metric,
             evaluations=evaluations,
             critical_blindspots=blindspots[:8],
             reproducibility_hash=reproducibility_hash,
@@ -370,7 +396,120 @@ class GeoBenchmarkRunner:
             summary=summary,
             repeats=repeat_count,
             failed_runs=failed_runs,
-            matrix_grounding=getattr(suite, "matrix_grounding", None),
+        )
+
+    def calculate_share_of_model(
+        self,
+        evaluations: List[EvaluatedQueryRun],
+        target_domain: str,
+        brand_name: str,
+        competitors: Optional[List[str]] = None,
+    ) -> ShareOfModelMetric:
+        """
+        Calculates enterprise Share of Model (SoM), ordinal position distributions,
+        and competitor displacement instances where rivals stole top recommendations.
+        """
+        clean_domain = (target_domain or "").lower().replace("https://", "").replace("http://", "").split("/")[0]
+        brand = (brand_name or clean_domain.split(".")[0]).lower().strip()
+        comp_list = [c.lower().strip() for c in (competitors or []) if c and c.strip()]
+
+        successes = [e for e in evaluations if e.status == "SUCCESS"]
+        total = len(successes)
+        if total == 0:
+            return ShareOfModelMetric(
+                target_domain=clean_domain,
+                brand_name=brand_name,
+                total_evaluated_queries=0,
+                share_of_model_pct=0.0,
+                first_party_citation_share_pct=0.0,
+                recommendation_rank_score=0.0,
+                ordinal_distribution={"rank_1": 0, "rank_2_3": 0, "rank_4_plus": 0, "unranked": 0},
+                competitor_shares={},
+                competitor_displacements=[],
+            )
+
+        target_mentions = 0
+        target_first_party_citations = 0
+        rank_1 = 0
+        rank_2_3 = 0
+        rank_4_plus = 0
+        unranked = 0
+        position_weight_sum = 0.0
+
+        for ev in successes:
+            if ev.was_mentioned:
+                target_mentions += 1
+                pos = ev.mention_position
+                if pos == 1:
+                    rank_1 += 1
+                    position_weight_sum += 1.0
+                elif pos in (2, 3):
+                    rank_2_3 += 1
+                    position_weight_sum += 0.75
+                elif pos and pos >= 4:
+                    rank_4_plus += 1
+                    position_weight_sum += 0.40
+                else:
+                    unranked += 1
+                    position_weight_sum += 0.50
+            else:
+                unranked += 1
+
+            if ev.was_first_party_cited:
+                target_first_party_citations += 1
+
+        # Competitor shares & displacements
+        competitor_shares: Dict[str, float] = {}
+        displacements: List[Dict[str, Any]] = []
+
+        for comp in comp_list:
+            comp_mentions = 0
+            for ev in successes:
+                raw_lower = (ev.raw_response or "").lower()
+                c_hit = comp in raw_lower or any(comp in s for s in ev.source_domains)
+                if c_hit:
+                    comp_mentions += 1
+                    if not ev.was_mentioned:
+                        displacements.append({
+                            "query_id": ev.query_id,
+                            "query_text": ev.query_text,
+                            "engine": ev.engine_name,
+                            "displacing_competitor": comp,
+                            "target_mentioned": False,
+                            "reason": f"Competitor '{comp}' was recommended while '{brand_name}' was omitted from the answer.",
+                        })
+                    elif ev.mention_position and ev.mention_position > 1:
+                        displacements.append({
+                            "query_id": ev.query_id,
+                            "query_text": ev.query_text,
+                            "engine": ev.engine_name,
+                            "displacing_competitor": comp,
+                            "target_mentioned": True,
+                            "target_position": ev.mention_position,
+                            "reason": f"Competitor '{comp}' led the recommendation list while '{brand_name}' was ranked #{ev.mention_position}.",
+                        })
+
+            competitor_shares[comp] = round((comp_mentions / total) * 100.0, 1)
+
+        som_pct = round((target_mentions / total) * 100.0, 1)
+        cit_share_pct = round((target_first_party_citations / total) * 100.0, 1)
+        rank_score = round((position_weight_sum / total) * 100.0, 1)
+
+        return ShareOfModelMetric(
+            target_domain=clean_domain,
+            brand_name=brand_name,
+            total_evaluated_queries=total,
+            share_of_model_pct=som_pct,
+            first_party_citation_share_pct=cit_share_pct,
+            recommendation_rank_score=rank_score,
+            ordinal_distribution={
+                "rank_1": rank_1,
+                "rank_2_3": rank_2_3,
+                "rank_4_plus": rank_4_plus,
+                "unranked": unranked,
+            },
+            competitor_shares=competitor_shares,
+            competitor_displacements=displacements[:30],
         )
 
 

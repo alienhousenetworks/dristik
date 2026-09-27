@@ -20,6 +20,19 @@ from app.intelligence.geo.citation_gap import (
     geo_citation_gap_engine,
     CausalCitationGapReport,
 )
+from app.intelligence.geo.benchmark_generator import (
+    benchmark_generator,
+    BenchmarkSuite,
+)
+from app.intelligence.geo.benchmark_runner import (
+    benchmark_runner,
+    ShareOfModelMetric,
+    EvaluatedQueryRun,
+)
+from app.intelligence.geo.crawler_logs import (
+    crawler_log_analyzer,
+    CrawlerLogAnalysis,
+)
 
 router = APIRouter(prefix="/geo-pipeline", tags=["GEO/AEO Pipeline"])
 
@@ -153,4 +166,76 @@ async def analyze_citation_gaps_endpoint(req: CitationGapAnalysisRequest):
         return report
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Failed to analyze citation gaps: {str(exc)}")
+
+
+class DynamicFanOutClusterRequest(BaseModel):
+    domain: str = Field(..., description="Target domain (e.g. acme.com)")
+    brand_name: Optional[str] = Field(None, description="Brand name")
+    industry: Optional[str] = Field(None, description="Industry or category label")
+    competitors: List[str] = Field(default_factory=list, description="Competitor names or domains")
+    personas: Optional[List[str]] = Field(None, description="Buyer personas to cluster (e.g. Enterprise Architect, CFO)")
+    target_size: int = Field(50, ge=10, le=200, description="Target query suite size")
+
+
+class ShareOfModelRequest(BaseModel):
+    domain: str = Field(..., description="Target domain")
+    brand_name: Optional[str] = Field(None, description="Brand name")
+    competitors: List[str] = Field(default_factory=list, description="Competitors to evaluate displacement against")
+    evaluations: List[EvaluatedQueryRun] = Field(default_factory=list, description="Evaluated query runs to score")
+
+
+class CrawlerLogAnalysisRequest(BaseModel):
+    log_content: str = Field(..., description="Raw server/CDN access log text (Nginx/Cloudflare)")
+
+
+@router.post("/fanout-cluster", response_model=BenchmarkSuite)
+async def generate_fanout_cluster_endpoint(req: DynamicFanOutClusterRequest):
+    """
+    Generates a dynamic multi-persona intent cluster of benchmark queries
+    accompanied by reverse-engineered AI search fan-out sub-queries.
+    """
+    try:
+        suite = benchmark_generator.generate_dynamic_cluster(
+            domain=req.domain,
+            brand_name=req.brand_name,
+            industry=req.industry,
+            competitors=req.competitors,
+            personas=req.personas,
+            target_size=req.target_size,
+        )
+        return suite
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Failed to generate fan-out cluster: {str(exc)}")
+
+
+@router.post("/share-of-model", response_model=ShareOfModelMetric)
+async def calculate_share_of_model_endpoint(req: ShareOfModelRequest):
+    """
+    Computes enterprise Share of Model (SoM), ordinal position distributions,
+    and competitor displacement instances where rivals captured top AI recommendations.
+    """
+    try:
+        metric = benchmark_runner.calculate_share_of_model(
+            evaluations=req.evaluations,
+            target_domain=req.domain,
+            brand_name=req.brand_name or req.domain.split(".")[0].capitalize(),
+            competitors=req.competitors,
+        )
+        return metric
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Failed to calculate Share of Model: {str(exc)}")
+
+
+@router.post("/crawler-logs/analyze", response_model=CrawlerLogAnalysis)
+async def analyze_crawler_logs_endpoint(req: CrawlerLogAnalysisRequest):
+    """
+    Analyzes server or CDN access logs (Cloudflare, Nginx, Apache) to measure
+    real AI search crawler activity (GPTBot, PerplexityBot, ClaudeBot), blocked hits, and crawl health.
+    """
+    try:
+        analysis = crawler_log_analyzer.analyze_logs(req.log_content)
+        return analysis
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Failed to analyze crawler logs: {str(exc)}")
+
 

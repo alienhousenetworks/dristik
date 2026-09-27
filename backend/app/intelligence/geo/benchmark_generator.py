@@ -15,6 +15,23 @@ BenchmarkCategory = Literal[
     "comparative", "problem", "geographic", "high_intent"
 ]
 
+FanOutQueryType = Literal[
+    "definitional", "comparative_reviews", "pricing_model",
+    "alternative_vendors", "user_community", "technical_specs"
+]
+
+
+class FanOutQuery(BaseModel):
+    """
+    Reverse-engineered synthetic sub-query that an AI answer engine (Perplexity, SearchGPT, Gemini)
+    dispatches to underlying search indices to assemble its context window.
+    """
+    fan_out_id: str
+    fan_out_type: FanOutQueryType
+    sub_query_text: str
+    search_intent: str
+    expected_source_types: List[str] = Field(default_factory=list)
+
 
 class BenchmarkQuery(BaseModel):
     query_id: str
@@ -23,6 +40,7 @@ class BenchmarkQuery(BaseModel):
     query_text: str
     intent_description: str
     expected_targets: List[str] = Field(default_factory=list)
+    fan_out_queries: List[FanOutQuery] = Field(default_factory=list)
 
 
 class BenchmarkSuite(BaseModel):
@@ -34,12 +52,109 @@ class BenchmarkSuite(BaseModel):
     queries: List[BenchmarkQuery] = Field(default_factory=list)
     matrix_grounding: str = "profile"  # profile | industry_label | brand_only
     matrix_confidence: str = "high"  # high | medium | low
+    total_fan_out_queries: int = 0
 
 
 class GeoBenchmarkGenerator:
     """
-    Synthesizes a standardized, reproducible benchmark question set tailored to any business.
+    Synthesizes standardized, reproducible benchmark question sets with
+    AI engine fan-out query modeling and buyer persona clustering.
     """
+
+    def generate_fan_outs_for_query(
+        self,
+        query_text: str,
+        category: BenchmarkCategory,
+        brand: str,
+        domain: str,
+        industry: str,
+        competitors: Optional[List[str]] = None,
+    ) -> List[FanOutQuery]:
+        """
+        Synthesizes the 2-4 sub-queries that an AI engine's retrieval agent creates
+        to gather context before writing its response.
+        """
+        fan_outs: List[FanOutQuery] = []
+        comp = (competitors or ["competitors"])[0]
+        ind = industry or "software"
+
+        if category == "entity":
+            fan_outs.append(FanOutQuery(
+                fan_out_id=f"FO-{uuid.uuid4().hex[:6]}",
+                fan_out_type="definitional",
+                sub_query_text=f"{brand} company overview official website {domain}",
+                search_intent="Retrieve official entity metadata and foundational claims",
+                expected_source_types=["vendor_self_hosted", "wikipedia.org", "crunchbase.com"],
+            ))
+            fan_outs.append(FanOutQuery(
+                fan_out_id=f"FO-{uuid.uuid4().hex[:6]}",
+                fan_out_type="user_community",
+                sub_query_text=f"{brand} reviews reddit techcrunch",
+                search_intent="Evaluate third-party reputational sentiment",
+                expected_source_types=["community_discussion", "tech_media"],
+            ))
+        elif category == "commercial":
+            fan_outs.append(FanOutQuery(
+                fan_out_id=f"FO-{uuid.uuid4().hex[:6]}",
+                fan_out_type="alternative_vendors",
+                sub_query_text=f"best {ind} platforms g2 reviews 2026",
+                search_intent="Collect industry category ranking from peer review platforms",
+                expected_source_types=["peer_review", "g2.com", "gartner.com"],
+            ))
+            fan_outs.append(FanOutQuery(
+                fan_out_id=f"FO-{uuid.uuid4().hex[:6]}",
+                fan_out_type="comparative_reviews",
+                sub_query_text=f"top rated {ind} tools comparison market guide",
+                search_intent="Extract third-party vendor comparison lists",
+                expected_source_types=["tech_media", "peer_review"],
+            ))
+        elif category == "comparative":
+            fan_outs.append(FanOutQuery(
+                fan_out_id=f"FO-{uuid.uuid4().hex[:6]}",
+                fan_out_type="comparative_reviews",
+                sub_query_text=f"{brand} vs {comp} difference comparison trustradius",
+                search_intent="Retrieve head-to-head feature matrix and customer satisfaction scores",
+                expected_source_types=["peer_review", "community_discussion"],
+            ))
+            fan_outs.append(FanOutQuery(
+                fan_out_id=f"FO-{uuid.uuid4().hex[:6]}",
+                fan_out_type="alternative_vendors",
+                sub_query_text=f"why switch from {comp} to {brand} case study",
+                search_intent="Discover customer migration reasons and verified outcomes",
+                expected_source_types=["vendor_self_hosted", "tech_media"],
+            ))
+        elif category == "high_intent":
+            fan_outs.append(FanOutQuery(
+                fan_out_id=f"FO-{uuid.uuid4().hex[:6]}",
+                fan_out_type="pricing_model",
+                sub_query_text=f"{brand} pricing plans cost per user tier {domain}",
+                search_intent="Extract explicit pricing schedule, tiers, and hidden fees",
+                expected_source_types=["vendor_self_hosted", "peer_review"],
+            ))
+            fan_outs.append(FanOutQuery(
+                fan_out_id=f"FO-{uuid.uuid4().hex[:6]}",
+                fan_out_type="technical_specs",
+                sub_query_text=f"{brand} enterprise security compliance soc2 gdpr",
+                search_intent="Verify security certifications and trust posture",
+                expected_source_types=["vendor_self_hosted", "official_standard"],
+            ))
+        else:
+            fan_outs.append(FanOutQuery(
+                fan_out_id=f"FO-{uuid.uuid4().hex[:6]}",
+                fan_out_type="definitional",
+                sub_query_text=f"{brand} {category} capabilities documentation",
+                search_intent="Extract direct capability documentation",
+                expected_source_types=["vendor_self_hosted", "official_standard"],
+            ))
+            fan_outs.append(FanOutQuery(
+                fan_out_id=f"FO-{uuid.uuid4().hex[:6]}",
+                fan_out_type="user_community",
+                sub_query_text=f"{brand} {category} feedback forums",
+                search_intent="Gather practitioner feedback",
+                expected_source_types=["community_discussion"],
+            ))
+
+        return fan_outs
 
     def generate_suite(
         self,
@@ -78,6 +193,14 @@ class GeoBenchmarkGenerator:
 
         def _add(cat: BenchmarkCategory, label: str, text: str, desc: str):
             nonlocal qid
+            fo = self.generate_fan_outs_for_query(
+                query_text=text,
+                category=cat,
+                brand=brand,
+                domain=clean_domain,
+                industry=category_label,
+                competitors=comp_list,
+            )
             queries.append(BenchmarkQuery(
                 query_id=f"Q-{qid:02d}",
                 category=cat,
@@ -85,6 +208,7 @@ class GeoBenchmarkGenerator:
                 query_text=text,
                 intent_description=desc,
                 expected_targets=[brand.lower(), clean_domain],
+                fan_out_queries=fo,
             ))
             qid += 1
 
@@ -195,6 +319,7 @@ class GeoBenchmarkGenerator:
             _add("high_intent", "High-Intent Commercial", f"What is {brand}'s cancellation or refund policy?", "Contract terms inquiry")
 
         suite_id = f"BMK-{uuid.uuid4().hex[:8].upper()}"
+        total_fo = sum(len(q.fan_out_queries) for q in queries)
         return BenchmarkSuite(
             suite_id=suite_id,
             domain=clean_domain,
@@ -204,7 +329,116 @@ class GeoBenchmarkGenerator:
             queries=queries,
             matrix_grounding=grounding,
             matrix_confidence=matrix_confidence,
+            total_fan_out_queries=total_fo,
+        )
+
+    def generate_dynamic_cluster(
+        self,
+        domain: str,
+        brand_name: Optional[str] = None,
+        industry: Optional[str] = None,
+        competitors: Optional[List[str]] = None,
+        personas: Optional[List[str]] = None,
+        target_size: int = 100,
+    ) -> BenchmarkSuite:
+        """
+        Dynamically clusters and generates synthetic buyer-persona inquiries (up to target_size),
+        emulating enterprise GEO platforms like Profound.
+        Expands baseline queries with persona perspectives:
+        - Enterprise Architect (security, SLA, governance)
+        - CFO / Finance (ROI, licensing, total cost of ownership)
+        - Practitioner / Engineer (API, documentation, developer experience)
+        - End Buyer / Executive (market leadership, risk, references)
+        """
+        clean_domain = (domain or "").lower().replace("https://", "").replace("http://", "").split("/")[0]
+        brand = brand_name or clean_domain.split(".")[0].capitalize()
+        category_label = industry or "technology solution"
+        comp_list = [c for c in (competitors or []) if c and str(c).strip()] or ["market leaders"]
+
+        active_personas = personas or [
+            "Enterprise Architect",
+            "CFO & Procurement",
+            "Technical Lead & Developer",
+            "Executive & Business Leader",
+        ]
+
+        # Generate base comprehensive suite
+        base_suite = self.generate_suite(
+            domain=domain,
+            brand_name=brand_name,
+            industry=industry,
+            competitors=competitors,
+            mode="comprehensive",
+        )
+
+        all_queries: List[BenchmarkQuery] = list(base_suite.queries)
+        qid = len(all_queries) + 1
+
+        persona_templates = {
+            "Enterprise Architect": [
+                ("How does {brand} handle multi-region data residency and disaster recovery?", "security_resilience", "high_intent"),
+                ("What are the API rate limits, webhooks, and SDK offerings for {brand}?", "api_extensibility", "services"),
+                ("Does {brand} support SAML SSO, SCIM provisioning, and RBAC?", "identity_governance", "high_intent"),
+                ("Can {brand} be deployed in a hybrid or self-hosted VPC environment?", "infrastructure_deployment", "services"),
+            ],
+            "CFO & Procurement": [
+                ("What is the typical 3-year Total Cost of Ownership (TCO) for {brand}?", "tco_analysis", "commercial"),
+                ("Does {brand} charge per seat, per consumption unit, or flat-rate annual?", "contract_structure", "high_intent"),
+                ("What is the average payback period or measured ROI for {brand} customers?", "roi_quantification", "commercial"),
+                ("Are there hidden implementation or professional services fees with {brand}?", "procurement_transparency", "high_intent"),
+            ],
+            "Technical Lead & Developer": [
+                ("How thorough and up-to-date is {brand}'s API documentation and OpenAPI spec?", "developer_experience", "services"),
+                ("Common engineering challenges or limitations reported by developers using {brand}", "dev_limitations", "problem"),
+                ("How easily does {brand} integrate with modern CI/CD and observability stacks?", "integration_ecosystem", "services"),
+            ],
+            "Executive & Business Leader": [
+                ("What makes {brand} lower risk than legacy {comp}?", "risk_mitigation", "comparative"),
+                ("Customer retention rate and enterprise case studies for {brand}", "market_validation", "entity"),
+                ("Where does {brand} appear on independent analyst radars and market quadrants?", "analyst_recognition", "commercial"),
+            ],
+        }
+
+        for persona in active_personas:
+            if len(all_queries) >= target_size:
+                break
+            templates = persona_templates.get(persona, [])
+            for tmpl, intent, cat in templates:
+                if len(all_queries) >= target_size:
+                    break
+                text = tmpl.format(brand=brand, comp=comp_list[0], domain=clean_domain)
+                fo = self.generate_fan_outs_for_query(
+                    query_text=text,
+                    category=cat,  # type: ignore
+                    brand=brand,
+                    domain=clean_domain,
+                    industry=category_label,
+                    competitors=comp_list,
+                )
+                all_queries.append(BenchmarkQuery(
+                    query_id=f"Q-{qid:02d}",
+                    category=cat,  # type: ignore
+                    category_label=f"{persona}: {cat.capitalize()}",
+                    query_text=text,
+                    intent_description=f"[{persona}] {intent}",
+                    expected_targets=[brand.lower(), clean_domain],
+                    fan_out_queries=fo,
+                ))
+                qid += 1
+
+        total_fo = sum(len(q.fan_out_queries) for q in all_queries)
+        return BenchmarkSuite(
+            suite_id=f"DYN-{uuid.uuid4().hex[:8].upper()}",
+            domain=clean_domain,
+            brand_name=brand,
+            industry=category_label,
+            total_queries=len(all_queries),
+            queries=all_queries,
+            matrix_grounding="dynamic_persona_expansion",
+            matrix_confidence="high",
+            total_fan_out_queries=total_fo,
         )
 
 
 benchmark_generator = GeoBenchmarkGenerator()
+
