@@ -7,7 +7,7 @@ relative ranks, peer averages, competitive moats, and critical vulnerability gap
 import re
 import asyncio
 import logging
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Tuple
 from urllib.parse import urlparse
 from pydantic import BaseModel, Field
 
