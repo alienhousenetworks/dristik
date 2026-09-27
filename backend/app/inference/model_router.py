@@ -166,7 +166,7 @@ class ModelRouter:
         capability: str,
         agent_role: str,
         task_contract: str,
-        evidence_list: List[Evidence],
+        evidence_list: Optional[List[Evidence]] = None,
         rubric: str = "",
         output_schema_desc: str = "",
         additional_context: Optional[str] = None,
@@ -184,6 +184,7 @@ class ModelRouter:
         When allow_fallback is False, missing keys or exhausted retries return {} instead of
         a canned fallback audit (specialist agents must not invent results).
         """
+        evidence_list = evidence_list if evidence_list is not None else []
         if not settings.has_active_llm_key:
             if not allow_fallback:
                 return {"status": "unavailable", "unavailable_reason": "no_llm_key", "claims": []}

@@ -608,6 +608,7 @@ class CitationPassageAnalyzer:
                 capability="content_intelligence",
                 agent_role="GEO Citation Copywriter. Precision evidence-grounded copy.",
                 task_contract=task_contract,
+                evidence_list=[],
                 rubric=rubric,
                 output_schema_desc=output_schema_desc,
                 additional_context=f"Candidates to rewrite:\n{candidates_payload}",
