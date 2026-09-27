@@ -104,7 +104,8 @@ class PromptCompiler:
         site_facts: Optional[Dict[str, Any]] = None,
         task_card: Optional[str] = None,
         max_claims: int = 8,
-        evidence_kind_allowlist: Optional[List[str]] = None
+        evidence_kind_allowlist: Optional[List[str]] = None,
+        evidence_max_tokens: int = 3000,
     ) -> Dict[str, str]:
         """
         Compiles the strict 70B envelope:
@@ -137,7 +138,7 @@ class PromptCompiler:
         # Evidence Pack
         evidence_block = self.build_evidence_pack(
             evidence_list,
-            max_tokens=3000,
+            max_tokens=evidence_max_tokens,
             allowed_kinds=evidence_kind_allowlist
         )
 

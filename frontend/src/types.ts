@@ -535,11 +535,27 @@ export interface RegressionReport {
   detected_at: string;
 }
 
+export interface StageCostRecord {
+  stage: string;
+  display_name: string;
+  calls_count: number;
+  input_tokens: number;
+  output_tokens: number;
+  total_tokens: number;
+  cost_usd: number;
+  latency_ms: number;
+  models: string[];
+}
+
 export interface TelemetryData {
   total_tokens: number;
   input_tokens: number;
   output_tokens: number;
   estimated_cost_usd: number;
+  actual_cost_usd?: number;
+  calculated_cost_usd?: number;
+  has_actual_costs?: boolean;
+  all_costs_actual?: boolean;
   cost_complete?: boolean;
   unpriced_calls?: number;
   cost_basis?: 'provider_billed' | 'operator_rate' | 'list_price' | 'mixed' | 'unpriced' | string;
@@ -547,6 +563,7 @@ export interface TelemetryData {
   total_latency_ms: number;
   model_calls_count: number;
   agent_timings: Record<string, number>;
+  stage_costs?: Record<string, StageCostRecord>;
 }
 
 export interface PageEvidence {

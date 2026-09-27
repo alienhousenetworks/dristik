@@ -117,15 +117,38 @@ class SpecialistAgent(BaseAgent):
             f"{prior}"
         )
 
+        # Determine model tier and token budget.
+        # When running under Groq (8,000 TPM limit), route routine specialists to fast_slm and budget tokens strictly.
+        # Non-Groq providers (Anthropic, Gemini, OpenRouter) retain full reasoning models and token budgets.
+        active_provider = getattr(getattr(self.model_router, "client", None), "provider", "")
+        if not active_provider:
+            from app.core.config import settings
+            active_provider = settings.get_active_provider()
+        is_groq = (active_provider or "").lower() == "groq"
+
         models = self.definition.allowed_models or []
-        if "judge_model" in models:
-            tier = "judge_model"
-        elif "reasoning_model" in models:
-            tier = "reasoning_model"
-        elif "fast_slm" in models:
-            tier = "fast_slm"
+        if is_groq:
+            # Under Groq, only deep reasoning/critic/synthesis capabilities use reasoning_model
+            if self.capability in ("synthesizer", "geo_analysis", "ai_search_simulation", "critic", "cross_analyst") and "reasoning_model" in models:
+                tier = "reasoning_model"
+            elif "fast_slm" in models:
+                tier = "fast_slm"
+            elif "judge_model" in models:
+                tier = "judge_model"
+            else:
+                tier = "fast_slm"
+            token_budget = min(int(self.definition.token_budget or 3000), 1000)
         else:
-            tier = "fast_slm"
+            if "judge_model" in models:
+                tier = "judge_model"
+            elif "reasoning_model" in models:
+                tier = "reasoning_model"
+            elif "fast_slm" in models:
+                tier = "fast_slm"
+            else:
+                tier = "fast_slm"
+            token_budget = int(self.definition.token_budget or 3000)
+
         max_claims = int(getattr(self.definition, "max_claims", 0) or 8)
         raw = await self.model_router.generate_structured(
             capability=self.capability,
@@ -138,7 +161,7 @@ class SpecialistAgent(BaseAgent):
             max_claims=max_claims,
             allow_fallback=False,
             model_tier=tier,
-            max_tokens=int(self.definition.token_budget or 3000),
+            max_tokens=token_budget,
             timeout_sec=int(self.definition.timeout_sec or 60),
         )
         return self._ingest_llm(blackboard, raw, evidence_slice)

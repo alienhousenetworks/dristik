@@ -2588,6 +2588,81 @@ export function Big4AuditReport({
             </div>
           </div>
 
+          {/* Stage-by-Stage Cost & Inference Accounting Ledger */}
+          {telemetry?.stage_costs && Object.keys(telemetry.stage_costs).length > 0 && (
+            <div className="mt-6 border border-slate-300 bg-white">
+              <div className="px-5 py-3 border-b border-slate-200 bg-slate-100 flex items-center justify-between">
+                <div>
+                  <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
+                    Pipeline Stage-by-Stage Inference & Cost Ledger
+                  </h4>
+                  <p className="text-[11px] text-slate-500">
+                    Transparent accounting of tokens, invocations, and actual USD costs across each cognitive phase.
+                  </p>
+                </div>
+                <div className="text-right font-mono text-xs font-bold text-slate-900">
+                  Total: {formatAuditCost(telemetry)}
+                </div>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="border-b border-slate-200 bg-slate-50 text-[10px] font-bold uppercase tracking-wider text-slate-600">
+                      <th className="py-2.5 px-4">Stage</th>
+                      <th className="py-2.5 px-4 text-right">Invocations</th>
+                      <th className="py-2.5 px-4 text-right">Input Tokens</th>
+                      <th className="py-2.5 px-4 text-right">Output Tokens</th>
+                      <th className="py-2.5 px-4 text-right">Latency</th>
+                      <th className="py-2.5 px-4 text-right">Cost (USD)</th>
+                      <th className="py-2.5 px-4 text-right">% of Run</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 font-mono text-[11px]">
+                    {Object.values(telemetry.stage_costs).map((st) => {
+                      const totalRunCost = telemetry.estimated_cost_usd || 0.000001;
+                      const pct = Math.min(100, (st.cost_usd / totalRunCost) * 100);
+                      return (
+                        <tr key={st.stage} className="hover:bg-slate-50/80 transition-colors">
+                          <td className="py-2.5 px-4 font-sans font-medium text-slate-900">
+                            <div>{st.display_name || st.stage}</div>
+                            {st.models?.length > 0 && (
+                              <div className="text-[10px] text-slate-400 font-mono mt-0.5">
+                                {st.models.join(', ')}
+                              </div>
+                            )}
+                          </td>
+                          <td className="py-2.5 px-4 text-right text-slate-700">{st.calls_count}</td>
+                          <td className="py-2.5 px-4 text-right text-slate-600">{st.input_tokens.toLocaleString()}</td>
+                          <td className="py-2.5 px-4 text-right text-slate-600">{st.output_tokens.toLocaleString()}</td>
+                          <td className="py-2.5 px-4 text-right text-slate-600">{formatMs(st.latency_ms)}</td>
+                          <td className="py-2.5 px-4 text-right font-bold text-slate-900">
+                            ${st.cost_usd.toFixed(4)}
+                          </td>
+                          <td className="py-2.5 px-4 text-right text-slate-500 font-sans">
+                            {pct.toFixed(1)}%
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                  <tfoot>
+                    <tr className="border-t-2 border-slate-300 font-bold bg-slate-100 text-slate-900">
+                      <td className="py-2.5 px-4 font-sans">Audit Run Total</td>
+                      <td className="py-2.5 px-4 text-right font-mono">{telemetry.model_calls_count || 0}</td>
+                      <td className="py-2.5 px-4 text-right font-mono">{(telemetry.input_tokens || 0).toLocaleString()}</td>
+                      <td className="py-2.5 px-4 text-right font-mono">{(telemetry.output_tokens || 0).toLocaleString()}</td>
+                      <td className="py-2.5 px-4 text-right font-mono">{formatMs(telemetry.total_latency_ms || 0)}</td>
+                      <td className="py-2.5 px-4 text-right font-mono text-emerald-800 text-sm">
+                        ${(telemetry.estimated_cost_usd || 0).toFixed(4)}
+                      </td>
+                      <td className="py-2.5 px-4 text-right font-sans">100.0%</td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            </div>
+          )}
+
           {/* Cryptographic Ledger Verification Box */}
           <div className="mt-6 p-5 border border-slate-300 bg-white space-y-2 text-xs">
             <div className="flex items-center justify-between">

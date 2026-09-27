@@ -51,6 +51,9 @@ class AgentCallPin(BaseModel):
     output_tokens: int = 0
     cost_usd: Optional[float] = None
     cost_basis: str = "unpriced"
+    is_actual: bool = False
+    actual_cost_usd: Optional[float] = None
+    calculated_cost_usd: Optional[float] = None
 
 
 class RunManifest(BaseModel):
@@ -145,6 +148,9 @@ def build_run_manifest(
                 output_tokens=rec.output_tokens,
                 cost_usd=getattr(rec, "cost_usd", None),
                 cost_basis=getattr(rec, "cost_basis", None) or "unpriced",
+                is_actual=bool(getattr(rec, "is_actual", False)),
+                actual_cost_usd=getattr(rec, "actual_cost_usd", None),
+                calculated_cost_usd=getattr(rec, "calculated_cost_usd", None),
             ))
 
     finding_pins: List[FindingPin] = []

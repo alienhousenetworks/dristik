@@ -171,7 +171,19 @@ class AgentPool:
 
     async def _run_one(self, agent_id: str, blackboard: CognitiveBlackboard) -> Dict[str, Any]:
         agent = self.agents[agent_id]
-        timeout_sec = float(getattr(agent.definition, "timeout_sec", 60) or 60) + 15.0
+        active_prov = ""
+        if hasattr(self.model_router, "client") and hasattr(self.model_router.client, "provider"):
+            active_prov = self.model_router.client.provider or ""
+        if not active_prov:
+            from app.core.config import settings
+            active_prov = settings.get_active_provider()
+
+        # Under Groq free tier, 429 backoffs can be up to 30s. Provide a generous outer buffer.
+        # Non-Groq providers maintain their standard fast timeout.
+        if (active_prov or "").lower() == "groq":
+            timeout_sec = max(60.0, float(getattr(agent.definition, "timeout_sec", 60) or 60) + 35.0)
+        else:
+            timeout_sec = float(getattr(agent.definition, "timeout_sec", 60) or 60) + 15.0
         try:
             return await asyncio.wait_for(agent.run(blackboard), timeout=timeout_sec)
         except asyncio.TimeoutError:

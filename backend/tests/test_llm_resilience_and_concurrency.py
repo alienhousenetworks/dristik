@@ -23,7 +23,10 @@ async def test_get_provider_semaphore_concurrency_limit():
     assert sem_anthropic._value == getattr(settings, "LLM_MAX_CONCURRENCY", 2)
 
     sem_groq = get_provider_semaphore("groq")
-    assert sem_groq._value >= 2
+    assert sem_groq._value == 1  # Strictly serialized for Groq 8,000 TPM limit
+
+    sem_together = get_provider_semaphore("together")
+    assert sem_together._value >= 4
 
 
 @pytest.mark.asyncio
@@ -188,3 +191,112 @@ async def test_agent_pool_timeout_isolation():
         res = await pool._run_one("test.slow.v3", blackboard)
         assert res["status"] == "unavailable"
         assert "timeout" in res["unavailable_reason"]
+
+
+@pytest.mark.asyncio
+async def test_groq_only_token_clamping_and_non_groq_unclamped():
+    """Verify that max_tokens is clamped only when calling Groq, and left unclamped for other providers."""
+    groq_client = LLMClient(provider="groq", api_key="gsk-test")
+    # 20000 characters prompt (~5200 tokens)
+    large_prompt = "evidence " * 2500
+
+    with patch.object(groq_client, "_single_chat_completion", new_callable=AsyncMock) as mock_single, \
+         patch.object(settings, "ENABLE_CROSS_PROVIDER_CASCADE", False):
+        mock_single.return_value = {"content": "{}", "input_tokens": 10, "output_tokens": 10}
+
+        await groq_client.generate_chat_completion(
+            model="openai/gpt-oss-120b",
+            system_prompt="system",
+            user_prompt=large_prompt,
+            max_tokens=3000,
+        )
+
+        mock_single.assert_called_once()
+        _, kwargs = mock_single.call_args
+        # On Groq, prompt (~5200) + 3000 > 7500, so max_tokens must be clamped to <= 7500 - 5200
+        assert kwargs["max_tokens"] < 3000
+        assert kwargs["max_tokens"] <= 7500
+
+    # Non-Groq provider (e.g. Together or Anthropic) must NOT be clamped
+    together_client = LLMClient(provider="together", api_key="tog-test")
+    with patch.object(together_client, "_single_chat_completion", new_callable=AsyncMock) as mock_tog_single, \
+         patch.object(settings, "ENABLE_CROSS_PROVIDER_CASCADE", False):
+        mock_tog_single.return_value = {"content": "{}", "input_tokens": 10, "output_tokens": 10}
+
+        await together_client.generate_chat_completion(
+            model="meta-llama/Llama-3.3-70B-Instruct-Turbo",
+            system_prompt="system",
+            user_prompt=large_prompt,
+            max_tokens=3000,
+        )
+
+        mock_tog_single.assert_called_once()
+        _, tog_kwargs = mock_tog_single.call_args
+        assert tog_kwargs["max_tokens"] == 3000
+
+
+@pytest.mark.asyncio
+async def test_groq_413_immediate_cascade_without_retries():
+    """Verify that HTTP 413 raises NonRetryableLLMError and immediately cascades without 3 futile retries."""
+    client = LLMClient(provider="groq", api_key="gsk-test")
+
+    with patch.object(client, "_single_chat_completion", new_callable=AsyncMock) as mock_single, \
+         patch.object(client, "_generate_anthropic", new_callable=AsyncMock) as mock_anthropic, \
+         patch.object(settings, "ENABLE_CROSS_PROVIDER_CASCADE", True), \
+         patch.object(settings, "ANTHROPIC_API_KEY", "sk-ant-test"):
+
+        mock_single.side_effect = NonRetryableLLMError("Request too large: Limit 8000, Requested 8255", status_code=413)
+        mock_anthropic.return_value = {"content": '{"cascaded": true}', "input_tokens": 10, "output_tokens": 10}
+
+        res = await client.generate_chat_completion(
+            model="openai/gpt-oss-120b",
+            system_prompt="sys",
+            user_prompt="usr",
+            max_tokens=1000,
+        )
+
+        assert res["content"] == '{"cascaded": true}'
+        # Groq should have been called only ONCE (no 3 repeated retries on 413)
+        assert mock_single.call_count == 1
+        # Cascade should have called Anthropic
+        assert mock_anthropic.call_count == 1
+
+
+@pytest.mark.asyncio
+async def test_specialist_provider_isolated_tier_and_budget():
+    """Verify specialist agent routes to fast_slm and 1000 tokens for Groq, but keeps reasoning_model for Anthropic."""
+    from app.agents.runtime.specialist import SpecialistAgent
+
+    defn = AgentDefinition(
+        agent_id="seo.indexability.v3",
+        agent_name="Indexability Specialist",
+        domain="SEO_TECHNICAL",
+        worker_type="specialist",
+        description="Audits indexability",
+        capabilities=["seo_indexability"],
+        allowed_models=["reasoning_model", "fast_slm"],
+        token_budget=3000,
+        timeout_sec=20,
+    )
+
+    mock_router = MagicMock()
+    mock_router.generate_structured = AsyncMock(return_value={"status": "completed", "claims": []})
+    mock_client = MagicMock()
+    mock_router.client = mock_client
+
+    agent = SpecialistAgent(defn, mock_router)
+    blackboard = CognitiveBlackboard(run_id="run_test", website_url="https://example.com")
+
+    # 1. When provider is Groq
+    mock_client.provider = "groq"
+    await agent._llm_audit(blackboard, [])
+    _, groq_kwargs = mock_router.generate_structured.call_args
+    assert groq_kwargs["model_tier"] == "fast_slm"
+    assert groq_kwargs["max_tokens"] == 1000
+
+    # 2. When provider is Anthropic
+    mock_client.provider = "anthropic"
+    await agent._llm_audit(blackboard, [])
+    _, ant_kwargs = mock_router.generate_structured.call_args
+    assert ant_kwargs["model_tier"] == "reasoning_model"
+    assert ant_kwargs["max_tokens"] == 3000

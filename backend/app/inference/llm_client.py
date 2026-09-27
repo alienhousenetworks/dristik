@@ -20,7 +20,7 @@ import time
 from typing import Dict, Any, Optional, List, Tuple
 import httpx
 from app.core.config import settings, Settings, ANTHROPIC_DEFAULT_FAST
-from app.inference.pricing import provider_billed_usd
+from app.inference.pricing import extract_provider_cost, provider_billed_usd
 
 logger = logging.getLogger("dristik.llm_client")
 
@@ -103,7 +103,8 @@ class TokenBucketRateLimiter:
 
 # Global rate limiters per provider to coordinate across concurrent agent tasks
 _GLOBAL_RATE_LIMITERS: Dict[str, TokenBucketRateLimiter] = {
-    "groq": TokenBucketRateLimiter(rpm=30, tpm=20000),
+    # Groq on-demand / free tier enforces strict 8,000 TPM limit on openai/gpt-oss-* models.
+    "groq": TokenBucketRateLimiter(rpm=30, tpm=7500),
     "together": TokenBucketRateLimiter(rpm=60, tpm=50000),
     "openrouter": TokenBucketRateLimiter(rpm=60, tpm=60000),
     "gemini": TokenBucketRateLimiter(rpm=60, tpm=100000),
@@ -119,7 +120,10 @@ def get_provider_semaphore(provider: str) -> asyncio.Semaphore:
     prov = (provider or "unknown").lower()
     if prov not in _PROVIDER_SEMAPHORES:
         concurrency = getattr(settings, "LLM_MAX_CONCURRENCY", 2)
-        if prov in ("anthropic", "claude"):
+        if prov == "groq":
+            # Groq free/on-demand tier has a strict 8,000 TPM limit. Serializing requests prevents 429 storms.
+            concurrency = 1
+        elif prov in ("anthropic", "claude"):
             concurrency = max(1, getattr(settings, "LLM_MAX_CONCURRENCY", 2))
         else:
             concurrency = max(concurrency, 4)
@@ -256,7 +260,7 @@ class LLMClient:
             "model": getattr(message, "model", None) or model,
             "provider": self.provider,
             "stop_reason": getattr(message, "stop_reason", None),
-            "provider_cost_usd": provider_billed_usd(usage),
+            "provider_cost_usd": extract_provider_cost("anthropic", message),
         }
 
     async def _single_chat_completion(
@@ -341,7 +345,7 @@ class LLMClient:
                         "[LLMClient] Provider '%s' returned HTTP %d for model '%s': %s",
                         provider, response.status_code, model, err_msg
                     )
-                    if response.status_code in (400, 401, 403, 404):
+                    if response.status_code in (400, 401, 403, 404, 413):
                         raise NonRetryableLLMError(
                             f"LLM Provider '{provider}' returned non-retryable HTTP {response.status_code}: {err_msg}",
                             status_code=response.status_code,
@@ -370,7 +374,7 @@ class LLMClient:
             "model": data.get("model") or model,
             "provider": provider,
             "stop_reason": choice.get("finish_reason"),
-            "provider_cost_usd": provider_billed_usd(usage),
+            "provider_cost_usd": extract_provider_cost(provider, data),
         }
 
     async def generate_chat_completion(
@@ -386,7 +390,7 @@ class LLMClient:
         """
         Calls chat completion endpoint with token-bucket rate limiting, exponential backoff
         with randomized jitter on HTTP 429/503, and multi-provider cascade fallback:
-        Primary (e.g. Groq) -> Fallback 1 (Together) -> Fallback 2 (OpenRouter).
+        Primary (e.g. Groq) -> Fallback 1 (Anthropic/Together) -> Fallback 2 (OpenRouter).
         """
         # Determine candidate provider sequence for cascade
         primary_prov = self.provider or "groq"
@@ -395,11 +399,15 @@ class LLMClient:
         allow_cascade = getattr(settings, "ENABLE_CROSS_PROVIDER_CASCADE", True)
         if allow_cascade:
             if primary_prov == "groq":
+                if (settings.ANTHROPIC_API_KEY or settings.CLAUDE_API_KEY) and "anthropic" not in cascade_chain:
+                    cascade_chain.append("anthropic")
                 if settings.TOGETHER_API_KEY and "together" not in cascade_chain:
                     cascade_chain.append("together")
                 if settings.OPENROUTER_API_KEY and "openrouter" not in cascade_chain:
                     cascade_chain.append("openrouter")
             elif primary_prov == "together":
+                if (settings.ANTHROPIC_API_KEY or settings.CLAUDE_API_KEY) and "anthropic" not in cascade_chain:
+                    cascade_chain.append("anthropic")
                 if settings.OPENROUTER_API_KEY and "openrouter" not in cascade_chain:
                     cascade_chain.append("openrouter")
             elif primary_prov in ("anthropic", "claude"):
@@ -417,6 +425,14 @@ class LLMClient:
                 curr_base_url = self.base_url
                 curr_headers = self.extra_headers
                 curr_model = model
+            elif current_prov in ("anthropic", "claude"):
+                curr_api_key = settings.ANTHROPIC_API_KEY or settings.CLAUDE_API_KEY
+                curr_base_url = "https://api.anthropic.com/v1"
+                curr_headers = {
+                    "anthropic-version": "2023-06-01",
+                    "x-api-key": curr_api_key or ""
+                }
+                curr_model = ANTHROPIC_DEFAULT_FAST
             elif current_prov == "together":
                 curr_api_key = settings.TOGETHER_API_KEY
                 curr_base_url = settings.TOGETHER_BASE_URL or "https://api.together.xyz/v1"
@@ -447,6 +463,17 @@ class LLMClient:
             limiter = _GLOBAL_RATE_LIMITERS.get(current_prov)
             call_timeout = timeout or self.timeout
 
+            # Groq-only token clamp to respect 8,000 TPM limit on free/on-demand tier
+            effective_max_tokens = max_tokens
+            if current_prov == "groq":
+                est_prompt = int((len(system_prompt) + len(user_prompt)) / 3.8)
+                if est_prompt + max_tokens > 7500:
+                    effective_max_tokens = max(350, 7500 - est_prompt)
+                    logger.info(
+                        "[LLMClient][groq] Clamping max_tokens from %d to %d (prompt est: %d) to stay within 8,000 TPM limit",
+                        max_tokens, effective_max_tokens, est_prompt
+                    )
+
             # Max retries per provider with exponential backoff & randomized jitter (2s up to 30s)
             max_retries = max(settings.LLM_MAX_RETRIES, 3)
             sem = get_provider_semaphore(current_prov)
@@ -455,7 +482,7 @@ class LLMClient:
                 try:
                     # 1. Enforce token-bucket TPM/RPM rate limits before dispatching
                     if limiter:
-                        estimated_tokens = len(system_prompt.split()) + len(user_prompt.split()) + int(max_tokens * 0.5)
+                        estimated_tokens = len(system_prompt.split()) + len(user_prompt.split()) + int(effective_max_tokens * 0.5)
                         await limiter.acquire(estimated_tokens=estimated_tokens)
 
                     # 2. Bounded Concurrency Semaphore: at most LLM_MAX_CONCURRENCY in flight
@@ -471,7 +498,7 @@ class LLMClient:
                                     f"{system_prompt or ''}\n\n"
                                     "Respond with a single valid JSON object only. "
                                     "No markdown fences, no preamble, no trailing commentary."
-                                ).strip()
+                                    ).strip()
                             return await self._generate_anthropic(
                                 model=anthropic_model,
                                 system_prompt=anthropic_system,
@@ -490,7 +517,7 @@ class LLMClient:
                             system_prompt=system_prompt,
                             user_prompt=user_prompt,
                             temperature=temperature,
-                            max_tokens=max_tokens,
+                            max_tokens=effective_max_tokens,
                             response_format=response_format,
                             timeout=call_timeout,
                         )
@@ -511,7 +538,7 @@ class LLMClient:
                 except NonRetryableLLMError as nre:
                     last_error = nre
                     logger.error(
-                        "[LLMClient][%s] Non-retryable error (status=%s): %s. Aborting provider.",
+                        "[LLMClient][%s] Non-retryable error (status=%s): %s. Cascading to next provider.",
                         current_prov, nre.status_code, nre
                     )
                     break

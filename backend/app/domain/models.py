@@ -829,6 +829,21 @@ class AgentCallRecord(BaseModel):
     latency_ms: float = 0.0
     cost_usd: Optional[float] = None
     cost_basis: str = "unpriced"
+    is_actual: bool = False
+    actual_cost_usd: Optional[float] = None
+    calculated_cost_usd: Optional[float] = None
+
+
+class StageCostRecord(BaseModel):
+    stage: str
+    display_name: str
+    calls_count: int = 0
+    input_tokens: int = 0
+    output_tokens: int = 0
+    total_tokens: int = 0
+    cost_usd: float = 0.0
+    latency_ms: float = 0.0
+    models: List[str] = Field(default_factory=list)
 
 
 class TelemetryData(BaseModel):
@@ -836,6 +851,10 @@ class TelemetryData(BaseModel):
     input_tokens: int = 0
     output_tokens: int = 0
     estimated_cost_usd: float = 0.0
+    actual_cost_usd: float = 0.0
+    calculated_cost_usd: float = 0.0
+    has_actual_costs: bool = False
+    all_costs_actual: bool = False
     cost_complete: bool = True
     unpriced_calls: int = 0
     cost_basis: str = "unpriced"
@@ -844,6 +863,7 @@ class TelemetryData(BaseModel):
     model_calls_count: int = 0
     agent_timings: Dict[str, float] = Field(default_factory=dict)
     agent_calls: List[AgentCallRecord] = Field(default_factory=list)
+    stage_costs: Dict[str, StageCostRecord] = Field(default_factory=dict)
 
 class PageEvidence(BaseModel):
     url: str

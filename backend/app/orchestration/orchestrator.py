@@ -145,12 +145,23 @@ class AnalysisOrchestrator:
 
         queue = self.event_queues.get(analysis_id)
         if queue:
+            payload_data = dict(data or {})
+            telemetry_snapshot = None
+            if run and getattr(run, "telemetry", None):
+                try:
+                    telemetry_snapshot = run.telemetry.model_dump(mode="json")
+                    if "telemetry" not in payload_data:
+                        payload_data["telemetry"] = telemetry_snapshot
+                except Exception:
+                    pass
+
             event_payload = {
                 "stage": stage,
                 "progress": progress,
                 "message": message,
                 "timestamp": datetime.now().isoformat(),
-                "data": data or {}
+                "data": payload_data,
+                "telemetry": telemetry_snapshot,
             }
             await queue.put(event_payload)
 
@@ -181,6 +192,8 @@ class AnalysisOrchestrator:
         run = self.runs.get(analysis_id)
         telemetry_tracker = TelemetryTracker()
         model_router = ModelRouter(telemetry_tracker=telemetry_tracker)
+        if run:
+            run.telemetry = telemetry_tracker.telemetry
         blackboard = CognitiveBlackboard(run_id=analysis_id, website_url=website_url)
         blackboard.user_declared_site_type = site_type
         blackboard.user_declared_site_type_notes = declared_site_type_notes
@@ -197,6 +210,7 @@ class AnalysisOrchestrator:
             )
 
             # 2. Level 0: Ingestion & Multi-Page Crawl
+            model_router.set_active_stage("crawl_and_ingest", "Crawl & Ingestion")
             run.status = AnalysisStage.INGESTING
             await self._emit_event(analysis_id, "ingesting", 10, f"Initializing multi-page crawler for {website_url}...")
 
@@ -249,6 +263,7 @@ class AnalysisOrchestrator:
 
             # Populate Evidence Graph 2.0 with all deterministic observations, SHA-256 hashes, and DOM selectors
             blackboard.evidence_graph.populate_from_evidence_store(blackboard.evidence_store, manifest)
+            model_router.set_active_stage("deterministic_analysis", "Deterministic Analysis & External Evidence")
 
             await self._emit_event(
                 analysis_id,
@@ -310,6 +325,7 @@ class AnalysisOrchestrator:
                 logger.warning(f"External evidence enrichment encountered error: {enrich_err}")
 
             # 3. Dynamic Capability Scheduling
+            model_router.set_active_stage("planning", "Capability Scheduling & Hypotheses")
             run.status = AnalysisStage.PLANNING
             mission_caps = self.mission_director.select_capabilities_for_mission(mission_state)
 
@@ -322,6 +338,7 @@ class AnalysisOrchestrator:
             await team_orchestrator.execute_capability_wave(mission_caps["tier_1_deterministic"], manifest, blackboard)
 
             # 6. Business identity (declared vs detected) before the 35-agent DAG
+            model_router.set_active_stage("business_understanding", "Business Identity Resolution")
             run.status = AnalysisStage.SPECIALIST_EXECUTION
             await self._emit_event(
                 analysis_id,
@@ -348,6 +365,7 @@ class AnalysisOrchestrator:
                 )
 
             # 7. Full 35-agent specialist DAG (dependency waves, no canned fallbacks)
+            model_router.set_active_stage("specialist_execution", "35-Agent Specialist DAG")
             agent_pool = AgentPool(model_router)
             await self._emit_event(
                 analysis_id,
@@ -358,6 +376,8 @@ class AnalysisOrchestrator:
             )
 
             async def _agent_progress(stage: str, progress: int, message: str, data: Dict[str, Any]):
+                if run and telemetry_tracker:
+                    run.telemetry = telemetry_tracker.telemetry
                 await self._emit_event(analysis_id, stage, progress, message, data)
 
             pool_summary = await agent_pool.execute_all(
@@ -393,6 +413,7 @@ class AnalysisOrchestrator:
                 logger.warning(f"Persistence error after specialists: {pe}")
 
             # 7b. Per-page SEO, copywriting, and suggested copy
+            model_router.set_active_stage("page_intelligence", "Page-Level SEO & Copywriting")
             await self._emit_event(
                 analysis_id,
                 "specialist_execution",
@@ -403,6 +424,7 @@ class AnalysisOrchestrator:
             await page_agent.run(blackboard)
 
             # 8. Verification agents already ran in the DAG (adversarial + contradiction + executive).
+            model_router.set_active_stage("adversarial_verification", "Adversarial Verification & Integrity Gate")
             run.status = AnalysisStage.ADVERSARIAL_VERIFICATION
             await self._emit_event(
                 analysis_id,
@@ -444,6 +466,7 @@ class AnalysisOrchestrator:
             blackboard.blackboard_state["evidence_gaps"] = [g.model_dump() for g in evidence_gaps]
 
             # 9. Level 3: Causal Reasoning & Root-Cause Bottleneck Discovery
+            model_router.set_active_stage("causal_reasoning", "Causal Reasoning & Bottlenecks")
             await self._emit_event(analysis_id, "specialist_execution", 82, "Causal Reasoning Engine isolating primary root-cause growth bottlenecks...")
             bottlenecks = self.causal_engine.analyze_root_causes(current_claims, blackboard.business_profile)
             blackboard.blackboard_state["root_causes"] = [b.model_dump() for b in bottlenecks]
@@ -461,6 +484,7 @@ class AnalysisOrchestrator:
             blackboard.blackboard_state["opportunities"] = [o.model_dump() for o in opportunities]
 
             # 10. AI Answer Engine Discoverability & Commercial Query Simulation
+            model_router.set_active_stage("ai_search_simulation", "AI Answer Engine Simulation")
             await self._emit_event(
                 analysis_id,
                 "specialist_execution",
@@ -474,12 +498,14 @@ class AnalysisOrchestrator:
                 logger.error("AI Search simulation error: %s", sim_err)
 
             # 11. Executive Strategy Narrative Synthesis
+            model_router.set_active_stage("executive_synthesis", "Executive Strategy Narrative Synthesis")
             run.status = AnalysisStage.EXECUTIVE_SYNTHESIS
             await self._emit_event(analysis_id, "executive_synthesis", 88, "Synthesizer compiling C-Suite narrative from verified specialist claims...")
             if not blackboard.executive_narrative.get("story_summary"):
                 await team_orchestrator.worker_synthesizer.execute_task("synthesis", blackboard)
 
             # 12. Causal Prioritization & Scoring Engine
+            model_router.set_active_stage("scoring_and_remediation", "Scoring & Remediation Blueprints")
             run.status = AnalysisStage.SCORING
             await self._emit_event(analysis_id, "scoring", 93, "Deterministic Scoring Engine computing intent-adjusted category scores...")
 
@@ -554,7 +580,7 @@ class AnalysisOrchestrator:
                 synthesizer_output=blackboard.executive_narrative
             )
 
-            telemetry_data = telemetry_tracker.get_data()
+            model_router.set_active_stage("ai_visibility_monitor", "Live AI Citation & Search Visibility")
 
             from app.intelligence.geo.readiness import evaluate_geo_readiness
             visibility_measured = False
@@ -627,6 +653,8 @@ class AnalysisOrchestrator:
             except Exception as e:
                 logger.warning("Failed to enrich GEO readiness citations with LLM: %s", e)
             blackboard.geo_readiness = geo_readiness
+
+            telemetry_data = telemetry_tracker.get_data()
 
             try:
                 from app.intelligence.geo.agent_readiness import evaluate_agent_readiness
@@ -967,6 +995,8 @@ class AnalysisOrchestrator:
                 )
                 return
 
+            telemetry_data = telemetry_tracker.get_data()
+            report.telemetry = telemetry_data
             run.status = AnalysisStage.COMPLETED
             run.report = report
             run.telemetry = telemetry_data
@@ -989,8 +1019,11 @@ class AnalysisOrchestrator:
                 analysis_id,
                 "completed",
                 100,
-                f"Multi-page audit completed across {len(manifest.pages)} pages. Overall Score: {overall_scores.overall_score:.0f}/100 ({overall_scores.grade}).",
-                {"report": report.model_dump(mode="json")}
+                f"Multi-page audit completed across {len(manifest.pages)} pages. Total AI Cost: ${telemetry_data.estimated_cost_usd:.4f}. Overall Score: {overall_scores.overall_score:.0f}/100 ({overall_scores.grade}).",
+                {
+                    "report": report.model_dump(mode="json"),
+                    "telemetry": telemetry_data.model_dump(mode="json"),
+                }
             )
 
         except Exception as e:
@@ -998,6 +1031,11 @@ class AnalysisOrchestrator:
             traceback.print_exc()
             run.status = AnalysisStage.FAILED
             run.error = str(e)
+            if run and telemetry_tracker:
+                try:
+                    run.telemetry = telemetry_tracker.get_data()
+                except Exception:
+                    pass
             try:
                 self.repository.save_run(run)
                 self.repository.save_checkpoint(StageCheckpoint(

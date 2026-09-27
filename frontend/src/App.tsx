@@ -142,12 +142,14 @@ export function App() {
             const payload = JSON.parse(event.data);
             setRun((prev) => {
               if (!prev) return prev;
+              const liveTelemetry = payload.telemetry ?? payload.data?.telemetry ?? prev.telemetry;
               return {
                 ...prev,
                 progress_percentage: payload.progress ?? prev.progress_percentage,
                 current_step: payload.message ?? prev.current_step,
                 status: payload.stage ?? prev.status,
                 report: payload.data?.report ?? prev.report,
+                telemetry: liveTelemetry,
               };
             });
             if (payload.stage === 'completed') {
@@ -243,12 +245,14 @@ export function App() {
           const payload = JSON.parse(event.data);
           setRun((prev) => {
             if (!prev) return prev;
+            const liveTelemetry = payload.telemetry ?? payload.data?.telemetry ?? prev.telemetry;
             return {
               ...prev,
               progress_percentage: payload.progress ?? prev.progress_percentage,
               current_step: payload.message ?? prev.current_step,
               status: payload.stage ?? prev.status,
               report: payload.data?.report ?? prev.report,
+              telemetry: liveTelemetry,
             };
           });
 

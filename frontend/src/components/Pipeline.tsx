@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { AnalysisRun } from '../types';
+import { formatMs } from '../lib/format';
 
 const STAGES = [
   { key: 'ingesting', label: 'Crawl' },
@@ -16,10 +17,17 @@ interface PipelineProps {
 }
 
 export function Pipeline({ run }: PipelineProps) {
+  const [showStages, setShowStages] = useState(false);
   const order = STAGES.map((s) => s.key);
   const currentIndex = order.findIndex((key) => key === run.status);
   const done = run.status === 'completed';
   const failed = run.status === 'failed';
+
+  const telemetry = run.telemetry;
+  const stageCosts = telemetry?.stage_costs ? Object.values(telemetry.stage_costs) : [];
+  const totalCost = telemetry?.estimated_cost_usd ?? 0;
+  const actualCost = telemetry?.actual_cost_usd ?? 0;
+  const isActualBilled = (telemetry?.has_actual_costs ?? false) && actualCost > 0;
 
   return (
     <section className="card p-5 sm:p-6 space-y-4">
@@ -28,7 +36,12 @@ export function Pipeline({ run }: PipelineProps) {
           <p className="label">Progress</p>
           <p className="mt-1 text-ink-700">{run.current_step || 'Queued'}</p>
         </div>
-        <p className="font-serif text-3xl text-ink leading-none">{run.progress_percentage}%</p>
+        <div className="text-right">
+          <p className="font-serif text-3xl text-ink leading-none">{run.progress_percentage}%</p>
+          <p className="text-[11px] font-mono text-ink-500 mt-1">
+            Cost: <span className="font-bold text-pine">${totalCost.toFixed(4)}</span>
+          </p>
+        </div>
       </div>
 
       <div className="h-1.5 bg-ink-300/40 rounded-full overflow-hidden">
@@ -52,6 +65,92 @@ export function Pipeline({ run }: PipelineProps) {
           );
         })}
       </ol>
+
+      {/* Live Stage Cost Meter */}
+      {telemetry && (
+        <div className="pt-3 border-t border-line/60">
+          <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+            <div className="flex items-center gap-2">
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded font-mono font-semibold bg-pine/10 text-pine border border-pine/20">
+                <span>Total AI Cost:</span>
+                <span>${totalCost.toFixed(4)}</span>
+              </span>
+              {isActualBilled && (
+                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-mono bg-sand-100 text-ink-700">
+                  Actual Billed: ${actualCost.toFixed(4)}
+                </span>
+              )}
+              <span className="text-ink-500">
+                {(telemetry.total_tokens || 0).toLocaleString()} tokens • {telemetry.model_calls_count || 0} calls
+              </span>
+            </div>
+
+            {stageCosts.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setShowStages(!showStages)}
+                className="text-pine hover:underline font-medium flex items-center gap-1 cursor-pointer"
+              >
+                {showStages ? '▲ Hide stage costs' : '▼ Stage costs breakdown'}
+              </button>
+            )}
+          </div>
+
+          {/* Collapsible Stage-by-Stage Cost Breakdown */}
+          {showStages && stageCosts.length > 0 && (
+            <div className="mt-3 overflow-x-auto rounded border border-line bg-sand-50/50 p-2">
+              <table className="w-full text-left text-xs">
+                <thead>
+                  <tr className="border-b border-line text-[11px] uppercase tracking-wider text-ink-500">
+                    <th className="py-1 px-2 font-medium">Pipeline Stage</th>
+                    <th className="py-1 px-2 font-medium text-right">Calls</th>
+                    <th className="py-1 px-2 font-medium text-right">Tokens</th>
+                    <th className="py-1 px-2 font-medium text-right">Latency</th>
+                    <th className="py-1 px-2 font-medium text-right">Stage Cost</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-line/40 font-mono">
+                  {stageCosts.map((s) => (
+                    <tr key={s.stage} className="hover:bg-sand-100/60 transition-colors">
+                      <td className="py-1 px-2 font-sans font-medium text-ink-800">
+                        {s.display_name || s.stage}
+                        {s.models?.length > 0 && (
+                          <span className="block text-[10px] text-ink-500 font-mono">
+                            {s.models.join(', ')}
+                          </span>
+                        )}
+                      </td>
+                      <td className="py-1 px-2 text-right text-ink-600">{s.calls_count}</td>
+                      <td className="py-1 px-2 text-right text-ink-600">
+                        {s.total_tokens.toLocaleString()}
+                      </td>
+                      <td className="py-1 px-2 text-right text-ink-600">{formatMs(s.latency_ms)}</td>
+                      <td className="py-1 px-2 text-right font-bold text-pine">
+                        ${s.cost_usd.toFixed(4)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr className="border-t border-line font-bold text-ink-900 bg-sand-100/40">
+                    <td className="py-1.5 px-2 font-sans">Total Pipeline Cost</td>
+                    <td className="py-1.5 px-2 text-right font-mono">{telemetry.model_calls_count || 0}</td>
+                    <td className="py-1.5 px-2 text-right font-mono">
+                      {(telemetry.total_tokens || 0).toLocaleString()}
+                    </td>
+                    <td className="py-1.5 px-2 text-right font-mono">
+                      {formatMs(telemetry.total_latency_ms || 0)}
+                    </td>
+                    <td className="py-1.5 px-2 text-right font-mono text-pine">
+                      ${totalCost.toFixed(4)}
+                    </td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
     </section>
   );
 }

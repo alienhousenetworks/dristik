@@ -34,6 +34,10 @@ class ModelRouter:
         self.telemetry = telemetry_tracker or TelemetryTracker()
         self.fallback_engine = DeterministicFallbackEngine()
 
+    def set_active_stage(self, stage: str, display_name: Optional[str] = None) -> None:
+        if hasattr(self.telemetry, "set_active_stage"):
+            self.telemetry.set_active_stage(stage, display_name)
+
     def _record_llm_call(
         self,
         *,
@@ -197,6 +201,10 @@ class ModelRouter:
             "synthesizer", "geo_analysis", "ai_search_simulation", "critic"
         ]
 
+        # Determine evidence token budget based on active provider (1600 for Groq's 8,000 TPM limit, 3000 for other providers)
+        active_prov = (getattr(self.client, "provider", "") or settings.get_active_provider()).lower()
+        evidence_budget = 1600 if active_prov == "groq" else 3000
+
         # 1. Compile structured prompt with 70B envelope
         prompts = self.prompt_compiler.compile(
             agent_role=agent_role,
@@ -207,7 +215,8 @@ class ModelRouter:
             additional_context=additional_context,
             site_facts=site_facts,
             task_card=task_card,
-            max_claims=max_claims
+            max_claims=max_claims,
+            evidence_max_tokens=evidence_budget,
         )
 
         # 2. Call LLM API with single-pass retries handled by LLMClient, plus 1 JSON-repair attempt if needed
