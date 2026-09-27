@@ -14,6 +14,9 @@ class ConfidenceResult(BaseModel):
     status: str  # VERIFIED, STRONGLY_SUPPORTED, PROBABLE, UNCERTAIN, UNSUPPORTED, CONTRADICTED
     signals_breakdown: Dict[str, float] = Field(default_factory=dict)
     summary: str
+    index_coverage: Optional[float] = None
+    sample_page_count: int = 0
+    index_url_count: Optional[int] = None
 
 class CalibratedConfidenceEngine:
     """
@@ -25,7 +28,9 @@ class CalibratedConfidenceEngine:
         claims: List[Claim],
         evidence_store: EvidenceStore,
         pages: List[PageEvidence],
-        contradictions_count: int = 0
+        contradictions_count: int = 0,
+        sample_target: int = 5,
+        index_url_count: Optional[int] = None,
     ) -> ConfidenceResult:
         if not claims:
             return ConfidenceResult(
@@ -41,9 +46,14 @@ class CalibratedConfidenceEngine:
         grounded_claims = sum(1 for c in claims if len(c.evidence_refs) > 0)
         grounding_ratio = grounded_claims / max(1, total_claims)
 
-        # 2. Evidence Coverage across pages
+        # 2. Sample coverage. Saturates at the deep-audit budget (default 5),
+        # which is sample confidence, not proof the whole site was rendered.
         crawled_count = len(pages)
-        coverage_score = min(1.0, crawled_count / 5.0) if crawled_count > 0 else 0.0
+        target = sample_target if sample_target and sample_target > 0 else 5
+        coverage_score = min(1.0, crawled_count / float(target)) if crawled_count > 0 else 0.0
+        index_coverage = None
+        if index_url_count and index_url_count > 0:
+            index_coverage = round(min(1.0, crawled_count / float(index_url_count)), 2)
 
         # 3. Contradiction Penalty (CONTESTED DOM vs ext counts)
         from app.domain.enums import VerificationStatus, SourceIntegrityLabel
@@ -82,6 +92,16 @@ class CalibratedConfidenceEngine:
         else:
             status = "UNSUPPORTED"
 
+        summary = (
+            f"Confidence calibrated at {int(final_score * 100)}% ({status}) "
+            f"across {len(claims)} evaluated claims and {crawled_count} deep-audited pages."
+        )
+        if index_coverage is not None and index_url_count:
+            summary += (
+                f" Index coverage is {crawled_count} of {index_url_count} discovered URLs"
+                f" ({int(index_coverage * 100)}%). Sample confidence is not sitewide coverage."
+            )
+
         return ConfidenceResult(
             confidence_score=round(final_score, 2),
             evidence_coverage=round(coverage_score, 2),
@@ -92,5 +112,8 @@ class CalibratedConfidenceEngine:
                 "deterministic_verification": round(deterministic_boost, 2),
                 "contradiction_penalty": round(contra_penalty, 2)
             },
-            summary=f"Confidence calibrated at {int(final_score * 100)}% ({status}) across {len(claims)} evaluated claims and {crawled_count} pages."
+            summary=summary,
+            index_coverage=index_coverage,
+            sample_page_count=crawled_count,
+            index_url_count=index_url_count,
         )

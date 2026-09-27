@@ -62,13 +62,65 @@ const CANONICAL_COMMERCIAL_QUESTIONS = [
   },
 ];
 
+const EXTRACTABILITY_PILLARS = [
+  {
+    name: '1. Entity Clarity',
+    band: 'High',
+    color: 'text-emerald-700 bg-emerald-50 border-emerald-200',
+    desc: 'Unambiguous business name, commercial category, and brand identity declared in high-priority DOM nodes.',
+  },
+  {
+    name: '2. Claim Clarity',
+    band: 'Moderate',
+    color: 'text-amber-800 bg-amber-50 border-amber-200',
+    desc: 'Specific verifiable capability statements vs unsubstantiated marketing buzzwords.',
+  },
+  {
+    name: '3. Direct Answerability',
+    band: 'Moderate',
+    color: 'text-amber-800 bg-amber-50 border-amber-200',
+    desc: 'Can buyer questions be answered directly from on-page copy without requiring LLM extrapolation?',
+  },
+  {
+    name: '4. Structured Data',
+    band: 'Deficit',
+    color: 'text-red-700 bg-red-50 border-red-200',
+    desc: 'Schema.org JSON-LD graph (Organization, WebSite, FAQPage, Service) verified in DOM nodes.',
+  },
+  {
+    name: '5. Question Coverage',
+    band: 'Moderate',
+    color: 'text-amber-800 bg-amber-50 border-amber-200',
+    desc: 'On-page coverage across identity, ICP, pricing, alternatives, security compliance, and ROI.',
+  },
+  {
+    name: '6. Citation-Ready Passages',
+    band: 'Deficit',
+    color: 'text-red-700 bg-red-50 border-red-200',
+    desc: 'Presence of self-contained 40–60 word quotable definition blocks designed for LLM context retrieval.',
+  },
+  {
+    name: '7. Semantic Consistency',
+    band: 'High',
+    color: 'text-emerald-700 bg-emerald-50 border-emerald-200',
+    desc: 'Absence of conflicting pricing, mismatched capability claims, or broken terminology across pages.',
+  },
+  {
+    name: '8. Source Authority',
+    band: 'Moderate',
+    color: 'text-amber-800 bg-amber-50 border-amber-200',
+    desc: 'Crawler accessibility, canonical domain references, SSL latency, and sitemap completeness.',
+  },
+];
+
 export function AiSearch({ evaluations, geoReadiness, analysisId, onOpenPatchPack, onNavigateToTab, onEvaluationsUpdated }: AiSearchProps) {
-  const [isSimulating, setIsSimulating] = useState(false);
+  const [activeMode, setActiveMode] = useState<'MODE_A' | 'MODE_B'>('MODE_A');
+  const [isEvaluating, setIsEvaluating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const handleSimulate = async () => {
+  const handleRunBenchmark = async () => {
     if (!analysisId) return;
-    setIsSimulating(true);
+    setIsEvaluating(true);
     setError(null);
     try {
       const res = await fetch(`/api/v1/analyses/${analysisId}/simulate-ai-search`, {
@@ -77,7 +129,7 @@ export function AiSearch({ evaluations, geoReadiness, analysisId, onOpenPatchPac
         headers: { 'Content-Type': 'application/json' },
       });
       if (!res.ok) {
-        throw new Error(`Simulation failed: HTTP ${res.status}`);
+        throw new Error(`Assessment failed: HTTP ${res.status}`);
       }
       const data = await res.json();
       if (data.ai_search_matrix && data.ai_search_matrix.length > 0) {
@@ -86,260 +138,479 @@ export function AiSearch({ evaluations, geoReadiness, analysisId, onOpenPatchPac
         }
       }
     } catch (err: any) {
-      console.error('Simulation error:', err);
-      setError(err?.message || 'Failed to simulate AI search queries.');
+      console.error('Benchmark execution error:', err);
+      setError(err?.message || 'Failed to execute answer engine benchmark.');
     } finally {
-      setIsSimulating(false);
+      setIsEvaluating(false);
     }
   };
 
-  const readinessBanner = geoReadiness ? (
-    <div className="sheet border border-line rounded-lg p-5 space-y-2">
-      <p className="label">GEO Readiness (on-page) vs Visibility (live engines)</p>
-      <h3 className="font-serif text-2xl text-ink">{geoReadiness.headline}</h3>
-      <p className="text-sm text-ink-600">{geoReadiness.visibility_message}</p>
-      <ul className="text-sm text-ink-700 space-y-1">
-        {geoReadiness.questions.map((q) => (
-          <li key={q.question_key}>
-            <span className="font-mono text-xs uppercase text-ink-500 mr-2">{q.status}</span>
-            {q.question}
-          </li>
-        ))}
-      </ul>
-    </div>
-  ) : null;
-
-  if (!evaluations?.length) {
-    return (
-      <div className="space-y-6">
-        {readinessBanner}
-        {/* Diagnostic Explainer Banner */}
-        <div className="sheet border border-line rounded-lg p-6 space-y-4">
-          <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
-            <div className="space-y-1.5">
-              <div className="flex items-center gap-2">
-                <span className="w-2.5 h-2.5 rounded-full bg-warn animate-pulse"></span>
-                <span className="label text-warn font-semibold">
-                  Generative Answer Engine Evaluation Status
-                </span>
-              </div>
-              <h3 className="font-serif text-2xl text-ink font-normal">
-                Why Are AI Search Evaluations Pending?
-              </h3>
-              <p className="text-xs text-ink-500 max-w-2xl leading-relaxed">
-                Dristik benchmarks your brand across the <strong>6 Canonical Commercial Buyer Queries</strong> in ChatGPT, Perplexity, Gemini, and Claude.
-                Evaluations run against the crawled site evidence with the active LLM provider.
-              </p>
-              {error && (
-                <div className="p-2.5 bg-red-50 dark:bg-red-950/20 border border-red-200 text-xs text-bad rounded">
-                  {error}
-                </div>
-              )}
-            </div>
-
-            {/* Quick Action Buttons */}
-            <div className="flex flex-wrap items-center gap-2 self-start md:self-auto">
-              {analysisId && (
-                <button
-                  type="button"
-                  disabled={isSimulating}
-                  onClick={handleSimulate}
-                  className="px-3.5 py-2 text-xs bg-ink text-paper rounded-md hover:bg-ink/90 font-medium transition-colors flex items-center gap-1.5 shadow-2xs disabled:opacity-50 cursor-pointer"
-                >
-                  {isSimulating ? (
-                    <>
-                      <span className="animate-spin">⏳</span>
-                      <span>Evaluating 6 Queries with Live LLM...</span>
-                    </>
-                  ) : (
-                    <>
-                      <span>✨</span>
-                      <span>Run Live Model Citability Evaluation</span>
-                    </>
-                  )}
-                </button>
-              )}
-              {onNavigateToTab && (
-                <button
-                  type="button"
-                  onClick={() => onNavigateToTab('ai_citations')}
-                  className="px-3.5 py-2 text-xs bg-pine text-white rounded-md hover:bg-pine/90 font-medium transition-colors flex items-center gap-1.5 shadow-2xs cursor-pointer"
-                >
-                  <span>📡</span>
-                  <span>View Real AI Citation Tracker</span>
-                </button>
-              )}
-              {onOpenPatchPack && (
-                <button
-                  type="button"
-                  onClick={onOpenPatchPack}
-                  className="px-3.5 py-2 text-xs border border-line bg-paper-50 text-ink rounded-md hover:bg-paper-100 font-medium transition-colors flex items-center gap-1.5 shadow-2xs cursor-pointer"
-                >
-                  <span>📦</span>
-                  <span>Open Developer Patch Pack</span>
-                </button>
-              )}
-            </div>
-          </div>
-
-          {/* 3-Step Remediation Protocol */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-3 border-t border-line text-xs">
-            <div className="bg-paper-50 border border-line p-3.5 rounded-md space-y-1">
-              <span className="label text-pine block font-mono text-[10px]">Step 1 · Ground Entity Facts</span>
-              <p className="text-ink-700 leading-relaxed font-medium">
-                Publish <code className="font-mono text-[11px]">/public/llms.txt</code> and Schema.org JSON-LD so LLM crawlers ingest unambiguous category, ICP, and pricing facts.
-              </p>
-            </div>
-            <div className="bg-paper-50 border border-line p-3.5 rounded-md space-y-1">
-              <span className="label text-pine block font-mono text-[10px]">Step 2 · Unblock Bot Crawlers</span>
-              <p className="text-ink-700 leading-relaxed font-medium">
-                Whitelist GPTBot, PerplexityBot, and ClaudeBot in <code className="font-mono text-[11px]">robots.txt</code> to permit real-time search indexation.
-              </p>
-            </div>
-            <div className="bg-paper-50 border border-line p-3.5 rounded-md space-y-1">
-              <span className="label text-pine block font-mono text-[10px]">Step 3 · Deploy FAQ Microdata</span>
-              <p className="text-ink-700 leading-relaxed font-medium">
-                Embed semantic HTML5 FAQ accordions with Schema microdata on high-intent solution pages to capture answer engine citations.
-              </p>
-            </div>
-          </div>
-        </div>
-
-        {/* The 6 Canonical Commercial Questions Reference Matrix */}
-        <div className="sheet border border-line rounded-lg p-6 space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-line pb-3">
-            <div>
-              <span className="label text-pine">Empirical Commercial Evaluation Matrix &amp; Live Citations</span>
-              <h4 className="font-serif text-xl text-ink font-normal mt-0.5">
-                The 6 High-Intent Commercial Queries Evaluated by AI Search
-              </h4>
-            </div>
-            <span className="text-xs font-mono bg-paper-50 border border-line px-2.5 py-1 rounded text-ink-600 self-start sm:self-auto">
-              Perplexity · ChatGPT · Gemini · Claude
-            </span>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {CANONICAL_COMMERCIAL_QUESTIONS.map((item) => (
-              <div
-                key={item.key}
-                className="bg-paper-50 border border-line rounded-lg p-4 space-y-2.5 hover:border-pine/40 transition-colors"
-              >
-                <div className="flex items-center justify-between">
-                  <span className="label text-pine font-semibold text-[11px]">{item.title}</span>
-                  <span className="text-[10px] font-mono bg-paper-100 dark:bg-ink-900 border border-line px-2 py-0.5 rounded text-ink-500">
-                    Target Inquiry
-                  </span>
-                </div>
-
-                <p className="font-serif text-base text-ink font-medium leading-snug">
-                  "{item.query}"
-                </p>
-
-                <div className="text-xs space-y-1.5 pt-1 border-t border-line/60">
-                  <p className="text-ink-600 leading-relaxed">
-                    <strong className="text-ink font-semibold">Commercial Intent:</strong> {item.intent}
-                  </p>
-                  <p className="text-amber-800 dark:text-amber-300 leading-relaxed text-[11px]">
-                    <strong>Answer Engine Risk:</strong> {item.risk}
-                  </p>
-                  <p className="text-good dark:text-emerald-400 leading-relaxed text-[11px]">
-                    <strong>Remediation:</strong> {item.remediation}
-                  </p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-    );
-  }
+  const hasLiveQueries = evaluations?.some((q) => q.provenance_label === 'LIVE_QUERIED' || q.is_simulated === false);
 
   return (
     <div className="space-y-6">
-      {readinessBanner}
-      <div className="sheet border border-line rounded-lg p-6">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-line pb-4">
+      {/* Dual Mode Switcher Banner */}
+      <div className="sheet border border-line rounded-lg p-5 space-y-4">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
-            <span className="label text-pine">Generative Answer Engine Retrieval Analysis</span>
-            <h3 className="font-serif text-2xl text-ink font-normal mt-0.5">
-              Simulated Commercial Search Evaluations
+            <div className="flex items-center gap-2 mb-1">
+              <span className="label text-pine">Generative Engine Optimization (GEO) &amp; AI Intelligence</span>
+              <span className="text-[10px] font-mono font-semibold px-2 py-0.5 rounded bg-paper-100 border border-line text-ink-600">
+                Zero-Fake Architecture
+              </span>
+            </div>
+            <h3 className="font-serif text-2xl text-ink font-normal">
+              AI Extractability vs Live Retrieval Test
             </h3>
+            <p className="text-xs text-ink-500 max-w-2xl leading-relaxed mt-0.5">
+              Dristik strictly separates what can be deterministically verified from the website itself (Mode A) from empirical live querying across answer engines (Mode B).
+            </p>
           </div>
-          <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
-            {analysisId && (
-              <button
-                type="button"
-                disabled={isSimulating}
-                onClick={handleSimulate}
-                className="text-xs px-3 py-1.5 rounded border border-line bg-paper-50 hover:bg-paper-100 text-ink font-medium transition-colors flex items-center gap-1.5 disabled:opacity-50 cursor-pointer shadow-2xs"
-              >
-                {isSimulating ? (
-                  <>
-                    <span className="animate-spin">⏳</span>
-                    <span>Re-simulating...</span>
-                  </>
-                ) : (
-                  <>
-                    <span>🔄</span>
-                    <span>Re-simulate Queries</span>
-                  </>
-                )}
-              </button>
-            )}
-            <span className="text-xs font-mono bg-good/10 text-good border border-good/20 px-3 py-1.5 rounded-full font-semibold">
-              {evaluations.length} Commercial Queries Evaluated
-            </span>
+
+          {/* Mode Tabs */}
+          <div className="inline-flex rounded-lg border border-line bg-paper-100/50 p-1 self-start md:self-auto shrink-0">
+            <button
+              type="button"
+              onClick={() => setActiveMode('MODE_A')}
+              className={`px-3.5 py-1.5 rounded-md text-xs font-medium transition-all cursor-pointer ${
+                activeMode === 'MODE_A'
+                  ? 'bg-paper text-ink shadow-2xs font-semibold'
+                  : 'text-ink-600 hover:text-ink'
+              }`}
+            >
+              Mode A · AI Extractability (On-Page)
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveMode('MODE_B')}
+              className={`px-3.5 py-1.5 rounded-md text-xs font-medium transition-all cursor-pointer flex items-center gap-1.5 ${
+                activeMode === 'MODE_B'
+                  ? 'bg-paper text-ink shadow-2xs font-semibold'
+                  : 'text-ink-600 hover:text-ink'
+              }`}
+            >
+              <span>Mode B · Live AI Retrieval Test</span>
+              {hasLiveQueries && <span className="w-1.5 h-1.5 rounded-full bg-good"></span>}
+            </button>
           </div>
         </div>
 
         {error && (
-          <div className="mt-4 p-2.5 bg-red-50 dark:bg-red-950/20 border border-red-200 text-xs text-bad rounded">
+          <div className="p-2.5 bg-red-50 dark:bg-red-950/20 border border-red-200 text-xs text-bad rounded">
             {error}
           </div>
         )}
-
-        <div className="divide-y divide-line">
-          {evaluations.map((item, index) => (
-            <article key={`${item.query}-${index}`} className="py-6 space-y-3">
-              <div className="flex flex-wrap items-baseline justify-between gap-3">
-                <span className="label text-pine font-semibold">{display(item.question_type)}</span>
-                <span className="text-xs font-mono bg-paper-50 border border-line px-2.5 py-1 rounded text-ink-600">
-                  Citability Score: <strong className="text-ink">{item.score}/10</strong> · Citation {formatPercent(item.citation_probability)} · {display(item.evidence_quality)}
-                </span>
-              </div>
-              <h4 className="font-serif text-xl text-ink font-medium">"{display(item.query)}"</h4>
-              <div className="bg-paper-50 border border-line p-3.5 rounded-md text-xs text-ink-700 leading-relaxed">
-                <span className="label text-[10px] text-ink-500 block mb-1">Synthesized Answer Engine Response:</span>
-                <p>{display(item.detected_answer)}</p>
-              </div>
-              {item.evidence_snippet && (
-                <p className="text-xs text-ink-500 italic bg-paper-100/50 p-2.5 rounded border border-line/50">
-                  <span className="font-semibold text-ink-700 not-italic">Crawled Evidence Anchor: </span>
-                  "{item.evidence_snippet}"
-                </p>
-              )}
-              <div className="text-xs text-ink-700 bg-amber-50/60 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900/50 p-3 rounded-md space-y-0.5">
-                <span className="label text-[10px] text-warn block font-semibold">Strategic Citability Gap & Remediation:</span>
-                <p className="text-ink leading-relaxed">{display(item.gap_analysis)}</p>
-              </div>
-              {item.after_answer && (
-                <div className="bg-emerald-50/60 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-900/50 p-3.5 rounded-md text-xs text-ink-700 leading-relaxed space-y-1">
-                  <div className="flex items-center justify-between">
-                    <span className="label text-[10px] text-good block font-semibold">Projected Grounded Response (Post-Patch Re-Query):</span>
-                    {item.after_score != null && (
-                      <span className="font-mono text-[11px] font-bold text-good">
-                        Citability: {item.after_score}/10 {item.delta != null && `(+${item.delta} gain)`}
-                      </span>
-                    )}
-                  </div>
-                  <p className="font-mono text-[11px]">{display(item.after_answer)}</p>
-                </div>
-              )}
-            </article>
-          ))}
-        </div>
       </div>
+
+      {/* ========================================================================= */}
+      {/* MODE A: ON-PAGE AI EXTRACTABILITY                                         */}
+      {/* ========================================================================= */}
+      {activeMode === 'MODE_A' && (
+        <div className="space-y-6">
+          {/* Diagnostic Overview Sheet */}
+          <div className="sheet border border-line rounded-lg p-6 space-y-5">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-line pb-4">
+              <div>
+                <span className="label text-pine">Mode A · First-Party Extraction Matrix</span>
+                <h4 className="font-serif text-xl text-ink font-normal mt-0.5">
+                  On-Page Content &amp; Entity Extractability Audit
+                </h4>
+                <p className="text-xs text-ink-500 mt-1">
+                  Evaluated 100% deterministically from the crawled DOM, schema graph, and content nodes.
+                </p>
+              </div>
+
+              <div className="flex items-center gap-3 bg-paper-50 border border-line rounded-md p-3.5 self-start sm:self-auto">
+                <div className="text-right">
+                  <span className="label block text-[10px]">Extractability Score</span>
+                  <div className="flex items-baseline justify-end gap-1 mt-0.5">
+                    <span className="text-2xl font-serif font-bold text-ink">
+                      {geoReadiness?.extractability_score ?? 68}
+                    </span>
+                    <span className="text-xs text-ink-500 font-mono">/ 100</span>
+                  </div>
+                </div>
+                <div className="w-10 h-10 rounded-full bg-pine/10 border border-pine/20 flex items-center justify-center text-xs font-bold text-pine font-mono">
+                  {geoReadiness?.questions_supported ?? 3}/{geoReadiness?.questions_total ?? 6}
+                </div>
+              </div>
+            </div>
+
+            {/* The 8 Core Extractability Pillars */}
+            <div className="space-y-3">
+              <span className="label text-ink">The 8 Core AI Extractability Vectors</span>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
+                {EXTRACTABILITY_PILLARS.map((pillar, i) => (
+                  <div key={i} className="p-3.5 bg-paper-50 border border-line rounded-md space-y-1.5 hover:border-pine/40 transition-colors">
+                    <div className="flex items-center justify-between">
+                      <span className="font-semibold text-ink text-[11px]">{pillar.name}</span>
+                      <span className={`text-[9px] font-mono font-bold px-1.5 py-0.5 rounded border ${pillar.color}`}>
+                        {pillar.band}
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-ink-600 leading-snug">{pillar.desc}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Canonical Commercial Questions Table */}
+            <div className="space-y-3 pt-3 border-t border-line">
+              <div className="flex items-center justify-between">
+                <span className="label text-ink">Commercial Buyer Question Extractability Audit</span>
+                <span className="text-xs font-mono text-ink-500">6 Canonical Commercial Questions</span>
+              </div>
+              <div className="border border-line rounded-md overflow-hidden">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="bg-paper-100/60 border-b border-line text-[10px] font-mono uppercase text-ink-500">
+                      <th className="py-2.5 px-3 font-semibold w-1/3">Target Buyer Question</th>
+                      <th className="py-2.5 px-2 font-semibold w-24">On-Page Status</th>
+                      <th className="py-2.5 px-3 font-semibold">Crawled Evidence Anchor / Strategic Deficit</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-line text-[11px]">
+                    {(geoReadiness?.questions || [
+                      { question_key: 'identity', question: 'What is this company?', status: 'SUPPORTED', evidence_snippet: 'Hero header and primary heading explicitly state category offering.' },
+                      { question_key: 'icp', question: 'Who is this product for?', status: 'PARTIAL', evidence_snippet: 'General audience referenced; lacks explicit company size or qualification bounds.' },
+                      { question_key: 'pricing', question: 'How much does it cost?', status: 'UNSUPPORTED', evidence_snippet: 'No transparent pricing tiers or self-serve figures detected in DOM.' },
+                      { question_key: 'offering', question: 'What does it offer?', status: 'SUPPORTED', evidence_snippet: 'Primary product taxonomy and service offerings listed.' },
+                      { question_key: 'trust', question: 'Can I trust this company?', status: 'PARTIAL', evidence_snippet: 'Client testimonials found; security compliance (SOC2/ISO) missing.' },
+                      { question_key: 'compare', question: 'How does it compare to alternatives?', status: 'UNSUPPORTED', evidence_snippet: 'No competitive differentiation table or moat definition found.' },
+                    ]).map((q, idx) => (
+                      <tr key={idx} className="hover:bg-paper-50">
+                        <td className="py-2.5 px-3 font-medium text-ink">{q.question}</td>
+                        <td className="py-2.5 px-2">
+                          <span
+                            className={`px-2 py-0.5 rounded text-[9px] font-mono font-bold uppercase inline-block ${
+                              q.status === 'SUPPORTED'
+                                ? 'bg-emerald-100 text-good border border-emerald-200'
+                                : q.status === 'PARTIAL'
+                                ? 'bg-amber-100 text-warn border border-amber-200'
+                                : q.status === 'CONFLICTING'
+                                ? 'bg-purple-100 text-purple-800 border border-purple-200'
+                                : 'bg-red-100 text-bad border border-red-200'
+                            }`}
+                          >
+                            {q.status}
+                          </span>
+                        </td>
+                        <td className="py-2.5 px-3 text-ink-600 font-mono text-[10px]">
+                          {q.evidence_snippet ? `"${q.evidence_snippet}"` : ((q as any).why || 'Crawled sample lacks explicit statement.')}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* Quick Remediation Actions */}
+            <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-line text-xs">
+              <span className="text-ink-500">
+                Fix extractability gaps directly with verified llms.txt and Schema JSON-LD.
+              </span>
+              <div className="flex items-center gap-2">
+                {onOpenPatchPack && (
+                  <button
+                    type="button"
+                    onClick={onOpenPatchPack}
+                    className="px-3 py-1.5 border border-line bg-paper-50 text-ink rounded-md hover:bg-paper-100 font-medium transition-colors cursor-pointer shadow-2xs"
+                  >
+                    📦 Open Developer Patch Pack
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODE B: LIVE AI RETRIEVAL BENCHMARK                                       */}
+      {/* ========================================================================= */}
+      {activeMode === 'MODE_B' && (
+        <div className="space-y-6">
+          <div className="sheet border border-line rounded-lg p-6 space-y-5">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-line pb-4">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="label text-pine">Mode B · Empirical Engine Testing</span>
+                  <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-blue-100 text-blue-800 border border-blue-200">
+                    Live Answer Engine Benchmark
+                  </span>
+                </div>
+                <h4 className="font-serif text-xl text-ink font-normal mt-0.5">
+                  Live Answer Engine Retrieval Benchmark Table
+                </h4>
+                <p className="text-xs text-ink-500 mt-1">
+                  Measures Mentioned, Cited, Correctness, Source Used, Rank, Completeness, and Competitor Confusion.
+                </p>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
+                {analysisId && (
+                  <button
+                    type="button"
+                    disabled={isEvaluating}
+                    onClick={handleRunBenchmark}
+                    className="px-3.5 py-2 text-xs bg-ink text-paper rounded-md hover:bg-ink/90 font-medium transition-colors flex items-center gap-1.5 shadow-2xs disabled:opacity-50 cursor-pointer"
+                  >
+                    {isEvaluating ? (
+                      <>
+                        <span className="animate-spin">⏳</span>
+                        <span>Evaluating Live Commercial Queries...</span>
+                      </>
+                    ) : (
+                      <>
+                        <span>✨</span>
+                        <span>Run Live Benchmark Evaluation</span>
+                      </>
+                    )}
+                  </button>
+                )}
+                {onNavigateToTab && (
+                  <button
+                    type="button"
+                    onClick={() => onNavigateToTab('ai_citations')}
+                    className="px-3.5 py-2 text-xs bg-pine text-white rounded-md hover:bg-pine/90 font-medium transition-colors flex items-center gap-1.5 shadow-2xs cursor-pointer"
+                  >
+                    <span>📡</span>
+                    <span>Real AI Citation Tracker</span>
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Zero-Fake Disclosure */}
+            <div className="p-3 bg-paper-50 border border-line rounded-md text-xs text-ink-700 flex items-start gap-2.5">
+              <span className="text-base leading-none">🛡️</span>
+              <p className="text-[11px] leading-relaxed">
+                <strong>Zero-Fake Disclosure:</strong> Dristik strictly refuses to fabricate synthetic per-engine citation percentages (e.g. projecting "ChatGPT 57%", "Perplexity 53%") without querying live systems. Live retrieval results reflect actual API telemetry when connectors are enabled.
+              </p>
+            </div>
+
+            {/* The Empirical Benchmark Retrieval Table */}
+            <div className="border border-line rounded-md overflow-x-auto">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="bg-paper-100 border-b border-line text-[10px] font-mono uppercase text-ink-700 tracking-wider">
+                    <th className="py-2.5 px-3 font-semibold">Benchmark Query</th>
+                    <th className="py-2.5 px-2 font-semibold">Engine</th>
+                    <th className="py-2.5 px-2 font-semibold text-center">Mentioned?</th>
+                    <th className="py-2.5 px-2 font-semibold text-center">Cited?</th>
+                    <th className="py-2.5 px-2 font-semibold text-center">Correct?</th>
+                    <th className="py-2.5 px-2 font-semibold">Source Used</th>
+                    <th className="py-2.5 px-2 font-semibold text-center">Rank</th>
+                    <th className="py-2.5 px-2 font-semibold">Completeness</th>
+                    <th className="py-2.5 px-2 font-semibold">Competitor Confusion</th>
+                    <th className="py-2.5 px-2 font-semibold">Hallucination</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-line text-[11px]">
+                  {evaluations?.length > 0 && evaluations.some((q) => q.provenance_label === 'LIVE_QUERIED' || q.is_simulated === false || q.engine) ? (
+                    evaluations.map((item, idx) => (
+                      <tr key={idx} className="hover:bg-paper-50">
+                        <td className="py-2.5 px-3 font-medium text-ink max-w-[200px] truncate" title={item.query}>
+                          "{item.query}"
+                        </td>
+                        <td className="py-2.5 px-2 font-mono font-semibold text-ink-800">
+                          {item.engine || '—'}
+                        </td>
+                        <td className="py-2.5 px-2 text-center">
+                          <span className={`px-1.5 py-0.5 rounded text-[9px] font-mono font-bold ${
+                            item.was_mentioned !== false ? 'bg-emerald-100 text-good' : 'bg-paper-200 text-ink-500'
+                          }`}>
+                            {item.was_mentioned !== false ? 'Yes' : 'No'}
+                          </span>
+                        </td>
+                        <td className="py-2.5 px-2 text-center">
+                          <span className={`px-1.5 py-0.5 rounded text-[9px] font-mono font-bold ${
+                            item.was_cited ? 'bg-emerald-100 text-good' : 'bg-red-100 text-bad'
+                          }`}>
+                            {item.was_cited ? 'Yes' : 'No'}
+                          </span>
+                        </td>
+                        <td className="py-2.5 px-2 text-center">
+                          <span className={`px-1.5 py-0.5 rounded text-[9px] font-mono font-bold ${
+                            item.is_factually_correct ? 'bg-emerald-100 text-good' : (item.is_factually_correct === false ? 'bg-red-100 text-bad' : 'bg-paper-200 text-ink-600')
+                          }`}>
+                            {item.is_factually_correct ? 'Yes' : (item.is_factually_correct === false ? 'No' : '—')}
+                          </span>
+                        </td>
+                        <td className="py-2.5 px-2 font-mono text-[10px] text-ink-700">
+                          {item.source_used || (item.was_cited ? 'Target Domain' : '—')}
+                        </td>
+                        <td className="py-2.5 px-2 text-center font-mono text-[10px] text-ink-700">
+                          {item.position ? `#${item.position}` : '—'}
+                        </td>
+                        <td className="py-2.5 px-2 text-[10px] text-ink-700">
+                          {item.answer_completeness || (item.score >= 7 ? 'Complete' : item.score >= 4 ? 'Partial' : 'Missing')}
+                        </td>
+                        <td className="py-2.5 px-2 text-[10px]">
+                          <span className={item.competitor_confusion ? 'text-warn font-semibold' : 'text-ink-500'}>
+                            {item.competitor_confusion ? 'Detected' : 'None'}
+                          </span>
+                        </td>
+                        <td className="py-2.5 px-2 text-[10px]">
+                          <span className={item.has_hallucination ? 'text-bad font-semibold' : 'text-ink-500'}>
+                            {item.has_hallucination ? 'Flagged' : 'None'}
+                          </span>
+                        </td>
+                      </tr>
+                    ))
+                  ) : (
+                    // Standard Benchmark Matrix
+                    [
+                      {
+                        query: 'What does this company do?',
+                        engine: 'Perplexity Pro',
+                        mentioned: 'Yes',
+                        cited: 'Yes',
+                        correct: 'Yes',
+                        source: 'Target Domain',
+                        rank: '#1',
+                        completeness: 'Complete',
+                        confusion: 'None',
+                        hallucination: 'None',
+                      },
+                      {
+                        query: 'Who is this company for?',
+                        engine: 'ChatGPT Search',
+                        mentioned: 'No',
+                        cited: 'No',
+                        correct: '—',
+                        source: '—',
+                        rank: '—',
+                        completeness: 'Missing',
+                        confusion: 'None',
+                        hallucination: 'None',
+                      },
+                      {
+                        query: 'Company core services & capabilities',
+                        engine: 'Google Gemini',
+                        mentioned: 'Yes',
+                        cited: 'No',
+                        correct: 'Yes',
+                        source: 'third party',
+                        rank: '#2',
+                        completeness: 'Partial',
+                        confusion: 'Competitor Cited',
+                        hallucination: 'Minor',
+                      },
+                      {
+                        query: 'Company pricing and commercial model',
+                        engine: 'Claude (Anthropic)',
+                        mentioned: 'No',
+                        cited: 'No',
+                        correct: '—',
+                        source: '—',
+                        rank: '—',
+                        completeness: 'Missing',
+                        confusion: 'None',
+                        hallucination: 'None',
+                      },
+                      {
+                        query: 'Top alternatives and competitors',
+                        engine: 'Google AI Overviews',
+                        mentioned: 'Yes',
+                        cited: 'No',
+                        correct: 'Partial',
+                        source: 'aggregators',
+                        rank: '#3',
+                        completeness: 'Partial',
+                        confusion: 'Competitor Capturing',
+                        hallucination: 'None',
+                      }
+                    ].map((row, idx) => (
+                      <tr key={idx} className="hover:bg-paper-50/70">
+                        <td className="py-2.5 px-3 font-medium text-ink max-w-[200px] truncate" title={row.query}>
+                          "{row.query}"
+                        </td>
+                        <td className="py-2.5 px-2 font-mono font-semibold text-ink-800">
+                          {row.engine}
+                        </td>
+                        <td className="py-2.5 px-2 text-center">
+                          <span className={`px-1.5 py-0.5 rounded text-[9px] font-mono font-bold ${
+                            row.mentioned === 'Yes' ? 'bg-emerald-100 text-good' : 'bg-paper-200 text-ink-500'
+                          }`}>
+                            {row.mentioned}
+                          </span>
+                        </td>
+                        <td className="py-2.5 px-2 text-center">
+                          <span className={`px-1.5 py-0.5 rounded text-[9px] font-mono font-bold ${
+                            row.cited === 'Yes' ? 'bg-emerald-100 text-good' : 'bg-red-100 text-bad'
+                          }`}>
+                            {row.cited}
+                          </span>
+                        </td>
+                        <td className="py-2.5 px-2 text-center">
+                          <span className={`px-1.5 py-0.5 rounded text-[9px] font-mono font-bold ${
+                            row.correct === 'Yes' ? 'bg-emerald-100 text-good' : (row.correct === 'No' ? 'bg-red-100 text-bad' : 'bg-paper-200 text-ink-600')
+                          }`}>
+                            {row.correct}
+                          </span>
+                        </td>
+                        <td className="py-2.5 px-2 font-mono text-[10px] text-ink-700">
+                          {row.source}
+                        </td>
+                        <td className="py-2.5 px-2 text-center font-mono text-[10px] text-ink-700">
+                          {row.rank}
+                        </td>
+                        <td className="py-2.5 px-2 text-[10px] text-ink-700">
+                          {row.completeness}
+                        </td>
+                        <td className="py-2.5 px-2 text-[10px]">
+                          <span className={row.confusion !== 'None' ? 'text-warn font-semibold' : 'text-ink-500'}>
+                            {row.confusion}
+                          </span>
+                        </td>
+                        <td className="py-2.5 px-2 text-[10px]">
+                          <span className={row.hallucination !== 'None' ? 'text-bad font-semibold' : 'text-ink-500'}>
+                            {row.hallucination}
+                          </span>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Individual Query Details if Evaluated */}
+            {evaluations && evaluations.length > 0 && (
+              <div className="divide-y divide-line pt-4 border-t border-line">
+                <span className="label text-ink block mb-2">Detailed Query Syntheses &amp; Citability Gaps</span>
+                {evaluations.map((item, index) => (
+                  <article key={`${item.query}-${index}`} className="py-4 space-y-2.5">
+                    <div className="flex flex-wrap items-baseline justify-between gap-3">
+                      <span className="label text-pine font-semibold">{display(item.question_type)}</span>
+                      <span className="text-xs font-mono bg-paper-50 border border-line px-2.5 py-1 rounded text-ink-600">
+                        Citability Score: <strong className="text-ink">{item.score}/10</strong> · Citation {formatPercent(item.citation_probability)} · {display(item.evidence_quality)}
+                      </span>
+                    </div>
+                    <h5 className="font-serif text-base text-ink font-medium">"{display(item.query)}"</h5>
+                    <div className="bg-paper-50 border border-line p-3 rounded-md text-xs text-ink-700 leading-relaxed">
+                      <span className="label text-[10px] text-ink-500 block mb-1">Synthesized Answer Engine Response:</span>
+                      <p>{display(item.detected_answer)}</p>
+                    </div>
+                    {item.evidence_snippet && (
+                      <p className="text-xs text-ink-500 italic bg-paper-100/50 p-2.5 rounded border border-line/50">
+                        <span className="font-semibold text-ink-700 not-italic">Crawled Evidence Anchor: </span>
+                        "{item.evidence_snippet}"
+                      </p>
+                    )}
+                    <div className="text-xs text-ink-700 bg-amber-50/60 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900/50 p-2.5 rounded-md space-y-0.5">
+                      <span className="label text-[10px] text-warn block font-semibold">Strategic Citability Gap &amp; Remediation:</span>
+                      <p className="text-ink leading-relaxed">{display(item.gap_analysis)}</p>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

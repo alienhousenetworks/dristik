@@ -46,6 +46,16 @@ export async function startAnalysis(
   return response.json();
 }
 
+export async function deleteAnalysis(analysisId: string): Promise<void> {
+  const response = await fetch(`/api/v1/analyses/${analysisId}`, {
+    method: 'DELETE',
+    credentials: 'include',
+  });
+  if (!response.ok) {
+    throw new Error(await readError(response, 'Could not delete the audit'));
+  }
+}
+
 export async function getAnalysis(analysisId: string): Promise<AnalysisRun> {
   const response = await fetch(`/api/v1/analyses/${analysisId}`, { credentials: 'include' });
   if (!response.ok) {

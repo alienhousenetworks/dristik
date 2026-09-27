@@ -6,18 +6,10 @@ interface CharacterSafeCopyWidgetProps {
 }
 
 export function CharacterSafeCopyWidget({ initialCopy }: CharacterSafeCopyWidgetProps) {
-  const [title, setTitle] = useState(initialCopy?.title || 'Dristik AI — Enterprise Web Intelligence & Audit Platform');
-  const [meta, setMeta] = useState(
-    initialCopy?.meta_description ||
-      'Dristik investigates your website with verified DOM evidence, Theory of Constraints bottlenecks, and post-patch generative search citation readiness.'
-  );
-  const [headline, setHeadline] = useState(
-    initialCopy?.hero_headline || 'Autonomous Website Intelligence for Generative Search'
-  );
-  const [subhead, setSubhead] = useState(
-    initialCopy?.hero_subhead ||
-      'Eliminate AI answer engine blindness. Dristik audits commercial clarity, generates developer-ready patch packs, and proves before-and-after citation readiness across ChatGPT, Perplexity, and Google.'
-  );
+  const [title, setTitle] = useState(initialCopy?.title || '');
+  const [meta, setMeta] = useState(initialCopy?.meta_description || '');
+  const [headline, setHeadline] = useState(initialCopy?.hero_headline || '');
+  const [subhead, setSubhead] = useState(initialCopy?.hero_subhead || '');
   const [copiedField, setCopiedField] = useState<string | null>(null);
 
   // Live count computations

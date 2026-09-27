@@ -160,6 +160,32 @@ class AuditRepository:
                     )
                 return [dict(r) for r in cur.fetchall()]
 
+    def delete_run(self, analysis_id: str, org_id: Optional[str] = None) -> bool:
+        """Deletes one audit and its checkpoints, pages, evidence, claims, and findings."""
+        child_tables = (
+            "audit_checkpoints",
+            "audit_pages",
+            "audit_evidence",
+            "audit_claims",
+            "audit_findings",
+            "agent_telemetry",
+        )
+        with self._lock:
+            with self._get_conn() as conn:
+                conn.execute("PRAGMA foreign_keys = ON")
+                if org_id:
+                    owned = conn.execute(
+                        "SELECT 1 FROM audits WHERE analysis_id = ? AND org_id = ?",
+                        (analysis_id, org_id),
+                    ).fetchone()
+                    if not owned:
+                        return False
+                for table in child_tables:
+                    conn.execute(f"DELETE FROM {table} WHERE analysis_id = ?", (analysis_id,))
+                cur = conn.execute("DELETE FROM audits WHERE analysis_id = ?", (analysis_id,))
+                conn.commit()
+                return cur.rowcount > 0
+
     # -------------------------------------------------------------------------
     # Stage Checkpoints (Resumable Pipeline)
     # -------------------------------------------------------------------------

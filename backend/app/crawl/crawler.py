@@ -7,6 +7,7 @@ import time
 import re
 import asyncio
 import logging
+from datetime import datetime, timezone
 import xml.etree.ElementTree as ET
 from urllib.parse import urlparse, urljoin, urldefrag
 from typing import List, Dict, Any, Set, Tuple, Optional, Callable
@@ -67,6 +68,54 @@ class CrawlerService:
         if any(k in p for k in ["about", "team", "story", "mission", "leadership", "careers"]):
             return "about"
         return "general"
+
+    def _url_role(self, url: str) -> str:
+        """Role slot used to keep a short crawl representative."""
+        parsed = urlparse(url)
+        ptype = self._classify_page_type(parsed.path)
+        if ptype == "homepage":
+            return "homepage"
+        if ptype == "product":
+            return "commercial"
+        if ptype in ("pricing", "contact"):
+            return "high_intent"
+        if ptype == "about":
+            return "proof"
+        return "other"
+
+    def _order_for_roles(self, urls: List[str], crawled_pages: List[Any]) -> List[str]:
+        """
+        Fill unfilled roles before spending the remaining budget on the priority queue.
+        Homepage, primary commercial, high-intent, a second commercial URL, then proof.
+        """
+        commercial_count = 0
+        filled = set()
+        for page in crawled_pages:
+            role = self._url_role(getattr(page, "url", "") or "")
+            if role == "commercial":
+                commercial_count += 1
+                filled.add("commercial")
+                if commercial_count >= 2:
+                    filled.add("secondary_commercial")
+            elif role != "other":
+                filled.add(role)
+
+        def rank(url: str) -> int:
+            role = self._url_role(url)
+            bonus = 0
+            if role == "homepage" and "homepage" not in filled:
+                bonus = 5000
+            elif role == "commercial" and "commercial" not in filled:
+                bonus = 4000
+            elif role == "high_intent" and "high_intent" not in filled:
+                bonus = 3000
+            elif role == "commercial" and "secondary_commercial" not in filled:
+                bonus = 2000
+            elif role == "proof" and "proof" not in filled:
+                bonus = 1000
+            return bonus + self._get_page_priority(url)
+
+        return sorted(urls, key=rank, reverse=True)
 
     def _get_page_priority(self, url: str) -> int:
         parsed = urlparse(url)
@@ -149,7 +198,14 @@ class CrawlerService:
             pass
         return False, None, sitemap_urls
 
-    async def _fetch_sitemap_urls(self, base_origin: str, base_domain: str, declared_sitemaps: List[str], client: httpx.AsyncClient) -> Tuple[bool, Optional[str], List[str]]:
+    async def _fetch_sitemap_urls(
+        self,
+        base_origin: str,
+        base_domain: str,
+        declared_sitemaps: List[str],
+        client: httpx.AsyncClient,
+        max_sitemap_urls: int = 500
+    ) -> Tuple[bool, Optional[str], List[str]]:
         candidate_sitemaps = declared_sitemaps + [
             f"{base_origin}/sitemap.xml",
             f"{base_origin}/sitemap_index.xml",
@@ -157,8 +213,12 @@ class CrawlerService:
         ]
         discovered_urls: List[str] = []
         found_sitemap_url: Optional[str] = None
+        visited_xml_sitemaps: Set[str] = set()
 
         for s_url in candidate_sitemaps:
+            if s_url in visited_xml_sitemaps:
+                continue
+            visited_xml_sitemaps.add(s_url)
             try:
                 resp = await client.get(s_url, headers=self.headers, timeout=6.0)
                 if resp.status_code == 200 and ("xml" in resp.headers.get("content-type", "") or resp.text.startswith("<?xml") or "<urlset" in resp.text or "<sitemapindex" in resp.text):
@@ -166,28 +226,33 @@ class CrawlerService:
                     locs = re.findall(r"<loc>(.*?)</loc>", resp.text, re.IGNORECASE)
                     for loc in locs:
                         loc_clean = loc.strip()
-                        if loc_clean.endswith(".xml"):
-                            if len(discovered_urls) < 15:
+                        if loc_clean.endswith(".xml") or "sitemap" in loc_clean.lower():
+                            if loc_clean not in visited_xml_sitemaps and len(visited_xml_sitemaps) < 25:
+                                visited_xml_sitemaps.add(loc_clean)
                                 try:
-                                    sub_resp = await client.get(loc_clean, headers=self.headers, timeout=4.0)
+                                    sub_resp = await client.get(loc_clean, headers=self.headers, timeout=5.0)
                                     if sub_resp.status_code == 200:
                                         sub_locs = re.findall(r"<loc>(.*?)</loc>", sub_resp.text, re.IGNORECASE)
                                         for s_loc in sub_locs:
                                             norm = self._normalize_url(s_loc.strip(), base_domain, base_origin)
                                             if norm and norm not in discovered_urls:
                                                 discovered_urls.append(norm)
+                                                if len(discovered_urls) >= max_sitemap_urls:
+                                                    break
                                 except Exception:
                                     pass
                         else:
                             norm = self._normalize_url(loc_clean, base_domain, base_origin)
                             if norm and norm not in discovered_urls:
                                 discovered_urls.append(norm)
+                                if len(discovered_urls) >= max_sitemap_urls:
+                                    break
                     if discovered_urls:
-                        return True, found_sitemap_url, discovered_urls[:50]
+                        return True, found_sitemap_url, discovered_urls[:max_sitemap_urls]
             except Exception:
                 continue
 
-        return False, None, discovered_urls
+        return (found_sitemap_url is not None), found_sitemap_url, discovered_urls[:max_sitemap_urls]
 
     async def _js_render_page(
         self,
@@ -266,30 +331,90 @@ class CrawlerService:
         url: str,
         client: httpx.AsyncClient,
         force_js: bool = False,
-    ) -> Tuple[Optional[str], int, float, Dict[str, str], int, Optional[str], Optional[str]]:
+    ) -> Tuple[Optional[str], int, float, Dict[str, str], int, Optional[str], Optional[str], List[Dict[str, Any]], str]:
         """
-        Direct HTTP first. If blocked, or force_js for CMS/SPA shells, render in a browser via Firecrawl.
-        Returns (html_content, status_code, ttfb_ms, headers, content_bytes, error_msg, markdown)
+        Direct HTTP first following redirects step-by-step with SSRF validation on each hop.
+        If blocked or force_js for CMS/SPA shells, render in a browser via Playwright/Firecrawl.
+        Returns:
+        (html_content, status_code, ttfb_ms, headers, content_bytes, error_msg, markdown, redirect_chain, final_url)
         """
         start_time = time.time()
         direct_err = None
         ttfb_ms = 0.0
+        redirect_chain: List[Dict[str, Any]] = []
+        final_url = url
 
         if not force_js:
-            try:
-                resp = await client.get(url)
-                ttfb_ms = (time.time() - start_time) * 1000
-                if resp.status_code < 400 and resp.text:
-                    return resp.text, resp.status_code, ttfb_ms, dict(resp.headers), len(resp.content), None, None
-                direct_err = f"HTTP {resp.status_code}"
-            except Exception as e:
-                ttfb_ms = (time.time() - start_time) * 1000
-                direct_err = str(e)
+            current_url = url
+            visited_in_chain: Set[str] = set()
 
-        html, markdown, status, ttfb_ms, headers, nbytes, js_err = await self._js_render_page(url, client, start_time)
+            for _ in range(10):
+                if current_url in visited_in_chain:
+                    direct_err = f"Redirect loop detected at '{current_url}'"
+                    break
+                visited_in_chain.add(current_url)
+
+                if settings.SSRF_PROTECTION_ENABLED:
+                    is_safe, reason = is_safe_url(current_url)
+                    if not is_safe:
+                        direct_err = f"SSRF blocked redirect: {current_url} ({reason})"
+                        break
+
+                hop_start = time.time()
+                try:
+                    resp = await client.get(current_url)
+                    hop_latency = (time.time() - hop_start) * 1000
+                except Exception as e:
+                    direct_err = str(e)
+                    break
+
+                status_code = resp.status_code
+                loc = resp.headers.get("location") or resp.headers.get("Location")
+
+                if 300 <= status_code < 400 and loc:
+                    next_url = urljoin(current_url, loc)
+                    redirect_chain.append({
+                        "status": status_code,
+                        "url": current_url,
+                        "location": next_url,
+                        "latency_ms": round(hop_latency, 2)
+                    })
+                    current_url = next_url
+                else:
+                    final_url = current_url
+                    ttfb_ms = (time.time() - start_time) * 1000
+                    if status_code < 400 and resp.text:
+                        return (
+                            resp.text,
+                            status_code,
+                            ttfb_ms,
+                            dict(resp.headers),
+                            len(resp.content),
+                            None,
+                            None,
+                            redirect_chain,
+                            final_url
+                        )
+                    direct_err = f"HTTP {status_code}"
+                    break
+
+            if direct_err and ("Redirect loop" in direct_err or "SSRF blocked" in direct_err):
+                return None, 0, ttfb_ms, {}, 0, direct_err, None, redirect_chain, final_url
+
+        html, markdown, status, js_ttfb, headers, nbytes, js_err = await self._js_render_page(url, client, start_time)
         if html:
-            return html, status, ttfb_ms, headers, nbytes, None, markdown
-        return None, 0, ttfb_ms, {}, 0, js_err or direct_err, None
+            return (
+                html,
+                status,
+                js_ttfb or ttfb_ms,
+                headers,
+                nbytes,
+                None,
+                markdown,
+                redirect_chain,
+                final_url
+            )
+        return None, 0, ttfb_ms, {}, 0, direct_err or js_err, None, redirect_chain, final_url
 
     async def crawl_and_analyze(self, target_url: str, evidence_store: EvidenceStore) -> PageEvidence:
         """
@@ -304,12 +429,12 @@ class CrawlerService:
         self,
         target_url: str,
         evidence_store: EvidenceStore,
-        max_pages: Any = 5,
+        max_pages: Any = 10,
         progress_callback: Optional[Callable[[str, int], Any]] = None
     ) -> CrawlManifest:
         """
         Executes recursive multi-page crawl across the website.
-        Supports page limit options: 5, 10, 20, 50, or 'all' (deep crawl).
+        Supports page limit options: 10, 25, 50, 200, 500, or named tiers ('quick', 'standard', 'deep', 'enterprise').
         Discovers robots.txt, sitemaps, internal links, ranks URLs, and extracts multi-page SEO evidence.
         """
         target_max_pages = settings.get_max_crawl_pages(max_pages)
@@ -338,14 +463,14 @@ class CrawlerService:
         timeout = httpx.Timeout(settings.CRAWL_TIMEOUT_SECONDS, connect=8.0)
         limits = httpx.Limits(max_keepalive_connections=5, max_connections=10)
 
-        async with httpx.AsyncClient(headers=self.headers, timeout=timeout, limits=limits, follow_redirects=True, verify=False) as client:
+        async with httpx.AsyncClient(headers=self.headers, timeout=timeout, limits=limits, follow_redirects=False, verify=False) as client:
             
             # Step A: Discover robots.txt & Sitemap
             if progress_callback:
                 progress_callback(f"Connecting to {base_origin}...", 15)
                 
             robots_found, robots_content, declared_sitemaps = await self._fetch_robots_txt(base_origin, client)
-            sitemap_found, sitemap_url, sitemap_urls = await self._fetch_sitemap_urls(base_origin, base_domain, declared_sitemaps, client)
+            sitemap_found, sitemap_url, sitemap_urls = await self._fetch_sitemap_urls(base_origin, base_domain, declared_sitemaps, client, max_sitemap_urls=max(target_max_pages * 2, 500))
             
             for u in sitemap_urls:
                 norm_s = self._normalize_url(u, base_domain, base_origin)
@@ -364,7 +489,7 @@ class CrawlerService:
             async def fetch_and_analyze_single_page(page_url: str) -> Optional[PageEvidence]:
                 nonlocal last_fetch_error
                 async with semaphore:
-                    html_content, status_code, ttfb_ms, resp_headers, content_bytes, err, markdown = await self._fetch_page_with_fallbacks(page_url, client)
+                    html_content, status_code, ttfb_ms, resp_headers, content_bytes, err, markdown, redirect_chain, final_url = await self._fetch_page_with_fallbacks(page_url, client)
                     
                     if not html_content:
                         last_fetch_error = err or "Connection failed"
@@ -396,7 +521,7 @@ class CrawlerService:
                         and is_thin_shell
                         and embedded.get("word_count", 0) < 80
                     ):
-                        js_html, js_status, js_ttfb, js_headers, js_bytes, js_err, js_md = await self._fetch_page_with_fallbacks(
+                        js_html, js_status, js_ttfb, js_headers, js_bytes, js_err, js_md, js_chain, js_final = await self._fetch_page_with_fallbacks(
                             page_url, client, force_js=True
                         )
                         if js_html:
@@ -408,18 +533,29 @@ class CrawlerService:
                             markdown = js_md or markdown
                             soup = BeautifulSoup(html_content, "lxml")
                             render_mode = "playwright_js" if (resp_headers or {}).get("x-crawler") == "playwright-local-js" else "firecrawl_js"
+                            if js_chain:
+                                redirect_chain = js_chain
+                            if js_final:
+                                final_url = js_final
                         elif embedded.get("word_count"):
                             render_mode = "embedded_cms"
                     elif embedded.get("sources"):
                         render_mode = "embedded_cms"
 
-                    evidence_store.record_fetch(
+                    fetch_rec = evidence_store.record_fetch(
                         page_url,
                         html_content,
                         source="crawler",
                         source_type="http",
                         media_type="text/html",
                     )
+                    snap_id = getattr(fetch_rec, "snapshot_id", None)
+                    snap_path = None
+                    if snap_id:
+                        try:
+                            snap_path = str(evidence_store._ensure_snapshots()._path(snap_id))
+                        except Exception:
+                            pass
 
                     # Record dynamic content architectural discovery in evidence store
                     if is_thin_shell:
@@ -445,7 +581,7 @@ class CrawlerService:
                         extra_h1=embedded.get("h1"),
                         extra_h2=embedded.get("h2"),
                     )
-                    meta_res = analyze_meta_tags(soup, page_url, evidence_store)
+                    meta_res = analyze_meta_tags(soup, page_url, evidence_store, resp_headers=resp_headers)
                     dom_res = analyze_dom_structure(soup, page_url, evidence_store)
                     schema_res = analyze_schema_markup(soup, page_url, evidence_store)
                     links_res = analyze_link_graph(soup, page_url, normalized_root, evidence_store)
@@ -488,6 +624,15 @@ class CrawlerService:
                         body_text=(html_res.get("distilled_text") or html_res.get("visible_text") or "")[:100000] or None,
                         ctas=dom_res.get("cta_candidates", [])[:8],
                         render_mode=render_mode,
+                        response_headers=dict(resp_headers or {}),
+                        redirect_chain=redirect_chain,
+                        is_redirected=bool(redirect_chain),
+                        final_url=final_url if final_url != page_url else None,
+                        snapshot_id=snap_id,
+                        snapshot_path=snap_path,
+                        observed_at=datetime.now(timezone.utc).isoformat(),
+                        image_assets=dom_res.get("image_assets", []),
+                        x_robots_tag=meta_res.get("x_robots_tag"),
                     )
 
             # Iteratively fetch top priority pages until target_max_pages reached or queue empty
@@ -499,7 +644,7 @@ class CrawlerService:
                 if not remaining_candidates:
                     break
                 
-                sorted_candidates = sorted(remaining_candidates, key=self._get_page_priority, reverse=True)
+                sorted_candidates = self._order_for_roles(remaining_candidates, crawled_pages)
                 batch = sorted_candidates[: (target_max_pages - len(crawled_pages))]
                 
                 for u in batch:
@@ -545,7 +690,9 @@ class CrawlerService:
             sitemap_url=sitemap_url,
             robots_txt_found=robots_found,
             robots_txt_content=robots_content,
-            broken_links=broken_links
+            broken_links=broken_links,
+            sitemap_urls=sitemap_urls,
+            target_max_pages=target_max_pages
         )
 
         # Step D: Index page chunks into VectorStore using E5-Large
@@ -609,7 +756,9 @@ class CrawlerService:
         sitemap_url: Optional[str],
         robots_txt_found: bool,
         robots_txt_content: Optional[str],
-        broken_links: List[Dict[str, str]]
+        broken_links: List[Dict[str, str]],
+        sitemap_urls: Optional[List[str]] = None,
+        target_max_pages: int = 10
     ) -> CrawlManifest:
         title_map: Dict[str, List[str]] = {}
         desc_map: Dict[str, List[str]] = {}
@@ -638,9 +787,71 @@ class CrawlerService:
 
         avg_ttfb = round(total_ttfb / max(len(crawled_pages), 1), 1)
 
+        # Orphan detection: Sitemap URLs that receive 0 internal links from crawled pages
+        s_urls = list(sitemap_urls or [])
+        internal_destinations = {link for p in crawled_pages for link in p.internal_links}
+        orphan_urls = [u for u in s_urls if u not in internal_destinations and u != base_url]
+
+        # Redirect chains collection
+        all_redirect_chains = [
+            {"initial_url": p.url, "final_url": p.final_url or p.url, "hops": p.redirect_chain, "hop_count": len(p.redirect_chain)}
+            for p in crawled_pages if p.redirect_chain
+        ]
+
+        # Crawl budget accounting
+        urls_discovered_cnt = max(total_discovered, len(crawled_pages))
+        urls_crawled_cnt = len(crawled_pages)
+        urls_skipped_cnt = max(0, urls_discovered_cnt - urls_crawled_cnt)
+        crawl_budget = {
+            "urls_discovered": urls_discovered_cnt,
+            "urls_allowed": target_max_pages,
+            "urls_crawled": urls_crawled_cnt,
+            "urls_skipped": urls_skipped_cnt,
+            "skip_reasons": {
+                "budget_cap_reached": max(0, urls_skipped_cnt - len(broken_links)),
+                "failed_or_broken": len(broken_links)
+            }
+        }
+
+        role_labels = {
+            "homepage": "homepage",
+            "commercial": "primary commercial",
+            "high_intent": "high-intent",
+            "proof": "proof or about",
+            "other": "additional",
+        }
+        seen_roles: List[str] = []
+        commercial_seen = 0
+        for page in crawled_pages:
+            role = self._url_role(page.url)
+            if role == "commercial":
+                commercial_seen += 1
+                label = "primary commercial" if commercial_seen == 1 else "secondary commercial"
+            else:
+                label = role_labels.get(role, "additional")
+            if label not in seen_roles:
+                seen_roles.append(label)
+        required_roles = ["homepage", "primary commercial", "high-intent", "secondary commercial", "proof or about"]
+        missing_roles = [role for role in required_roles if role not in seen_roles]
+        sitemap_count = len(s_urls)
+        sampling_note = (
+            f"Deep audit covered {len(crawled_pages)} URL"
+            f"{'' if len(crawled_pages) == 1 else 's'}"
+            f" selected for these roles: {', '.join(seen_roles) or 'general pages'}. "
+            f"Sitemap listed {sitemap_count} URL{'' if sitemap_count == 1 else 's'}. "
+            f"Findings are page-verified, sample-verified, origin-verified, or site-inferred. "
+            f"This run does not claim every URL was rendered."
+        )
+        if missing_roles:
+            sampling_note += f" Roles not fetched in this budget: {', '.join(missing_roles)}."
+
         crawl_health = {
             "total_pages_crawled": len(crawled_pages),
-            "total_pages_discovered": max(total_discovered, len(crawled_pages)),
+            "sampling_note": sampling_note,
+            "roles_filled": seen_roles,
+            "roles_missing": missing_roles,
+            "sitemap_url_count": sitemap_count,
+            "total_pages_discovered": urls_discovered_cnt,
             "sitemap_status": "Verified" if sitemap_found else "Missing / Inaccessible",
             "robots_txt_status": "Configured" if robots_txt_found else "Missing",
             "duplicate_titles_count": len(duplicate_titles),
@@ -657,17 +868,36 @@ class CrawlerService:
             "broken_links": broken_links,
             "avg_ttfb_ms": avg_ttfb,
             "total_words_across_site": total_words,
-            "page_breakdown": [{"url": p.url, "type": p.page_type, "status": p.status_code, "words": p.word_count, "ttfb_ms": p.ttfb_ms, "schema_count": len(p.schema_types)} for p in crawled_pages]
+            "orphan_pages_count": len(orphan_urls),
+            "redirect_chains_count": len(all_redirect_chains),
+            "crawl_budget": crawl_budget,
+            "page_breakdown": [
+                {
+                    "url": p.url,
+                    "type": p.page_type,
+                    "status": p.status_code,
+                    "words": p.word_count,
+                    "ttfb_ms": p.ttfb_ms,
+                    "schema_count": len(p.schema_types),
+                    "has_redirects": p.is_redirected,
+                    "redirect_hops": len(p.redirect_chain)
+                }
+                for p in crawled_pages
+            ]
         }
 
         return CrawlManifest(
             domain=base_domain,
             base_url=base_url,
-            total_pages_discovered=max(total_discovered, len(crawled_pages)),
+            total_pages_discovered=urls_discovered_cnt,
             pages=crawled_pages,
             sitemap_found=sitemap_found,
             sitemap_url=sitemap_url,
             robots_txt_found=robots_txt_found,
             robots_txt_content=robots_txt_content,
-            crawl_health=crawl_health
+            crawl_health=crawl_health,
+            redirect_chains=all_redirect_chains,
+            crawl_budget=crawl_budget,
+            sitemap_urls=s_urls,
+            orphan_urls=orphan_urls
         )

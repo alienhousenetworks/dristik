@@ -11,8 +11,8 @@ class AgentDefinition(BaseModel):
     agent_name: str
     version: str = "3.0.0"
     domain: str
-    worker_type: str
-    description: str
+    worker_type: str = "analyst_worker"
+    description: str = ""
     capabilities: List[str] = Field(default_factory=list)
     allowed_models: List[str] = Field(default_factory=list)
     token_budget: int = 4000

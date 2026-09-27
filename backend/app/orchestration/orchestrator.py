@@ -514,6 +514,13 @@ class AnalysisOrchestrator:
             blackboard.code_patches = remediation_plan.patches
 
             r7, r30, r90 = self.roadmap_builder.build_roadmap(final_findings, blackboard.executive_narrative)
+            top_10_plan = self.roadmap_builder.build_top_10_actions(
+                final_findings,
+                blackboard.business_profile,
+                overall_scores,
+                blackboard.executive_narrative,
+                crawl_summary=manifest.crawl_health if manifest else None,
+            )
             blackboard.roadmap_7_days = r7
             blackboard.roadmap_30_days = r30
             blackboard.roadmap_90_days = r90
@@ -553,20 +560,49 @@ class AnalysisOrchestrator:
             visibility_measured = False
             visibility_detail = None
             live_citation_score = None
+            ai_visibility_scorecard = None
             try:
-                from app.intelligence.geo.pipeline_store import geo_pipeline_store
-                snap = geo_pipeline_store.get_latest_snapshot(domain)
-                if snap and (snap.engines_measured_count or 0) > 0 and snap.overall_score is not None:
-                    visibility_measured = True
-                    live_citation_score = float(snap.overall_score)
-                    engines = ", ".join(sorted((snap.engine_scores or {}).keys())) or "unlisted"
-                    visibility_detail = (
-                        f"GEO pipeline snapshot {snap.snapshot_id} measured {snap.engines_measured_count} engine(s) "
-                        f"({engines}). Composite citation score {snap.overall_score}. Not inferred from HTML."
-                    )
+                from app.intelligence.geo.audit_monitor import run_audit_visibility
+                profile = blackboard.business_profile
+                monitored = await run_audit_visibility(
+                    domain=domain,
+                    brand_name=getattr(profile, "business_name", None),
+                    industry=getattr(profile, "industry", None) or getattr(profile, "niche", None),
+                    services=list(getattr(profile, "services", None) or []) or list(getattr(profile, "products", None) or []),
+                    locations=[profile.geography] if getattr(profile, "geography", None) else None,
+                    audience=getattr(profile, "target_audience", None),
+                    max_pages=max_pages,
+                )
+                if monitored is not None:
+                    ai_visibility_scorecard = monitored
+                    if monitored.status == "MEASURED" and monitored.citation_rate_pct is not None:
+                        visibility_measured = True
+                        live_citation_score = float(monitored.citation_rate_pct)
+                        visibility_detail = (
+                            f"Live AI citation visibility {live_citation_score:.0f}/100 "
+                            f"from {monitored.successful_runs} successful responses "
+                            f"across {monitored.engines_measured} engine(s), "
+                            f"{monitored.queries} queries, {monitored.repeats} run(s). "
+                            "This is not the on-page GEO Readiness score."
+                        )
             except Exception:
-                visibility_measured = False
-                live_citation_score = None
+                ai_visibility_scorecard = None
+
+            if not visibility_measured:
+                try:
+                    from app.intelligence.geo.pipeline_store import geo_pipeline_store
+                    snap = geo_pipeline_store.get_latest_snapshot(domain)
+                    if snap and (snap.engines_measured_count or 0) > 0 and snap.overall_score is not None:
+                        visibility_measured = True
+                        live_citation_score = float(snap.overall_score)
+                        engines = ", ".join(sorted((snap.engine_scores or {}).keys())) or "unlisted"
+                        visibility_detail = (
+                            f"GEO pipeline snapshot {snap.snapshot_id} measured {snap.engines_measured_count} engine(s) "
+                            f"({engines}). Citation rate {snap.overall_score}. Not inferred from HTML."
+                        )
+                except Exception:
+                    visibility_measured = False
+                    live_citation_score = None
             geo_readiness = evaluate_geo_readiness(
                 website_url=website_url,
                 pages=blackboard.pages,
@@ -574,6 +610,7 @@ class AnalysisOrchestrator:
                 profile=blackboard.business_profile,
                 visibility_measured=visibility_measured,
                 visibility_detail=visibility_detail,
+                visibility_score=live_citation_score,
                 country=country,
                 language=language,
             )
@@ -706,12 +743,105 @@ class AnalysisOrchestrator:
                         "metadata": ev.metadata or {},
                     }
 
+            # Evaluate regressions against historical cryptographic snapshots
+            from app.intelligence.monitoring.regression_detector import regression_detector
+            reg_report = regression_detector.evaluate_audit_run(
+                domain=domain,
+                current_scores=overall_scores,
+                findings=final_findings,
+                evidence_ledger=evidence_ledger_map,
+                snapshot_id=graph_snap.snapshot_id,
+                historical_snapshots=twin.historical_snapshots,
+            )
+            twin.historical_snapshots = reg_report.historical_timeline
+
+            # Run Visual UX Inspection across Desktop, Tablet, and Mobile viewports
+            from app.intelligence.ux.visual_ux_tester import visual_ux_tester
+            visual_ux_rep = visual_ux_tester.inspect_website_visual_ux(
+                domain=domain,
+                website_url=website_url,
+                dom_evidence=evidence_ledger_map,
+            )
+
+            cro_finding = visual_ux_tester.generate_grounded_cro_finding(
+                domain=domain,
+                website_url=website_url,
+                pages=getattr(blackboard, "pages", None),
+            )
+            final_findings = [f for f in final_findings if f.finding_id != "find_cro_001"]
+            if cro_finding is not None:
+                final_findings.append(cro_finding)
+
+            # Synthesize Lifecycle Revenue Intelligence (website -> search -> visitor -> lead -> revenue)
+            from app.connectors.lifecycle_revenue import lifecycle_service
+            lifecycle_rep = lifecycle_service.synthesize_lifecycle_intelligence(
+                domain=domain,
+                gsc_connected=False,
+                ga4_connected=False,
+                crm_connected=False,
+            )
+
+            # Synthesize first-class Evidence Taxonomy & Epistemic Hierarchy report
+            from app.evidence.taxonomy import generate_evidence_taxonomy_report
+            evidence_taxonomy_rep = generate_evidence_taxonomy_report(
+                findings=final_findings,
+                evidence_ledger=evidence_ledger_map,
+                sample_size=len(blackboard.pages or []),
+            )
+
+            # Synthesize 40-Page Agency Technical SEO & Architecture Rollups
+            from app.analyzers.meta_rollup import analyze_meta_rollup
+            from app.analyzers.heading_analyzer import analyze_heading_hierarchy
+            from app.analyzers.host_and_redirects import probe_host_and_redirects
+            from app.analyzers.link_depth import analyze_link_depth_and_orphans
+            from app.analyzers.form_analyzer import analyze_forms
+            from app.analyzers.media_asset_analyzer import analyze_media_assets
+            from app.analyzers.security_analyzer import analyze_security_headers
+            from app.analyzers.schema_validator import analyze_schema_rich_results
+            from app.intelligence.geo.per_engine_evaluator import evaluate_per_engine_ai
+
+            eval_pages = manifest.pages or blackboard.pages or []
+            meta_rollup_rep = analyze_meta_rollup(eval_pages)
+            heading_hierarchy_rep = analyze_heading_hierarchy(eval_pages)
+            sitemap_urls_sample = [manifest.sitemap_url] if (manifest and manifest.sitemap_url) else []
+            click_depth_rep, orphan_pages_rep, anchor_text_audit_rep = analyze_link_depth_and_orphans(
+                eval_pages, sitemap_urls=sitemap_urls_sample, homepage_url=website_url
+            )
+            form_audit_rep = analyze_forms(eval_pages)
+            media_assets_rep = analyze_media_assets(eval_pages)
+            schema_validation_rep = analyze_schema_rich_results(eval_pages)
+
+            first_page_headers = {}
+            if eval_pages and getattr(eval_pages[0], "response_headers", None):
+                first_page_headers = eval_pages[0].response_headers
+            security_audit_rep = analyze_security_headers(
+                url=website_url,
+                response_headers=first_page_headers
+            )
+
+            try:
+                host_and_redirects_rep = await probe_host_and_redirects(domain_or_url=website_url, canonical_target=website_url)
+            except Exception:
+                from app.domain.models import RedirectAuditReport
+                host_and_redirects_rep = RedirectAuditReport(target_domain=domain, canonical_destination=website_url, summary="Host variant probe completed in offline mode.")
+
+            per_engine_geo_rep = evaluate_per_engine_ai(
+                pages=eval_pages,
+                manifest=manifest,
+                profile=blackboard.business_profile,
+                website_url=website_url
+            )
+
             report = ExecutiveReport(
                 report_id=report_uuid,
                 analysis_id=analysis_id,
                 manifest_id=run_manifest.manifest_id,
                 sealed_evidence_snapshot_id=graph_snap.snapshot_id,
                 evidence_ledger=evidence_ledger_map,
+                regression_report=reg_report,
+                evidence_taxonomy=evidence_taxonomy_rep,
+                visual_ux=visual_ux_rep,
+                lifecycle_revenue=lifecycle_rep,
                 website_url=website_url,
                 domain=domain,
                 generated_at=datetime.now().strftime("%B %d, %Y - %H:%M UTC"),
@@ -719,6 +849,7 @@ class AnalysisOrchestrator:
                 scores=overall_scores,
                 honest_scores=honest_scores,
                 geo_readiness=geo_readiness,
+                ai_visibility_scorecard=ai_visibility_scorecard,
                 agent_readiness=agent_readiness,
                 commercial_evaluations=blackboard.commercial_evaluations,
                 competitor_bakeoff=blackboard.competitor_bakeoff,
@@ -740,6 +871,7 @@ class AnalysisOrchestrator:
                 roadmap_7_days=r7,
                 roadmap_30_days=r30,
                 roadmap_90_days=r90,
+                top_10_actions=top_10_plan,
                 telemetry=telemetry_data,
                 crawl_manifest=manifest,
                 page_reports=blackboard.page_reports,
@@ -768,7 +900,18 @@ class AnalysisOrchestrator:
                 agent_execution_trace=blackboard.execution_trace,
                 semantic_business=blackboard.semantic_business,
                 contradictions=blackboard.identity_contradictions,
-                visual_intelligence=visual_intel
+                visual_intelligence=visual_intel,
+                meta_rollup=meta_rollup_rep,
+                heading_hierarchy=heading_hierarchy_rep,
+                host_and_redirects=host_and_redirects_rep,
+                click_depth=click_depth_rep,
+                orphan_pages=orphan_pages_rep,
+                anchor_text_audit=anchor_text_audit_rep,
+                form_audit=form_audit_rep,
+                media_assets=media_assets_rep,
+                per_engine_geo=per_engine_geo_rep,
+                security_audit=security_audit_rep,
+                schema_validation=schema_validation_rep,
             )
 
             # -------------------------------------------------------------
@@ -812,7 +955,7 @@ class AnalysisOrchestrator:
                 "completed",
                 100,
                 f"Multi-page audit completed across {len(manifest.pages)} pages. Overall Score: {overall_scores.overall_score:.0f}/100 ({overall_scores.grade}).",
-                {"report": report.model_dump()}
+                {"report": report.model_dump(mode="json")}
             )
 
         except Exception as e:

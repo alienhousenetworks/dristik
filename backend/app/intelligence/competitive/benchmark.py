@@ -49,7 +49,7 @@ class PeerBenchmarkProfile(BaseModel):
     brand_name: str
     is_target: bool = False
     rank: int = 1
-    scores: CompetitorPillarScores
+    scores: Optional[CompetitorPillarScores] = None
     specs: CompetitorTechSpecs
     crawl_status: str = "SUCCESS"  # SUCCESS | FAILED
     error_message: Optional[str] = None
@@ -276,22 +276,19 @@ class CompetitorBenchmarkEngine:
         clean_comp2 = _clean_domain(competitor_2_url)
 
         # 1. Resolve Target Profile
+        target_error = None
         if target_evidence:
             target_specs = _extract_tech_specs(target_evidence, is_https=True)
             target_pillar_scores = target_scores or _evaluate_page_to_pillar_scores(target_evidence, is_https=True)
         else:
-            # Crawl target homepage if not provided
             t_ev, t_https, t_err = await self._crawl_competitor_homepage(clean_target)
             if t_ev:
                 target_specs = _extract_tech_specs(t_ev, is_https=t_https)
                 target_pillar_scores = _evaluate_page_to_pillar_scores(t_ev, is_https=t_https)
             else:
-                # Fallback baseline
-                target_specs = CompetitorTechSpecs(ttfb_ms=450.0, word_count=350, h1_count=1)
-                target_pillar_scores = CompetitorPillarScores(
-                    search_seo=50, ai_search_geo=45, experience_sxo=60,
-                    conversion_cro=50, brand_trust=60, overall_score=52
-                )
+                target_specs = CompetitorTechSpecs(status_code=0, ttfb_ms=0.0, word_count=0, h1_count=0)
+                target_pillar_scores = None
+                target_error = t_err or "Homepage was not crawled"
 
         target_peer = PeerBenchmarkProfile(
             domain=clean_target,
@@ -299,7 +296,8 @@ class CompetitorBenchmarkEngine:
             is_target=True,
             scores=target_pillar_scores,
             specs=target_specs,
-            crawl_status="SUCCESS"
+            crawl_status="SUCCESS" if target_pillar_scores is not None else "FAILED",
+            error_message=target_error,
         )
 
         # 2. Concurrently crawl both competitor homepages
@@ -321,9 +319,8 @@ class CompetitorBenchmarkEngine:
                 crawl_status="SUCCESS"
             )
         else:
-            # Scrape failed or blocked
-            comp1_scores = CompetitorPillarScores(search_seo=40, ai_search_geo=35, experience_sxo=50, conversion_cro=40, brand_trust=50, overall_score=42)
-            comp1_specs = CompetitorTechSpecs(status_code=0, ttfb_ms=1200.0)
+            comp1_scores = None
+            comp1_specs = CompetitorTechSpecs(status_code=0, ttfb_ms=0.0, word_count=0, h1_count=0)
             peer1 = PeerBenchmarkProfile(
                 domain=clean_comp1,
                 brand_name=clean_comp1.split(".")[0].capitalize(),
@@ -347,8 +344,8 @@ class CompetitorBenchmarkEngine:
                 crawl_status="SUCCESS"
             )
         else:
-            comp2_scores = CompetitorPillarScores(search_seo=40, ai_search_geo=35, experience_sxo=50, conversion_cro=40, brand_trust=50, overall_score=42)
-            comp2_specs = CompetitorTechSpecs(status_code=0, ttfb_ms=1200.0)
+            comp2_scores = None
+            comp2_specs = CompetitorTechSpecs(status_code=0, ttfb_ms=0.0, word_count=0, h1_count=0)
             peer2 = PeerBenchmarkProfile(
                 domain=clean_comp2,
                 brand_name=clean_comp2.split(".")[0].capitalize(),
@@ -359,23 +356,34 @@ class CompetitorBenchmarkEngine:
                 error_message=err2 or "Unreachable"
             )
 
-        # 3. Calculate Relative Ranks
+        # 3. Rank only peers whose homepage was actually scored
         all_peers = [target_peer, peer1, peer2]
-        sorted_by_score = sorted(all_peers, key=lambda p: p.scores.overall_score, reverse=True)
-        for idx, p in enumerate(sorted_by_score):
+        measured = [p for p in all_peers if p.scores is not None]
+        measured.sort(key=lambda p: p.scores.overall_score, reverse=True)
+        for idx, p in enumerate(measured):
             p.rank = idx + 1
 
-        target_overall_rank = target_peer.rank
-        comp_scores_list = [peer1.scores.overall_score, peer2.scores.overall_score]
-        peer_avg = int(round(sum(comp_scores_list) / max(1, len(comp_scores_list))))
-        target_delta_vs_avg = target_peer.scores.overall_score - peer_avg
+        target_overall_rank = target_peer.rank if target_peer.scores is not None else 0
+        comp_scores_list = [p.scores.overall_score for p in (peer1, peer2) if p.scores is not None]
+        peer_avg = int(round(sum(comp_scores_list) / len(comp_scores_list))) if comp_scores_list else 0
+        target_delta_vs_avg = (
+            target_peer.scores.overall_score - peer_avg
+            if target_peer.scores is not None and comp_scores_list
+            else 0
+        )
 
         # 4. Identify Empirical Competitive Moats (Where Target leads both rivals)
         moats: List[CompetitiveMoatItem] = []
 
+        crawled_peers = [p for p in (peer1, peer2) if p.crawl_status == "SUCCESS"]
         # TTFB Speed moat
-        if target_specs.ttfb_ms > 0 and (target_specs.ttfb_ms < peer1.specs.ttfb_ms or peer1.specs.ttfb_ms == 0) and (target_specs.ttfb_ms < peer2.specs.ttfb_ms or peer2.specs.ttfb_ms == 0):
-            ms_diff = int(round(min(peer1.specs.ttfb_ms or 999, peer2.specs.ttfb_ms or 999) - target_specs.ttfb_ms))
+        if (
+            target_peer.crawl_status == "SUCCESS"
+            and target_specs.ttfb_ms > 0
+            and crawled_peers
+            and all(target_specs.ttfb_ms < p.specs.ttfb_ms for p in crawled_peers)
+        ):
+            ms_diff = int(round(min(p.specs.ttfb_ms for p in crawled_peers) - target_specs.ttfb_ms))
             if ms_diff > 50:
                 moats.append(CompetitiveMoatItem(
                     title="Faster Server Response Speed (TTFB)",
@@ -385,17 +393,18 @@ class CompetitorBenchmarkEngine:
                 ))
 
         # Schema Markup moat
-        if target_specs.schema_count > peer1.specs.schema_count and target_specs.schema_count > peer2.specs.schema_count:
+        if crawled_peers and target_peer.crawl_status == "SUCCESS" and all(target_specs.schema_count > p.specs.schema_count for p in crawled_peers):
             moats.append(CompetitiveMoatItem(
                 title="Richer Structured Schema Markup",
                 pillar="AI Search Intelligence (GEO)",
                 description=f"Target declares {target_specs.schema_count} Schema.org entities ({', '.join(target_specs.schema_types[:3])}), outclassing rivals in machine readability.",
-                advantage_delta=f"+{target_specs.schema_count - max(peer1.specs.schema_count, peer2.specs.schema_count)} entities"
+                advantage_delta=f"+{target_specs.schema_count - max(p.specs.schema_count for p in crawled_peers)} entities"
             ))
 
         # Pillar specific moats
-        if target_pillar_scores.search_seo > peer1.scores.search_seo and target_pillar_scores.search_seo > peer2.scores.search_seo:
-            diff = target_pillar_scores.search_seo - max(peer1.scores.search_seo, peer2.scores.search_seo)
+        scored_rivals = [p for p in crawled_peers if p.scores is not None]
+        if target_pillar_scores is not None and scored_rivals and all(target_pillar_scores.search_seo > p.scores.search_seo for p in scored_rivals):
+            diff = target_pillar_scores.search_seo - max(p.scores.search_seo for p in scored_rivals)
             moats.append(CompetitiveMoatItem(
                 title="Superior Organic Search Foundation",
                 pillar="Search (SEO)",
@@ -403,74 +412,65 @@ class CompetitorBenchmarkEngine:
                 advantage_delta=f"+{diff} pts"
             ))
 
-        if target_pillar_scores.conversion_cro > peer1.scores.conversion_cro and target_pillar_scores.conversion_cro > peer2.scores.conversion_cro:
-            diff = target_pillar_scores.conversion_cro - max(peer1.scores.conversion_cro, peer2.scores.conversion_cro)
+        if target_pillar_scores is not None and scored_rivals and all(target_pillar_scores.conversion_cro > p.scores.conversion_cro for p in scored_rivals):
+            diff = target_pillar_scores.conversion_cro - max(p.scores.conversion_cro for p in scored_rivals)
             moats.append(CompetitiveMoatItem(
                 title="Higher Conversion Readiness",
                 pillar="Conversion Intelligence (CRO)",
-                description=f"Actionable CTAs and value proposition clarity score {target_pillar_scores.conversion_cro}/100 vs peer average {int(round((peer1.scores.conversion_cro + peer2.scores.conversion_cro)/2))}.",
+                description=f"Actionable CTAs and value proposition clarity score {target_pillar_scores.conversion_cro}/100 vs crawled peers.",
                 advantage_delta=f"+{diff} pts"
             ))
 
         # 5. Identify Priority Vulnerability Gaps (Where rivals beat Target)
         gaps: List[CompetitiveGapItem] = []
 
-        # Content Depth Gap
-        max_peer_words = max(peer1.specs.word_count, peer2.specs.word_count)
-        winning_comp_words = peer1.brand_name if peer1.specs.word_count >= peer2.specs.word_count else peer2.brand_name
-        if max_peer_words > (target_specs.word_count + 250):
-            gaps.append(CompetitiveGapItem(
-                title="Content Depth & Topical Authority Deficit",
-                pillar="Search (SEO)",
-                description=f"{winning_comp_words} publishes {max_peer_words} words on homepage vs {target_specs.word_count} on target, capturing higher semantic breadth.",
-                winning_competitor=winning_comp_words,
-                recommendation="Expand primary landing page copy with explicit capability modules and FAQ blocks."
-            ))
+        if crawled_peers and target_peer.crawl_status == "SUCCESS":
+            word_leader = max(crawled_peers, key=lambda p: p.specs.word_count)
+            if word_leader.specs.word_count > (target_specs.word_count + 250):
+                gaps.append(CompetitiveGapItem(
+                    title="Content Depth & Topical Authority Deficit",
+                    pillar="Search (SEO)",
+                    description=f"{word_leader.brand_name} publishes {word_leader.specs.word_count} words on the homepage vs {target_specs.word_count} on the target.",
+                    winning_competitor=word_leader.brand_name,
+                    recommendation="Expand the homepage only with claims that already exist on the site.",
+                ))
+            schema_leader = max(crawled_peers, key=lambda p: p.specs.schema_count)
+            if schema_leader.specs.schema_count > target_specs.schema_count:
+                gaps.append(CompetitiveGapItem(
+                    title="Schema count is lower than a crawled rival",
+                    pillar="AI Search Intelligence (GEO)",
+                    description=f"{schema_leader.brand_name} has {schema_leader.specs.schema_count} schema types; this crawl found {target_specs.schema_count}.",
+                    winning_competitor=schema_leader.brand_name,
+                    recommendation="Add only schema types that match visible page content.",
+                ))
+            faster = [p for p in crawled_peers if p.specs.ttfb_ms > 0 and p.specs.ttfb_ms < target_specs.ttfb_ms]
+            if target_specs.ttfb_ms > 600 and faster:
+                fastest = min(faster, key=lambda p: p.specs.ttfb_ms)
+                gaps.append(CompetitiveGapItem(
+                    title="Server Response Latency Lag",
+                    pillar="Website Experience (SXO)",
+                    description=f"{fastest.brand_name} responded in {fastest.specs.ttfb_ms:.0f}ms; this crawl measured {target_specs.ttfb_ms:.0f}ms.",
+                    winning_competitor=fastest.brand_name,
+                    recommendation="Recheck TTFB on the same URL before treating one fetch as a ranking gap.",
+                ))
 
-        # Schema Gap
-        max_peer_schema = max(peer1.specs.schema_count, peer2.specs.schema_count)
-        winning_comp_schema = peer1.brand_name if peer1.specs.schema_count >= peer2.specs.schema_count else peer2.brand_name
-        if max_peer_schema > target_specs.schema_count:
-            gaps.append(CompetitiveGapItem(
-                title="AI Search Schema Deficit",
-                pillar="AI Search Intelligence (GEO)",
-                description=f"{winning_comp_schema} deploys {max_peer_schema} structured JSON-LD entities; target domain has {target_specs.schema_count}.",
-                winning_competitor=winning_comp_schema,
-                recommendation="Deploy the Dristik Developer Patch Pack to instantly inject Organization, SoftwareApplication, and FAQPage JSON-LD."
-            ))
-
-        # Response Speed Gap
-        if target_specs.ttfb_ms > 600 and (peer1.specs.ttfb_ms < target_specs.ttfb_ms or peer2.specs.ttfb_ms < target_specs.ttfb_ms):
-            faster_comp = peer1.brand_name if peer1.specs.ttfb_ms < (peer2.specs.ttfb_ms or 999) else peer2.brand_name
-            faster_time = min(peer1.specs.ttfb_ms or 999, peer2.specs.ttfb_ms or 999)
-            gaps.append(CompetitiveGapItem(
-                title="Server Response Latency Lag",
-                pillar="Website Experience (SXO)",
-                description=f"{faster_comp} responds in {faster_time:.0f}ms; target requires {target_specs.ttfb_ms:.0f}ms.",
-                winning_competitor=faster_comp,
-                recommendation="Enable edge page caching or CDN caching on Cloudflare/Vercel to bring TTFB sub-300ms."
-            ))
-
-        # 6. Synthesize Strategic Summary
-        if target_overall_rank == 1:
+        if target_peer.scores is None:
+            summary = f"{target_peer.brand_name} was not scored. No comparison numbers were filled in."
+        elif not measured or len(measured) == 1:
             summary = (
-                f"{target_peer.brand_name} leads this 3-way peer cohort with an overall score of "
-                f"{target_peer.scores.overall_score}/100 (+{target_delta_vs_avg} pts vs peer avg). "
-                f"Primary competitive moat is {moats[0].title if moats else 'balanced multi-pillar execution'}."
+                f"{target_peer.brand_name} scored {target_peer.scores.overall_score}/100 from the pages that were crawled. "
+                "Rivals without a successful crawl have no score."
             )
-        elif target_overall_rank == 2:
-            leader = sorted_by_score[0].brand_name
+        elif target_overall_rank == 1:
             summary = (
-                f"{target_peer.brand_name} ranks #2 of 3 in the peer group ({target_peer.scores.overall_score}/100), "
-                f"trailing {leader} ({sorted_by_score[0].scores.overall_score}/100). "
-                f"Closing the {gaps[0].title if gaps else 'AI Search Schema'} gap will elevate target to #1."
+                f"{target_peer.brand_name} leads the crawled set at {target_peer.scores.overall_score}/100 "
+                f"({target_delta_vs_avg:+d} vs the crawled rival average)."
             )
         else:
-            leader = sorted_by_score[0].brand_name
+            leader = measured[0]
             summary = (
-                f"{target_peer.brand_name} ranks #3 of 3 ({target_peer.scores.overall_score}/100), lagging "
-                f"{leader} ({sorted_by_score[0].scores.overall_score}/100) across {len(gaps)} key dimensions. "
-                f"Immediate remediation required to prevent competitor search capture."
+                f"{target_peer.brand_name} is #{target_overall_rank} of {len(measured)} crawled sites "
+                f"at {target_peer.scores.overall_score}/100. {leader.brand_name} is at {leader.scores.overall_score}/100."
             )
 
         return CompetitiveBenchmarkResult(

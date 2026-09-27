@@ -37,6 +37,7 @@ FRONTEND_PID=""
 TAIL_PID=""
 DB_CONTAINER_STARTED=false
 LOG_LEVEL="info"
+ENABLE_RELOAD=true
 
 # ------------------------------------------------------------------------------
 # Banner
@@ -241,13 +242,24 @@ start_backend() {
     # Reset backend log file
     : > "${BACKEND_LOG}"
 
+    local reload_args=()
+    if [ "$ENABLE_RELOAD" = true ]; then
+        reload_args=(
+            "--reload"
+            "--reload-dir" "${BACKEND_DIR}/app"
+            "--reload-exclude" "data/*"
+            "--reload-exclude" "*.db"
+            "--reload-exclude" "*.log"
+        )
+    fi
+
     (
         cd "${BACKEND_DIR}" && \
         export PYTHONUNBUFFERED=1 && \
         exec "${BACKEND_DIR}/venv/bin/uvicorn" app.main:app \
             --host 0.0.0.0 \
             --port 8000 \
-            --reload \
+            "${reload_args[@]}" \
             --use-colors \
             --access-log \
             --log-level "${LOG_LEVEL}"
@@ -378,6 +390,9 @@ for arg in "$@"; do
             ;;
         --debug)
             LOG_LEVEL="debug"
+            ;;
+        --no-reload)
+            ENABLE_RELOAD=false
             ;;
         --log-level=*)
             LOG_LEVEL="${arg#*=}"

@@ -114,7 +114,7 @@ SCORING_RUBRIC_V4: Dict[str, Any] = {
         {"band": "Category Benchmark", "min_score": 90, "max_score": 100, "status": "Best-in-class technical and citation posture"},
         {"band": "Citation Ready", "min_score": 75, "max_score": 89.9, "status": "Strong discoverability with minor friction points"},
         {"band": "Fragile Presence", "min_score": 50, "max_score": 74.9, "status": "At risk of being filtered by answer engines and search bots"},
-        {"band": "Critical Vulnerability", "min_score": 0, "max_score": 49.9, "status": "Severe indexing or accessibility bottlenecks blocking revenue"},
+        {"band": "Low readiness", "min_score": 0, "max_score": 49.9, "status": "Severe indexing or accessibility issues blocking revenue"},
     ],
 }
 

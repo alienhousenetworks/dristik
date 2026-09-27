@@ -163,9 +163,14 @@ def test_citation_passage_detection_and_rewriter():
 
     # Check that a rewrite was recommended for the fluff passage
     assert len(res.rewrite_recommendations) >= 1
-    rewrite = res.rewrite_recommendations[0]
+    rewrite = next(item for item in res.rewrite_recommendations if "cutting-edge" in item.current_passage.lower())
     assert "AlienHouse" in rewrite.recommended_rewrite
-    assert len(rewrite.why) > 10
+    assert "cutting-edge" not in rewrite.recommended_rewrite.lower()
+    assert not rewrite.recommended_rewrite.lower().startswith("we ")
+    assert rewrite.recommended_rewrite.strip() != rewrite.current_passage.strip()
+    assert "removed" in rewrite.why.lower() or "replaced" in rewrite.why.lower()
+    named = next(item for item in res.passages if item.raw_text.startswith("AlienHouse Networks develops"))
+    assert named.rewrite_recommendation is None
 
 
 def test_schema_content_crosschecker():

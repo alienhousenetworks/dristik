@@ -21,7 +21,52 @@ def analyze_dom_structure(soup: BeautifulSoup, url: str, evidence_store: Evidenc
 
     images = soup.find_all("img")
     total_images = len(images)
-    images_without_alt = sum(1 for img in images if not img.get("alt") or not img.get("alt").strip())
+    # WCAG 2.2: alt="" or role="presentation" indicates a decorative image that assistive tech ignores.
+    decorative_images = sum(
+        1 for img in images
+        if (img.get("alt") == "" or (img.get("alt") is not None and not img.get("alt").strip()))
+        or (img.get("role") or "").lower() in ("presentation", "none")
+        or img.get("aria-hidden") == "true"
+    )
+    images_without_alt = sum(
+        1 for img in images
+        if img.get("alt") is None
+        and (img.get("role") or "").lower() not in ("presentation", "none")
+        and img.get("aria-hidden") != "true"
+    )
+
+    image_assets: List[Dict[str, Any]] = []
+    for img in images[:50]:
+        src = (img.get("src") or img.get("data-src") or "").strip()
+        if not src:
+            continue
+        alt = img.get("alt")
+        w_val = img.get("width")
+        h_val = img.get("height")
+        has_dims = bool(w_val and h_val)
+        fmt = "other"
+        src_lower = src.lower()
+        for ext in ["avif", "webp", "svg", "png", "jpeg", "jpg", "gif"]:
+            if f".{ext}" in src_lower:
+                fmt = "jpg" if ext == "jpeg" else ext
+                break
+        is_modern = fmt in ("webp", "avif", "svg")
+        is_insecure = src.startswith("http://") and url.startswith("https://")
+
+        image_assets.append({
+            "url": src[:200],
+            "page_url": url,
+            "alt_text": alt[:100] if alt else None,
+            "has_alt": bool(alt and alt.strip()),
+            "is_empty_alt": alt == "",
+            "has_dimensions": has_dims,
+            "width": w_val,
+            "height": h_val,
+            "format": fmt,
+            "is_modern_format": is_modern,
+            "is_insecure_http": is_insecure,
+            "cls_risk": not has_dims
+        })
 
     scripts = soup.find_all("script")
     scripts_count = len(scripts)
@@ -66,8 +111,12 @@ def analyze_dom_structure(soup: BeautifulSoup, url: str, evidence_store: Evidenc
             analyzer="dom_analyzer",
             url=url,
             selector="img",
-            text=f"{images_without_alt} out of {total_images} images lack descriptive alt text",
-            value={"images_without_alt": images_without_alt, "total_images": total_images}
+            text=f"{images_without_alt} out of {total_images} images lack alt attributes (WCAG 2.2 non-compliant; {decorative_images} decorative images properly marked with alt=\"\")",
+            value={
+                "images_without_alt": images_without_alt,
+                "total_images": total_images,
+                "decorative_images": decorative_images
+            }
         )
 
     if cta_candidates:
@@ -86,5 +135,6 @@ def analyze_dom_structure(soup: BeautifulSoup, url: str, evidence_store: Evidenc
         "images_without_alt": images_without_alt,
         "scripts_count": scripts_count,
         "stylesheets_count": stylesheets_count,
-        "cta_candidates": cta_candidates[:6]
+        "cta_candidates": cta_candidates[:6],
+        "image_assets": image_assets
     }

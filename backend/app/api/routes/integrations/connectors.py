@@ -17,8 +17,10 @@ from app.domain.enums import ConnectorType, ConnectorHealthStatus
 from app.connectors.base.models import ConnectorCredentials, ConnectorHealth
 from app.core.config import settings
 from app.connectors.store import connector_store
+from app.connectors.oauth_providers import router as oauth_router
 
 router = APIRouter(prefix="/connectors", tags=["Platform Connectors"])
+router.include_router(oauth_router)
 
 class ConnectPlatformRequest(BaseModel):
     provider: ConnectorType

@@ -1,11 +1,13 @@
 import React, { useState } from 'react';
 import { ExecutiveReport, ChartSpecification, SpotlightMetric, VisualIntelligencePayload } from '../../types';
 import { synthesizeVisualIntelligenceFallback } from '../../lib/visualSynthesizerFallback';
+import { measuredBreakdowns } from '../../lib/measuredBreakdowns';
 import { RadarChart } from './charts/RadarChart';
 import { LatencyCurveChart } from './charts/LatencyCurveChart';
 import { SeverityDonutChart } from './charts/SeverityDonutChart';
 import { EngineComparisonBarChart } from './charts/EngineComparisonBarChart';
 import { JourneyFunnelChart } from './charts/JourneyFunnelChart';
+import { CountBarChart } from './charts/CountBarChart';
 
 interface AdaptiveVisualIntelligenceProps {
   report: ExecutiveReport;
@@ -14,8 +16,25 @@ interface AdaptiveVisualIntelligenceProps {
 
 export function AdaptiveVisualIntelligence({ report, compact = false }: AdaptiveVisualIntelligenceProps) {
   // Use precomputed visual intelligence from backend report, or dynamically synthesize via fallback
-  const visualPayload: VisualIntelligencePayload =
+  const basePayload: VisualIntelligencePayload =
     report.visual_intelligence || synthesizeVisualIntelligenceFallback(report);
+  const extraCharts: ChartSpecification[] = measuredBreakdowns(report)
+    .filter((item) => !basePayload.selected_visualizations.some((chart) => chart.id === item.id))
+    .map((item, index) => ({
+      id: item.id,
+      chart_type: 'count_bar',
+      title: item.title,
+      subtitle: item.note,
+      ai_insight: item.note,
+      category: 'OVERALL',
+      data: { bars: item.bars },
+      is_recommended: true,
+      priority_order: 20 + index,
+    }));
+  const visualPayload: VisualIntelligencePayload = {
+    ...basePayload,
+    selected_visualizations: [...basePayload.selected_visualizations, ...extraCharts],
+  };
 
   const [activeChartIds, setActiveChartIds] = useState<string[]>(
     visualPayload.selected_visualizations.map((c) => c.id)
@@ -62,8 +81,10 @@ export function AdaptiveVisualIntelligence({ report, compact = false }: Adaptive
         return <EngineComparisonBarChart chart={chart} />;
       case 'journey_funnel':
         return <JourneyFunnelChart chart={chart} />;
+      case 'count_bar':
+        return <CountBarChart chart={chart} />;
       default:
-        return <RadarChart chart={chart} />;
+        return null;
     }
   };
 
@@ -178,7 +199,7 @@ export function AdaptiveVisualIntelligence({ report, compact = false }: Adaptive
                     metric.status
                   )}`}
                 >
-                  {metric.change_indicator || 'Calibrated'}
+                  {metric.change_indicator || '—'}
                 </span>
                 <span className="text-[10px] text-ink-400 group-hover:text-pine transition-colors cursor-help">
                   ℹ️

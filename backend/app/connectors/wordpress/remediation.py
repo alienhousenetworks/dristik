@@ -36,19 +36,15 @@ class WordPressRemediation:
             "target": patch.target_url
         })
 
-        # 3. Simulate/Execute deployment via WP REST or Plugin endpoint
-        patch.approval_status = PatchApprovalStatus.APPLIED
-        patch.applied_via = "wordpress"
-        patch.applied_at = datetime.now(timezone.utc).isoformat()
-
+        applied_at = datetime.now(timezone.utc).isoformat()
         return PatchApplicationResult(
-            success=True,
+            success=False,
             patch_id=patch.patch_id,
             provider=ConnectorType.WORDPRESS,
-            applied_at=patch.applied_at,
-            target_resource=f"{self.client.base_url} ({patch.target_file})",
+            applied_at=applied_at,
+            target_resource=self.client.base_url or "",
             diff_summary={"operation": patch.operation.value, "title": patch.title},
-            message=f"Successfully deployed '{patch.title}' directly to WordPress site at {self.client.base_url}."
+            message="WordPress was not updated. No REST or plugin call was made."
         )
 
     async def rollback(self, patch: RemediationPatch) -> RollbackResult:

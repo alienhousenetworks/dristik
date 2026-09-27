@@ -26,9 +26,18 @@ async def stream_analysis_progress(analysis_id: str, user: Optional[UserIdentity
         if not Authorizer.can_perform(user, "mission:read"):
             raise HTTPException(status_code=403, detail="You do not have permission to view audits.")
 
+    def _json_default(obj):
+        if hasattr(obj, "isoformat"):
+            return obj.isoformat()
+        if hasattr(obj, "model_dump"):
+            return obj.model_dump(mode="json")
+        if hasattr(obj, "__dict__"):
+            return obj.__dict__
+        return str(obj)
+
     async def event_generator():
         async for event in orchestrator.stream_events(analysis_id):
-            payload = json.dumps(event)
+            payload = json.dumps(event, default=_json_default)
             yield f"data: {payload}\n\n"
 
     return StreamingResponse(

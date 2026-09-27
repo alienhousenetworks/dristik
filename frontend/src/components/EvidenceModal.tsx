@@ -25,14 +25,14 @@ export function EvidenceModal({ evidenceId, ledger, findings, onClose }: Evidenc
     (e) => e.evidence_id === evidenceId || e.source === evidenceId
   );
 
-  const url = evItem?.url || inlineEv?.url || matchingFinding?.evidence?.[0]?.url || 'Homepage Root (Crawl Origin)';
-  const selector = evItem?.selector || inlineEv?.selector || inlineEv?.element || 'DOM Node / Element';
-  const textContent = evItem?.text || evItem?.value || inlineEv?.snippet || inlineEv?.value || inlineEv?.excerpt || 'Observed DOM element content captured during deterministic crawl pass.';
-  const hash = evItem?.content_sha256 || evItem?.hash || 'sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855';
-  const analyzer = evItem?.analyzer || 'DeterministicDOMCrawlerWorker';
-  const sourceType = evItem?.source_type || (evidenceId.startsWith('ext_') ? 'external_ground_truth' : 'html_dom_ast');
-  const fetchedAt = evItem?.fetched_at || new Date().toISOString();
-  const rawSnapshotId = evItem?.raw_snapshot_id || `snap_${evidenceId}_raw`;
+  const url = evItem?.url || inlineEv?.url || matchingFinding?.evidence?.[0]?.url || 'URL not stored';
+  const selector = evItem?.selector || inlineEv?.selector || inlineEv?.element || 'Selector not stored';
+  const textContent = evItem?.text || evItem?.value || inlineEv?.snippet || inlineEv?.value || inlineEv?.excerpt || 'No evidence text was stored for this id.';
+  const hash = evItem?.content_sha256 || evItem?.hash || 'Hash not stored';
+  const analyzer = evItem?.analyzer || 'Analyzer not stored';
+  const sourceType = evItem?.source_type || (evidenceId.startsWith('ext_') ? 'external' : 'not stored');
+  const fetchedAt = evItem?.fetched_at || 'Fetch time not stored';
+  const rawSnapshotId = evItem?.raw_snapshot_id || 'Snapshot not stored';
 
   const copyHash = async () => {
     await navigator.clipboard.writeText(hash);

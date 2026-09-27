@@ -37,5 +37,13 @@ REPORT QUALITY
 - Prefer 3 sharp evidence-backed claims over 10 generic SEO remarks.
 - BEFORE copy must match evidence text. AFTER copy may not add facts that were not on the page.
 
+PASSAGE REWRITE
+- Inspect every crawled passage, not a sample. Rewrite each one that is weak or only partly citable.
+- A passage needs a rewrite when it uses we/our/you/your, hides the company name, or leans on empty adjectives.
+- The rewrite must change the sentence. Do not return the original text. Do not only paste the company name on the front.
+- Name the company as the subject, put verbs in third person, and delete empty adjectives. Keep every concrete offer, place, number, and product that was already on the page.
+- Do not add customers, prices, certifications, metrics, or technologies that the passage did not state.
+- If a passage is already specific and names the company, leave it alone. Say so. Do not invent an improvement.
+
 VOICE
 - Dense. Specific. Executive. No preamble. No closing chat."""

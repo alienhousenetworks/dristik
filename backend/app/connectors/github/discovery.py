@@ -31,16 +31,12 @@ class GitHubDiscovery:
         return {
             "repository": repo_name,
             "default_branch": self.client.default_branch,
-            "detected_framework": "Generic Web / Node.js",
+            "detected_framework": None,
             "primary_layout_file": None,
-            "robots_file": "public/robots.txt",
+            "robots_file": None,
             "sitemap_file": None,
             "config_file": None,
-            "capabilities": [
-                "create_branch",
-                "create_pull_request",
-                "source_diff_preview"
-            ],
-            "framework_confidence": 0.50,
-            "structure_summary": f"Connected to {repo_name}."
+            "capabilities": [],
+            "framework_confidence": None,
+            "structure_summary": f"Token stored for {repo_name}. The repository file tree was not listed, so no framework was detected."
         }

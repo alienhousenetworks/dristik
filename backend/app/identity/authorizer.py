@@ -21,6 +21,9 @@ class UserIdentity(BaseModel):
     last_login_at: Optional[float] = None
     is_active: bool = True
     is_system: bool = False
+    auth_provider: str = "local"
+    oauth_id: Optional[str] = None
+    avatar_url: Optional[str] = None
 
 ORG_STAFF_ROLES = {
     UserRole.ADMIN,

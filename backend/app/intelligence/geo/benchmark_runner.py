@@ -46,6 +46,7 @@ class EvaluatedQueryRun(BaseModel):
     source_quality: SourceQuality = "unsourced"
     status: str = "SUCCESS"  # SUCCESS | KEY_MISSING | TIMEOUT | ERROR
     error_message: Optional[str] = None
+    run_index: int = 1
 
 
 class EngineBenchmarkAggregate(BaseModel):
@@ -55,9 +56,9 @@ class EngineBenchmarkAggregate(BaseModel):
     queries_tested: int = 0
     queries_succeeded: int = 0
     mention_count: int = 0
-    mention_rate_pct: float = 0.0
+    mention_rate_pct: Optional[float] = None
     first_party_citation_count: int = 0
-    first_party_citation_rate_pct: float = 0.0
+    first_party_citation_rate_pct: Optional[float] = None
     average_latency_ms: float = 0.0
     is_live: bool = False
     status: str = "AVAILABLE"  # AVAILABLE | UNAVAILABLE | RATE_LIMITED | KEY_MISSING
@@ -72,8 +73,11 @@ class GeoBenchmarkReport(BaseModel):
     total_queries: int
     engines_tested: List[str] = Field(default_factory=list)
     engine_aggregates: Dict[str, EngineBenchmarkAggregate] = Field(default_factory=dict)
-    overall_mention_rate_pct: float = 0.0
-    overall_first_party_citation_rate_pct: float = 0.0
+    overall_mention_rate_pct: Optional[float] = None
+    overall_first_party_citation_rate_pct: Optional[float] = None
+    repeats: int = 1
+    failed_runs: int = 0
+    matrix_grounding: Optional[str] = None
     evaluations: List[EvaluatedQueryRun] = Field(default_factory=list)
     critical_blindspots: List[str] = Field(default_factory=list)
     reproducibility_hash: str
@@ -169,6 +173,8 @@ class GeoBenchmarkRunner:
         mode: Literal["comprehensive", "concise"] = "concise",
         engines: Optional[List[str]] = None,
         suite_override: Optional[BenchmarkSuite] = None,
+        repeats: int = 1,
+        max_queries: Optional[int] = None,
     ) -> GeoBenchmarkReport:
         clean_domain = domain.lower().replace("https://", "").replace("http://", "").split("/")[0]
         brand = brand_name or clean_domain.split(".")[0].capitalize()
@@ -183,6 +189,10 @@ class GeoBenchmarkRunner:
             locations=locations,
             mode=mode,
         )
+        repeat_count = max(1, min(int(repeats or 1), 5))
+        if max_queries and max_queries > 0:
+            suite.queries = suite.queries[:max_queries]
+            suite.total_queries = len(suite.queries)
 
         # 2. Resolve Engine Adapters
         active_adapters: List[BaseGeoEngineAdapter] = []
@@ -219,7 +229,12 @@ class GeoBenchmarkRunner:
         # 3. Concurrently Dispatch Queries
         sem = asyncio.Semaphore(5)  # Max 5 concurrent external engine calls
 
-        async def _run_single(ad: BaseGeoEngineAdapter, q: BenchmarkQuery, client: httpx.AsyncClient) -> EvaluatedQueryRun:
+        async def _run_single(
+            ad: BaseGeoEngineAdapter,
+            q: BenchmarkQuery,
+            client: httpx.AsyncClient,
+            run_index: int,
+        ) -> EvaluatedQueryRun:
             async with sem:
                 resp = await ad.execute_query(q.query_text, locale=locale, client=client)
                 has_mention, pos = self._detect_mention_and_position(resp.raw_content, brand, clean_domain)
@@ -252,15 +267,17 @@ class GeoBenchmarkRunner:
                     source_quality=quality,
                     status=status,
                     error_message=resp.error,
+                    run_index=run_index,
                 )
 
         tasks = []
         async with httpx.AsyncClient(timeout=18.0) as client:
-            for q in suite.queries:
-                for ad in active_adapters:
-                    tasks.append(_run_single(ad, q, client))
+            for run_index in range(1, repeat_count + 1):
+                for q in suite.queries:
+                    for ad in active_adapters:
+                        tasks.append(_run_single(ad, q, client, run_index))
 
-            evaluations = await asyncio.gather(*tasks)
+            evaluations = list(await asyncio.gather(*tasks))
 
         # 4. Aggregate Metrics
         for ev in evaluations:
@@ -272,10 +289,10 @@ class GeoBenchmarkRunner:
                 st["succeeded"] += 1
                 if ev.latency_ms > 0:
                     st["latencies"].append(ev.latency_ms)
-            if ev.was_mentioned:
-                st["mentions"] += 1
-            if ev.was_first_party_cited:
-                st["first_party_citations"] += 1
+                if ev.was_mentioned:
+                    st["mentions"] += 1
+                if ev.was_first_party_cited:
+                    st["first_party_citations"] += 1
 
         engine_aggregates: Dict[str, EngineBenchmarkAggregate] = {}
         total_mentions = 0
@@ -292,8 +309,8 @@ class GeoBenchmarkRunner:
             total_succeeded += s_cnt
 
             avg_lat = round(sum(st["latencies"]) / len(st["latencies"]), 1) if st["latencies"] else 0.0
-            m_rate = round((m_cnt / max(1, s_cnt)) * 100.0, 1) if s_cnt > 0 else 0.0
-            c_rate = round((c_cnt / max(1, s_cnt)) * 100.0, 1) if s_cnt > 0 else 0.0
+            m_rate = round((m_cnt / s_cnt) * 100.0, 1) if s_cnt > 0 else None
+            c_rate = round((c_cnt / s_cnt) * 100.0, 1) if s_cnt > 0 else None
 
             engine_aggregates[eid] = EngineBenchmarkAggregate(
                 engine_id=eid,
@@ -310,24 +327,28 @@ class GeoBenchmarkRunner:
                 status=st["status"],
             )
 
-        overall_mention_rate = round((total_mentions / max(1, total_succeeded)) * 100.0, 1) if total_succeeded > 0 else 0.0
-        overall_1p_citation_rate = round((total_1p_citations / max(1, total_succeeded)) * 100.0, 1) if total_succeeded > 0 else 0.0
+        overall_mention_rate = round((total_mentions / total_succeeded) * 100.0, 1) if total_succeeded > 0 else None
+        overall_1p_citation_rate = round((total_1p_citations / total_succeeded) * 100.0, 1) if total_succeeded > 0 else None
+        failed_runs = sum(1 for ev in evaluations if ev.status != "SUCCESS")
 
-        # Critical blindspots detection (queries where target company was completely omitted across all engines)
+        # Blindspots only when a successful response omitted the brand. Errors are not omissions.
         blindspots: List[str] = []
         for q in suite.queries:
-            q_runs = [e for e in evaluations if e.query_id == q.query_id]
-            if q_runs and not any(r.was_mentioned for r in q_runs if r.status == "SUCCESS"):
+            success_runs = [e for e in evaluations if e.query_id == q.query_id and e.status == "SUCCESS"]
+            if success_runs and not any(r.was_mentioned for r in success_runs):
                 blindspots.append(f"{q.category_label}: '{q.query_text}'")
 
         # Reproducibility hash
         hash_input = f"{benchmark_id}|{clean_domain}|{len(evaluations)}|{overall_mention_rate}|{overall_1p_citation_rate}"
         reproducibility_hash = hashlib.sha256(hash_input.encode()).hexdigest()[:16]
 
+        mention_text = f"{overall_mention_rate:.1f}%" if overall_mention_rate is not None else "not measured"
+        citation_text = f"{overall_1p_citation_rate:.1f}%" if overall_1p_citation_rate is not None else "not measured"
         summary = (
-            f"Live AI Retrieval Benchmark ({benchmark_id}): {len(suite.queries)} queries tested across "
-            f"{len(active_adapters)} engines. Overall Brand Mention Rate: {overall_mention_rate:.1f}%, "
-            f"First-Party Citation Rate: {overall_1p_citation_rate:.1f}%. "
+            f"Live AI Retrieval Benchmark ({benchmark_id}): {len(suite.queries)} queries, "
+            f"{repeat_count} run(s) each, across {len(active_adapters)} engines. "
+            f"Brand mention rate {mention_text}, first-party citation rate {citation_text}, "
+            f"over {total_succeeded} successful responses ({failed_runs} errors excluded). "
             f"{len(blindspots)} category blindspots identified."
         )
 
@@ -345,9 +366,133 @@ class GeoBenchmarkRunner:
             evaluations=evaluations,
             critical_blindspots=blindspots[:8],
             reproducibility_hash=reproducibility_hash,
-            is_live_measurement=any(a.is_live for a in engine_aggregates.values()),
+            is_live_measurement=total_succeeded > 0,
             summary=summary,
+            repeats=repeat_count,
+            failed_runs=failed_runs,
+            matrix_grounding=getattr(suite, "matrix_grounding", None),
         )
+
+
+def _pct(hits: int, total: int) -> Optional[float]:
+    if total <= 0:
+        return None
+    return round((hits / total) * 100.0, 1)
+
+
+def build_visibility_scorecard(
+    report: GeoBenchmarkReport,
+    services: Optional[List[str]] = None,
+    competitors: Optional[List[str]] = None,
+    locations: Optional[List[str]] = None,
+    industry: Optional[str] = None,
+    audience: Optional[str] = None,
+    matrix_grounding: Optional[str] = None,
+):
+    """Rates over successful responses only. Unchecked rates stay null."""
+    from app.domain.models import AiVisibilityScorecard
+
+    successes = [ev for ev in report.evaluations if ev.status == "SUCCESS"]
+    failures = [ev for ev in report.evaluations if ev.status != "SUCCESS"]
+    if not successes:
+        return AiVisibilityScorecard(
+            status="NOT_MEASURED",
+            engines_requested=len(report.engines_tested),
+            queries=report.total_queries,
+            repeats=report.repeats,
+            failed_runs=len(failures),
+            not_measured_reason="No successful engine responses. Errors are excluded rather than scored as omissions.",
+            matrix_grounding=matrix_grounding,
+        )
+
+    brand = (report.brand_name or "").lower()
+    service_terms = [s.lower() for s in (services or []) if s]
+    competitor_terms = [c.lower() for c in (competitors or []) if c and "leading competitors" not in c.lower()]
+    location_terms = [loc.lower() for loc in (locations or []) if loc]
+    industry_term = (industry or "").lower().strip()
+    audience_term = (audience or "").lower().strip()
+
+    entity_hits = 0
+    entity_slots = 0
+    service_hits = 0
+    service_total = 0
+    pricing_hits = 0
+    pricing_total = 0
+    icp_hits = 0
+    icp_total = 0
+    competitor_hits = 0
+
+    for ev in successes:
+        text = (ev.raw_response or "").lower()
+        slots = []
+        if brand:
+            slots.append(brand in text)
+        if service_terms:
+            slots.append(any(term in text for term in service_terms))
+        if location_terms:
+            slots.append(any(term in text for term in location_terms))
+        if industry_term and industry_term not in ("this category",):
+            slots.append(industry_term in text)
+        if audience_term:
+            slots.append(audience_term in text)
+        if slots:
+            entity_slots += len(slots)
+            entity_hits += sum(1 for ok in slots if ok)
+
+        if ev.category == "services" and service_terms:
+            service_total += 1
+            if any(term in text for term in service_terms):
+                service_hits += 1
+        if ev.category in ("high_intent", "commercial") and "pric" in (ev.query_text or "").lower():
+            pricing_total += 1
+            if brand and brand in text:
+                pricing_hits += 1
+        if ev.category == "audience" and (audience_term or brand):
+            icp_total += 1
+            if (audience_term and audience_term in text) or (brand and brand in text):
+                icp_hits += 1
+        if competitor_terms and any(term in text for term in competitor_terms):
+            competitor_hits += 1
+
+    source_consistency = None
+    if report.repeats >= 2:
+        by_query: Dict[str, List[EvaluatedQueryRun]] = {}
+        for ev in successes:
+            by_query.setdefault(ev.query_id, []).append(ev)
+        stable = 0
+        seen = 0
+        for runs in by_query.values():
+            domain_counts: Dict[str, int] = {}
+            for ev in runs:
+                for domain in ev.source_domains:
+                    domain_counts[domain] = domain_counts.get(domain, 0) + 1
+            for count in domain_counts.values():
+                seen += 1
+                if count >= 2:
+                    stable += 1
+        source_consistency = _pct(stable, seen)
+
+    engines_live = sum(1 for agg in report.engine_aggregates.values() if agg.queries_succeeded > 0)
+    return AiVisibilityScorecard(
+        status="MEASURED",
+        engines_measured=engines_live,
+        engines_requested=len(report.engines_tested),
+        queries=report.total_queries,
+        repeats=report.repeats,
+        successful_runs=len(successes),
+        failed_runs=len(failures),
+        mention_rate_pct=report.overall_mention_rate_pct,
+        citation_rate_pct=report.overall_first_party_citation_rate_pct,
+        citation_accuracy_pct=None,
+        entity_accuracy_pct=_pct(entity_hits, entity_slots),
+        service_recognition_pct=_pct(service_hits, service_total),
+        icp_recognition_pct=_pct(icp_hits, icp_total),
+        pricing_recognition_pct=_pct(pricing_hits, pricing_total),
+        competitor_visibility_pct=_pct(competitor_hits, len(successes)) if competitor_terms else None,
+        hallucination_rate_pct=None,
+        source_consistency_pct=source_consistency,
+        matrix_grounding=matrix_grounding,
+    )
 
 
 benchmark_runner = GeoBenchmarkRunner()

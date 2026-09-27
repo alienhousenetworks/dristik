@@ -1,11 +1,12 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { AnalysisSummary } from '../types';
-import { listAnalyses } from '../services/api';
+import { deleteAnalysis, listAnalyses } from '../services/api';
 
 interface RecentAuditsDropdownProps {
   currentAnalysisId?: string;
   onSelectAudit: (analysisId: string) => void;
   onNewAudit?: () => void;
+  onAuditDeleted?: (analysisId: string) => void | Promise<void>;
   className?: string;
 }
 
@@ -13,12 +14,14 @@ export function RecentAuditsDropdown({
   currentAnalysisId,
   onSelectAudit,
   onNewAudit,
+  onAuditDeleted,
   className = '',
 }: RecentAuditsDropdownProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [audits, setAudits] = useState<AnalysisSummary[]>([]);
   const [loading, setLoading] = useState(false);
   const [query, setQuery] = useState('');
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
 
   const load = async () => {
@@ -120,6 +123,9 @@ export function RecentAuditsDropdown({
           )}
 
           {/* List of audits */}
+          {deleteError && (
+            <p className="px-3 py-2 text-[11px] text-bad border-b border-line">{deleteError}</p>
+          )}
           <div className="max-h-72 overflow-y-auto divide-y divide-line/60 scrollbar-thin">
             {loading && audits.length === 0 ? (
               <div className="p-4 text-center text-ink-400">Loading audit history...</div>
@@ -140,18 +146,20 @@ export function RecentAuditsDropdown({
                   : '';
 
                 return (
-                  <button
+                  <div
                     key={item.analysis_id}
-                    type="button"
-                    onClick={() => {
-                      onSelectAudit(item.analysis_id);
-                      setIsOpen(false);
-                    }}
                     className={`w-full text-left p-3 transition-colors flex items-center justify-between gap-2 hover:bg-paper-100 dark:hover:bg-ink-800/80 ${
                       isSelected ? 'bg-pine/10 border-l-2 border-pine' : ''
                     }`}
                   >
-                    <div className="min-w-0 pr-2">
+                    <button
+                      type="button"
+                      className="min-w-0 pr-2 text-left flex-1"
+                      onClick={() => {
+                        onSelectAudit(item.analysis_id);
+                        setIsOpen(false);
+                      }}
+                    >
                       <div className="flex items-center gap-1.5">
                         <span className="font-semibold text-ink truncate block text-xs">
                           {item.domain}
@@ -165,9 +173,32 @@ export function RecentAuditsDropdown({
                       <span className="text-[10px] text-ink-400 font-mono block mt-0.5">
                         {dateStr} · {item.page_count} page{item.page_count === 1 ? '' : 's'}
                       </span>
-                    </div>
+                    </button>
 
                     <div className="shrink-0 flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        className="shrink-0 px-2 py-1 text-[11px] font-semibold text-bad border border-bad/40 rounded hover:bg-bad/10"
+                        title={`Delete audit for ${item.domain}`}
+                        onClick={async (event) => {
+                          event.stopPropagation();
+                          const label = item.domain || item.website_url;
+                          if (!window.confirm(`Delete the audit for ${label}? This cannot be undone.`)) return;
+                          setDeleteError(null);
+                          try {
+                            if (onAuditDeleted) {
+                              await onAuditDeleted(item.analysis_id);
+                            } else {
+                              await deleteAnalysis(item.analysis_id);
+                            }
+                            setAudits((prev) => prev.filter((row) => row.analysis_id !== item.analysis_id));
+                          } catch (err) {
+                            setDeleteError(err instanceof Error ? err.message : 'Could not delete the audit.');
+                          }
+                        }}
+                      >
+                        Delete
+                      </button>
                       <span
                         className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded border ${getScoreBadge(
                           item.score_overall,
@@ -181,7 +212,7 @@ export function RecentAuditsDropdown({
                           : item.status}
                       </span>
                     </div>
-                  </button>
+                  </div>
                 );
               })
             )}

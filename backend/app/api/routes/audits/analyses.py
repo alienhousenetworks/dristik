@@ -137,6 +137,29 @@ async def list_analyses(
 
     return summaries
 
+@router.delete("/{analysis_id}")
+async def delete_analysis(
+    analysis_id: str,
+    user: Optional[UserIdentity] = Depends(get_current_user_optional),
+):
+    """Deletes a stored audit. The open report is removed from memory as well."""
+    org_id = user.org_id if user else "org_default"
+    row = orchestrator.repository.get_run(analysis_id)
+    memory_run = orchestrator.runs.get(analysis_id)
+    if row and row.get("org_id") != org_id:
+        if not user or not Authorizer.can_access_org(user, row.get("org_id") or ""):
+            raise HTTPException(status_code=404, detail="Analysis run not found.")
+    if memory_run and getattr(memory_run, "org_id", org_id) != org_id:
+        if not user or not Authorizer.can_access_org(user, memory_run.org_id):
+            raise HTTPException(status_code=404, detail="Analysis run not found.")
+    if not row and not memory_run:
+        raise HTTPException(status_code=404, detail="Analysis run not found.")
+    removed = orchestrator.repository.delete_run(analysis_id, org_id=row.get("org_id") if row else None)
+    orchestrator.runs.pop(analysis_id, None)
+    if not removed and not memory_run:
+        raise HTTPException(status_code=404, detail="Analysis run not found.")
+    return {"deleted": analysis_id}
+
 @router.post("", response_model=AnalysisRun)
 async def start_analysis(
     request: AnalysisRequest,

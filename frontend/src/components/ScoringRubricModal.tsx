@@ -322,7 +322,7 @@ export function ScoringRubricModal({ isOpen, onClose }: ScoringRubricModalProps)
                 },
                 {
                   range: '0 – 49',
-                  band: 'Critical Vulnerability',
+                  band: 'Low readiness',
                   color: 'text-bad border-bad bg-bad/10',
                   desc: 'Severe accessibility, indexing, or positioning failure. Immediate engineering and editorial remediation required.',
                 },

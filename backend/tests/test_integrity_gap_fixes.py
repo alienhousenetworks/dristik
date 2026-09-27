@@ -124,3 +124,118 @@ async def test_agent_readiness_does_not_invent_a_score_without_pages(monkeypatch
     report = await evaluate_agent_readiness("https://example.com", [], manifest=None)
     assert report.score is None
     assert any(signal.status == "NOT_MEASURED" for signal in report.signals)
+
+
+def test_finding_dedup_clusters_same_defect_across_categories():
+    from app.cognition.finding_registry import FindingRegistry
+    from app.domain.enums import Category, Severity
+    from app.domain.models import Finding
+
+    registry = FindingRegistry()
+    f1 = Finding(
+        finding_id="f_h1_seo",
+        category=Category.TECHNICAL_SEO,
+        severity=Severity.HIGH,
+        title="H1 tag is a slogan instead of clear identity",
+        description="The primary heading 'Empowering Future Leaders' fails to state the core service.",
+        recommendation="Replace H1 slogan with core product identity.",
+        evidence_refs=["ev_dom_h1"],
+        impact=7,
+        confidence=0.95,
+        surfaces_affected=[{"surface": "h1", "url": "https://example.com/", "selector": "h1.hero"}]
+    )
+    f2 = Finding(
+        finding_id="f_h1_ai",
+        category=Category.AI_SEARCH,
+        severity=Severity.CRITICAL,
+        title="H1 is slogan - missing core business entity",
+        description="Meta description has the real identity while H1 is a marketing slogan.",
+        recommendation="State core entity in H1 for generative search extraction.",
+        evidence_refs=["ev_dom_meta"],
+        impact=8,
+        confidence=0.92,
+        surfaces_affected=[{"surface": "meta", "url": "https://example.com/", "selector": "meta[name='description']"}]
+    )
+    f3 = Finding(
+        finding_id="f_h1_content",
+        category=Category.CONTENT,
+        severity=Severity.MEDIUM,
+        title="H1 heading slogan defect on landing page",
+        description="H1 is a slogan: Empowering Future Leaders.",
+        recommendation="Align heading hierarchy with business offerings.",
+        evidence_refs=["ev_dom_h1", "ev_dom_subpage"],
+        impact=6,
+        confidence=0.88,
+        surfaces_affected=[{"surface": "h1", "url": "https://example.com/about", "selector": "h1"}]
+    )
+
+    registry.register(f1)
+    registry.register(f2)
+    registry.register(f3)
+
+    all_findings = registry.all_findings()
+    # Should be deduplicated into exactly 1 root-cause finding
+    assert len(all_findings) == 1
+    root = all_findings[0]
+    # Severity should escalate to highest observed (CRITICAL)
+    assert root.severity == Severity.CRITICAL
+    # Impact should escalate to highest observed (8)
+    assert root.impact == 8
+    # Evidence refs should be merged without duplicates
+    assert set(root.evidence_refs) == {"ev_dom_h1", "ev_dom_meta", "ev_dom_subpage"}
+    # Surfaces affected should contain consolidated unique entries
+    assert len(root.surfaces_affected) >= 2
+
+
+def test_confidence_rubric_not_demoted_by_absence_phrasing_when_dom_evidence_present():
+    from app.cognition.finding_rubric import apply_rubric_to_finding
+    from app.domain.enums import RubricConfidence
+    from app.domain.models import Finding, Category, Severity
+
+    finding = Finding(
+        finding_id="f_img_alt",
+        category=Category.TECHNICAL_SEO,
+        severity=Severity.HIGH,
+        title="15/16 images lack alt text - missing accessibility attributes",
+        description="Missing and absence of alt attributes across 15 images on the homepage.",
+        recommendation="Inject descriptive alt attributes on all informative images.",
+        evidence_refs=["ev_ast_img_01", "ev_ast_img_02"],
+        impact=7,
+        confidence=0.9
+    )
+    evaluated = apply_rubric_to_finding(finding)
+    # Direct DOM AST tokens prevent demotion to GUESSING
+    assert evaluated.confidence_rubric != RubricConfidence.GUESSING
+    assert evaluated.confidence_rubric in (RubricConfidence.CERTAIN, RubricConfidence.LIKELY)
+
+
+def test_null_evidence_category_grades_provisional_neutral():
+    from app.scoring.engine import ScoringEngine
+    from app.domain.enums import Category, Severity
+    from app.domain.models import Finding, BusinessProfile
+
+    engine = ScoringEngine()
+    # Active audit with an effective finding in TECHNICAL_SEO, but zero evidence in UX_CONVERSION
+    findings = [
+        Finding(
+            finding_id="f_canon",
+            category=Category.TECHNICAL_SEO,
+            severity=Severity.CRITICAL,
+            title="Broken Canonical Directives",
+            description="Canonical URL points to non-existent subdomain.",
+            recommendation="Update canonical tags to point to authoritative root.",
+            impact=9,
+            confidence=0.9
+        )
+    ]
+    scores = engine.calculate_scores(
+        findings=findings,
+        business_profile=BusinessProfile(business_name="Acme")
+    )
+    # UX_CONVERSION has 0 findings and 0 positive signals in an active audit
+    ux_score = scores.category_scores.get(Category.UX_CONVERSION)
+    assert ux_score is not None
+    # Must NOT be 100/100 unearned; must be capped at 50.0 (Provisional Neutral)
+    assert ux_score.score == 50.0
+    assert "insufficient direct signals" in ux_score.summary.lower() or "provisional" in ux_score.summary.lower()
+

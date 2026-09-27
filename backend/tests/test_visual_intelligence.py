@@ -158,8 +158,9 @@ def test_visual_intelligence_case_evaluation_and_selection():
     chart_types = [c.chart_type for c in payload.selected_visualizations]
     assert "radar" in chart_types
     assert "latency_curve" in chart_types
-    assert "engine_comparison_bar" in chart_types
     assert "defect_donut" in chart_types
+    assert "engine_comparison_bar" not in chart_types
+    assert "journey_funnel" not in chart_types
 
     # Check spotlight numbers
     assert len(payload.spotlight_metrics) >= 4

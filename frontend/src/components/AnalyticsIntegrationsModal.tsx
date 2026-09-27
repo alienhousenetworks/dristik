@@ -28,7 +28,7 @@ interface IntegrationStatus {
 export function AnalyticsIntegrationsModal({
   isOpen,
   onClose,
-  domain = 'example.com',
+  domain = '',
 }: AnalyticsIntegrationsModalProps) {
   const [status, setStatus] = useState<IntegrationStatus | null>(null);
   const [ga4PropertyId, setGa4PropertyId] = useState('');
@@ -155,7 +155,7 @@ export function AnalyticsIntegrationsModal({
                           : 'bg-amber-500/10 text-amber-600 border-amber-500/30'
                       }`}
                     >
-                      {status?.google_search_console.connected ? '● CONNECTED' : '○ SANDBOX CALIBRATED'}
+                      {status?.google_search_console.connected ? '● CONNECTED' : '○ NOT CONNECTED'}
                     </span>
                   </div>
                   <p className="text-xs text-ink-500">
@@ -183,7 +183,7 @@ export function AnalyticsIntegrationsModal({
                           : 'bg-amber-500/10 text-amber-600 border-amber-500/30'
                       }`}
                     >
-                      {status?.google_analytics_4.connected ? '● CONNECTED' : '○ SANDBOX CALIBRATED'}
+                      {status?.google_analytics_4.connected ? '● CONNECTED' : '○ NOT CONNECTED'}
                     </span>
                   </div>
                   <p className="text-xs text-ink-500">

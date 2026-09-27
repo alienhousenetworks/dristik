@@ -109,13 +109,11 @@ class ModelRouter:
 
         current_model = model
         last_error = None
-        max_attempts = max(settings.LLM_MAX_RETRIES, 3)
+        max_attempts = 2
         tried_missing: set = set()
 
         for attempt in range(max_attempts):
             try:
-                if attempt >= 2 and current_model != fast_model and fast_model not in tried_missing:
-                    current_model = fast_model
                 if current_model in tried_missing:
                     break
 
@@ -139,9 +137,8 @@ class ModelRouter:
                 return response.get("content", "")
             except RateLimitException as rle:
                 last_error = rle
-                sleep_sec = min(rle.retry_after_seconds + 0.5, 10.0)
-                if attempt < max_attempts - 1:
-                    await asyncio.sleep(sleep_sec)
+                logger.warning("[ModelRouter][%s] Rate limit exhausted from LLMClient: %s", capability, rle)
+                break
             except Exception as e:
                 last_error = e
                 msg = str(e).lower()
@@ -154,8 +151,8 @@ class ModelRouter:
                     logger.warning("Model %s missing (%s); retrying with %s", current_model, e, nxt)
                     current_model = nxt
                     continue
-                if attempt < max_attempts - 1:
-                    await asyncio.sleep(1.5 * (attempt + 1))
+                logger.warning("[ModelRouter][%s] generate_prose failed: %s", capability, e)
+                break
 
         logger.warning("generate_prose failed: %s", last_error)
         return ""
@@ -171,7 +168,7 @@ class ModelRouter:
         additional_context: Optional[str] = None,
         site_facts: Optional[Dict[str, Any]] = None,
         task_card: Optional[str] = None,
-        max_claims: int = 3,
+        max_claims: int = 8,
         allow_fallback: bool = False,
         model_tier: Optional[str] = None,
         max_tokens: Optional[int] = None,
@@ -213,10 +210,10 @@ class ModelRouter:
             max_claims=max_claims
         )
 
-        # 2. Call LLM API with adaptive retries & model fallback
+        # 2. Call LLM API with single-pass retries handled by LLMClient, plus 1 JSON-repair attempt if needed
         current_model = model
         last_error = None
-        max_attempts = max(settings.LLM_MAX_RETRIES, 4)
+        max_attempts = 2
         tried_missing: set = set()
         user_prompt = prompts["user"]
         max_tokens = int(max_tokens or settings.LLM_MAX_TOKENS)
@@ -229,8 +226,6 @@ class ModelRouter:
 
         for attempt in range(max_attempts):
             try:
-                if attempt >= 2 and current_model != fast_model and fast_model not in tried_missing:
-                    current_model = fast_model
                 if current_model in tried_missing:
                     break
 
@@ -270,7 +265,7 @@ class ModelRouter:
                         f"Could not parse valid JSON from {self.client.provider} response "
                         f"for capability '{capability}' (stop_reason={stop_reason}, chars={len(raw)})."
                     )
-                    logger.warning("%s Preview: %s", last_error, raw[:400].replace("\n", " "))
+                    logger.warning("[ModelRouter][%s][%s] %s Preview: %s", capability, agent_role, last_error, raw[:300].replace("\n", " "))
                     if stop_reason in ("max_tokens", "length") and max_tokens < 8192:
                         max_tokens = min(max_tokens * 2, 8192)
                     user_prompt = (
@@ -278,12 +273,15 @@ class ModelRouter:
                         "PREVIOUS OUTPUT WAS NOT VALID JSON. Return a single JSON object only. "
                         "No markdown fences, no preamble, no trailing commentary."
                     )
+                    continue
 
             except RateLimitException as rle:
                 last_error = rle
-                sleep_sec = min(rle.retry_after_seconds + 0.5, 10.0)
-                if attempt < max_attempts - 1:
-                    await asyncio.sleep(sleep_sec)
+                logger.warning(
+                    "[ModelRouter][%s][%s] Rate limit exhausted from LLMClient: %s",
+                    capability, agent_role, rle
+                )
+                break
             except Exception as e:
                 last_error = e
                 msg = str(e).lower()
@@ -291,13 +289,16 @@ class ModelRouter:
                 if missing:
                     nxt = self._next_model_after_missing(current_model, fast_model, tried_missing)
                     if not nxt:
-                        logger.warning("Model %s missing (%s); no distinct fallback remains", current_model, e)
+                        logger.warning("[ModelRouter][%s][%s] Model %s missing (%s); no distinct fallback remains", capability, agent_role, current_model, e)
                         break
-                    logger.warning("Model %s missing (%s); retrying with %s", current_model, e, nxt)
+                    logger.warning("[ModelRouter][%s][%s] Model %s missing (%s); retrying with %s", capability, agent_role, current_model, e, nxt)
                     current_model = nxt
                     continue
-                if attempt < max_attempts - 1:
-                    await asyncio.sleep(1.5 * (attempt + 1))
+                logger.warning(
+                    "[ModelRouter][%s][%s] Call failed on attempt %d: %s (%s)",
+                    capability, agent_role, attempt + 1, e, type(e).__name__
+                )
+                break
 
         # 3. Exhausted retries — specialists must not receive canned audits
         if not allow_fallback:

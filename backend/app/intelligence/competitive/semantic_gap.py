@@ -22,9 +22,21 @@ class SemanticGapEngine:
     ) -> Dict[str, Any]:
         """
         Evaluates how semantically grounded the website's content is against buyer queries.
+        Fails closed with explicit UNAVAILABLE status when neural embeddings are not available.
         """
         if not queries:
-            return {"coverage_score": 0, "evaluations": []}
+            return {"status": "NOT_EVALUATED", "coverage_score": None, "evaluations": []}
+
+        if not embedding_service.is_available():
+            return {
+                "domain": domain,
+                "status": "UNAVAILABLE",
+                "overall_semantic_coverage_score": None,
+                "total_queries_evaluated": len(queries),
+                "evaluations": [],
+                "reason": "Neural embedding model unconfigured or unreachable. Semantic intent coverage cannot be evaluated without live embeddings.",
+                "missing_evidence_required": "Valid neural embedding model (SentenceTransformer or EMBEDDING_API_KEY)."
+            }
 
         evaluations: List[Dict[str, Any]] = []
         scores: List[float] = []
@@ -34,6 +46,9 @@ class SemanticGapEngine:
             intent = q_obj.get("intent", "Commercial Search")
             
             q_vec = embedding_service.embed_query(query_text)
+            if not q_vec:
+                continue
+
             matches = vector_store.search_similar(
                 query_vector=q_vec,
                 domain=domain,
@@ -57,11 +72,12 @@ class SemanticGapEngine:
                 "evidence_snippet": best_chunk
             })
 
-        avg_sim = sum(scores) / len(scores) if scores else 0.0
-        coverage_score = int(round(avg_sim * 100))
+        avg_sim = sum(scores) / len(scores) if scores else None
+        coverage_score = int(round(avg_sim * 100)) if avg_sim is not None else None
 
         return {
             "domain": domain,
+            "status": "AVAILABLE" if coverage_score is not None else "INSUFFICIENT_EVIDENCE",
             "overall_semantic_coverage_score": coverage_score,
             "total_queries_evaluated": len(queries),
             "evaluations": evaluations

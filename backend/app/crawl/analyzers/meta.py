@@ -6,7 +6,12 @@ from typing import Dict, Any, Optional
 from bs4 import BeautifulSoup
 from app.evidence.store import EvidenceStore
 
-def analyze_meta_tags(soup: BeautifulSoup, url: str, evidence_store: EvidenceStore) -> Dict[str, Any]:
+def analyze_meta_tags(
+    soup: BeautifulSoup,
+    url: str,
+    evidence_store: EvidenceStore,
+    resp_headers: Optional[Dict[str, str]] = None,
+) -> Dict[str, Any]:
     title_tag = soup.find("title")
     title = title_tag.get_text(strip=True) if title_tag else None
     
@@ -18,6 +23,28 @@ def analyze_meta_tags(soup: BeautifulSoup, url: str, evidence_store: EvidenceSto
     
     robots_meta_tag = soup.find("meta", attrs={"name": lambda x: x and x.lower() == "robots"})
     robots_meta = robots_meta_tag.get("content", "").strip() if robots_meta_tag else None
+
+    # Inspect X-Robots-Tag in HTTP response headers
+    x_robots_tag = None
+    if resp_headers:
+        for k, v in resp_headers.items():
+            if k.lower() == "x-robots-tag" and v:
+                x_robots_tag = str(v).strip()
+                break
+
+    if x_robots_tag:
+        evidence_store.add_evidence(
+            source_type="header",
+            analyzer="meta_analyzer",
+            url=url,
+            text=f"HTTP Response Header X-Robots-Tag: {x_robots_tag}",
+            value={"x_robots_tag": x_robots_tag},
+        )
+        if "noindex" in x_robots_tag.lower():
+            if not robots_meta:
+                robots_meta = x_robots_tag
+            elif "noindex" not in robots_meta.lower():
+                robots_meta = f"{robots_meta}, {x_robots_tag}"
     
     viewport_tag = soup.find("meta", attrs={"name": lambda x: x and x.lower() == "viewport"})
     viewport = viewport_tag.get("content", "").strip() if viewport_tag else None
@@ -101,6 +128,7 @@ def analyze_meta_tags(soup: BeautifulSoup, url: str, evidence_store: EvidenceSto
         "meta_description": meta_description,
         "canonical_url": canonical_url,
         "robots_meta": robots_meta,
+        "x_robots_tag": x_robots_tag,
         "viewport": viewport,
         "og_tags": og_tags,
         "twitter_tags": twitter_tags

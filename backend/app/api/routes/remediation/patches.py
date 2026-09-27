@@ -7,13 +7,14 @@ from typing import List, Optional, Dict, Any
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, Field
 
-from app.domain.models import RemediationPatch, RoiInput, RoiEstimate, VerificationResult
+from app.domain.models import RemediationPatch, RoiInput, RoiEstimate, VerificationResult, RemediationVerificationReport
 from app.domain.enums import PatchRiskLevel, PatchApprovalStatus
 from app.remediation.patch_engine import patch_engine
 from app.remediation.diff_engine import diff_engine
 from app.remediation.approval import approval_manager
 from app.connectors.store import connector_store
 from app.verification.verifier import verification_engine
+from app.verification.verification_loop import verification_loop_service
 from app.orchestration.orchestrator import orchestrator
 
 router = APIRouter(prefix="/remediation", tags=["Remediation & Universal Patches"])
@@ -165,6 +166,97 @@ async def verify_patch(patch_id: str):
         )
 
     return await verification_engine.verify_remediation(patch)
+ 
+class VerifyFindingRequest(BaseModel):
+    finding_id: str
+    analysis_id: Optional[str] = None
+    website_url: Optional[str] = None
+    target_url: Optional[str] = None
+    finding_title: Optional[str] = None
+    finding_category: Optional[str] = None
+    finding_text: Optional[str] = None
+    finding_description: Optional[str] = None
+    finding_recommendation: Optional[str] = None
+    mock_live_html: Optional[str] = None  # retained solely for test fixture compatibility
+    override_html_for_testing: Optional[str] = None
+
+@router.post("/verify-finding", response_model=RemediationVerificationReport)
+async def verify_finding_remediation(req: VerifyFindingRequest):
+    """
+    Executes the continuous remediation verification loop:
+    FIX -> RECRAWL -> RECHECK -> COMPARE -> CERTIFY
+    Operates on live original target URLs and authentic findings.
+    """
+    finding = None
+    target_url = req.target_url or req.website_url or ""
+
+    if req.analysis_id:
+        run = orchestrator.get_run(req.analysis_id)
+        if run and run.report:
+            target_url = req.target_url or req.website_url or run.website_url
+            for f in (run.report.findings or []):
+                if f.finding_id == req.finding_id or f.id == req.finding_id:
+                    finding = f
+                    # If finding has a specific target URL in its evidence, prefer that for page-level recrawl
+                    for ev in (f.evidence or []):
+                        if ev.url and ev.url.startswith("http"):
+                            target_url = req.target_url or ev.url
+                            break
+                    break
+
+    if not finding:
+        # Build finding from the authentic finding details provided in the request payload
+        from app.domain.models import Finding
+        from app.domain.enums import Category, Severity
+        cat = Category.TECHNICAL_SEO
+        if req.finding_category:
+            try:
+                cat = Category(req.finding_category)
+            except Exception:
+                pass
+        finding = Finding(
+            finding_id=req.finding_id,
+            category=cat,
+            severity=Severity.HIGH,
+            title=req.finding_title or req.finding_text or f"Finding {req.finding_id}",
+            finding=req.finding_text or req.finding_title or "",
+            description=req.finding_description or "",
+            recommendation=req.finding_recommendation or ""
+        )
+
+    test_html = req.override_html_for_testing or req.mock_live_html
+
+    report = await verification_loop_service.verify_finding(
+        finding=finding,
+        website_url=target_url or "https://example.com",
+        live_html=test_html,
+        analysis_id=req.analysis_id,
+    )
+    return report
+
+@router.post("/verify-all/{analysis_id}", response_model=List[RemediationVerificationReport])
+async def verify_all_findings_remediation(analysis_id: str):
+    """
+    Runs the verification loop across all findings in an analysis run using live original URLs.
+    """
+    run = orchestrator.get_run(analysis_id)
+    if not run or not run.report:
+        raise HTTPException(status_code=404, detail="Analysis run or report not found")
+
+    results: List[RemediationVerificationReport] = []
+    for f in (run.report.findings or []):
+        f_url = run.website_url
+        for ev in (f.evidence or []):
+            if ev.url and ev.url.startswith("http"):
+                f_url = ev.url
+                break
+        rep = await verification_loop_service.verify_finding(
+            finding=f,
+            website_url=f_url,
+            analysis_id=analysis_id,
+        )
+        results.append(rep)
+    return results
 
 @router.post("/roi-estimate", response_model=RoiEstimate)
 async def calculate_roi_estimate(inp: RoiInput):
@@ -212,3 +304,36 @@ async def calculate_roi_estimate(inp: RoiInput):
         roi_multiple=roi_multiple,
         high_impact_opportunities=opportunities
     )
+
+@router.get("/download-pack/{analysis_id}")
+async def download_remediation_patch_pack(analysis_id: str):
+    """
+    Downloads the 1-click deployable code fixes packaging:
+    - schema.jsonld
+    - robots.txt
+    - llms.txt
+    - security_headers.conf
+    - geo_definitions.html
+    into a single downloadable 'dristik-remediation-patches.zip'.
+    """
+    run = orchestrator.get_run(analysis_id)
+    if not run or not run.report:
+        raise HTTPException(status_code=404, detail="Analysis run or report not found")
+
+    from app.remediation.patch_pack import generate_patch_pack_zip
+    from fastapi.responses import Response
+
+    zip_bytes = generate_patch_pack_zip(
+        bp=run.report.business_profile,
+        website_url=run.website_url,
+        commercial_evals=run.report.commercial_evaluations or []
+    )
+
+    return Response(
+        content=zip_bytes,
+        media_type="application/zip",
+        headers={
+            "Content-Disposition": "attachment; filename=dristik-remediation-patches.zip"
+        }
+    )
+

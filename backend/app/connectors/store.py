@@ -192,7 +192,47 @@ class ConnectorStore:
             return WebflowConnector(creds)
         elif integ.provider == ConnectorType.GOOGLE_SEARCH_CONSOLE:
             return GoogleSearchConsoleConnector(creds)
+        elif integ.provider == ConnectorType.GOOGLE_ANALYTICS_4:
+            from app.connectors.google.ga4_connector import GoogleAnalytics4Connector
+            return GoogleAnalytics4Connector(creds)
+        elif integ.provider == ConnectorType.CRM:
+            from app.connectors.crm.connector import CrmRevenueConnector
+            return CrmRevenueConnector(creds)
+        elif integ.provider == ConnectorType.DATAFORSEO:
+            from app.connectors.dataforseo.connector import DataForSeoConnector
+            return DataForSeoConnector(creds)
+        elif integ.provider == ConnectorType.LIVE_AI_SEARCH:
+            from app.connectors.ai_search.connector import LiveAiSearchConnector
+            return LiveAiSearchConnector(creds)
+        elif integ.provider == ConnectorType.CRUX:
+            from app.connectors.crux.connector import CruxConnector
+            return CruxConnector(creds)
         else:
             return GenericWebsiteConnector(creds)
+
+    def get_telemetry_service(self) -> Any:
+        from app.connectors.telemetry_service import ExternalTelemetryService
+        from app.connectors.google.connector import GoogleSearchConsoleConnector
+        from app.connectors.google.ga4_connector import GoogleAnalytics4Connector
+        from app.connectors.crux.connector import CruxConnector
+        from app.connectors.external_seo.connector import ExternalSeoConnector
+
+        gsc = None
+        ga4 = None
+        crux = None
+        seo = None
+
+        for integ_id, integ in self._integrations.items():
+            creds = self._credentials.get(integ_id, ConnectorCredentials(provider=integ.provider))
+            if integ.provider == ConnectorType.GOOGLE_SEARCH_CONSOLE and not gsc:
+                gsc = GoogleSearchConsoleConnector(creds)
+            elif integ.provider == ConnectorType.GOOGLE_ANALYTICS_4 and not ga4:
+                ga4 = GoogleAnalytics4Connector(creds)
+            elif integ.provider == ConnectorType.CRUX and not crux:
+                crux = CruxConnector(creds)
+            elif integ.provider == ConnectorType.DATAFORSEO and not seo:
+                seo = ExternalSeoConnector(creds)
+
+        return ExternalTelemetryService(gsc=gsc, ga4=ga4, crux=crux, external_seo=seo)
 
 connector_store = ConnectorStore()

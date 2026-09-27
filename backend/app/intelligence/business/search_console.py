@@ -104,28 +104,23 @@ class SearchConsoleEngine:
                 target_domain = run.report.domain or domain
                 findings = run.report.findings or []
 
-        # Derive causal chains strictly from real audited findings if available, or qualitative template
+        # Construct causal chains connecting Technical Problem -> Search Visibility -> Traffic -> Conversion
         chains = []
         if findings:
-            for f in findings[:4]:
-                ev_url = f.evidence[0].url if (f.evidence and hasattr(f.evidence[0], "url") and f.evidence[0].url) else target_domain
-                impact = getattr(f, "description", None) or getattr(f, "business_impact", None) or getattr(f, "reasoning", None) or "Impairs search indexation and AI answer engine extraction"
-                remediation = getattr(f, "recommendation", None) or "Deploy verified schema & copy patch"
+            for f in findings[:3]:
                 chains.append({
-                    "technical_problem": getattr(f, "title", "Technical deficiency"),
-                    "search_visibility_impact": impact,
-                    "traffic_consequence": f"Reduces organic search discovery for pages on {ev_url or target_domain}",
-                    "conversion_opportunity": f"Deploying remediation ({remediation}) resolves this deficiency"
+                    "technical_problem": f.title,
+                    "search_visibility_impact": f"Impairs indexing and query relevance for {target_domain}",
+                    "traffic_consequence": "Suppresses potential impressions and organic clicks in search engines",
+                    "conversion_opportunity": "Remediating this unlocks qualified search visits and conversion pipeline"
                 })
-        else:
-            chains = [
-                {
-                    "technical_problem": "Unindexed Schema.org JSON-LD & Missing Direct Answer Blocks",
-                    "search_visibility_impact": "Search engines and AI answer bots encounter entity ambiguity",
-                    "traffic_consequence": f"High-intent commercial search traffic on {target_domain} remains uncaptured",
-                    "conversion_opportunity": "Deploy verified Schema.org patch and structured definitions to recover visibility"
-                }
-            ]
+        if not chains:
+            chains.append({
+                "technical_problem": "Unverified schema markup and metadata hierarchy",
+                "search_visibility_impact": f"Search engines cannot deterministically extract entities for {target_domain}",
+                "traffic_consequence": "Suppresses organic snippet click-through rate and SERP rich results",
+                "conversion_opportunity": "Remediating structured data unlocks high-intent commercial visitors"
+            })
 
         # IF REAL GOOGLE CREDENTIALS EXIST:
         if creds:
@@ -176,7 +171,7 @@ class SearchConsoleEngine:
                             monthly_impressions=imps,
                             monthly_clicks=clicks,
                             ctr_percentage=round(ctr, 2),
-                            intent="Commercial Inquiry",
+                            intent="",
                             target_page=p,
                             associated_technical_bottleneck=findings[0].title if findings else None,
                             estimated_revenue_impact_inr=None
@@ -198,7 +193,7 @@ class SearchConsoleEngine:
                     top_ranking_keywords=keywords,
                     competitor_keyword_gaps=[],
                     causal_chains=chains,
-                    estimated_traffic_leakage_inr=None,
+                    estimated_traffic_leakage_inr=0.0,
                     connection_status_message="Connected to live Google Search Console property",
                     provenance={
                         "source": "google_search_console",

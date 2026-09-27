@@ -1,7 +1,7 @@
 # Dristik AI — Complete Product Report
 
 **Product:** Dristik AI — Enterprise evidence-driven website intelligence and growth auditor  
-**Code version:** `2.0.0` (`APP_VERSION` in `backend/app/config.py`)  
+**Code version:** `2.0.0` (`APP_VERSION` in `backend/app/core/config.py`)  
 **Policy pack:** `enterprise_web_intel_v4`  
 **Source of truth:** live codebase under `/Users/sayantande/dristik` (not marketing copy)  
 **Generated:** 20 September 2026 (synced with live `SPECIALIST_AGENTS_V3` Kahn waves and `execute_analysis_pipeline`)
@@ -415,33 +415,34 @@ dristik/
 
 | File | What it has |
 |---|---|
-| `main.py` | FastAPI app, CORS, lifespan (`validate_production_configuration`, seed admin), mounts all routers at `/api/v1` and `/api`, `/health`, `/` |
-| `config.py` | `Settings`, provider auto-select, retired Groq/Anthropic model coercion, production secret checks |
+| `main.py` | FastAPI app, CORS, lifespan (`validate_production_configuration`, seed admin), `/health`, `/` |
+| `api/router.py` | Mounts every router at `/api/v1` and `/api` |
+| `core/config.py` | `Settings`, provider auto-select, retired Groq/Anthropic model coercion, production secret checks |
 
 #### `agents/` — specialist fleet + leftover wrappers
 
 | File | Classes / role |
 |---|---|
-| `registry.py` | `AgentDefinition`, `SPECIALIST_AGENTS_V3` (exactly 35), `COPYWRITING_AGENTS_V3` (5), aliases, `CAPABILITY_AGENT_MAP` |
-| `specialist.py` | **The live runtime class for all 35 agents** (`SpecialistAgent`) |
-| `task_cards.py` | Per-agent task contracts + `SPECIALIST_OUTPUT_SCHEMA` |
-| `base.py` | Abstract `BaseAgent` (register_claim, run) |
-| `page_intelligence.py` | `PageIntelligenceAgent` — per-URL SEO + 5 copywriting cards |
-| `business.py` | Legacy `BusinessIntelligenceAgent` |
-| `technical_seo.py` | Legacy `TechnicalSeoAgent` |
-| `content.py` / `content_intel.py` | Legacy content agents |
-| `geo.py` | Legacy `GeoAgent` |
-| `ai_search.py` | Legacy `AiSearchSimulationAgent` |
-| `ux.py` / `ux_conversion.py` | Legacy UX agents |
-| `trust.py` | Legacy `TrustAuthorityAgent` |
-| `critic.py` | Legacy `AdversarialCriticAgent` |
-| `verifier.py` | Legacy `EvidenceVerifierJudgeAgent` |
-| `synthesizer.py` | Legacy `ExecutiveSynthesizerAgent` |
-| `discovery.py` | Legacy `DiscoveryAgent` |
+| `runtime/registry.py` | `AgentDefinition`, `SPECIALIST_AGENTS_V3` (exactly 35), `COPYWRITING_AGENTS_V3` (5), aliases, `CAPABILITY_AGENT_MAP` |
+| `runtime/specialist.py` | **The live runtime class for all 35 agents** (`SpecialistAgent`) |
+| `runtime/task_cards.py` | Per-agent task contracts + `SPECIALIST_OUTPUT_SCHEMA` |
+| `runtime/base.py` | Abstract `BaseAgent` (register_claim, run) |
+| `page/intelligence.py` | `PageIntelligenceAgent` — per-URL SEO + 5 copywriting cards |
+| `legacy/business.py` | Legacy `BusinessIntelligenceAgent` |
+| `legacy/technical_seo.py` | Legacy `TechnicalSeoAgent` |
+| `legacy/content.py` / `legacy/content_intel.py` | Legacy content agents |
+| `legacy/geo.py` | Legacy `GeoAgent` |
+| `legacy/ai_search.py` | Legacy `AiSearchSimulationAgent` |
+| `legacy/ux.py` / `legacy/ux_conversion.py` | Legacy UX agents |
+| `legacy/trust.py` | Legacy `TrustAuthorityAgent` |
+| `legacy/critic.py` | Legacy `AdversarialCriticAgent` |
+| `legacy/verifier.py` | Legacy `EvidenceVerifierJudgeAgent` |
+| `legacy/synthesizer.py` | Legacy `ExecutiveSynthesizerAgent` |
+| `legacy/discovery.py` | Legacy `DiscoveryAgent` |
 
-Live audits instantiate `SpecialistAgent` from the registry. The named legacy classes remain in the tree but are not the AgentPool path.
+Live audits instantiate `SpecialistAgent` from `agents/runtime`. The named legacy classes remain in `agents/legacy` and are not the AgentPool path.
 
-#### `analyzers/` — deterministic extractors
+#### `crawl/analyzers/` — deterministic extractors
 
 | File | Role |
 |---|---|
@@ -573,66 +574,57 @@ Live audits instantiate `SpecialistAgent` from the registry. The named legacy cl
 
 | File | Role |
 |---|---|
-| `geo_readiness.py` | `evaluate_geo_readiness` |
-| `geo_pipeline_runner.py` / `geo_pipeline_store.py` | Live GEO/AEO snapshots + SQLite trends |
-| `ai_citation_tracker.py` | Multi-engine live citation dashboard |
-| `live_ai_citation_engine.py` | Live engine queries |
-| `visual_intelligence.py` | Adaptive chart payload for the report |
-| `ai_simulation.py` | Labeled SIMULATION_ONLY extractability |
-| `commercial_bakeoff.py` | Target vs competitor on 6 questions |
-| `competitor_discovery.py` | Rival discovery (no invented category giants) |
-| `competitive.py` / `competitive_benchmark.py` | Competitive engines / 5-pillar homepage compare |
-| `search_console.py` | GSC attribution (fail-closed if disconnected on this path) |
-| `lead_gen_opportunities.py` | Landing-page opportunity specs from crawl voids |
-| `radar.py` | Monthly pulse |
-| `outcomes.py` / `outcome_store.py` | Post-delivery 30/60/90 |
-| `timeline.py` | Audit snapshot deltas |
-| `intent_graph.py` | Buyer-intent paths |
-| `website_twin.py` | Digital twin |
-| `business_understanding.py` | 5-worker identity pre-pass |
-| `opportunity.py` | Growth opportunity detector |
-| `semantic_gap_engine.py` | Embedding coverage gaps |
-| `simulator.py` | Strategy scenario deltas |
+| `geo/readiness.py` | `evaluate_geo_readiness` |
+| `geo/pipeline_runner.py` / `geo/pipeline_store.py` | Live GEO/AEO snapshots + SQLite trends |
+| `citations/tracker.py` | Multi-engine live citation dashboard |
+| `citations/live.py` | Live engine queries |
+| `monitoring/visual_intelligence.py` | Adaptive chart payload for the report |
+| `citations/simulation.py` | Labeled SIMULATION_ONLY extractability |
+| `competitive/bakeoff.py` | Target vs competitor on 6 questions |
+| `competitive/discovery.py` | Rival discovery (no invented category giants) |
+| `competitive/engine.py` / `competitive/benchmark.py` | Competitive engines / 5-pillar homepage compare |
+| `business/search_console.py` | GSC attribution (fail-closed if disconnected on this path) |
+| `business/lead_gen.py` | Landing-page opportunity specs from crawl voids |
+| `monitoring/radar.py` | Monthly pulse |
+| `outcomes/tracking.py` / `outcomes/store.py` | Post-delivery 30/60/90 |
+| `monitoring/timeline.py` | Audit snapshot deltas |
+| `business/intent_graph.py` | Buyer-intent paths |
+| `business/website_twin.py` | Digital twin |
+| `business/understanding.py` | 5-worker identity pre-pass |
+| `business/opportunity.py` | Growth opportunity detector |
+| `competitive/semantic_gap.py` | Embedding coverage gaps |
+| `business/simulator.py` | Strategy scenario deltas |
 
 #### Remaining backend packages (full tree)
 
 ```
 backend/app/
-├── main.py / config.py
-├── agents/          registry.py, specialist.py, task_cards.py, page_intelligence.py, base.py + legacy wrappers
-├── analyzers/       html, visible, meta, dom, schema, links, performance, security, trust_signals, dynamic_content
-├── api/routes/      analyses, stream, auth, orgs, workspaces, payments, connectors, remediation,
-│                    intelligence, radar, outcomes, geo_pipeline, integrations, system, contact, meta
-├── audit/           snapshots, manifest, ledger, regression_engine, sitemap_parser
+├── main.py / api/router.py / core/config.py
+├── api/routes/      audits, identity, platform, intelligence, integrations, remediation
+├── agents/          runtime/{registry,specialist,task_cards,base}, page/intelligence, legacy/
+├── crawl/           crawler, browser, embeddings, vector_store, sitemap, analyzers/
+├── audit/           snapshots, manifest, ledger, regression_engine
 ├── capabilities/    registry.py
 ├── cognition/       blackboard, claims, ground_truth, finding_rubric, confidence, contradiction,
 │                    consensus, hypotheses, causal, decision_engine
 ├── connectors/      store + base/{interface,models,permissions} + generic/github/wordpress/shopify/webflow/google
+├── core/            config, security/{ssrf,trust_boundary,enterprise_audit_logger}, privacy, policy
 ├── domain/          enums, models, capability, provenance
 ├── evidence/        store, models, provenance, graph, retriever, site_facts, acquisition, enrichment, validation
 ├── identity/        store, service, security, authorizer, deps, sso_scim
 ├── inference/       llm_client, model_router, together, fallback, prompt_compiler, json_repair,
-│                    global_policy, telemetry, prompts/*.txt, schemas/
-├── integrations/    google_connectors, dataforseo_provider
-├── intelligence/    geo_readiness, geo_pipeline_*, ai_citation_tracker, live_ai_citation_engine,
-│                    ai_simulation, commercial_bakeoff, competitor_discovery, competitive*,
-│                    search_console, lead_gen_opportunities, radar, outcomes, outcome_store,
-│                    timeline, intent_graph, website_twin, business_understanding, opportunity,
-│                    semantic_gap_engine, simulator, visual_intelligence
-├── mission/         director, state, policies, graph
-├── missions/        state_machine.py
+│                    global_policy, telemetry, pricing, prompts/*.txt, schemas/
+├── integrations/    google_connectors, google_api, dataforseo_provider
+├── intelligence/    geo/, competitive/, citations/, outcomes/, business/, monitoring/
+├── mission/         director, state, policies, graph, state_machine
 ├── orchestration/   orchestrator, agent_pool, team_orchestrator, integrity_gate,
 │                    capability_router, planner, dynamic_team, dag.py (unused by main path)
 ├── payments/        store.py
 ├── persistence/     models, repository, schema, enterprise_schema, storage_cas
-├── policy/          engine.py
-├── privacy/         sanitizer.py
 ├── remediation/     planner, patch_engine, patch_generator, patch_pack, validator,
 │                    approval, rollback, diff_engine, sync_engine
 ├── reports/         narrative, roadmap, pdf_generator, validation_gate
 ├── scoring/         engine, weights, scoring_rubric
-├── security/        ssrf, trust_boundary, enterprise_audit_logger
-├── services/        crawler, browser_render, embedding_service, vector_store, model_router, ssrf_guard
 ├── tenancy/         manager, models, agency, white_label
 ├── verification/    verifier.py
 └── workers/         extractor, analyst, research, critic, strategist, simulator, synthesizer,
@@ -642,18 +634,17 @@ backend/app/
 | Dir | Role |
 |---|---|
 | `capabilities/registry.py` | Honest capability declarations (`AVAILABLE` / `NOT_CONNECTED` / …) |
-| `mission/` | `MissionDirector`, `MissionState`, industry policies, light state graph |
-| `missions/state_machine.py` | Durable checkpointed mission SM |
+| `mission/` | `MissionDirector`, `MissionState`, industry policies, light state graph, checkpointed state machine |
 | `orchestration/` | `AnalysisOrchestrator`, `AgentPool`, `TeamOrchestrator`, planner, integrity gate, DAG helper |
 | `payments/store.py` | Orders / vouchers |
 | `persistence/` | SQLite persist crawl pages, evidence, claims, findings, checkpoints, sealed runs |
-| `policy/engine.py` | Tier / budget gating |
-| `privacy/sanitizer.py` | PII / injection redaction |
+| `core/policy/engine.py` | Tier / budget gating |
+| `core/privacy/sanitizer.py` | PII / injection redaction |
 | `remediation/` | Patch engine, generator, pack ZIP, validator, HITL approval, rollback, diffs |
 | `reports/` | `NarrativeGenerator`, `RoadmapBuilder`, PDF, validation gate |
 | `scoring/` | Engine, weights, published rubric |
-| `security/` | SSRF + trust boundary + enterprise audit log |
-| `services/` | Crawler, Playwright, embeddings, vector store, model router, SSRF guard |
+| `core/security/` | SSRF + trust boundary + enterprise audit log |
+| `crawl/` | Crawler, Playwright, embeddings, vector store, sitemap, deterministic analyzers |
 | `tenancy/` | Org / workspace / project / agency multi-client |
 | `verification/verifier.py` | Closed-loop patch verify |
 | `workers/` | Reusable cognitive workers (extractor, analyst, research, critic, strategist, simulator, synthesizer, remediation) |
@@ -1251,7 +1242,7 @@ classDiagram
 
 ### 6.1 Canonical 35 specialists (`SPECIALIST_AGENTS_V3`)
 
-Runtime class for **all 35**: `SpecialistAgent` in `backend/app/agents/specialist.py`.  
+Runtime class for **all 35**: `SpecialistAgent` in `backend/app/agents/runtime/specialist.py`.  
 Tests require `specialist_count() == 35`.
 
 Modes: **DET** = crawl-only, no LLM; **HYBRID** = deterministic pass then LLM merge; **LLM** = structured generation with `allow_fallback=False` (missing key → `unavailable`, never a canned audit).
@@ -1587,7 +1578,7 @@ CREATED
 
 ### 7.6 One-agent internal flow (`SpecialistAgent.run`)
 
-Every one of the 35 specialists is the same class. This is the exact branch order in `backend/app/agents/specialist.py`.
+Every one of the 35 specialists is the same class. This is the exact branch order in `backend/app/agents/runtime/specialist.py`.
 
 ```mermaid
 flowchart TD

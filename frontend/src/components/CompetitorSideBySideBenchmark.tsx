@@ -368,11 +368,16 @@ export function CompetitorSideBySideBenchmark({
                 { key: 'conversion_cro', label: '4. Conversion Intelligence (CRO)', desc: 'CTA Action Verbs, Value Proposition, Forms' },
                 { key: 'brand_trust', label: '5. Brand & Trust', desc: 'Verified Entity Metadata, HTTPS, Social Proof' },
               ].map((pillar) => {
-                const targetScore = (benchmarkResult.peers.find((p) => p.is_target)?.scores as any)?.[pillar.key] || 0;
-                const p1Score = (benchmarkResult.peers.find((p) => !p.is_target && p.domain === benchmarkResult.competitor_1_domain)?.scores as any)?.[pillar.key] || 0;
-                const p2Score = (benchmarkResult.peers.find((p) => !p.is_target && p.domain === benchmarkResult.competitor_2_domain)?.scores as any)?.[pillar.key] || 0;
-
-                const maxScore = Math.max(targetScore, p1Score, p2Score);
+                const readScore = (peer?: { scores?: Record<string, number> | null }) => {
+                  const value = peer?.scores?.[pillar.key];
+                  return typeof value === 'number' ? value : null;
+                };
+                const targetScore = readScore(benchmarkResult.peers.find((p) => p.is_target) as any);
+                const p1Score = readScore(benchmarkResult.peers.find((p) => !p.is_target && p.domain === benchmarkResult.competitor_1_domain) as any);
+                const p2Score = readScore(benchmarkResult.peers.find((p) => !p.is_target && p.domain === benchmarkResult.competitor_2_domain) as any);
+                const measuredScores = [targetScore, p1Score, p2Score].filter((n): n is number => n != null);
+                const maxScore = measuredScores.length ? Math.max(...measuredScores) : null;
+                const showScore = (n: number | null) => (n == null ? '—' : `${n}%`);
 
                 return (
                   <div key={pillar.key} className="p-3.5 bg-paper-50 dark:bg-ink-900/30 rounded-lg border border-line space-y-2">
@@ -381,21 +386,21 @@ export function CompetitorSideBySideBenchmark({
                         <span className="font-bold text-xs text-ink">{pillar.label}</span>
                         <span className="text-[11px] text-ink-500 ml-2">({pillar.desc})</span>
                       </div>
-                      <span className="text-[10px] font-mono text-ink-500">Max Score: {maxScore}%</span>
+                      <span className="text-[10px] font-mono text-ink-500">Max score: {maxScore == null ? '—' : `${maxScore}%`}</span>
                     </div>
 
                     <div className="grid grid-cols-3 gap-3 font-mono text-xs">
-                      <div className={`p-2 rounded border ${targetScore === maxScore ? 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-300 text-emerald-900 dark:text-emerald-200 font-bold' : 'bg-white dark:bg-ink-950 border-line text-ink'}`}>
+                      <div className={`p-2 rounded border ${targetScore != null && targetScore === maxScore ? 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-300 text-emerald-900 dark:text-emerald-200 font-bold' : 'bg-white dark:bg-ink-950 border-line text-ink'}`}>
                         <span className="text-[10px] block text-ink-400">Target ({cleanTarget})</span>
-                        <span className="text-sm">{targetScore}%</span>
+                        <span className="text-sm">{showScore(targetScore)}</span>
                       </div>
-                      <div className={`p-2 rounded border ${p1Score === maxScore ? 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-300 text-emerald-900 dark:text-emerald-200 font-bold' : 'bg-white dark:bg-ink-950 border-line text-ink'}`}>
+                      <div className={`p-2 rounded border ${p1Score != null && p1Score === maxScore ? 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-300 text-emerald-900 dark:text-emerald-200 font-bold' : 'bg-white dark:bg-ink-950 border-line text-ink'}`}>
                         <span className="text-[10px] block text-ink-400">{benchmarkResult.competitor_1_domain}</span>
-                        <span className="text-sm">{p1Score}%</span>
+                        <span className="text-sm">{showScore(p1Score)}</span>
                       </div>
-                      <div className={`p-2 rounded border ${p2Score === maxScore ? 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-300 text-emerald-900 dark:text-emerald-200 font-bold' : 'bg-white dark:bg-ink-950 border-line text-ink'}`}>
+                      <div className={`p-2 rounded border ${p2Score != null && p2Score === maxScore ? 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-300 text-emerald-900 dark:text-emerald-200 font-bold' : 'bg-white dark:bg-ink-950 border-line text-ink'}`}>
                         <span className="text-[10px] block text-ink-400">{benchmarkResult.competitor_2_domain}</span>
-                        <span className="text-sm">{p2Score}%</span>
+                        <span className="text-sm">{showScore(p2Score)}</span>
                       </div>
                     </div>
                   </div>

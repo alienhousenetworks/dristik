@@ -6,6 +6,13 @@ interface EngineQueryResult {
   position?: number | null;
   was_cited: boolean;
   cited_url?: string | null;
+  source_used?: string;
+  is_factually_correct?: boolean | null;
+  answer_completeness?: string;
+  brand_accuracy?: string;
+  competitor_confusion?: boolean;
+  has_hallucination?: boolean;
+  hallucination_note?: string | null;
   competitor_cited_instead?: string | null;
   source_domains_used: string[];
   synthesized_snippet: string;
@@ -384,6 +391,88 @@ export function RealAiCitationTracker({
         </div>
         )}
       </div>
+
+      {/* Mode B Live Retrieval Benchmark Table */}
+      {data.tracked_queries.length > 0 && (
+        <div className="sheet border border-line rounded-lg p-5 space-y-3">
+          <div className="flex items-center justify-between">
+            <span className="label text-pine">Mode B · Live Answer Engine Retrieval Benchmark</span>
+            <span className="text-xs font-mono text-ink-500">Zero-Fake Empirical Telemetry</span>
+          </div>
+          <div className="border border-line rounded-md overflow-x-auto">
+            <table className="w-full text-left text-xs border-collapse">
+              <thead>
+                <tr className="bg-paper-100 border-b border-line text-[10px] font-mono uppercase text-ink-700 tracking-wider">
+                  <th className="py-2.5 px-3 font-semibold">Buyer Query</th>
+                  <th className="py-2.5 px-2 font-semibold">Engine</th>
+                  <th className="py-2.5 px-2 font-semibold text-center">Mentioned?</th>
+                  <th className="py-2.5 px-2 font-semibold text-center">Cited?</th>
+                  <th className="py-2.5 px-2 font-semibold text-center">Correct?</th>
+                  <th className="py-2.5 px-2 font-semibold">Source Used</th>
+                  <th className="py-2.5 px-2 font-semibold text-center">Rank</th>
+                  <th className="py-2.5 px-2 font-semibold">Completeness</th>
+                  <th className="py-2.5 px-2 font-semibold">Competitor Confusion</th>
+                  <th className="py-2.5 px-2 font-semibold">Hallucination</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-line text-[11px]">
+                {data.tracked_queries.flatMap((q) =>
+                  q.engines.map((eng, idx) => (
+                    <tr key={`${q.query_id}-${eng.engine}-${idx}`} className="hover:bg-paper-50">
+                      <td className="py-2 px-3 font-medium text-ink max-w-[200px] truncate" title={q.buyer_query}>
+                        "{q.buyer_query}"
+                      </td>
+                      <td className="py-2 px-2 font-mono font-semibold text-ink-800">
+                        {eng.engine}
+                      </td>
+                      <td className="py-2 px-2 text-center">
+                        <span className={`px-1.5 py-0.5 rounded text-[9px] font-mono font-bold ${
+                          eng.was_mentioned ? 'bg-emerald-100 text-good' : 'bg-paper-200 text-ink-500'
+                        }`}>
+                          {eng.was_mentioned ? 'Yes' : 'No'}
+                        </span>
+                      </td>
+                      <td className="py-2 px-2 text-center">
+                        <span className={`px-1.5 py-0.5 rounded text-[9px] font-mono font-bold ${
+                          eng.was_cited ? 'bg-emerald-100 text-good' : 'bg-red-100 text-bad'
+                        }`}>
+                          {eng.was_cited ? 'Yes' : 'No'}
+                        </span>
+                      </td>
+                      <td className="py-2 px-2 text-center">
+                        <span className={`px-1.5 py-0.5 rounded text-[9px] font-mono font-bold ${
+                          eng.is_factually_correct ? 'bg-emerald-100 text-good' : (eng.is_factually_correct === false ? 'bg-red-100 text-bad' : 'bg-paper-200 text-ink-600')
+                        }`}>
+                          {eng.is_factually_correct ? 'Yes' : (eng.is_factually_correct === false ? 'No' : '—')}
+                        </span>
+                      </td>
+                      <td className="py-2 px-2 font-mono text-[10px] text-ink-700">
+                        {eng.source_used || (eng.was_cited ? data.target_domain : (eng.source_domains_used?.[0] || '—'))}
+                      </td>
+                      <td className="py-2 px-2 text-center font-mono text-[10px] text-ink-700">
+                        {eng.position ? `#${eng.position}` : '—'}
+                      </td>
+                      <td className="py-2 px-2 text-[10px] text-ink-700">
+                        {eng.answer_completeness || (eng.was_cited ? 'Complete' : eng.was_mentioned ? 'Partial' : 'Missing')}
+                      </td>
+                      <td className="py-2 px-2 text-[10px]">
+                        <span className={eng.competitor_cited_instead || eng.competitor_confusion ? 'text-warn font-semibold' : 'text-ink-500'}>
+                          {eng.competitor_cited_instead ? `Cited: ${eng.competitor_cited_instead}` : (eng.competitor_confusion ? 'Detected' : 'None')}
+                        </span>
+                      </td>
+                      <td className="py-2 px-2 text-[10px]">
+                        <span className={eng.has_hallucination ? 'text-bad font-semibold' : 'text-ink-500'}>
+                          {eng.has_hallucination ? 'Flagged' : 'None'}
+                        </span>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       {selectedQuery && (
         <div className="sheet border border-line rounded-lg p-5 space-y-4">

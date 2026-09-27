@@ -303,7 +303,7 @@ class SchemaContentCrosschecker:
         if "Organization" not in detected_types:
             recommendations.append("Deploy Schema.org/Organization on the homepage with canonical brand name and sameAs profile links.")
         if "FAQPage" not in detected_types:
-            recommendations.append("Add FAQPage structured data matching visible accordion questions to enable direct AI citation capture.")
+            recommendations.append("Add FAQPage structured data matching visible accordion questions to enable direct AI citation capture in answer engines (Note: Google restricted standard SERP FAQ rich snippets in Aug 2023 to gov/health authorities; value is primarily in AEO/GEO extractability).")
 
         summary = (
             f"Schema Grounding Score: {grounding_score:.0f}/100. "

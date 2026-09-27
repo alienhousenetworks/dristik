@@ -51,3 +51,69 @@ class Evidence(BaseModel):
 
     model_config = ConfigDict(frozen=True)
 
+    def to_ref(self) -> "EvidenceRef":
+        st = (self.source_type or "").lower()
+        if st in ("crawl", "http", "dom", "html", "robots", "sitemap"):
+            mapped_st = "crawl"
+        elif st in ("measured", "perf", "performance", "crux", "lighthouse", "meta"):
+            mapped_st = "measured"
+        elif st in ("external", "gsc", "ga4", "ahrefs", "semrush", "dataforseo"):
+            mapped_st = "external"
+        else:
+            mapped_st = "derived"
+        return EvidenceRef(
+            source_type=mapped_st,
+            source_id=self.id,
+            evidence_hash=self.hash,
+            observed_at=self.timestamp,
+            methodology_version="dristik_v2.1",
+            url=self.url,
+            selector=self.selector,
+            snippet=(self.text[:200] if self.text else None),
+            observed_value=self.value,
+            collector_or_analyzer=self.analyzer,
+            metadata=dict(self.metadata),
+        )
+
+
+class DataAvailabilityStatus(str, Enum):
+    AVAILABLE = "available"
+    UNAVAILABLE = "unavailable"
+    NOT_CONNECTED = "not_connected"
+    NOT_CONFIGURED = "not_configured"
+    NOT_EVALUATED = "not_evaluated"
+    INSUFFICIENT_EVIDENCE = "insufficient_evidence"
+    NOT_APPLICABLE = "not_applicable"
+
+
+class DataAvailability(BaseModel):
+    status: DataAvailabilityStatus = Field(default=DataAvailabilityStatus.AVAILABLE)
+    reason: Optional[str] = None
+    source: Optional[str] = None
+    missing_evidence_required: Optional[str] = None
+    required_action: Optional[str] = None
+    observed_at: datetime = Field(default_factory=datetime.utcnow)
+
+    model_config = ConfigDict(frozen=True)
+
+
+class EvidenceRef(BaseModel):
+    source_type: str = Field(
+        default="crawl",
+        description="Classification of evidence origin: crawl, measured, derived, external",
+    )
+    source_id: str = Field(..., description="Unique identifier of raw evidence node or analyzer")
+    evidence_hash: str = Field(..., description="SHA-256 cryptographic hash of extracted payload")
+    observed_at: datetime = Field(default_factory=datetime.utcnow)
+    methodology_version: str = Field(default="dristik_v2.1")
+    url: Optional[str] = None
+    selector: Optional[str] = None
+    snippet: Optional[str] = None
+    observed_value: Optional[Any] = None
+    collector_or_analyzer: Optional[str] = None
+    parent_evidence_refs: list[str] = Field(default_factory=list, description="IDs of parent evidence nodes for derived claims")
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+    model_config = ConfigDict(frozen=True)
+
+

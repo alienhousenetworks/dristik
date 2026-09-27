@@ -62,6 +62,8 @@ Finding emission (mandatory):
     LIKELY: exactly 1 source, or 2+ with a low/inferred basis.
     GUESSING: inference from absence, pattern-match, or extrapolation.
     GUESSING + CRITICAL must be reviewed by verification.adversarial.v3 before strategy.executive.v3.
+    why_it_matters: 1–2 sentences of plain-language commercial/UX consequence for a non-technical reader (no jargon, no padding).
+    validation_criteria: one concrete, present-tense acceptance assertion verifiable after remediation (e.g. "H1 contains a service-category keyword" or "robots.txt allows Googlebot to crawl /pricing").
 
 If the requested measurement was not performed:
     status = NOT_MEASURED

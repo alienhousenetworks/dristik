@@ -30,10 +30,11 @@ DANGLING_ANAPHORA = [
 ]
 
 FLUFF_TERMS = [
-    "revolutionize", "unprecedented", "cutting-edge", "seamless", "seamlessly",
+    "revolutionize", "revolutionary", "unprecedented", "cutting-edge", "seamless", "seamlessly",
     "next-generation", "next-gen", "unlock growth", "future of business",
-    "game-changer", "game-changing", "innovative solutions", "synergy",
-    "reimagine", "all-in-one", "world-class", "best-in-class", "supercharge"
+    "game-changer", "game-changing", "innovative solutions", "synergy", "synergistic",
+    "reimagine", "all-in-one", "world-class", "best-in-class", "supercharge",
+    "robust", "state-of-the-art", "paradigm",
 ]
 
 FACTUAL_INDICATORS = [
@@ -181,40 +182,105 @@ class CitationPassageAnalyzer:
 
         return clarity, attribution, info_gain, factuality, tier, detected_subj, fluff_found, factual_anchors
 
+    def _to_third_person(self, verb: str) -> str:
+        word = verb.lower()
+        irregular = {
+            "are": "is", "is": "is", "have": "has", "has": "has",
+            "do": "does", "focus": "focuses",
+        }
+        if word in irregular:
+            return irregular[word]
+        if word.endswith("y") and len(word) > 2 and word[-2] not in "aeiou":
+            return word[:-1] + "ies"
+        if word.endswith(("s", "sh", "ch", "x", "z", "o")):
+            return word + "es"
+        return word + "s"
+
+    def _conjugate_phrase(self, phrase: str) -> str:
+        parts = re.split(r"(\s+and\s+|,\s*)", phrase.strip())
+        return "".join(
+            self._to_third_person(part) if re.fullmatch(r"[A-Za-z]+", part) else part
+            for part in parts
+        )
+
+    def _same_text(self, left: str, right: str) -> bool:
+        def norm(value: str) -> str:
+            return re.sub(r"[^a-z0-9]+", " ", value.lower()).strip()
+        return norm(left) == norm(right)
+
     def _generate_rewrite(
         self,
         text: str,
         brand: str,
         fluff_found: List[str],
         detected_subj: str
-    ) -> Tuple[str, str]:
+    ) -> Tuple[Optional[str], Optional[str]]:
         """
-        Synthesizes a clean, machine-citable rewrite replacing pronouns and fluff.
+        Edit only pronouns and empty marketing words already in the sentence.
+        Return nothing when the sentence would stay the same.
         """
-        rewritten = text
-        brand_name = brand or "The Company"
+        brand_name = (brand or "").strip()
+        if not brand_name:
+            return None, None
+        rewritten = re.sub(r"\s+", " ", text).strip()
+        changes: List[str] = []
 
-        # Replace generic "We provide..." with "[Brand] provides..."
-        rewritten = re.sub(r"^(?:we\s+|our\s+team\s+)(provides|develops|builds|offers|specializes\s+in|helps)", f"{brand_name} \\1", rewritten, flags=re.I)
-        rewritten = re.sub(r"^(?:we\s+are\s+a\s+|we\s+are\s+an\s+)", f"{brand_name} is an ", rewritten, flags=re.I)
-
-        # Replace common fluff buzzwords
         for fl in fluff_found:
-            if fl in ["cutting-edge", "next-generation", "next-gen", "revolutionary"]:
-                rewritten = re.sub(rf"\b{re.escape(fl)}\b", "production-grade", rewritten, flags=re.I)
-            elif fl in ["seamless", "seamlessly"]:
-                rewritten = re.sub(rf"\b{re.escape(fl)}\b", "directly", rewritten, flags=re.I)
-            elif fl in ["empower", "empowers"]:
-                rewritten = re.sub(rf"\b{re.escape(fl)}\b", "enables", rewritten, flags=re.I)
-            elif fl in ["game-changer", "game-changing"]:
-                rewritten = re.sub(rf"\b{re.escape(fl)}\b", "high-performance", rewritten, flags=re.I)
+            cleaned = re.sub(rf"\b{re.escape(fl)}\b", "", rewritten, flags=re.I)
+            cleaned = re.sub(r"\s{2,}", " ", cleaned)
+            cleaned = re.sub(r"\s+([,.;])", r"\1", cleaned).strip()
+            if not self._same_text(cleaned, rewritten):
+                rewritten = cleaned
+                changes.append(f"removed \"{fl}\"")
 
-        # Ensure brand name is present if not already
-        if brand_name.lower() not in rewritten.lower():
-            rewritten = f"{brand_name}: {rewritten}"
+        opening = re.match(
+            r"^We\s+((?:[A-Za-z]+(?:,\s*|\s+and\s+))*[A-Za-z]+)\b(.*)$",
+            rewritten,
+            flags=re.I,
+        )
+        if opening and opening.group(1).lower() not in {"are", "is"}:
+            rewritten = f"{brand_name} {self._conjugate_phrase(opening.group(1))}{opening.group(2)}"
+            changes.append("replaced opening \"We\" with the company name")
+        else:
+            are_match = re.match(r"^We\s+are\s+(?:an?\s+)?(.*)$", rewritten, flags=re.I)
+            if are_match:
+                rewritten = f"{brand_name} is {are_match.group(1).strip()}"
+                changes.append("replaced \"We are\" with the company name")
 
-        why = "Replaces ambiguous pronouns with explicit entity attribution, eliminates subjective marketing adjectives, and frames the statement as an authoritative machine-citable passage."
-        return rewritten, why
+        without_our = re.sub(r"\b[Oo]ur\b", f"{brand_name}'s", rewritten)
+        if not self._same_text(without_our, rewritten):
+            rewritten = without_our
+            changes.append("replaced \"our\" with the company name")
+
+        def _we_verb(match: re.Match) -> str:
+            return f"{brand_name} {self._to_third_person(match.group(1))}"
+
+        without_we = re.sub(r"\b[Ww]e\s+([A-Za-z]+)\b", _we_verb, rewritten)
+        if not self._same_text(without_we, rewritten):
+            rewritten = without_we
+            changes.append("replaced remaining \"we\" with the company name")
+
+        slogan = re.match(
+            r"^(?:Boost|Grow|Discover|Unlock|Transform)\b.+?\bwith\s+(.+?)\.?$",
+            rewritten,
+            flags=re.I,
+        )
+        if slogan:
+            offer = re.sub(r"\b(your|you)\b", "", slogan.group(1), flags=re.I)
+            offer = re.sub(r"\s{2,}", " ", offer).strip(" .")
+            if offer:
+                rewritten = f"{brand_name} offers {offer}."
+                changes.append("turned the second-person slogan into a statement of the offer")
+
+        if brand_name.lower() not in rewritten.lower() and "?" not in rewritten and not re.match(r"^[\d(]", rewritten):
+            body = rewritten[0].lower() + rewritten[1:] if rewritten else rewritten
+            rewritten = f"{brand_name} offers {body}"
+            changes.append("named the company as the subject of an unnamed offer")
+
+        rewritten = re.sub(r"\s{2,}", " ", rewritten).strip()
+        if not changes or self._same_text(rewritten, text):
+            return None, None
+        return rewritten, "Changed the crawled sentence: " + "; ".join(changes) + "."
 
     def analyze(
         self,
@@ -228,7 +294,7 @@ class CitationPassageAnalyzer:
         rewrites: List[CitationRewriteItem] = []
 
         passage_idx = 1
-        for url, raw_text in paragraphs[:40]:  # Evaluate top 40 candidate passages
+        for url, raw_text in paragraphs:
             clarity, attribution, info_gain, factuality, tier, detected_subj, fluff_found, factual_anchors = self._score_passage(raw_text, brand)
             total = clarity + attribution + info_gain + factuality
 
@@ -239,16 +305,21 @@ class CitationPassageAnalyzer:
             rec_text = None
             rec_why = None
 
-            if needs_rewrite and len(rewrites) < 8:
+            if needs_rewrite:
                 rec_text, rec_why = self._generate_rewrite(raw_text, brand, fluff_found, detected_subj)
-                rewrites.append(CitationRewriteItem(
-                    passage_id=pid,
-                    source_url=url,
-                    current_passage=raw_text[:280],
-                    recommended_rewrite=rec_text[:280],
-                    why=rec_why,
-                    estimated_score_improvement=f"{total:.0f} → {min(95, int(total + 28))}/100",
-                ))
+                if rec_text and rec_why:
+                    rescored = sum(self._score_passage(rec_text, brand)[:4])
+                    rewrites.append(CitationRewriteItem(
+                        passage_id=pid,
+                        source_url=url,
+                        current_passage=raw_text[:280],
+                        recommended_rewrite=rec_text[:280],
+                        why=rec_why,
+                        estimated_score_improvement=f"{total:.0f} → {min(100, round(rescored)):.0f}/100",
+                    ))
+                else:
+                    rec_text, rec_why = None, None
+                    needs_rewrite = False
 
             passages.append(CitationPassage(
                 passage_id=pid,

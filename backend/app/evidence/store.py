@@ -67,6 +67,10 @@ class EvidenceStore:
         fetch = self._current_fetch or {}
         fetched_at = fetch.get("fetched_at") or datetime.now(timezone.utc)
         snapshot_id = fetch.get("raw_snapshot_id")
+        meta = dict(metadata or {})
+        if fetch.get("content_sha256"):
+            meta["parent_document_sha256"] = fetch.get("content_sha256")
+
         if raw_source is not None:
             content_sha = compute_raw_source_hash(raw_source)
             snap = self._ensure_snapshots().put(
@@ -96,7 +100,7 @@ class EvidenceStore:
             content_sha256=content_sha,
             fetched_at=fetched_at if isinstance(fetched_at, datetime) else None,
             raw_snapshot_id=snapshot_id,
-            metadata=metadata or {},
+            metadata=meta,
         )
         self._evidence[ev_id] = evidence
         return evidence

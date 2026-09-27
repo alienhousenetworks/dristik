@@ -23,6 +23,8 @@ export interface FindingEvidence {
   excerpt?: string;
   type?: string;
   state?: string;
+  evidence_class?: EvidenceClass;
+  evidence_subtype?: string;
 }
 
 export interface CodePatch {
@@ -66,6 +68,63 @@ export interface Finding {
   source_agreement?: number;
   adversarial_reviewed?: boolean;
   held_from_executive?: boolean;
+  why_it_matters?: string;
+  validation_criteria?: string;
+  remediation_verification?: RemediationVerificationReport;
+  resolution_status?: 'OPEN' | 'RESOLVED' | 'VERIFYING' | 'REGRESSED' | string;
+  evidence_class?: EvidenceClass;
+  evidence_subtype?: string;
+  epistemic_level?: string;
+  evidence_scope?: 'PAGE_VERIFIED' | 'SAMPLE_VERIFIED' | 'ORIGIN_VERIFIED' | 'INDEX_OBSERVED' | 'SITE_INFERRED' | 'EXTERNAL_MEASURED';
+  scope_hit_count?: number | null;
+  scope_sample_size?: number | null;
+  cro_dissection?: CroEvidenceDissection;
+  surfaces_affected?: Array<{
+    surface: string;
+    url?: string;
+    selector?: string;
+    details?: string;
+  }>;
+}
+
+export interface CroEvidenceDissection {
+  observed_facts: string[];
+  inferred_impact: string;
+  requires_analytics: {
+    actual_abandonment_rate: string;
+    cta_conversion_rate: string;
+    form_completion_rate: string;
+    [key: string]: string;
+  };
+  analytics_connected: boolean;
+  grounded_metrics?: Record<string, any> | null;
+}
+
+export interface VerificationCheckItem {
+  name: string;
+  passed: boolean;
+  detail: string;
+}
+
+export interface RemediationVerificationReport {
+  verification_id: string;
+  finding_id: string;
+  analysis_id?: string;
+  target_url: string;
+  stage: 'FIX' | 'RECRAWL' | 'RECHECK' | 'COMPARE' | 'CERTIFY' | string;
+  status: 'RESOLVED' | 'PARTIALLY_RESOLVED' | 'FAILED_RECHECK' | 'PENDING' | string;
+  before_state: string;
+  after_state: string;
+  checks: VerificationCheckItem[];
+  passed_checks_count: number;
+  total_checks_count: number;
+  score_delta?: number | null;
+  verified_at: string;
+  evidence_seal: string;
+  certified_by?: string;
+  recrawl_status_code?: number;
+  recrawl_ttfb_ms?: number;
+  recrawl_content_type?: string;
 }
 
 export interface Claim {
@@ -109,6 +168,42 @@ export interface ThreeWayComparison {
   ai_answer_engine_perspective: string;
 }
 
+export interface EngineQueryResult {
+  engine: string;
+  was_mentioned: boolean;
+  position?: number | null;
+  was_cited: boolean;
+  cited_url?: string | null;
+  source_used?: string;
+  is_factually_correct?: boolean | null;
+  answer_completeness?: 'Complete' | 'Partial' | 'Missing' | 'Diverted';
+  brand_accuracy?: 'Accurate' | 'Distorted' | 'Omitted' | 'Unverified';
+  competitor_confusion?: boolean;
+  has_hallucination?: boolean;
+  hallucination_note?: string | null;
+  competitor_cited_instead?: string | null;
+  source_domains_used?: string[];
+  synthesized_snippet?: string;
+  extractability_health?: string;
+  failure_reason?: string | null;
+  failure_code?: string | null;
+}
+
+export interface LiveBenchmarkRow {
+  query: string;
+  engine: string;
+  was_mentioned: boolean;
+  was_cited: boolean;
+  is_factually_correct?: boolean | null;
+  source_used: string;
+  position?: number | null;
+  answer_completeness?: string;
+  brand_accuracy?: string;
+  competitor_confusion?: boolean;
+  has_hallucination?: boolean;
+  hallucination_note?: string | null;
+}
+
 export interface AiSearchQueryEvaluation {
   query: string;
   question_type: string;
@@ -126,6 +221,17 @@ export interface AiSearchQueryEvaluation {
   provenance_label?: 'LIVE_QUERIED' | 'MODEL_PREDICTED';
   model_version?: string;
   queried_at?: string;
+  // Mode B Benchmark attributes if evaluated against real engines
+  engine?: string;
+  was_mentioned?: boolean;
+  was_cited?: boolean;
+  is_factually_correct?: boolean | null;
+  source_used?: string;
+  position?: number | null;
+  answer_completeness?: string;
+  brand_accuracy?: string;
+  competitor_confusion?: boolean;
+  has_hallucination?: boolean;
 }
 
 export interface EvidenceLedgerItem {
@@ -211,6 +317,31 @@ export interface CharacterSafeCopy {
 }
 
 
+export interface ScoreDeductionItem {
+  finding_id: string;
+  title: string;
+  severity: string;
+  points_lost: number;
+  why_it_matters?: string;
+}
+
+export interface ScoreFormulaComponent {
+  component: string;
+  points_earned: number;
+  points_possible: number;
+  status: 'PASS' | 'PARTIAL' | 'DEFICIT';
+  provenance?: string;
+}
+
+export interface MathematicalDerivationRow {
+  category: string;
+  category_label: string;
+  raw_score: number;
+  weight_pct: number;
+  weight: number;
+  weighted_points: number;
+}
+
 export interface CategoryScore {
   category: Category;
   score: number;
@@ -220,6 +351,8 @@ export interface CategoryScore {
   strengths: string[];
   weaknesses: string[];
   summary: string;
+  deductions?: ScoreDeductionItem[];
+  formula_breakdown?: ScoreFormulaComponent[];
 }
 
 export interface OverallScoreResult {
@@ -230,6 +363,7 @@ export interface OverallScoreResult {
   health_label: string;
   category_scores: Record<string, CategoryScore>;
   intent_adjusted_weights: Record<string, number>;
+  mathematical_derivation?: MathematicalDerivationRow[];
 }
 
 export interface RoadmapItem {
@@ -241,6 +375,164 @@ export interface RoadmapItem {
   category: Category;
   related_finding_id?: string;
   code_snippet?: string;
+}
+
+export interface ExecutiveActionItem {
+  rank: number;
+  priority: 'P0' | 'P1' | 'P2' | 'P3' | string;
+  action: string;
+  impact: 'Very High' | 'High' | 'Medium' | 'Low' | string;
+  effort: 'Low' | 'Medium' | 'High' | string;
+  expected_outcome: string;
+  estimated_engineer_hours: number;
+  dependencies: string[];
+  validation: string;
+  category?: Category | string;
+  related_finding_id?: string;
+}
+
+export interface ExecutiveTopActionsPlan {
+  actions: ExecutiveActionItem[];
+  total_engineer_hours: number;
+  dependencies_flow: string;
+  validation_mode: string;
+}
+
+export interface AuditSnapshot {
+  snapshot_id: string;
+  run_label: string;
+  date: string;
+  score: number;
+  category_scores: Record<string, number>;
+  evidence_seal: string;
+  verified_schema_types: string[];
+  findings_count: number;
+  status: 'HEALTHY' | 'IMPROVED' | 'REGRESSION' | string;
+}
+
+export interface RegressionItem {
+  severity: 'CRITICAL' | 'HIGH' | 'MEDIUM' | string;
+  title: string;
+  category: string;
+  dimension_delta?: number | null;
+  description: string;
+  evidence_ref?: string;
+}
+
+export type EvidenceClass =
+  | 'OBSERVED'
+  | 'EXTERNALLY_VERIFIED'
+  | 'MODEL_INFERRED'
+  | 'HYPOTHESIS'
+  | 'RECOMMENDATION';
+
+export interface EvidenceTaxonomySubtype {
+  id: string;
+  name: string;
+  description: string;
+}
+
+export interface EvidenceTaxonomyClassBreakdown {
+  class_id: EvidenceClass;
+  label: string;
+  title: string;
+  epistemic_level: string;
+  description: string;
+  badge_color: string;
+  count: number;
+  percentage: number;
+  subtypes: EvidenceTaxonomySubtype[];
+}
+
+export interface EvidenceTaxonomyReport {
+  total_evidence_nodes: number;
+  epistemic_integrity_score: number;
+  class_counts: Record<string, number>;
+  subtype_counts: Record<string, number>;
+  classes_breakdown: EvidenceTaxonomyClassBreakdown[];
+  description: string;
+}
+
+export interface ViewportInspection {
+  device: 'desktop' | 'tablet' | 'mobile' | string;
+  width: number;
+  height: number;
+  above_the_fold: Record<string, any>;
+  detected_defects: string[];
+  screenshot_url?: string;
+  dom_anchors: string[];
+}
+
+export interface VisualUxInspectionReport {
+  inspected_at: string;
+  tested_devices: string[];
+  viewports: Record<string, ViewportInspection>;
+  overall_visual_ux_score?: number | null;
+  critical_visual_defects: Array<{
+    defect: string;
+    severity: string;
+    device: string;
+    evidence: string;
+    remediation: string;
+  }>;
+  combined_intelligence: Record<string, any>;
+}
+
+export interface GscAttributionData {
+  queries: Array<{ query: string; impressions: number; clicks: number; ctr: number; position: number }>;
+  impressions: number;
+  clicks: number;
+  ctr: number;
+  average_position: number;
+  pages: string[];
+  countries: Array<{ country: string; clicks: number; pct: number }>;
+  devices: Record<string, number>;
+  is_connected: boolean;
+}
+
+export interface Ga4AttributionData {
+  landing_pages: Array<{ path: string; sessions: number; bounce_rate: number; avg_session_duration_s: number }>;
+  engagement_rate: number;
+  conversion_rate: number;
+  funnels: Array<{ step: string; visitors: number; dropoff_pct: number }>;
+  events: Array<{ event_name: string; count: number }>;
+  traffic_sources: Array<{ source: string; sessions: number; pct: number }>;
+  is_connected: boolean;
+}
+
+export interface CrmAttributionData {
+  lead_source: Array<{ source: string; leads: number; mql: number; sql: number; won: number; revenue_inr: number }>;
+  lead_quality_score: number;
+  pipeline_value_inr: number;
+  closed_revenue_inr: number;
+  conversion_rate_lead_to_customer: number;
+  is_connected: boolean;
+}
+
+export interface LifecycleRevenueIntelligence {
+  domain: string;
+  stages: Record<string, {
+    name: string;
+    status: string;
+    summary?: string;
+    metrics?: Record<string, any>;
+  }>;
+  gsc: GscAttributionData;
+  ga4: Ga4AttributionData;
+  crm: CrmAttributionData;
+  summary: string;
+}
+
+export interface RegressionReport {
+  has_regression: boolean;
+  regression_count: number;
+  score_delta: number;
+  baseline_run?: AuditSnapshot;
+  current_run?: AuditSnapshot;
+  regressions: RegressionItem[];
+  historical_timeline: AuditSnapshot[];
+  summary: string;
+  detected_at: string;
 }
 
 export interface TelemetryData {
@@ -487,6 +779,11 @@ export interface ExecutiveReport {
   roadmap_7_days: RoadmapItem[];
   roadmap_30_days: RoadmapItem[];
   roadmap_90_days: RoadmapItem[];
+  top_10_actions?: ExecutiveTopActionsPlan;
+  regression_report?: RegressionReport;
+  evidence_taxonomy?: EvidenceTaxonomyReport;
+  visual_ux?: VisualUxInspectionReport;
+  lifecycle_revenue?: LifecycleRevenueIntelligence;
   telemetry: TelemetryData;
   crawl_manifest?: CrawlManifest;
   page_reports?: PageReport[];
@@ -498,6 +795,27 @@ export interface ExecutiveReport {
     score: number | null;
     summary: string;
     signals: Array<{ key: string; status: string; summary: string }>;
+  };
+  ai_visibility_scorecard?: {
+    status: string;
+    measurement_note?: string;
+    engines_measured: number;
+    engines_requested: number;
+    queries: number;
+    repeats: number;
+    successful_runs: number;
+    failed_runs: number;
+    mention_rate_pct?: number | null;
+    citation_rate_pct?: number | null;
+    citation_accuracy_pct?: number | null;
+    entity_accuracy_pct?: number | null;
+    service_recognition_pct?: number | null;
+    icp_recognition_pct?: number | null;
+    pricing_recognition_pct?: number | null;
+    competitor_visibility_pct?: number | null;
+    hallucination_rate_pct?: number | null;
+    source_consistency_pct?: number | null;
+    not_measured_reason?: string | null;
   };
   geo_readiness?: {
     visibility_status: string;
@@ -536,11 +854,245 @@ export interface ExecutiveReport {
   integrity_repairs_log?: Array<{ timestamp: string; action: string; description: string; auditable: boolean; }>;
   certification_status?: 'CERTIFIED' | 'DEGRADED_SECTIONS_WITHHELD';
   withheld_sections?: Array<{ check: string; section: string; reason: string; }>;
+  meta_rollup?: MetaBucketRollup;
+  heading_hierarchy?: HeadingHierarchyRollup;
+  host_and_redirects?: RedirectAuditReport;
+  click_depth?: ClickDepthReport;
+  orphan_pages?: OrphanPageReport;
+  anchor_text_audit?: AnchorTextAudit;
+  form_audit?: FormAuditReport;
+  media_assets?: MediaAssetAuditReport;
+  per_engine_geo?: PerEngineAiMatrix;
+  security_audit?: SecurityAuditReport;
+  schema_validation?: SchemaValidationReport;
+  remediation_patches?: RemediationPatch[];
+}
+
+export interface SchemaIssue {
+  url: string;
+  schema_type: string;
+  severity: 'ERROR' | 'WARNING';
+  field: string;
+  message: string;
+}
+
+export interface SchemaValidationReport {
+  total_pages_with_schema: number;
+  total_entities_detected: number;
+  valid_entities_count: number;
+  entities_with_errors_count: number;
+  entities_with_warnings_count: number;
+  detected_types: string[];
+  issues: SchemaIssue[];
+  summary: string;
+}
+
+export interface SecurityAuditReport {
+  target_domain?: string;
+  score?: number;
+}
+
+export interface MetaBucketItem {
+  url: string;
+  text?: string | null;
+  char_length: number;
+  pixel_length: number;
+}
+
+export interface MetaBucketRollup {
+  total_pages_evaluated: number;
+  missing_titles: MetaBucketItem[];
+  too_short_titles: MetaBucketItem[];
+  optimal_titles: MetaBucketItem[];
+  too_long_titles: MetaBucketItem[];
+  duplicate_titles: MetaBucketItem[];
+  title_issue_count: number;
+  missing_descriptions: MetaBucketItem[];
+  too_short_descriptions: MetaBucketItem[];
+  optimal_descriptions: MetaBucketItem[];
+  too_long_descriptions: MetaBucketItem[];
+  duplicate_descriptions: MetaBucketItem[];
+  description_issue_count: number;
+  title_summary: string;
+  description_summary: string;
+}
+
+export interface HeadingIssueItem {
+  url: string;
+  headings: string[];
+  issue_type: string;
+  detail: string;
+}
+
+export interface HeadingHierarchyRollup {
+  total_pages_evaluated: number;
+  missing_h1: HeadingIssueItem[];
+  multiple_h1: HeadingIssueItem[];
+  short_h1: HeadingIssueItem[];
+  long_h1: HeadingIssueItem[];
+  duplicate_h1: HeadingIssueItem[];
+  hierarchy_violations: Array<Record<string, any>>;
+  outline_tree_sample: Array<Record<string, any>>;
+  total_heading_issues: number;
+  h1_health_score: number;
+}
+
+export interface RedirectHop {
+  status: number;
+  url: string;
+  location?: string | null;
+}
+
+export interface HostVariantProbeResult {
+  origin_url: string;
+  final_destination: string;
+  status_code: number;
+  hops: RedirectHop[];
+  hop_count: number;
+  proper_canonical_redirect: boolean;
+  error?: string | null;
+}
+
+export interface RedirectAuditReport {
+  target_domain: string;
+  canonical_destination: string;
+  host_variants: Record<string, HostVariantProbeResult>;
+  proper_301_consolidation: boolean;
+  has_chain_gt_1_hop: boolean;
+  has_redirect_loop: boolean;
+  redirects_to_4xx: boolean;
+  chains_recorded: Array<Record<string, any>>;
+  summary: string;
+}
+
+export interface ClickDepthReport {
+  homepage_url: string;
+  total_pages_analyzed: number;
+  depth_1_count: number;
+  depth_2_count: number;
+  depth_3_count: number;
+  depth_4_plus_count: number;
+  max_click_depth: number;
+  pages_by_depth: Record<string, string[]>;
+  depth_distribution_pct: Record<string, number>;
+  high_depth_warning_count: number;
+}
+
+export interface OrphanPageReport {
+  total_sitemap_urls: number;
+  total_crawled_urls: number;
+  orphan_urls: string[];
+  orphan_count: number;
+  orphan_percentage: number;
+  summary: string;
+}
+
+export interface AnchorTextAudit {
+  total_links_analyzed: number;
+  generic_anchor_count: number;
+  low_equity_terms_found: Array<{ term: string; count: number }>;
+  flagged_anchor_instances: Array<{ url: string; anchor: string; reason: string }>;
+  summary: string;
+}
+
+export interface FormAuditItem {
+  page_url: string;
+  form_id?: string | null;
+  form_action?: string | null;
+  input_count: number;
+  missing_labels_count: number;
+  input_types: string[];
+  submit_button_text: string;
+  has_captcha_or_honeypot: boolean;
+  has_confirmation_destination: boolean;
+  friction_risk: string;
+}
+
+export interface FormAuditReport {
+  total_forms_detected: number;
+  forms: FormAuditItem[];
+  forms_with_missing_labels: number;
+  forms_without_captcha: number;
+  forms_without_confirmation: number;
+  cro_friction_grade: string;
+  friction_score: number;
+  actionable_remedies: string[];
+}
+
+export interface MediaAssetItem {
+  url: string;
+  page_url: string;
+  alt_text?: string | null;
+  has_alt: boolean;
+  is_empty_alt: boolean;
+  has_dimensions: boolean;
+  format: string;
+  is_modern_format: boolean;
+  is_insecure_http: boolean;
+}
+
+export interface MediaAssetAuditReport {
+  total_images_analyzed: number;
+  missing_alt_count: number;
+  empty_alt_count: number;
+  missing_dimensions_count: number;
+  modern_format_count: number;
+  non_modern_format_count: number;
+  mixed_content_count: number;
+  mixed_content_urls: string[];
+  cls_risk_images: Array<Record<string, string>>;
+  summary: string;
+}
+
+export interface PerEngineAiScore {
+  engine_name: string;
+  score: number;
+  grade: string;
+  readiness_band: string;
+  strengths: string[];
+  critical_gaps: string[];
+  recommended_fixes: string[];
+}
+
+export interface InformationGainReport {
+  score: number;
+  grade: string;
+  has_proprietary_statistics: boolean;
+  has_benchmark_tables: boolean;
+  has_methodology_section: boolean;
+  has_executive_quotes: boolean;
+  fluff_ratio_score: number;
+  original_data_signals: string[];
+  commodity_fluff_signals: string[];
+  recommendations: string[];
+}
+
+export interface AiBotDirectivesReport {
+  robots_txt_status: string;
+  gptbot_allowed: boolean;
+  perplexitybot_allowed: boolean;
+  claudebot_allowed: boolean;
+  google_extended_allowed: boolean;
+  llms_txt_found: boolean;
+  llms_txt_url?: string | null;
+  llms_txt_generated?: string | null;
+  recommendations: string[];
+}
+
+export interface PerEngineAiMatrix {
+  chatgpt: PerEngineAiScore;
+  perplexity: PerEngineAiScore;
+  google_aio: PerEngineAiScore;
+  claude_gemini: PerEngineAiScore;
+  overall_engine_score: number;
+  overall_engine_grade: string;
+  information_gain: InformationGainReport;
+  ai_bot_directives: AiBotDirectivesReport;
 }
 
 export interface ChartSpecification {
   id: string;
-  chart_type: 'radar' | 'latency_curve' | 'defect_donut' | 'engine_comparison_bar' | 'journey_funnel' | 'content_depth_bar';
+  chart_type: 'radar' | 'latency_curve' | 'defect_donut' | 'engine_comparison_bar' | 'journey_funnel' | 'content_depth_bar' | 'count_bar';
   title: string;
   subtitle: string;
   ai_insight: string;
@@ -657,29 +1209,36 @@ export interface PaymentVoucher {
 
 export type TabId =
   | 'overview'
+  | 'seo'
+  | 'geo'
+  | 'aeo'
+  | 'cro'
+  | 'competitors'
+  | 'pages'
+  | 'findings'
+  | 'patches'
+  | 'roadmap'
+  | 'verification'
+  | 'report'
+  | 'plans'
+  // Legacy aliases for backward compatibility
   | 'search_intelligence'
   | 'ai_search_intelligence'
   | 'website_experience'
   | 'conversion_intelligence'
   | 'brand_entity_intelligence'
-  | 'pages'
   | 'perspectives'
   | 'ai_citations'
-  | 'competitors'
   | 'lead_gen'
   | 'search_console'
-  | 'ai_search'
-  | 'findings'
-  | 'roadmap'
-  | 'report'
-  | 'plans';
+  | 'ai_search';
 
 export interface PillarScoreData {
   id: TabId;
   name: string;
   shortName: string;
   categoryTag: string;
-  score: number;
+  score: number | null;
   grade: string;
   health: 'GOOD' | 'FAIR' | 'POOR';
   headline: string;
@@ -689,12 +1248,19 @@ export interface PillarScoreData {
 }
 
 export interface WebsiteIntelligenceRollup {
+  // Enterprise separated pillars
+  seo: PillarScoreData;
+  geo: PillarScoreData;
+  aeo: PillarScoreData;
+  cro: PillarScoreData;
+  competitors: PillarScoreData;
+  // Legacy pillar mappings for backward compatibility
   search_intelligence: PillarScoreData;
   ai_search_intelligence: PillarScoreData;
   website_experience: PillarScoreData;
   conversion_intelligence: PillarScoreData;
   brand_entity_intelligence: PillarScoreData;
-  sxo_score: number;
+  sxo_score: number | null;
   sxo_health: 'GOOD' | 'FAIR' | 'POOR';
 }
 
@@ -722,6 +1288,23 @@ export interface AuthUser {
   role_label: string;
   is_system: boolean;
   permissions: string[];
+  auth_provider?: string;
+  avatar_url?: string;
+}
+
+export interface AuthSSOProvider {
+  name: string;
+  configured: boolean;
+  client_id_env: string;
+  redirect_uri: string;
+}
+
+export interface AuthProvidersResponse {
+  providers: {
+    google: AuthSSOProvider;
+    github: AuthSSOProvider;
+    [key: string]: AuthSSOProvider;
+  };
 }
 
 export interface ContactRecord {
@@ -809,7 +1392,18 @@ export interface PlatformOverview {
 export type PatchRiskLevel = 'SAFE_AUTO' | 'HUMAN_APPROVAL' | 'DEVELOPER_REQUIRED';
 export type PatchOperation = 'REPLACE' | 'INSERT_HEAD' | 'INSERT_BODY' | 'UPDATE_JSONLD' | 'UPDATE_FILE' | 'APPEND_ROBOTS';
 export type PatchApprovalStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'APPLIED' | 'ROLLED_BACK' | 'FAILED';
-export type ConnectorType = 'wordpress' | 'github' | 'shopify' | 'webflow' | 'google_search_console' | 'generic';
+export type ConnectorType =
+  | 'wordpress'
+  | 'github'
+  | 'shopify'
+  | 'webflow'
+  | 'google_search_console'
+  | 'google_analytics_4'
+  | 'crm'
+  | 'dataforseo'
+  | 'live_ai_search'
+  | 'crux'
+  | 'generic';
 export type ConnectorHealthStatus = 'connected' | 'disconnected' | 'error' | 'unauthorized';
 
 export interface RemediationPatch {

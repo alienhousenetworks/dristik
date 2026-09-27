@@ -17,6 +17,22 @@ type AiSubTab = 'citations' | 'trends' | 'matrix' | 'extracts' | 'entities';
 type ExtractSubSection = 'questions' | 'passages' | 'triples';
 type EntitySubSection = 'surfaces' | 'schema';
 
+function passageKey(value?: string): string {
+  return (value || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+}
+
+function rewriteChangesTheSentence(current?: string, next?: string, why?: string): boolean {
+  if ((why || '').startsWith('Replaces ambiguous pronouns with explicit entity attribution')) return false;
+  const original = passageKey(current);
+  const rewritten = passageKey(next);
+  if (!rewritten || rewritten === original) return false;
+  const words = rewritten.split(' ');
+  for (let i = 1; i <= Math.min(6, words.length - 1); i += 1) {
+    if (words.slice(i).join(' ') === original) return false;
+  }
+  return true;
+}
+
 export function AiSearchIntelligenceView({
   report,
   analysisId,
@@ -30,18 +46,16 @@ export function AiSearchIntelligenceView({
   const [entitySection, setEntitySection] = useState<EntitySubSection>('surfaces');
 
   const geo = report.geo_readiness;
-  const questionsSupported = geo?.questions_supported || 0;
-  const questionsTotal = geo?.questions_total || (geo?.questions?.length || 6);
-  const citationScore = report.honest_scores?.ai_citation_score ?? 68;
-
-  // Layer 1 Extractability Data
-  const extractabilityScore = geo?.extractability_score ?? (
-    Math.round(((questionsSupported / Math.max(1, questionsTotal)) * 50) + 35)
-  );
+  const questionsSupported = geo?.questions_supported ?? null;
+  const questionsTotal = geo?.questions_total ?? geo?.questions?.length ?? null;
+  const extractabilityScore = typeof geo?.extractability_score === 'number' ? geo.extractability_score : null;
   const qGraph = geo?.question_graph_50;
   const entityConsistency = geo?.entity_consistency;
   const claimsAnalysis = geo?.claims_analysis;
   const citationPassages = geo?.citation_passages;
+  const usefulRewrites = (citationPassages?.rewrite_recommendations || []).filter((rew: { current_passage?: string; recommended_rewrite?: string; why?: string }) =>
+    rewriteChangesTheSentence(rew.current_passage, rew.recommended_rewrite, rew.why)
+  );
   const schemaCrosscheck = geo?.schema_crosscheck;
 
   // Active question set (prefers 50-question graph if present)
@@ -59,9 +73,9 @@ export function AiSearchIntelligenceView({
       title="Layer 1 AI Extractability & Live Citation Benchmark"
       description="Deterministic on-page machine extractability cross-referenced against live answer engine citations."
       scoreLabel="Extractability"
-      score={Math.round(extractabilityScore)}
+      score={extractabilityScore == null ? '—' : Math.round(extractabilityScore)}
       metaLabel="Answers"
-      meta={`${qGraph?.supported_count ?? questionsSupported} / ${qGraph?.total_questions ?? questionsTotal}`}
+      meta={`${qGraph?.supported_count ?? questionsSupported ?? '—'} / ${qGraph?.total_questions ?? questionsTotal ?? '—'}`}
       tabs={[
         { id: 'citations', label: 'Live Citations' },
         { id: 'extracts', label: 'AI Extractability' },
@@ -112,7 +126,7 @@ export function AiSearchIntelligenceView({
             <div className="sheet border border-line p-4 rounded-lg space-y-1 bg-paper-50 dark:bg-ink-900/40">
               <span className="label text-[10px] block text-ink-500">Layer 1 Extractability</span>
               <span className="font-serif text-3xl font-bold text-ink">
-                {Math.round(extractabilityScore)}
+                {extractabilityScore == null ? '—' : Math.round(extractabilityScore)}
                 <span className="text-sm font-sans text-ink-400 font-normal">/100</span>
               </span>
               <span className="text-[11px] text-ink-500 block">Website-native proof</span>
@@ -134,14 +148,14 @@ export function AiSearchIntelligenceView({
                 <span className="text-sm font-sans text-ink-400 font-normal"> blocks</span>
               </span>
               <span className="text-[11px] text-ink-500 block">
-                {citationPassages?.rewrite_recommendations?.length ?? 0} rewrites available
+                {usefulRewrites.length} rewrites available
               </span>
             </div>
 
             <div className="sheet border border-line p-4 rounded-lg space-y-1 bg-paper-50 dark:bg-ink-900/40">
               <span className="label text-[10px] block text-ink-500">Claim Specificity</span>
               <span className="font-serif text-3xl font-bold text-ink">
-                {Math.round(claimsAnalysis?.aggregate_specificity_score ?? 72)}%
+                {typeof claimsAnalysis?.aggregate_specificity_score === 'number' ? `${Math.round(claimsAnalysis.aggregate_specificity_score)}%` : '—'}
               </span>
               <span className="text-[11px] text-ink-500 block">
                 {claimsAnalysis?.citable_claims_count ?? 0} verified triples
@@ -261,11 +275,11 @@ export function AiSearchIntelligenceView({
             {extractSection === 'passages' && (
               <div className="space-y-6">
                 {/* High Priority Rewrites */}
-                {citationPassages?.rewrite_recommendations && citationPassages.rewrite_recommendations.length > 0 && (
+                {usefulRewrites.length > 0 && (
                   <div className="space-y-3">
                     <div className="flex items-center justify-between">
                       <h4 className="font-serif text-lg font-bold text-ink">
-                        High-Impact Drop-In Rewrites ({citationPassages.rewrite_recommendations.length})
+                        High-Impact Drop-In Rewrites ({usefulRewrites.length})
                       </h4>
                       <span className="text-xs text-pine font-mono font-semibold">
                         Optimized for Perplexity, SearchGPT & Gemini Grounding
@@ -273,7 +287,7 @@ export function AiSearchIntelligenceView({
                     </div>
 
                     <div className="space-y-4">
-                      {citationPassages.rewrite_recommendations.map((rew: any, i: number) => (
+                      {usefulRewrites.map((rew: any, i: number) => (
                         <div key={i} className="bg-paper-50 dark:bg-ink-900 border border-line rounded-lg p-4 space-y-3">
                           <div className="flex items-center justify-between gap-2 border-b border-line pb-2">
                             <span className="text-xs font-mono font-bold text-ink">Passage ID: {rew.passage_id}</span>
@@ -456,7 +470,7 @@ export function AiSearchIntelligenceView({
                     <div className="flex items-center justify-between border-b border-line pb-2">
                       <span className="text-xs font-mono font-bold text-ink uppercase">{sKey.replace('_', ' ')}</span>
                       <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-paper-100 dark:bg-ink-800 text-ink-600">
-                        Confidence {Math.round((sVal.confidence || 0.8) * 100)}%
+                        {typeof sVal.confidence === 'number' ? `Confidence ${Math.round(sVal.confidence * 100)}%` : 'Confidence not scored'}
                       </span>
                     </div>
 
@@ -467,7 +481,7 @@ export function AiSearchIntelligenceView({
                       </div>
                       <div>
                         <span className="text-ink-500 font-mono">Category:</span>{' '}
-                        <span className="font-semibold text-pine">{sVal.category_observed || 'General business'}</span>
+                        <span className="font-semibold text-pine">{sVal.category_observed || '—'}</span>
                       </div>
                       {sVal.locations_observed && sVal.locations_observed.length > 0 && (
                         <div>

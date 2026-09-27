@@ -15,7 +15,8 @@ export function BrandEntityIntelligenceView({ report }: BrandEntityIntelligenceV
   const semantic = report.semantic_business;
   const contradictions = report.contradictions || (semantic?.contradiction ? [semantic.contradiction] : []);
   const schemaTypes = report.geo_readiness?.schema_types || [];
-  const trustScore = Math.round(report.scores?.category_scores?.['TRUST_AUTHORITY']?.score || 78);
+  const rawTrust = report.scores?.category_scores?.['TRUST_AUTHORITY']?.score;
+  const trustScore = typeof rawTrust === 'number' ? Math.round(rawTrust) : null;
 
   return (
     <PillarShell
@@ -23,7 +24,7 @@ export function BrandEntityIntelligenceView({ report }: BrandEntityIntelligenceV
       title="Entity, schema, and trust"
       description="Whether the business is consistent, structured, and corroborated across the pages we crawled."
       scoreLabel="Authority"
-      score={trustScore}
+      score={trustScore ?? '—'}
       metaLabel="Conflicts"
       meta={contradictions.length}
       tabs={[
@@ -50,19 +51,19 @@ export function BrandEntityIntelligenceView({ report }: BrandEntityIntelligenceV
             <div className="bg-paper-50 border border-line p-3.5 rounded-lg space-y-1">
               <span className="label text-[10px] block">Industry Classification</span>
               <span className="font-semibold text-ink text-sm block">
-                {profile?.industry || 'Technology'}
+                {profile?.industry || '—'}
               </span>
             </div>
             <div className="bg-paper-50 border border-line p-3.5 rounded-lg space-y-1">
               <span className="label text-[10px] block">Target Geography</span>
               <span className="font-semibold text-ink text-sm block">
-                {profile?.geography || 'Global'}
+                {profile?.geography || '—'}
               </span>
             </div>
             <div className="bg-paper-50 border border-line p-3.5 rounded-lg space-y-1">
               <span className="label text-[10px] block">Disambiguation Status</span>
-              <span className="font-semibold text-good text-sm block">
-                Corroborated in DOM
+              <span className="font-semibold text-ink text-sm block">
+                {profile?.business_name ? 'Name found on the crawl' : 'Not confirmed'}
               </span>
             </div>
           </div>
@@ -101,7 +102,7 @@ export function BrandEntityIntelligenceView({ report }: BrandEntityIntelligenceV
                     ⚠️ {c.contradiction_type || 'Business Identity Conflict'}
                   </span>
                   <span className="text-xs font-mono px-2 py-0.5 rounded bg-amber-200 text-amber-900">
-                    Confidence: {c.confidence ? `${Math.round(c.confidence * 100)}%` : '90%'}
+                    {typeof c.confidence === 'number' ? `Confidence: ${Math.round(c.confidence * 100)}%` : 'Confidence not scored'}
                   </span>
                 </div>
                 <p className="text-sm text-ink-800 leading-relaxed">{c.reason}</p>
@@ -110,9 +111,9 @@ export function BrandEntityIntelligenceView({ report }: BrandEntityIntelligenceV
           ) : (
             <div className="sheet border border-line rounded-lg p-6 text-center space-y-2">
               <span className="text-3xl">✅</span>
-              <h4 className="font-serif text-xl font-bold text-ink">Zero Identity Conflicts Detected</h4>
+              <h4 className="font-serif text-xl font-bold text-ink">No identity conflict was recorded</h4>
               <p className="text-xs text-ink-500 max-w-md mx-auto">
-                Website claims, titles, footer credentials, and business reality align consistently across all audited pages.
+                This audit did not store a contradiction. That is not a proof that every claim on the site agrees.
               </p>
             </div>
           )}
@@ -126,18 +127,18 @@ export function BrandEntityIntelligenceView({ report }: BrandEntityIntelligenceV
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div className="border border-line p-4 rounded-lg bg-paper-50 space-y-1">
               <span className="label text-[10px] block">Trust Authority Score</span>
-              <span className="font-serif text-3xl font-bold text-good">{trustScore} / 100</span>
-              <span className="text-xs text-ink-500 block">Verified credentials & proof</span>
+              <span className="font-serif text-3xl font-bold text-ink">{trustScore == null ? '—' : `${trustScore} / 100`}</span>
+              <span className="text-xs text-ink-500 block">{trustScore == null ? 'Not scored' : 'From this audit'}</span>
             </div>
             <div className="border border-line p-4 rounded-lg bg-paper-50 space-y-1">
               <span className="label text-[10px] block">Privacy & Legal Compliance</span>
-              <span className="font-serif text-3xl font-bold text-good">Verified</span>
-              <span className="text-xs text-ink-500 block">Policy & Terms links found</span>
+              <span className="font-serif text-3xl font-bold text-ink">—</span>
+              <span className="text-xs text-ink-500 block">Privacy and terms links were not scored here.</span>
             </div>
             <div className="border border-line p-4 rounded-lg bg-paper-50 space-y-1">
               <span className="label text-[10px] block">Contact Accessibility</span>
-              <span className="font-serif text-3xl font-bold text-ink">Transparent</span>
-              <span className="text-xs text-ink-500 block">Clear business address/email</span>
+              <span className="font-serif text-3xl font-bold text-ink">—</span>
+              <span className="text-xs text-ink-500 block">Address and email were not checked on this card.</span>
             </div>
           </div>
         </div>

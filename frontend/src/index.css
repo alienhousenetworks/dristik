@@ -274,7 +274,12 @@ code {
   }
 
   .no-print,
-  .no-print * {
+  .no-print *,
+  header.no-print,
+  aside.no-print,
+  footer.no-print,
+  main.no-print,
+  .print\:hidden {
     display: none !important;
   }
 
@@ -287,10 +292,14 @@ code {
   }
 
   .big4-page-break {
-    break-after: page !important;
-    page-break-after: always !important;
-    margin-bottom: 0 !important;
-    padding-bottom: 0 !important;
+    break-inside: auto !important;
+    page-break-inside: auto !important;
+  }
+
+  .audit-pdf-section {
+    break-inside: auto;
+    page-break-inside: auto;
+    overflow: visible !important;
   }
 
   .big4-avoid-break {
@@ -298,9 +307,156 @@ code {
     page-break-inside: avoid !important;
   }
 
+  .audit-pdf {
+    color: #111111;
+    font-family: 'Source Sans 3', Georgia, serif;
+    font-size: 10.5pt;
+    line-height: 1.4;
+  }
+
+  .audit-pdf h1 {
+    font-family: Georgia, 'Times New Roman', serif;
+    font-size: 22pt;
+    font-weight: 400;
+    margin: 0 0 4px;
+    color: #111111;
+  }
+
+  .audit-pdf h2 {
+    font-family: Georgia, 'Times New Roman', serif;
+    font-size: 13pt;
+    font-weight: 400;
+    margin: 18px 0 8px;
+    padding-top: 8px;
+    border-top: 1px solid #111111;
+    color: #111111;
+    break-after: avoid;
+    page-break-after: avoid;
+  }
+
+  .audit-pdf h3 {
+    font-family: Georgia, 'Times New Roman', serif;
+    font-size: 11pt;
+    font-weight: 400;
+    margin: 10px 0 4px;
+    color: #111111;
+  }
+
+  .audit-pdf p,
+  .audit-pdf li {
+    margin: 0 0 6px;
+    color: #111111;
+  }
+
+  .audit-pdf ul {
+    margin: 0 0 8px 18px;
+    padding: 0;
+  }
+
+  .audit-pdf-kicker,
+  .audit-pdf-meta,
+  .audit-pdf-note,
+  .audit-pdf-footer {
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-size: 8pt;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: #333333;
+  }
+
+  .audit-pdf-url {
+    margin: 0 0 8px;
+    font-size: 10pt;
+  }
+
+  .audit-pdf-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 0 0 10px;
+    font-size: 9pt;
+  }
+
+  .audit-pdf-table th,
+  .audit-pdf-table td {
+    border: 1px solid #222222;
+    padding: 4px 6px;
+    vertical-align: top;
+    text-align: left;
+    color: #111111;
+    background: #ffffff;
+  }
+
+  .audit-pdf-table thead th,
+  .audit-pdf-scores th {
+    font-weight: 600;
+    background: #f2f2f2;
+  }
+
+  .audit-pdf-block,
+  .audit-pdf-section {
+    break-inside: auto;
+  }
+
+  .audit-pdf-block {
+    margin: 0 0 8px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid #dddddd;
+  }
+
+  .audit-pdf-finding-title {
+    font-weight: 700;
+    margin-bottom: 2px;
+  }
+
+  .audit-pdf-pre {
+    white-space: pre-wrap;
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-size: 8pt;
+    border: 1px solid #222222;
+    padding: 6px;
+    margin: 4px 0 8px;
+  }
+
+  .audit-pdf-empty {
+    color: #333333;
+    font-style: italic;
+  }
+
+  .audit-pdf-bar {
+    display: grid;
+    grid-template-columns: 140px 1fr 32px;
+    gap: 8px;
+    align-items: center;
+    margin: 3px 0;
+    font-size: 9pt;
+  }
+
+  .audit-pdf-bar-track {
+    display: block;
+    height: 7px;
+    background: #eeeeee;
+    border: 1px solid #222222;
+  }
+
+  .audit-pdf-bar-track span {
+    display: block;
+    height: 100%;
+    background: #222222;
+  }
+
   .big4-break-before {
     break-before: page !important;
     page-break-before: always !important;
+  }
+
+  .audit-pdf svg {
+    overflow: visible !important;
+    max-width: 100% !important;
+  }
+
+  .audit-pdf pre {
+    white-space: pre-wrap !important;
+    word-break: break-word !important;
   }
 
   table {
@@ -324,4 +480,73 @@ code {
     white-space: pre-wrap !important;
     word-break: break-all !important;
   }
+
+  .audit-module {
+    page-break-after: always !important;
+    break-after: page !important;
+    margin-bottom: 2rem;
+  }
+
+  .audit-pdf-branding-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 2px solid #111111;
+    padding-bottom: 6px;
+    margin-bottom: 14px;
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-size: 8pt;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+  }
+
+  .audit-pdf-seal {
+    background: #111111;
+    color: #ffffff;
+    padding: 3px 8px;
+    font-size: 7.5pt;
+    letter-spacing: 0.08em;
+  }
+
+  .audit-pdf-subtitle {
+    font-size: 10pt;
+    font-style: italic;
+    color: #444444;
+    margin-top: -4px;
+    margin-bottom: 12px;
+  }
+
+  .audit-pdf-badge {
+    display: inline-block;
+    padding: 2px 6px;
+    font-size: 7.5pt;
+    font-weight: 700;
+    text-transform: uppercase;
+    border: 1px solid #111111;
+  }
+
+  .audit-pdf-badge.status-supported {
+    background: #dcfce7;
+    color: #14532d;
+    border-color: #16a34a;
+  }
+
+  .audit-pdf-badge.status-partial {
+    background: #fef9c3;
+    color: #713f12;
+    border-color: #ca8a04;
+  }
+
+  .audit-pdf-badge.status-unsupported {
+    background: #fee2e2;
+    color: #7f1d1d;
+    border-color: #dc2626;
+  }
+
+  .audit-pdf-badge.status-conflicting {
+    background: #fce7f3;
+    color: #831843;
+    border-color: #db2777;
+  }
 }
+

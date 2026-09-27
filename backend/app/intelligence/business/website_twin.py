@@ -6,7 +6,7 @@ Forms the long-term memory layer for historical tracking, simulation, and conver
 from typing import Dict, Any, List, Optional
 from datetime import datetime
 from pydantic import BaseModel, Field
-from app.domain.models import BusinessProfile, PageEvidence, OverallScoreResult, Finding, CodePatch
+from app.domain.models import BusinessProfile, PageEvidence, OverallScoreResult, Finding, CodePatch, AuditSnapshot
 
 class ConversionPath(BaseModel):
     landing_url: str
@@ -35,6 +35,7 @@ class WebsiteDigitalTwin(BaseModel):
     active_findings: List[Finding] = Field(default_factory=list)
     pending_patches: List[CodePatch] = Field(default_factory=list)
     ai_citation_readiness: Optional[float] = None
+    historical_snapshots: List[AuditSnapshot] = Field(default_factory=list)
 
     def update_from_mission(
         self,

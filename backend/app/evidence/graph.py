@@ -7,6 +7,7 @@ import uuid
 from typing import List, Dict, Optional, Any, Set
 from pydantic import BaseModel, Field
 from datetime import datetime
+from app.evidence.models import EvidenceRef
 
 class GraphNodeType(str):
     # Core Infrastructure
@@ -64,6 +65,7 @@ class EvidenceNode(BaseModel):
     url: Optional[str] = None
     selector: Optional[str] = None
     content_hash: Optional[str] = None
+    evidence_ref: Optional[EvidenceRef] = None
     properties: Dict[str, Any] = Field(default_factory=dict)
     created_at: str = Field(default_factory=lambda: datetime.now().isoformat())
 
@@ -95,6 +97,7 @@ class EvidenceGraph:
         url: Optional[str] = None,
         selector: Optional[str] = None,
         content_hash: Optional[str] = None,
+        evidence_ref: Optional[EvidenceRef] = None,
         properties: Optional[Dict[str, Any]] = None
     ) -> EvidenceNode:
         node = EvidenceNode(
@@ -104,6 +107,7 @@ class EvidenceGraph:
             url=url,
             selector=selector,
             content_hash=content_hash,
+            evidence_ref=evidence_ref,
             properties=properties or {}
         )
         self.nodes[node_id] = node
@@ -218,7 +222,8 @@ class EvidenceGraph:
             node_type = GraphNodeType.DOM_ELEMENT if ev.selector else GraphNodeType.OBSERVATION
             label = (ev.text or "").strip()[:100] or f"Observation {ev.id}"
             
-            # Add or update node with exact content_hash and DOM selector
+            # Add or update node with exact content_hash, DOM selector, and typed EvidenceRef
+            ev_ref = ev.to_ref() if hasattr(ev, "to_ref") else None
             node = self.add_node(
                 node_id=node_id,
                 node_type=node_type,
@@ -226,6 +231,7 @@ class EvidenceGraph:
                 url=ev.url,
                 selector=ev.selector,
                 content_hash=getattr(ev, "hash", None),
+                evidence_ref=ev_ref,
                 properties={
                     "source_type": ev.source_type,
                     "analyzer": ev.analyzer,
@@ -315,14 +321,14 @@ class EvidenceGraph:
             "claims_count": len(claims),
             "sha256_verified_nodes": len(sha256_hashed),
             "dom_selectors_count": len(selectors),
-            "sample_nodes": [n.model_dump() for n in list(self.nodes.values())[:30]],
-            "sample_edges": [e.model_dump() for e in list(self.edges.values())[:40]],
+            "sample_nodes": [n.model_dump(mode="json") for n in list(self.nodes.values())[:30]],
+            "sample_edges": [e.model_dump(mode="json") for e in list(self.edges.values())[:40]],
         }
 
     def export_graph_data(self) -> Dict[str, Any]:
         return {
             "total_nodes": len(self.nodes),
             "total_edges": len(self.edges),
-            "nodes": [n.model_dump() for n in self.nodes.values()],
-            "edges": [e.model_dump() for e in self.edges.values()]
+            "nodes": [n.model_dump(mode="json") for n in self.nodes.values()],
+            "edges": [e.model_dump(mode="json") for e in self.edges.values()]
         }

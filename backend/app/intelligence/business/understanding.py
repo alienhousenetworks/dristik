@@ -648,10 +648,14 @@ class BusinessUnderstandingOrchestrator:
             model = "B2B SaaS"
             intent = "saas"
             website_type = "SaaS"
-        else:
-            model = "B2B Professional Services & Consulting"
+        elif has_contact and any(k in cta_text or k in " ".join(h1s).lower() for k in ["consult", "service", "agency", "book", "quote", "talk to", "schedule"]):
+            model = "Professional Services & Consulting"
             intent = "lead_generation"
             website_type = "Agency / Services"
+        else:
+            model = "Unknown"
+            intent = "unknown"
+            website_type = "Unknown"
 
         evidence_items = [
             FindingEvidence(
@@ -664,14 +668,13 @@ class BusinessUnderstandingOrchestrator:
         ]
 
         observed_services = [h.strip() for h in h1s if h and h.strip()][:3]
-        if failure_reason:
+        if failure_reason or website_type == "Unknown":
             model = "Unknown"
             intent = "unknown"
             website_type = "Unknown"
             confidence = 0.0
             summary = (
-                f"FAILED: business intelligence model did not run. {failure_reason} "
-                "Industry, model, journey, and audience are Unknown — not guessed. "
+                f"Website category and business model are Unknown from crawled DOM evidence. "
                 f"Observed title/H1: {brand}; CTAs: {', '.join(ctas[:3]) or 'none'}."
             )
         else:

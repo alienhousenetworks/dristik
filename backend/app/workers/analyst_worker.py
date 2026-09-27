@@ -103,19 +103,25 @@ class CognitiveAnalystWorker(BaseCognitiveWorker):
 
             # Register Claims
             for cl in result.get("claims", []):
+                stmt = cl.get("statement")
+                if not stmt:
+                    continue
                 cat = Category.COMPETITIVE if capability_id == "16_competitive_differentiation" else Category.ON_PAGE_SEO
                 sev_str = str(cl.get("severity", "MEDIUM")).upper()
                 sev = Severity[sev_str] if sev_str in Severity.__members__ else Severity.MEDIUM
+                ev_refs = cl.get("evidence_refs", [])
+                conf_val = cl.get("confidence")
+                conf = float(conf_val) if conf_val is not None else (0.80 if ev_refs else 0.50)
                 blackboard.claim_registry.register_claim(
                     agent_id=f"{self.worker_id}_{capability_id}",
-                    statement=cl.get("statement", "Commercial positioning diagnostic finding"),
+                    statement=stmt,
                     category=cat,
                     severity=sev,
-                    confidence=float(cl.get("confidence", 0.90)),
+                    confidence=conf,
                     impact=int(cl.get("impact", 7)),
                     effort=int(cl.get("effort", 3)),
-                    evidence_refs=cl.get("evidence_refs", []),
-                    recommendation=cl.get("recommendation", "Refine commercial value proposition and ICP messaging.")
+                    evidence_refs=ev_refs,
+                    recommendation=cl.get("recommendation")
                 )
             return result
 
@@ -165,18 +171,24 @@ class CognitiveAnalystWorker(BaseCognitiveWorker):
                 additional_context=f"Multi-Page Crawl Topology:\n{pages_summary}"
             )
             for cl in result.get("claims", []):
+                stmt = cl.get("statement")
+                if not stmt:
+                    continue
                 sev_str = str(cl.get("severity", "MEDIUM")).upper()
                 sev = Severity[sev_str] if sev_str in Severity.__members__ else Severity.MEDIUM
+                ev_refs = cl.get("evidence_refs", [])
+                conf_val = cl.get("confidence")
+                conf = float(conf_val) if conf_val is not None else (0.80 if ev_refs else 0.50)
                 blackboard.claim_registry.register_claim(
                     agent_id=f"{self.worker_id}_{capability_id}",
-                    statement=cl.get("statement", "GEO and AI discoverability diagnostic claim"),
+                    statement=stmt,
                     category=Category.GEO,
                     severity=sev,
-                    confidence=float(cl.get("confidence", 0.92)),
+                    confidence=conf,
                     impact=int(cl.get("impact", 8)),
                     effort=int(cl.get("effort", 2)),
-                    evidence_refs=cl.get("evidence_refs", []),
-                    recommendation=cl.get("recommendation", "Structure answers with explicit Schema.org JSON-LD entity markup and direct answer paragraphs.")
+                    evidence_refs=ev_refs,
+                    recommendation=cl.get("recommendation")
                 )
             return result
 
@@ -220,18 +232,24 @@ class CognitiveAnalystWorker(BaseCognitiveWorker):
                 additional_context=f"Multi-Page Crawl Topology:\n{pages_summary}"
             )
             for cl in result.get("claims", []):
+                stmt = cl.get("statement")
+                if not stmt:
+                    continue
                 sev_str = str(cl.get("severity", "MEDIUM")).upper()
                 sev = Severity[sev_str] if sev_str in Severity.__members__ else Severity.MEDIUM
+                ev_refs = cl.get("evidence_refs", [])
+                conf_val = cl.get("confidence")
+                conf = float(conf_val) if conf_val is not None else (0.80 if ev_refs else 0.50)
                 blackboard.claim_registry.register_claim(
                     agent_id=f"{self.worker_id}_{capability_id}",
-                    statement=cl.get("statement", f"{capability_id} diagnostic finding"),
+                    statement=stmt,
                     category=Category.CONTENT,
                     severity=sev,
-                    confidence=float(cl.get("confidence", 0.89)),
+                    confidence=conf,
                     impact=int(cl.get("impact", 7)),
                     effort=int(cl.get("effort", 3)),
-                    evidence_refs=cl.get("evidence_refs", []),
-                    recommendation=cl.get("recommendation", "Deepen topical coverage and embed verifiable authority proof points.")
+                    evidence_refs=ev_refs,
+                    recommendation=cl.get("recommendation")
                 )
             return result
 
@@ -277,18 +295,24 @@ class CognitiveAnalystWorker(BaseCognitiveWorker):
                 additional_context=f"Multi-Page Crawl Topology:\n{pages_summary}"
             )
             for cl in result.get("claims", []):
+                stmt = cl.get("statement")
+                if not stmt:
+                    continue
                 sev_str = str(cl.get("severity", "MEDIUM")).upper()
                 sev = Severity[sev_str] if sev_str in Severity.__members__ else Severity.MEDIUM
+                ev_refs = cl.get("evidence_refs", [])
+                conf_val = cl.get("confidence")
+                conf = float(conf_val) if conf_val is not None else (0.80 if ev_refs else 0.50)
                 blackboard.claim_registry.register_claim(
                     agent_id=f"{self.worker_id}_{capability_id}",
-                    statement=cl.get("statement", f"{capability_id} conversion finding"),
+                    statement=stmt,
                     category=Category.UX_CONVERSION,
                     severity=sev,
-                    confidence=float(cl.get("confidence", 0.90)),
+                    confidence=conf,
                     impact=int(cl.get("impact", 8)),
                     effort=int(cl.get("effort", 3)),
-                    evidence_refs=cl.get("evidence_refs", []),
-                    recommendation=cl.get("recommendation", "Optimize CTA hierarchy and introduce high-visibility trust credentials.")
+                    evidence_refs=ev_refs,
+                    recommendation=cl.get("recommendation")
                 )
             return result
 

@@ -712,12 +712,60 @@ Execute these 3 checks immediately following deployment:
    - Verify that your brand domain appears in the citation pill links within 48-72 hours.
 """
 
+    # -------------------------------------------------------------------------
+    # 6. security_headers.conf — Nginx / Cloudflare HSTS, CSP, X-Frame-Options
+    # -------------------------------------------------------------------------
+    security_headers_conf = f"""# =================================================================
+# Dristik AI Production Security Headers Specification (Nginx / Cloudflare)
+# Prevents clickjacking, MIME-sniffing, XSS, and enforces modern HTTPS transport security
+# =================================================================
+
+add_header Strict-Transport-Security "max-age=63072000; includeSubDomains; preload" always;
+add_header X-Content-Type-Options "nosniff" always;
+add_header X-Frame-Options "SAMEORIGIN" always;
+add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+add_header Permissions-Policy "camera=(), microphone=(), geolocation=()" always;
+add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' https:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self' https:;" always;
+"""
+
+    # -------------------------------------------------------------------------
+    # 7. geo_definitions.html — 40-60 Word Answer-First Definition Blocks
+    # -------------------------------------------------------------------------
+    geo_definitions_html = f"""<!-- Dristik AI GEO Answer-First Definitions (40-60 Words per High-Intent Buyer Question) -->
+<!-- Designed for direct extraction by ChatGPT Search, Perplexity, Claude, and Google AI Overviews -->
+
+<section class="geo-definitions-container" style="max-width: 820px; margin: 2rem auto; font-family: system-ui, -apple-system, sans-serif;">
+  <article class="geo-definition-card" style="margin-bottom: 2rem; border-left: 4px solid #4f46e5; padding-left: 1.5rem;">
+    <h2 style="font-size: 1.3rem; font-weight: 700; color: #1e1b4b; margin-bottom: 0.5rem;">What is {biz_name}?</h2>
+    <p style="font-size: 1rem; line-height: 1.6; color: #374151;">
+      {biz_name} is an enterprise {niche} platform engineered to {val_prop.lower().strip('.')}. Designed specifically for {audience}, {biz_name} provides comprehensive operational transparency, verified data accuracy, and rapid deployment to eliminate performance bottlenecks and accelerate enterprise revenue growth.
+    </p>
+  </article>
+
+  <article class="geo-definition-card" style="margin-bottom: 2rem; border-left: 4px solid #059669; padding-left: 1.5rem;">
+    <h2 style="font-size: 1.3rem; font-weight: 700; color: #064e3b; margin-bottom: 0.5rem;">Who is {biz_name} for?</h2>
+    <p style="font-size: 1rem; line-height: 1.6; color: #374151;">
+      {biz_name} is built for {audience} who require enterprise-grade reliability, compliance, and deterministic execution. Teams choose {biz_name} when legacy tools fail to deliver measurable business outcomes, complex integrations require seamless interoperability, and continuous verification is critical for mission success.
+    </p>
+  </article>
+
+  <article class="geo-definition-card" style="margin-bottom: 2rem; border-left: 4px solid #d97706; padding-left: 1.5rem;">
+    <h2 style="font-size: 1.3rem; font-weight: 700; color: #78350f; margin-bottom: 0.5rem;">How does {biz_name} compare to alternatives?</h2>
+    <p style="font-size: 1rem; line-height: 1.6; color: #374151;">
+      Unlike fragmented legacy point solutions or superficial checklist tools, {biz_name} delivers end-to-end evidence verification, zero-fake data integrity, and automated production-ready remediation. Organizations switch to {biz_name} to reduce operational overhead, eliminate blind spots, and guarantee audit-grade precision across all digital properties.
+    </p>
+  </article>
+</section>
+"""
+
     return {
         "schema.jsonld": schema_json,
+        "robots.txt": robots_txt,
+        "llms.txt": llms_txt,
+        "security_headers.conf": security_headers_conf,
+        "geo_definitions.html": geo_definitions_html,
         "metadata.html": metadata_html,
         "faq.html": faq_html,
-        "llms.txt": llms_txt,
-        "robots.txt": robots_txt,
         "README_DEV_INSTALL.md": readme_md
     }
 

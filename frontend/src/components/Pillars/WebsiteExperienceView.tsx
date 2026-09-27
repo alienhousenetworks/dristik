@@ -17,9 +17,10 @@ export function WebsiteExperienceView({
 
   const crawl = report.crawl_manifest;
   const homePage = crawl?.pages?.[0];
-  const ttfb = homePage?.ttfb_ms || 280;
+  const ttfb = typeof homePage?.ttfb_ms === 'number' && homePage.ttfb_ms > 0 ? homePage.ttfb_ms : null;
   const ctas = homePage?.ctas || [];
-  const uxScore = Math.round(report.scores?.category_scores?.['UX_CONVERSION']?.score || report.honest_scores?.human_score || 74);
+  const measuredUx = report.scores?.category_scores?.['UX_CONVERSION']?.score ?? report.honest_scores?.human_score;
+  const uxScore = typeof measuredUx === 'number' ? Math.round(measuredUx) : null;
 
   const findings = (report.findings || []).filter(
     (f) => f.category === 'UX_CONVERSION'
@@ -31,9 +32,9 @@ export function WebsiteExperienceView({
       title="Speed, mobile, and usability"
       description="How quickly the site loads, how it behaves on mobile, and whether visitors can complete the job they came for."
       scoreLabel="Experience"
-      score={uxScore}
+      score={uxScore ?? '—'}
       metaLabel="TTFB"
-      meta={`${ttfb} ms`}
+      meta={ttfb == null ? '—' : `${ttfb} ms`}
       tabs={[
         { id: 'sxo', label: 'Experience' },
         { id: 'cwv', label: 'Speed' },
@@ -52,7 +53,7 @@ export function WebsiteExperienceView({
             <div className="bg-paper-50 dark:bg-ink-900/40 border border-line p-5 rounded-lg space-y-2">
               <span className="label text-[10px] block">3-Second Hook Test</span>
               <span className="font-serif text-2xl font-bold text-ink">
-                {homePage?.title ? 'Passed' : 'Needs Hook Clarification'}
+                {homePage?.title ? 'Title present' : 'No title'}
               </span>
               <p className="text-xs text-ink-500 leading-relaxed">
                 Whether a visitor arriving from Google or ChatGPT immediately grasps what the company does within 3 seconds.
@@ -61,18 +62,18 @@ export function WebsiteExperienceView({
 
             <div className="bg-paper-50 dark:bg-ink-900/40 border border-line p-5 rounded-lg space-y-2">
               <span className="label text-[10px] block">Bounce Risk Mitigation</span>
-              <span className="font-serif text-2xl font-bold text-good">
-                Low Bounce Risk
+              <span className="font-serif text-2xl font-bold text-ink">
+                Not measured
               </span>
               <p className="text-xs text-ink-500 leading-relaxed">
-                Fast server delivery and clear visual hierarchy prevent immediate tab closings.
+                Bounce rate needs analytics. This crawl does not record it.
               </p>
             </div>
 
             <div className="bg-paper-50 dark:bg-ink-900/40 border border-line p-5 rounded-lg space-y-2">
               <span className="label text-[10px] block">Intent Resolution</span>
               <span className="font-serif text-2xl font-bold text-ink">
-                {report.business_profile?.primary_intent ? 'Commercial Intent' : 'Informational'}
+                {report.business_profile?.primary_intent || '—'}
               </span>
               <p className="text-xs text-ink-500 leading-relaxed">
                 Matching search queries directly to specific on-page actions.
@@ -122,29 +123,29 @@ export function WebsiteExperienceView({
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <div className="border border-line p-4 rounded-lg bg-paper-50 space-y-1">
               <span className="label text-[10px] block">TTFB (Time to First Byte)</span>
-              <span className="font-serif text-3xl font-bold text-good">{ttfb} ms</span>
-              <span className="text-xs text-good block">✅ Sub-300ms server baseline</span>
+              <span className="font-serif text-3xl font-bold text-ink">{ttfb == null ? '—' : `${ttfb} ms`}</span>
+              <span className="text-xs text-ink-500 block">{ttfb == null ? 'Not measured on this crawl' : 'From this crawl'}</span>
             </div>
             <div className="border border-line p-4 rounded-lg bg-paper-50 space-y-1">
               <span className="label text-[10px] block">DOM Tree Depth</span>
               <span className="font-serif text-3xl font-bold text-ink">
-                {homePage?.dom_elements_count || 420} elements
+                {homePage?.dom_elements_count ?? '—'}
               </span>
-              <span className="text-xs text-ink-500 block">Clean DOM layout</span>
+              <span className="text-xs text-ink-500 block">{homePage?.dom_elements_count ? 'Elements counted' : 'Not counted'}</span>
             </div>
             <div className="border border-line p-4 rounded-lg bg-paper-50 space-y-1">
               <span className="label text-[10px] block">External Scripts</span>
               <span className="font-serif text-3xl font-bold text-ink">
-                {homePage?.scripts_count || 8} scripts
+                {homePage?.scripts_count ?? '—'}
               </span>
               <span className="text-xs text-ink-500 block">JavaScript payload</span>
             </div>
             <div className="border border-line p-4 rounded-lg bg-paper-50 space-y-1">
               <span className="label text-[10px] block">Stylesheets</span>
               <span className="font-serif text-3xl font-bold text-ink">
-                {homePage?.stylesheets_count || 2} files
+                {homePage?.stylesheets_count ?? '—'}
               </span>
-              <span className="text-xs text-good block">Render-blocking minimized</span>
+              <span className="text-xs text-ink-500 block">{homePage?.stylesheets_count == null ? 'Not counted' : 'Stylesheets counted'}</span>
             </div>
           </div>
         </div>
@@ -158,15 +159,15 @@ export function WebsiteExperienceView({
             <div className="border border-line p-4 rounded-lg bg-paper-50 space-y-2">
               <span className="label text-[10px] block">Viewport Meta Tag</span>
               <p className="font-mono text-xs text-ink bg-paper-100 p-2 rounded border border-line">
-                {homePage?.viewport || 'width=device-width, initial-scale=1.0'}
+                {homePage?.viewport || 'Not found'}
               </p>
-              <span className="text-xs text-good block">✅ Responsive viewport tag declared</span>
+              <span className="text-xs text-ink-500 block">{homePage?.viewport ? 'Viewport tag present' : 'No viewport tag in the crawl'}</span>
             </div>
 
             <div className="border border-line p-4 rounded-lg bg-paper-50 space-y-2">
               <span className="label text-[10px] block">Tap Target Safety</span>
-              <p className="font-serif text-xl font-bold text-ink">Touch Optimized</p>
-              <span className="text-xs text-ink-500 block">CTA buttons contain ample padding for mobile touch</span>
+              <p className="font-serif text-xl font-bold text-ink">Not measured</p>
+              <span className="text-xs text-ink-500 block">Tap-target size was not rendered.</span>
             </div>
           </div>
         </div>
@@ -186,13 +187,13 @@ export function WebsiteExperienceView({
             </div>
             <div className="border border-line p-4 rounded-lg bg-paper-50 space-y-1">
               <span className="label text-[10px] block">Heading Hierarchy</span>
-              <span className="font-serif text-3xl font-bold text-good">H1 → H2 → H3</span>
-              <span className="text-xs text-ink-500 block">Strict sequential nesting</span>
+              <span className="font-serif text-3xl font-bold text-ink">—</span>
+              <span className="text-xs text-ink-500 block">Heading order was not scored as a pass.</span>
             </div>
             <div className="border border-line p-4 rounded-lg bg-paper-50 space-y-1">
               <span className="label text-[10px] block">Semantic HTML5</span>
-              <span className="font-serif text-3xl font-bold text-good">Standard</span>
-              <span className="text-xs text-ink-500 block">Main, header, nav, footer tags</span>
+              <span className="font-serif text-3xl font-bold text-ink">—</span>
+              <span className="text-xs text-ink-500 block">Landmark tags were not scored.</span>
             </div>
           </div>
         </div>
@@ -212,7 +213,7 @@ export function WebsiteExperienceView({
                   </span>
                 ))
               ) : (
-                <span className="text-xs text-ink-500">Standard header navigation</span>
+                <span className="text-xs text-ink-500">No CTA strings were extracted.</span>
               )}
             </div>
           </div>

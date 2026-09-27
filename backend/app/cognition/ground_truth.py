@@ -189,6 +189,7 @@ def apply_ground_truth_to_claim(
             VerificationStatus.REJECTED,
             VerificationStatus.CONTESTED,
             VerificationStatus.CONFLICTED,
+            VerificationStatus.CONTRADICTED,
         }:
             claim.verification_status = VerificationStatus.SINGLE_SOURCE_UNVERIFIED
         claim.claim_state = ClaimState.SINGLE_SOURCE_UNVERIFIED

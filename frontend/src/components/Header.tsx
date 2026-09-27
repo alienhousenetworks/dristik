@@ -19,6 +19,7 @@ interface HeaderProps {
   onLogout: () => void;
   onSelectAudit?: (analysisId: string) => void;
   onNewAudit?: () => void;
+  onAuditDeleted?: (analysisId: string) => void | Promise<void>;
 }
 
 export function Header({
@@ -36,6 +37,7 @@ export function Header({
   onLogout,
   onSelectAudit,
   onNewAudit,
+  onAuditDeleted,
 }: HeaderProps) {
   const status = run?.status?.replace(/_/g, ' ') || '';
   const showTools = Boolean(user && (onOpenConnectors || onOpenRemediation || onOpenAgency || onOpenRubric));
@@ -83,17 +85,32 @@ export function Header({
               currentAnalysisId={run?.analysis_id}
               onSelectAudit={onSelectAudit}
               onNewAudit={onNewAudit}
+              onAuditDeleted={onAuditDeleted}
             />
           )}
 
+          {run && onAuditDeleted && view === 'home' && (
+            <button
+              type="button"
+              onClick={() => {
+                const label = run.website_url.replace(/^https?:\/\//, '');
+                if (!window.confirm(`Delete the audit for ${label}? This cannot be undone.`)) return;
+                onAuditDeleted(run.analysis_id);
+              }}
+              className="inline-flex items-center px-2.5 py-1.5 rounded-lg border border-bad/40 text-bad hover:bg-bad/10 text-xs font-semibold"
+              title="Delete this audit"
+            >
+              Delete audit
+            </button>
+          )}
           {run && onNewAudit && view === 'home' && (
             <button
               type="button"
               onClick={onNewAudit}
-              className="hidden sm:inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-line hover:border-ink-400 text-xs font-semibold text-ink-700 dark:text-ink-200 transition-colors shadow-2xs"
+              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-line hover:border-ink-400 text-xs font-semibold text-ink-700"
               title="Clear current audit and start fresh"
             >
-              <span>+</span> New Audit
+              New audit
             </button>
           )}
           <div className="md:hidden">

@@ -26,6 +26,8 @@ def public_user(user: UserIdentity) -> dict:
         "is_active": user.is_active,
         "created_at": user.created_at,
         "last_login_at": user.last_login_at,
+        "auth_provider": getattr(user, "auth_provider", "local") or "local",
+        "avatar_url": getattr(user, "avatar_url", None),
         "permissions": sorted(p for p in (
             "mission:create", "mission:read", "staff:invite", "org:manage",
             "system:manage", "contact:read", "account:delete", "orgs:list_all",
@@ -36,6 +38,63 @@ def public_user(user: UserIdentity) -> dict:
 def _slugify(name: str) -> str:
     slug = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")
     return slug or "org"
+
+
+def oauth_login_or_signup(
+    provider: str,
+    oauth_id: str,
+    email: str,
+    full_name: str,
+    avatar_url: Optional[str] = None,
+) -> Tuple[UserIdentity, str]:
+    store = get_store()
+    mail = (email or "").strip().lower()
+    name = (full_name or "").strip() or (mail.split("@")[0].capitalize() if mail else "User")
+
+    # 1. Check if user is already linked by provider + oauth_id
+    user = store.get_user_by_oauth(provider, oauth_id)
+    if user:
+        if not user.is_active:
+            raise ValueError("This account has been deactivated.")
+        store.touch_login(user.user_id)
+        token = new_token()
+        store.create_session(user.user_id, token, settings.SESSION_DAYS)
+        return user, token
+
+    # 2. Check if a user with this email already exists
+    if mail:
+        existing = store.get_user_by_email(mail)
+        if existing:
+            if not existing.is_active:
+                raise ValueError("This account has been deactivated.")
+            user = store.link_oauth(existing.user_id, provider, oauth_id, avatar_url)
+            assert user is not None
+            token = new_token()
+            store.create_session(user.user_id, token, settings.SESSION_DAYS)
+            return user, token
+
+    # 3. Auto-provision organization and user
+    org_name = f"{name}'s Team"
+    slug = _slugify(org_name)
+    base = slug
+    n = 1
+    while store.slug_taken(slug):
+        n += 1
+        slug = f"{base}-{n}"
+
+    org = store.create_organization(org_name, slug)
+    user = store.create_oauth_user(
+        org_id=org["org_id"],
+        email=mail,
+        full_name=name,
+        provider=provider,
+        oauth_id=oauth_id,
+        role=UserRole.OWNER,
+        avatar_url=avatar_url,
+    )
+    token = new_token()
+    store.create_session(user.user_id, token, settings.SESSION_DAYS)
+    return user, token
 
 
 def signup(full_name: str, email: str, password: str, organization_name: str) -> Tuple[UserIdentity, str]:

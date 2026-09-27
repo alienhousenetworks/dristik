@@ -1,7 +1,7 @@
 # Dristik AI — Architecture, Features & Specialist Agent Reference
 
 **Product:** Dristik AI — evidence-driven website intelligence and growth auditor  
-**Code version:** `2.0.0` (`APP_VERSION` in `backend/app/config.py`)  
+**Code version:** `2.0.0` (`APP_VERSION` in `backend/app/core/config.py`)  
 **Policy pack:** `enterprise_web_intel_v4`  
 **Source of truth:** live codebase (`backend/app/`), not older marketing copy  
 **Updated:** 20 September 2026
@@ -345,7 +345,7 @@ flowchart LR
 
 ## 6. Specialist agent workforce
 
-Live runtime class for all 35: `SpecialistAgent` in `backend/app/agents/specialist.py`, instantiated from `SPECIALIST_AGENTS_V3` in `backend/app/agents/registry.py`. Tests require **exactly 35** specialists (`backend/tests/test_agent_pool_35.py`).
+Live runtime class for all 35: `SpecialistAgent` in `backend/app/agents/runtime/specialist.py`, instantiated from `SPECIALIST_AGENTS_V3` in `backend/app/agents/runtime/registry.py`. Tests require **exactly 35** specialists (`backend/tests/test_agent_pool_35.py`).
 
 Copywriting IDs `copywriting.{seo,geo,cro,clarity,section}.v3` live in `COPYWRITING_AGENTS_V3` and run **inside** `PageIntelligenceAgent` after the pool — they are not AgentPool members.
 
@@ -643,240 +643,72 @@ dristik/
 
 ```
 backend/app/
-├── main.py                                # FastAPI app, CORS, lifespan, routers, /health
-├── config.py                              # Settings, provider auto-select, production checks
+├── main.py                                # FastAPI app factory, CORS, lifespan, /health
+├── api/
+│   ├── router.py                          # Mounts routers at /api/v1 and /api
+│   └── routes/
+│       ├── audits/                        # analyses, stream
+│       ├── identity/                      # auth, orgs
+│       ├── platform/                      # contact, system, meta, payments, workspaces
+│       ├── intelligence/                  # strategic, geo, outcomes, radar
+│       ├── integrations/                  # connectors, google analytics
+│       └── remediation/                   # patch approve / apply
 │
-├── agents/                                # Specialist fleet
-│   ├── registry.py                        # SPECIALIST_AGENTS_V3 (35), COPYWRITING_AGENTS_V3 (5)
-│   ├── specialist.py                      # Live runtime class for all 35
-│   ├── task_cards.py                      # Per-agent contracts + output schema
-│   ├── base.py                            # Abstract BaseAgent
-│   ├── page_intelligence.py               # Per-URL SEO + 5 copywriting cards
-│   ├── business.py                        # Legacy wrapper (not AgentPool path)
-│   ├── technical_seo.py                   # Legacy
-│   ├── content.py / content_intel.py      # Legacy
-│   ├── geo.py / ai_search.py              # Legacy
-│   ├── ux.py / ux_conversion.py           # Legacy
-│   ├── trust.py / critic.py / verifier.py # Legacy
-│   ├── synthesizer.py / discovery.py      # Legacy
+├── core/
+│   ├── config.py                          # Settings, provider auto-select, production checks
+│   ├── security/                          # ssrf, trust_boundary, enterprise_audit_logger
+│   ├── privacy/sanitizer.py               # PII / injection redaction
+│   └── policy/engine.py                   # Tier / budget gating
 │
-├── analyzers/                             # Deterministic extractors (Wave 0)
-│   ├── html.py / html_parser.py           # Semantic distill, headings, readability
-│   ├── visible.py                         # Human-visible text (skip chrome / SPA shells)
-│   ├── meta.py                            # Title/meta/OG/Twitter/canonical/robots/viewport
-│   ├── dom.py                             # Structure, alt, CTAs, forms
-│   ├── schema.py / schema_parser.py       # JSON-LD + microdata
-│   ├── links.py / link_graph.py           # Internal/external graph
-│   ├── performance.py                     # TTFB, payload, compression
-│   ├── security.py                        # Security headers
-│   ├── trust_signals.py                   # Privacy/terms/NAP/social
-│   └── dynamic_content.py                 # CMS JSON recovery, JS-render need
+├── agents/
+│   ├── runtime/                           # base, specialist, registry, task_cards (live 35)
+│   ├── page/intelligence.py               # Per-URL SEO + 5 copywriting cards
+│   └── legacy/                            # Pre-pool wrappers; not the AgentPool path
 │
-├── api/routes/
-│   ├── analyses.py                        # Start/get audit, report, manifest, snapshots, findings,
-│   │                                      #   twin, intent-graph, patch-pack, re-query, bakeoff,
-│   │                                      #   WhatsApp, evidence-graph
-│   ├── stream.py                          # SSE progress
-│   ├── auth.py                            # Signup/login/logout/me/forgot/reset/delete
-│   ├── orgs.py                            # Org members CRUD
-│   ├── workspaces.py                      # Workspace hierarchy
-│   ├── payments.py                        # Plans, Razorpay, GST invoice
-│   ├── connectors.py                      # CMS/GitHub/GSC connect, WP plugin, Google OAuth
-│   ├── remediation.py                     # Patch approve/reject/apply/rollback/verify, ROI
-│   ├── intelligence.py                    # Competitors, GSC attribution, AI citations, lead-gen, agency
-│   ├── radar.py                           # Pulse subscriptions
-│   ├── outcomes.py                        # 30/60/90 schedule/run/benchmark
-│   ├── geo_pipeline.py                    # Live GEO/AEO snapshots + trends
-│   ├── integrations.py                    # GSC/GA4/DataForSEO status + metrics
-│   ├── system.py                          # Super-admin orgs/users/plans/maintenance
-│   ├── contact.py                         # Contact form + inbox
-│   └── meta.py                            # Scoring rubric JSON
+├── crawl/                                 # Acquisition
+│   ├── crawler.py                         # CrawlerService
+│   ├── browser.py                         # Playwright
+│   ├── embeddings.py / vector_store.py
+│   ├── sitemap.py                         # XML sitemap parse
+│   └── analyzers/                         # html, visible, meta, dom, schema, links,
+│                                          #   performance, security, trust_signals, dynamic_content
 │
-├── audit/
-│   ├── snapshots.py                       # Content-addressed raw body store (snap_<sha256>)
+├── audit/                                 # Seal and compare
+│   ├── snapshots.py                       # Content-addressed raw body store
 │   ├── manifest.py                        # build_run_manifest / seal_manifest
-│   ├── ledger.py                          # Hash-chained append-only audit ledger
-│   ├── regression_engine.py               # Audit-to-audit regression
-│   └── sitemap_parser.py                  # XML sitemap parse
+│   ├── ledger.py                          # Hash-chained audit ledger
+│   └── regression_engine.py               # Audit-to-audit regression
 │
-├── capabilities/
-│   └── registry.py                        # Honest capability declarations (AVAILABLE / NOT_CONNECTED)
-│
-├── cognition/
-│   ├── blackboard.py                      # CognitiveBlackboard — shared run memory
-│   ├── claims.py                          # ClaimRegistry
-│   ├── ground_truth.py                    # Bind ext_ to gated families
-│   ├── finding_rubric.py                  # CERTAIN/LIKELY/GUESSING + hold rules
-│   ├── confidence.py                      # CalibratedConfidenceEngine
-│   ├── contradiction.py                   # ContradictionDetector
-│   ├── consensus.py                       # Multi-agent consensus
-│   ├── hypotheses.py                      # HypothesisEngine
-│   ├── causal.py                          # CausalReasoningEngine
-│   └── decision_engine.py                 # Claims → findings
-│
-├── connectors/
-│   ├── store.py                           # In-memory connector registry
-│   ├── base/interface.py                  # Abstract BaseConnector
-│   ├── base/models.py                     # Credentials, health, patch/rollback results
-│   ├── base/permissions.py                # Least-privilege guard
-│   ├── generic/connector.py               # Public URL → patch files, no CMS auth
-│   ├── github/{client,discovery,remediation,verify}.py
-│   ├── wordpress/{client,discovery,remediation,verify}.py
-│   ├── shopify/connector.py
-│   ├── webflow/connector.py
-│   └── google/connector.py                # GSC adapter for the store
-│
-├── domain/
-│   ├── enums.py                           # Severity, category, rubric, patches, connectors, roles
-│   ├── models.py                          # Finding, Claim, PageEvidence, ExecutiveReport, …
-│   ├── capability.py                      # 35-capability taxonomy (01_discovery … 35_contradiction)
-│   └── provenance.py                      # Provenance types
-│
-├── evidence/
-│   ├── store.py                           # EvidenceStore (ev_ / ext_)
-│   ├── models.py                          # Evidence, ResultProvenance
-│   ├── provenance.py                      # SHA-256 helpers
-│   ├── graph.py                           # EvidenceGraph nodes/edges
-│   ├── retriever.py                       # Slice evidence for a specialist prompt
-│   ├── site_facts.py                      # Wave-0 fact pack
-│   ├── acquisition.py                     # Plans next external fetches
-│   ├── enrichment.py                      # ExternalEvidenceEnricher (DNS/TLS/headers/CrUX)
-│   └── validation.py                      # EvidenceGapDetector
-│
-├── identity/
-│   ├── store.py                           # SQLite users/orgs/sessions
-│   ├── service.py                         # Signup/login/reset/staff
-│   ├── security.py                        # Password hash + opaque tokens
-│   ├── authorizer.py                      # UserIdentity, RBAC
-│   ├── deps.py                            # FastAPI get_current_user / require_permission
-│   └── sso_scim.py                        # SSO / SCIM stubs
-│
-├── inference/
-│   ├── llm_client.py                      # Multi-provider chat
-│   ├── model_router.py                    # Fast vs reasoning, structured JSON
-│   ├── together.py                        # Legacy Together client
-│   ├── fallback.py                        # Deterministic fallback (specialists: allow_fallback=False)
-│   ├── prompt_compiler.py                 # Load .txt prompts + global policy
-│   ├── json_repair.py                     # Repair truncated JSON
-│   ├── global_policy.py                   # Anti-hallucination system policy
-│   ├── telemetry.py                       # Token/cost/latency
-│   ├── prompts/*.txt                      # specialist_system, business_*, geo, critic, …
-│   └── schemas/{agent_schemas,compat,shared}.py
-│
-├── integrations/
-│   ├── google_connectors.py               # GSC / GA4 wrappers
-│   └── dataforseo_provider.py             # Keywords / backlinks
+├── capabilities/registry.py               # Honest capability declarations
+├── cognition/                             # blackboard, claims, ground_truth, finding_rubric,
+│                                          #   confidence, contradiction, consensus, hypotheses,
+│                                          #   causal, decision_engine
+├── connectors/                            # store + base + generic/github/wordpress/shopify/webflow/google
+├── domain/                                # enums, models, capability, provenance
+├── evidence/                              # store, graph, retriever, site_facts, enrichment, validation
+├── identity/                              # store, service, security, authorizer, deps, sso_scim
+├── inference/                             # llm_client, model_router, pricing, prompts, schemas
+├── integrations/                          # google_connectors, google_api, dataforseo_provider
 │
 ├── intelligence/
-│   ├── geo_readiness.py                   # evaluate_geo_readiness
-│   ├── geo_pipeline_runner.py / geo_pipeline_store.py
-│   ├── ai_citation_tracker.py             # Multi-engine live citation dashboard
-│   ├── live_ai_citation_engine.py         # Live engine queries
-│   ├── ai_simulation.py                   # Labeled SIMULATION_ONLY extractability
-│   ├── commercial_bakeoff.py              # Target vs competitor on 6 questions
-│   ├── competitor_discovery.py            # Rival discovery (no invented giants)
-│   ├── competitive.py / competitive_benchmark.py
-│   ├── search_console.py                  # GSC attribution (fail-closed on this path)
-│   ├── lead_gen_opportunities.py          # Landing-page opportunity specs
-│   ├── radar.py                           # Monthly pulse
-│   ├── outcomes.py / outcome_store.py     # Post-delivery 30/60/90
-│   ├── timeline.py                        # Audit snapshot deltas
-│   ├── intent_graph.py                    # Buyer-intent paths
-│   ├── website_twin.py                    # Digital twin
-│   ├── business_understanding.py          # 5-worker identity pre-pass
-│   ├── opportunity.py                     # Growth opportunity detector
-│   ├── semantic_gap_engine.py             # Embedding coverage gaps
-│   ├── simulator.py                       # Strategy scenario deltas
-│   └── visual_intelligence.py             # Adaptive chart payload
+│   ├── geo/                               # readiness, benchmarks, pipeline, adapters, agent_readiness
+│   ├── competitive/                       # discovery, benchmark, bake-off, semantic gaps
+│   ├── citations/                         # tracker, live engine, on-page simulation
+│   ├── outcomes/                          # 30/60/90 tracking + store
+│   ├── business/                          # understanding, intent, twin, opportunity, search console
+│   └── monitoring/                        # radar, timeline, visual report payload
 │
-├── mission/
-│   ├── director.py                        # MissionDirector
-│   ├── state.py                           # MissionState
-│   ├── policies.py                        # Industry policies
-│   └── graph.py                           # Light state graph
-│
-├── missions/
-│   └── state_machine.py                   # Durable checkpointed mission SM
-│
-├── orchestration/
-│   ├── orchestrator.py                    # AnalysisOrchestrator (main pipeline)
-│   ├── agent_pool.py                      # 35-agent Kahn-wave executor
-│   ├── team_orchestrator.py               # Tier-1 caps + reusable workers
-│   ├── integrity_gate.py                  # Claim/evidence validation
-│   ├── capability_router.py               # Cap ID → agent
-│   ├── planner.py                         # Mission planner
-│   ├── dynamic_team.py                    # Dynamic team assembly
-│   └── dag.py                             # Unused by the main orchestrator
-│
-├── payments/
-│   └── store.py                           # Orders / vouchers
-│
-├── persistence/
-│   ├── models.py                          # Run / checkpoint models
-│   ├── repository.py                      # SQLite persist crawl/claims/findings/runs
-│   ├── schema.py / enterprise_schema.py
-│   └── storage_cas.py                     # Content-addressed storage
-│
-├── policy/
-│   └── engine.py                          # Tier / budget gating
-│
-├── privacy/
-│   └── sanitizer.py                       # PII / injection redaction
-│
-├── remediation/
-│   ├── planner.py                         # RemediationPlanner
-│   ├── patch_engine.py / patch_generator.py
-│   ├── patch_pack.py                      # ZIP + character-safe copy + WhatsApp
-│   ├── validator.py                       # Patch validator
-│   ├── approval.py                        # HITL approve/reject
-│   ├── rollback.py                        # Rollback
-│   ├── diff_engine.py                     # Diffs
-│   └── sync_engine.py                     # CMS/git sync
-│
-├── reports/
-│   ├── narrative.py                       # NarrativeGenerator
-│   ├── roadmap.py                         # RoadmapBuilder
-│   ├── pdf_generator.py                   # Printable deck
-│   └── validation_gate.py                 # Report validation
-│
-├── scoring/
-│   ├── engine.py                          # ScoringEngine + honest scores
-│   ├── weights.py                         # BASELINE_WEIGHTS + intent multipliers
-│   └── scoring_rubric.py                  # Published 5-pillar rubric
-│
-├── security/
-│   ├── ssrf.py                            # URL allow/deny
-│   ├── trust_boundary.py                  # Trust boundary
-│   └── enterprise_audit_logger.py         # Governance audit log
-│
-├── services/
-│   ├── crawler.py                         # CrawlerService
-│   ├── browser_render.py                  # Playwright
-│   ├── embedding_service.py               # Local e5-small-v2 / OpenRouter
-│   ├── vector_store.py                    # Page chunk vectors
-│   ├── model_router.py                    # Service-level router alias
-│   └── ssrf_guard.py                      # Crawl-time SSRF
-│
-├── tenancy/
-│   ├── manager.py                         # Org / workspace / project
-│   ├── models.py
-│   ├── agency.py                          # Multi-client
-│   └── white_label.py                     # White-label flags
-│
-├── verification/
-│   └── verifier.py                        # Closed-loop patch verify
-│
-└── workers/                               # Reusable cognitive workers
-    ├── base_worker.py
-    ├── extractor_worker.py
-    ├── analyst_worker.py
-    ├── research_worker.py
-    ├── critic_worker.py
-    ├── strategist_worker.py
-    ├── simulator_worker.py
-    ├── synthesizer_worker.py
-    ├── remediation_worker.py
-    └── distributed_engine.py
+├── mission/                               # director, state, policies, graph, state_machine
+├── orchestration/                         # orchestrator, agent_pool, integrity_gate, planner, dag
+├── payments/store.py
+├── persistence/                           # repository, schema, storage_cas
+├── remediation/                           # patches, approval, validator, sync_engine
+├── reports/                               # narrative, roadmap, pdf, validation_gate
+├── scoring/                               # engine, weights, scoring_rubric
+├── tenancy/                               # manager, agency, white_label
+├── verification/verifier.py
+├── workers/                               # cognitive workers + distributed_engine
+└── notifications/dispatcher.py
 ```
 
 ### 9.2 `backend/tests/`

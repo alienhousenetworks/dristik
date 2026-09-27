@@ -37,7 +37,7 @@ export function Report({
   const humanScore = honest?.human_score ?? (scores.category_scores?.['UX_CONVERSION']?.score != null ? Math.round(scores.category_scores['UX_CONVERSION'].score * 0.95) : null);
   const googleScore = honest?.google_score ?? (scores.category_scores?.['TECHNICAL_SEO']?.score != null ? Math.round(scores.category_scores['TECHNICAL_SEO'].score * 0.95) : null);
   const aiScore = honest?.ai_citation_score ?? (scores.category_scores?.['GEO']?.score != null ? Math.round(scores.category_scores['GEO'].score * 0.95) : null);
-  const scoreBand = honest?.score_band ?? (aiScore != null ? (aiScore >= 75 ? 'Citation Ready' : aiScore >= 50 ? 'Fragile Presence' : 'Critical Vulnerability') : 'Pending Verification');
+  const scoreBand = honest?.score_band ?? (aiScore != null ? (aiScore >= 75 ? 'Citation Ready' : aiScore >= 50 ? 'Fragile Presence' : 'Low readiness') : 'Pending Verification');
   const evidenceRefs = honest?.evidence_refs || report.findings.slice(0, 6).flatMap((f) => f.evidence_refs || []);
   const uniqueEvRefs = Array.from(new Set(evidenceRefs)).slice(0, 8);
 
@@ -95,10 +95,16 @@ export function Report({
             <button
               type="button"
               onClick={() => {
-                if (onExportPdf) onExportPdf();
-                else window.print();
+                try {
+                  if (onExportPdf) onExportPdf();
+                  else window.print();
+                } catch {
+                  const id = report.analysis_id || report.report_id;
+                  if (id) window.open(`/api/v1/reports/${id}/executive-deck`, '_blank');
+                }
               }}
               className="btn-secondary px-3.5 py-2 text-sm"
+              title="Print or Save as PDF"
             >
               Export PDF
             </button>
@@ -142,7 +148,7 @@ export function Report({
               <span className="text-xs text-ink-400">/ 100</span>
             </div>
             <p className="text-xs text-ink-700 leading-relaxed">
-              {honest?.human_summary || 'Evaluates economic buyer value prop clarity and CTA punch within 5 seconds.'}
+              {honest?.human_summary || 'No human-score summary was stored.'}
             </p>
           </div>
 
@@ -159,7 +165,7 @@ export function Report({
               <span className="text-xs text-ink-400">/ 100</span>
             </div>
             <p className="text-xs text-ink-700 leading-relaxed">
-              {honest?.google_summary || 'Validates Googlebot crawlability, indexability, TTFB, and on-page DOM hygiene.'}
+              {honest?.google_summary || 'No search-score summary was stored.'}
             </p>
           </div>
 
@@ -176,7 +182,7 @@ export function Report({
               <span className="text-xs text-good/70">/ 100</span>
             </div>
             <p className="text-xs text-ink-700 leading-relaxed">
-              {honest?.ai_citation_summary || 'Citability across the 6 commercial buyer questions in AI answer engines.'}
+              {honest?.ai_citation_summary || 'No AI-score summary was stored.'}
             </p>
           </div>
         </div>

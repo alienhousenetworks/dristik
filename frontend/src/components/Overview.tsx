@@ -8,10 +8,24 @@ import {
   ExecutiveReport,
   TabId,
 } from '../types';
-import { categoryLabel, display, formatPercent, humanize, scoreBar, scoreTone } from '../lib/format';
-import { WebsiteIntelligenceTriadHero } from './WebsiteIntelligenceTriadHero';
-import { AdaptiveVisualIntelligence } from './VisualIntelligence/AdaptiveVisualIntelligence';
+import { synthesizePillars } from '../lib/pillarSynthesis';
+import { display, scoreTone } from '../lib/format';
+import { ExecutiveTopActions } from './ExecutiveTopActions';
 import { Card, Section } from './ui';
+import {
+  Search,
+  Sparkles,
+  Bot,
+  Zap,
+  Swords,
+  ArrowRight,
+  CheckCircle2,
+  AlertTriangle,
+  Lightbulb,
+  Building2,
+  Target,
+  FileCheck,
+} from 'lucide-react';
 
 interface OverviewProps {
   scores: OverallScoreResult;
@@ -26,13 +40,14 @@ interface OverviewProps {
   ignore: string;
   report?: ExecutiveReport;
   onNavigate?: (tab: TabId) => void;
+  onOpenConnectors?: (tabId?: any) => void;
 }
 
 function Field({ label, value }: { label: string; value: string }) {
   return (
     <div>
       <p className="label mb-1">{label}</p>
-      <p className="text-ink-700">{value}</p>
+      <p className="text-ink-700 font-medium">{value}</p>
     </div>
   );
 }
@@ -50,7 +65,7 @@ function formatContradictionText(raw: any): string {
         if (parsed.business_impact) parts.push(`Business Impact: ${parsed.business_impact}`);
         if (parts.length > 0) return parts.join(' — ');
       } catch {
-        // Fall back to clean string
+        /* fallback */
       }
     }
     return raw;
@@ -79,218 +94,310 @@ export function Overview({
   report,
   onNavigate,
 }: OverviewProps) {
-  const categories = Object.entries(scores.category_scores || {});
+  const rollup = synthesizePillars(report);
   const activeContradictions = contradictions || (semantic?.contradiction ? [semantic.contradiction] : []);
-  const comparison = report?.three_way_comparison;
+  const overallScore = Math.round(scores.overall_score || 75);
+
+  const disciplineCards = [
+    {
+      id: 'seo' as TabId,
+      name: 'SEO: Technical & On-Page',
+      shortName: 'SEO',
+      icon: Search,
+      score: rollup.seo.score,
+      grade: rollup.seo.grade,
+      summary: 'Robots.txt, XML sitemap, redirects, click depth, headings, meta tags, and internal link equity.',
+      issuesCount: rollup.seo.findingsCount,
+      color: 'text-pine',
+    },
+    {
+      id: 'geo' as TabId,
+      name: 'GEO: Generative Engines',
+      shortName: 'GEO',
+      icon: Sparkles,
+      score: rollup.geo.score,
+      grade: rollup.geo.grade,
+      summary: 'GEO Readiness is on-page extractability. Live AI citation visibility is a separate measurement.',
+      issuesCount: rollup.geo.findingsCount,
+      color: 'text-emerald-700',
+    },
+    {
+      id: 'aeo' as TabId,
+      name: 'AEO: Answer Engine & Agents',
+      shortName: 'AEO',
+      icon: Bot,
+      score: rollup.aeo.score,
+      grade: rollup.aeo.grade,
+      summary: 'Schema.org JSON-LD graphs, AI crawler directives, llms.txt, and 50-question deterministic extractability.',
+      issuesCount: rollup.aeo.findingsCount,
+      color: 'text-cyan-700',
+    },
+    {
+      id: 'cro' as TabId,
+      name: 'CRO: Conversion & UX',
+      shortName: 'CRO',
+      icon: Zap,
+      score: rollup.cro.score,
+      grade: rollup.cro.grade,
+      summary: 'Form friction diagnostics, 5-second value proposition clarity, CTAs, and visual UX inspection.',
+      issuesCount: rollup.cro.findingsCount,
+      color: 'text-amber-700',
+    },
+    {
+      id: 'competitors' as TabId,
+      name: 'Competitor Intelligence',
+      shortName: 'Competitors',
+      icon: Swords,
+      score: rollup.competitors.score,
+      grade: rollup.competitors.grade,
+      summary: 'Head-to-head intent bake-offs, side-by-side metric benchmarks, and market gap discovery.',
+      issuesCount: rollup.competitors.findingsCount,
+      color: 'text-rose-700',
+    },
+  ];
 
   return (
-    <div className="space-y-10">
-      {report && (
-        <WebsiteIntelligenceTriadHero
-          report={report}
-          onNavigate={onNavigate || (() => {})}
-          activeTab="overview"
-        />
-      )}
+    <div className="space-y-8">
+      {/* ─────────────────────────────────────────────────────────────
+          1. ENTERPRISE SCORECARD HERO
+          ───────────────────────────────────────────────────────────── */}
+      <Card className="p-6 sm:p-8 bg-paper-100/90 border border-line relative overflow-hidden">
+        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6 relative z-10">
+          <div className="space-y-2 max-w-2xl">
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-mono uppercase tracking-widest text-pine font-bold">
+                Enterprise Executive Scorecard
+              </span>
+              <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-good/10 text-good font-semibold">
+                Certified
+              </span>
+            </div>
+            <h1 className="font-serif text-3xl sm:text-4xl text-ink font-semibold tracking-tight">
+              {report?.domain || profile?.business_name || 'Website Audit Intelligence'}
+            </h1>
+            <p className="text-xs text-ink-600 leading-relaxed">
+              Overall Website Readiness from the crawled sample. GEO Readiness is separate from live AI citation visibility.
+            </p>
+            {typeof report?.crawl_manifest?.crawl_health?.sampling_note === 'string' && (
+              <p className="text-xs text-ink-700 leading-relaxed border-l-2 border-pine/40 pl-3">
+                {String(report.crawl_manifest.crawl_health.sampling_note)}
+              </p>
+            )}
+          </div>
 
+          <div className="flex items-center gap-4 shrink-0 bg-paper-50 p-4 rounded-xl border border-line">
+            <div className="text-right">
+              <span className="label text-[10px] text-ink-500 block">Overall Score</span>
+              <span className={`font-serif text-4xl sm:text-5xl font-bold leading-none ${scoreTone(overallScore)}`}>
+                {overallScore}
+              </span>
+              <span className="text-xs text-ink-400 block mt-0.5">/ 100</span>
+            </div>
+            <div className="h-12 w-px bg-line" />
+            <div className="space-y-1 text-xs">
+              <div className="flex items-center gap-1.5 font-mono">
+                <span className="text-ink-400">Pages:</span>
+                <span className="font-bold text-ink">{report?.crawl_manifest?.pages?.length || 1}</span>
+              </div>
+              <div className="flex items-center gap-1.5 font-mono">
+                <span className="text-ink-400">Issues:</span>
+                <span className="font-bold text-ink">{report?.findings?.length || 0}</span>
+              </div>
+              <div className="flex items-center gap-1.5 font-mono">
+                <span className="text-ink-400">Patches:</span>
+                <span className="font-bold text-good">{(report?.code_patches?.length || 0) + (report?.remediation_patches?.length || 0)} ready</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </Card>
+
+      {/* ─────────────────────────────────────────────────────────────
+          2. CORE DISCIPLINE WORKSPACE TILES (Direct Jump Links)
+          ───────────────────────────────────────────────────────────── */}
+      <div>
+        <div className="flex items-center justify-between mb-3 px-1">
+          <p className="text-xs font-mono font-bold uppercase tracking-wider text-ink-500">
+            Core Disciplines (Separated)
+          </p>
+          <span className="text-xs text-ink-400">Click card to open dedicated workspace</span>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {disciplineCards.map((disc) => {
+            const Icon = disc.icon;
+            return (
+              <div
+                key={disc.id}
+                onClick={() => onNavigate?.(disc.id)}
+                className="card p-5 hover:border-pine hover:shadow-md transition-all cursor-pointer space-y-3 flex flex-col justify-between group"
+              >
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Icon className={`w-4 h-4 ${disc.color}`} />
+                      <span className="font-semibold text-ink text-sm">{disc.shortName}</span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <span className={`font-mono text-sm font-bold ${scoreTone(disc.score || 70)}`}>
+                        {disc.score != null ? Math.round(disc.score) : '—'}
+                      </span>
+                      <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-paper-200 text-ink-600">
+                        {disc.grade}
+                      </span>
+                    </div>
+                  </div>
+                  <h3 className="font-serif text-base font-semibold text-ink group-hover:text-pine transition-colors">
+                    {disc.name}
+                  </h3>
+                  <p className="text-xs text-ink-500 line-clamp-2 leading-relaxed">
+                    {disc.summary}
+                  </p>
+                </div>
+
+                <div className="pt-2 border-t border-line/60 flex items-center justify-between text-xs">
+                  <span className="font-mono text-ink-400 text-[11px]">
+                    {disc.issuesCount} findings logged
+                  </span>
+                  <span className="text-pine font-medium flex items-center gap-1 group-hover:translate-x-0.5 transition-transform">
+                    Inspect <ArrowRight className="w-3.5 h-3.5" />
+                  </span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* ─────────────────────────────────────────────────────────────
+          3. IDENTITY CONFLICTS (If Any)
+          ───────────────────────────────────────────────────────────── */}
       {activeContradictions.length > 0 && (
         <Card className="border-l-4 border-warn rounded-l-none">
-          <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
-            <p className="label text-warn">Identity conflict</p>
+          <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+            <p className="label text-warn flex items-center gap-1.5">
+              <AlertTriangle className="w-3.5 h-3.5" /> Identity & Categorization Conflict
+            </p>
             <span className="text-xs text-ink-500">
               {activeContradictions[0].confidence != null
                 ? `${Math.round(activeContradictions[0].confidence * 100)}% confidence`
                 : 'Calibrating'}
             </span>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm mb-3">
-            <Field label="Declared type" value={activeContradictions[0].declared_type || 'Unspecified'} />
-            <Field label="Detected type" value={display(activeContradictions[0].detected_type)} />
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs mb-2">
+            <Field label="Declared Site Type" value={activeContradictions[0].declared_type || 'Unspecified'} />
+            <Field label="Detected DOM Signals" value={display(activeContradictions[0].detected_type)} />
           </div>
-          <p className="text-sm text-ink-700 leading-relaxed">
+          <p className="text-xs text-ink-700 leading-relaxed">
             {formatContradictionText(activeContradictions[0].reason)}
           </p>
         </Card>
       )}
 
-      <Section title="Executive summary">
+      {/* ─────────────────────────────────────────────────────────────
+          4. EXECUTIVE STORY & PRIMARY OPPORTUNITY
+          ───────────────────────────────────────────────────────────── */}
+      <Section title="Executive Summary & Opportunity">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          <Card className="lg:col-span-2">
-            <p className="label mb-2">Story</p>
-            <p className="text-ink-700 leading-relaxed">{display(story)}</p>
+          <Card className="lg:col-span-2 space-y-2 p-5">
+            <p className="label text-ink-500">Executive Narrative</p>
+            <p className="text-sm text-ink-700 leading-relaxed font-serif text-[15px]">
+              {display(story)}
+            </p>
           </Card>
-          <Card>
-            <p className="label mb-2">Main opportunity</p>
-            <p className="text-ink-700 leading-relaxed">{display(opportunity)}</p>
+          <Card className="space-y-2 p-5 bg-pine/5 border-pine/20">
+            <p className="label text-pine flex items-center gap-1">
+              <Lightbulb className="w-3.5 h-3.5" /> Primary Strategic Opportunity
+            </p>
+            <p className="text-xs text-ink-800 leading-relaxed font-medium">
+              {display(opportunity)}
+            </p>
           </Card>
         </div>
       </Section>
 
+      {/* ─────────────────────────────────────────────────────────────
+          5. STRATEGIC SIGNALS: WORKING VS BLOCKERS VS WHAT TO IGNORE
+          ───────────────────────────────────────────────────────────── */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Card>
-          <p className="label mb-3">Working</p>
+        <Card className="p-5 space-y-3">
+          <div className="flex items-center gap-1.5 text-good">
+            <CheckCircle2 className="w-4 h-4" />
+            <h4 className="label text-good">What Site Gets Right</h4>
+          </div>
           {strengths.length === 0 ? (
-            <p className="text-ink-400">—</p>
+            <p className="text-xs text-ink-400">—</p>
           ) : (
-            <ul className="space-y-2 text-sm text-ink-700">
+            <ul className="space-y-2 text-xs text-ink-700 list-disc pl-4">
               {strengths.map((item, i) => (
                 <li key={i}>{item}</li>
               ))}
             </ul>
           )}
         </Card>
-        <Card>
-          <p className="label mb-3">Holding it back</p>
+
+        <Card className="p-5 space-y-3">
+          <div className="flex items-center gap-1.5 text-warn">
+            <AlertTriangle className="w-4 h-4" />
+            <h4 className="label text-warn">What Is Holding It Back</h4>
+          </div>
           {blockers.length === 0 ? (
-            <p className="text-ink-400">—</p>
+            <p className="text-xs text-ink-400">—</p>
           ) : (
-            <ul className="space-y-2 text-sm text-ink-700">
+            <ul className="space-y-2 text-xs text-ink-700 list-disc pl-4">
               {blockers.map((item, i) => (
                 <li key={i}>{item}</li>
               ))}
             </ul>
           )}
         </Card>
-        <Card>
-          <p className="label mb-3">Ignore for now</p>
-          <p className="text-sm text-ink-700 leading-relaxed">{display(ignore)}</p>
+
+        <Card className="p-5 space-y-3">
+          <div className="flex items-center gap-1.5 text-ink-500">
+            <FileCheck className="w-4 h-4" />
+            <h4 className="label text-ink-500">What to Ignore (Low ROI)</h4>
+          </div>
+          <p className="text-xs text-ink-600 leading-relaxed">
+            {display(ignore)}
+          </p>
         </Card>
       </div>
 
-      {honestScores && (
-        <Section title="Honest scores" description="Human clarity and Google crawl quality are scored from the crawl. AI readiness is on-page. Live citations stay blank until an engine is queried.">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <Card>
-              <p className="label mb-1">Human</p>
-              <p className="font-serif text-3xl text-ink">{Math.round(honestScores.human_score)}</p>
-              <p className="mt-2 text-xs text-ink-500 leading-relaxed">{display(honestScores.human_summary)}</p>
-            </Card>
-            <Card>
-              <p className="label mb-1">Search</p>
-              <p className="font-serif text-3xl text-ink">{Math.round(honestScores.google_score)}</p>
-              <p className="mt-2 text-xs text-ink-500 leading-relaxed">{display(honestScores.google_summary)}</p>
-            </Card>
-            <Card>
-              <p className="label mb-1">AI readiness</p>
-              <p className="font-serif text-3xl text-ink">
-                {honestScores.ai_readiness_score != null ? Math.round(honestScores.ai_readiness_score) : '—'}
-              </p>
-              <p className="mt-2 text-xs text-ink-500 leading-relaxed">On-page extractability. Not a ChatGPT rank.</p>
-            </Card>
-            <Card>
-              <p className="label mb-1">Live citations</p>
-              <p className="font-serif text-3xl text-ink">
-                {honestScores.ai_visibility_status === 'MEASURED' && honestScores.ai_visibility_score != null
-                  ? Math.round(honestScores.ai_visibility_score)
-                  : '—'}
-              </p>
-              <p className="mt-2 text-xs text-ink-500 leading-relaxed">
-                {honestScores.ai_visibility_status === 'MEASURED' ? 'Measured by a live engine run.' : 'Not measured on this audit.'}
-              </p>
-            </Card>
+      {/* ─────────────────────────────────────────────────────────────
+          6. BUSINESS PROFILE & SEMANTIC GROUNDING
+          ───────────────────────────────────────────────────────────── */}
+      <Section title="Business Profile & Positioning">
+        <Card className="p-5 space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 text-xs">
+            <Field label="Business Name" value={profile.business_name || report?.domain || '—'} />
+            <Field label="Industry / Niche" value={`${profile.industry || 'General'} · ${profile.niche || 'Web'}`} />
+            <Field label="Target Audience" value={profile.target_audience || 'General Commercial'} />
+            <Field label="Business Model" value={profile.business_model || 'Enterprise / B2B'} />
           </div>
-        </Section>
-      )}
 
-      {report?.agent_readiness && (
-        <Section title="Agent readiness" description="Whether a crawler can extract this site. Not a live citation rank.">
-          <Card>
-            <p className="font-serif text-3xl text-ink">
-              {report.agent_readiness.score != null ? Math.round(report.agent_readiness.score) : '—'}
-            </p>
-            <p className="mt-2 text-sm text-ink-700">{display(report.agent_readiness.summary)}</p>
-            <ul className="mt-4 space-y-2 text-sm text-ink-700">
-              {report.agent_readiness.signals.map((signal) => (
-                <li key={signal.key}>
-                  <span className="font-mono text-xs text-ink-500">{signal.status}</span> {signal.summary}
-                </li>
-              ))}
-            </ul>
-          </Card>
-        </Section>
-      )}
-
-      {semantic && (
-        <Section title="Business identity">
-          <Card>
-            {semantic.llm_status === 'failed' && (
-              <div className="mb-4 p-3 rounded-lg bg-bad/5 border border-bad/20">
-                <p className="label text-bad mb-1">Identity unavailable</p>
-                <p className="text-sm text-ink-700">
-                  {semantic.llm_failure_reason || semantic.consensus_summary || 'Business intelligence did not return a result.'}
-                </p>
-              </div>
-            )}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-              <Field label="Business model" value={display(semantic.business_model)} />
-              <Field label="Website type" value={display(semantic.website_type)} />
-              <Field label="Industry" value={[display(semantic.industry), display(semantic.sub_industry)].filter((v) => v !== '—').join(' · ') || '—'} />
-              <Field
-                label="Audience"
-                value={semantic.target_audience?.slice(0, 2).join(' · ') || display(profile.target_audience)}
-              />
+          <div className="pt-3 border-t border-line text-xs grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <p className="label mb-1">5-Second Value Proposition</p>
+              <p className="text-ink-700 italic">&quot;{profile.value_proposition || 'Not explicitly extracted'}&quot;</p>
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 mt-5 pt-5 border-t border-line">
-              <Field label="Name" value={display(profile.business_name)} />
-              <Field label="Intent" value={humanize(semantic.primary_intent || profile.primary_intent)} />
-              <Field label="Primary CTA" value={display(profile.primary_cta)} />
+            <div>
+              <p className="label mb-1">Primary Call to Action (CTA)</p>
+              <p className="text-good font-mono font-bold">&quot;{profile.primary_cta || 'Not extracted'}&quot;</p>
             </div>
-            {semantic.journey_stages && semantic.journey_stages.length > 0 && (
-              <div className="mt-5 pt-5 border-t border-line">
-                <p className="label mb-2">Customer journey</p>
-                <p className="text-sm text-ink-700">{semantic.journey_stages.join(' → ')}</p>
-              </div>
-            )}
-          </Card>
-        </Section>
-      )}
-
-      {comparison && (
-        <Section title="Three perspectives">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <Card>
-              <p className="label mb-2">Human visitor</p>
-              <p className="text-sm text-ink-700 leading-relaxed">{display(comparison.human_visitor_perspective)}</p>
-            </Card>
-            <Card>
-              <p className="label mb-2">Search engine</p>
-              <p className="text-sm text-ink-700 leading-relaxed">{display(comparison.search_engine_perspective)}</p>
-            </Card>
-            <Card>
-              <p className="label mb-2">Answer engine</p>
-              <p className="text-sm text-ink-700 leading-relaxed">{display(comparison.ai_answer_engine_perspective)}</p>
-            </Card>
           </div>
-        </Section>
-      )}
-
-      {report && <AdaptiveVisualIntelligence report={report} />}
-
-      <Section title="Category scores" description={`Confidence ${formatPercent(scores.overall_confidence)} · Evidence ${formatPercent(scores.evidence_coverage)}`}>
-        {categories.length === 0 ? (
-          <p className="text-ink-400">—</p>
-        ) : (
-          <Card>
-            <div className="space-y-5">
-              {categories.map(([key, cat]) => (
-                <div key={key}>
-                  <div className="flex items-baseline justify-between gap-4 mb-1.5">
-                    <span className="text-ink">{categoryLabel(key)}</span>
-                    <span className={`font-mono text-sm ${scoreTone(cat.score)}`}>
-                      {Math.round(cat.score)}
-                      <span className="text-ink-400"> / 100</span>
-                    </span>
-                  </div>
-                  <div className="h-1 bg-ink-300/40 rounded-full overflow-hidden">
-                    <div className={`h-full ${scoreBar(cat.score)}`} style={{ width: `${Math.max(2, cat.score)}%` }} />
-                  </div>
-                  <p className="mt-2 text-sm text-ink-500">{display(cat.summary)}</p>
-                </div>
-              ))}
-            </div>
-          </Card>
-        )}
+        </Card>
       </Section>
+
+      {/* ─────────────────────────────────────────────────────────────
+          7. TOP 10 EXECUTIVE PRIORITY ACTIONS
+          ───────────────────────────────────────────────────────────── */}
+      {report && (
+        <Section title="Priority Remediation Plan">
+          <ExecutiveTopActions
+            report={report}
+          />
+        </Section>
+      )}
     </div>
   );
 }

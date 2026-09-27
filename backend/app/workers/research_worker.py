@@ -98,11 +98,11 @@ class CognitiveResearchWorker(BaseCognitiveWorker):
                 parsed_evals.append(AiSearchQueryEvaluation(
                     query=item.get("query", f"What is {biz_name}?"),
                     question_type=item.get("question_type", "General Query"),
-                    evidence_quality=item.get("evidence_quality", "Moderate"),
+                    evidence_quality=item.get("evidence_quality", "Missing"),
                     score=s,
-                    detected_answer=item.get("detected_answer", "Synthesized from crawled domain headers and metadata."),
+                    detected_answer=item.get("detected_answer") or "No answer discernible from on-page evidence.",
                     evidence_snippet=item.get("evidence_snippet"),
-                    gap_analysis=item.get("gap_analysis", "Embed structured JSON-LD entity graph and direct answer definitions to increase AI citation probability."),
+                    gap_analysis=item.get("gap_analysis") or "Information not found in crawled page evidence.",
                     citation_probability=cp
                 ))
             except Exception:
@@ -112,15 +112,24 @@ class CognitiveResearchWorker(BaseCognitiveWorker):
 
         # Register Claims
         for cl in result.get("claims", []):
+            stmt = cl.get("statement")
+            if not stmt:
+                continue
             sev_str = str(cl.get("severity", "MEDIUM")).upper()
             sev = Severity[sev_str] if sev_str in Severity.__members__ else Severity.MEDIUM
+            ev_refs = cl.get("evidence_refs", [])
+            conf_val = cl.get("confidence")
+            conf = float(conf_val) if conf_val is not None else (0.80 if ev_refs else 0.50)
             blackboard.claim_registry.register_claim(
                 agent_id=f"{self.worker_id}_{capability_id}",
-                statement=cl.get("statement", "AI search query simulation finding"),
+                statement=stmt,
                 category=Category.AI_SEARCH,
                 severity=sev,
-                confidence=float(cl.get("confidence", 0.90)),
-                recommendation=cl.get("recommendation", "Optimize answer clarity and JSON-LD schema for AI discovery queries.")
+                confidence=conf,
+                impact=int(cl.get("impact", 7)),
+                effort=int(cl.get("effort", 3)),
+                evidence_refs=ev_refs,
+                recommendation=cl.get("recommendation")
             )
 
         return result

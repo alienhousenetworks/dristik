@@ -25,7 +25,8 @@ export function ConversionIntelligenceView({
 
   const profile = report.business_profile;
   const semantic = report.semantic_business;
-  const croScore = Math.round(report.honest_scores?.human_score || 72);
+  const humanScore = report.honest_scores?.human_score;
+  const croScore = typeof humanScore === 'number' ? Math.round(humanScore) : null;
 
   return (
     <PillarShell
@@ -33,7 +34,7 @@ export function ConversionIntelligenceView({
       title="Funnels, CTAs, and competitors"
       description="Clarity of the offer, form friction, pricing, and how you compare in buyer questions."
       scoreLabel="Conversion"
-      score={croScore}
+      score={croScore ?? '—'}
       metaLabel="Model"
       meta={profile?.business_model || '—'}
       tabs={[
@@ -54,25 +55,25 @@ export function ConversionIntelligenceView({
           <div className="sheet border border-line rounded-lg p-6 space-y-4">
             <span className="label text-[10px] block text-pine">5-Second Value Proposition</span>
             <p className="font-serif text-2xl text-ink leading-relaxed">
-              "{profile?.value_proposition || 'Comprehensive digital solutions for modern businesses.'}"
+              {profile?.value_proposition ? `"${profile.value_proposition}"` : 'No value proposition was extracted from the crawl.'}
             </p>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-2">
               <div className="bg-paper-50 p-3 rounded border border-line">
                 <span className="label text-[10px] block">Target Audience</span>
                 <span className="font-semibold text-ink text-xs mt-1 block">
-                  {profile?.target_audience || 'Commercial Decision Makers'}
+                  {profile?.target_audience || '—'}
                 </span>
               </div>
               <div className="bg-paper-50 p-3 rounded border border-line">
                 <span className="label text-[10px] block">Primary Intent</span>
                 <span className="font-semibold text-ink text-xs mt-1 block">
-                  {profile?.primary_intent || 'Lead Generation'}
+                  {profile?.primary_intent || '—'}
                 </span>
               </div>
               <div className="bg-paper-50 p-3 rounded border border-line">
                 <span className="label text-[10px] block">Primary CTA</span>
                 <span className="font-semibold text-good text-xs mt-1 block">
-                  {profile?.primary_cta || 'Get Started / Contact Us'}
+                  {profile?.primary_cta || '—'}
                 </span>
               </div>
             </div>
@@ -88,18 +89,15 @@ export function ConversionIntelligenceView({
             <div className="border border-line p-4 rounded-lg bg-paper-50 space-y-2">
               <span className="label text-[10px] block">Action Verbs in CTA Buttons</span>
               <p className="font-mono text-sm text-ink font-bold">
-                {profile?.primary_cta ? `"${profile.primary_cta}"` : 'Generic CTA detected'}
-              </p>
-              <p className="text-xs text-ink-500">
-                Action-oriented buttons with immediate benefit outperform passive labels like "Submit" or "Click Here".
+                {profile?.primary_cta ? `"${profile.primary_cta}"` : 'No CTA string was extracted.'}
               </p>
             </div>
 
             <div className="border border-line p-4 rounded-lg bg-paper-50 space-y-2">
-              <span className="label text-[10px] block">Form Field Barriers</span>
-              <p className="font-serif text-xl font-bold text-good">Friction Checked</p>
+              <span className="label text-[10px] block">Form fields</span>
+              <p className="font-serif text-xl font-bold text-ink">Not measured</p>
               <p className="text-xs text-ink-500">
-                Forms with fewer than 4 input fields achieve up to 35% higher lead conversion rates.
+                Field count and completion rate are blank until the crawl records the form or a CRM returns submissions.
               </p>
             </div>
           </div>
@@ -113,10 +111,7 @@ export function ConversionIntelligenceView({
           <div className="border border-line p-5 rounded-lg bg-paper-50 space-y-3">
             <span className="label text-[10px] block">Detected Monetization Structure</span>
             <p className="text-sm font-semibold text-ink">
-              Model: {profile?.business_model || 'Subscription / Retainer'}
-            </p>
-            <p className="text-xs text-ink-600 leading-relaxed">
-              Transparent pricing tables enhance Google AI search citability by allowing answer engines to quote verified price ranges.
+              {profile?.business_model ? `Model: ${profile.business_model}` : 'No business model was stated on the crawled pages.'}
             </p>
           </div>
         </div>
@@ -140,7 +135,7 @@ export function ConversionIntelligenceView({
               ))}
             </div>
           ) : (
-            <p className="text-sm text-ink-500">Awareness → Consideration → Commercial Evaluation → Conversion</p>
+            <p className="text-sm text-ink-500">No journey stages were extracted from this crawl.</p>
           )}
         </div>
       )}

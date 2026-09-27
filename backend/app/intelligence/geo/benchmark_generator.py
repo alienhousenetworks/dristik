@@ -32,6 +32,8 @@ class BenchmarkSuite(BaseModel):
     industry: str
     total_queries: int
     queries: List[BenchmarkQuery] = Field(default_factory=list)
+    matrix_grounding: str = "profile"  # profile | industry_label | brand_only
+    matrix_confidence: str = "high"  # high | medium | low
 
 
 class GeoBenchmarkGenerator:
@@ -51,14 +53,25 @@ class GeoBenchmarkGenerator:
     ) -> BenchmarkSuite:
         clean_domain = (domain or "").lower().replace("https://", "").replace("http://", "").split("/")[0]
         brand = brand_name or clean_domain.split(".")[0].capitalize()
-        ind = industry or "Software & Technology Services"
-        serv_list = services or ["AI development", "custom software engineering", "cloud infrastructure"]
-        primary_serv = serv_list[0] if serv_list else "custom software engineering"
-        secondary_serv = serv_list[1] if len(serv_list) > 1 else "cloud architecture"
-        comp_list = competitors or ["leading competitors in the market"]
-        primary_comp = comp_list[0] if comp_list else "market alternatives"
-        loc_list = locations or ["India", "United States", "global"]
-        primary_loc = loc_list[0] if loc_list else "global"
+        ind = (industry or "").strip()
+        serv_list = [str(s).strip() for s in (services or []) if s and str(s).strip()]
+        if serv_list:
+            grounding = "profile"
+            matrix_confidence = "high"
+        elif ind:
+            serv_list = [ind]
+            grounding = "industry_label"
+            matrix_confidence = "medium"
+        else:
+            grounding = "brand_only"
+            matrix_confidence = "low"
+        primary_serv = serv_list[0] if serv_list else "the services it lists publicly"
+        secondary_serv = serv_list[1] if len(serv_list) > 1 else primary_serv
+        category_label = ind or "this category"
+        comp_list = [c for c in (competitors or []) if c and str(c).strip()] or ["leading competitors in the market"]
+        primary_comp = comp_list[0]
+        loc_list = [loc for loc in (locations or []) if loc and str(loc).strip()]
+        primary_loc = loc_list[0] if loc_list else "its home market"
 
         queries: List[BenchmarkQuery] = []
         qid = 1
@@ -98,14 +111,14 @@ class GeoBenchmarkGenerator:
         if mode == "comprehensive":
             _add("services", "Service Capabilities", f"Does {brand} build {secondary_serv}?", "Secondary capability inquiry")
             _add("services", "Service Capabilities", f"What technology stack and frameworks does {brand} use?", "Tech stack extraction")
-            _add("services", "Service Capabilities", f"Does {brand} offer custom API development and integrations?", "API capability")
+            _add("services", "Service Capabilities", f"Does {brand} offer {secondary_serv}?", "Secondary capability inquiry")
             _add("services", "Service Capabilities", f"What are the main features of {brand}'s platform?", "Feature set extraction")
-            _add("services", "Service Capabilities", f"Can {brand} handle enterprise-scale workloads?", "Scalability verification")
-            _add("services", "Service Capabilities", f"Does {brand} offer mobile and cloud application development?", "Multi-platform support")
+            _add("services", "Service Capabilities", f"Can {brand} deliver {primary_serv} for larger organizations?", "Scale verification")
+            _add("services", "Service Capabilities", f"Does {brand} offer {primary_serv} together with {secondary_serv}?", "Combined capability")
             _add("services", "Service Capabilities", f"What deliverables does {brand} provide during a project?", "Deliverables specification")
             _add("services", "Service Capabilities", f"Does {brand} provide ongoing maintenance and technical support?", "Support policy")
             _add("services", "Service Capabilities", f"How does {brand}'s service delivery process work?", "Process and methodology")
-            _add("services", "Service Capabilities", f"Does {brand} offer consulting and architecture design?", "Advisory services")
+            _add("services", "Service Capabilities", f"Does {brand} advise on {primary_serv} as well as deliver it?", "Advisory services")
 
         # -------------------------------------------------------------
         # Category 3: Target Audience & ICP (8 in full, 2 in concise)
@@ -123,24 +136,24 @@ class GeoBenchmarkGenerator:
         # -------------------------------------------------------------
         # Category 4: Commercial Intent (8 in full, 2 in concise)
         # -------------------------------------------------------------
-        _add("commercial", "Commercial Intent", f"Top {ind} companies for startups in 2026", "Non-branded competitive list")
+        _add("commercial", "Commercial Intent", f"Top {category_label} companies for buyers in 2026", "Non-branded competitive list")
         _add("commercial", "Commercial Intent", f"Best companies offering {primary_serv} with verified customer reviews", "Service-grounded recommendation")
         if mode == "comprehensive":
-            _add("commercial", "Commercial Intent", f"Who are the leading {ind} firms in {primary_loc}?", "Regional industry leaders")
+            _add("commercial", "Commercial Intent", f"Who are the leading {category_label} firms in {primary_loc}?", "Regional industry leaders")
             _add("commercial", "Commercial Intent", f"Top rated vendors providing {secondary_serv}", "Secondary service rankings")
-            _add("commercial", "Commercial Intent", f"Affordable and high-quality {ind} agencies", "Price/quality discovery")
-            _add("commercial", "Commercial Intent", f"Enterprise {primary_serv} providers with SOC 2 compliance", "Enterprise filter")
-            _add("commercial", "Commercial Intent", f"Fastest growing {ind} startups to watch", "Growth category search")
-            _add("commercial", "Commercial Intent", f"Recommended development partners for building AI SaaS applications", "SaaS development partners")
+            _add("commercial", "Commercial Intent", f"Affordable and high-quality {category_label} providers", "Price/quality discovery")
+            _add("commercial", "Commercial Intent", f"Enterprise providers of {primary_serv}", "Enterprise filter")
+            _add("commercial", "Commercial Intent", f"Established {category_label} providers to evaluate", "Category discovery")
+            _add("commercial", "Commercial Intent", f"Recommended partners for {primary_serv}", "Partner discovery")
 
         # -------------------------------------------------------------
         # Category 5: Comparative & Alternatives (8 in full, 2 in concise)
         # -------------------------------------------------------------
-        _add("comparative", "Comparative & Alternatives", f"{brand} vs {primary_comp}: which is better for {ind}?", "Head-to-head bakeoff")
+        _add("comparative", "Comparative & Alternatives", f"{brand} vs {primary_comp}: which is better for {category_label}?", "Head-to-head bakeoff")
         _add("comparative", "Comparative & Alternatives", f"What are the top alternatives to {brand}?", "Competitor substitution")
         if mode == "comprehensive":
             _add("comparative", "Comparative & Alternatives", f"Companies similar to {brand} in pricing and quality", "Peer group comparison")
-            _add("comparative", "Comparative & Alternatives", f"Why choose {brand} over other {ind} providers?", "Moat and differentiation")
+            _add("comparative", "Comparative & Alternatives", f"Why choose {brand} over other {category_label} providers?", "Moat and differentiation")
             _add("comparative", "Comparative & Alternatives", f"How does {brand}'s pricing compare to {primary_comp}?", "Price comparison")
             _add("comparative", "Comparative & Alternatives", f"Pros and cons of using {brand}", "Trade-off analysis")
             _add("comparative", "Comparative & Alternatives", f"How easy is it to migrate from {primary_comp} to {brand}?", "Switching costs")
@@ -149,26 +162,26 @@ class GeoBenchmarkGenerator:
         # -------------------------------------------------------------
         # Category 6: Problem-Based Inquiries (8 in full, 2 in concise)
         # -------------------------------------------------------------
-        _add("problem", "Problem-Based", f"Which company can build a production-ready AI application with low latency?", "Technical problem inquiry")
+        _add("problem", "Problem-Based", f"Who can help a company with {primary_serv}?", "Problem inquiry")
         _add("problem", "Problem-Based", f"How can a business hire experts for {primary_serv}?", "Talent/vendor sourcing")
         if mode == "comprehensive":
-            _add("problem", "Problem-Based", f"Who can migrate our infrastructure to modern cloud architectures?", "Migration challenge")
-            _add("problem", "Problem-Based", f"How to automate backend workflows using generative AI safely?", "GenAI workflow challenge")
-            _add("problem", "Problem-Based", f"Who provides turnkey development for Series A venture-backed SaaS?", "Venture startup challenge")
-            _add("problem", "Problem-Based", f"What is the best way to develop custom LLM agents for enterprise?", "Agent development challenge")
-            _add("problem", "Problem-Based", f"Which agencies build scalable FastAPI and PyTorch software?", "Stack-specific challenge")
-            _add("problem", "Problem-Based", f"How to achieve 99.99% uptime for AI inference microservices?", "High availability challenge")
+            _add("problem", "Problem-Based", f"Who can help a company implement {primary_serv} without a long disruption?", "Implementation challenge")
+            _add("problem", "Problem-Based", f"How do companies choose a provider for {secondary_serv}?", "Selection challenge")
+            _add("problem", "Problem-Based", f"Who provides {primary_serv} for growing companies?", "Growth-stage challenge")
+            _add("problem", "Problem-Based", f"What should a buyer ask before hiring for {primary_serv}?", "Buying-question challenge")
+            _add("problem", "Problem-Based", f"Which providers are known for {primary_serv}?", "Known-provider challenge")
+            _add("problem", "Problem-Based", f"How do buyers compare reliability when choosing {primary_serv}?", "Reliability challenge")
 
         # -------------------------------------------------------------
         # Category 7: Geographic Discovery (6 in full, 2 in concise)
         # -------------------------------------------------------------
-        _add("geographic", "Geographic Discovery", f"Best {ind} companies in {primary_loc}", "Primary location search")
+        _add("geographic", "Geographic Discovery", f"Best {category_label} companies in {primary_loc}", "Primary location search")
         _add("geographic", "Geographic Discovery", f"Top {primary_serv} providers based in {primary_loc}", "Local capability search")
         if mode == "comprehensive":
             _add("geographic", "Geographic Discovery", f"Does {brand} provide services internationally to US and European clients?", "Global service reach")
-            _add("geographic", "Geographic Discovery", f"Tech and software development agencies operating in {primary_loc}", "Regional directory search")
-            _add("geographic", "Geographic Discovery", f"Offshore vs nearshore development in {primary_loc} for AI", "Offshore positioning")
-            _add("geographic", "Geographic Discovery", f"Where can I find vetted {ind} engineering teams in {primary_loc}?", "Vetted regional teams")
+            _add("geographic", "Geographic Discovery", f"Providers of {primary_serv} operating in {primary_loc}", "Regional directory search")
+            _add("geographic", "Geographic Discovery", f"Local versus remote providers of {primary_serv} in {primary_loc}", "Delivery-location positioning")
+            _add("geographic", "Geographic Discovery", f"Where can I find vetted {category_label} teams in {primary_loc}?", "Vetted regional teams")
 
         # -------------------------------------------------------------
         # Category 8: High-Intent Purchase Questions (6 in full, 2 in concise)
@@ -177,7 +190,7 @@ class GeoBenchmarkGenerator:
         _add("high_intent", "High-Intent Commercial", f"Does {brand} offer a free trial, free tier, or proof of concept?", "Trial inquiry")
         if mode == "comprehensive":
             _add("high_intent", "High-Intent Commercial", f"How long does it take to get started and deploy with {brand}?", "Time-to-value inquiry")
-            _add("high_intent", "High-Intent Commercial", f"Is {brand} SOC 2, HIPAA, or ISO 27001 compliant?", "Compliance proof")
+            _add("high_intent", "High-Intent Commercial", f"What trust, certification, or customer evidence does {brand} publish?", "Trust evidence inquiry")
             _add("high_intent", "High-Intent Commercial", f"How can I book a demo or contact {brand}'s sales team?", "Direct booking inquiry")
             _add("high_intent", "High-Intent Commercial", f"What is {brand}'s cancellation or refund policy?", "Contract terms inquiry")
 
@@ -186,9 +199,11 @@ class GeoBenchmarkGenerator:
             suite_id=suite_id,
             domain=clean_domain,
             brand_name=brand,
-            industry=ind,
+            industry=category_label,
             total_queries=len(queries),
             queries=queries,
+            matrix_grounding=grounding,
+            matrix_confidence=matrix_confidence,
         )
 
 

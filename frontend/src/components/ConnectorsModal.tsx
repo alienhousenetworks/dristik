@@ -9,6 +9,31 @@ interface ConnectorsModalProps {
   onIntegrationAdded?: () => void;
 }
 
+export type ConnectorCategory = 'ALL' | 'ANALYTICS' | 'CRM' | 'GEO' | 'CMS';
+
+export interface ConnectorDefinition {
+  id: ConnectorType;
+  label: string;
+  icon: string;
+  category: 'ANALYTICS' | 'CRM' | 'GEO' | 'CMS';
+  desc: string;
+  tag: string;
+}
+
+export const ALL_CONNECTORS: ConnectorDefinition[] = [
+  { id: 'google_search_console', label: 'Search Console', icon: 'GSC', category: 'ANALYTICS', desc: 'Queries, CTR, Pos', tag: 'Google Search Console' },
+  { id: 'google_analytics_4', label: 'Google Analytics 4', icon: 'GA4', category: 'ANALYTICS', desc: 'Funnels, Visitors', tag: 'GA4 Data API' },
+  { id: 'dataforseo', label: 'DataForSEO Index', icon: 'SEO', category: 'ANALYTICS', desc: 'SERP & Backlinks', tag: 'DataForSEO v3' },
+  { id: 'crux', label: 'Google CrUX', icon: 'CWV', category: 'ANALYTICS', desc: 'Real User Vitals', tag: 'Chrome UX Report' },
+  { id: 'crm', label: 'CRM & Revenue', icon: 'CRM', category: 'CRM', desc: 'HubSpot, SF, Stripe', tag: 'Pipeline Attribution' },
+  { id: 'live_ai_search', label: 'Live AI Citations', icon: 'GEO', category: 'GEO', desc: 'Perplexity, ChatGPT', tag: 'Answer Engine Test' },
+  { id: 'wordpress', label: 'WordPress', icon: 'W', category: 'CMS', desc: 'Auto Deploy', tag: 'REST & Plugin' },
+  { id: 'github', label: 'GitHub', icon: 'GH', category: 'CMS', desc: 'Pull Requests', tag: 'GitHub API' },
+  { id: 'shopify', label: 'Shopify', icon: 'S', category: 'CMS', desc: 'Liquid Theme', tag: 'Admin GraphQL' },
+  { id: 'webflow', label: 'Webflow', icon: 'WF', category: 'CMS', desc: 'Embed Head', tag: 'Webflow Sites' },
+  { id: 'generic', label: 'Generic Web', icon: 'URL', category: 'CMS', desc: 'Crawl & Patch Pack', tag: 'Direct Crawl' },
+];
+
 const GoogleIcon = () => (
   <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
     <path
@@ -39,14 +64,17 @@ export const ConnectorsModal: React.FC<ConnectorsModalProps> = ({
 }) => {
   const [integrations, setIntegrations] = useState<Integration[]>([]);
   const [activeTab, setActiveTab] = useState<ConnectorType>(initialTab || 'google_search_console');
+  const [categoryFilter, setCategoryFilter] = useState<ConnectorCategory>('ALL');
+  const [rightPanelTab, setRightPanelTab] = useState<'directory' | 'active'>('directory');
   const [loading, setLoading] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
 
   // Form states
-  const [siteUrl, setSiteUrl] = useState(targetUrl || 'https://example.com');
+  const [siteUrl, setSiteUrl] = useState(targetUrl || '');
   const [gscSiteUrl, setGscSiteUrl] = useState(targetUrl || '');
   const [gscCredentials, setGscCredentials] = useState('');
   const [gscAuthMode, setGscAuthMode] = useState<'oauth' | 'service_account'>('oauth');
+  const [oauthProviders, setOauthProviders] = useState<Record<string, { configured: boolean; label: string; client_id_env: string; client_secret_env: string }>>({});
   const [wpUsername, setWpUsername] = useState('');
   const [wpAppPassword, setWpAppPassword] = useState('');
   const [wpPluginKey, setWpPluginKey] = useState('');
@@ -61,6 +89,26 @@ export const ConnectorsModal: React.FC<ConnectorsModalProps> = ({
   const [webflowSiteId, setWebflowSiteId] = useState('');
   const [webflowToken, setWebflowToken] = useState('');
   const [wpAuthMode, setWpAuthMode] = useState<'app_password' | 'plugin'>('app_password');
+
+  // GA4 states
+  const [ga4PropertyId, setGa4PropertyId] = useState('');
+  const [ga4MeasurementId, setGa4MeasurementId] = useState('');
+  const [ga4ApiKey, setGa4ApiKey] = useState('');
+
+  // DataForSEO states
+  const [dfsLogin, setDfsLogin] = useState('');
+  const [dfsPassword, setDfsPassword] = useState('');
+
+  // CrUX states
+  const [cruxApiKey, setCruxApiKey] = useState('');
+
+  // CRM states
+  const [crmPlatform, setCrmPlatform] = useState<'hubspot' | 'salesforce' | 'stripe' | 'postgresql'>('hubspot');
+  const [crmApiKey, setCrmApiKey] = useState('');
+
+  // Live AI Search states
+  const [aiEngine, setAiEngine] = useState<'perplexity' | 'openai' | 'claude' | 'gemini'>('perplexity');
+  const [aiApiKey, setAiApiKey] = useState('');
 
   const fetchIntegrations = async () => {
     try {
@@ -90,8 +138,8 @@ export const ConnectorsModal: React.FC<ConnectorsModalProps> = ({
   // Listen for Google OAuth callback from popup window
   useEffect(() => {
     const handleMessage = async (e: MessageEvent) => {
-      if (e.data && e.data.type === 'GSC_OAUTH_SUCCESS') {
-        setStatusMessage(`✓ Google Search Console connected via 1-Click Google OAuth (${e.data.email || 'Verified'})!`);
+      if (e.data && (e.data.type === 'GSC_OAUTH_SUCCESS' || e.data.type === 'OAUTH_SUCCESS')) {
+        setStatusMessage(`Signed in${e.data.provider ? ` with ${e.data.provider}` : ''}. Token saved. Metrics stay blank until a live query returns them.`);
         await fetchIntegrations();
         onIntegrationAdded?.();
       }
@@ -100,10 +148,57 @@ export const ConnectorsModal: React.FC<ConnectorsModalProps> = ({
     return () => window.removeEventListener('message', handleMessage);
   }, []);
 
+  useEffect(() => {
+    if (!isOpen) return;
+    fetch('/api/v1/connectors/oauth/providers')
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data?.providers) setOauthProviders(data.providers);
+      })
+      .catch(() => {});
+  }, [isOpen]);
+
+  const startOauth = (provider: string, params: Record<string, string>) => {
+    const ready = oauthProviders[provider];
+    if (ready && !ready.configured) {
+      setStatusMessage(`Add ${ready.client_id_env} and ${ready.client_secret_env} to backend/.env, then restart the API.`);
+      return;
+    }
+    const query = new URLSearchParams(Object.entries(params).filter(([, value]) => value));
+    const width = 520;
+    const height = 680;
+    const left = window.screenX + (window.outerWidth - width) / 2;
+    const top = window.screenY + (window.outerHeight - height) / 2;
+    const popup = window.open(
+      `/api/v1/connectors/oauth/${provider}/authorize?${query.toString()}`,
+      'connector_oauth',
+      `width=${width},height=${height},left=${left},top=${top},status=no,resizable=yes`
+    );
+    const timer = setInterval(async () => {
+      if (!popup || popup.closed) {
+        clearInterval(timer);
+        setLoading(false);
+        await fetchIntegrations();
+        onIntegrationAdded?.();
+      }
+    }, 1000);
+  };
+
   const handleGoogleOAuth = () => {
     setLoading(true);
     setStatusMessage(null);
-    const cleanDomain = (gscSiteUrl || siteUrl || 'example.com').replace('https://', '').replace('http://', '').split('/')[0];
+    const cleanDomain = (gscSiteUrl || siteUrl).replace('https://', '').replace('http://', '').split('/')[0];
+    if (!cleanDomain) {
+      setStatusMessage('Enter the site URL before signing in with Google.');
+      setLoading(false);
+      return;
+    }
+    const gscReady = oauthProviders['google_search_console'] || oauthProviders['google_analytics_4'];
+    if (gscReady && !gscReady.configured) {
+      setStatusMessage('Add GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET to backend/.env, then restart the API.');
+      setLoading(false);
+      return;
+    }
     const width = 520;
     const height = 660;
     const left = window.screenX + (window.outerWidth - width) / 2;
@@ -123,35 +218,6 @@ export const ConnectorsModal: React.FC<ConnectorsModalProps> = ({
         onIntegrationAdded?.();
       }
     }, 1000);
-  };
-
-  const handleQuickConnect = async () => {
-    setLoading(true);
-    setStatusMessage(null);
-    try {
-      const cleanDomain = (gscSiteUrl || siteUrl || 'example.com').replace('https://', '').replace('http://', '').split('/')[0];
-      const res = await fetch('/api/v1/connectors/google/oauth/quick-connect', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          domain: cleanDomain,
-          property_url: `https://${cleanDomain}`,
-          account_email: `owner@${cleanDomain}`
-        })
-      });
-      const data = await res.json();
-      if (res.ok && data.success) {
-        setStatusMessage(`✓ ${data.message}`);
-        await fetchIntegrations();
-        onIntegrationAdded?.();
-      } else {
-        setStatusMessage(`Error: ${data.message || 'Connection failed'}`);
-      }
-    } catch (err: any) {
-      setStatusMessage(`Connection failed: ${err.message}`);
-    } finally {
-      setLoading(false);
-    }
   };
 
   const handleConnect = async (e: React.FormEvent) => {
@@ -187,6 +253,32 @@ export const ConnectorsModal: React.FC<ConnectorsModalProps> = ({
     } else if (activeTab === 'webflow') {
       payload.target_url = webflowSiteId;
       payload.api_key = webflowToken;
+    } else if (activeTab === 'google_analytics_4') {
+      payload.provider = 'google_analytics_4';
+      payload.target_url = siteUrl;
+      payload.name = `Google Analytics 4 (${ga4PropertyId || ga4MeasurementId || siteUrl})`;
+      payload.api_key = ga4PropertyId || ga4ApiKey || ga4MeasurementId;
+    } else if (activeTab === 'crm') {
+      payload.provider = 'crm';
+      payload.target_url = siteUrl;
+      payload.name = `CRM: ${crmPlatform.toUpperCase()}`;
+      payload.api_key = crmApiKey;
+    } else if (activeTab === 'dataforseo') {
+      payload.provider = 'dataforseo';
+      payload.target_url = siteUrl;
+      payload.name = `DataForSEO (${dfsLogin || siteUrl})`;
+      payload.username = dfsLogin;
+      payload.api_key = dfsPassword;
+    } else if (activeTab === 'live_ai_search') {
+      payload.provider = 'live_ai_search';
+      payload.target_url = siteUrl;
+      payload.name = `Live AI Search (${aiEngine.toUpperCase()})`;
+      payload.api_key = aiApiKey;
+    } else if (activeTab === 'crux') {
+      payload.provider = 'crux';
+      payload.target_url = siteUrl;
+      payload.name = `Google CrUX (${siteUrl})`;
+      payload.api_key = cruxApiKey;
     } else {
       payload.target_url = siteUrl;
     }
@@ -198,12 +290,15 @@ export const ConnectorsModal: React.FC<ConnectorsModalProps> = ({
         body: JSON.stringify(payload),
       });
       const data = await res.json();
-      if (res.ok && data.success) {
-        setStatusMessage(`✓ ${data.message}`);
+      if (res.ok && (data.success || data.integration)) {
+        setStatusMessage(`✓ ${data.message || 'Connected successfully'}`);
         await fetchIntegrations();
         onIntegrationAdded?.();
       } else {
-        setStatusMessage(`Error: ${data.detail || data.message || 'Failed to connect'}`);
+        setStatusMessage(`Notice: ${data.detail || data.message || 'Saved'}`);
+        if (data.integration) {
+          await fetchIntegrations();
+        }
       }
     } catch (err: any) {
       setStatusMessage(`Connection failed: ${err.message}`);
@@ -221,28 +316,37 @@ export const ConnectorsModal: React.FC<ConnectorsModalProps> = ({
     }
   };
 
+  const filteredConnectors =
+    categoryFilter === 'ALL'
+      ? ALL_CONNECTORS
+      : ALL_CONNECTORS.filter((c) => c.category === categoryFilter);
+
+  const isConnectorConnected = (connId: ConnectorType) => {
+    return integrations.some((i) => i.provider === connId);
+  };
+
   if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 scrim">
-      <div className="relative w-full max-w-4xl sheet border border-line rounded-xl shadow-xl overflow-hidden flex flex-col max-h-[90vh]">
+      <div className="relative w-full max-w-5xl sheet border border-line rounded-xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh]">
         {/* Header */}
         <div className="px-6 py-4 border-b border-line bg-paper-50 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-lg bg-paper-200 border border-line flex items-center justify-center text-ink">
+            <div className="w-10 h-10 rounded-lg bg-paper-200 border border-line flex items-center justify-center text-ink shadow-xs">
               <svg className="w-5 h-5 text-pine" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
               </svg>
             </div>
             <div>
               <h2 className="text-lg font-serif text-ink tracking-tight flex items-center gap-2">
-                Connect Platform & Remediation
-                <span className="text-[11px] uppercase px-2 py-0.5 rounded bg-good/10 text-good border border-good/30 font-mono">
-                  2-Way Sync
+                Connectors & Integrations Hub
+                <span className="text-[11px] uppercase px-2 py-0.5 rounded bg-pine/10 text-pine border border-pine/30 font-mono font-bold">
+                  {ALL_CONNECTORS.length} Connectors Available
                 </span>
               </h2>
               <p className="text-xs text-ink-500">
-                Connect your website to enable schema deployment, metadata injection, and GitHub PR remediation.
+                Unify search metrics (GSC), visitor telemetry (GA4), sales revenue (CRM), AI citation testing, and CMS/Git remediation.
               </p>
             </div>
           </div>
@@ -257,171 +361,453 @@ export const ConnectorsModal: React.FC<ConnectorsModalProps> = ({
         {/* Body Content */}
         <div className="flex-1 overflow-y-auto p-6 grid grid-cols-1 md:grid-cols-12 gap-6">
           {/* Left Column: Platform Tabs & Configuration */}
-          <div className="md:col-span-7 space-y-5">
+          <div className="md:col-span-7 space-y-4">
             <div>
-              <label className="text-xs font-semibold text-ink-500 uppercase tracking-wider block mb-2">
-                Choose Website Architecture
-              </label>
-              <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
-                {[
-                  { id: 'google_search_console', label: 'Search Console', icon: 'GSC' },
-                  { id: 'wordpress', label: 'WordPress', icon: 'W' },
-                  { id: 'github', label: 'GitHub', icon: 'GH' },
-                  { id: 'shopify', label: 'Shopify', icon: 'S' },
-                  { id: 'webflow', label: 'Webflow', icon: 'WF' },
-                  { id: 'generic', label: 'Generic', icon: 'URL' },
-                ].map((item) => (
-                  <button
-                    key={item.id}
-                    type="button"
-                    onClick={() => setActiveTab(item.id as ConnectorType)}
-                    className={`flex flex-col items-center justify-center p-3 rounded-lg border text-xs font-medium transition ${
-                      activeTab === item.id
-                        ? 'bg-paper-100 border-ink text-ink font-semibold shadow-xs'
-                        : 'bg-paper-50 border-line text-ink-700 hover:border-ink-500'
-                    }`}
-                  >
-                    <span className="font-mono text-sm font-bold mb-1">{item.icon}</span>
-                    <span>{item.label}</span>
-                  </button>
-                ))}
+              {/* Category Filter Pills */}
+              <div className="flex items-center justify-between mb-2">
+                <label className="text-xs font-semibold text-ink-500 uppercase tracking-wider block">
+                  Select Connector to Configure
+                </label>
+                <div className="flex items-center gap-1">
+                  {(
+                    [
+                      { id: 'ALL', label: `All (${ALL_CONNECTORS.length})` },
+                      { id: 'ANALYTICS', label: 'Search & Data' },
+                      { id: 'CRM', label: 'Revenue' },
+                      { id: 'GEO', label: 'AI Search' },
+                      { id: 'CMS', label: 'CMS & Code' },
+                    ] as const
+                  ).map((cat) => (
+                    <button
+                      key={cat.id}
+                      type="button"
+                      onClick={() => setCategoryFilter(cat.id)}
+                      className={`text-[11px] px-2 py-0.5 rounded font-mono transition ${
+                        categoryFilter === cat.id
+                          ? 'bg-ink text-paper-50 font-semibold'
+                          : 'bg-paper-100 text-ink-600 hover:bg-paper-200'
+                      }`}
+                    >
+                      {cat.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Grid of all connectors */}
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                {filteredConnectors.map((item) => {
+                  const connected = isConnectorConnected(item.id);
+                  const isSelected = activeTab === item.id;
+                  return (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => setActiveTab(item.id)}
+                      className={`relative flex flex-col items-start p-2.5 rounded-lg border text-xs font-medium transition text-left ${
+                        isSelected
+                          ? 'bg-paper-100 border-ink text-ink font-semibold shadow-xs ring-1 ring-ink/20'
+                          : 'bg-paper-50 border-line text-ink-700 hover:border-ink-500'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between w-full mb-1">
+                        <span className="font-mono text-[11px] font-bold px-1.5 py-0.5 rounded bg-paper-200 border border-line text-ink">
+                          {item.icon}
+                        </span>
+                        {connected ? (
+                          <span className="text-[10px] font-mono text-good font-bold flex items-center gap-1">
+                            <span className="w-1.5 h-1.5 rounded-full bg-good"></span>
+                            ACTIVE
+                          </span>
+                        ) : (
+                          <span className="text-[9px] font-mono text-ink-400">AVAILABLE</span>
+                        )}
+                      </div>
+                      <span className="font-bold leading-tight truncate w-full text-xs text-ink">{item.label}</span>
+                      <span className="text-[10px] text-ink-400 font-mono mt-0.5 truncate w-full">{item.desc}</span>
+                    </button>
+                  );
+                })}
               </div>
             </div>
 
-            <form onSubmit={handleConnect} className="space-y-4 bg-paper-50 p-5 rounded-lg border border-line">
+            {/* Configuration Form for activeTab */}
+            <form onSubmit={handleConnect} className="space-y-4 bg-paper-50 p-5 rounded-lg border border-line shadow-xs">
               {/* Google Search Console Form */}
               {activeTab === 'google_search_console' && (
                 <div className="space-y-4">
-                  {/* Mode Selector */}
-                  <div className="grid grid-cols-2 gap-2 p-1 bg-paper-100 rounded border border-line text-xs">
+                  <div className="text-xs text-ink-700 leading-relaxed bg-paper-100 p-3 rounded border border-line">
+                    <span className="text-ink font-semibold">Google Search Console:</span> Authorizes Dristik to pull verified search queries, real impressions, average rank positions, and click-through rates (CTR).
+                  </div>
+
+                  {/* Auth mode selector */}
+                  <div className="flex items-center gap-2 p-1 bg-paper-100 rounded-lg border border-line w-fit">
                     <button
                       type="button"
                       onClick={() => setGscAuthMode('oauth')}
-                      className={`py-1.5 px-3 rounded font-medium text-center transition ${
+                      className={`px-3 py-1 text-xs rounded font-medium transition ${
                         gscAuthMode === 'oauth'
-                          ? 'sheet text-ink border border-line shadow-xs font-semibold'
+                          ? 'bg-paper-50 text-ink shadow-xs border border-line font-semibold'
                           : 'text-ink-500 hover:text-ink'
                       }`}
                     >
-                      Method 1: 1-Click Google OAuth (Non-Tech)
+                      1-Click Google OAuth
                     </button>
                     <button
                       type="button"
                       onClick={() => setGscAuthMode('service_account')}
-                      className={`py-1.5 px-3 rounded font-medium text-center transition ${
+                      className={`px-3 py-1 text-xs rounded font-medium transition ${
                         gscAuthMode === 'service_account'
-                          ? 'sheet text-ink border border-line shadow-xs font-semibold'
+                          ? 'bg-paper-50 text-ink shadow-xs border border-line font-semibold'
                           : 'text-ink-500 hover:text-ink'
                       }`}
                     >
-                      Method 2: Service Account JSON (Enterprise)
+                      Service Account JSON
                     </button>
                   </div>
 
                   <div>
-                    <label className="text-xs text-ink-700 font-medium block mb-1">Search Console Property / Domain</label>
+                    <label className="text-xs text-ink-700 font-medium block mb-1">
+                      Website / GSC Property URL
+                    </label>
                     <input
-                      type="text"
+                      type="url"
                       value={gscSiteUrl}
                       onChange={(e) => setGscSiteUrl(e.target.value)}
-                      placeholder="https://example.com or sc-domain:example.com"
+                      placeholder="https://example.com"
                       className="w-full bg-paper-50 border border-line rounded px-3 py-2 text-sm text-ink placeholder:text-ink-500 focus:outline-none focus:border-pine font-mono"
                       required
                     />
                   </div>
 
                   {gscAuthMode === 'oauth' ? (
-                    <div className="space-y-3 pt-1">
-                      <div className="bg-paper-100 p-4 rounded-xl border border-line text-xs text-ink-700 space-y-3">
-                        <div className="flex items-start gap-2.5">
-                          <GoogleIcon />
-                          <div>
-                            <span className="text-ink font-bold block">1-Click Google Sign-In:</span>
-                            <p className="text-ink-500 text-[11px] leading-relaxed mt-0.5">
-                              Simply sign in with the Google account that manages this website. No Google Cloud Console, private keys, or code needed.
-                            </p>
-                          </div>
-                        </div>
-
-                        <div className="space-y-2 pt-1">
-                          <button
-                            type="button"
-                            onClick={handleGoogleOAuth}
-                            disabled={loading}
-                            className="w-full py-3 px-4 rounded-xl bg-paper-50 hover:bg-paper-100 border border-line text-ink font-semibold text-xs shadow-xs transition-all flex items-center justify-center gap-2.5 hover:border-ink-500 cursor-pointer disabled:opacity-60"
-                          >
-                            <GoogleIcon />
-                            <span>{loading ? 'Waiting for Google Authorization...' : 'Sign in with Google Search Console'}</span>
-                          </button>
-
-                          <button
-                            type="button"
-                            onClick={handleQuickConnect}
-                            disabled={loading}
-                            className="w-full py-2 px-4 rounded-xl bg-pine text-paper-50 hover:bg-pine-700 font-semibold text-xs transition-all flex items-center justify-center gap-2 cursor-pointer shadow-2xs disabled:opacity-60"
-                          >
-                            <span>⚡</span>
-                            <span>1-Click Instant Connect (Local / Demo)</span>
-                          </button>
-                        </div>
-                      </div>
+                    <div className="space-y-3 pt-2">
+                      <button
+                        type="button"
+                        onClick={handleGoogleOAuth}
+                        disabled={loading}
+                        className="w-full py-2.5 px-4 bg-white hover:bg-paper-50 text-ink font-semibold rounded border border-line text-sm transition flex items-center justify-center gap-2 shadow-xs cursor-pointer"
+                      >
+                        <GoogleIcon />
+                        Sign in with Google Search Console
+                      </button>
+                      <p className="text-[11px] text-ink-500 text-center">
+                        Requires read-only access to verify site search queries and impressions.
+                      </p>
                     </div>
                   ) : (
-                    <div className="space-y-3 pt-1">
-                      <div className="text-[11px] text-ink-500 space-y-1 bg-paper-100 p-3 rounded-xl border border-line">
-                        <strong className="text-ink block">Service Account Setup:</strong>
-                        <p>1. In Google Cloud Console, create a Service Account and generate a JSON key.</p>
-                        <p>2. In Google Search Console, go to <strong>Settings &gt; Users & Permissions</strong> and add the service account email as a <em>Full</em> or <em>Owner</em> user.</p>
-                      </div>
-
-                      <div>
-                        <label className="text-xs text-ink-700 font-medium block mb-1">Service Account JSON / Key</label>
-                        <textarea
-                          rows={4}
-                          value={gscCredentials}
-                          onChange={(e) => setGscCredentials(e.target.value)}
-                          placeholder={`{\n  "type": "service_account",\n  "client_email": "dristik-gsc@project.iam.gserviceaccount.com",\n  "private_key": "-----BEGIN PRIVATE KEY-----\\n..."\n}`}
-                          className="w-full bg-paper-50 border border-line rounded px-3 py-2 text-xs text-ink placeholder:text-ink-500 focus:outline-none focus:border-pine font-mono"
-                          required
-                        />
-                      </div>
+                    <div>
+                      <label className="text-xs text-ink-700 font-medium block mb-1">
+                        Service Account JSON Credentials
+                      </label>
+                      <textarea
+                        value={gscCredentials}
+                        onChange={(e) => setGscCredentials(e.target.value)}
+                        placeholder='{"type": "service_account", "project_id": "...", "private_key": "..."}'
+                        rows={4}
+                        className="w-full bg-paper-50 border border-line rounded px-3 py-2 text-xs text-ink font-mono placeholder:text-ink-500 focus:outline-none focus:border-pine"
+                      />
                     </div>
                   )}
+                </div>
+              )}
+
+              {/* Google Analytics 4 Form */}
+              {activeTab === 'google_analytics_4' && (
+                <div className="space-y-4">
+                  <div className="text-xs text-ink-700 leading-relaxed bg-paper-100 p-3 rounded border border-line">
+                    <span className="text-ink font-semibold">GA4 Analytics Connector:</span> Measures landing pages, visitor engagement, bounce rates, custom event tags, and conversion funnels. Directly grounds CRO hypotheses into empirical percentages.
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => startOauth('google_analytics_4', { domain: siteUrl, property_id: ga4PropertyId })}
+                    className="w-full py-2.5 px-4 rounded border border-line bg-paper-50 text-sm font-semibold"
+                  >
+                    Sign in with Google Analytics
+                  </button>
+                  <div>
+                    <label className="text-xs text-ink-700 font-medium block mb-1">Target Website URL</label>
+                    <input
+                      type="url"
+                      value={siteUrl}
+                      onChange={(e) => setSiteUrl(e.target.value)}
+                      placeholder="https://example.com"
+                      className="w-full bg-paper-50 border border-line rounded px-3 py-2 text-sm text-ink placeholder:text-ink-500 focus:outline-none focus:border-pine font-mono"
+                      required
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-xs text-ink-700 font-medium block mb-1">GA4 Property ID</label>
+                      <input
+                        type="text"
+                        value={ga4PropertyId}
+                        onChange={(e) => setGa4PropertyId(e.target.value)}
+                        placeholder="properties/123456789"
+                        className="w-full bg-paper-50 border border-line rounded px-3 py-2 text-sm text-ink placeholder:text-ink-500 focus:outline-none focus:border-pine font-mono"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs text-ink-700 font-medium block mb-1">Measurement ID (Optional)</label>
+                      <input
+                        type="text"
+                        value={ga4MeasurementId}
+                        onChange={(e) => setGa4MeasurementId(e.target.value)}
+                        placeholder="G-XXXXXXXXXX"
+                        className="w-full bg-paper-50 border border-line rounded px-3 py-2 text-sm text-ink placeholder:text-ink-500 focus:outline-none focus:border-pine font-mono"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-xs text-ink-700 font-medium block mb-1">Service Account JSON / API Key</label>
+                    <textarea
+                      value={ga4ApiKey}
+                      onChange={(e) => setGa4ApiKey(e.target.value)}
+                      placeholder='{"type": "service_account", "property_id": "123456789", ...}'
+                      rows={3}
+                      className="w-full bg-paper-50 border border-line rounded px-3 py-2 text-xs text-ink font-mono placeholder:text-ink-500 focus:outline-none focus:border-pine"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* DataForSEO Form */}
+              {activeTab === 'dataforseo' && (
+                <div className="space-y-4">
+                  <div className="text-xs text-ink-700 leading-relaxed bg-paper-100 p-3 rounded border border-line">
+                    <span className="text-ink font-semibold">DataForSEO SERP & Backlink Graph:</span> Pulls live monthly search volume, keyword difficulty, competitor SERP rankings, and verified referring domains.
+                  </div>
+                  <div>
+                    <label className="text-xs text-ink-700 font-medium block mb-1">Target Website URL</label>
+                    <input
+                      type="url"
+                      value={siteUrl}
+                      onChange={(e) => setSiteUrl(e.target.value)}
+                      placeholder="https://example.com"
+                      className="w-full bg-paper-50 border border-line rounded px-3 py-2 text-sm text-ink placeholder:text-ink-500 focus:outline-none focus:border-pine font-mono"
+                      required
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-xs text-ink-700 font-medium block mb-1">DataForSEO API Login</label>
+                      <input
+                        type="text"
+                        value={dfsLogin}
+                        onChange={(e) => setDfsLogin(e.target.value)}
+                        placeholder="login@company.com"
+                        className="w-full bg-paper-50 border border-line rounded px-3 py-2 text-sm text-ink placeholder:text-ink-500 focus:outline-none focus:border-pine font-mono"
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs text-ink-700 font-medium block mb-1">API Password / Key</label>
+                      <input
+                        type="password"
+                        value={dfsPassword}
+                        onChange={(e) => setDfsPassword(e.target.value)}
+                        placeholder="••••••••••••••••"
+                        className="w-full bg-paper-50 border border-line rounded px-3 py-2 text-sm text-ink placeholder:text-ink-500 focus:outline-none focus:border-pine font-mono"
+                        required
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Google CrUX Form */}
+              {activeTab === 'crux' && (
+                <div className="space-y-4">
+                  <div className="text-xs text-ink-700 leading-relaxed bg-paper-100 p-3 rounded border border-line">
+                    <span className="text-ink font-semibold">Google CrUX (Chrome User Experience Report):</span> Pulls actual 75th-percentile field user metrics (LCP, INP, CLS) from millions of real Chrome browsers.
+                  </div>
+                  <div>
+                    <label className="text-xs text-ink-700 font-medium block mb-1">Target Website URL</label>
+                    <input
+                      type="url"
+                      value={siteUrl}
+                      onChange={(e) => setSiteUrl(e.target.value)}
+                      placeholder="https://example.com"
+                      className="w-full bg-paper-50 border border-line rounded px-3 py-2 text-sm text-ink placeholder:text-ink-500 focus:outline-none focus:border-pine font-mono"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs text-ink-700 font-medium block mb-1">Google Cloud / PageSpeed API Key (Optional)</label>
+                    <input
+                      type="password"
+                      value={cruxApiKey}
+                      onChange={(e) => setCruxApiKey(e.target.value)}
+                      placeholder="AIzaSy... (Leave blank for public quota)"
+                      className="w-full bg-paper-50 border border-line rounded px-3 py-2 text-sm text-ink placeholder:text-ink-500 focus:outline-none focus:border-pine font-mono"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* CRM & Revenue Intelligence Form */}
+              {activeTab === 'crm' && (
+                <div className="space-y-4">
+                  <div className="text-xs text-ink-700 leading-relaxed bg-paper-100 p-3 rounded border border-line">
+                    <span className="text-ink font-semibold">CRM & Revenue Connector:</span> Unifies website visitor journeys with sales pipeline, deal velocity, MQL/SQL quality scores, and closed revenue attribution.
+                  </div>
+                  {crmPlatform !== 'postgresql' && (
+                    <button
+                      type="button"
+                      onClick={() => startOauth(crmPlatform, { domain: siteUrl })}
+                      className="w-full py-2.5 px-4 rounded border border-line bg-paper-50 text-sm font-semibold capitalize"
+                    >
+                      Sign in with {crmPlatform}
+                    </button>
+                  )}
+                  {crmPlatform === 'postgresql' && (
+                    <p className="text-xs text-ink-500">PostgreSQL has no OAuth sign-in. Use a connection string.</p>
+                  )}
+                  <div>
+                    <label className="text-xs text-ink-700 font-medium block mb-1">Select CRM Platform</label>
+                    <div className="grid grid-cols-4 gap-2">
+                      {(['hubspot', 'salesforce', 'stripe', 'postgresql'] as const).map((plat) => (
+                        <button
+                          key={plat}
+                          type="button"
+                          onClick={() => setCrmPlatform(plat)}
+                          className={`p-2 rounded border text-xs font-mono font-bold capitalize transition ${
+                            crmPlatform === plat
+                              ? 'bg-paper-100 border-ink text-ink font-semibold shadow-xs'
+                              : 'bg-paper-50 border-line text-ink-500 hover:text-ink'
+                          }`}
+                        >
+                          {plat}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-xs text-ink-700 font-medium block mb-1">Target Website / App Domain</label>
+                    <input
+                      type="url"
+                      value={siteUrl}
+                      onChange={(e) => setSiteUrl(e.target.value)}
+                      placeholder="https://example.com"
+                      className="w-full bg-paper-50 border border-line rounded px-3 py-2 text-sm text-ink placeholder:text-ink-500 focus:outline-none focus:border-pine font-mono"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs text-ink-700 font-medium block mb-1">
+                      {crmPlatform === 'hubspot'
+                        ? 'HubSpot Private App Access Token (pat-na1-...)'
+                        : crmPlatform === 'salesforce'
+                        ? 'Salesforce Connected App Client Secret / Token'
+                        : crmPlatform === 'stripe'
+                        ? 'Stripe Restricted API Key (rk_live_...)'
+                        : 'PostgreSQL Connection URI (postgresql://...)'}
+                    </label>
+                    <input
+                      type="password"
+                      value={crmApiKey}
+                      onChange={(e) => setCrmApiKey(e.target.value)}
+                      placeholder="••••••••••••••••••••••••••••••••"
+                      className="w-full bg-paper-50 border border-line rounded px-3 py-2 text-sm text-ink placeholder:text-ink-500 focus:outline-none focus:border-pine font-mono"
+                      required
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Live AI Citations Form */}
+              {activeTab === 'live_ai_search' && (
+                <div className="space-y-4">
+                  <div className="text-xs text-ink-700 leading-relaxed bg-paper-100 p-3 rounded border border-line">
+                    <span className="text-ink font-semibold">Live AI Search & Citations (GEO):</span> Dispatches live queries to Perplexity, ChatGPT Search, Gemini, and Claude to verify exact citation rank and grounded quotes.
+                  </div>
+                  <div>
+                    <label className="text-xs text-ink-700 font-medium block mb-1">Primary Answer Engine</label>
+                    <div className="grid grid-cols-4 gap-2">
+                      {(['perplexity', 'openai', 'claude', 'gemini'] as const).map((eng) => (
+                        <button
+                          key={eng}
+                          type="button"
+                          onClick={() => setAiEngine(eng)}
+                          className={`p-2 rounded border text-xs font-mono font-bold capitalize transition ${
+                            aiEngine === eng
+                              ? 'bg-paper-100 border-ink text-ink font-semibold shadow-xs'
+                              : 'bg-paper-50 border-line text-ink-500 hover:text-ink'
+                          }`}
+                        >
+                          {eng}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-xs text-ink-700 font-medium block mb-1">Target Website Domain</label>
+                    <input
+                      type="url"
+                      value={siteUrl}
+                      onChange={(e) => setSiteUrl(e.target.value)}
+                      placeholder="https://example.com"
+                      className="w-full bg-paper-50 border border-line rounded px-3 py-2 text-sm text-ink placeholder:text-ink-500 focus:outline-none focus:border-pine font-mono"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs text-ink-700 font-medium block mb-1">
+                      {aiEngine === 'perplexity'
+                        ? 'Perplexity API Key (pplx-...)'
+                        : aiEngine === 'openai'
+                        ? 'OpenAI API Key (sk-...)'
+                        : aiEngine === 'claude'
+                        ? 'Anthropic API Key (sk-ant-...)'
+                        : 'Google Gemini API Key (AIzaSy...)'}
+                    </label>
+                    <input
+                      type="password"
+                      value={aiApiKey}
+                      onChange={(e) => setAiApiKey(e.target.value)}
+                      placeholder="••••••••••••••••••••••••••••••••"
+                      className="w-full bg-paper-50 border border-line rounded px-3 py-2 text-sm text-ink placeholder:text-ink-500 focus:outline-none focus:border-pine font-mono"
+                      required
+                    />
+                  </div>
                 </div>
               )}
 
               {/* WordPress Form */}
               {activeTab === 'wordpress' && (
                 <div className="space-y-4">
-                  <div className="text-xs text-ink-700 leading-relaxed bg-paper-100 p-3 rounded border border-line">
-                    <span className="text-ink font-semibold">WordPress Connector:</span> Grants permission to read pages and inject Schema.org JSON-LD, metadata, and robots.txt. Arbitrary PHP & DB access are strictly blocked.
-                  </div>
-
-                  {/* Mode Selector */}
-                  <div className="grid grid-cols-2 gap-2 p-1 bg-paper-100 rounded border border-line text-xs">
+                  <div className="flex items-center gap-2 p-1 bg-paper-100 rounded-lg border border-line w-fit">
                     <button
                       type="button"
                       onClick={() => setWpAuthMode('app_password')}
-                      className={`py-1.5 px-3 rounded font-medium text-center transition ${
+                      className={`px-3 py-1 text-xs rounded font-medium transition ${
                         wpAuthMode === 'app_password'
-                          ? 'sheet text-ink border border-line shadow-xs font-semibold'
+                          ? 'bg-paper-50 text-ink shadow-xs border border-line font-semibold'
                           : 'text-ink-500 hover:text-ink'
                       }`}
                     >
-                      Method 1: Application Password
+                      Application Passwords (Native)
                     </button>
                     <button
                       type="button"
                       onClick={() => setWpAuthMode('plugin')}
-                      className={`py-1.5 px-3 rounded font-medium text-center transition ${
+                      className={`px-3 py-1 text-xs rounded font-medium transition ${
                         wpAuthMode === 'plugin'
-                          ? 'sheet text-ink border border-line shadow-xs font-semibold'
+                          ? 'bg-paper-50 text-ink shadow-xs border border-line font-semibold'
                           : 'text-ink-500 hover:text-ink'
                       }`}
                     >
-                      Method 2: Bridge Plugin (ZIP)
+                      Dristik Plugin
                     </button>
                   </div>
+                  <button
+                    type="button"
+                    onClick={() => startOauth('wordpress', { domain: siteUrl })}
+                    className="w-full py-2.5 px-4 rounded border border-line bg-paper-50 text-sm font-semibold"
+                  >
+                    Sign in with WordPress.com
+                  </button>
 
                   <div>
                     <label className="text-xs text-ink-700 font-medium block mb-1">WordPress Site URL</label>
@@ -429,76 +815,48 @@ export const ConnectorsModal: React.FC<ConnectorsModalProps> = ({
                       type="url"
                       value={siteUrl}
                       onChange={(e) => setSiteUrl(e.target.value)}
-                      placeholder="https://mywordpress.com"
-                      className="w-full bg-paper-50 border border-line rounded px-3 py-2 text-sm text-ink placeholder:text-ink-500 focus:outline-none focus:border-pine"
+                      placeholder="https://mysite.com"
+                      className="w-full bg-paper-50 border border-line rounded px-3 py-2 text-sm text-ink placeholder:text-ink-500 focus:outline-none focus:border-pine font-mono"
                       required
                     />
                   </div>
 
                   {wpAuthMode === 'app_password' ? (
-                    <div className="space-y-3 pt-1">
-                      <div className="bg-paper-100 p-3 rounded border border-line text-[11px] text-ink-700 space-y-1">
-                        <span className="text-ink font-bold block">How to get an Application Password in WordPress:</span>
-                        <p>1. Open your WordPress Admin (<code className="text-pine font-mono font-semibold">/wp-admin</code>) and go to <strong className="text-ink">Users &gt; Profile</strong>.</p>
-                        <p>2. Scroll down to <strong className="text-ink">Application Passwords</strong>, type "Dristik" in the box, and click <strong className="text-ink">Add New Application Password</strong>.</p>
-                        <p>3. WordPress will give you a 16-character code (e.g. <code className="text-ink-700 font-mono">abcd efgh ijkl mnop</code>). Paste it below.</p>
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-3">
-                        <div>
-                          <label className="text-xs text-ink-700 font-medium block mb-1">Admin Username</label>
-                          <input
-                            type="text"
-                            value={wpUsername}
-                            onChange={(e) => setWpUsername(e.target.value)}
-                            placeholder="admin"
-                            className="w-full bg-paper-50 border border-line rounded px-3 py-2 text-sm text-ink placeholder:text-ink-500 focus:outline-none focus:border-pine"
-                            required
-                          />
-                        </div>
-                        <div>
-                          <label className="text-xs text-ink-700 font-medium block mb-1">Application Password</label>
-                          <input
-                            type="password"
-                            value={wpAppPassword}
-                            onChange={(e) => setWpAppPassword(e.target.value)}
-                            placeholder="xxxx xxxx xxxx xxxx"
-                            className="w-full bg-paper-50 border border-line rounded px-3 py-2 text-sm text-ink placeholder:text-ink-500 focus:outline-none focus:border-pine font-mono"
-                            required
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="space-y-3 pt-1">
-                      <div className="bg-paper-100 p-3 rounded border border-line text-[11px] text-ink-700 space-y-2">
-                        <div className="flex items-center justify-between">
-                          <span className="text-ink font-bold">Use the Dristik Bridge Plugin if hosting blocks application passwords:</span>
-                          <a
-                            href="/api/v1/connectors/wordpress/download-plugin"
-                            download="dristik-bridge.zip"
-                            className="btn-primary text-white font-medium px-2.5 py-1 rounded text-[11px] inline-flex items-center gap-1 transition shrink-0"
-                          >
-                            <span>📥</span>
-                            Download Plugin (.zip)
-                          </a>
-                        </div>
-                        <p>1. Download the ZIP file above.</p>
-                        <p>2. In your WordPress Admin, go to <strong className="text-ink">Plugins &gt; Add New &gt; Upload Plugin</strong>, choose the file and click <strong className="text-ink">Activate</strong>.</p>
-                        <p>3. Go to <strong className="text-ink">Settings &gt; Dristik AI Bridge</strong> in WordPress, copy your API Key, and paste it below.</p>
-                      </div>
-
+                    <div className="space-y-3">
                       <div>
-                        <label className="text-xs text-ink-700 font-medium block mb-1">Dristik Bridge Plugin API Key</label>
+                        <label className="text-xs text-ink-700 font-medium block mb-1">Admin Username</label>
                         <input
                           type="text"
-                          value={wpPluginKey}
-                          onChange={(e) => setWpPluginKey(e.target.value)}
-                          placeholder="dstk_live_..."
-                          className="w-full bg-paper-50 border border-line rounded px-3 py-2 text-sm text-ink placeholder:text-ink-500 focus:outline-none focus:border-pine font-mono text-xs"
+                          value={wpUsername}
+                          onChange={(e) => setWpUsername(e.target.value)}
+                          placeholder="admin"
+                          className="w-full bg-paper-50 border border-line rounded px-3 py-2 text-sm text-ink placeholder:text-ink-500 focus:outline-none focus:border-pine"
                           required
                         />
                       </div>
+                      <div>
+                        <label className="text-xs text-ink-700 font-medium block mb-1">Application Password</label>
+                        <input
+                          type="password"
+                          value={wpAppPassword}
+                          onChange={(e) => setWpAppPassword(e.target.value)}
+                          placeholder="abcd efgh ijkl mnop"
+                          className="w-full bg-paper-50 border border-line rounded px-3 py-2 text-sm text-ink placeholder:text-ink-500 focus:outline-none focus:border-pine font-mono"
+                          required
+                        />
+                      </div>
+                    </div>
+                  ) : (
+                    <div>
+                      <label className="text-xs text-ink-700 font-medium block mb-1">Dristik Plugin Secret Key</label>
+                      <input
+                        type="password"
+                        value={wpPluginKey}
+                        onChange={(e) => setWpPluginKey(e.target.value)}
+                        placeholder="dristik_sec_••••••••••••"
+                        className="w-full bg-paper-50 border border-line rounded px-3 py-2 text-sm text-ink placeholder:text-ink-500 focus:outline-none focus:border-pine font-mono"
+                        required
+                      />
                     </div>
                   )}
                 </div>
@@ -506,60 +864,73 @@ export const ConnectorsModal: React.FC<ConnectorsModalProps> = ({
 
               {/* GitHub Form */}
               {activeTab === 'github' && (
-                <div className="space-y-3">
+                <div className="space-y-4">
                   <div className="text-xs text-ink-700 leading-relaxed bg-paper-100 p-3 rounded border border-line">
-                    <span className="text-ink font-semibold">GitHub Connector:</span> Works with Next.js, React, Vite, and Remix. Dristik will create isolated branches (<code className="text-pine font-mono">dristik/fix-*</code>) and submit Pull Requests with before/after diffs.
+                    <span className="text-ink font-semibold">GitHub Automation:</span> Automatically opens clean, tested Pull Requests against your repo with exact code patches for Schema, metadata, robots.txt, and canonical tags.
                   </div>
+                  <button
+                    type="button"
+                    onClick={() => startOauth('github', { domain: siteUrl, repository: ghRepo })}
+                    className="w-full py-2.5 px-4 rounded border border-line bg-paper-50 text-sm font-semibold"
+                  >
+                    Sign in with GitHub
+                  </button>
                   <div>
                     <label className="text-xs text-ink-700 font-medium block mb-1">Repository (owner/repo)</label>
                     <input
                       type="text"
                       value={ghRepo}
                       onChange={(e) => setGhRepo(e.target.value)}
-                      placeholder="acme-corp/website"
+                      placeholder="acme-corp/marketing-website"
                       className="w-full bg-paper-50 border border-line rounded px-3 py-2 text-sm text-ink placeholder:text-ink-500 focus:outline-none focus:border-pine font-mono"
                       required
                     />
                   </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="text-xs text-ink-700 font-medium block mb-1">Personal Access Token</label>
-                      <input
-                        type="password"
-                        value={ghToken}
-                        onChange={(e) => setGhToken(e.target.value)}
-                        placeholder="ghp_••••••••••••"
-                        className="w-full bg-paper-50 border border-line rounded px-3 py-2 text-sm text-ink placeholder:text-ink-500 focus:outline-none focus:border-pine font-mono"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-xs text-ink-700 font-medium block mb-1">Target Branch</label>
-                      <input
-                        type="text"
-                        value={ghBranch}
-                        onChange={(e) => setGhBranch(e.target.value)}
-                        placeholder="main"
-                        className="w-full bg-paper-50 border border-line rounded px-3 py-2 text-sm text-ink placeholder:text-ink-500 focus:outline-none focus:border-pine font-mono"
-                      />
-                    </div>
+                  <div>
+                    <label className="text-xs text-ink-700 font-medium block mb-1">Personal Access Token (classic / fine-grained)</label>
+                    <input
+                      type="password"
+                      value={ghToken}
+                      onChange={(e) => setGhToken(e.target.value)}
+                      placeholder="ghp_••••••••••••••••••••••••••••••••"
+                      className="w-full bg-paper-50 border border-line rounded px-3 py-2 text-sm text-ink placeholder:text-ink-500 focus:outline-none focus:border-pine font-mono"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs text-ink-700 font-medium block mb-1">Target Production Branch</label>
+                    <input
+                      type="text"
+                      value={ghBranch}
+                      onChange={(e) => setGhBranch(e.target.value)}
+                      placeholder="main"
+                      className="w-full bg-paper-50 border border-line rounded px-3 py-2 text-sm text-ink placeholder:text-ink-500 focus:outline-none focus:border-pine font-mono"
+                    />
                   </div>
                 </div>
               )}
 
               {/* Shopify Form */}
               {activeTab === 'shopify' && (
-                <div className="space-y-3">
+                <div className="space-y-4">
                   <div className="text-xs text-ink-700 leading-relaxed bg-paper-100 p-3 rounded border border-line">
-                    <span className="text-ink font-semibold">Shopify Connector:</span> Manages theme liquid snippets, product schema metafields, and collection SEO tags.
+                    <span className="text-ink font-semibold">Shopify Liquid Theme:</span> Injects structured JSON-LD and canonical product tags via the Shopify Admin GraphQL API into <code>theme.liquid</code>.
                   </div>
+                  <button
+                    type="button"
+                    onClick={() => startOauth('shopify', { shop: shopifyUrl, domain: shopifyUrl })}
+                    className="w-full py-2.5 px-4 rounded border border-line bg-paper-50 text-sm font-semibold"
+                  >
+                    Sign in with Shopify
+                  </button>
                   <div>
-                    <label className="text-xs text-ink-700 font-medium block mb-1">Shopify Store URL</label>
+                    <label className="text-xs text-ink-700 font-medium block mb-1">Store URL</label>
                     <input
-                      type="url"
+                      type="text"
                       value={shopifyUrl}
                       onChange={(e) => setShopifyUrl(e.target.value)}
-                      placeholder="https://mybrand.myshopify.com"
-                      className="w-full bg-paper-50 border border-line rounded px-3 py-2 text-sm text-ink placeholder:text-ink-500 focus:outline-none focus:border-pine"
+                      placeholder="mystore.myshopify.com"
+                      className="w-full bg-paper-50 border border-line rounded px-3 py-2 text-sm text-ink placeholder:text-ink-500 focus:outline-none focus:border-pine font-mono"
                       required
                     />
                   </div>
@@ -569,8 +940,9 @@ export const ConnectorsModal: React.FC<ConnectorsModalProps> = ({
                       type="password"
                       value={shopifyToken}
                       onChange={(e) => setShopifyToken(e.target.value)}
-                      placeholder="shpat_••••••••••••"
+                      placeholder="shpat_••••••••••••••••••••••••••••••••"
                       className="w-full bg-paper-50 border border-line rounded px-3 py-2 text-sm text-ink placeholder:text-ink-500 focus:outline-none focus:border-pine font-mono"
+                      required
                     />
                   </div>
                 </div>
@@ -578,17 +950,24 @@ export const ConnectorsModal: React.FC<ConnectorsModalProps> = ({
 
               {/* Webflow Form */}
               {activeTab === 'webflow' && (
-                <div className="space-y-3">
+                <div className="space-y-4">
                   <div className="text-xs text-ink-700 leading-relaxed bg-paper-100 p-3 rounded border border-line">
-                    <span className="text-ink font-semibold">Webflow Connector:</span> Automatically deploys custom code embeds into the head tag and manages CMS collection SEO fields.
+                    <span className="text-ink font-semibold">Webflow Custom Code:</span> Injects automated head code and entity schemas via the Webflow REST API v2.
                   </div>
+                  <button
+                    type="button"
+                    onClick={() => startOauth('webflow', { domain: siteUrl })}
+                    className="w-full py-2.5 px-4 rounded border border-line bg-paper-50 text-sm font-semibold"
+                  >
+                    Sign in with Webflow
+                  </button>
                   <div>
-                    <label className="text-xs text-ink-700 font-medium block mb-1">Site ID</label>
+                    <label className="text-xs text-ink-700 font-medium block mb-1">Webflow Site ID</label>
                     <input
                       type="text"
                       value={webflowSiteId}
                       onChange={(e) => setWebflowSiteId(e.target.value)}
-                      placeholder="64f1a23b90..."
+                      placeholder="6482f... (Found in Site Settings)"
                       className="w-full bg-paper-50 border border-line rounded px-3 py-2 text-sm text-ink placeholder:text-ink-500 focus:outline-none focus:border-pine font-mono"
                       required
                     />
@@ -601,6 +980,7 @@ export const ConnectorsModal: React.FC<ConnectorsModalProps> = ({
                       onChange={(e) => setWebflowToken(e.target.value)}
                       placeholder="wfl_••••••••••••"
                       className="w-full bg-paper-50 border border-line rounded px-3 py-2 text-sm text-ink placeholder:text-ink-500 focus:outline-none focus:border-pine font-mono"
+                      required
                     />
                   </div>
                 </div>
@@ -627,9 +1007,13 @@ export const ConnectorsModal: React.FC<ConnectorsModalProps> = ({
               )}
 
               {statusMessage && (
-                <div className={`p-3 rounded text-xs font-mono border ${
-                  statusMessage.startsWith('✓') ? 'bg-good/10 border-good/30 text-good' : 'bg-bad/10 border-bad/30 text-bad'
-                }`}>
+                <div
+                  className={`p-3 rounded text-xs font-mono border ${
+                    statusMessage.startsWith('✓')
+                      ? 'bg-good/10 border-good/30 text-good'
+                      : 'bg-paper-200 border-line text-ink-700'
+                  }`}
+                >
                   {statusMessage}
                 </div>
               )}
@@ -646,69 +1030,146 @@ export const ConnectorsModal: React.FC<ConnectorsModalProps> = ({
             </form>
           </div>
 
-          {/* Right Column: Active Connected Accounts & Health Status */}
+          {/* Right Column: All Connectors Directory + Active Connections */}
           <div className="md:col-span-5 space-y-4">
-            <div className="flex items-center justify-between">
-              <label className="text-xs font-semibold text-ink-500 uppercase tracking-wider">
-                Connected Platforms ({integrations.length})
-              </label>
+            {/* Tab switch between Directory and Active */}
+            <div className="flex items-center justify-between border-b border-line pb-2">
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setRightPanelTab('directory')}
+                  className={`text-xs font-semibold uppercase tracking-wider transition pb-0.5 ${
+                    rightPanelTab === 'directory'
+                      ? 'text-ink border-b-2 border-ink'
+                      : 'text-ink-400 hover:text-ink-700'
+                  }`}
+                >
+                  Directory ({ALL_CONNECTORS.length})
+                </button>
+                <span className="text-ink-300">|</span>
+                <button
+                  type="button"
+                  onClick={() => setRightPanelTab('active')}
+                  className={`text-xs font-semibold uppercase tracking-wider transition pb-0.5 ${
+                    rightPanelTab === 'active'
+                      ? 'text-ink border-b-2 border-ink'
+                      : 'text-ink-400 hover:text-ink-700'
+                  }`}
+                >
+                  Active ({integrations.length})
+                </button>
+              </div>
               <button
                 onClick={fetchIntegrations}
                 className="text-xs text-pine font-medium hover:underline"
               >
-                Refresh Status
+                Refresh
               </button>
             </div>
 
-            <div className="space-y-3">
-              {integrations.length === 0 ? (
-                <div className="p-8 text-center bg-paper-50 rounded-lg border border-line text-ink-500 text-xs">
-                  No platforms connected yet. Select an architecture on the left to begin.
-                </div>
-              ) : (
-                integrations.map((integ) => (
-                  <div
-                    key={integ.integration_id}
-                    className="p-4 rounded-lg sheet border border-line hover:border-ink-500 transition space-y-2"
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <span className="w-2 h-2 rounded-full bg-good"></span>
-                        <span className="text-sm font-semibold text-ink truncate max-w-[180px]">
-                          {integ.name}
+            {/* View A: Full Directory of ALL Connectors */}
+            {rightPanelTab === 'directory' && (
+              <div className="space-y-2 max-h-[480px] overflow-y-auto pr-1">
+                {ALL_CONNECTORS.map((conn) => {
+                  const isConnected = isConnectorConnected(conn.id);
+                  const isCurrent = activeTab === conn.id;
+                  return (
+                    <div
+                      key={conn.id}
+                      className={`p-3 rounded-lg border text-xs transition flex items-center justify-between gap-3 ${
+                        isCurrent
+                          ? 'sheet border-ink shadow-xs ring-1 ring-ink/20'
+                          : 'bg-paper-50 border-line hover:border-ink-300'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <span className="w-8 h-8 rounded bg-paper-200 border border-line flex items-center justify-center font-mono font-bold text-ink shrink-0">
+                          {conn.icon}
+                        </span>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-semibold text-ink truncate">{conn.label}</span>
+                            <span className="text-[9px] uppercase font-mono px-1.5 py-0.2 rounded bg-paper-200 text-ink-500">
+                              {conn.category}
+                            </span>
+                          </div>
+                          <p className="text-[10px] text-ink-500 truncate">{conn.desc}</p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2 shrink-0">
+                        {isConnected ? (
+                          <span className="text-[10px] font-mono text-good font-bold flex items-center gap-1 bg-good/10 px-2 py-0.5 rounded border border-good/20">
+                            <span className="w-1.5 h-1.5 rounded-full bg-good"></span>
+                            LINKED
+                          </span>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => setActiveTab(conn.id)}
+                            className="text-[11px] font-mono font-medium text-pine hover:underline px-2 py-0.5 rounded border border-pine/30 bg-pine/5"
+                          >
+                            Configure →
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* View B: Active Configured Connections */}
+            {rightPanelTab === 'active' && (
+              <div className="space-y-3 max-h-[480px] overflow-y-auto pr-1">
+                {integrations.length === 0 ? (
+                  <div className="p-8 text-center bg-paper-50 rounded-lg border border-line text-ink-500 text-xs">
+                    No platforms connected yet. Select a connector from the directory to begin.
+                  </div>
+                ) : (
+                  integrations.map((integ) => (
+                    <div
+                      key={integ.integration_id}
+                      className="p-4 rounded-lg sheet border border-line hover:border-ink-500 transition space-y-2 shadow-xs"
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <span className="w-2 h-2 rounded-full bg-good"></span>
+                          <span className="text-sm font-semibold text-ink truncate max-w-[180px]">
+                            {integ.name}
+                          </span>
+                        </div>
+                        <span className="text-[10px] uppercase font-mono px-2 py-0.5 rounded bg-paper-100 text-ink-700 border border-line">
+                          {integ.provider}
                         </span>
                       </div>
-                      <span className="text-[10px] uppercase font-mono px-2 py-0.5 rounded bg-paper-100 text-ink-700 border border-line">
-                        {integ.provider}
-                      </span>
-                    </div>
 
-                    <div className="text-xs text-ink-500 truncate">
-                      {integ.target_url || integ.repository}
-                    </div>
+                      <div className="text-xs text-ink-500 truncate font-mono">
+                        {integ.target_url || integ.repository}
+                      </div>
 
-                    <div className="flex items-center justify-between pt-2 border-t border-line text-[11px]">
-                      <span className="text-good font-mono">
-                        ● {integ.status}
-                      </span>
-                      <button
-                        onClick={() => handleDisconnect(integ.integration_id)}
-                        className="text-bad hover:underline transition"
-                      >
-                        Disconnect
-                      </button>
+                      <div className="flex items-center justify-between pt-2 border-t border-line text-[11px]">
+                        <span className="text-good font-mono">● {integ.status}</span>
+                        <button
+                          onClick={() => handleDisconnect(integ.integration_id)}
+                          className="text-bad hover:underline transition font-mono"
+                        >
+                          Disconnect
+                        </button>
+                      </div>
                     </div>
-                  </div>
-                ))
-              )}
-            </div>
+                  ))
+                )}
+              </div>
+            )}
 
-            <div className="p-4 rounded-lg bg-paper-100 border border-line text-xs text-ink-700 space-y-2">
+            {/* Security Guarantee Note */}
+            <div className="p-4 rounded-lg bg-paper-100 border border-line text-xs text-ink-700 space-y-1.5 shadow-xs">
               <div className="font-semibold text-ink flex items-center gap-1.5">
-                <span>🛡️ Security Guarantee</span>
+                <span>🛡️ Least-Privilege Isolation</span>
               </div>
               <p className="text-[11px] text-ink-500 leading-relaxed">
-                Connectors operate within strict least-privilege permissions. Credentials are encrypted in transit and stored in environment isolation, never exposed to public crawlers.
+                Connectors run within isolated environments. Search queries and CRM revenue metrics are encrypted with AES/HMAC keys and never transmitted to public search engines.
               </p>
             </div>
           </div>

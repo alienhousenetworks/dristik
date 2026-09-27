@@ -59,17 +59,14 @@ class WebflowConnector(BaseConnector):
         ConnectorSecurityGuard.validate_patch_permissions(patch, "webflow")
         rollback_engine.capture_pre_patch_snapshot(patch, {"platform": "webflow", "site_id": self.site_id})
 
-        patch.approval_status = PatchApprovalStatus.APPLIED
-        patch.applied_via = "webflow"
-        patch.applied_at = datetime.now(timezone.utc).isoformat()
-
+        applied_at = datetime.now(timezone.utc).isoformat()
         return PatchApplicationResult(
-            success=True,
+            success=False,
             patch_id=patch.patch_id,
             provider=ConnectorType.WEBFLOW,
-            applied_at=patch.applied_at,
-            target_resource=f"Webflow Site {self.site_id} (Custom Code Head)",
-            message=f"Deployed custom schema/meta embed to Webflow site."
+            applied_at=applied_at,
+            target_resource=self.site_id or "",
+            message="Webflow was not updated. No API call was made."
         )
 
     async def rollback_patch(self, patch: RemediationPatch) -> RollbackResult:

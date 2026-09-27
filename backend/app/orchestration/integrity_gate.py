@@ -71,34 +71,67 @@ class EvidenceIntegrityValidator:
                         adjusted = True
 
                 claim.evidence_refs = valid_refs
-
-            # 2. Check claim type vs evidence backing
-            if claim.claim_type == ClaimType.FACT and not claim.evidence_refs:
-                # A factual claim with zero evidence backing cannot remain FACT with high confidence
-                if claim.confidence and claim.confidence > 0.60:
-                    claim.confidence = 0.50
+                if not valid_refs:
+                    claim.verification_status = VerificationStatus.REJECTED
+                    claim.confidence = 0.0
+                    claim.held_from_executive = True
                     result.violations.append(IntegrityViolation(
                         agent_id=claim.agent_id,
                         claim_id=claim.id,
-                        violation_type="UNBACKED_FACTUAL_CLAIM",
-                        description=f"Claim '{claim.statement[:60]}' marked FACT has 0 evidence references.",
-                        action_taken="Downgraded confidence to 0.50."
+                        violation_type="FABRICATED_OR_UNRESOLVABLE_EVIDENCE",
+                        description=f"Claim '{claim.id}' had evidence references, but NONE existed in EvidenceStore.",
+                        action_taken="Marked claim REJECTED and held from executive synthesis."
                     ))
+                    result.is_valid = False
                     adjusted = True
+
+            # 2. Check claim type vs evidence backing
+            if claim.claim_type == ClaimType.FACT and not claim.evidence_refs:
+                claim.verification_status = VerificationStatus.REJECTED
+                claim.confidence = 0.0
+                claim.held_from_executive = True
+                result.violations.append(IntegrityViolation(
+                    agent_id=claim.agent_id,
+                    claim_id=claim.id,
+                    violation_type="UNBACKED_FACTUAL_CLAIM",
+                    description=f"Claim '{claim.statement[:60]}' marked FACT has 0 evidence references.",
+                    action_taken="Marked claim REJECTED and held from executive synthesis."
+                ))
+                result.is_valid = False
+                adjusted = True
 
             # 3. Check for banned mock/synthetic markers in claim statement or recommendation
             text_to_scan = f"{claim.statement} {claim.recommendation or ''}".lower()
             banned_markers = ["order_mock_", "mock_sig_", "pay_mock_", "fake_", "simulated real data"]
             for marker in banned_markers:
                 if marker in text_to_scan:
+                    claim.verification_status = VerificationStatus.REJECTED
+                    claim.confidence = 0.0
+                    claim.held_from_executive = True
                     result.violations.append(IntegrityViolation(
                         agent_id=claim.agent_id,
                         claim_id=claim.id,
                         violation_type="SYNTHETIC_MARKER_DETECTED",
                         description=f"Claim contains banned synthetic token '{marker}'.",
-                        action_taken="Flagged integrity violation."
+                        action_taken="Flagged integrity violation and marked REJECTED."
                     ))
                     result.is_valid = False
+                    adjusted = True
+
+            # 4. Check for contradictory claims or contradiction status
+            if claim.verification_status == VerificationStatus.CONTRADICTED or (
+                hasattr(claim, "contradicting_agents") and len(claim.contradicting_agents) > len(claim.supporting_agents) and len(claim.contradicting_agents) > 0
+            ):
+                claim.verification_status = VerificationStatus.CONTRADICTED
+                claim.held_from_executive = True
+                result.violations.append(IntegrityViolation(
+                    agent_id=claim.agent_id,
+                    claim_id=claim.id,
+                    violation_type="CONTRADICTED_CLAIM",
+                    description=f"Claim '{claim.id}' is contradicted by evidence or peer agents.",
+                    action_taken="Marked CONTRADICTED and held from executive synthesis."
+                ))
+                adjusted = True
 
             if adjusted:
                 result.claims_adjusted += 1

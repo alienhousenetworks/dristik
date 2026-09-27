@@ -70,8 +70,21 @@ class DecisionEngine:
             strategic_val = 9.0 if claim.severity in [Severity.CRITICAL, Severity.HIGH] else 5.0
             urgency_val = 9.0 if claim.severity == Severity.CRITICAL else (7.0 if claim.severity == Severity.HIGH else 4.0)
 
+            # Statistical & Traffic / Surface-Weighted Prioritization:
+            # Weight findings that impair the primary commercial surface (homepage / pricing)
+            surface_weight = 1.0
+            primary_url = attached_ev[0].url if attached_ev and attached_ev[0].url else ""
+            if primary_url:
+                clean_url = primary_url.rstrip("/")
+                if clean_url.endswith(".com") or clean_url.endswith(".io") or clean_url.endswith(".ai") or clean_url == "":
+                    surface_weight = 1.35  # Homepage/Root has highest organic & direct traffic impact
+                elif any(k in clean_url.lower() for k in ["pricing", "demo", "signup", "contact", "checkout"]):
+                    surface_weight = 1.25  # High commercial-intent conversion bottleneck
+                elif any(k in clean_url.lower() for k in ["terms", "privacy", "cookie", "legal"]):
+                    surface_weight = 0.80  # Low traffic utility surface
+
             causal_score = (
-                (0.30 * impact_val) +
+                (0.30 * impact_val * surface_weight) +
                 (0.20 * conf_val) +
                 (0.15 * reach_val) +
                 (0.15 * ease_val) +
@@ -109,5 +122,11 @@ class DecisionEngine:
             )
             apply_rubric_to_finding(finding, evidence_store)
             findings.append(finding)
-            
-        return findings
+
+        # Run through Canonical FindingRegistry to cluster root causes and eliminate duplicate alerts
+        from app.cognition.finding_registry import FindingRegistry
+        registry = FindingRegistry()
+        for f in findings:
+            registry.register(f)
+
+        return registry.all_findings()

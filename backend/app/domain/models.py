@@ -30,7 +30,14 @@ from app.domain.enums import (
     ConfidenceBand,
     RubricConfidence,
     Materiality,
+    EvidenceClass,
+    EvidenceSubtype,
+    FindingLifecycle,
+    AiVisibilityStatus,
+    GeoDimensionKey,
+    QueryClass,
 )
+from app.evidence.models import EvidenceRef
 
 class FindingEvidence(BaseModel):
     evidence_id: Optional[str] = None
@@ -44,6 +51,9 @@ class FindingEvidence(BaseModel):
     excerpt: Optional[str] = None
     type: str = "content"
     state: EvidenceState = EvidenceState.OBSERVED
+    evidence_class: EvidenceClass = EvidenceClass.OBSERVED
+    evidence_subtype: Optional[str] = "DOM"
+    evidence_ref: Optional[EvidenceRef] = None
 
     @field_validator("excerpt", "value", "snippet", mode="before")
     @classmethod
@@ -90,6 +100,9 @@ class RemediationPatch(BaseModel):
     verification_notes: Optional[str] = None
     citation_score_delta: Optional[int] = None
     metadata_payload: Dict[str, Any] = Field(default_factory=dict)
+    is_blocked: bool = False
+    blocked_reason: Optional[str] = None
+    required_evidence: Optional[str] = None
 
 class Integration(BaseModel):
     integration_id: str
@@ -140,6 +153,42 @@ class VerificationResult(BaseModel):
     after_score: Optional[int] = None
     score_delta: Optional[int] = None
 
+class VerificationCheckItem(BaseModel):
+    name: str
+    passed: bool
+    detail: str
+
+class RemediationVerificationReport(BaseModel):
+    verification_id: str
+    finding_id: str
+    analysis_id: Optional[str] = None
+    target_url: str
+    stage: str = "PENDING"  # "PENDING" -> "RECRAWL" -> "RECHECK" -> "COMPARE" -> "CERTIFIED"
+    status: str = "PENDING"  # "RESOLVED", "PARTIALLY_RESOLVED", "FAILED_RECHECK", "FAILED_RECRAWL", "INCONCLUSIVE", "PENDING"
+    before_state: str
+    after_state: str
+    checks: List[VerificationCheckItem] = Field(default_factory=list)
+    passed_checks_count: int = 0
+    total_checks_count: int = 0
+    score_delta: Optional[float] = None
+    verified_at: str
+    evidence_seal: str
+    certified_by: str = "Dristik Continuous Assurance Engine v4"
+    recrawl_status_code: Optional[int] = None
+    recrawl_ttfb_ms: Optional[float] = None
+    recrawl_content_type: Optional[str] = None
+
+class CroEvidenceDissection(BaseModel):
+    observed_facts: List[str] = Field(default_factory=list) # e.g. ["No pricing information found.", "CTA text = 'REQUEST CUSTOM BUILD'"]
+    inferred_impact: str = "" # e.g. "This may increase qualification friction for self-serve visitors."
+    requires_analytics: Dict[str, str] = Field(default_factory=lambda: {
+        "actual_abandonment_rate": "UNKNOWN (Requires GA4 connector)",
+        "cta_conversion_rate": "UNKNOWN (Requires GA4 events / PostHog)",
+        "form_completion_rate": "UNKNOWN (Requires CRM / Analytics connector)",
+    })
+    analytics_connected: bool = False
+    grounded_metrics: Optional[Dict[str, Any]] = None # If connected, holds measured numbers
+
 class Finding(BaseModel):
     finding_id: str
     org_id: str = "org_default"
@@ -151,6 +200,7 @@ class Finding(BaseModel):
     description: str
     evidence: List[FindingEvidence] = Field(default_factory=list)
     evidence_refs: List[str] = Field(default_factory=list)
+    evidence_ref_objects: List[EvidenceRef] = Field(default_factory=list)
     rule_id: Optional[str] = None
     confidence: float = Field(default=0.90, ge=0.0, le=1.0)
     confidence_label: EvidenceConfidence = EvidenceConfidence.STRONG
@@ -178,6 +228,46 @@ class Finding(BaseModel):
     adversarial_reviewed: bool = False
     held_from_executive: bool = False
     claim_refs: List[str] = Field(default_factory=list)
+    why_it_matters: Optional[str] = Field(
+        default=None,
+        description="Plain-language explanation of the commercial / UX / SEO consequence of this finding for a non-technical stakeholder."
+    )
+    validation_criteria: Optional[str] = Field(
+        default=None,
+        description="Concrete, checkable acceptance condition that must be true after remediation is applied. Written as a present-tense assertion."
+    )
+    remediation_verification: Optional[RemediationVerificationReport] = None
+    resolution_status: str = "OPEN"  # "OPEN", "RESOLVED", "VERIFYING", "REGRESSED"
+    evidence_class: EvidenceClass = EvidenceClass.OBSERVED
+    evidence_subtype: Optional[str] = "DOM"
+    epistemic_level: Optional[str] = None
+    evidence_scope: Optional[str] = None
+    scope_hit_count: Optional[int] = None
+    scope_sample_size: Optional[int] = None
+    cro_dissection: Optional[CroEvidenceDissection] = None
+    surfaces_affected: List[Dict[str, Any]] = Field(
+        default_factory=list,
+        description="Consolidated surfaces affected by this root-cause defect (e.g. [{'surface': 'H1 Heading', 'url': '/', 'selector': 'h1'}])"
+    )
+    # v2: Lifecycle and display fields
+    lifecycle_state: FindingLifecycle = Field(
+        default=FindingLifecycle.OPEN,
+        description="Current lifecycle stage of this finding in the canonical registry."
+    )
+    confidence_display_label: Optional[str] = Field(
+        default=None,
+        description="Customer-facing confidence label. Never exposes 'GUESSING'. "
+                    "Auto-derived from confidence_rubric.customer_label if not set explicitly."
+    )
+
+    def get_confidence_display(self) -> str:
+        """Return the customer-facing confidence label, never GUESSING."""
+        if self.confidence_display_label:
+            return self.confidence_display_label
+        rubric = self.confidence_rubric
+        if hasattr(rubric, "customer_label"):
+            return rubric.customer_label
+        return str(rubric.value) if rubric else "Unknown"
 
     @property
     def id(self) -> str:
@@ -202,6 +292,7 @@ class Claim(BaseModel):
     category: Category
     severity: Severity = Severity.MEDIUM
     evidence_refs: List[str] = Field(default_factory=list)
+    evidence_ref_objects: List[EvidenceRef] = Field(default_factory=list)
     supporting_agents: List[str] = Field(default_factory=list)
     contradicting_agents: List[str] = Field(default_factory=list)
     confidence: float = Field(default=0.85, ge=0.0, le=1.0)
@@ -382,6 +473,26 @@ class GeoDimension(BaseModel):
     evidence_notes: List[str] = Field(default_factory=list)
 
 
+class GeoDimensionScore(BaseModel):
+    """Score for a single GEO dimension with provenance."""
+    key: str = Field(..., description="GeoDimensionKey enum value")
+    label: str
+    score: float = Field(..., ge=0.0, le=100.0, description="0-100 dimension score")
+    band: str = Field(..., description="'high' | 'medium' | 'low'")
+    confidence: float = Field(default=0.75, ge=0.0, le=1.0)
+    provenances: List[str] = Field(default_factory=list, description="Evidence IDs backing this score")
+    summary: str = ""
+    evidence_notes: List[str] = Field(default_factory=list)
+    is_measured: bool = Field(
+        default=False,
+        description="True only when this dimension was directly measured (not inferred from HTML)."
+    )
+    measurement_note: Optional[str] = Field(
+        default=None,
+        description="If is_measured=False, explains what would be needed to measure this directly."
+    )
+
+
 class GeoReadinessReport(BaseModel):
     layer: str = "readiness"
     visibility_status: str = "NOT_CONFIGURED"
@@ -395,18 +506,128 @@ class GeoReadinessReport(BaseModel):
     headline: str = ""
     questions: List[GeoQuestionEvidence] = Field(default_factory=list)
     dimensions: List[GeoDimension] = Field(default_factory=list)
+    # v2: Multi-dimensional scored breakdown keyed by GeoDimensionKey value
+    dimension_scores: Dict[str, GeoDimensionScore] = Field(
+        default_factory=dict,
+        description="Scored GEO dimensions keyed by GeoDimensionKey enum values. "
+                    "Populated by the multi-dimensional evaluator."
+    )
     schema_types: List[str] = Field(default_factory=list)
     schema_is_evidence_layer_only: bool = True
     market_country: str = "Global"
     market_language: str = "en"
     market_note: str = "Country and language are the audit request context. They are not a live geo-rank."
-    # Layer 1 High-Density AI Extractability Additions
+    interpretation_disclaimer: str = Field(
+        default=(
+            "GEO Readiness measures whether AI engines can extract answers from this website. "
+            "It is NOT a live citation rank. Live AI citation visibility requires a separate "
+            "connector with actual engine queries and can only be reported as MEASURED when "
+            "directly observed."
+        ),
+        description="Mandatory disclaimer surfaced on every GEO report."
+    )
+    # Layer 1 High-Density AI Extractability
     extractability_score: Optional[float] = None
     entity_consistency: Optional[Dict[str, Any]] = None
     claims_analysis: Optional[Dict[str, Any]] = None
     question_graph_50: Optional[Dict[str, Any]] = None
     citation_passages: Optional[Dict[str, Any]] = None
     schema_crosscheck: Optional[Dict[str, Any]] = None
+
+
+# ---------------------------------------------------------------------------
+# AI Visibility Record — strictly separates MEASURED from SIMULATION
+# ---------------------------------------------------------------------------
+class AiEngineQueryResult(BaseModel):
+    """Result of a single live AI engine query."""
+    engine: str = Field(..., description="Engine name: 'chatgpt', 'perplexity', 'gemini', 'claude'")
+    query: str
+    query_class: Optional[str] = Field(default=None, description="QueryClass enum value")
+    cited: bool = Field(..., description="True if the target domain appeared in the response")
+    citation_rank: Optional[int] = Field(default=None, description="1-indexed position in citations, if cited")
+    response_snippet: Optional[str] = None
+    queried_at: Optional[str] = None
+    evidence_id: Optional[str] = Field(default=None, description="ID in the EvidenceStore for this query result")
+
+
+class AiEngineSimulationResult(BaseModel):
+    """Model-inferred simulation — NOT a live engine result."""
+    engine: str
+    query: str
+    query_class: Optional[str] = None
+    inferred_citability: str = Field(
+        ..., description="'LIKELY_CITED' | 'UNLIKELY_CITED' | 'UNCERTAIN'"
+    )
+    basis: str = Field(
+        ..., description="What on-page signals the model used to infer citability."
+    )
+    simulation_disclaimer: str = Field(
+        default=(
+            "This is a model inference based on on-page signals only. "
+            "It is NOT a live query result. Actual citation status may differ."
+        )
+    )
+
+
+class AiVisibilityRecord(BaseModel):
+    """
+    Canonical AI Search visibility record.
+    Strictly separates MEASURED results from SIMULATION_ONLY inferences.
+    The executive report must surface this distinction to the end user.
+    """
+    status: AiVisibilityStatus = AiVisibilityStatus.NOT_MEASURED
+    # MEASURED results (only present when live engine was actually queried)
+    measured_results: List[AiEngineQueryResult] = Field(default_factory=list)
+    # SIMULATION results (model-inferred, clearly labelled)
+    simulation_results: List[AiEngineSimulationResult] = Field(default_factory=list)
+    # Aggregate measured metrics (only valid when status == MEASURED)
+    measured_citation_rate: Optional[float] = Field(
+        default=None,
+        description="Fraction of live queries where the domain was cited. "
+                    "None when not measured."
+    )
+    engines_queried: List[str] = Field(default_factory=list)
+    queries_run: int = 0
+    not_measured_reason: Optional[str] = Field(
+        default=None,
+        description="Populated when status is NOT_MEASURED or SIMULATION_ONLY to "
+                    "explain why direct measurement was not performed."
+    )
+    measurement_disclaimer: str = Field(
+        default=(
+            "AI Visibility data is only reported as MEASURED when a live engine "
+            "connector performed actual queries. Simulation results are model "
+            "inferences and must not be presented as measured visibility."
+        )
+    )
+
+
+class AiVisibilityScorecard(BaseModel):
+    """Live multi-engine rates. None means that rate was not measured."""
+    status: str = "NOT_MEASURED"
+    measurement_note: str = (
+        "Rates use successful API or SERP responses only. "
+        "An API answer can differ from the consumer chat UI. "
+        "A timeout is an error, not a failure to mention the brand."
+    )
+    engines_measured: int = 0
+    engines_requested: int = 0
+    queries: int = 0
+    repeats: int = 1
+    successful_runs: int = 0
+    failed_runs: int = 0
+    mention_rate_pct: Optional[float] = None
+    citation_rate_pct: Optional[float] = None
+    citation_accuracy_pct: Optional[float] = None
+    entity_accuracy_pct: Optional[float] = None
+    service_recognition_pct: Optional[float] = None
+    icp_recognition_pct: Optional[float] = None
+    pricing_recognition_pct: Optional[float] = None
+    competitor_visibility_pct: Optional[float] = None
+    hallucination_rate_pct: Optional[float] = None
+    source_consistency_pct: Optional[float] = None
+    not_measured_reason: Optional[str] = None
+    matrix_grounding: Optional[str] = None
 
 
 class HonestScores(BaseModel):
@@ -461,6 +682,8 @@ class CategoryScore(BaseModel):
     strengths: List[str] = Field(default_factory=list)
     weaknesses: List[str] = Field(default_factory=list)
     summary: str
+    deductions: List[Dict[str, Any]] = Field(default_factory=list)
+    formula_breakdown: List[Dict[str, Any]] = Field(default_factory=list)
 
 class OverallScoreResult(BaseModel):
     overall_score: float # 0 - 100
@@ -470,6 +693,7 @@ class OverallScoreResult(BaseModel):
     health_label: str # Excellent, Good, Moderate, Needs Attention, Critical
     category_scores: Dict[str, CategoryScore] = Field(default_factory=dict)
     intent_adjusted_weights: Dict[str, float] = Field(default_factory=dict)
+    mathematical_derivation: List[Dict[str, Any]] = Field(default_factory=list)
 
 class RoadmapItem(BaseModel):
     timeframe: str # "7_days", "30_days", "90_days"
@@ -480,6 +704,116 @@ class RoadmapItem(BaseModel):
     category: Category
     related_finding_id: Optional[str] = None
     code_snippet: Optional[str] = None
+
+class ExecutiveActionItem(BaseModel):
+    rank: int
+    priority: str = "P1" # "P0", "P1", "P2", "P3"
+    action: str
+    impact: str = "High" # "Very High", "High", "Medium", "Low"
+    effort: str = "Low" # "Low", "Medium", "High"
+    expected_outcome: str
+    estimated_engineer_hours: int = 4
+    dependencies: List[str] = Field(default_factory=list)
+    validation: str = "Automated retest"
+    category: Optional[Category] = None
+    related_finding_id: Optional[str] = None
+
+class ExecutiveTopActionsPlan(BaseModel):
+    actions: List[ExecutiveActionItem] = Field(default_factory=list)
+    total_engineer_hours: int = 0
+    dependencies_flow: str = ""
+    validation_mode: str = "automated_retest"
+
+class AuditSnapshot(BaseModel):
+    snapshot_id: str
+    run_label: str
+    date: str
+    score: float
+    category_scores: Dict[str, float] = Field(default_factory=dict)
+    evidence_seal: str
+    verified_schema_types: List[str] = Field(default_factory=list)
+    findings_count: int = 0
+    status: str = "HEALTHY"  # HEALTHY, IMPROVED, REGRESSION
+
+class RegressionItem(BaseModel):
+    severity: str = "HIGH"  # CRITICAL, HIGH, MEDIUM
+    title: str
+    category: str
+    dimension_delta: Optional[float] = None
+    description: str
+    evidence_ref: Optional[str] = None
+
+class RegressionReport(BaseModel):
+    has_regression: bool = False
+    regression_count: int = 0
+    score_delta: float = 0.0 # e.g. -4.0
+    baseline_run: Optional[AuditSnapshot] = None
+    current_run: Optional[AuditSnapshot] = None
+    regressions: List[RegressionItem] = Field(default_factory=list)
+    historical_timeline: List[AuditSnapshot] = Field(default_factory=list)
+    summary: str = ""
+    detected_at: str = Field(default_factory=lambda: datetime.now().isoformat())
+
+class EvidenceTaxonomyReport(BaseModel):
+    total_evidence_nodes: int = 0
+    epistemic_integrity_score: float = 100.0 # % of findings that are directly OBSERVED or EXTERNALLY_VERIFIED
+    class_counts: Dict[str, int] = Field(default_factory=dict)
+    subtype_counts: Dict[str, int] = Field(default_factory=dict)
+    classes_breakdown: List[Dict[str, Any]] = Field(default_factory=list)
+    description: str = ""
+
+class ViewportInspection(BaseModel):
+    device: str # "desktop", "tablet", "mobile"
+    width: int
+    height: int
+    above_the_fold: Dict[str, Any] = Field(default_factory=dict) # value_proposition, cta, trust, hierarchy, visual_density, navigation, contrast, forms
+    detected_defects: List[str] = Field(default_factory=list) # "CTA below fold", "Text over image", "Low contrast (2.8:1)", "Mobile overflow", "Layout shift", "Tiny text (< 12px)", "Inconsistent spacing", "Visual hierarchy failure"
+    screenshot_url: Optional[str] = None
+    dom_anchors: List[str] = Field(default_factory=list)
+
+class VisualUxInspectionReport(BaseModel):
+    inspected_at: str
+    tested_devices: List[str] = Field(default_factory=lambda: ["desktop", "tablet", "mobile"])
+    viewports: Dict[str, ViewportInspection] = Field(default_factory=dict)
+    overall_visual_ux_score: Optional[float] = None
+    critical_visual_defects: List[Dict[str, Any]] = Field(default_factory=list)
+    combined_intelligence: Dict[str, Any] = Field(default_factory=dict) # DOM intelligence + screenshot intelligence + browser interaction intelligence
+
+class GscAttributionData(BaseModel):
+    queries: List[Dict[str, Any]] = Field(default_factory=list)
+    impressions: int = 0
+    clicks: int = 0
+    ctr: float = 0.0
+    average_position: float = 0.0
+    pages: List[str] = Field(default_factory=list)
+    countries: List[Dict[str, Any]] = Field(default_factory=list)
+    devices: Dict[str, float] = Field(default_factory=dict)
+    is_connected: bool = False
+
+class Ga4AttributionData(BaseModel):
+    landing_pages: List[Dict[str, Any]] = Field(default_factory=list)
+    engagement_rate: float = 0.0
+    conversion_rate: float = 0.0
+    funnels: List[Dict[str, Any]] = Field(default_factory=list)
+    events: List[Dict[str, Any]] = Field(default_factory=list)
+    traffic_sources: List[Dict[str, Any]] = Field(default_factory=list)
+    is_connected: bool = False
+
+class CrmAttributionData(BaseModel):
+    lead_source: List[Dict[str, Any]] = Field(default_factory=list)
+    lead_quality_score: float = 0.0
+    pipeline_value_inr: float = 0.0
+    closed_revenue_inr: float = 0.0
+    conversion_rate_lead_to_customer: float = 0.0
+    is_connected: bool = False
+
+class LifecycleRevenueIntelligence(BaseModel):
+    domain: str
+    stages: Dict[str, Any] = Field(default_factory=dict) # website -> search -> visitor -> lead -> revenue
+    gsc: GscAttributionData = Field(default_factory=GscAttributionData)
+    ga4: Ga4AttributionData = Field(default_factory=Ga4AttributionData)
+    crm: CrmAttributionData = Field(default_factory=CrmAttributionData)
+    summary: str = ""
 
 class AgentCallRecord(BaseModel):
     call_id: str
@@ -538,8 +872,21 @@ class PageEvidence(BaseModel):
     stylesheets_count: int = 0
     page_type: str = "general"
     body_text: Optional[str] = None
+    text_content: Optional[str] = None
     ctas: List[str] = Field(default_factory=list)
+    call_to_actions: List[str] = Field(default_factory=list)
+    forms: List[Dict[str, Any]] = Field(default_factory=list)
     render_mode: str = "static"
+    response_headers: Dict[str, str] = Field(default_factory=dict)
+    security_headers: Dict[str, str] = Field(default_factory=dict)
+    redirect_chain: List[Dict[str, Any]] = Field(default_factory=list)
+    is_redirected: bool = False
+    final_url: Optional[str] = None
+    snapshot_id: Optional[str] = None
+    snapshot_path: Optional[str] = None
+    observed_at: Optional[str] = None
+    image_assets: List[Dict[str, Any]] = Field(default_factory=list)
+    x_robots_tag: Optional[str] = None
 
 class CopyIssue(BaseModel):
     area: str
@@ -636,8 +983,8 @@ class PageReport(BaseModel):
     findings: List[str] = Field(default_factory=list)
 
 class CrawlManifest(BaseModel):
-    domain: str
-    base_url: str
+    domain: str = ""
+    base_url: str = ""
     total_pages_discovered: int = 0
     pages: List[PageEvidence] = Field(default_factory=list)
     sitemap_found: bool = False
@@ -645,6 +992,10 @@ class CrawlManifest(BaseModel):
     robots_txt_found: bool = False
     robots_txt_content: Optional[str] = None
     crawl_health: Dict[str, Any] = Field(default_factory=dict)
+    redirect_chains: List[Dict[str, Any]] = Field(default_factory=list)
+    crawl_budget: Dict[str, Any] = Field(default_factory=dict)
+    sitemap_urls: List[str] = Field(default_factory=list)
+    orphan_urls: List[str] = Field(default_factory=list)
 
 class UntrustedObservation(BaseModel):
     id: str
@@ -691,6 +1042,229 @@ class VisualIntelligencePayload(BaseModel):
     def charts(self) -> List[ChartSpecification]:
         return self.selected_visualizations
 
+# ===========================================================================
+# 40-PAGE ENTERPRISE AUDIT ROLLUP & PARAMETER MODELS
+# ===========================================================================
+
+class MetaBucketItem(BaseModel):
+    url: str
+    text: Optional[str] = None
+    char_length: int = 0
+    pixel_length: int = 0
+
+class MetaBucketRollup(BaseModel):
+    total_pages_evaluated: int = 0
+    # Titles
+    missing_titles: List[MetaBucketItem] = Field(default_factory=list)
+    too_short_titles: List[MetaBucketItem] = Field(default_factory=list)  # <30 chars
+    optimal_titles: List[MetaBucketItem] = Field(default_factory=list)    # 50-60 chars
+    too_long_titles: List[MetaBucketItem] = Field(default_factory=list)    # >60 chars
+    duplicate_titles: List[MetaBucketItem] = Field(default_factory=list)  # same title across URLs
+    title_issue_count: int = 0
+    # Descriptions
+    missing_descriptions: List[MetaBucketItem] = Field(default_factory=list)
+    too_short_descriptions: List[MetaBucketItem] = Field(default_factory=list)  # <70 chars
+    optimal_descriptions: List[MetaBucketItem] = Field(default_factory=list)    # 150-160 chars
+    too_long_descriptions: List[MetaBucketItem] = Field(default_factory=list)   # >160 chars
+    duplicate_descriptions: List[MetaBucketItem] = Field(default_factory=list)
+    description_issue_count: int = 0
+    title_summary: str = ""
+    description_summary: str = ""
+
+class HeadingIssueItem(BaseModel):
+    url: str
+    headings: List[str] = Field(default_factory=list)
+    issue_type: str = ""
+    detail: str = ""
+
+class HeadingHierarchyRollup(BaseModel):
+    total_pages_evaluated: int = 0
+    missing_h1: List[HeadingIssueItem] = Field(default_factory=list)
+    multiple_h1: List[HeadingIssueItem] = Field(default_factory=list)
+    short_h1: List[HeadingIssueItem] = Field(default_factory=list)  # <10 chars
+    long_h1: List[HeadingIssueItem] = Field(default_factory=list)   # >70 chars
+    duplicate_h1: List[HeadingIssueItem] = Field(default_factory=list)
+    hierarchy_violations: List[Dict[str, Any]] = Field(default_factory=list)
+    outline_tree_sample: List[Dict[str, Any]] = Field(default_factory=list)
+    total_heading_issues: int = 0
+    h1_health_score: float = 100.0
+
+class RedirectHop(BaseModel):
+    status: int
+    url: str
+    location: Optional[str] = None
+
+class HostVariantProbeResult(BaseModel):
+    origin_url: str
+    final_destination: str
+    status_code: int
+    hops: List[RedirectHop] = Field(default_factory=list)
+    hop_count: int = 0
+    proper_canonical_redirect: bool = False
+    error: Optional[str] = None
+
+class RedirectAuditReport(BaseModel):
+    target_domain: str
+    canonical_destination: str
+    host_variants: Dict[str, HostVariantProbeResult] = Field(default_factory=dict)
+    proper_301_consolidation: bool = False
+    has_chain_gt_1_hop: bool = False
+    has_redirect_loop: bool = False
+    redirects_to_4xx: bool = False
+    chains_recorded: List[Dict[str, Any]] = Field(default_factory=list)
+    summary: str = ""
+
+class ClickDepthReport(BaseModel):
+    homepage_url: str
+    total_pages_analyzed: int = 0
+    depth_1_count: int = 0
+    depth_2_count: int = 0
+    depth_3_count: int = 0
+    depth_4_plus_count: int = 0
+    max_click_depth: int = 0
+    pages_by_depth: Dict[str, List[str]] = Field(default_factory=dict)
+    depth_distribution_pct: Dict[str, float] = Field(default_factory=dict)
+    high_depth_warning_count: int = 0
+
+class OrphanPageReport(BaseModel):
+    total_sitemap_urls: int = 0
+    total_crawled_urls: int = 0
+    orphan_urls: List[str] = Field(default_factory=list)
+    orphan_count: int = 0
+    orphan_percentage: float = 0.0
+    summary: str = ""
+
+class AnchorTextAudit(BaseModel):
+    total_links_analyzed: int = 0
+    generic_anchor_count: int = 0
+    low_equity_terms_found: List[Dict[str, Any]] = Field(default_factory=list)
+    flagged_anchor_instances: List[Dict[str, str]] = Field(default_factory=list)
+    summary: str = ""
+
+class FormAuditItem(BaseModel):
+    page_url: str
+    form_id: Optional[str] = None
+    form_action: Optional[str] = None
+    input_count: int = 0
+    missing_labels_count: int = 0
+    input_types: List[str] = Field(default_factory=list)
+    submit_button_text: str = ""
+    has_captcha_or_honeypot: bool = False
+    has_confirmation_destination: bool = False
+    friction_risk: str = "LOW"  # "LOW" | "MEDIUM" | "HIGH"
+
+class FormAuditReport(BaseModel):
+    total_forms_detected: int = 0
+    forms: List[FormAuditItem] = Field(default_factory=list)
+    forms_with_missing_labels: int = 0
+    forms_without_captcha: int = 0
+    forms_without_confirmation: int = 0
+    cro_friction_grade: str = "A"
+    friction_score: float = 0.0
+    actionable_remedies: List[str] = Field(default_factory=list)
+
+class MediaAssetItem(BaseModel):
+    url: str
+    page_url: str
+    alt_text: Optional[str] = None
+    has_alt: bool = True
+    is_empty_alt: bool = False
+    has_dimensions: bool = True
+    format: str = "other"  # "png", "jpeg", "webp", "avif", "svg", etc.
+    is_modern_format: bool = False
+    is_insecure_http: bool = False
+
+class MediaAssetAuditReport(BaseModel):
+    total_images_analyzed: int = 0
+    missing_alt_count: int = 0
+    empty_alt_count: int = 0
+    missing_dimensions_count: int = 0  # CLS hazard
+    modern_format_count: int = 0
+    non_modern_format_count: int = 0
+    mixed_content_count: int = 0
+    mixed_content_urls: List[str] = Field(default_factory=list)
+    cls_risk_images: List[Dict[str, str]] = Field(default_factory=list)
+    decorative_alt_compliant_count: int = 0
+    summary: str = ""
+
+class SecurityAuditReport(BaseModel):
+    target_domain: str = ""
+    score: float = 100.0
+    grade: str = "A"
+    hsts_enabled: bool = False
+    hsts_header: Optional[str] = None
+    csp_enabled: bool = False
+    csp_header: Optional[str] = None
+    x_frame_options: Optional[str] = None
+    x_content_type_options: Optional[str] = None
+    referrer_policy: Optional[str] = None
+    permissions_policy: Optional[str] = None
+    information_disclosure_headers: List[Dict[str, str]] = Field(default_factory=list)
+    insecure_cookies: List[str] = Field(default_factory=list)
+    critical_findings: List[str] = Field(default_factory=list)
+    recommended_headers: Dict[str, str] = Field(default_factory=dict)
+    summary: str = ""
+
+class SchemaIssue(BaseModel):
+    url: str
+    schema_type: str
+    severity: str = "ERROR"  # "ERROR" (blocks rich results) | "WARNING" (missing recommended field)
+    field: str
+    message: str
+
+class SchemaValidationReport(BaseModel):
+    total_pages_with_schema: int = 0
+    total_entities_detected: int = 0
+    valid_entities_count: int = 0
+    entities_with_errors_count: int = 0
+    entities_with_warnings_count: int = 0
+    detected_types: List[str] = Field(default_factory=list)
+    issues: List[SchemaIssue] = Field(default_factory=list)
+    summary: str = ""
+
+class PerEngineAiScore(BaseModel):
+    engine_name: str  # "ChatGPT / SearchGPT" | "Perplexity" | "Google AI Overviews" | "Claude / Gemini"
+    score: float = 0.0
+    grade: str = "C"
+    readiness_band: str = "medium"  # "high" | "medium" | "low"
+    evaluation_type: str = "On-Page Structural Readiness (Simulated Extractability)"
+    strengths: List[str] = Field(default_factory=list)
+    critical_gaps: List[str] = Field(default_factory=list)
+    recommended_fixes: List[str] = Field(default_factory=list)
+
+class InformationGainReport(BaseModel):
+    score: float = 50.0
+    grade: str = "C"
+    has_proprietary_statistics: bool = False
+    has_benchmark_tables: bool = False
+    has_methodology_section: bool = False
+    has_executive_quotes: bool = False
+    fluff_ratio_score: float = 50.0
+    original_data_signals: List[str] = Field(default_factory=list)
+    commodity_fluff_signals: List[str] = Field(default_factory=list)
+    recommendations: List[str] = Field(default_factory=list)
+
+class AiBotDirectivesReport(BaseModel):
+    robots_txt_status: str = "VALIDATED"
+    gptbot_allowed: bool = True
+    perplexitybot_allowed: bool = True
+    claudebot_allowed: bool = True
+    google_extended_allowed: bool = True
+    llms_txt_found: bool = False
+    llms_txt_url: Optional[str] = None
+    llms_txt_generated: Optional[str] = None
+    recommendations: List[str] = Field(default_factory=list)
+
+class PerEngineAiMatrix(BaseModel):
+    chatgpt: PerEngineAiScore
+    perplexity: PerEngineAiScore
+    google_aio: PerEngineAiScore
+    claude_gemini: PerEngineAiScore
+    overall_engine_score: float = 0.0
+    overall_engine_grade: str = "B"
+    information_gain: InformationGainReport
+    ai_bot_directives: AiBotDirectivesReport
+
 class ExecutiveReport(BaseModel):
     report_id: str
     analysis_id: Optional[str] = None
@@ -715,6 +1289,11 @@ class ExecutiveReport(BaseModel):
     roadmap_7_days: List[RoadmapItem] = Field(default_factory=list)
     roadmap_30_days: List[RoadmapItem] = Field(default_factory=list)
     roadmap_90_days: List[RoadmapItem] = Field(default_factory=list)
+    top_10_actions: Optional[ExecutiveTopActionsPlan] = None
+    regression_report: Optional[RegressionReport] = None
+    evidence_taxonomy: Optional[EvidenceTaxonomyReport] = None
+    visual_ux: Optional[VisualUxInspectionReport] = None
+    lifecycle_revenue: Optional[LifecycleRevenueIntelligence] = None
     telemetry: TelemetryData = Field(default_factory=TelemetryData)
     crawl_summary: Dict[str, Any] = Field(default_factory=dict)
     crawl_manifest: Optional[CrawlManifest] = None
@@ -733,6 +1312,7 @@ class ExecutiveReport(BaseModel):
     roi_estimate: Optional[RoiEstimate] = None
     semantic_business: Optional[SemanticBusinessRepresentation] = None
     geo_readiness: Optional[GeoReadinessReport] = None
+    ai_visibility_scorecard: Optional[AiVisibilityScorecard] = None
     agent_readiness: Optional[AgentReadinessReport] = None
     contradictions: List[ContradictionReport] = Field(default_factory=list)
     exploratory_hypotheses: List[Finding] = Field(default_factory=list)
@@ -742,6 +1322,17 @@ class ExecutiveReport(BaseModel):
     integrity_repairs_log: List[Dict[str, Any]] = Field(default_factory=list)
     certification_status: str = "CERTIFIED"  # "CERTIFIED" | "DEGRADED_SECTIONS_WITHHELD"
     withheld_sections: List[Dict[str, str]] = Field(default_factory=list)
+    meta_rollup: Optional[MetaBucketRollup] = None
+    heading_hierarchy: Optional[HeadingHierarchyRollup] = None
+    host_and_redirects: Optional[RedirectAuditReport] = None
+    click_depth: Optional[ClickDepthReport] = None
+    orphan_pages: Optional[OrphanPageReport] = None
+    anchor_text_audit: Optional[AnchorTextAudit] = None
+    form_audit: Optional[FormAuditReport] = None
+    media_assets: Optional[MediaAssetAuditReport] = None
+    per_engine_geo: Optional[PerEngineAiMatrix] = None
+    security_audit: Optional[SecurityAuditReport] = None
+    schema_validation: Optional[SchemaValidationReport] = None
 
 class AnalysisRequest(BaseModel):
     website_url: str

@@ -209,9 +209,9 @@ class DeterministicFallbackEngine:
                 model = "Direct-to-Consumer / Online Commerce"
                 industry = "Commercial Retail & E-Commerce"
             else:
-                intent = "lead_generation"
-                model = "B2B Commercial Services & Inbound Solutions"
-                industry = "Commercial & Enterprise Digital Services"
+                intent = "unknown"
+                model = "Unknown Business Model"
+                industry = "Unknown Industry"
 
             # Dynamic Niche Determination
             if any(k in all_texts for k in ["cloud", "devops", "aws", "azure", "infrastructure", "kubernetes", "sre"]):
@@ -231,7 +231,7 @@ class DeterministicFallbackEngine:
             elif intent == "ecommerce":
                 niche = "Online Retail & Consumer Goods"
             else:
-                niche = "Enterprise Commercial Solutions"
+                niche = "Unknown Niche"
 
         # 5. Dynamic Value Proposition Grounding
         if meta_desc:
@@ -283,20 +283,9 @@ class DeterministicFallbackEngine:
                 "value_proposition": val_prop,
                 "primary_intent": intent,
                 "primary_cta": primary_cta,
-                "confidence": 0.40,
+                "confidence": None,
                 "evidence_status": "inferred_from_fallback",
-                "claims": [
-                    {
-                        "statement": f"Offline identity from crawl: {biz_name}. Model '{model}' is a heuristic, not a live market study.",
-                        "category": "COMPETITIVE",
-                        "severity": "INFO",
-                        "confidence": 0.40,
-                        "impact": 6,
-                        "effort": 2,
-                        "evidence_refs": [ev.id for ev in evidence_list[:2]],
-                        "recommendation": "Confirm industry, buyer, and CTA against the live page. Do not treat this fallback as a scored audit."
-                    }
-                ]
+                "claims": []
             }
 
         elif capability == "business_extract":
@@ -323,14 +312,14 @@ class DeterministicFallbackEngine:
                 "monetization_motion": "sales_assisted" if intent == "agency" else ("self_serve" if intent in ["saas", "ecommerce"] else "hybrid"),
                 "value_proposition": val_prop,
                 "five_second_clarity": {
-                    "band": "adequate",
+                    "band": "adequate" if val_prop else "unmeasured",
                     "evidence_status": "inferred_fallback",
                     "evidence_refs": [ev.id for ev in evidence_list[:2]],
-                    "rationale": f"Clear primary brand identity ({biz_name}) and identifiable offering in {niche}."
+                    "rationale": f"Brand identity ({biz_name}) from crawl." if val_prop else "No value proposition extracted."
                 },
                 "cac_impact": {
-                    "band": "low",
-                    "mechanism": f"Positioning targets qualified commercial buyers seeking {niche.lower()}.",
+                    "band": "unmeasured",
+                    "mechanism": None,
                     "numeric_estimate": None
                 },
                 "claims": []
@@ -344,9 +333,9 @@ class DeterministicFallbackEngine:
                 "what_company_does": val_prop,
                 "who_it_serves": [audience] if audience else [],
                 "what_it_sells": extracted_services,
-                "how_it_makes_money": f"Heuristic motion: {model}." if model else None,
+                "how_it_makes_money": f"Heuristic motion: {model}." if model != "Unknown Business Model" else None,
                 "core_problem_solved": None,
-                "primary_business_objective": "Lead Generation & Client Acquisition" if intent == "agency" else "Commercial Conversions",
+                "primary_business_objective": "Lead Generation" if intent == "agency" else ("Commercial Conversions" if intent in ["saas", "ecommerce"] else "Unmeasured"),
                 "confidence": None,
                 "evidence_excerpts": [h for h in all_texts.splitlines() if len(h.strip()) > 20][:3] or [val_prop]
             }
@@ -354,7 +343,7 @@ class DeterministicFallbackEngine:
 
         elif capability == "intent_journey":
             return {
-                "primary_intent": "lead_generation" if intent == "agency" else intent,
+                "primary_intent": intent,
                 "secondary_intents": [],
                 "journey_stages": ["Discovery", "Solution Evaluation", "Trust Verification", "Proposal Request"] if intent == "agency" else ["Discovery", "Education", "Evaluation", "Conversion"],
                 "conversion_events": [primary_cta] if primary_cta else [],
@@ -363,7 +352,7 @@ class DeterministicFallbackEngine:
                 "exit_points": [],
                 "friction_points": [] if primary_cta else ["No CTA detected in the crawl."],
                 "missing_stages": [],
-                "confidence": 0.40,
+                "confidence": None,
                 "evidence_excerpts": [primary_cta] if primary_cta else []
             }
 
@@ -372,11 +361,11 @@ class DeterministicFallbackEngine:
                 "product_categories": [],
                 "subcategories": [],
                 "services": extracted_services,
-                "service_categories": [niche] if niche else [],
+                "service_categories": [niche] if niche != "Unknown Niche" else [],
                 "product_families": [],
                 "use_cases": [],
                 "audience_segments": [audience] if audience else [],
-                "confidence": 0.91,
+                "confidence": None,
                 "evidence_excerpts": extracted_services[:3]
             }
 
@@ -384,11 +373,11 @@ class DeterministicFallbackEngine:
             return {
                 "primary_model": model,
                 "secondary_model": None,
-                "commercial_motion": "sales_assisted" if intent == "agency" else "self_serve",
-                "conversion_model": "Direct Inquiries & Proposal Contracts" if intent == "agency" else "Online Subscription",
-                "confidence": 0.89,
-                "reasoning": f"Grounded in verified page structure: consultative calls-to-action ('{primary_cta}') and enterprise service taxonomy without direct self-serve cart.",
-                "evidence_excerpts": [primary_cta]
+                "commercial_motion": "sales_assisted" if intent == "agency" else ("self_serve" if intent in ["saas", "ecommerce"] else "unknown"),
+                "conversion_model": "Direct Inquiries" if intent == "agency" else ("Online Subscription" if intent in ["saas", "ecommerce"] else "Unmeasured"),
+                "confidence": None,
+                "reasoning": f"Observed calls-to-action: '{primary_cta}'." if primary_cta else "No CTA observed.",
+                "evidence_excerpts": [primary_cta] if primary_cta else []
             }
 
         elif capability == "semantic_strategist":
@@ -403,44 +392,21 @@ class DeterministicFallbackEngine:
                 "contradictions_detected": [],
                 "content_gaps": [],
                 "strategic_hypotheses": [],
-                "confidence": 0.91,
-                "evidence_excerpts": [val_prop]
+                "confidence": None,
+                "evidence_excerpts": [val_prop] if val_prop else []
             }
 
         elif capability == "geo_analysis":
-            has_org = any(ev.source_type == "schema" and "Organization" in str(ev.value) for ev in evidence_list)
-            
-            claims = [
-                {
-                    "statement": "Absent or incomplete Schema.org JSON-LD entity graph prevents AI answer engines (Perplexity, ChatGPT, Gemini) from building authoritative Knowledge Graph nodes.",
-                    "category": "GEO",
-                    "severity": "HIGH" if not has_org else "MEDIUM",
-                    "confidence": 0.40,
-                    "impact": 9,
-                    "effort": 2,
-                    "evidence_refs": [ev.id for ev in evidence_list if ev.source_type == "schema"][:2],
-                    "recommendation": "Deploy nested Schema.org JSON-LD (Organization, WebSite, Service/Product, FAQPage) with explicit sameAs and founder references."
-                },
-                {
-                    "statement": "Direct answer density is constrained by narrative-heavy promotional phrasing rather than concise, factual definition sentences.",
-                    "category": "GEO",
-                    "severity": "MEDIUM",
-                    "confidence": 0.40,
-                    "impact": 8,
-                    "effort": 3,
-                    "evidence_refs": [ev.id for ev in evidence_list if ev.source_type in ["h1", "h2", "meta"]][:2],
-                    "recommendation": "Structure top sections with direct answer definition blocks (2-sentence summaries answering 'What is X' and 'How does X work')."
-                }
-            ]
             return {
                 "extractability_score": None,
                 "information_gain_score": None,
                 "citation_readiness_score": None,
                 "entity_clarity_score": None,
-                "claims": claims,
+                "claims": [],
                 "status": "UNAVAILABLE",
-                "notes": "Numeric GEO scores unavailable without active inference model"
+                "notes": "Generative Engine Optimization semantic analysis requires an active LLM inference model. Deterministic schema and markup checks run in deterministic analyzers."
             }
+
 
         elif capability == "ai_search_simulation":
             return {

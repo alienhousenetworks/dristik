@@ -2,6 +2,11 @@
 Live AI Search & Answer Engine Intelligence (GEO / AEO).
 Queries real answer engine APIs and web endpoints (ChatGPT, Perplexity, Gemini, Claude)
 to compute verified Citation Ranks, Share of Voice (SoV), and exact quote extractions.
+
+ZERO-FAKE CONTRACT:
+Without configured API keys, this module returns is_cited=False, citation_rank=None,
+and a descriptive notice explaining what is required. It never fabricates citation
+results from string-matching heuristics.
 """
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -24,6 +29,8 @@ class EngineCitationResult:
     cited_url: Optional[str]
     extracted_snippet: Optional[str]
     competitor_citations: List[Dict[str, Any]] = field(default_factory=list)
+    is_simulation: bool = False
+    notice: Optional[str] = None
 
 
 class QueryBankRequest(BaseModel):
@@ -35,8 +42,37 @@ class QueryBankRequest(BaseModel):
 
 class LiveAICitationEngine:
     """
-    Executes queries across live LLM answer engines to verify brand citation and citations ranks.
+    Evaluates queries across live LLM answer engines to verify brand citation and citation ranks.
+
+    Without configured API keys, returns honest NOT_AVAILABLE results.
+    The structural eligibility heuristic is available internally for on-page readiness scoring
+    but is never exposed as a live citation result.
     """
+
+    def _structural_eligibility(
+        self,
+        domain: str,
+        query: str,
+        engine: str,
+    ) -> Dict[str, Any]:
+        """
+        Internal heuristic for on-page structural readiness.
+        This is NOT a live citation result — it estimates whether the page
+        structure makes the domain eligible for citation.
+        Always labeled is_simulation=True.
+        """
+        clean_domain = domain.replace("https://", "").replace("http://", "").split("/")[0].lower()
+        domain_tokens = clean_domain.split(".")[0]
+        # Simple structural check: is the domain name present in the query?
+        name_in_query = domain_tokens in query.lower()
+        return {
+            "engine": engine,
+            "query": query,
+            "domain_in_query": name_in_query,
+            "eligibility_band": "medium" if name_in_query else "low",
+            "is_simulation": True,
+            "notice": "Structural eligibility only. Not a live citation measurement.",
+        }
 
     def evaluate_query(
         self,
@@ -45,34 +81,21 @@ class LiveAICitationEngine:
         engine: str,
         competitors: Optional[List[str]] = None
     ) -> EngineCitationResult:
-        clean_domain = domain.replace("https://", "").replace("http://", "").split("/")[0].lower()
-        comps = competitors or []
-
-        # Simulated live search evaluation logic based on deterministic domain relevance
-        # In full production, this dispatches to OpenAI Search / Perplexity API / Google Search API.
-        domain_tokens = clean_domain.split(".")[0]
-        is_cited = domain_tokens in query.lower() or "best" in query.lower() or "top" in query.lower()
-        rank = 1 if domain_tokens in query.lower() else (2 if is_cited else None)
-        cited_url = f"https://{clean_domain}/" if is_cited else None
-        snippet = f"According to {clean_domain.capitalize()}, they provide leading solutions for {query}." if is_cited else None
-
-        competitor_citations = []
-        for i, comp in enumerate(comps, start=2):
-            clean_comp = comp.replace("https://", "").replace("http://", "").split("/")[0].lower()
-            competitor_citations.append({
-                "domain": clean_comp,
-                "citation_rank": i,
-                "is_cited": True,
-            })
-
+        """
+        Returns honest NOT_AVAILABLE result when no real API key is configured.
+        Live engine integration requires API keys for each provider.
+        """
+        # No real API integration yet — return honest unconfigured state
         return EngineCitationResult(
             engine=engine,
             query=query,
-            is_cited=is_cited,
-            citation_rank=rank,
-            cited_url=cited_url,
-            extracted_snippet=snippet,
-            competitor_citations=competitor_citations,
+            is_cited=False,
+            citation_rank=None,
+            cited_url=None,
+            extracted_snippet=None,
+            competitor_citations=[],
+            is_simulation=False,
+            notice=f"Live {engine} citation query requires API key configuration. No simulated data returned.",
         )
 
     def evaluate_query_bank(
@@ -100,6 +123,8 @@ class LiveAICitationEngine:
                     "cited_url": res.cited_url,
                     "extracted_snippet": res.extracted_snippet,
                     "competitor_citations": res.competitor_citations,
+                    "is_simulation": res.is_simulation,
+                    "notice": res.notice,
                     "queried_at": datetime.now(timezone.utc).isoformat(),
                 })
 
@@ -111,6 +136,7 @@ class LiveAICitationEngine:
             "total_citations": total_citations,
             "share_of_voice_percentage": share_of_voice_pct,
             "evaluations": results,
+            "notice": "Live citation queries require API key configuration. All results reflect actual API availability." if total_citations == 0 else None,
         }
 
 
@@ -154,6 +180,7 @@ async def get_live_citations_endpoint(
 ):
     """
     Evaluates a single query against a live answer engine.
+    Returns honest NOT_AVAILABLE state when API keys are not configured.
     """
     cit_engine = get_live_ai_citation_engine()
     res = cit_engine.evaluate_query(domain, query, engine)
@@ -165,4 +192,6 @@ async def get_live_citations_endpoint(
         "citation_rank": res.citation_rank,
         "cited_url": res.cited_url,
         "extracted_snippet": res.extracted_snippet,
+        "is_simulation": res.is_simulation,
+        "notice": res.notice,
     }

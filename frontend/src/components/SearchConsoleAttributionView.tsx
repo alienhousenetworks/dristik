@@ -143,37 +143,6 @@ export function SearchConsoleAttributionView({ domain, analysisId, onOpenConnect
     }, 1000);
   };
 
-  const handleQuickConnect = async () => {
-    setConnecting(true);
-    setConnectError(null);
-    try {
-      const cleanDomain = (gscPropertyUrl || domain).replace('https://', '').replace('http://', '').split('/')[0];
-      const res = await fetch('/api/v1/connectors/google/oauth/quick-connect', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          domain: cleanDomain,
-          property_url: `https://${cleanDomain}`,
-          account_email: `owner@${cleanDomain}`
-        })
-      });
-      const resData = await res.json();
-      if (res.ok && resData.success) {
-        setConnectSuccess('✓ Google Search Console connected via 1-Click Google OAuth!');
-        setTimeout(() => {
-          setShowDirectModal(false);
-          fetchGsc();
-        }, 800);
-      } else {
-        setConnectError(resData.message || 'Quick connect failed');
-      }
-    } catch (e: any) {
-      setConnectError(e.message || 'Quick connect failed');
-    } finally {
-      setConnecting(false);
-    }
-  };
-
   const handleDirectConnect = async (e: React.FormEvent) => {
     e.preventDefault();
     setConnecting(true);
@@ -546,15 +515,6 @@ export function SearchConsoleAttributionView({ domain, analysisId, onOpenConnect
                     <span>{connecting ? 'Waiting for Google Authorization...' : 'Sign in with Google Search Console'}</span>
                   </button>
 
-                  <button
-                    type="button"
-                    onClick={handleQuickConnect}
-                    disabled={connecting}
-                    className="w-full py-2.5 px-4 rounded-xl bg-pine text-paper-50 hover:bg-pine-700 font-semibold text-xs transition-all flex items-center justify-center gap-2 cursor-pointer shadow-2xs disabled:opacity-60"
-                  >
-                    <span>⚡</span>
-                    <span>1-Click Instant Connect (Local / Demo)</span>
-                  </button>
                 </div>
               </div>
 

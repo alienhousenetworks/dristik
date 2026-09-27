@@ -16,8 +16,18 @@ from app.intelligence.geo.pipeline_runner import (
     geo_pipeline_runner,
     FIXED_PROMPT_SET,
 )
+from app.intelligence.geo.citation_gap import (
+    geo_citation_gap_engine,
+    CausalCitationGapReport,
+)
 
 router = APIRouter(prefix="/geo-pipeline", tags=["GEO/AEO Pipeline"])
+
+
+class CitationGapAnalysisRequest(BaseModel):
+    domain: str = Field(..., description="Target website domain (e.g. acme.com)")
+    brand_name: Optional[str] = Field(None, description="Organization brand name")
+    competitors: List[str] = Field(default_factory=list, description="Competitor domains to evaluate against")
 
 
 class RunGeoPipelineRequest(BaseModel):
@@ -125,3 +135,22 @@ async def list_geo_tracked_domains():
     """
     domains = geo_pipeline_store.list_tracked_domains()
     return {"domains": domains, "total_count": len(domains)}
+
+
+@router.post("/citation-gap", response_model=CausalCitationGapReport)
+async def analyze_citation_gaps_endpoint(req: CitationGapAnalysisRequest):
+    """
+    Executes Causal Citation Gap Analysis (Layers 3 & 4 of GEO architecture).
+    Reverse-engineers why competitors win AI citations and emits exact drop-in
+    copy, schema, and llms.txt patches.
+    """
+    try:
+        report = geo_citation_gap_engine.analyze_citation_gaps(
+            target_domain=req.domain,
+            brand_name=req.brand_name,
+            competitor_domains=req.competitors,
+        )
+        return report
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Failed to analyze citation gaps: {str(exc)}")
+

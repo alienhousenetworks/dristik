@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { AnalysisRun, AnalysisSummary, AppView, AuthUser, ConnectorType, Finding, TabId } from './types';
-import { getAnalysis, listAnalyses, openAnalysisStream, startAnalysis } from './services/api';
+import { deleteAnalysis, getAnalysis, listAnalyses, openAnalysisStream, startAnalysis } from './services/api';
 import { can, fetchMe, logout } from './services/auth';
 import { Header } from './components/Header';
 import { AuditForm } from './components/AuditForm';
@@ -12,6 +12,7 @@ import { Findings } from './components/Findings';
 import { Roadmap } from './components/Roadmap';
 import { Report } from './components/Report';
 import { Big4AuditReport } from './components/Big4AuditReport';
+import { AuditPdfReport } from './components/AuditPdfReport';
 import { Pricing } from './components/Pricing';
 import { Drawer } from './components/Drawer';
 import { PricingModal } from './components/PricingModal';
@@ -24,11 +25,14 @@ import { ConnectorsModal } from './components/ConnectorsModal';
 import { RemediationFlowModal } from './components/RemediationFlowModal';
 import { AgencyWorkspaceModal } from './components/AgencyWorkspaceModal';
 import { PillarNavBar } from './components/Navigation/PillarNavBar';
-import { SearchIntelligenceView } from './components/Pillars/SearchIntelligenceView';
-import { AiSearchIntelligenceView } from './components/Pillars/AiSearchIntelligenceView';
-import { WebsiteExperienceView } from './components/Pillars/WebsiteExperienceView';
-import { ConversionIntelligenceView } from './components/Pillars/ConversionIntelligenceView';
-import { BrandEntityIntelligenceView } from './components/Pillars/BrandEntityIntelligenceView';
+import { SeoWorkspaceView } from './components/Pillars/SeoWorkspaceView';
+import { GeoWorkspaceView } from './components/Pillars/GeoWorkspaceView';
+import { AeoWorkspaceView } from './components/Pillars/AeoWorkspaceView';
+import { CroWorkspaceView } from './components/Pillars/CroWorkspaceView';
+import { CompetitorWorkspaceView } from './components/Pillars/CompetitorWorkspaceView';
+import { DevPatchPackView } from './components/DevPatchPackView';
+import { VerificationWorkspaceView } from './components/VerificationWorkspaceView';
+import { Pages } from './components/Pages';
 import { ScoringRubricModal } from './components/ScoringRubricModal';
 import { RecentAuditsDropdown } from './components/RecentAuditsDropdown';
 import { PageHeader } from './components/ui';
@@ -322,14 +326,28 @@ export function App() {
         onOpenAgency={() => setAgencyOpen(true)}
         onOpenRubric={() => setRubricOpen(true)}
         onExport={() => {
-          window.print();
+          try {
+            window.print();
+          } catch {
+            const id = run?.report?.analysis_id || run?.report?.report_id || run?.analysis_id;
+            if (id) window.open(`/api/v1/reports/${id}/executive-deck`, '_blank');
+          }
         }}
         onSelectAudit={(id) => loadAudit(id)}
         onNewAudit={clearAudit}
+        onAuditDeleted={async (id) => {
+          try {
+            await deleteAnalysis(id);
+            setRecentAudits((prev) => prev.filter((item) => item.analysis_id !== id));
+            if (run?.analysis_id === id) clearAudit();
+          } catch (err) {
+            setError(err instanceof Error ? err.message : 'Could not delete the audit.');
+          }
+        }}
       />
 
       {workspaceRun ? (
-        <div className="flex-1 flex flex-col lg:flex-row min-h-0">
+        <div className="no-print flex-1 flex flex-col lg:flex-row min-h-0">
           {report && (
             <PillarNavBar
               tab={tab}
@@ -341,7 +359,7 @@ export function App() {
             />
           )}
 
-          <main className="flex-1 min-w-0 print:hidden">
+          <main className="no-print flex-1 min-w-0">
             <div className="max-w-[1100px] mx-auto px-5 sm:px-8 py-8 space-y-6">
               {!report && (
                 <div className="space-y-6">
@@ -371,12 +389,24 @@ export function App() {
                       blockers={report.what_is_holding_it_back}
                       ignore={report.consultant_advice_what_to_ignore}
                       report={report}
-                      onNavigate={setTab}
+                      onNavigate={(nextTab) => {
+                        if ((nextTab as string) === 'connectors') {
+                          setConnectorsInitialTab('google_search_console');
+                          setConnectorsOpen(true);
+                        } else {
+                          setTab(nextTab);
+                        }
+                      }}
+                      onOpenConnectors={(connectorTab) => {
+                        setConnectorsInitialTab((connectorTab as ConnectorType) || 'google_search_console');
+                        setConnectorsOpen(true);
+                      }}
                     />
                   )}
 
-                  {(tab === 'search_intelligence' || tab === 'pages' || tab === 'search_console') && (
-                    <SearchIntelligenceView
+                  {/* 1. SEO WORKSPACE */}
+                  {(tab === 'seo' || tab === 'search_intelligence' || tab === 'search_console') && (
+                    <SeoWorkspaceView
                       report={report}
                       analysisId={run?.analysis_id}
                       onSelectFinding={setFinding}
@@ -387,8 +417,9 @@ export function App() {
                     />
                   )}
 
-                  {(tab === 'ai_search_intelligence' || tab === 'ai_citations' || tab === 'ai_search') && (
-                    <AiSearchIntelligenceView
+                  {/* 2. GEO WORKSPACE */}
+                  {(tab === 'geo' || tab === 'ai_search_intelligence' || tab === 'ai_citations' || tab === 'ai_search') && (
+                    <GeoWorkspaceView
                       report={report}
                       analysisId={run?.analysis_id}
                       onOpenPatchPack={() => setRemediationOpen(true)}
@@ -408,24 +439,51 @@ export function App() {
                     />
                   )}
 
-                  {tab === 'website_experience' && (
-                    <WebsiteExperienceView report={report} onSelectFinding={setFinding} />
-                  )}
-
-                  {(tab === 'conversion_intelligence' || tab === 'lead_gen' || tab === 'competitors') && (
-                    <ConversionIntelligenceView
+                  {/* 3. AEO WORKSPACE */}
+                  {(tab === 'aeo' || tab === 'brand_entity_intelligence') && (
+                    <AeoWorkspaceView
                       report={report}
                       analysisId={run?.analysis_id}
-                      websiteUrl={run?.website_url || report.website_url}
+                      onOpenPatchPack={() => setRemediationOpen(true)}
+                    />
+                  )}
+
+                  {/* 4. CRO WORKSPACE */}
+                  {(tab === 'cro' || tab === 'conversion_intelligence' || tab === 'website_experience') && (
+                    <CroWorkspaceView
+                      report={report}
+                      analysisId={run?.analysis_id}
                       onDeployRemediation={() => setRemediationOpen(true)}
                     />
                   )}
 
-                  {tab === 'brand_entity_intelligence' && <BrandEntityIntelligenceView report={report} />}
+                  {/* 5. COMPETITOR INTELLIGENCE WORKSPACE */}
+                  {(tab === 'competitors' || tab === 'perspectives' || tab === 'lead_gen') && (
+                    <CompetitorWorkspaceView
+                      report={report}
+                      analysisId={run?.analysis_id}
+                      websiteUrl={run?.website_url || report.website_url}
+                    />
+                  )}
 
-                  {tab === 'perspectives' && <Perspectives comparison={report.three_way_comparison} />}
+                  {/* 6. PAGE INSPECTOR */}
+                  {tab === 'pages' && (
+                    <Pages
+                      manifest={report.crawl_manifest}
+                      summary={report.crawl_summary}
+                      pageReports={report.page_reports}
+                    />
+                  )}
 
+                  {/* 7. EVIDENCE LEDGER / FINDINGS */}
                   {tab === 'findings' && <Findings findings={report.findings} onSelect={setFinding} />}
+
+                  {/* 8. DEV PATCH PACK */}
+                  {tab === 'patches' && (
+                    <DevPatchPackView report={report} analysisId={run?.analysis_id} />
+                  )}
+
+                  {/* 9. ACTION ROADMAP */}
                   {tab === 'roadmap' && (
                     <Roadmap
                       days7={report.roadmap_7_days}
@@ -433,6 +491,13 @@ export function App() {
                       days90={report.roadmap_90_days}
                     />
                   )}
+
+                  {/* 10. VERIFICATION & REGRESSION */}
+                  {tab === 'verification' && (
+                    <VerificationWorkspaceView report={report} analysisId={run?.analysis_id} />
+                  )}
+
+                  {/* 11. PRESENTATION REPORT */}
                   {tab === 'report' && (
                     <Report
                       report={report}
@@ -440,6 +505,8 @@ export function App() {
                       onExportPdf={() => window.print()}
                     />
                   )}
+
+                  {/* 12. PLANS / BILLING */}
                   {tab === 'plans' && (
                     <Pricing
                       onSelectPlan={(id) => {
@@ -460,7 +527,7 @@ export function App() {
           </main>
         </div>
       ) : (
-        <main className="flex-1 max-w-[1120px] w-full mx-auto px-6 lg:px-8 py-10 print:hidden">
+        <main className="no-print flex-1 max-w-[1120px] w-full mx-auto px-6 lg:px-8 py-10">
           {view === 'login' && (
             <LoginScreen
               onAuthed={async () => {
@@ -544,20 +611,41 @@ export function App() {
                   <div className="mt-4 pt-3 border-t border-line/60 flex flex-wrap items-center gap-2 text-xs">
                     <span className="text-ink-400 font-medium">Recent audits:</span>
                     {recentAudits.slice(0, 5).map((item) => (
-                      <button
+                      <span
                         key={item.analysis_id}
-                        type="button"
-                        onClick={() => loadAudit(item.analysis_id)}
-                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-line/40 hover:bg-pine/10 hover:text-pine text-ink-700 dark:text-ink-200 transition-colors font-medium border border-line/40 hover:border-pine/30 cursor-pointer"
-                        title={`Reopen audit for ${item.website_url}`}
+                        className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-line/40 text-ink-700 border border-line/40"
                       >
-                        <span className="truncate max-w-[140px]">{item.domain || item.website_url.replace(/^https?:\/\//, '')}</span>
-                        {item.score_overall != null && (
-                          <span className="font-mono text-[10px] px-1 py-0.2 rounded bg-ink/5 text-ink-600 dark:text-ink-300">
-                            {Math.round(item.score_overall)}
-                          </span>
-                        )}
-                      </button>
+                        <button
+                          type="button"
+                          onClick={() => loadAudit(item.analysis_id)}
+                          className="inline-flex items-center gap-1.5 hover:text-pine font-medium cursor-pointer"
+                          title={`Reopen audit for ${item.website_url}`}
+                        >
+                          <span className="truncate max-w-[140px]">{item.domain || item.website_url.replace(/^https?:\/\//, '')}</span>
+                          {item.score_overall != null && (
+                            <span className="font-mono text-[10px] px-1 py-0.2 rounded bg-ink/5 text-ink-600">
+                              {Math.round(item.score_overall)}
+                            </span>
+                          )}
+                        </button>
+                        <button
+                          type="button"
+                          className="text-[10px] text-ink-400 hover:text-bad px-1"
+                          title={`Delete audit for ${item.domain}`}
+                          onClick={async () => {
+                            const label = item.domain || item.website_url;
+                            if (!window.confirm(`Delete the audit for ${label}? This cannot be undone.`)) return;
+                            try {
+                              await deleteAnalysis(item.analysis_id);
+                              setRecentAudits((prev) => prev.filter((row) => row.analysis_id !== item.analysis_id));
+                            } catch (err) {
+                              setError(err instanceof Error ? err.message : 'Could not delete the audit.');
+                            }
+                          }}
+                        >
+                          Delete
+                        </button>
+                      </span>
                     ))}
                   </div>
                 )}
@@ -568,19 +656,26 @@ export function App() {
         </main>
       )}
 
-      {report && (
+      {report && !previewDeck && (
         <div className="print-only">
-          <Big4AuditReport report={report} />
+          <AuditPdfReport report={report} />
         </div>
       )}
 
       {previewDeck && report && (
-        <div className="scrim fixed inset-0 z-50 overflow-y-auto p-3 sm:p-6 no-print flex flex-col items-center">
-          <div className="w-full max-w-[1400px] my-auto">
+        <div className="scrim fixed inset-0 z-50 overflow-y-auto p-3 sm:p-6 flex flex-col items-center print:static print:p-0 print:overflow-visible print:bg-transparent">
+          <div className="w-full max-w-[1400px] my-auto print:max-w-none print:w-full print:my-0">
             <Big4AuditReport
               report={report}
               previewMode
-              onPrint={() => window.print()}
+              onPrint={() => {
+                try {
+                  window.print();
+                } catch {
+                  const id = report.analysis_id || report.report_id;
+                  if (id) window.open(`/api/v1/reports/${id}/executive-deck`, '_blank');
+                }
+              }}
               onClosePreview={() => setPreviewDeck(false)}
             />
           </div>
@@ -602,7 +697,17 @@ export function App() {
       )}
 
       <div className="no-print">
-        <Drawer finding={finding} patches={report?.code_patches || []} onClose={() => setFinding(null)} />
+        <Drawer
+          finding={finding}
+          patches={report?.code_patches || []}
+          websiteUrl={report?.website_url}
+          analysisId={report?.analysis_id}
+          onClose={() => setFinding(null)}
+          onOpenConnectors={(connectorTab) => {
+            if (connectorTab) setConnectorsInitialTab(connectorTab);
+            setConnectorsOpen(true);
+          }}
+        />
         <PricingModal
           isOpen={plansOpen}
           onClose={() => setPlansOpen(false)}

@@ -7,12 +7,25 @@ topological waves. Independent agents in a wave run concurrently.
 from __future__ import annotations
 
 import asyncio
+import logging
 from collections import defaultdict, deque
 from typing import Any, Awaitable, Callable, Dict, List, Optional
 
+from app.core.config import settings
 from app.agents.runtime.registry import SPECIALIST_AGENTS_V3, AgentDefinition, get_agent_definition
 from app.agents.runtime.specialist import SpecialistAgent
+from app.agents.runtime.reasoners import (
+    TechnicalReasonerAgent,
+    GeoAeoReasonerAgent,
+    CroExperienceReasonerAgent,
+    CrossAnalystAgent,
+    CriticAgent,
+    SynthesizerAgent,
+)
+from app.evidence.coverage import EvidenceCoverageCalculator
 from app.cognition.blackboard import CognitiveBlackboard
+
+logger = logging.getLogger("dristik.agent_pool")
 
 ProgressCb = Optional[Callable[[str, int, str, Dict[str, Any]], Awaitable[None]]]
 
@@ -63,6 +76,15 @@ class AgentPool:
         }
         self.waves = topological_waves(SPECIALIST_AGENTS_V3)
 
+        # Streamlined Specialist Reasoner Fleet
+        self.tech_reasoner = TechnicalReasonerAgent(model_router)
+        self.geo_reasoner = GeoAeoReasonerAgent(model_router)
+        self.cro_reasoner = CroExperienceReasonerAgent(model_router)
+        self.cross_analyst = CrossAnalystAgent()
+        self.critic = CriticAgent()
+        self.synthesizer = SynthesizerAgent()
+        self.coverage_calc = EvidenceCoverageCalculator()
+
     def __len__(self) -> int:
         return len(self.agents)
 
@@ -93,8 +115,16 @@ class AgentPool:
             "results": {},
         }
 
+        # Limit parallel agent tasks per wave to prevent scheduling bursts
+        pool_concurrency = max(2, getattr(settings, "LLM_MAX_CONCURRENCY", 2) * 2)
+        sem = asyncio.Semaphore(pool_concurrency)
+
+        async def _bounded_run(aid: str) -> Dict[str, Any]:
+            async with sem:
+                return await self._run_one(aid, blackboard)
+
         for wave_index, wave in enumerate(self.waves):
-            tasks = [self._run_one(agent_id, blackboard) for agent_id in wave]
+            tasks = [_bounded_run(agent_id) for agent_id in wave]
             packed = await asyncio.gather(*tasks, return_exceptions=True)
             for agent_id, payload in zip(wave, packed):
                 completed += 1
@@ -141,4 +171,140 @@ class AgentPool:
 
     async def _run_one(self, agent_id: str, blackboard: CognitiveBlackboard) -> Dict[str, Any]:
         agent = self.agents[agent_id]
-        return await agent.run(blackboard)
+        timeout_sec = float(getattr(agent.definition, "timeout_sec", 60) or 60) + 15.0
+        try:
+            return await asyncio.wait_for(agent.run(blackboard), timeout=timeout_sec)
+        except asyncio.TimeoutError:
+            logger.warning("[AgentPool] Specialist agent '%s' timed out after %.1fs", agent_id, timeout_sec)
+            record = {
+                "agent_id": agent_id,
+                "status": "unavailable",
+                "unavailable_reason": f"timeout_after_{timeout_sec:.0f}s",
+                "claims": [],
+            }
+            blackboard.blackboard_state.setdefault("agent_results", {})[agent_id] = record
+            return record
+        except Exception as e:
+            logger.error("[AgentPool] Specialist agent '%s' failed: %s", agent_id, e)
+            record = {
+                "agent_id": agent_id,
+                "status": "error",
+                "unavailable_reason": str(e),
+                "claims": [],
+            }
+            blackboard.blackboard_state.setdefault("agent_results", {})[agent_id] = record
+            return record
+
+    async def execute_streamlined_fleet(
+        self,
+        blackboard: CognitiveBlackboard,
+        progress_cb: ProgressCb = None,
+        base_progress: int = 46,
+        end_progress: int = 78,
+    ) -> Dict[str, Any]:
+        """
+        Executes the streamlined, zero-hallucination specialist workforce:
+        1. 3 Specialist Reasoners (Technical, GEO/AEO, CRO/Experience) in parallel.
+        2. CrossAnalystAgent for cross-pillar causal bottlenecks.
+        3. CriticAgent for adversarial verification against EvidenceRef.
+        4. SynthesizerAgent for surface/priority ranking and actionable remediation.
+        5. EvidenceCoverageCalculator for transparent observability audit.
+        """
+        manifest = blackboard.crawl_manifest
+        pages = blackboard.pages or (manifest.pages if manifest else [])
+
+        if progress_cb:
+            await progress_cb(
+                "streamlined_reasoning",
+                base_progress,
+                "Deploying 3 Specialist Reasoners (Technical, GEO, CRO)...",
+                {"reasoners": 3}
+            )
+
+        # Step 1: Execute 3 Specialist Reasoners in parallel
+        tech_task = self.tech_reasoner.reason(manifest, pages, blackboard.evidence_store)
+        geo_task = self.geo_reasoner.reason(manifest, pages, blackboard.evidence_store)
+        cro_task = self.cro_reasoner.reason(manifest, pages, blackboard.evidence_store)
+
+        reasoner_results = await asyncio.gather(tech_task, geo_task, cro_task, return_exceptions=True)
+
+        specialist_findings: List[Finding] = []
+        for r in reasoner_results:
+            if isinstance(r, list):
+                specialist_findings.extend(r)
+            elif isinstance(r, Exception):
+                logger.error("[AgentPool] Reasoner exception: %s", r)
+
+        if progress_cb:
+            mid_progress = base_progress + int((end_progress - base_progress) * 0.4)
+            await progress_cb(
+                "cross_analyst",
+                mid_progress,
+                "Running CrossAnalystAgent for cross-pillar causal synthesis...",
+                {"raw_findings": len(specialist_findings)}
+            )
+
+        # Step 2: CrossAnalyst causal synthesis
+        cross_findings = await self.cross_analyst.analyze(specialist_findings, manifest)
+        all_raw_findings = specialist_findings + cross_findings
+
+        if progress_cb:
+            critic_progress = base_progress + int((end_progress - base_progress) * 0.7)
+            await progress_cb(
+                "adversarial_critic",
+                critic_progress,
+                "CriticAgent auditing findings against EvidenceRef provenance...",
+                {"findings_to_audit": len(all_raw_findings)}
+            )
+
+        # Step 3: Critic adversarial verification
+        audit_res = self.critic.audit_findings(all_raw_findings)
+        verified_findings = audit_res.get("verified", [])
+
+        # Step 4: Synthesizer prioritization
+        final_findings = self.synthesizer.synthesize(verified_findings)
+
+        # Step 5: Save findings & register claims onto blackboard
+        blackboard.findings = final_findings
+        for f in final_findings:
+            blackboard.claim_registry.register_claim(
+                agent_id=f"reasoner_{f.category.value if hasattr(f.category, 'value') else f.category}",
+                statement=f.description or f.title,
+                category=f.category,
+                severity=f.severity,
+                confidence=f.confidence,
+                recommendation=f.recommendation,
+                evidence_refs=list(f.evidence_refs or []),
+            )
+
+        # Step 6: Evidence Coverage Metric
+        coverage_report = self.coverage_calc.calculate_coverage(
+            run_id=blackboard.run_id,
+            manifest=manifest,
+            pages=pages,
+            evidence_store=blackboard.evidence_store
+        )
+        blackboard.blackboard_state["evidence_coverage"] = coverage_report.model_dump()
+
+        summary: Dict[str, Any] = {
+            "mode": "streamlined_fleet",
+            "specialist_reasoners": 3,
+            "total_findings_generated": len(all_raw_findings),
+            "critic_verified": len(verified_findings),
+            "critic_rejected": len(audit_res.get("rejected", [])),
+            "critic_demoted": len(audit_res.get("demoted", [])),
+            "final_findings_count": len(final_findings),
+            "overall_evidence_coverage_pct": coverage_report.overall_coverage_pct,
+            "pillars_coverage": {k: v.coverage_pct for k, v in coverage_report.pillars.items()},
+        }
+        blackboard.blackboard_state["streamlined_fleet_summary"] = summary
+
+        if progress_cb:
+            await progress_cb(
+                "streamlined_reasoning",
+                end_progress,
+                f"Streamlined reasoner fleet completed: {len(final_findings)} verified findings ({coverage_report.overall_coverage_pct}% evidence coverage).",
+                summary
+            )
+
+        return summary

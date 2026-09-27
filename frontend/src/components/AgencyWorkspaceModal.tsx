@@ -118,11 +118,11 @@ export function AgencyWorkspaceModal({ isOpen, onClose, onSelectClientDomain }: 
                 Agency Mode Workspace
               </span>
               <span className="text-xs text-ink-500 font-mono">
-                {data?.plan_tier || 'Agency Multi-Domain Guard'}
+                {data?.plan_tier || 'Plan not loaded'}
               </span>
             </div>
             <h3 className="text-xl font-serif text-ink tracking-tight">
-              {data?.agency_name || 'Apex Digital Agency'} Client Portfolio
+              {data?.agency_name || 'Agency workspace'}
             </h3>
           </div>
           <button

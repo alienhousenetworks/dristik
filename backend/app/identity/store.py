@@ -104,6 +104,12 @@ class IdentityStore:
         user_cols = {row["name"] for row in self._query("PRAGMA table_info(users)")}
         if "last_login_at" not in user_cols:
             self._execute("ALTER TABLE users ADD COLUMN last_login_at REAL")
+        if "auth_provider" not in user_cols:
+            self._execute("ALTER TABLE users ADD COLUMN auth_provider TEXT DEFAULT 'local'")
+        if "oauth_id" not in user_cols:
+            self._execute("ALTER TABLE users ADD COLUMN oauth_id TEXT")
+        if "avatar_url" not in user_cols:
+            self._execute("ALTER TABLE users ADD COLUMN avatar_url TEXT")
 
     def close(self) -> None:
         with self._lock:
@@ -195,8 +201,8 @@ class IdentityStore:
     ) -> UserIdentity:
         user_id = f"usr_{uuid.uuid4().hex[:10]}"
         self._execute(
-            """INSERT INTO users (user_id, org_id, email, full_name, password_hash, role, is_active, is_system, created_at)
-               VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?)""",
+            """INSERT INTO users (user_id, org_id, email, full_name, password_hash, role, is_active, is_system, created_at, auth_provider)
+               VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, 'local')""",
             (
                 user_id,
                 org_id,
@@ -212,8 +218,68 @@ class IdentityStore:
         assert identity is not None
         return identity
 
+    def create_oauth_user(
+        self,
+        org_id: str,
+        email: str,
+        full_name: str,
+        provider: str,
+        oauth_id: str,
+        role: UserRole = UserRole.OWNER,
+        avatar_url: Optional[str] = None,
+    ) -> UserIdentity:
+        user_id = f"usr_{uuid.uuid4().hex[:10]}"
+        # Secure placeholder password hash that cannot be matched by plain password auth
+        placeholder_hash = f"oauth_{provider}_{uuid.uuid4().hex}"
+        self._execute(
+            """INSERT INTO users (user_id, org_id, email, full_name, password_hash, role, is_active, is_system, created_at, last_login_at, auth_provider, oauth_id, avatar_url)
+               VALUES (?, ?, ?, ?, ?, ?, 1, 0, ?, ?, ?, ?, ?)""",
+            (
+                user_id,
+                org_id,
+                email.strip().lower(),
+                full_name.strip(),
+                placeholder_hash,
+                role.value,
+                _now(),
+                _now(),
+                provider,
+                str(oauth_id),
+                avatar_url,
+            ),
+        )
+        identity = self.get_user(user_id)
+        assert identity is not None
+        return identity
+
+    def get_user_by_oauth(self, provider: str, oauth_id: str) -> Optional[UserIdentity]:
+        row = self._one(
+            "SELECT * FROM users WHERE auth_provider = ? AND oauth_id = ? AND deleted_at IS NULL",
+            (provider, str(oauth_id)),
+        )
+        return self._identity(row) if row else None
+
+    def link_oauth(
+        self,
+        user_id: str,
+        provider: str,
+        oauth_id: str,
+        avatar_url: Optional[str] = None,
+    ) -> Optional[UserIdentity]:
+        self._execute(
+            """UPDATE users
+               SET auth_provider = ?, oauth_id = ?, avatar_url = COALESCE(?, avatar_url), last_login_at = ?
+               WHERE user_id = ? AND deleted_at IS NULL""",
+            (provider, str(oauth_id), avatar_url, _now(), user_id),
+        )
+        return self.get_user(user_id)
+
+    def touch_login(self, user_id: str) -> None:
+        self._execute("UPDATE users SET last_login_at = ? WHERE user_id = ?", (_now(), user_id))
+
     def _identity(self, row: sqlite3.Row) -> UserIdentity:
         org = self._one("SELECT name FROM organizations WHERE org_id = ?", (row["org_id"],))
+        keys = row.keys()
         return UserIdentity(
             user_id=row["user_id"],
             org_id=row["org_id"],
@@ -224,7 +290,10 @@ class IdentityStore:
             is_active=bool(row["is_active"]) and row["deleted_at"] is None,
             is_system=bool(row["is_system"]),
             created_at=row["created_at"],
-            last_login_at=row["last_login_at"] if "last_login_at" in row.keys() else None,
+            last_login_at=row["last_login_at"] if "last_login_at" in keys else None,
+            auth_provider=row["auth_provider"] if ("auth_provider" in keys and row["auth_provider"]) else "local",
+            oauth_id=row["oauth_id"] if "oauth_id" in keys else None,
+            avatar_url=row["avatar_url"] if "avatar_url" in keys else None,
         )
 
     def get_user(self, user_id: str) -> Optional[UserIdentity]:

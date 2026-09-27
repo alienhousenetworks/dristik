@@ -1,4 +1,4 @@
-import { AdminOrganization, AuthUser, ContactRecord, OrgSummary, PlatformOverview } from '../types';
+import { AdminOrganization, AuthProvidersResponse, AuthUser, ContactRecord, OrgSummary, PlatformOverview } from '../types';
 import { readError } from './api';
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
@@ -175,4 +175,49 @@ export async function runDatabaseCleanup(): Promise<{
   database: PlatformOverview['database'];
 }> {
   return request('/api/v1/system/maintenance/cleanup', { method: 'POST' });
+}
+
+export async function fetchAuthProviders(): Promise<AuthProvidersResponse> {
+  return request<AuthProvidersResponse>('/api/v1/auth/providers');
+}
+
+export function startSSOAuth(provider: 'google' | 'github', onComplete: () => void): () => void {
+  const width = 540;
+  const height = 660;
+  const left = window.screenX + (window.outerWidth - width) / 2;
+  const top = window.screenY + (window.outerHeight - height) / 2;
+  const authUrl = `/api/v1/auth/oauth/${provider}/authorize`;
+
+  const popup = window.open(
+    authUrl,
+    `oauth_${provider}_popup`,
+    `width=${width},height=${height},left=${left},top=${top},status=no,resizable=yes`
+  );
+
+  let cleaned = false;
+  let timer: any = null;
+
+  const handleMessage = (e: MessageEvent) => {
+    if (e.data && e.data.type === 'AUTH_SUCCESS') {
+      cleanup();
+      onComplete();
+    }
+  };
+
+  const cleanup = () => {
+    if (cleaned) return;
+    cleaned = true;
+    if (timer) clearInterval(timer);
+    window.removeEventListener('message', handleMessage);
+  };
+
+  timer = setInterval(() => {
+    if (!popup || popup.closed) {
+      cleanup();
+      onComplete();
+    }
+  }, 800);
+
+  window.addEventListener('message', handleMessage);
+  return cleanup;
 }

@@ -38,12 +38,20 @@ class DiscoveryAgent:
 
         # Check sitemap
         if not manifest.sitemap_found:
+            is_small_site = len(manifest.pages) <= 50
             findings.append(Finding(
                 finding_id="DISC-102",
                 category=Category.TECHNICAL_SEO,
-                severity=Severity.HIGH,
-                title="Missing or Undiscoverable XML Sitemap",
-                description="No XML sitemap was found at standard locations or referenced in robots.txt. Search engines and indexing agents may miss newly published or deep pages.",
+                severity=Severity.LOW if is_small_site else Severity.MEDIUM,
+                title="XML Sitemap Not Discovered (Advisory)" if is_small_site else "Missing or Undiscoverable XML Sitemap",
+                description=(
+                    "No XML sitemap was found at standard root locations or referenced in robots.txt. "
+                    "Google can discover comprehensively linked pages on small sites without a sitemap; "
+                    "however, publishing /sitemap.xml is recommended as an industry best practice for rapid discovery of new and updated routes."
+                    if is_small_site else
+                    "No XML sitemap was found at standard locations or referenced in robots.txt. "
+                    "Search engines and indexing agents may miss newly published or deep pages."
+                ),
                 evidence=[FindingEvidence(
                     url=manifest.base_url,
                     element="sitemap.xml",
@@ -52,10 +60,10 @@ class DiscoveryAgent:
                 rule_id="RULE_DISC_SITEMAP_XML",
                 confidence=0.95,
                 confidence_label=EvidenceConfidence.CONFIRMED,
-                impact=7,
-                effort=2,
-                priority=8,
-                recommendation="Generate an automated XML sitemap (e.g., sitemap.xml) and declare its absolute URL in robots.txt.",
+                impact=3 if is_small_site else 6,
+                effort=1,
+                priority=4 if is_small_site else 7,
+                recommendation="Publish an automated XML sitemap (e.g., sitemap.xml) and declare its absolute URL in robots.txt as an indexing best practice.",
                 verification_status=VerificationStatus.VERIFIED
             ))
 

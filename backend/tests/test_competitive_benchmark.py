@@ -99,7 +99,7 @@ async def test_3way_benchmark_engine():
     )
 
     def side_effect_crawl(target_url, evidence_store, max_pages=1):
-        manifest = CrawlManifest(website_url=target_url)
+        manifest = CrawlManifest(domain=target_url.split("//")[-1].split("/")[0], base_url=target_url)
         if "rival1" in target_url:
             manifest.pages = [comp1_ev]
         else:
@@ -138,4 +138,4 @@ async def test_3way_benchmark_engine():
     assert result.target_vs_peer_avg_delta > 0
     assert len(result.competitive_moats) > 0
     # Summary should mention rank #1
-    assert "leads this 3-way peer cohort" in result.strategic_summary
+    assert "leads the crawled set" in result.strategic_summary

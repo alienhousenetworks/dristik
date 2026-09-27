@@ -34,7 +34,10 @@ export function SearchIntelligenceView({
       title="Organic search and crawl"
       description="Indexation, HTML structure, internal links, and Search Console attribution."
       scoreLabel="Search"
-      score={Math.round(report.scores?.category_scores?.['TECHNICAL_SEO']?.score || report.honest_scores?.google_score || 0)}
+      score={(() => {
+        const measured = report.scores?.category_scores?.['TECHNICAL_SEO']?.score ?? report.honest_scores?.google_score;
+        return typeof measured === 'number' ? Math.round(measured) : '—';
+      })()}
       metaLabel="Findings"
       meta={`${findings.length}`}
       tabs={[
@@ -68,7 +71,7 @@ export function SearchIntelligenceView({
             <div className="bg-paper-50 dark:bg-ink-900/40 border border-line p-4 rounded-lg space-y-1">
               <span className="label text-[10px] text-ink-500 block">Robots.txt Health</span>
               <span className="font-semibold text-ink text-base block">
-                {crawl?.robots_txt_found ? '✅ Accessible' : '⚠️ Missing / Permissive'}
+                {crawl?.robots_txt_found ? '✅ Accessible' : crawl ? 'Not found' : '—'}
               </span>
               <span className="text-xs text-ink-500 block">
                 {crawl?.robots_txt_found ? 'Standard crawl rules active' : 'Crawl directives absent'}
@@ -81,17 +84,17 @@ export function SearchIntelligenceView({
                 {crawl?.total_pages_discovered || pages.length} Pages Crawled
               </span>
               <span className="text-xs text-ink-500 block">
-                Status 200 OK verified
+                {pages.length ? `${pages.filter((p) => p.status_code === 200).length} returned HTTP 200` : 'No pages crawled'}
               </span>
             </div>
 
             <div className="bg-paper-50 dark:bg-ink-900/40 border border-line p-4 rounded-lg space-y-1">
               <span className="label text-[10px] text-ink-500 block">Server TTFB (Latency)</span>
               <span className="font-semibold text-ink text-base block">
-                {homePage?.ttfb_ms ? `${homePage.ttfb_ms} ms` : '240 ms'}
+                {homePage?.ttfb_ms ? `${homePage.ttfb_ms} ms` : '—'}
               </span>
-              <span className="text-xs text-good block">
-                {(homePage?.ttfb_ms || 240) < 500 ? '✅ Fast response' : '⚠️ Latency alert'}
+              <span className="text-xs text-ink-500 block">
+                {homePage?.ttfb_ms ? 'Measured on the homepage fetch' : 'Not measured'}
               </span>
             </div>
           </div>
@@ -149,7 +152,7 @@ export function SearchIntelligenceView({
             <div className="border border-line rounded-lg p-4 bg-paper-50 space-y-3">
               <span className="label text-[10px] block">Robots.txt Content</span>
               <pre className="text-xs font-mono bg-paper-100 dark:bg-ink-950 p-3 rounded overflow-x-auto max-h-48 border border-line">
-                {crawl?.robots_txt_content || 'User-agent: *\nAllow: /\nSitemap: ' + (crawl?.sitemap_url || `${crawl?.base_url}/sitemap.xml`)}
+                {crawl?.robots_txt_content || 'robots.txt was not fetched.'}
               </pre>
             </div>
 
@@ -158,19 +161,19 @@ export function SearchIntelligenceView({
               <div className="space-y-2 text-xs">
                 <div className="flex items-center justify-between border-b border-line pb-1.5">
                   <span className="text-ink-600">Canonical Tag Declared:</span>
-                  <span className="font-mono font-bold text-ink">{homePage?.canonical_url ? 'Yes' : 'Self-Referencing'}</span>
+                  <span className="font-mono font-bold text-ink">{homePage?.canonical_url || '—'}</span>
                 </div>
                 <div className="flex items-center justify-between border-b border-line pb-1.5">
                   <span className="text-ink-600">Robots Meta Tag:</span>
-                  <span className="font-mono font-bold text-ink">{homePage?.robots_meta || 'index, follow (default)'}</span>
+                  <span className="font-mono font-bold text-ink">{homePage?.robots_meta || '—'}</span>
                 </div>
                 <div className="flex items-center justify-between border-b border-line pb-1.5">
                   <span className="text-ink-600">HTTP Status:</span>
-                  <span className="font-mono font-bold text-good">{homePage?.status_code || 200} OK</span>
+                  <span className="font-mono font-bold text-ink">{homePage?.status_code ?? '—'}</span>
                 </div>
                 <div className="flex items-center justify-between pb-1">
                   <span className="text-ink-600">DOM Elements Count:</span>
-                  <span className="font-mono text-ink">{homePage?.dom_elements_count || 'Clean (<1,500)'}</span>
+                  <span className="font-mono text-ink">{homePage?.dom_elements_count ?? '—'}</span>
                 </div>
               </div>
             </div>
@@ -226,7 +229,7 @@ export function SearchIntelligenceView({
             </div>
             <div className="border border-line p-4 rounded-lg bg-paper-50 space-y-1">
               <span className="label text-[10px] block">Readability Score</span>
-              <span className="font-serif text-3xl font-bold text-good">{homePage?.readability_score || 72} / 100</span>
+              <span className="font-serif text-3xl font-bold text-ink">{homePage?.readability_score ?? '—'}{homePage?.readability_score != null ? ' / 100' : ''}</span>
               <span className="text-xs text-ink-500 block">Flesch-Kincaid Reading Ease</span>
             </div>
             <div className="border border-line p-4 rounded-lg bg-paper-50 space-y-1">

@@ -7,6 +7,16 @@ Computed 100% deterministically from the DOM and content graph.
 
 Layer 2 Visibility: Was the entity actually cited in a live AI engine?
 Never inferred from HTML. If no live connector ran, status is NOT_CONFIGURED.
+
+v2 Changes:
+  - GEO score is decomposed into 8 independently scored dimensions
+    (GeoDimensionKey enum), each with provenance, band, and measurement metadata.
+  - Dimensions that cannot be measured from crawl evidence explicitly declare
+    is_measured=False and provide a measurement_note explaining the gap.
+  - The composite readiness score is the weighted mean of all scored dimensions.
+  - AI Engine Visibility dimension is only scored if a live connector ran.
+  - Every report now carries an interpretation_disclaimer to prevent
+    GEO Readiness from being misread as live citation rank.
 """
 from __future__ import annotations
 
@@ -18,10 +28,12 @@ from app.domain.models import (
     BusinessProfile,
     CrawlManifest,
     GeoDimension,
+    GeoDimensionScore,
     GeoQuestionEvidence,
     GeoReadinessReport,
     PageEvidence,
 )
+from app.domain.enums import GeoDimensionKey
 from app.intelligence.geo.entity_consistency import entity_consistency_analyzer
 from app.intelligence.geo.claim_extractor import claim_extractor
 from app.intelligence.geo.question_graph import question_graph_engine
@@ -100,12 +112,313 @@ def _status_for(blob: str, needles: List[str], hits: List[Tuple[str, str]], key:
     return "UNSUPPORTED"
 
 
-def _band(high: bool, medium: bool) -> str:
-    if high:
+def _band(score: float) -> str:
+    if score >= 70:
         return "high"
-    if medium:
+    if score >= 40:
         return "medium"
     return "low"
+
+
+# ---------------------------------------------------------------------------
+# Multi-dimensional GEO scoring
+# Each dimension returns a GeoDimensionScore.
+# ---------------------------------------------------------------------------
+
+def _score_entity_clarity(
+    pages: List[PageEvidence],
+    blob: str,
+    name: str,
+    profile: BusinessProfile,
+    entity_res,
+) -> GeoDimensionScore:
+    low = blob.lower()
+    fluff_hits = [w for w in _FLUFF if w in low]
+    named = name.lower() in low if name else False
+    specific = bool(profile.industry or profile.niche or profile.products or profile.services)
+
+    base_score = 30.0
+    if named:
+        base_score += 20.0
+    if specific:
+        base_score += 20.0
+    if not fluff_hits:
+        base_score += 10.0
+    else:
+        base_score -= 10.0
+    if entity_res and not entity_res.is_fragmented:
+        base_score += 10.0
+    elif entity_res and entity_res.is_fragmented:
+        base_score -= 15.0
+
+    score = max(0.0, min(100.0, base_score))
+    summary = (
+        f"{name} is named on-page with a specific category/offer."
+        if (named and specific and not fluff_hits)
+        else f"Identity is vague or fluff-heavy ({', '.join(fluff_hits[:3]) or 'no concrete category'})."
+    )
+    if entity_res and entity_res.is_fragmented:
+        summary += f" Notice: {len(entity_res.discrepancies)} surface discrepancies ({entity_res.fragmentation_risk.lower()} risk)."
+
+    return GeoDimensionScore(
+        key=GeoDimensionKey.ENTITY_CLARITY.value,
+        label="Entity clarity & consistency",
+        score=round(score, 1),
+        band=_band(score),
+        confidence=0.85,
+        summary=summary,
+        evidence_notes=[
+            f"business_name={name}",
+            f"consistency_score={entity_res.overall_consistency_score if entity_res else 'N/A'}",
+            f"fluff_words_detected={len(fluff_hits)}",
+        ],
+        is_measured=True,
+        measurement_note=None,
+    )
+
+
+def _score_answerability(
+    canonical_questions: List[GeoQuestionEvidence],
+    q_graph_res,
+) -> GeoDimensionScore:
+    total = len(canonical_questions)
+    supported = sum(1 for q in canonical_questions if q.status == "SUPPORTED")
+    partial = sum(1 for q in canonical_questions if q.status == "PARTIAL")
+
+    base_score = (supported / max(1, total)) * 60.0 + (partial / max(1, total)) * 20.0
+    if q_graph_res:
+        base_score = (base_score * 0.5) + (q_graph_res.answerability_score * 0.5)
+
+    score = max(0.0, min(100.0, base_score))
+    return GeoDimensionScore(
+        key=GeoDimensionKey.ANSWERABILITY.value,
+        label="Direct buyer question answerability",
+        score=round(score, 1),
+        band=_band(score),
+        confidence=0.80,
+        summary=f"{supported}/{total} buyer questions have explicit on-page answers. {partial} partial.",
+        evidence_notes=[
+            f"supported={supported}",
+            f"partial={partial}",
+            f"q_graph_score={q_graph_res.answerability_score if q_graph_res else 'N/A'}",
+        ],
+        is_measured=True,
+        measurement_note=None,
+    )
+
+
+def _score_content_extractability(
+    pages: List[PageEvidence],
+    passage_res,
+    supported: int,
+) -> GeoDimensionScore:
+    headings = sum(len(p.h2 or []) + len(p.h3 or []) for p in pages)
+    heading_score = min(40.0, headings * 4.0)
+    passage_score = (passage_res.citation_readiness_score * 0.40) if passage_res else 30.0
+    question_score = min(20.0, supported * 5.0)
+    score = max(0.0, min(100.0, heading_score + passage_score + question_score))
+
+    summary = f"{headings} H2/H3 blocks; {supported} questions have quotable answers."
+    if passage_res:
+        summary += f" {passage_res.highly_citable_count} highly citation-ready passages."
+
+    return GeoDimensionScore(
+        key=GeoDimensionKey.CONTENT_EXTRACTABILITY.value,
+        label="Content extractability & citation readiness",
+        score=round(score, 1),
+        band=_band(score),
+        confidence=0.80,
+        summary=summary,
+        evidence_notes=[
+            f"h2_h3_count={headings}",
+            f"citation_score={passage_res.citation_readiness_score if passage_res else 'N/A'}",
+        ],
+        is_measured=True,
+        measurement_note=None,
+    )
+
+
+def _score_citation_readiness(passage_res) -> GeoDimensionScore:
+    if passage_res:
+        raw = passage_res.citation_readiness_score
+        count = passage_res.highly_citable_count
+    else:
+        raw = 50.0
+        count = 0
+
+    score = max(0.0, min(100.0, raw))
+    return GeoDimensionScore(
+        key=GeoDimensionKey.CITATION_READINESS.value,
+        label="Citation-ready passage density",
+        score=round(score, 1),
+        band=_band(score),
+        confidence=0.75,
+        summary=f"{count} highly citation-ready passages detected." if passage_res else "Passage analysis unavailable.",
+        evidence_notes=[f"highly_citable_count={count}", f"raw_score={raw}"],
+        is_measured=True,
+        measurement_note=None,
+    )
+
+
+def _score_retrieval_accessibility(
+    website_url: str,
+    manifest: Optional[CrawlManifest],
+) -> GeoDimensionScore:
+    robots = bool(manifest and manifest.robots_txt_found)
+    sitemap = bool(manifest and manifest.sitemap_found)
+    https = (website_url or "").startswith("https://")
+
+    score = 30.0
+    if https:
+        score += 30.0
+    if robots:
+        score += 20.0
+    if sitemap:
+        score += 20.0
+    score = max(0.0, min(100.0, score))
+
+    return GeoDimensionScore(
+        key=GeoDimensionKey.RETRIEVAL_ACCESSIBILITY.value,
+        label="Retrieval accessibility (HTTPS, robots, sitemap)",
+        score=round(score, 1),
+        band=_band(score),
+        confidence=0.95,
+        summary=f"https={https}, robots.txt={robots}, sitemap.xml={sitemap}.",
+        evidence_notes=[f"https={https}", f"robots={robots}", f"sitemap={sitemap}"],
+        is_measured=True,
+        measurement_note=None,
+    )
+
+
+def _score_factual_grounding(
+    claims_res,
+    conflicting: int,
+) -> GeoDimensionScore:
+    if conflicting > 0:
+        score = 20.0
+        summary = f"{conflicting} conflicting commercial fact(s) detected. Contradictory signals reduce AI trust."
+    elif claims_res:
+        raw = min(100.0, claims_res.claim_clarity_score)
+        score = raw
+        summary = f"{claims_res.citable_claims_count} verified citable claims with no detected contradictions."
+    else:
+        score = 50.0
+        summary = "Claim analysis unavailable. Score is provisional."
+
+    return GeoDimensionScore(
+        key=GeoDimensionKey.FACTUAL_GROUNDING.value,
+        label="Factual grounding & claim verifiability",
+        score=max(0.0, min(100.0, score)),
+        band=_band(score),
+        confidence=0.70 if not claims_res else 0.80,
+        summary=summary,
+        evidence_notes=[
+            f"conflicting_facts={conflicting}",
+            f"claim_clarity={claims_res.claim_clarity_score if claims_res else 'N/A'}",
+        ],
+        is_measured=True,
+        measurement_note=None,
+    )
+
+
+def _score_external_authority(entity_res) -> GeoDimensionScore:
+    """
+    External authority cannot be measured from HTML crawl alone.
+    Requires external API (backlinks, directory presence, GSC).
+    This dimension is explicitly NOT_MEASURED when no connector ran.
+    """
+    return GeoDimensionScore(
+        key=GeoDimensionKey.EXTERNAL_AUTHORITY.value,
+        label="External authority & backlink signals",
+        score=50.0,   # Neutral default when not measured
+        band="medium",
+        confidence=0.30,
+        summary=(
+            "External authority cannot be measured from on-page HTML crawl. "
+            "This requires GSC, backlink API, or business directory connector data. "
+            "Score of 50 is a provisional neutral pending measurement."
+        ),
+        evidence_notes=["requires_connector=GSC or backlink API"],
+        is_measured=False,
+        measurement_note=(
+            "Connect Google Search Console or a backlink data provider "
+            "to measure external authority with evidence."
+        ),
+    )
+
+
+def _score_ai_engine_visibility(
+    visibility_measured: bool,
+    visibility_detail: Optional[str],
+    visibility_score: Optional[float] = None,
+) -> GeoDimensionScore:
+    """
+    AI engine visibility can ONLY be scored if a live connector ran
+    and returned a rate. NEVER infer from HTML, and never use a placeholder.
+    """
+    if visibility_measured and visibility_score is not None:
+        score = max(0.0, min(100.0, float(visibility_score)))
+        return GeoDimensionScore(
+            key=GeoDimensionKey.AI_ENGINE_VISIBILITY.value,
+            label="Live AI citation visibility",
+            score=score,
+            band=_band(score),
+            confidence=0.90,
+            summary=visibility_detail or (
+                f"Live AI citation visibility is {score:.0f}/100 from successful engine responses. "
+                "This is not the on-page GEO Readiness score."
+            ),
+            evidence_notes=["source=live_engine_connector"],
+            is_measured=True,
+            measurement_note=None,
+        )
+    else:
+        return GeoDimensionScore(
+            key=GeoDimensionKey.AI_ENGINE_VISIBILITY.value,
+            label="Live AI engine citation visibility",
+            score=0.0,
+            band="low",
+            confidence=0.0,
+            summary=(
+                "Live AI engine visibility was NOT measured in this audit run. "
+                "Connect the Live AI Search connector to query Perplexity, ChatGPT, "
+                "Gemini, and Claude with real queries against the target domain."
+            ),
+            evidence_notes=["requires_connector=live_ai_search"],
+            is_measured=False,
+            measurement_note=(
+                "Activate the 'Live AI Search' connector under Settings → Connectors "
+                "to enable direct citation measurement."
+            ),
+        )
+
+
+# Dimension weights for composite score
+# NOTE: AI_ENGINE_VISIBILITY is excluded from composite when not measured
+_WEIGHTS: Dict[str, float] = {
+    GeoDimensionKey.ENTITY_CLARITY.value:          0.20,
+    GeoDimensionKey.ANSWERABILITY.value:           0.25,
+    GeoDimensionKey.CONTENT_EXTRACTABILITY.value:  0.15,
+    GeoDimensionKey.CITATION_READINESS.value:      0.15,
+    GeoDimensionKey.RETRIEVAL_ACCESSIBILITY.value: 0.10,
+    GeoDimensionKey.FACTUAL_GROUNDING.value:       0.15,
+    GeoDimensionKey.EXTERNAL_AUTHORITY.value:      0.00,  # 0 weight when not measured
+    GeoDimensionKey.AI_ENGINE_VISIBILITY.value:    0.00,  # 0 weight when not measured
+}
+
+
+def _compute_composite(dimension_scores: Dict[str, GeoDimensionScore]) -> float:
+    """Weighted composite of measured dimensions only."""
+    total_weight = 0.0
+    total_score = 0.0
+    for key, ds in dimension_scores.items():
+        weight = _WEIGHTS.get(key, 0.0)
+        if ds.is_measured and weight > 0.0:
+            total_score += ds.score * weight
+            total_weight += weight
+    if total_weight == 0.0:
+        return 50.0  # Cannot compute — return neutral
+    return round(total_score / total_weight, 1)
 
 
 def evaluate_geo_readiness(
@@ -116,6 +429,7 @@ def evaluate_geo_readiness(
     profile: Optional[BusinessProfile] = None,
     visibility_measured: bool = False,
     visibility_detail: Optional[str] = None,
+    visibility_score: Optional[float] = None,
     country: Optional[str] = None,
     language: Optional[str] = None,
     extended_questions: bool = False,
@@ -127,11 +441,10 @@ def evaluate_geo_readiness(
         name = host.split(".")[0].capitalize() if host else "the company"
 
     blob = _corpus(pages)
-    low = blob.lower()
 
-    # -------------------------------------------------------------
-    # 1. Canonical 6-Question Evaluation (Backwards Compatibility)
-    # -------------------------------------------------------------
+    # ------------------------------------------------------------------
+    # 1. Canonical 6-Question Evaluation
+    # ------------------------------------------------------------------
     canonical_questions: List[GeoQuestionEvidence] = []
     for key, q, needles in _questions(name):
         pattern = re.compile("|".join(re.escape(n) for n in needles if n.strip()), re.I)
@@ -158,142 +471,100 @@ def evaluate_geo_readiness(
     unsupported = sum(1 for q in canonical_questions if q.status == "UNSUPPORTED")
     conflicting = sum(1 for q in canonical_questions if q.status == "CONFLICTING")
 
-    # -------------------------------------------------------------
-    # 2. Phase 1 Layer 1 Deep Extractability Engines
-    # -------------------------------------------------------------
+    # ------------------------------------------------------------------
+    # 2. Deep Extractability Engines
+    # ------------------------------------------------------------------
     try:
         entity_res = entity_consistency_analyzer.analyze(pages, website_url=website_url, profile=profile)
-        entity_dict = entity_res.model_dump()
     except Exception:
         entity_res = None
-        entity_dict = None
 
     try:
         claims_res = claim_extractor.extract_claims(pages, brand_name=name)
-        claims_dict = claims_res.model_dump()
     except Exception:
         claims_res = None
-        claims_dict = None
 
     try:
         q_graph_res = question_graph_engine.evaluate_graph(pages, brand_name=name, website_url=website_url, profile=profile)
-        q_graph_dict = q_graph_res.model_dump()
     except Exception:
         q_graph_res = None
-        q_graph_dict = None
 
     try:
         passage_res = passage_analyzer.analyze(pages, brand_name=name)
-        passage_dict = passage_res.model_dump()
     except Exception:
         passage_res = None
-        passage_dict = None
 
     try:
         schema_res = schema_crosschecker.crosscheck(pages, brand_name=name)
-        schema_dict = schema_res.model_dump()
     except Exception:
         schema_res = None
-        schema_dict = None
 
-    # Compute composite Layer 1 Extractability Score (0 - 100)
-    # Weights:
-    # - Entity Consistency: 25%
-    # - Question Graph Answerability: 30%
-    # - Claim Specificity & Clarity: 20%
-    # - Citation Passage Readiness: 15%
-    # - Schema Grounding: 10%
-    entity_part = (entity_res.overall_consistency_score if entity_res else 70.0) * 0.25
-    q_graph_part = (q_graph_res.answerability_score if q_graph_res else 60.0) * 0.30
-    claims_part = (claims_res.claim_clarity_score if claims_res else 60.0) * 0.20
-    passage_part = (passage_res.citation_readiness_score if passage_res else 60.0) * 0.15
-    schema_part = (schema_res.grounding_score if schema_res else 50.0) * 0.10
-    extractability_score = round(entity_part + q_graph_part + claims_part + passage_part + schema_part, 1)
+    # ------------------------------------------------------------------
+    # 3. Multi-Dimensional Scoring (v2)
+    # ------------------------------------------------------------------
+    dim_scores: Dict[str, GeoDimensionScore] = {}
 
-    # -------------------------------------------------------------
-    # 3. Dimensions Construction (Enriched with Deep Diagnostics)
-    # -------------------------------------------------------------
-    fluff_hits = [w for w in _FLUFF if w in low]
-    named = name.lower() in low if name else False
-    specific = bool(profile.industry or profile.niche or profile.products or profile.services)
-    entity_high = named and specific and not fluff_hits
-    entity_med = named or specific
-
-    entity_summary = (
-        f"{name} is named on-page with a specific category/offer."
-        if entity_high else
-        f"Identity is vague or fluff-heavy ({', '.join(fluff_hits[:3]) or 'no concrete category'})."
+    dim_scores[GeoDimensionKey.ENTITY_CLARITY.value] = _score_entity_clarity(
+        pages, blob, name, profile, entity_res
     )
-    if entity_res and entity_res.is_fragmented:
-        entity_summary += f" Notice: {len(entity_res.discrepancies)} surface discrepancies detected ({entity_res.fragmentation_risk.lower()} risk)."
-
-    entity = GeoDimension(
-        key="entity_clarity",
-        label="Entity clarity & consistency",
-        band=entity_res.fragmentation_risk.lower() if entity_res and entity_res.fragmentation_risk == "LOW" else _band(entity_high, entity_med),
-        summary=entity_summary,
-        evidence_notes=[
-            f"business_name={name}",
-            f"consistency_score={entity_res.overall_consistency_score if entity_res else 'N/A'}",
-            f"fragmentation_risk={entity_res.fragmentation_risk if entity_res else 'N/A'}"
-        ],
+    dim_scores[GeoDimensionKey.ANSWERABILITY.value] = _score_answerability(
+        canonical_questions, q_graph_res
+    )
+    dim_scores[GeoDimensionKey.CONTENT_EXTRACTABILITY.value] = _score_content_extractability(
+        pages, passage_res, supported
+    )
+    dim_scores[GeoDimensionKey.CITATION_READINESS.value] = _score_citation_readiness(passage_res)
+    dim_scores[GeoDimensionKey.RETRIEVAL_ACCESSIBILITY.value] = _score_retrieval_accessibility(
+        website_url, manifest
+    )
+    dim_scores[GeoDimensionKey.FACTUAL_GROUNDING.value] = _score_factual_grounding(
+        claims_res, conflicting
+    )
+    dim_scores[GeoDimensionKey.EXTERNAL_AUTHORITY.value] = _score_external_authority(entity_res)
+    dim_scores[GeoDimensionKey.AI_ENGINE_VISIBILITY.value] = _score_ai_engine_visibility(
+        visibility_measured, visibility_detail, visibility_score
     )
 
-    headings = sum(len(p.h2 or []) + len(p.h3 or []) for p in pages)
-    extract_high = headings >= 6 and supported >= 3
-    extract_summary = f"{headings} H2/H3 blocks; {supported} questions have quotable answers."
-    if passage_res:
-        extract_summary += f" {passage_res.highly_citable_count} highly citation-ready passages detected."
+    # Composite extractability score from measured dimensions
+    extractability_score = _compute_composite(dim_scores)
 
-    extract = GeoDimension(
-        key="extractability",
-        label="Content extractability & citation readiness",
-        band=_band(extract_high, headings >= 3 or supported >= 1),
-        summary=extract_summary,
-        evidence_notes=[
-            f"h2_h3_count={headings}",
-            f"citation_score={passage_res.citation_readiness_score if passage_res else 'N/A'}"
-        ],
-    )
-
+    # ------------------------------------------------------------------
+    # 4. Schema types
+    # ------------------------------------------------------------------
     schema_types = sorted({t for p in pages for t in (p.schema_types or [])})
     schema_summary = (
         f"Schema.org types observed: {', '.join(schema_types) or 'none'}. "
-        "Schema is a machine-readable layer, not proof of GEO readiness."
+        "Schema is a machine-readable evidence layer, not a GEO score."
     )
     if schema_res:
         schema_summary += f" Schema Grounding Score: {schema_res.grounding_score:.0f}/100 ({schema_res.verified_count} properties verified in DOM)."
 
-    schema = GeoDimension(
-        key="structured_data",
-        label="Structured data (evidence layer, not GEO score)",
-        band=_band(len(schema_types) >= 2, len(schema_types) >= 1),
-        summary=schema_summary,
-        evidence_notes=schema_types or ["none"],
+    # ------------------------------------------------------------------
+    # 5. Legacy dimensions list (backwards-compat with existing report views)
+    # ------------------------------------------------------------------
+    legacy_dimensions = [
+        GeoDimension(
+            key=ds.key,
+            label=ds.label,
+            band=ds.band,
+            summary=ds.summary,
+            evidence_notes=ds.evidence_notes,
+        )
+        for ds in dim_scores.values()
+    ]
+    legacy_dimensions.append(
+        GeoDimension(
+            key="structured_data",
+            label="Structured Data Grounding",
+            band="medium" if schema_types else "low",
+            summary=f"{schema_summary} Structured data is a machine-readable evidence layer, not proof of GEO readiness.",
+            evidence_notes=[f"schema_types={len(schema_types)}"],
+        )
     )
 
-    robots = bool(manifest.robots_txt_found) if manifest else False
-    sitemap = bool(manifest.sitemap_found) if manifest else False
-    https = (website_url or "").startswith("https://")
-    retrieval = GeoDimension(
-        key="retrieval",
-        label="Retrieval accessibility",
-        band=_band(https and robots and sitemap, https),
-        summary=f"https={https}, robots.txt={robots}, sitemap={sitemap}.",
-        evidence_notes=[f"https={https}", f"robots={robots}", f"sitemap={sitemap}"],
-    )
-
-    consistency = GeoDimension(
-        key="consistency",
-        label="Factual consistency & claim verifiability",
-        band="low" if conflicting else ("high" if supported >= 3 else "medium"),
-        summary=(
-            "Conflicting commercial facts (e.g. pricing) in the crawled sample."
-            if conflicting else
-            f"No conflicting price strings detected. {claims_res.citable_claims_count if claims_res else 0} verified citable claims."
-        ),
-    )
-
+    # ------------------------------------------------------------------
+    # 6. Headline
+    # ------------------------------------------------------------------
     headline = (
         f"{supported} of {len(canonical_questions)} high-value buyer questions have explicit on-page answers"
         f"{f'; {partial} partial' if partial else ''}"
@@ -314,7 +585,6 @@ def evaluate_geo_readiness(
             "not GEO Visibility (does ChatGPT/Perplexity/AI Overviews actually cite you)."
         )
 
-    # Active questions list: either 50 when extended_questions is requested, or canonical 6
     active_questions = (
         q_graph_res.questions if (extended_questions and q_graph_res and q_graph_res.questions)
         else canonical_questions
@@ -331,14 +601,15 @@ def evaluate_geo_readiness(
         questions_conflicting=sum(1 for q in active_questions if q.status == "CONFLICTING"),
         headline=headline,
         questions=active_questions,
-        dimensions=[entity, extract, schema, retrieval, consistency],
+        dimensions=legacy_dimensions,
+        dimension_scores=dim_scores,
         schema_types=schema_types,
         market_country=(country or "Global").strip() or "Global",
         market_language=(language or "en").strip() or "en",
         extractability_score=extractability_score,
-        entity_consistency=entity_dict,
-        claims_analysis=claims_dict,
-        question_graph_50=q_graph_dict,
-        citation_passages=passage_dict,
-        schema_crosscheck=schema_dict,
+        entity_consistency=entity_res.model_dump() if entity_res else None,
+        claims_analysis=claims_res.model_dump() if claims_res else None,
+        question_graph_50=q_graph_res.model_dump() if q_graph_res else None,
+        citation_passages=passage_res.model_dump() if passage_res else None,
+        schema_crosscheck=schema_res.model_dump() if schema_res else None,
     )

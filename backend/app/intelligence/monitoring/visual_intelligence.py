@@ -52,15 +52,18 @@ class VisualIntelligenceEngine:
         pages = manifest.pages if manifest and manifest.pages else []
         page_count = len(pages)
         ttfbs = [p.ttfb_ms for p in pages if p.ttfb_ms is not None and p.ttfb_ms > 0]
-        avg_ttfb = sum(ttfbs) / len(ttfbs) if ttfbs else (manifest.crawl_health.get("avg_ttfb_ms", 320) if manifest else 320)
+        health_ttfb = None
+        if manifest and isinstance(manifest.crawl_health, dict):
+            raw_health = manifest.crawl_health.get("avg_ttfb_ms")
+            if isinstance(raw_health, (int, float)) and raw_health > 0:
+                health_ttfb = float(raw_health)
+        avg_ttfb = (sum(ttfbs) / len(ttfbs)) if ttfbs else health_ttfb
         max_ttfb = max(ttfbs) if ttfbs else avg_ttfb
         min_ttfb = min(ttfbs) if ttfbs else avg_ttfb
-        ttfb_variance = max_ttfb - min_ttfb if ttfbs else 0
+        ttfb_variance = (max_ttfb - min_ttfb) if ttfbs and max_ttfb is not None and min_ttfb is not None else 0
 
-        # Word count signals
         word_counts = [p.word_count for p in pages if p.word_count is not None]
-        avg_words = sum(word_counts) / len(word_counts) if word_counts else 450
-        min_words = min(word_counts) if word_counts else avg_words
+        min_words = min(word_counts) if word_counts else None
 
         # Severity breakdown
         sev_counts = {"CRITICAL": 0, "HIGH": 0, "MEDIUM": 0, "LOW": 0, "INFO": 0}
@@ -69,42 +72,62 @@ class VisualIntelligenceEngine:
             sev_counts[sev] = sev_counts.get(sev, 0) + 1
         total_defects = len(findings)
 
-        # 5 Pillar Rollup Scores
         cat_scores = scores.category_scores or {}
-        seo_score = round(
-            ((cat_scores.get("TECHNICAL_SEO", {}).score or 70) * 0.6)
-            + ((cat_scores.get("ON_PAGE_SEO", {}).score or 70) * 0.4)
-        )
-        geo_score = round(
-            honest_scores.ai_citation_score
-            if honest_scores and honest_scores.ai_citation_score is not None
-            else (cat_scores.get("GEO", {}).score or 65)
-        )
-        sxo_score = round(
-            honest_scores.human_score
-            if honest_scores and honest_scores.human_score is not None
-            else (cat_scores.get("UX_CONVERSION", {}).score or 68)
-        )
-        cro_score = round(cat_scores.get("UX_CONVERSION", {}).score or 65)
-        brand_score = round(
-            ((cat_scores.get("SCHEMA", {}).score or 65) * 0.5)
-            + ((cat_scores.get("TRUST_AUTHORITY", {}).score or 75) * 0.5)
-        )
 
-        biz_model = (business_profile.business_model if business_profile else "B2B SaaS").lower()
+        def _cat_score(key: str) -> Optional[float]:
+            item = cat_scores.get(key)
+            if item is None:
+                return None
+            value = getattr(item, "score", None)
+            if value is None:
+                return None
+            try:
+                return float(value)
+            except (TypeError, ValueError):
+                return None
+
+        def _blend(pairs: List[tuple]) -> Optional[float]:
+            present = [(weight, value) for weight, value in pairs if value is not None]
+            if not present:
+                return None
+            weight_sum = sum(weight for weight, _ in present)
+            if weight_sum <= 0:
+                return None
+            return round(sum(weight * value for weight, value in present) / weight_sum)
+
+        seo_score = _blend([
+            (0.6, _cat_score("TECHNICAL_SEO")),
+            (0.4, _cat_score("ON_PAGE_SEO")),
+        ])
+        geo_measured = honest_scores.ai_citation_score if honest_scores and honest_scores.ai_citation_score is not None else None
+        geo_score = round(float(geo_measured)) if geo_measured is not None else (
+            round(_cat_score("GEO")) if _cat_score("GEO") is not None else None
+        )
+        sxo_score = round(float(honest_scores.human_score)) if honest_scores and honest_scores.human_score is not None else _cat_score("UX_CONVERSION")
+        if sxo_score is not None:
+            sxo_score = round(sxo_score)
+        cro_score = _cat_score("UX_CONVERSION")
+        if cro_score is not None:
+            cro_score = round(cro_score)
+        brand_score = _blend([
+            (0.5, _cat_score("SCHEMA")),
+            (0.5, _cat_score("TRUST_AUTHORITY")),
+        ])
+
+        biz_model = (business_profile.business_model if business_profile and business_profile.business_model else "").lower()
         is_transactional = any(k in biz_model for k in ["saas", "ecommerce", "e-commerce", "lead gen", "subscription", "pricing"])
 
         # -------------------------------------------------------------
         # 2. AI Judgment: Case Classification & Rationale
         # -------------------------------------------------------------
         case_tags = []
-        if max_ttfb > 700 or (ttfb_variance > 300 and page_count >= 2):
+        if max_ttfb is not None and (max_ttfb > 700 or (ttfb_variance > 300 and page_count >= 2)):
             case_tags.append("Latency Volatility Detected")
-        if abs(seo_score - geo_score) >= 20:
+        if seo_score is not None and geo_score is not None and abs(seo_score - geo_score) >= 20:
             case_tags.append("Asymmetric AI Citation Gap")
         if sev_counts["CRITICAL"] + sev_counts["HIGH"] >= 4:
             case_tags.append("High Critical Defect Concentration")
-        if min_words < 250 and page_count >= 2:
+        if min_words is not None and min_words < 250 and page_count >= 2:
             case_tags.append("Thin Content Vulnerability")
         if is_transactional:
             case_tags.append("High-Friction Conversion Funnel")
@@ -122,65 +145,61 @@ class VisualIntelligenceEngine:
 
         # CHART 1: 5-Pillar Tripartite Radar / Spider Polygon
         # Universal benchmark showing multi-vector balance
-        radar_insight = (
-            f"Strongest pillar is {'Search (SEO)' if seo_score >= max(geo_score, sxo_score, cro_score, brand_score) else 'Brand & Entity'} ({max(seo_score, geo_score, sxo_score, cro_score, brand_score)}/100). "
-            f"Primary drag is {'AI Citations (GEO)' if geo_score <= min(seo_score, sxo_score, cro_score, brand_score) else 'Conversion (CRO)'} ({min(seo_score, geo_score, sxo_score, cro_score, brand_score)}/100), creating an asymmetric posture."
-        )
-        charts.append(
-            ChartSpecification(
-                id="chart_pillar_radar",
-                chart_type="radar",
-                title="5-Pillar Holistic Health Radar",
-                subtitle="Tripartite Diagnostic: Target Domain vs. Institutional Industry Baseline",
-                ai_insight=radar_insight,
-                category="OVERALL",
-                data={
-                    "labels": [
-                        "1. Search (SEO)",
-                        "2. AI Citations (GEO)",
-                        "3. Experience (SXO)",
-                        "4. Conversion (CRO)",
-                        "5. Brand & Entity",
-                    ],
-                    "target_values": [seo_score, geo_score, sxo_score, cro_score, brand_score],
-                    "benchmark_values": [75, 70, 72, 70, 74],
-                },
-                config={
-                    "max_value": 100,
-                    "target_label": domain,
-                    "target_color": "#2e6f5e",
-                    "benchmark_label": "Industry Baseline (Top 25%)",
-                    "benchmark_color": "#94a3b8",
-                },
-                is_recommended=True,
-                priority_order=order,
+        pillar_points = [
+            ("1. Search (SEO)", seo_score),
+            ("2. AI Citations (GEO)", geo_score),
+            ("3. Experience (SXO)", sxo_score),
+            ("4. Conversion (CRO)", cro_score),
+            ("5. Brand & Entity", brand_score),
+        ]
+        measured_pillars = [(label, value) for label, value in pillar_points if value is not None]
+        if measured_pillars:
+            strongest = max(measured_pillars, key=lambda item: item[1])
+            weakest = min(measured_pillars, key=lambda item: item[1])
+            radar_insight = (
+                f"Strongest measured pillar is {strongest[0]} ({strongest[1]}/100). "
+                f"Lowest measured pillar is {weakest[0]} ({weakest[1]}/100)."
             )
-        )
-        order += 1
+            charts.append(
+                ChartSpecification(
+                    id="chart_pillar_radar",
+                    chart_type="radar",
+                    title="Measured pillar scores",
+                    subtitle="Scores from this audit only. No industry baseline is plotted.",
+                    ai_insight=radar_insight,
+                    category="OVERALL",
+                    data={
+                        "labels": [label for label, _ in measured_pillars],
+                        "target_values": [value for _, value in measured_pillars],
+                        "benchmark_values": [],
+                    },
+                    config={
+                        "max_value": 100,
+                        "target_label": domain,
+                        "target_color": "#2e6f5e",
+                    },
+                    is_recommended=True,
+                    priority_order=order,
+                )
+            )
+            order += 1
 
         # CHART 2: Latency & Crawl Response Speed Curve (TTFB)
         # AI judges this is needed if page_count >= 2 or avg_ttfb > 250ms
-        if page_count >= 2 or avg_ttfb > 250:
-            page_items = []
-            for i, p in enumerate(pages[:8]):
-                url_slug = p.url.replace(f"https://{domain}", "").replace(f"http://{domain}", "")
-                if not url_slug or url_slug == "/":
-                    url_slug = "/ (Home)"
-                elif len(url_slug) > 20:
-                    url_slug = url_slug[:18] + "…"
-                ttfb_val = p.ttfb_ms if p.ttfb_ms is not None and p.ttfb_ms > 0 else avg_ttfb
-                page_items.append({"label": url_slug, "value": round(ttfb_val), "full_url": p.url})
+        page_items = []
+        for p in pages[:8]:
+            if p.ttfb_ms is None or p.ttfb_ms <= 0:
+                continue
+            url_slug = p.url.replace(f"https://{domain}", "").replace(f"http://{domain}", "")
+            if not url_slug or url_slug == "/":
+                url_slug = "/ (Home)"
+            elif len(url_slug) > 20:
+                url_slug = url_slug[:18] + "…"
+            page_items.append({"label": url_slug, "value": round(p.ttfb_ms), "full_url": p.url})
 
-            if not page_items:
-                page_items = [
-                    {"label": "/ (Home)", "value": round(avg_ttfb), "full_url": f"https://{domain}/"},
-                    {"label": "/about", "value": round(avg_ttfb * 1.15), "full_url": f"https://{domain}/about"},
-                    {"label": "/pricing", "value": round(avg_ttfb * 1.35), "full_url": f"https://{domain}/pricing"},
-                ]
-
+        if page_items and max_ttfb is not None:
             latency_insight = (
-                f"Peak response latency reached {round(max_ttfb)}ms. "
-                + ("Multiple URLs breach Google's 800ms crawl budget warning threshold." if max_ttfb > 800 else "Average TTFB is within acceptable margins, but sub-page variance warrants CDN edge caching.")
+                f"Peak measured response time was {round(max_ttfb)} ms across {len(page_items)} crawled URL(s)."
             )
             charts.append(
                 ChartSpecification(
@@ -207,80 +226,15 @@ class VisualIntelligenceEngine:
             )
             order += 1
 
-        # CHART 3: Generative AI Search Visibility Matrix
-        # Reconcile exactly with canonical honest AI citation score so scorecard and matrix match
-        target_ai_score = round(
-            honest_scores.ai_citation_score
-            if honest_scores and honest_scores.ai_citation_score is not None
-            else geo_score
-        )
-
-        # Distribute engine readiness symmetrically around target_ai_score so arithmetic mean == target_ai_score
-        d1 = min(4, 100 - target_ai_score, target_ai_score)
-        d2 = min(2, 100 - target_ai_score, target_ai_score)
-
-        google_ai_vis = max(0, min(100, target_ai_score + d1))
-        chatgpt_vis = max(0, min(100, target_ai_score + d2))
-        perplexity_vis = max(0, min(100, target_ai_score - d2))
-        claude_vis = max(0, min(100, target_ai_score - d1))
-
-        # Fine-tune rounding to ensure exact integer average equality
-        cur_sum = google_ai_vis + chatgpt_vis + perplexity_vis + claude_vis
-        target_sum = target_ai_score * 4
-        if cur_sum != target_sum:
-            chatgpt_vis += (target_sum - cur_sum)
-
-        engines_spec = [
-            {"name": "Google AI Overviews", "readiness": google_ai_vis, "benchmark": 78, "status": "Cited" if google_ai_vis >= 70 else ("Partial" if google_ai_vis >= 40 else "Uncited")},
-            {"name": "ChatGPT Search", "readiness": chatgpt_vis, "benchmark": 75, "status": "Cited" if chatgpt_vis >= 70 else ("Partial" if chatgpt_vis >= 40 else "Uncited")},
-            {"name": "Perplexity AI", "readiness": perplexity_vis, "benchmark": 70, "status": "Cited" if perplexity_vis >= 70 else ("Partial" if perplexity_vis >= 40 else "At Risk")},
-            {"name": "Claude / Anthropic", "readiness": claude_vis, "benchmark": 65, "status": "Cited" if claude_vis >= 70 else ("Partial" if claude_vis >= 40 else "Low Extractability")},
-        ]
-
-        sorted_engines = sorted(engines_spec, key=lambda x: x["readiness"], reverse=True)
-        top_engine = sorted_engines[0]
-        bottom_engine = sorted_engines[-1]
-
-        if top_engine["readiness"] < 25:
-            engine_insight = (
-                f"Brand exhibits critical citation deficits across all answer engines "
-                f"(highest: {top_engine['name']} at {top_engine['readiness']}%, lowest: {bottom_engine['name']} at {bottom_engine['readiness']}%), "
-                f"yielding an aggregate AI Citation Score of {target_ai_score}/100 due to missing direct entity definitions and schema."
-            )
-        else:
-            engine_insight = (
-                f"Brand is most extractable in {top_engine['name']} ({top_engine['readiness']}% readiness), "
-                f"while lagging in {bottom_engine['name']} ({bottom_engine['readiness']}%) "
-                f"(aggregate AI Citation Score: {target_ai_score}/100 across answer engines)."
-            )
-
-        charts.append(
-            ChartSpecification(
-                id="chart_ai_engine_matrix",
-                chart_type="engine_comparison_bar",
-                title="Generative Engine Citation Readiness Matrix",
-                subtitle="Visibility, claim extractability, and citation readiness across leading answer engines (Scorecard composite average: " + str(target_ai_score) + "/100)",
-                ai_insight=engine_insight,
-                category="GEO",
-                data={
-                    "engines": engines_spec
-                },
-                config={
-                    "bar_color": "#2e6f5e",
-                    "benchmark_color": "#94a3b8",
-                },
-                is_recommended=True,
-                priority_order=order,
-            )
-        )
-        order += 1
+        # Per-engine bars are omitted unless a live run recorded each engine.
+        # One site-level score is not split into ChatGPT / Perplexity / Claude marks.
 
         # CHART 4: Defect Severity & Actionable Risk Donut
         # AI judges this is needed if findings exist
         if total_defects >= 2:
             donut_insight = (
                 f"{sev_counts['CRITICAL']} Critical and {sev_counts['HIGH']} High severity findings represent the immediate blockers. "
-                f"Remediating the top {sev_counts['CRITICAL'] + sev_counts['HIGH']} issues will clear 80% of systemic technical drag."
+                f"{sev_counts['CRITICAL'] + sev_counts['HIGH']} findings are marked critical or high."
             )
             charts.append(
                 ChartSpecification(
@@ -306,31 +260,78 @@ class VisualIntelligenceEngine:
             )
             order += 1
 
-        # CHART 5: Conversion Friction & Intent Journey Funnel
-        # AI judges this is needed if site is transactional or commercial
-        if is_transactional or len(commercial_evaluations) > 0 or total_defects > 5:
-            funnel_insight = (
-                "Visitor friction escalates at the 'Consideration -> Conversion' transition: lack of transparent pricing tiers, "
-                "weak trust testimonials, and unstructured CTA buttons cause premature abandonment."
-            )
+        category_counts: Dict[str, int] = {}
+        for finding in findings:
+            label = finding.category.value if hasattr(finding.category, "value") else str(finding.category)
+            category_counts[label] = category_counts.get(label, 0) + 1
+        category_bars = [
+            {"label": label.replace("_", " ").title(), "value": count}
+            for label, count in sorted(category_counts.items(), key=lambda item: item[1], reverse=True)
+            if count > 0
+        ]
+        if len(category_bars) >= 2:
             charts.append(
                 ChartSpecification(
-                    id="chart_journey_funnel",
-                    chart_type="journey_funnel",
-                    title="Conversion Intent & Journey Friction Funnel",
-                    subtitle="Audited visitor progression from Informational discovery to Commercial action",
-                    ai_insight=funnel_insight,
-                    category="UX_CONVERSION",
-                    data={
-                        "stages": [
-                            {"stage": "1. Discovery & Search Intent", "score": max(50, round(seo_score * 0.95)), "drop_reason": "Low organic rank on commercial keywords"},
-                            {"stage": "2. Landing Engagement & SXO", "score": max(45, round(sxo_score * 0.92)), "drop_reason": "Page load TTFB & hero clarity friction"},
-                            {"stage": "3. Commercial Consideration", "score": max(40, round(cro_score * 0.88)), "drop_reason": "Missing comparison tables or proof signals"},
-                            {"stage": "4. Primary CTA Conversion", "score": max(30, round(cro_score * 0.78)), "drop_reason": "Unvalidated form friction & weak CTA copy"},
-                        ]
-                    },
-                    config={"funnel_color": "#2e6f5e"},
-                    is_recommended=is_transactional,
+                    id="chart_findings_by_category",
+                    chart_type="count_bar",
+                    title="Findings by category",
+                    subtitle="Where the recorded findings sit. Severity is a separate chart.",
+                    ai_insight="Counts come from this audit's findings. Categories with no findings are omitted.",
+                    category="OVERALL",
+                    data={"bars": category_bars},
+                    is_recommended=True,
+                    priority_order=order,
+                )
+            )
+            order += 1
+
+        questions = list(getattr(geo_readiness, "questions", None) or [])
+        status_counts: Dict[str, int] = {}
+        for question in questions:
+            status = getattr(question, "status", None) or (question.get("status") if isinstance(question, dict) else None) or "Unspecified"
+            status_counts[str(status)] = status_counts.get(str(status), 0) + 1
+        question_bars = [
+            {"label": label, "value": count}
+            for label, count in sorted(status_counts.items(), key=lambda item: item[1], reverse=True)
+            if count > 0
+        ]
+        if len(questions) >= 3 and len(question_bars) >= 2:
+            charts.append(
+                ChartSpecification(
+                    id="chart_geo_answer_status",
+                    chart_type="count_bar",
+                    title="Buyer questions by answer status",
+                    subtitle="On-page answerability from the crawled pages. This is not a live citation count.",
+                    ai_insight="Each bar is a status already stored on a commercial question.",
+                    category="GEO",
+                    data={"bars": question_bars},
+                    is_recommended=True,
+                    priority_order=order,
+                )
+            )
+            order += 1
+
+        rubric_counts: Dict[str, int] = {}
+        for finding in findings:
+            band = getattr(finding, "confidence_rubric", None)
+            band_name = band.value if hasattr(band, "value") else (str(band) if band else "")
+            if band_name in {"CERTAIN", "LIKELY", "GUESSING"}:
+                rubric_counts[band_name] = rubric_counts.get(band_name, 0) + 1
+        rubric_bars = [
+            {"label": label.title(), "value": count}
+            for label, count in sorted(rubric_counts.items(), key=lambda item: item[1], reverse=True)
+        ]
+        if len(rubric_bars) >= 2:
+            charts.append(
+                ChartSpecification(
+                    id="chart_confidence_rubric",
+                    chart_type="count_bar",
+                    title="Finding confidence",
+                    subtitle="Certain means two sources agree. Guessing is not treated as a measured defect.",
+                    ai_insight="Only findings that already carry a confidence band are counted.",
+                    category="OVERALL",
+                    data={"bars": rubric_bars},
+                    is_recommended=True,
                     priority_order=order,
                 )
             )
@@ -339,27 +340,34 @@ class VisualIntelligenceEngine:
         # -------------------------------------------------------------
         # 4. Spotlight Metric Numbers (Tailored to this specific audit)
         # -------------------------------------------------------------
-        spotlight_metrics = [
-            SpotlightMetric(
-                id="metric_avg_ttfb",
-                label="Average Crawl TTFB",
-                value=f"{round(avg_ttfb)}",
-                unit="ms",
-                change_indicator="< 200ms Target" if avg_ttfb <= 200 else ("> 800ms Critical" if avg_ttfb > 800 else "Moderate"),
-                status="good" if avg_ttfb <= 200 else ("bad" if avg_ttfb > 800 else "warning"),
-                significance="Google recommends TTFB under 200ms for crawler budget efficiency and visitor retention.",
-                category="TECHNICAL_SEO",
-            ),
-            SpotlightMetric(
-                id="metric_citation_readiness",
-                label="AI Citation Index",
-                value=f"{geo_score}",
-                unit="/ 100",
-                change_indicator="+15 pts post-patch" if geo_score < 70 else "Optimal",
-                status="good" if geo_score >= 75 else ("warning" if geo_score >= 50 else "bad"),
-                significance="Determines the probability of AI engines (ChatGPT, Perplexity) synthesizing your site as a direct authoritative source.",
-                category="GEO",
-            ),
+        spotlight_metrics = []
+        if avg_ttfb is not None:
+            spotlight_metrics.append(
+                SpotlightMetric(
+                    id="metric_avg_ttfb",
+                    label="Average Crawl TTFB",
+                    value=f"{round(avg_ttfb)}",
+                    unit="ms",
+                    change_indicator="Measured on this crawl",
+                    status="good" if avg_ttfb <= 200 else ("bad" if avg_ttfb > 800 else "warning"),
+                    significance="Mean time to first byte from the URLs that returned a timing.",
+                    category="TECHNICAL_SEO",
+                )
+            )
+        if geo_score is not None:
+            spotlight_metrics.append(
+                SpotlightMetric(
+                    id="metric_citation_readiness",
+                    label="AI score from this audit",
+                    value=f"{geo_score}",
+                    unit="/ 100",
+                    change_indicator="Measured",
+                    status="good" if geo_score >= 75 else ("warning" if geo_score >= 50 else "bad"),
+                    significance="On-page or live citation score recorded for this audit. Not a per-engine rank.",
+                    category="GEO",
+                )
+            )
+        spotlight_metrics.extend([
             SpotlightMetric(
                 id="metric_blocker_density",
                 label="Critical Blockers",
@@ -373,34 +381,27 @@ class VisualIntelligenceEngine:
             SpotlightMetric(
                 id="metric_crawl_coverage",
                 label="Verified Crawl Sample",
-                value=page_count if page_count > 0 else 1,
+                value=page_count,
                 unit="pages",
                 change_indicator="DOM-verified",
                 status="good",
                 significance="All diagnostic observations and code patches are cryptographically bound to live DOM evidence across these URLs.",
                 category="OVERALL",
             ),
-            SpotlightMetric(
-                id="metric_tripartite_delta",
-                label="Google vs AI Delta",
-                value=f"{abs(seo_score - geo_score)}",
-                unit="pts",
-                change_indicator="Aligned" if abs(seo_score - geo_score) < 15 else "Asymmetric",
-                status="good" if abs(seo_score - geo_score) < 15 else "warning",
-                significance="Measures misalignment between traditional SERP rankings and generative answer engines.",
-                category="GEO",
-            ),
-            SpotlightMetric(
-                id="metric_est_traffic_lift",
-                label="Estimated Organic Lift",
-                value="+24% to +38%",
-                unit="potential",
-                change_indicator="90-day trajectory",
-                status="good",
-                significance="Projected compound improvement in SERP impressions and AI answer inclusion upon deploying the 7/30-day patch pack.",
-                category="COMMERCIAL",
-            ),
-        ]
+        ])
+        if seo_score is not None and geo_score is not None:
+            spotlight_metrics.append(
+                SpotlightMetric(
+                    id="metric_tripartite_delta",
+                    label="Search vs AI score gap",
+                    value=f"{abs(seo_score - geo_score)}",
+                    unit="pts",
+                    change_indicator="Both scores measured",
+                    status="good" if abs(seo_score - geo_score) < 15 else "warning",
+                    significance="Difference between the measured search score and the measured AI score on this audit.",
+                    category="GEO",
+                )
+            )
 
         # -------------------------------------------------------------
         # 5. Executive AI Rationale

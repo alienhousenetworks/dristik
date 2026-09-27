@@ -13,8 +13,8 @@ from pydantic import BaseModel, Field
 from app.core.config import settings, Settings, ANTHROPIC_DEFAULT_FAST, GROQ_DEFAULT_REASONING
 from app.orchestration.orchestrator import orchestrator
 
-ENGINE_TIMEOUT_SECONDS = 8.0
-DASHBOARD_TIMEOUT_SECONDS = 45.0
+ENGINE_TIMEOUT_SECONDS = 15.0
+DASHBOARD_TIMEOUT_SECONDS = 60.0
 
 
 class EngineQueryResult(BaseModel):
@@ -23,6 +23,13 @@ class EngineQueryResult(BaseModel):
     position: Optional[int] = None
     was_cited: bool
     cited_url: Optional[str] = None
+    source_used: str = "—"
+    is_factually_correct: Optional[bool] = None
+    answer_completeness: str = "Missing" # "Complete" | "Partial" | "Missing" | "Diverted"
+    brand_accuracy: str = "Unverified" # "Accurate" | "Distorted" | "Omitted"
+    competitor_confusion: bool = False
+    has_hallucination: bool = False
+    hallucination_note: Optional[str] = None
     competitor_cited_instead: Optional[str] = None
     source_domains_used: List[str] = Field(default_factory=list)
     synthesized_snippet: str
@@ -73,12 +80,16 @@ def _parse_bool(val: Any, default: bool = True) -> bool:
     return default
 
 
-def _engine_active(flag_name: str, has_native_key: bool) -> bool:
-    """Honor an explicit ACTIVE flag; otherwise enable only when a native key exists."""
+def _engine_active(flag_name: str, has_key: bool) -> bool:
+    """Honor an explicit ACTIVE flag; otherwise enable only when a key exists."""
     raw = os.environ.get(flag_name)
+    if raw is None and hasattr(settings, flag_name):
+        val = getattr(settings, flag_name)
+        if val is not None:
+            raw = str(val)
     if raw is not None and str(raw).strip() != "":
         return _parse_bool(raw, default=False)
-    return bool(has_native_key)
+    return bool(has_key)
 
 
 def _provider_family(provider: str) -> set:
@@ -106,9 +117,12 @@ def _engine_matches_active_provider(engine_provider: str) -> bool:
     LLM_PROVIDER is the only live inference vendor unless
     AI_CITATION_CROSS_PROVIDER=true opts into multi-engine fan-out.
     """
-    if _parse_bool(os.environ.get("AI_CITATION_CROSS_PROVIDER"), default=False):
+    cross = os.environ.get("AI_CITATION_CROSS_PROVIDER")
+    if cross is None and getattr(settings, "AI_CITATION_CROSS_PROVIDER", False):
+        cross = str(settings.AI_CITATION_CROSS_PROVIDER)
+    if _parse_bool(cross, default=False):
         return True
-    active = (settings.get_active_provider() or "").lower().strip()
+    active = (os.environ.get("LLM_PROVIDER") or settings.get_active_provider() or "").lower().strip()
     family = _provider_family(active)
     return (engine_provider or "").lower().strip() in family
 
@@ -124,55 +138,59 @@ def get_configured_ai_engines() -> List[Dict[str, Any]]:
         return or_key if provider == "openrouter" else ""
 
     # 1. Google Gemini
+    gemini_explicit_key = os.environ.get("AI_CITATION_GEMINI_API_KEY")
     gemini_native = (
-        os.environ.get("AI_CITATION_GEMINI_API_KEY")
-        or settings.GEMINI_API_KEY
+        settings.GEMINI_API_KEY
         or os.environ.get("GEMINI_API_KEY")
         or settings.GOOGLE_API_KEY
         or os.environ.get("GOOGLE_API_KEY")
         or ""
     )
-    gemini_provider = (os.environ.get("AI_CITATION_GEMINI_PROVIDER") or ("gemini" if gemini_native else "gemini")).lower()
-    gemini_key = gemini_native or _or_key_if(gemini_provider)
-    gemini_active = _engine_active("AI_CITATION_GEMINI_ACTIVE", bool(gemini_native))
-    gemini_model = os.environ.get("AI_CITATION_GEMINI_MODEL") or ("google/gemini-2.0-flash-exp:free" if gemini_provider == "openrouter" else "gemini-2.0-flash")
+    gemini_provider = (os.environ.get("AI_CITATION_GEMINI_PROVIDER") or ("gemini" if (gemini_explicit_key or gemini_native) else "gemini")).lower()
+    if gemini_provider == "openrouter":
+        gemini_key = gemini_explicit_key or _or_key_if("openrouter")
+    else:
+        gemini_key = gemini_explicit_key or gemini_native
+    gemini_active = _engine_active("AI_CITATION_GEMINI_ACTIVE", bool(gemini_key))
+    gemini_model = os.environ.get("AI_CITATION_GEMINI_MODEL") or ("google/gemini-2.5-flash" if gemini_provider == "openrouter" else "gemini-2.0-flash")
 
     # 2. ChatGPT (OpenAI)
-    chatgpt_native = (
-        os.environ.get("AI_CITATION_CHATGPT_API_KEY")
-        or settings.OPENAI_API_KEY
-        or os.environ.get("OPENAI_API_KEY")
-        or ""
-    )
-    chatgpt_provider = (os.environ.get("AI_CITATION_CHATGPT_PROVIDER") or ("openai" if chatgpt_native else "openai")).lower()
-    chatgpt_key = chatgpt_native or _or_key_if(chatgpt_provider)
-    chatgpt_active = _engine_active("AI_CITATION_CHATGPT_ACTIVE", bool(chatgpt_native))
+    chatgpt_explicit_key = os.environ.get("AI_CITATION_CHATGPT_API_KEY")
+    chatgpt_native = settings.OPENAI_API_KEY or os.environ.get("OPENAI_API_KEY") or ""
+    chatgpt_provider = (os.environ.get("AI_CITATION_CHATGPT_PROVIDER") or ("openai" if (chatgpt_explicit_key or chatgpt_native) else "openai")).lower()
+    if chatgpt_provider == "openrouter":
+        chatgpt_key = chatgpt_explicit_key or _or_key_if("openrouter")
+    else:
+        chatgpt_key = chatgpt_explicit_key or chatgpt_native
+    chatgpt_active = _engine_active("AI_CITATION_CHATGPT_ACTIVE", bool(chatgpt_key))
     chatgpt_model = os.environ.get("AI_CITATION_CHATGPT_MODEL") or ("openai/gpt-4o-mini" if chatgpt_provider == "openrouter" else "gpt-4o-mini")
 
     # 3. Perplexity Pro
-    perp_native = (
-        os.environ.get("AI_CITATION_PERPLEXITY_API_KEY")
-        or os.environ.get("PERPLEXITY_API_KEY")
-        or settings.PERPLEXITY_API_KEY
-        or ""
-    )
-    perp_provider = (os.environ.get("AI_CITATION_PERPLEXITY_PROVIDER") or ("perplexity" if perp_native else "perplexity")).lower()
-    perp_key = perp_native or _or_key_if(perp_provider)
-    perp_active = _engine_active("AI_CITATION_PERPLEXITY_ACTIVE", bool(perp_native))
+    perp_explicit_key = os.environ.get("AI_CITATION_PERPLEXITY_API_KEY")
+    perp_native = settings.PERPLEXITY_API_KEY or os.environ.get("PERPLEXITY_API_KEY") or ""
+    perp_provider = (os.environ.get("AI_CITATION_PERPLEXITY_PROVIDER") or ("perplexity" if (perp_explicit_key or perp_native) else "perplexity")).lower()
+    if perp_provider == "openrouter":
+        perp_key = perp_explicit_key or _or_key_if("openrouter")
+    else:
+        perp_key = perp_explicit_key or perp_native
+    perp_active = _engine_active("AI_CITATION_PERPLEXITY_ACTIVE", bool(perp_key))
     perp_model = os.environ.get("AI_CITATION_PERPLEXITY_MODEL") or ("perplexity/sonar" if perp_provider == "openrouter" else "sonar")
 
     # 4. Claude (Anthropic)
+    claude_explicit_key = os.environ.get("AI_CITATION_CLAUDE_API_KEY")
     claude_native = (
-        os.environ.get("AI_CITATION_CLAUDE_API_KEY")
-        or settings.ANTHROPIC_API_KEY
+        settings.ANTHROPIC_API_KEY
         or os.environ.get("ANTHROPIC_API_KEY")
         or settings.CLAUDE_API_KEY
         or os.environ.get("CLAUDE_API_KEY")
         or ""
     )
-    claude_provider = (os.environ.get("AI_CITATION_CLAUDE_PROVIDER") or ("anthropic" if claude_native else "anthropic")).lower()
-    claude_key = claude_native or _or_key_if(claude_provider)
-    claude_active = _engine_active("AI_CITATION_CLAUDE_ACTIVE", bool(claude_native))
+    claude_provider = (os.environ.get("AI_CITATION_CLAUDE_PROVIDER") or ("anthropic" if (claude_explicit_key or claude_native) else "anthropic")).lower()
+    if claude_provider == "openrouter":
+        claude_key = claude_explicit_key or _or_key_if("openrouter")
+    else:
+        claude_key = claude_explicit_key or claude_native
+    claude_active = _engine_active("AI_CITATION_CLAUDE_ACTIVE", bool(claude_key))
     raw_claude_model = os.environ.get("AI_CITATION_CLAUDE_MODEL") or settings.ANTHROPIC_MODEL or os.environ.get("ANTHROPIC_MODEL")
     if claude_provider == "openrouter":
         claude_model = raw_claude_model or "anthropic/claude-haiku-4.5"
@@ -180,36 +198,52 @@ def get_configured_ai_engines() -> List[Dict[str, Any]]:
         claude_model = Settings._coerce_anthropic_model(raw_claude_model, ANTHROPIC_DEFAULT_FAST)
 
     # 5. DeepSeek
-    deepseek_native = (
-        os.environ.get("AI_CITATION_DEEPSEEK_API_KEY")
-        or settings.DEEPSEEK_API_KEY
-        or os.environ.get("DEEPSEEK_API_KEY")
-        or ""
-    )
-    deepseek_provider = (os.environ.get("AI_CITATION_DEEPSEEK_PROVIDER") or ("deepseek" if deepseek_native else "deepseek")).lower()
-    deepseek_key = deepseek_native or _or_key_if(deepseek_provider)
-    deepseek_active = _engine_active("AI_CITATION_DEEPSEEK_ACTIVE", bool(deepseek_native))
+    deepseek_explicit_key = os.environ.get("AI_CITATION_DEEPSEEK_API_KEY")
+    deepseek_native = settings.DEEPSEEK_API_KEY or os.environ.get("DEEPSEEK_API_KEY") or ""
+    deepseek_provider = (os.environ.get("AI_CITATION_DEEPSEEK_PROVIDER") or ("deepseek" if (deepseek_explicit_key or deepseek_native) else "deepseek")).lower()
+    if deepseek_provider == "openrouter":
+        deepseek_key = deepseek_explicit_key or _or_key_if("openrouter")
+    else:
+        deepseek_key = deepseek_explicit_key or deepseek_native
+    deepseek_active = _engine_active("AI_CITATION_DEEPSEEK_ACTIVE", bool(deepseek_key))
     deepseek_model = os.environ.get("AI_CITATION_DEEPSEEK_MODEL") or ("deepseek/deepseek-chat" if deepseek_provider == "openrouter" else "deepseek-chat")
 
     # 6. Kimi (Moonshot AI)
-    kimi_key = os.environ.get("AI_CITATION_KIMI_API_KEY") or settings.MOONSHOT_API_KEY or os.environ.get("MOONSHOT_API_KEY") or os.environ.get("KIMI_API_KEY") or ""
-    kimi_active = _engine_active("AI_CITATION_KIMI_ACTIVE", bool(kimi_key))
+    kimi_explicit_key = os.environ.get("AI_CITATION_KIMI_API_KEY")
+    kimi_native = settings.MOONSHOT_API_KEY or os.environ.get("MOONSHOT_API_KEY") or os.environ.get("KIMI_API_KEY") or ""
     kimi_provider = (os.environ.get("AI_CITATION_KIMI_PROVIDER") or "moonshot").lower()
+    if kimi_provider == "openrouter":
+        kimi_key = kimi_explicit_key or _or_key_if("openrouter")
+    else:
+        kimi_key = kimi_explicit_key or kimi_native
+    kimi_active = _engine_active("AI_CITATION_KIMI_ACTIVE", bool(kimi_key))
     kimi_model = os.environ.get("AI_CITATION_KIMI_MODEL") or "moonshot-v1-8k"
 
     # 7. xAI Grok
-    grok_key = os.environ.get("AI_CITATION_GROK_API_KEY") or settings.XAI_API_KEY or os.environ.get("XAI_API_KEY") or os.environ.get("GROK_API_KEY") or ""
-    grok_active = _engine_active("AI_CITATION_GROK_ACTIVE", bool(grok_key))
+    grok_explicit_key = os.environ.get("AI_CITATION_GROK_API_KEY")
+    grok_native = settings.XAI_API_KEY or os.environ.get("XAI_API_KEY") or os.environ.get("GROK_API_KEY") or ""
     grok_provider = (os.environ.get("AI_CITATION_GROK_PROVIDER") or "xai").lower()
+    if grok_provider == "openrouter":
+        grok_key = grok_explicit_key or _or_key_if("openrouter")
+    else:
+        grok_key = grok_explicit_key or grok_native
+    grok_active = _engine_active("AI_CITATION_GROK_ACTIVE", bool(grok_key))
     grok_model = os.environ.get("AI_CITATION_GROK_MODEL") or "grok-2-latest"
 
-    # 8. Meta Llama — Groq by default when a Groq key exists. Do not fall back to OpenRouter.
+    # 8. Meta Llama — Dedicated Groq / Together or OpenRouter
+    llama_explicit_key = os.environ.get("AI_CITATION_LLAMA_API_KEY")
     groq_key = settings.GROQ_API_KEY or os.environ.get("GROQ_API_KEY") or ""
     together_key = settings.TOGETHER_API_KEY or os.environ.get("TOGETHER_API_KEY") or ""
-    llama_native = os.environ.get("AI_CITATION_LLAMA_API_KEY") or groq_key or together_key or ""
     llama_provider = (os.environ.get("AI_CITATION_LLAMA_PROVIDER") or ("groq" if groq_key else ("together" if together_key else "groq"))).lower()
-    llama_key = llama_native or _or_key_if(llama_provider)
-    llama_active = _engine_active("AI_CITATION_LLAMA_ACTIVE", bool(llama_native))
+    if llama_provider == "openrouter":
+        llama_key = llama_explicit_key or _or_key_if("openrouter")
+    elif llama_provider == "groq":
+        llama_key = llama_explicit_key or groq_key
+    elif llama_provider == "together":
+        llama_key = llama_explicit_key or together_key
+    else:
+        llama_key = llama_explicit_key or _or_key_if(llama_provider)
+    llama_active = _engine_active("AI_CITATION_LLAMA_ACTIVE", bool(llama_key))
     llama_model = os.environ.get("AI_CITATION_LLAMA_MODEL") or (
         GROQ_DEFAULT_REASONING if llama_provider == "groq"
         else ("meta-llama/Llama-3.3-70B-Instruct-Turbo" if llama_provider == "together" else "meta-llama/llama-3.3-70b-instruct")
@@ -557,12 +591,48 @@ class AiCitationTracker:
             elif re.search(rf"(?:3\.|#3|third).*?{re.escape(lower_brand)}", lower_content):
                 position = 3
 
+        # Mode B Benchmark Field Mapping
+        source_used = "—"
+        if matched_url:
+            source_used = lower_domain
+        elif extracted_domains:
+            source_used = extracted_domains[0]
+        elif has_mention:
+            source_used = "third party"
+
+        is_factually_correct: Optional[bool] = None
+        if has_mention:
+            is_factually_correct = (not competitor_cited)
+        elif competitor_cited:
+            is_factually_correct = False
+
+        if has_link or (has_mention and len(content or "") > 200):
+            answer_completeness = "Complete"
+        elif has_mention:
+            answer_completeness = "Partial"
+        elif competitor_cited:
+            answer_completeness = "Diverted"
+        else:
+            answer_completeness = "Missing"
+
+        brand_accuracy = "Accurate" if (has_mention and not competitor_cited) else ("Distorted" if competitor_cited else "Omitted")
+        competitor_confusion = bool(competitor_cited)
+        has_hallucination = bool(competitor_cited and has_mention)
+        hallucination_note = f"Engine substituted {competitor_cited} for {brand}." if competitor_cited else None
+
         return EngineQueryResult(
             engine=engine_name,
             was_mentioned=has_mention,
             position=position,
             was_cited=has_link,
             cited_url=matched_url,
+            source_used=source_used,
+            is_factually_correct=is_factually_correct,
+            answer_completeness=answer_completeness,
+            brand_accuracy=brand_accuracy,
+            competitor_confusion=competitor_confusion,
+            has_hallucination=has_hallucination,
+            hallucination_note=hallucination_note,
             competitor_cited_instead=competitor_cited,
             source_domains_used=extracted_domains[:4],
             synthesized_snippet=snippet,

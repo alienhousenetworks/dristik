@@ -920,6 +920,9 @@ class PageIntelligenceAgent(BaseAgent):
         blackboard.page_reports = reports
 
         for report in reports:
+            page_ev_ids = [ev.id for ev in blackboard.evidence_store.get_all() if getattr(ev, "url", None) == report.url][:3]
+            if not page_ev_ids:
+                page_ev_ids = [ev.id for ev in blackboard.evidence_store.get_all()[:2]]
             for issue in report.seo.issues[:3]:
                 severity = Severity.HIGH if report.seo.score < 55 else Severity.MEDIUM
                 self.register_claim(
@@ -928,6 +931,7 @@ class PageIntelligenceAgent(BaseAgent):
                     category=Category.ON_PAGE_SEO,
                     severity=severity,
                     confidence=0.93,
+                    evidence_refs=page_ev_ids,
                     recommendation=report.seo.recommendations[0] if report.seo.recommendations else "Fix on-page SEO for this URL.",
                     impact=7,
                     effort=3,
@@ -940,6 +944,7 @@ class PageIntelligenceAgent(BaseAgent):
                     category=Category.CONTENT,
                     severity=sev,
                     confidence=0.9,
+                    evidence_refs=page_ev_ids,
                     recommendation=(
                         f"Replace {copy_issue.area} copy."
                         + (

@@ -148,3 +148,30 @@ def get_backlinks(domain: str = Query(..., description="Target domain to inspect
     """Fetches referring domains, backlinks, and link graph status."""
     from app.integrations.dataforseo_provider import dataforseo_provider
     return dataforseo_provider.fetch_backlink_profile(domain).model_dump()
+
+
+@router.get("/telemetry/{domain}")
+async def get_domain_telemetry(domain: str) -> Dict[str, Any]:
+    """
+    Unified telemetry endpoint polling GSC, GA4, CrUX, and External SEO providers.
+    Enforces clean fail-closed status tags and zero synthetic metric fabrication.
+    """
+    from app.connectors.store import connector_store
+    telemetry_svc = connector_store.get_telemetry_service()
+    package = await telemetry_svc.fetch_all_telemetry(domain)
+    return package.model_dump()
+
+
+@router.get("/crux/{domain}")
+async def get_crux_telemetry(domain: str) -> Dict[str, Any]:
+    """
+    Queries Google CrUX origin Core Web Vitals (p75 LCP, INP, CLS, FCP).
+    Returns explicit lab_fallback_only when domain has insufficient CrUX dataset traffic.
+    """
+    from app.connectors.crux.connector import CruxConnector
+    from app.connectors.base.models import ConnectorCredentials
+    from app.domain.enums import ConnectorType
+
+    connector = CruxConnector(ConnectorCredentials(provider=ConnectorType.CRUX))
+    res = await connector.fetch_telemetry(domain)
+    return res.model_dump()

@@ -2,9 +2,18 @@
 Dristik AI Configuration
 Loads settings from environment variables with validation.
 """
-from typing import Any, Optional, List
+from pathlib import Path
+from typing import Any, Optional, List, Dict
+from dotenv import load_dotenv
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import Field
+
+# Ensure backend/.env variables are populated into os.environ for os.environ.get calls
+_backend_root = Path(__file__).resolve().parent.parent.parent
+for _candidate in (_backend_root / ".env", Path(".env").resolve(), Path("backend/.env").resolve()):
+    if _candidate.is_file():
+        load_dotenv(dotenv_path=_candidate, override=False)
+        break
 
 # Live Anthropic IDs (Claude 3 Haiku / 3.5 Sonnet were retired in 2026).
 ANTHROPIC_DEFAULT_FAST = "claude-haiku-4-5-20251001"
@@ -99,6 +108,48 @@ class Settings(BaseSettings):
     OPENROUTER_SITE_NAME: Optional[str] = Field(default="Dristik AI", description="X-Title header for OpenRouter rankings")
     TOGETHER_MODEL: Optional[str] = None
 
+    # AI Citation Tracker Engine Configuration
+    AI_CITATION_CROSS_PROVIDER: bool = Field(default=False, description="Enable multi-engine citation tracker fan-out across providers")
+    AI_CITATION_CLAUDE_ACTIVE: Optional[bool] = None
+    AI_CITATION_CLAUDE_PROVIDER: Optional[str] = None
+    AI_CITATION_CLAUDE_API_KEY: Optional[str] = None
+    AI_CITATION_CLAUDE_MODEL: Optional[str] = None
+
+    AI_CITATION_LLAMA_ACTIVE: Optional[bool] = None
+    AI_CITATION_LLAMA_PROVIDER: Optional[str] = None
+    AI_CITATION_LLAMA_API_KEY: Optional[str] = None
+    AI_CITATION_LLAMA_MODEL: Optional[str] = None
+
+    AI_CITATION_GEMINI_ACTIVE: Optional[bool] = None
+    AI_CITATION_GEMINI_PROVIDER: Optional[str] = None
+    AI_CITATION_GEMINI_API_KEY: Optional[str] = None
+    AI_CITATION_GEMINI_MODEL: Optional[str] = None
+
+    AI_CITATION_CHATGPT_ACTIVE: Optional[bool] = None
+    AI_CITATION_CHATGPT_PROVIDER: Optional[str] = None
+    AI_CITATION_CHATGPT_API_KEY: Optional[str] = None
+    AI_CITATION_CHATGPT_MODEL: Optional[str] = None
+
+    AI_CITATION_PERPLEXITY_ACTIVE: Optional[bool] = None
+    AI_CITATION_PERPLEXITY_PROVIDER: Optional[str] = None
+    AI_CITATION_PERPLEXITY_API_KEY: Optional[str] = None
+    AI_CITATION_PERPLEXITY_MODEL: Optional[str] = None
+
+    AI_CITATION_DEEPSEEK_ACTIVE: Optional[bool] = None
+    AI_CITATION_DEEPSEEK_PROVIDER: Optional[str] = None
+    AI_CITATION_DEEPSEEK_API_KEY: Optional[str] = None
+    AI_CITATION_DEEPSEEK_MODEL: Optional[str] = None
+
+    AI_CITATION_GROK_ACTIVE: Optional[bool] = None
+    AI_CITATION_GROK_PROVIDER: Optional[str] = None
+    AI_CITATION_GROK_API_KEY: Optional[str] = None
+    AI_CITATION_GROK_MODEL: Optional[str] = None
+
+    AI_CITATION_KIMI_ACTIVE: Optional[bool] = None
+    AI_CITATION_KIMI_PROVIDER: Optional[str] = None
+    AI_CITATION_KIMI_API_KEY: Optional[str] = None
+    AI_CITATION_KIMI_MODEL: Optional[str] = None
+
     # Legacy Together AI fields for backwards compatibility
     TOGETHER_BASE_URL: str = "https://api.together.xyz/v1"
     TOGETHER_MODEL_FAST: str = "meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo"
@@ -111,6 +162,10 @@ class Settings(BaseSettings):
     LLM_MAX_TOKENS: int = 3000
     LLM_TIMEOUT_SECONDS: int = 60
     LLM_MAX_RETRIES: int = 3
+    LLM_MAX_CONCURRENCY: int = Field(default=2, description="Max concurrent in-flight requests per LLM provider to eliminate 429 thundering herd")
+    ANTHROPIC_RPM: int = Field(default=15, description="Requests per minute limit for Anthropic Messages API")
+    ANTHROPIC_TPM: int = Field(default=40000, description="Tokens per minute limit for Anthropic Messages API")
+    ENABLE_CROSS_PROVIDER_CASCADE: bool = Field(default=True, description="Cascade to secondary provider if primary provider is exhausted")
     # Actual USD per 1M tokens you pay. Both must be set. They override the
     # published list price for every call the provider did not bill in-band.
     LLM_COST_INPUT_PER_MILLION: Optional[float] = None
@@ -137,7 +192,15 @@ class Settings(BaseSettings):
 
     # Crawling & Ingestion
     FIRECRAWL_API_KEY: Optional[str] = None
-    MAX_CRAWL_PAGES: Any = Field(default=5, description="Page limit: 5 | 10 | 20 | 50 | 'all'")
+    MAX_CRAWL_PAGES: Any = Field(default=10, description="Page limit: 10 | 25 | 50 | 200 | 500 | 'quick' | 'standard' | 'deep' | 'enterprise'")
+    CRAWL_TIERS: Dict[str, int] = Field(
+        default_factory=lambda: {
+            "quick": 10,
+            "standard": 50,
+            "deep": 500,
+            "enterprise": 500,
+        }
+    )
     CRAWL_TIMEOUT_SECONDS: int = 15
     CRAWL_CONCURRENCY: int = 3
     JS_RENDER_THIN_PAGES: bool = True
@@ -149,13 +212,16 @@ class Settings(BaseSettings):
 
     def get_max_crawl_pages(self, override: Optional[Any] = None) -> int:
         """
-        Resolves maximum crawl pages allowing 5, 10, 20, 50, or 'all' (deep crawl).
-        'all' resolves to 500 pages.
+        Resolves maximum crawl pages allowing integer counts or named tiers:
+        'quick' -> 10, 'standard' -> 50, 'deep' / 'enterprise' / 'all' -> 500.
+        Invalid strings fallback to default 5.
         """
         raw = override if override is not None else self.MAX_CRAWL_PAGES
         if isinstance(raw, str):
             s = raw.strip().lower()
-            if s in ("all", "-1", "deep", "full", "max"):
+            if s in self.CRAWL_TIERS:
+                return self.CRAWL_TIERS[s]
+            if s in ("all", "-1", "deep", "full", "max", "enterprise"):
                 return 500
             try:
                 return int(s)
@@ -202,8 +268,38 @@ class Settings(BaseSettings):
     GOOGLE_CLIENT_ID: Optional[str] = None
     GOOGLE_CLIENT_SECRET: Optional[str] = None
     GOOGLE_OAUTH_REDIRECT_URI: Optional[str] = None
+    OAUTH_REDIRECT_URI: Optional[str] = None
+    GITHUB_CLIENT_ID: Optional[str] = None
+    GITHUB_CLIENT_SECRET: Optional[str] = None
+    # Optional dedicated SSO client ID/secrets (falls back to GOOGLE_CLIENT_ID / GITHUB_CLIENT_ID if unset)
+    GOOGLE_SSO_CLIENT_ID: Optional[str] = None
+    GOOGLE_SSO_CLIENT_SECRET: Optional[str] = None
+    GITHUB_SSO_CLIENT_ID: Optional[str] = None
+    GITHUB_SSO_CLIENT_SECRET: Optional[str] = None
+    SHOPIFY_CLIENT_ID: Optional[str] = None
+    SHOPIFY_CLIENT_SECRET: Optional[str] = None
+    WEBFLOW_CLIENT_ID: Optional[str] = None
+    WEBFLOW_CLIENT_SECRET: Optional[str] = None
+    HUBSPOT_CLIENT_ID: Optional[str] = None
+    HUBSPOT_CLIENT_SECRET: Optional[str] = None
+    SALESFORCE_CLIENT_ID: Optional[str] = None
+    SALESFORCE_CLIENT_SECRET: Optional[str] = None
+    STRIPE_CLIENT_ID: Optional[str] = None
+    STRIPE_CLIENT_SECRET: Optional[str] = None
+    WORDPRESS_CLIENT_ID: Optional[str] = None
+    WORDPRESS_CLIENT_SECRET: Optional[str] = None
     GOOGLE_APPLICATION_CREDENTIALS: Optional[str] = None
     GA4_PROPERTY_ID: Optional[str] = None
+
+    def get_google_sso_client(self) -> tuple[Optional[str], Optional[str]]:
+        cid = self.GOOGLE_SSO_CLIENT_ID or self.GOOGLE_CLIENT_ID
+        sec = self.GOOGLE_SSO_CLIENT_SECRET or self.GOOGLE_CLIENT_SECRET
+        return cid, sec
+
+    def get_github_sso_client(self) -> tuple[Optional[str], Optional[str]]:
+        cid = self.GITHUB_SSO_CLIENT_ID or self.GITHUB_CLIENT_ID
+        sec = self.GITHUB_SSO_CLIENT_SECRET or self.GITHUB_CLIENT_SECRET
+        return cid, sec
 
     # Notifications. Missing SMTP reports delivery_status=not_configured.
     SMTP_HOST: Optional[str] = None

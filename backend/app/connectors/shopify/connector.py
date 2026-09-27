@@ -60,17 +60,14 @@ class ShopifyConnector(BaseConnector):
         ConnectorSecurityGuard.validate_patch_permissions(patch, "shopify")
         rollback_engine.capture_pre_patch_snapshot(patch, {"platform": "shopify", "store": self.shop_url})
 
-        patch.approval_status = PatchApprovalStatus.APPLIED
-        patch.applied_via = "shopify"
-        patch.applied_at = datetime.now(timezone.utc).isoformat()
-
+        applied_at = datetime.now(timezone.utc).isoformat()
         return PatchApplicationResult(
-            success=True,
+            success=False,
             patch_id=patch.patch_id,
             provider=ConnectorType.SHOPIFY,
-            applied_at=patch.applied_at,
-            target_resource=f"{self.shop_url} (Shopify Metafields / Theme)",
-            message=f"Applied SEO patch to Shopify store {self.shop_url}."
+            applied_at=applied_at,
+            target_resource=self.shop_url or "",
+            message="Shopify was not updated. No Admin API call was made."
         )
 
     async def rollback_patch(self, patch: RemediationPatch) -> RollbackResult:

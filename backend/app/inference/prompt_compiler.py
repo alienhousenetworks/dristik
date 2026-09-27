@@ -103,7 +103,7 @@ class PromptCompiler:
         additional_context: Optional[str] = None,
         site_facts: Optional[Dict[str, Any]] = None,
         task_card: Optional[str] = None,
-        max_claims: int = 3,
+        max_claims: int = 8,
         evidence_kind_allowlist: Optional[List[str]] = None
     ) -> Dict[str, str]:
         """

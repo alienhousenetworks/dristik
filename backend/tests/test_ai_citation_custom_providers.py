@@ -15,6 +15,7 @@ async def test_anthropic_direct_query_in_citation_tracker():
     with patch.object(tracker, "_query_anthropic_live", new_callable=AsyncMock, return_value=mock_res) as mock_anthropic, \
          patch.dict("os.environ", {
              "AI_CITATION_CROSS_PROVIDER": "false",
+             "LLM_PROVIDER": "anthropic",
              "AI_CITATION_CLAUDE_ACTIVE": "true",
              "AI_CITATION_CLAUDE_PROVIDER": "anthropic",
              "AI_CITATION_CLAUDE_API_KEY": "sk-ant-test-key",

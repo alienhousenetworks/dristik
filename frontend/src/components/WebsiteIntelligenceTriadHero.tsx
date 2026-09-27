@@ -18,7 +18,7 @@ export function WebsiteIntelligenceTriadHero({
   const pillars: Array<{
     id: TabId;
     label: string;
-    score: number;
+    score: number | null;
     hint: string;
   }> = [
     {
@@ -53,8 +53,8 @@ export function WebsiteIntelligenceTriadHero({
     },
   ];
 
-  const overall = Math.round(report.scores?.overall_score || 0);
-  const tone = overall >= 80 ? 'text-good' : overall >= 60 ? 'text-warn' : 'text-bad';
+  const overall = typeof report.scores?.overall_score === 'number' ? Math.round(report.scores.overall_score) : null;
+  const tone = overall == null ? 'text-ink' : overall >= 80 ? 'text-good' : overall >= 60 ? 'text-warn' : 'text-bad';
 
   return (
     <section className="space-y-4">
@@ -66,7 +66,7 @@ export function WebsiteIntelligenceTriadHero({
         </div>
         <div className="text-left sm:text-right">
           <p className="label">Overall</p>
-          <p className={cn('font-serif text-5xl leading-none mt-1', tone)}>{overall}</p>
+          <p className={cn('font-serif text-5xl leading-none mt-1', tone)}>{overall == null ? '—' : overall}</p>
           <p className="text-sm text-ink-500 mt-1">
             {report.scores?.grade} · {report.scores?.health_label}
           </p>
@@ -83,7 +83,7 @@ export function WebsiteIntelligenceTriadHero({
           >
             <div className="flex items-baseline justify-between gap-2">
               <p className="label">{pillar.label}</p>
-              <p className="font-serif text-2xl text-ink leading-none">{pillar.score}</p>
+              <p className="font-serif text-2xl text-ink leading-none">{pillar.score == null ? '—' : pillar.score}</p>
             </div>
             <p className="mt-2 text-xs text-ink-500 leading-relaxed line-clamp-2">{pillar.hint}</p>
           </button>

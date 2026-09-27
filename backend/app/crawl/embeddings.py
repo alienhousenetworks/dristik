@@ -130,14 +130,31 @@ class EmbeddingService:
             if remote_vecs:
                 vector = remote_vecs[0]
 
-        # 3. Fallback deterministic vector if offline / unconfigured
+        # Fail closed: never fabricate pseudo-embeddings when neural models are offline
         if not vector:
-            vector = self._deterministic_fallback_vector(clean_q)
+            logger.warning("[EmbeddingService] Neural embedding unavailable for query: %s", clean_q[:40])
+            return []
 
         # Cache vector
         if len(self._cache) < self._max_cache_size:
             self._cache[cache_key] = vector
         return vector
+
+    def is_available(self) -> bool:
+        """Returns True if a real neural embedding model (local or remote API) is configured and available."""
+        provider = (settings.EMBEDDING_PROVIDER or "huggingface").lower().strip()
+        if provider in ("huggingface", "local"):
+            if self._local_model is not None:
+                return True
+            try:
+                from sentence_transformers import SentenceTransformer
+                target_model = settings.EMBEDDING_MODEL or "intfloat/e5-small-v2"
+                self._local_model = SentenceTransformer(target_model, local_files_only=True)
+                return True
+            except Exception:
+                return False
+        api_key = settings.EMBEDDING_API_KEY or settings.OPENROUTER_API_KEY or os.environ.get("OPENROUTER_API_KEY")
+        return bool(api_key)
 
     async def embed_query_async(self, query: str) -> List[float]:
         """Async version of embed_query."""
@@ -156,7 +173,7 @@ class EmbeddingService:
         api_key = settings.EMBEDDING_API_KEY or settings.OPENROUTER_API_KEY or os.environ.get("OPENROUTER_API_KEY")
         if not api_key:
             logger.warning("[EmbeddingService] No API key available for remote embedding provider.")
-            return [self._deterministic_fallback_vector(t) for t in prefixed_texts]
+            return []
 
         base_url = (settings.EMBEDDING_BASE_URL or "https://openrouter.ai/api/v1").rstrip("/")
         endpoint = f"{base_url}/embeddings"
@@ -184,13 +201,13 @@ class EmbeddingService:
         except Exception as exc:
             logger.error("[EmbeddingService] Remote embedding request error: %s", exc)
 
-        return [self._deterministic_fallback_vector(t) for t in prefixed_texts]
+        return []
 
     async def _embed_remote_async(self, prefixed_texts: List[str]) -> List[List[float]]:
         """Calls OpenRouter or OpenAI-compatible remote embedding endpoint asynchronously."""
         api_key = settings.EMBEDDING_API_KEY or settings.OPENROUTER_API_KEY or os.environ.get("OPENROUTER_API_KEY")
         if not api_key:
-            return [self._deterministic_fallback_vector(t) for t in prefixed_texts]
+            return []
 
         base_url = (settings.EMBEDDING_BASE_URL or "https://openrouter.ai/api/v1").rstrip("/")
         endpoint = f"{base_url}/embeddings"
@@ -218,7 +235,7 @@ class EmbeddingService:
         except Exception as exc:
             logger.error("[EmbeddingService] Async remote embedding error: %s", exc)
 
-        return [self._deterministic_fallback_vector(t) for t in prefixed_texts]
+        return []
 
     def _get_target_dim(self) -> int:
         model = (settings.EMBEDDING_MODEL or "intfloat/e5-small-v2").lower()
@@ -228,21 +245,6 @@ class EmbeddingService:
             return 768
         return 384
 
-    def _deterministic_fallback_vector(self, text: str, dim: Optional[int] = None) -> List[float]:
-        """
-        Zero-Fake safe fallback: generates a deterministic pseudo-embedding
-        when no neural embedding model or key is reachable, preserving pipeline execution.
-        """
-        import math
-        if dim is None:
-            dim = self._get_target_dim()
-        vec = []
-        for i in range(dim):
-            h = hashlib.sha256(f"{text}:{i}".encode("utf-8")).digest()
-            val = (int.from_bytes(h[:4], "big") / 0xFFFFFFFF) * 2.0 - 1.0
-            vec.append(val)
-        norm = math.sqrt(sum(x * x for x in vec)) or 1.0
-        return [round(x / norm, 6) for x in vec]
 
 
 embedding_service = EmbeddingService()

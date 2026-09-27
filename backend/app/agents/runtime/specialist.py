@@ -50,9 +50,9 @@ class SpecialistAgent(BaseAgent):
 
     async def run(self, blackboard: CognitiveBlackboard) -> Dict[str, Any]:
         retriever = EvidenceRetriever(blackboard.evidence_store)
-        evidence_slice = retriever.retrieve_for_agent(self.capability, limit=30)
+        evidence_slice = retriever.retrieve_for_agent(self.capability, limit=60)
         if not evidence_slice:
-            evidence_slice = blackboard.evidence_store.get_all()[:30]
+            evidence_slice = blackboard.evidence_store.get_all()[:60]
 
         if self.agent_id == "verification.adversarial.v3":
             self._falsify_unbacked_claims(blackboard)
@@ -126,6 +126,7 @@ class SpecialistAgent(BaseAgent):
             tier = "fast_slm"
         else:
             tier = "fast_slm"
+        max_claims = int(getattr(self.definition, "max_claims", 0) or 8)
         raw = await self.model_router.generate_structured(
             capability=self.capability,
             agent_role=self.definition.agent_name,
@@ -134,7 +135,7 @@ class SpecialistAgent(BaseAgent):
             output_schema_desc=SPECIALIST_OUTPUT_SCHEMA,
             site_facts=getattr(blackboard, "site_facts", {}) or {},
             task_card=card,
-            max_claims=3,
+            max_claims=max_claims,
             allow_fallback=False,
             model_tier=tier,
             max_tokens=int(self.definition.token_budget or 3000),
@@ -159,7 +160,8 @@ class SpecialistAgent(BaseAgent):
         valid_ids = {ev.id for ev in evidence_slice}
         valid_ids.update(ev.id for ev in blackboard.evidence_store.get_external())
         registered = []
-        for item in (raw.get("claims") or [])[:3]:
+        max_claims = int(getattr(self.definition, "max_claims", 0) or 8)
+        for item in (raw.get("claims") or [])[:max_claims]:
             if not isinstance(item, dict):
                 continue
             if str(item.get("evidence_status") or "").lower() == "not_in_evidence":
@@ -216,9 +218,18 @@ class SpecialistAgent(BaseAgent):
             observations["sitemap_found"] = bool(manifest.sitemap_found)
             observations["robots_txt_found"] = bool(manifest.robots_txt_found)
             if not manifest.sitemap_found:
-                add("XML sitemap was not found during crawl.", Severity.HIGH, "Publish /sitemap.xml and reference it in robots.txt.")
+                is_small_site = len(pages) <= 50
+                add(
+                    "XML sitemap was not found during crawl (Advisory: Google discovers comprehensively linked pages on small sites, but /sitemap.xml is recommended for rapid indexation)." if is_small_site else "XML sitemap was not found during crawl.",
+                    Severity.LOW if is_small_site else Severity.MEDIUM,
+                    "Publish /sitemap.xml and reference it in robots.txt as an indexing best practice."
+                )
             if not manifest.robots_txt_found:
                 add("robots.txt was not found at the domain root.", Severity.MEDIUM, "Add a robots.txt with crawler policy and sitemap reference.")
+            http_errs = [p.url for p in pages if getattr(p, "status_code", 200) >= 400]
+            observations["http_errors_count"] = len(http_errs)
+            if http_errs:
+                add(f"{len(http_errs)} crawled URL(s) returned HTTP 4xx/5xx status error.", Severity.HIGH, "Fix broken routing or configure 301 redirects for error URLs.")
 
         elif aid == "seo.indexability.v3":
             missing = [p.url for p in pages if not p.canonical_url]
@@ -229,12 +240,52 @@ class SpecialistAgent(BaseAgent):
                     Severity.MEDIUM,
                     "Add a self-referential canonical on each indexable URL.",
                 )
+            mismatches = [p.url for p in pages if p.canonical_url and p.canonical_url.rstrip("/") != p.url.rstrip("/")]
+            observations["canonical_mismatches"] = len(mismatches)
+            if mismatches:
+                add(
+                    f"{len(mismatches)} page(s) have canonical tag mismatch pointing away from current URL.",
+                    Severity.HIGH,
+                    "Ensure canonical tags point to the authoritative self-referential URL unless intentionally deduplicating.",
+                )
+            noindex_pages = [p.url for p in pages if p.robots_meta and "noindex" in str(p.robots_meta).lower()]
+            observations["noindex_pages_count"] = len(noindex_pages)
+            if noindex_pages:
+                add(
+                    f"{len(noindex_pages)} crawled page(s) declare noindex in robots meta directives.",
+                    Severity.HIGH,
+                    "Remove noindex from indexable production pages to permit search engine indexing.",
+                )
 
         elif aid == "seo.html.v3":
             missing_h1 = [p.url for p in pages if not p.h1]
             observations["pages_missing_h1"] = len(missing_h1)
             if missing_h1:
                 add(f"{len(missing_h1)} page(s) are missing an H1.", Severity.HIGH, "Add one H1 that states the page offer.")
+            multi_h1 = [p.url for p in pages if p.h1 and len(p.h1) > 1]
+            observations["pages_multiple_h1"] = len(multi_h1)
+            if multi_h1:
+                add(f"{len(multi_h1)} page(s) contain multiple H1 heading tags.", Severity.MEDIUM, "Consolidate heading tags to a single primary H1 per page.")
+            missing_title = [p.url for p in pages if not p.title or not p.title.strip()]
+            observations["pages_missing_title"] = len(missing_title)
+            if missing_title:
+                add(f"{len(missing_title)} page(s) are missing a title tag.", Severity.HIGH, "Add a unique, keyword-aligned title tag (50-60 characters) to each page.")
+            title_suboptimal = [p.url for p in pages if p.title and (len(p.title.strip()) < 35 or len(p.title.strip()) > 65)]
+            observations["pages_title_suboptimal"] = len(title_suboptimal)
+            if title_suboptimal:
+                add(f"{len(title_suboptimal)} page(s) have title tags outside optimal length (35-65 characters).", Severity.MEDIUM, "Optimize title tags to 50-60 characters to avoid SERP truncation.")
+            missing_meta = [p.url for p in pages if not p.meta_description or not p.meta_description.strip()]
+            observations["pages_missing_meta"] = len(missing_meta)
+            if missing_meta:
+                add(f"{len(missing_meta)} page(s) are missing a meta description.", Severity.HIGH, "Add an actionable meta description (140-160 characters) with a clear value proposition.")
+            meta_suboptimal = [p.url for p in pages if p.meta_description and (len(p.meta_description.strip()) < 70 or len(p.meta_description.strip()) > 160)]
+            observations["pages_meta_suboptimal"] = len(meta_suboptimal)
+            if meta_suboptimal:
+                add(f"{len(meta_suboptimal)} page(s) have meta descriptions outside recommended length (70-160 characters).", Severity.LOW, "Tune meta descriptions to 140-160 characters for complete SERP snippet display.")
+            heading_skips = [p.url for p in pages if p.h1 and not p.h2 and p.h3]
+            observations["pages_heading_skips"] = len(heading_skips)
+            if heading_skips:
+                add(f"{len(heading_skips)} page(s) have non-hierarchical heading skips (H1 to H3 without H2).", Severity.LOW, "Maintain logical H1 -> H2 -> H3 heading hierarchy for crawler parsing and accessibility.")
 
         elif aid == "seo.internal_links.v3":
             broken = int(ch.get("broken_links_count") or 0)
@@ -258,6 +309,22 @@ class SpecialistAgent(BaseAgent):
             observations["https"] = is_https
             if not is_https:
                 add("Crawl URL is not HTTPS.", Severity.CRITICAL, "Serve the site on HTTPS and redirect HTTP.")
+            all_headers = {}
+            for p in pages:
+                for k, v in (getattr(p, "response_headers", None) or {}).items():
+                    all_headers[k.lower()] = v
+            if not all_headers and manifest and getattr(manifest, "headers", None):
+                all_headers = {k.lower(): v for k, v in manifest.headers.items()}
+            observations["headers_audited"] = list(all_headers.keys())
+            if all_headers:
+                if "strict-transport-security" not in all_headers:
+                    add("Strict-Transport-Security (HSTS) header is missing.", Severity.HIGH, "Configure HSTS with max-age=31536000 and includeSubDomains.")
+                if "content-security-policy" not in all_headers:
+                    add("Content-Security-Policy (CSP) header is missing.", Severity.HIGH, "Implement a Content-Security-Policy header to prevent cross-site scripting.")
+                if "x-frame-options" not in all_headers:
+                    add("X-Frame-Options header is missing (clickjacking protection).", Severity.MEDIUM, "Set X-Frame-Options: SAMEORIGIN or DENY to prevent clickjacking.")
+                if "x-content-type-options" not in all_headers:
+                    add("X-Content-Type-Options header is missing (MIME-sniffing risk).", Severity.LOW, "Set X-Content-Type-Options: nosniff to protect against MIME type confusion.")
 
         elif aid == "seo.assets.v3":
             missing_alt = sum(getattr(p, "images_without_alt", 0) or 0 for p in pages)
@@ -271,6 +338,8 @@ class SpecialistAgent(BaseAgent):
             observations["schema_types"] = types
             if pages and len(without) == len(pages):
                 add("No JSON-LD or microdata schema types were parsed on crawled pages.", Severity.HIGH, "Add Organization and WebSite JSON-LD if those entities exist.")
+            elif not any(t.lower() in ("organization", "corporation", "localbusiness") for t in types):
+                add("Missing Organization or LocalBusiness structured data schema.", Severity.MEDIUM, "Implement Organization JSON-LD with official brand name, logo, and sameAs social profiles.")
 
         elif aid == "content.cannibalization.v3":
             dup = int(ch.get("duplicate_titles_count") or 0)
@@ -285,6 +354,12 @@ class SpecialistAgent(BaseAgent):
                 }
             if dup:
                 add(f"{dup} duplicate title collision(s) across crawled pages.", Severity.HIGH, "Give each URL a distinct title.")
+
+        elif aid == "cro.conversion.v3":
+            no_cta = [p.url for p in pages if not getattr(p, "ctas", None)]
+            observations["pages_without_cta"] = len(no_cta)
+            if no_cta and len(no_cta) == len(pages):
+                add(f"No clear Call-To-Action (CTA) elements detected on crawled pages.", Severity.HIGH, "Add prominent, value-driven CTA buttons in hero sections.")
 
         elif aid == "ux.experience.v3":
             missing_vp = [p.url for p in pages if not getattr(p, "viewport", None)]

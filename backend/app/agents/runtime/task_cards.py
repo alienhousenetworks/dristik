@@ -65,16 +65,19 @@ TASK_CARDS: Dict[str, str] = {
         "pricing page says hobby). Do not add new facts. Only reconcile existing evidence-backed claims."
     ),
     "seo.crawl.v3": (
-        "Audit robots.txt presence, sitemap presence, HTTP status codes, and crawl depth from the crawl manifest. "
-        "Only state what the crawler recorded. Missing robots is MEDIUM unless the site also returns errors."
+        "Audit robots.txt presence and AI bot directives (GPTBot, ClaudeBot, PerplexityBot, Google-Extended), "
+        "XML sitemap presence, HTTP status codes (4xx/5xx errors), redirect hops, and crawl depth from crawl manifest evidence. "
+        "Emit distinct claims for missing robots.txt, missing XML sitemap, crawler blocking rules, or HTTP anomalies."
     ),
     "seo.indexability.v3": (
-        "Audit canonical tags, meta robots, noindex, and X-Robots-Tag from extracted meta evidence. "
-        "Do not assume indexability if tags are missing — report MISSING. noindex on the homepage is CRITICAL."
+        "Audit canonical tags, self-referential canonical consistency, meta robots directives (noindex/nofollow), "
+        "and X-Robots-Tag across all crawled URLs in evidence. "
+        "Emit distinct findings for missing canonical, canonical mismatches, or unintended noindex directives."
     ),
     "seo.html.v3": (
-        "Audit title, meta description, H1–H6 hierarchy, and landmark elements from the DOM evidence. "
-        "Quote lengths and counts. Do not invent missing headings. Duplicate H1s are MEDIUM, missing H1 is HIGH."
+        "Audit title tag length (<35 chars or >65 chars), meta description length (<70 chars, >160 chars, or absent), "
+        "missing H1, multiple H1s, non-hierarchical heading skips (e.g. H1 to H3), empty heading tags, and landmark elements from DOM evidence. "
+        "Quote exact strings and character counts. Emit distinct claims for each separate defect found across the crawled pages."
     ),
     "seo.internal_links.v3": (
         "Describe the observed internal link graph: orphan candidates, thin in-degree, generic anchors. "
@@ -88,16 +91,19 @@ TASK_CARDS: Dict[str, str] = {
         "If a vital was not measured, status=unavailable for that metric."
     ),
     "seo.security.v3": (
-        "Report HTTPS vs HTTP, HSTS, CSP, X-Frame-Options from response headers. "
-        "If a header is absent, say absent. Do not assume HTTPS is true. HTTP homepage is CRITICAL."
+        "Audit HTTPS protocol, HSTS header (Strict-Transport-Security), Content-Security-Policy (CSP), "
+        "X-Frame-Options (clickjacking protection), and X-Content-Type-Options (MIME sniffing) from response headers. "
+        "Emit separate findings for each missing security header with its specific threat model and remediation directive."
     ),
     "seo.assets.v3": (
-        "Count images, missing alt, and any observed format hints from the DOM. Do not invent file weights. "
-        "Decorative missing alt is LOW; missing alt on a product/hero image is MEDIUM."
+        "Audit every image in DOM evidence for missing alt attributes, empty alt attributes on informative images, "
+        "and missing width/height attributes (causing CLS). Quote specific img src or selectors. "
+        "Emit distinct findings for informative hero/product images lacking alt text."
     ),
     "schema.validation.v3": (
-        "List Schema.org types actually parsed from JSON-LD/microdata. Name missing required types only as MISSING, "
-        "not as a fake Knowledge Graph failure. Do not invent sameAs URLs."
+        "Audit structured data across JSON-LD and microdata. Check presence and completeness of Organization, "
+        "WebSite, Service/Product, BreadcrumbList, and FAQPage. "
+        "Flag missing required schema, missing sameAs entity links, and unlinked schema nodes with concrete JSON-LD fixes."
     ),
     "entity.graph.v3": (
         "Extract Organization, Person, Product, Service, Place entities that appear in schema or visible text. "
@@ -129,8 +135,9 @@ TASK_CARDS: Dict[str, str] = {
         "Compare crawled titles, H1s, and canonicals for collisions. Requires at least two pages; otherwise unavailable."
     ),
     "geo.extractability.v3": (
-        "Find definition sentences, lists, tables, and FAQ blocks in the DOM. Score extractability only from those structures. "
-        "Do not invent a 0–100 score that is not computed in code. Do not invent live citation rates."
+        "Evaluate the 8-dimension GEO rubric: definition sentence clarity, tabular data presence, FAQ block markup, "
+        "entity disambiguation, statistics quotation readiness, and machine-parsable bullet lists. "
+        "Flag low extractability and lack of structured answer passages with concrete DOM remediation."
     ),
     "geo.information_gain.v3": (
         "Flag original data only when the page contains numbers, tables, or methodology the evidence actually shows. "
@@ -164,12 +171,13 @@ TASK_CARDS: Dict[str, str] = {
         "If those results are missing, status=unavailable. Do not invent engine scores."
     ),
     "ux.experience.v3": (
-        "Audit nav structure, viewport, heading scanability, and interaction labels from the DOM. "
-        "Mobile readiness uses the viewport tag and observed layout cues only."
+        "Audit nav structure, mobile viewport configuration, heading scanability, button touch targets, and interaction labels from the DOM. "
+        "Flag unlabelled form controls, missing aria-labels on interactive elements, or navigation hierarchies exceeding 3 levels."
     ),
     "cro.conversion.v3": (
-        "List observed CTAs, form fields, and hero actions with their exact text. If no CTA evidence, say MISSING. "
-        "Primary CTA missing on homepage is HIGH. Weak verbs (Submit, Learn More) are MEDIUM with a rewrite."
+        "Audit value proposition clarity, 3-second first impression hook, form fields and input accessibility, "
+        "and primary CTA button microcopy. Flag generic or passive verbs ('Submit', 'Learn More', 'Click Here') with high-intent rewrites, "
+        "and report form input fields lacking associated WCAG label elements as conversion friction barriers."
     ),
     "trust.authority.v3": (
         "List observed testimonials, logos, badges, contact details, privacy/terms links. "
@@ -203,9 +211,11 @@ COPYWRITING_TASK_CARDS: Dict[str, str] = {
         "matching visitor search intent. Ban keyword stuffing. AFTER may not add facts absent from evidence."
     ),
     "copywriting.geo.v3": (
-        "Formulate extractable, citation-ready content for AI Answer Engines (ChatGPT, Perplexity, Claude, Google SGE): "
-        "40-60 word citable definitions, factual data hooks, structured Q&A / FAQ pairs, and entity-dense statements that answer engines can directly quote. "
-        "No invented statistics."
+        "Review every crawled passage, not a sample of eight. Rewrite each one that is weak or only partly citable: "
+        "we/our/you/your, a missing company name, or empty adjectives (seamless, cutting-edge, next-gen, world-class, robust). "
+        "The rewrite must change the sentence: company as subject, third-person verbs, empty adjectives deleted, every original offer, place, and number kept. "
+        "Do not paste the brand on the front of an unchanged sentence. Do not add customers, prices, certifications, or metrics that were not on the page. "
+        "Leave a passage alone when it already names the company and states a concrete offer. No invented statistics."
     ),
     "copywriting.cro.v3": (
         "Audit 3-second hook clarity, high-converting value proposition framing, objection handling, and formulate high-intent "

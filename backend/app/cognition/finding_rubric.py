@@ -179,6 +179,13 @@ def classify_rubric(
     guessing_from_language = _is_guessing_language(statement)
     no_tokens = agreement == 0
 
+    # Evidentiary standard: A claim backed by direct DOM tokens (ev_*) is verified from
+    # the page AST. Phrasing containing "absence of" or "missing" reflects an observed structural
+    # defect, NOT an epistemic guess.
+    has_dom_tokens = any(str(r).startswith("ev_") for r in (evidence_refs or []))
+    if has_dom_tokens and not guessing_from_type and not guessing_from_level:
+        guessing_from_language = False
+
     if (
         guessing_from_type
         or guessing_from_level
