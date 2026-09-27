@@ -613,3 +613,35 @@ def evaluate_geo_readiness(
         citation_passages=passage_res.model_dump() if passage_res else None,
         schema_crosscheck=schema_res.model_dump() if schema_res else None,
     )
+
+
+async def enrich_geo_readiness_citations(
+    report: GeoReadinessReport,
+    model_router: Any,
+    brand_name: str,
+    domain: str,
+    profile: Optional[Any] = None,
+) -> GeoReadinessReport:
+    """Enriches citation passage rewrites with LLM when available."""
+    if not model_router or not getattr(report, "citation_passages", None):
+        return report
+    try:
+        from app.intelligence.geo.citation_passages import (
+            passage_analyzer,
+            CitationPassageAnalysisResult,
+        )
+        curr_passages = report.citation_passages
+        if isinstance(curr_passages, dict):
+            parsed = CitationPassageAnalysisResult(**curr_passages)
+            enriched = await passage_analyzer.enrich_rewrites_with_llm(
+                parsed,
+                model_router=model_router,
+                brand_name=brand_name,
+                domain=domain,
+                profile=profile,
+            )
+            report.citation_passages = enriched.model_dump()
+    except Exception as exc:
+        import logging
+        logging.getLogger(__name__).warning("Failed to enrich citation rewrites with LLM: %s", exc)
+    return report

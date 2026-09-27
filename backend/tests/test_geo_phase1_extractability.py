@@ -264,3 +264,97 @@ def test_full_geo_readiness_integration():
     assert report.question_graph_50["total_questions"] == 50
     assert report.citation_passages is not None
     assert report.schema_crosscheck is not None
+
+
+def test_passage_analyzer_deduplication_and_grammar():
+    """
+    Verifies that:
+    1. Identical paragraphs across multiple pages are deduplicated.
+    2. Fluff removal does not leave dangling commas or broken syntax.
+    3. Indefinite articles are corrected ('a e-commerce' -> 'an e-commerce').
+    4. Proper English possessives are used for brands ending in 's'.
+    """
+    dup_text = "Custom software solutions engineered for high performance, seamless scalability, reliability, and long-term sustainable business growth."
+    fluff_text = "Our AI Engineering service focuses on building robust, secure, and scalable artificial intelligence systems tailored for real-world business applications."
+    ecommerce_text = "Discover a seamless e-commerce platform dedicated to electric vehicle parts. Our marketplace ensures compatibility, reliability, and secure transactions."
+
+    pages = [
+        PageEvidence(
+            url="https://alienhouse.ai/",
+            body_text=f"{dup_text}\n\n{fluff_text}"
+        ),
+        PageEvidence(
+            url="https://alienhouse.ai/about",
+            body_text=f"{dup_text}\n\n{ecommerce_text}"  # dup_text is repeated here
+        ),
+    ]
+
+    analyzer = CitationPassageAnalyzer(brand_name="AlienHouse Networks")
+    res = analyzer.analyze(pages, brand_name="AlienHouse Networks")
+
+    # 1. Deduplication check: dup_text appeared on 2 pages, but should only appear ONCE in rewrites
+    dup_rewrites = [r for r in res.rewrite_recommendations if "custom software solutions" in r.current_passage.lower()]
+    assert len(dup_rewrites) == 1, f"Expected 1 deduplicated rewrite, got {len(dup_rewrites)}"
+    assert len(dup_rewrites[0].all_source_urls) == 2
+
+    # 2. Grammar check: 'building robust, secure, and scalable' must NOT become 'building, secure'
+    fluff_rewrite = next((r for r in res.rewrite_recommendations if "ai engineering" in r.current_passage.lower()), None)
+    assert fluff_rewrite is not None
+    assert "building," not in fluff_rewrite.recommended_rewrite, "Dangling comma after verb was not cleaned up"
+    # Possessive should be AlienHouse Networks' rather than AlienHouse Networks's
+    assert "Networks's" not in fluff_rewrite.recommended_rewrite
+    assert "Networks'" in fluff_rewrite.recommended_rewrite
+
+    # 3. Indefinite article check: 'a e-commerce' should become 'an e-commerce'
+    ecom_rewrite = next((r for r in res.rewrite_recommendations if "e-commerce" in r.current_passage.lower()), None)
+    assert ecom_rewrite is not None
+    assert "a e-commerce" not in ecom_rewrite.recommended_rewrite.lower()
+    assert "an e-commerce" in ecom_rewrite.recommended_rewrite.lower()
+
+
+@pytest.mark.asyncio
+async def test_enrich_rewrites_with_llm():
+    """
+    Verifies that enrich_rewrites_with_llm updates passage rewrites when model_router produces results.
+    """
+    from unittest.mock import AsyncMock, MagicMock
+    from app.core.config import settings
+
+    pages = [
+        PageEvidence(
+            url="https://alienhouse.ai/",
+            body_text="We provide cutting-edge revolutionary solutions to empower businesses to seamlessly scale into the future."
+        )
+    ]
+    analyzer = CitationPassageAnalyzer(brand_name="AlienHouse Networks")
+    res = analyzer.analyze(pages, brand_name="AlienHouse Networks")
+    assert len(res.rewrite_recommendations) >= 1
+
+    target_pid = res.rewrite_recommendations[0].passage_id
+
+    mock_router = MagicMock()
+    mock_router.generate_structured = AsyncMock(return_value={
+        "rewrites": [
+            {
+                "passage_id": target_pid,
+                "recommended_rewrite": "AlienHouse Networks engineers high-throughput distributed cloud platforms and enterprise AI pipelines designed for 99.9% operational reliability.",
+                "why": "Replaces generic consulting superlatives with concrete technical deliverables and explicit brand authority.",
+                "improvements": ["Entity Grounding", "Fluff Eliminated", "High Citation Density"]
+            }
+        ]
+    })
+
+    # Temporarily force has_active_llm_key to True for test
+    orig_key = getattr(settings, "ANTHROPIC_API_KEY", None)
+    settings.ANTHROPIC_API_KEY = "test-key"
+    try:
+        enriched = await analyzer.enrich_rewrites_with_llm(
+            result=res,
+            model_router=mock_router,
+            brand_name="AlienHouse Networks",
+            domain="alienhouse.ai",
+        )
+        assert enriched.rewrite_recommendations[0].recommended_rewrite.startswith("AlienHouse Networks engineers high-throughput")
+        assert "High Citation Density" in enriched.rewrite_recommendations[0].improvements
+    finally:
+        settings.ANTHROPIC_API_KEY = orig_key

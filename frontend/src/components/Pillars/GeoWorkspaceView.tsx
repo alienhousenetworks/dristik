@@ -13,6 +13,9 @@ import {
   CheckCircle2,
   AlertCircle,
   Lightbulb,
+  Copy,
+  Check,
+  ArrowUpRight,
 } from 'lucide-react';
 
 interface GeoWorkspaceViewProps {
@@ -33,6 +36,13 @@ export function GeoWorkspaceView({
   onEvaluationsUpdated,
 }: GeoWorkspaceViewProps) {
   const [activeSubTab, setActiveSubTab] = useState<GeoSubTab>('engines');
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+
+  const handleCopy = (text: string, id: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedId(id);
+    setTimeout(() => setCopiedId(null), 2000);
+  };
 
   const perEngine = report.per_engine_geo;
   const infoGain = perEngine?.information_gain;
@@ -40,7 +50,16 @@ export function GeoWorkspaceView({
 
   const geoReadiness = report.geo_readiness;
   const citationPassages = geoReadiness?.citation_passages;
-  const rewrites = citationPassages?.rewrite_recommendations || [];
+  const rawRewrites = citationPassages?.rewrite_recommendations || [];
+  
+  // Deduplicate recommendations by normalized current passage
+  const seenRewriteKeys = new Set<string>();
+  const rewrites = rawRewrites.filter((r: any) => {
+    const key = (r.current_passage || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+    if (!key || seenRewriteKeys.has(key)) return false;
+    seenRewriteKeys.add(key);
+    return true;
+  });
 
   const readinessScore = report.scores?.category_scores?.['GEO']?.score;
   const geoScore = readinessScore != null ? Math.round(readinessScore) : null;
@@ -347,34 +366,129 @@ export function GeoWorkspaceView({
           ───────────────────────────────────────────────────────────── */}
       {activeSubTab === 'rewrites' && (
         <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <h3 className="font-serif text-lg text-ink font-semibold">LLM Citation Passage Rewrites</h3>
-            <span className="text-xs text-ink-500 font-mono">{rewrites.length} recommendations</span>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-ink/5">
+            <div>
+              <div className="flex items-center gap-2">
+                <Sparkles className="w-4 h-4 text-pine" />
+                <h3 className="font-serif text-lg text-ink font-semibold">LLM Citation Passage Rewrites</h3>
+              </div>
+              <p className="text-xs text-ink-600 mt-0.5">
+                AI engines quote self-contained, fact-grounded statements with explicit brand attribution. Vague marketing fluff and ambiguous pronouns are eliminated.
+              </p>
+            </div>
+            <div className="flex items-center gap-2 self-start sm:self-center">
+              <span className="px-2.5 py-1 rounded-full bg-pine/10 text-pine font-mono text-xs font-semibold">
+                {rewrites.length} high-impact recommendations
+              </span>
+            </div>
           </div>
-          <p className="text-xs text-ink-600">
-            LLMs extract factual statements best when sentences are self-contained and explicitly name the brand instead of using ambiguous pronouns.
-          </p>
 
-          <div className="space-y-3">
-            {rewrites.map((r: any, idx: number) => (
-              <Card key={idx} className="p-4 space-y-3">
-                <div className="flex items-center justify-between text-xs">
-                  <span className="font-semibold text-pine font-mono">Rewrite #{idx + 1}</span>
-                  <span className="text-ink-500 font-mono text-[11px]">{r.why || 'Entity attribution'}</span>
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-                  <div className="p-3 rounded bg-bad/5 border border-bad/20 space-y-1">
-                    <span className="text-[10px] font-mono font-bold text-bad uppercase block">Current Passage</span>
-                    <p className="text-ink-700 font-mono text-[11px]">{r.current_passage}</p>
-                  </div>
-                  <div className="p-3 rounded bg-good/5 border border-good/20 space-y-1">
-                    <span className="text-[10px] font-mono font-bold text-good uppercase block">Recommended Rewrite</span>
-                    <p className="text-ink-900 font-mono text-[11px] font-semibold">{r.recommended_rewrite}</p>
-                  </div>
-                </div>
-              </Card>
-            ))}
-          </div>
+          {rewrites.length === 0 ? (
+            <Card className="p-8 text-center space-y-2">
+              <CheckCircle2 className="w-8 h-8 text-good mx-auto" />
+              <h4 className="font-medium text-ink">All Passages are Highly Citation-Ready</h4>
+              <p className="text-xs text-ink-500 max-w-md mx-auto">
+                No weak, fluff-heavy, or pronoun-led passages detected across crawled pages. Sentences are already self-contained and brand-attributed.
+              </p>
+            </Card>
+          ) : (
+            <div className="space-y-4">
+              {rewrites.map((r: any, idx: number) => {
+                const isCopied = copiedId === (r.passage_id || `rec-${idx}`);
+                return (
+                  <Card key={idx} className="p-4 space-y-3 border-ink/10 hover:border-pine/30 transition-all shadow-sm">
+                    {/* Header: Rewrite #, Tag Chips, Score Badge, Copy Action */}
+                    <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                      <div className="flex items-center gap-2">
+                        <span className="font-semibold text-pine font-mono bg-pine/5 px-2 py-0.5 rounded border border-pine/20">
+                          Rewrite #{idx + 1}
+                        </span>
+                        {r.category && (
+                          <span className="text-[11px] text-ink-600 font-medium">
+                            {r.category}
+                          </span>
+                        )}
+                        {Array.isArray(r.improvements) && r.improvements.map((imp: string, i: number) => (
+                          <span key={i} className="hidden sm:inline-block px-1.5 py-0.5 rounded bg-ink-100 text-ink-700 text-[10px] font-mono">
+                            {imp}
+                          </span>
+                        ))}
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        {r.estimated_score_improvement && (
+                          <span className="font-mono text-[11px] px-2 py-0.5 rounded bg-good/10 text-good font-semibold border border-good/20">
+                            Score: {r.estimated_score_improvement}
+                          </span>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => handleCopy(r.recommended_rewrite, r.passage_id || `rec-${idx}`)}
+                          className={`inline-flex items-center gap-1 px-2.5 py-1 rounded text-xs font-mono font-medium transition-colors ${
+                            isCopied
+                              ? 'bg-good text-white'
+                              : 'bg-ink-100 hover:bg-ink-200 text-ink-700 hover:text-ink-900 border border-ink/10'
+                          }`}
+                          title="Copy recommended rewrite"
+                        >
+                          {isCopied ? (
+                            <>
+                              <Check className="w-3.5 h-3.5" />
+                              <span>Copied!</span>
+                            </>
+                          ) : (
+                            <>
+                              <Copy className="w-3.5 h-3.5" />
+                              <span>Copy Rewrite</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Side-by-Side Current vs Recommended */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+                      <div className="p-3 rounded-md bg-bad/5 border border-bad/20 space-y-1.5">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] font-mono font-bold text-bad uppercase tracking-wider">
+                            Current Crawled Copy
+                          </span>
+                          <span className="text-[10px] text-ink-400 font-mono">Original</span>
+                        </div>
+                        <p className="text-ink-700 font-mono text-[11px] leading-relaxed">
+                          {r.current_passage}
+                        </p>
+                      </div>
+
+                      <div className="p-3 rounded-md bg-good/5 border border-good/30 space-y-1.5">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] font-mono font-bold text-good uppercase tracking-wider flex items-center gap-1">
+                            <Sparkles className="w-3 h-3 text-good" />
+                            Citation-Ready Rewrite
+                          </span>
+                          <span className="text-[10px] text-good font-mono font-semibold">Recommended</span>
+                        </div>
+                        <p className="text-ink-900 font-mono text-[11px] font-medium leading-relaxed">
+                          {r.recommended_rewrite}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Bottom: Rationale & Why it matters for GEO */}
+                    {r.why && (
+                      <div className="flex items-start gap-1.5 pt-1 text-[11px] text-ink-600 bg-ink-50/60 p-2 rounded border border-ink/5">
+                        <Lightbulb className="w-3.5 h-3.5 text-pine shrink-0 mt-0.5" />
+                        <span className="leading-snug">
+                          <strong className="text-ink font-semibold">GEO Impact: </strong>
+                          {r.why}
+                        </span>
+                      </div>
+                    )}
+                  </Card>
+                );
+              })}
+            </div>
+          )}
         </div>
       )}
 

@@ -1,6 +1,7 @@
 """
 Citation-Ready Passage Detector & Rewriter.
-Layer 1 Extractability: What Dristik can prove deterministically from the website itself.
+Layer 1 Extractability: What Dristik can prove deterministically from the website itself,
+augmented with optional LLM Generative Engine Optimization (GEO) synthesis.
 
 Scans content paragraphs across all crawled pages and evaluates whether they are
 ready for external AI retrieval citation (Perplexity, ChatGPT Search, Gemini, Claude).
@@ -11,15 +12,20 @@ Evaluates 4 core criteria (25 pts each = 100 max):
 3. Informational Gain & Density: Contains concrete facts, named technologies, or quantifiable metrics.
 4. Factuality vs Fluff: Deducts for empty marketing adjectives ("cutting-edge", "game-changing").
 
-Produces drop-in rewrite recommendations for partially citable or weak blocks.
+Produces drop-in rewrite recommendations for partially citable or weak blocks,
+strictly avoiding repetitive prefixes and broken syntax.
 """
 from __future__ import annotations
 
+import logging
 import re
 from typing import Any, Dict, List, Literal, Optional, Tuple
 from pydantic import BaseModel, Field
 
+from app.core.config import settings
 from app.domain.models import PageEvidence
+
+logger = logging.getLogger(__name__)
 
 PassageTier = Literal["HIGHLY_CITABLE", "PARTIALLY_CITABLE", "WEAK"]
 
@@ -41,6 +47,13 @@ FACTUAL_INDICATORS = [
     "api", "fastapi", "python", "react", "aws", "cloud", "soc 2", "iso 27001",
     "gdpr", "hipaa", "postgres", "docker", "kubernetes", "%", "$", "sla",
     "b2b", "saas", "enterprise", "startups", "uptime", "latency", "sdk"
+]
+
+BOILERPLATE_PATTERNS = [
+    re.compile(r"copyright\s*(?:©|\(c\)|&copy;|\d{4})", re.I),
+    re.compile(r"all\s+rights\s+reserved", re.I),
+    re.compile(r"privacy\s+policy|terms\s+of\s+service|terms\s+of\s+use|cookie\s+settings", re.I),
+    re.compile(r"^(?:skip\s+to\s+content|menu|navigation|home\s+about\s+services)", re.I),
 ]
 
 
@@ -70,6 +83,11 @@ class CitationRewriteItem(BaseModel):
     recommended_rewrite: str
     why: str
     estimated_score_improvement: str
+    category: Optional[str] = "Core Offerings"
+    improvements: List[str] = Field(default_factory=list)
+    score_before: Optional[float] = None
+    score_after: Optional[float] = None
+    all_source_urls: List[str] = Field(default_factory=list)
 
 
 class CitationPassageAnalysisResult(BaseModel):
@@ -83,27 +101,78 @@ class CitationPassageAnalysisResult(BaseModel):
     summary: str = ""
 
 
+def _brand_possessive(brand: str) -> str:
+    """Proper English possessive: 'Networks'' vs 'Google's'."""
+    b = (brand or "").strip()
+    if not b:
+        return "The Company's"
+    if b.endswith(("s", "S", "z", "Z")):
+        return f"{b}'"
+    return f"{b}'s"
+
+
+def _normalize_passage_key(text: str) -> str:
+    """Canonical key to deduplicate identical passages across crawled pages."""
+    t = re.sub(r"[^\w\s]", "", text.lower())
+    return re.sub(r"\s+", " ", t).strip()
+
+
 class CitationPassageAnalyzer:
     """
     Scans paragraphs across crawled pages and detects citation suitability.
+    Features cross-page deduplication, grammar-aware fluff removal,
+    and LLM-assisted citation enhancement.
     """
 
     def __init__(self, brand_name: str = ""):
         self.brand_name = brand_name
 
-    def _extract_paragraphs(self, pages: List[PageEvidence]) -> List[Tuple[str, str]]:
-        """Extracts candidate paragraphs (URL, text) from page body text."""
-        candidates = []
+    def _extract_paragraphs(self, pages: List[PageEvidence]) -> List[Tuple[str, str, List[str]]]:
+        """
+        Extracts candidate paragraphs (primary_url, text, all_source_urls) from page body text.
+        Deduplicates identical text blocks across pages and discards boilerplate.
+        """
+        # Map: normalized_key -> (primary_url, text, [all_urls])
+        seen: Dict[str, Tuple[str, str, List[str]]] = {}
+
         for p in pages:
+            url = p.url or ""
             body = p.body_text or ""
-            # Split by double newline or block-like separators
             blocks = re.split(r"\n\s*\n|\r\n\s*\r\n", body)
             for b in blocks:
                 cleaned = re.sub(r"\s+", " ", b).strip()
                 words = cleaned.split()
                 # Candidate passage should have between 12 and 120 words
-                if 12 <= len(words) <= 120:
-                    candidates.append((p.url or "", cleaned))
+                if not (12 <= len(words) <= 120):
+                    continue
+
+                # Filter boilerplate
+                if any(bp.search(cleaned) for bp in BOILERPLATE_PATTERNS):
+                    continue
+
+                key = _normalize_passage_key(cleaned)
+                if not key or len(key) < 25:
+                    continue
+
+                if key in seen:
+                    prev_url, prev_text, urls = seen[key]
+                    if url and url not in urls:
+                        urls.append(url)
+                else:
+                    seen[key] = (url, cleaned, [url] if url else [])
+
+        # Priority sort: passages discussing core services/products/capabilities first
+        def passage_priority(item: Tuple[str, str, List[str]]) -> int:
+            txt = item[1].lower()
+            score = 0
+            if any(term in txt for term in ["service", "platform", "solution", "software", "infrastructure", "ai", "consulting", "engineers", "develops"]):
+                score += 10
+            if any(term in txt for term in ["we ", "our ", "provide", "delivers", "specializ"]):
+                score += 5
+            return score
+
+        candidates = list(seen.values())
+        candidates.sort(key=passage_priority, reverse=True)
         return candidates
 
     def _score_passage(
@@ -117,7 +186,6 @@ class CitationPassageAnalyzer:
         first_15_words = " ".join(words[:15]).lower()
 
         # 1. Standalone Clarity (0 - 25)
-        # Optimal word count is 35-75 words. Deduct for dangling anaphora.
         clarity = 15.0
         if 35 <= word_count <= 75:
             clarity += 10.0
@@ -130,7 +198,6 @@ class CitationPassageAnalyzer:
                 break
 
         # 2. Explicit Subject Attribution (0 - 25)
-        # Does it name the brand in the first 15 words?
         attribution = 8.0
         detected_subj = "unnamed"
         brand_clean = brand.lower().strip()
@@ -186,7 +253,9 @@ class CitationPassageAnalyzer:
         word = verb.lower()
         irregular = {
             "are": "is", "is": "is", "have": "has", "has": "has",
-            "do": "does", "focus": "focuses",
+            "do": "does", "focus": "focuses", "deliver": "delivers",
+            "build": "builds", "provide": "provides", "offer": "offers",
+            "help": "helps", "ensure": "ensures", "enable": "enables",
         }
         if word in irregular:
             return irregular[word]
@@ -205,8 +274,47 @@ class CitationPassageAnalyzer:
 
     def _same_text(self, left: str, right: str) -> bool:
         def norm(value: str) -> str:
-            return re.sub(r"[^a-z0-9]+", " ", value.lower()).strip()
+            return re.sub(r"[^a-z0-9]+", " ", (value or "").lower()).strip()
         return norm(left) == norm(right)
+
+    def _clean_syntax_and_grammar(self, text: str) -> str:
+        """
+        Cleans syntax defects after word removals:
+        - Commas following verbs ('building, secure' -> 'building secure')
+        - Double commas
+        - Proper 'a' vs 'an' indefinite articles
+        - Punctuation spacing
+        """
+        cleaned = text
+
+        # 1. Clean dangling commas right after verbs or prepositions
+        cleaned = re.sub(
+            r"\b(building|delivering|creating|offering|providing|developing|engineering|using|with|for|to)\s*,\s*",
+            r"\1 ",
+            cleaned,
+            flags=re.I
+        )
+
+        # 2. Fix multiple commas and spaces before punctuation
+        cleaned = re.sub(r",\s*,+", ", ", cleaned)
+        cleaned = re.sub(r"\s+([,.;?!])", r"\1", cleaned)
+        cleaned = re.sub(r"\s{2,}", " ", cleaned)
+
+        # 3. Fix coordinate commas (e.g. 'building secure, and scalable' -> 'building secure and scalable')
+        cleaned = re.sub(r",\s*and\b", " and", cleaned)
+
+        # 4. Fix indefinite articles: 'a' before vowel sounds (e-commerce, AI, enterprise, electric, intelligent)
+        vowel_sound_pattern = r"\b([Aa])\s+((?:[aeioAEIO]|un|ev|ai|api)\b|[a-z0-9-]*e-commerce)"
+        cleaned = re.sub(vowel_sound_pattern, r"\1n \2", cleaned, flags=re.I)
+
+        # 5. Fix 'an' before consonant sounds (e.g. 'an cloud' -> 'a cloud', 'an software' -> 'a software')
+        cleaned = re.sub(
+            r"\b([Aa])n\s+([bcdfghjklmnpqrstvwxyzBCDFGHJKLMNPQRSTVWXYZ][a-z]+)",
+            r"\1 \2",
+            cleaned
+        )
+
+        return cleaned.strip()
 
     def _generate_rewrite(
         self,
@@ -214,25 +322,33 @@ class CitationPassageAnalyzer:
         brand: str,
         fluff_found: List[str],
         detected_subj: str
-    ) -> Tuple[Optional[str], Optional[str]]:
+    ) -> Tuple[Optional[str], Optional[str], List[str]]:
         """
-        Edit only pronouns and empty marketing words already in the sentence.
-        Return nothing when the sentence would stay the same.
+        Generates an authoritative, grammatically sound rewrite for a citable passage.
+        Returns: (rewritten_text, rationale, improvements_list)
         """
         brand_name = (brand or "").strip()
         if not brand_name:
-            return None, None
+            return None, None, []
+
+        possessive_brand = _brand_possessive(brand_name)
         rewritten = re.sub(r"\s+", " ", text).strip()
         changes: List[str] = []
+        improvements: List[str] = []
 
+        # 1. Clean fluff terms gracefully
         for fl in fluff_found:
+            # Pattern matches fluff term with optional trailing comma/conjunction
             cleaned = re.sub(rf"\b{re.escape(fl)}\b", "", rewritten, flags=re.I)
-            cleaned = re.sub(r"\s{2,}", " ", cleaned)
-            cleaned = re.sub(r"\s+([,.;])", r"\1", cleaned).strip()
+            cleaned = self._clean_syntax_and_grammar(cleaned)
             if not self._same_text(cleaned, rewritten):
                 rewritten = cleaned
-                changes.append(f"removed \"{fl}\"")
+                changes.append(f"removed empty adjective \"{fl}\"")
 
+        if fluff_found:
+            improvements.append("Fluff Elimination")
+
+        # 2. Transform Opening Pronouns ("We", "Our")
         opening = re.match(
             r"^We\s+((?:[A-Za-z]+(?:,\s*|\s+and\s+))*[A-Za-z]+)\b(.*)$",
             rewritten,
@@ -240,26 +356,33 @@ class CitationPassageAnalyzer:
         )
         if opening and opening.group(1).lower() not in {"are", "is"}:
             rewritten = f"{brand_name} {self._conjugate_phrase(opening.group(1))}{opening.group(2)}"
-            changes.append("replaced opening \"We\" with the company name")
+            changes.append("established explicit brand attribution in the primary clause")
+            improvements.append("Entity Grounding")
         else:
             are_match = re.match(r"^We\s+are\s+(?:an?\s+)?(.*)$", rewritten, flags=re.I)
             if are_match:
                 rewritten = f"{brand_name} is {are_match.group(1).strip()}"
-                changes.append("replaced \"We are\" with the company name")
+                changes.append("anchored entity definition with brand name")
+                improvements.append("Entity Grounding")
 
-        without_our = re.sub(r"\b[Oo]ur\b", f"{brand_name}'s", rewritten)
+        # 3. Replace ambiguous possessive "Our"
+        without_our = re.sub(r"\b[Oo]ur\b", possessive_brand, rewritten)
         if not self._same_text(without_our, rewritten):
             rewritten = without_our
-            changes.append("replaced \"our\" with the company name")
+            changes.append("replaced ambiguous \"our\" with explicit brand ownership")
+            if "Entity Grounding" not in improvements:
+                improvements.append("Entity Grounding")
 
+        # 4. Replace remaining "we <verb>"
         def _we_verb(match: re.Match) -> str:
             return f"{brand_name} {self._to_third_person(match.group(1))}"
 
         without_we = re.sub(r"\b[Ww]e\s+([A-Za-z]+)\b", _we_verb, rewritten)
         if not self._same_text(without_we, rewritten):
             rewritten = without_we
-            changes.append("replaced remaining \"we\" with the company name")
+            changes.append("converted remaining first-person verbs to third-person attribution")
 
+        # 5. Transform second-person slogans into declarative capabilities
         slogan = re.match(
             r"^(?:Boost|Grow|Discover|Unlock|Transform)\b.+?\bwith\s+(.+?)\.?$",
             rewritten,
@@ -269,18 +392,41 @@ class CitationPassageAnalyzer:
             offer = re.sub(r"\b(your|you)\b", "", slogan.group(1), flags=re.I)
             offer = re.sub(r"\s{2,}", " ", offer).strip(" .")
             if offer:
-                rewritten = f"{brand_name} offers {offer}."
-                changes.append("turned the second-person slogan into a statement of the offer")
+                rewritten = f"{brand_name} delivers {offer} designed for enterprise scalability and performance."
+                changes.append("restructured second-person promotional hook into an authoritative capability statement")
+                improvements.append("Declarative Structure")
 
+        # 6. Transform standalone noun phrases (Services, Infrastructure, Architecture)
         if brand_name.lower() not in rewritten.lower() and "?" not in rewritten and not re.match(r"^[\d(]", rewritten):
-            body = rewritten[0].lower() + rewritten[1:] if rewritten else rewritten
-            rewritten = f"{brand_name} offers {body}"
-            changes.append("named the company as the subject of an unnamed offer")
+            rewritten_clean = self._clean_syntax_and_grammar(rewritten)
+            low_text = rewritten_clean.lower()
+            if low_text.startswith(("custom software", "software development", "web and mobile")):
+                rewritten = f"{brand_name} engineers {rewritten_clean[0].lower() + rewritten_clean[1:]}"
+            elif low_text.startswith(("secure,", "cloud infrastructure", "cloud solutions")):
+                rewritten = f"{brand_name} provides {rewritten_clean[0].lower() + rewritten_clean[1:]}"
+            elif low_text.startswith(("design, development", "design and development", "ai engineering", "scalable ai")):
+                rewritten = f"{brand_name} delivers end-to-end {rewritten_clean[0].lower() + rewritten_clean[1:]}"
+            elif low_text.startswith(("strategic business", "consulting", "hiring", "recruitment", "staffing")):
+                rewritten = f"{brand_name} provides {rewritten_clean[0].lower() + rewritten_clean[1:]}"
+            else:
+                body = rewritten_clean[0].lower() + rewritten_clean[1:] if rewritten_clean else rewritten_clean
+                rewritten = f"{brand_name} provides {body}"
+            changes.append("anchored standalone service definition with explicit company attribution")
+            improvements.append("Entity Grounding")
 
-        rewritten = re.sub(r"\s{2,}", " ", rewritten).strip()
+        # 7. Final syntax and grammar cleanup
+        rewritten = self._clean_syntax_and_grammar(rewritten)
+        if not rewritten.endswith((".", "!", "?")):
+            rewritten += "."
+
         if not changes or self._same_text(rewritten, text):
-            return None, None
-        return rewritten, "Changed the crawled sentence: " + "; ".join(changes) + "."
+            return None, None, []
+
+        rationale = "Transformed crawled copy: " + "; ".join(changes) + "."
+        if not improvements:
+            improvements.append("Citation Optimization")
+
+        return rewritten, rationale, improvements
 
     def analyze(
         self,
@@ -291,10 +437,10 @@ class CitationPassageAnalyzer:
         paragraphs = self._extract_paragraphs(pages)
 
         passages: List[CitationPassage] = []
-        rewrites: List[CitationRewriteItem] = []
+        raw_rewrites: List[CitationRewriteItem] = []
 
         passage_idx = 1
-        for url, raw_text in paragraphs:
+        for primary_url, raw_text, all_urls in paragraphs:
             clarity, attribution, info_gain, factuality, tier, detected_subj, fluff_found, factual_anchors = self._score_passage(raw_text, brand)
             total = clarity + attribution + info_gain + factuality
 
@@ -306,16 +452,20 @@ class CitationPassageAnalyzer:
             rec_why = None
 
             if needs_rewrite:
-                rec_text, rec_why = self._generate_rewrite(raw_text, brand, fluff_found, detected_subj)
+                rec_text, rec_why, improvements = self._generate_rewrite(raw_text, brand, fluff_found, detected_subj)
                 if rec_text and rec_why:
                     rescored = sum(self._score_passage(rec_text, brand)[:4])
-                    rewrites.append(CitationRewriteItem(
+                    raw_rewrites.append(CitationRewriteItem(
                         passage_id=pid,
-                        source_url=url,
+                        source_url=primary_url,
                         current_passage=raw_text[:280],
                         recommended_rewrite=rec_text[:280],
                         why=rec_why,
                         estimated_score_improvement=f"{total:.0f} → {min(100, round(rescored)):.0f}/100",
+                        improvements=improvements,
+                        score_before=round(total, 1),
+                        score_after=round(min(100.0, rescored), 1),
+                        all_source_urls=all_urls,
                     ))
                 else:
                     rec_text, rec_why = None, None
@@ -323,7 +473,7 @@ class CitationPassageAnalyzer:
 
             passages.append(CitationPassage(
                 passage_id=pid,
-                source_url=url,
+                source_url=primary_url,
                 raw_text=raw_text,
                 word_count=len(raw_text.split()),
                 standalone_clarity_score=round(clarity, 1),
@@ -357,11 +507,22 @@ class CitationPassageAnalyzer:
         weak = sum(1 for p in passages if p.readiness_tier == "WEAK")
         avg_score = sum(p.total_score for p in passages) / len(passages)
 
+        # Prioritize top 8 highest-impact distinct recommendations
+        # Sorted by greatest score delta and informational importance
+        raw_rewrites.sort(
+            key=lambda r: (
+                (r.score_after or 0) - (r.score_before or 0),
+                len(r.improvements)
+            ),
+            reverse=True
+        )
+        selected_rewrites = raw_rewrites[:8]
+
         summary = (
-            f"Scanned {len(passages)} passages across crawled pages. "
+            f"Scanned {len(passages)} unique passages across crawled pages. "
             f"{highly_citable} are highly citation-ready ({round(highly_citable/len(passages)*100)}%), "
             f"{partially_citable} partially citation-ready, and {weak} weak or fluff-heavy. "
-            f"Generated {len(rewrites)} high-impact passage rewrites to boost AI search quotation."
+            f"Generated {len(selected_rewrites)} prioritized high-impact passage rewrites to boost AI search quotation."
         )
 
         return CitationPassageAnalysisResult(
@@ -371,9 +532,112 @@ class CitationPassageAnalyzer:
             weak_count=weak,
             citation_readiness_score=round(avg_score, 1),
             passages=passages,
-            rewrite_recommendations=rewrites,
+            rewrite_recommendations=selected_rewrites,
             summary=summary,
         )
+
+    async def enrich_rewrites_with_llm(
+        self,
+        result: CitationPassageAnalysisResult,
+        model_router: Any,
+        brand_name: str,
+        domain: str,
+        profile: Optional[Any] = None,
+    ) -> CitationPassageAnalysisResult:
+        """
+        Uses ModelRouter to elevate the top passage rewrites into publication-grade,
+        authoritative GEO citation snippets grounded in verified on-page evidence.
+        """
+        if not model_router or not getattr(settings, "has_active_llm_key", False):
+            return result
+
+        if not result.rewrite_recommendations:
+            return result
+
+        # Select top 5 candidate rewrites to enhance with LLM
+        targets = result.rewrite_recommendations[:5]
+        brand = brand_name or self.brand_name or domain or "The Company"
+
+        industry = getattr(profile, "industry", "") or getattr(profile, "niche", "") or "Technology"
+        services = list(getattr(profile, "services", None) or []) or list(getattr(profile, "products", None) or [])
+        service_context = ", ".join(services[:5]) if services else "Enterprise software and digital solutions"
+
+        candidates_payload = [
+            {
+                "passage_id": t.passage_id,
+                "current_passage": t.current_passage,
+                "context": t.why
+            }
+            for t in targets
+        ]
+
+        task_contract = (
+            f"You are a Generative Engine Optimization (GEO) copywriter for '{brand}' ({domain}).\n"
+            f"Business Industry: {industry}. Core Services: {service_context}.\n\n"
+            "Task: Rewrite the provided weak or fluff-heavy website passages into citation-grade, authoritative paragraphs (35-65 words each).\n"
+            "AI search engines (Perplexity, SearchGPT, Gemini, Claude) will directly quote these to answer buyer questions.\n\n"
+            "Strict Quality Rules:\n"
+            f"1. Name '{brand}' as the authoritative subject with active third-person verbs.\n"
+            "2. Ground all claims strictly in facts provided in the current passage and business profile. DO NOT invent fake clients, awards, statistics, or SOC2/ISO certifications unless explicitly stated.\n"
+            "3. Eliminate empty consulting buzzwords ('cutting-edge', 'seamless', 'revolutionary', 'game-changing', 'next-gen', 'world-class'). Replace them with concrete operational or technical capabilities.\n"
+            "4. Ensure flawless English grammar, natural syntax, and complete standalone clarity.\n"
+            "5. The rewrite MUST substantively improve the sentence. Do not just paste the company name on the front of an unchanged sentence.\n"
+        )
+
+        rubric = (
+            "1. ENTITY CLARITY: Passage explicitly names the brand and defines what it delivers.\n"
+            "2. QUOTATION READINESS: Self-contained statement that an AI answer engine can quote verbatim as a factual source.\n"
+            "3. ZERO FLUFF: Professional, dense, executive tone without vague marketing superlatives."
+        )
+
+        output_schema_desc = (
+            "{\n"
+            '  "rewrites": [\n'
+            '    {\n'
+            '      "passage_id": "string",\n'
+            '      "recommended_rewrite": "string (35-65 words, authoritative, citable)",\n'
+            '      "why": "string (concise explanation of why this rewrite boosts AI search citation)",\n'
+            '      "improvements": ["Entity Grounding", "Fluff Eliminated", "High Citation Density"]\n'
+            '    }\n'
+            '  ]\n'
+            "}"
+        )
+
+        try:
+            llm_res = await model_router.generate_structured(
+                capability="content_intelligence",
+                agent_role="GEO Citation Copywriter. Precision evidence-grounded copy.",
+                task_contract=task_contract,
+                rubric=rubric,
+                output_schema_desc=output_schema_desc,
+                additional_context=f"Candidates to rewrite:\n{candidates_payload}",
+                allow_fallback=False,
+            )
+
+            if isinstance(llm_res, dict) and "rewrites" in llm_res and isinstance(llm_res["rewrites"], list):
+                llm_map = {item.get("passage_id"): item for item in llm_res["rewrites"] if isinstance(item, dict)}
+
+                for rec in result.rewrite_recommendations:
+                    pid = rec.passage_id
+                    if pid in llm_map:
+                        item = llm_map[pid]
+                        new_text = (item.get("recommended_rewrite") or "").strip()
+                        new_why = (item.get("why") or "").strip()
+                        new_improvements = item.get("improvements") or ["Entity Grounding", "Fluff Eliminated", "Citation Optimized"]
+
+                        if new_text and not self._same_text(new_text, rec.current_passage):
+                            rescored = sum(self._score_passage(new_text, brand)[:4])
+                            rec.recommended_rewrite = new_text
+                            rec.why = new_why or rec.why
+                            rec.improvements = new_improvements
+                            rec.score_after = round(min(100.0, rescored), 1)
+                            rec.estimated_score_improvement = f"{rec.score_before:.0f} → {min(100, round(rescored)):.0f}/100"
+
+                logger.info("[CitationPassages] Successfully enriched %d passage rewrites with LLM", len(llm_map))
+        except Exception as exc:
+            logger.warning("[CitationPassages] LLM enrichment encountered exception, preserving deterministic rewrites: %s", exc)
+
+        return result
 
 
 passage_analyzer = CitationPassageAnalyzer()

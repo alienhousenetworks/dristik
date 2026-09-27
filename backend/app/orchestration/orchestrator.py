@@ -614,6 +614,18 @@ class AnalysisOrchestrator:
                 country=country,
                 language=language,
             )
+            try:
+                from app.intelligence.geo.readiness import enrich_geo_readiness_citations
+                brand_name = getattr(blackboard.business_profile, "business_name", None) or domain
+                geo_readiness = await enrich_geo_readiness_citations(
+                    geo_readiness,
+                    model_router=model_router,
+                    brand_name=brand_name,
+                    domain=domain,
+                    profile=blackboard.business_profile,
+                )
+            except Exception as e:
+                logger.warning("Failed to enrich GEO readiness citations with LLM: %s", e)
             blackboard.geo_readiness = geo_readiness
 
             try:
