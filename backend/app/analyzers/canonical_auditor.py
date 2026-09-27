@@ -9,6 +9,7 @@ Audits HTML canonical directives across crawled pages against Google Search Cent
 - Multiple canonical tags in DOM (causes Google to ignore both)
 - Cross-domain canonicals
 """
+from __future__ import annotations
 from typing import List, Dict, Any, Optional, Tuple
 from urllib.parse import urlparse
 from pydantic import BaseModel, Field
