@@ -25,7 +25,7 @@ from __future__ import annotations
 
 import itertools
 import re
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, Dict, Any
 
 from app.domain.enums import (
     ContradictionStatus,

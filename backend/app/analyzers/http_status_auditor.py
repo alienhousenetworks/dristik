@@ -7,7 +7,8 @@ Classifies crawled URLs into status buckets:
 - 5xx Server Errors (HTTP 500, 502, 503)
 Surfaces source URLs and anchor text for all broken links (Industry Standard Screaming Frog model).
 """
-from typing import List, Tuple
+from __future__ import annotations
+from typing import List, Tuple, Optional, Dict, Any
 from app.domain.models import PageEvidence, HttpStatusBreakdown, HttpStatusItem, BrokenLinkRecord, Finding, FindingEvidence
 from app.domain.enums import Category, Severity
 

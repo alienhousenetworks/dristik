@@ -9,10 +9,11 @@ Probes the 4 origin permutations:
 Verifies proper 301 consolidation to a single canonical destination in 1 hop.
 Detects redirect chains (>1 hop), redirect loops, and terminal 4xx/5xx responses.
 """
+from __future__ import annotations
 import asyncio
 import logging
 from urllib.parse import urlparse
-from typing import Dict, List, Optional, Set
+from typing import Dict, List, Optional, Set, Any, Tuple
 import httpx
 from app.domain.models import RedirectHop, HostVariantProbeResult, RedirectAuditReport
 
