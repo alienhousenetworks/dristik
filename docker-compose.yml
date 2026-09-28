@@ -16,6 +16,7 @@ services:
       SYSTEM_ADMIN_EMAIL: ${SYSTEM_ADMIN_EMAIL:-admin@dristik.ai}
       AUTH_DATABASE_PATH: /app/data/dristik.db
     volumes:
+      - ./backend:/app
       - dristik-data:/app/data
       - hf-cache:/root/.cache/huggingface
     restart: unless-stopped
