@@ -535,6 +535,22 @@ export interface RegressionReport {
   detected_at: string;
 }
 
+export interface SubStepCostRecord {
+  sub_step: string;
+  display_name: string;
+  capability?: string;
+  calls_count: number;
+  input_tokens: number;
+  output_tokens: number;
+  total_tokens: number;
+  cost_usd: number;
+  latency_ms: number;
+  models?: string[];
+  is_actual?: boolean;
+  cost_basis?: string;
+  formula_rate?: string;
+}
+
 export interface StageCostRecord {
   stage: string;
   display_name: string;
@@ -545,6 +561,26 @@ export interface StageCostRecord {
   cost_usd: number;
   latency_ms: number;
   models: string[];
+  sub_steps?: Record<string, SubStepCostRecord>;
+}
+
+export interface AgentCallRecord {
+  call_id: string;
+  capability: string;
+  agent_id?: string;
+  model: string;
+  provider: string;
+  prompt_sha256?: string;
+  prompt_template_sha256?: string;
+  called_at: string;
+  input_tokens: number;
+  output_tokens: number;
+  latency_ms: number;
+  cost_usd?: number;
+  cost_basis?: string;
+  is_actual?: boolean;
+  actual_cost_usd?: number;
+  calculated_cost_usd?: number;
 }
 
 export interface TelemetryData {
@@ -564,6 +600,7 @@ export interface TelemetryData {
   model_calls_count: number;
   agent_timings: Record<string, number>;
   stage_costs?: Record<string, StageCostRecord>;
+  agent_calls?: AgentCallRecord[];
 }
 
 export interface PageEvidence {
@@ -1344,6 +1381,8 @@ export type TabId =
   | 'verification'
   | 'report'
   | 'plans'
+  | 'costing'
+  | 'costs'
   // Legacy aliases for backward compatibility
   | 'search_intelligence'
   | 'ai_search_intelligence'
@@ -1601,4 +1640,167 @@ export interface VerificationResult {
   before_score: number;
   after_score: number;
   score_delta: number;
+}
+
+export interface BrandPerceptionScore {
+  brand_name: string;
+  sentiment: 'POSITIVE' | 'NEUTRAL' | 'SKEPTICAL' | 'NEGATIVE' | string;
+  sentiment_score: number;
+  attributed_traits: string[];
+  positive_signals: string[];
+  negative_signals: string[];
+  quote_snippets: string[];
+  hallucination_detected: boolean;
+  hallucination_details?: string | null;
+  confidence: number;
+}
+
+export interface HallucinationItem {
+  hallucination_id: string;
+  query_id?: string | null;
+  engine_id: string;
+  claim_text: string;
+  ground_truth_fact: string;
+  category: string;
+  severity: 'CRITICAL' | 'HIGH' | 'MEDIUM' | string;
+}
+
+export interface HallucinationAuditReport {
+  total_evaluated: number;
+  clean_responses: number;
+  hallucinated_responses: number;
+  hallucination_rate_pct: number;
+  detected_distortions: HallucinationItem[];
+  overall_sentiment_distribution: Record<string, number>;
+  top_attributed_traits: Record<string, number>;
+}
+
+export interface RetrievalMethodology {
+  analyzer_name: string;
+  embedding_model: string;
+  chunking_strategy: string;
+  chunk_size: number;
+  chunk_overlap: number;
+  similarity_metric: string;
+  similarity_threshold: number;
+  methodology_version: string;
+  disclaimer: string;
+}
+
+export interface AnalyzedChunk {
+  chunk_id: string;
+  source_url: string;
+  char_start: number;
+  char_end: number;
+  word_count: number;
+  content: string;
+  similarity_score: number;
+  passes_threshold: boolean;
+  retrieval_rank?: number | null;
+  evaluation_notes: string[];
+  evidence_type?: string;
+  source_type?: string;
+  methodology?: string;
+  is_retrieved?: boolean;
+  failure_reasons?: string[];
+}
+
+export interface ControlledRetrievalReport {
+  query_text: string;
+  source_url: string;
+  total_chunks: number;
+  qualifying_chunks_count: number;
+  top_chunk_similarity: number;
+  threshold_pass_rate_pct: number;
+  average_chunk_similarity: number;
+  methodology: RetrievalMethodology;
+  chunks: AnalyzedChunk[];
+  content_structure_recommendations: string[];
+  evidence_type?: string;
+  source_type?: string;
+  retrieved_chunks?: number;
+  retrieval_pass_rate_pct?: number;
+  dead_zone_recommendations?: string[];
+  embedding_provider_used?: string;
+}
+
+export type SimulatedChunk = AnalyzedChunk;
+export type RagSimulationReport = ControlledRetrievalReport;
+
+export interface AuthorityCitationHub {
+  domain: string;
+  hub_type: string;
+  frequency_across_queries: number;
+  target_brand_present: boolean;
+  competitor_brands_present: string[];
+  specific_cited_urls: string[];
+  acquisition_priority: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW' | string;
+  recommended_action: string;
+}
+
+export interface OffPageCitationReport {
+  target_domain: string;
+  brand_name: string;
+  total_external_citations: number;
+  unique_authority_domains: number;
+  third_party_coverage_score: number;
+  top_authority_hubs: AuthorityCitationHub[];
+  hub_type_distribution: Record<string, number>;
+  priority_acquisition_roadmap: Array<{
+    step: number;
+    target_platform: string;
+    category: string;
+    urgency: string;
+    action_required: string;
+    sample_urls: string[];
+  }>;
+}
+
+export interface DisplacementAlert {
+  alert_id: string;
+  timestamp: string;
+  engine_id: string;
+  engine_name: string;
+  query_id: string;
+  query_text: string;
+  category: string;
+  previous_rank?: number | null;
+  new_rank?: number | null;
+  displaced_by_competitors: string[];
+  citation_lost_urls: string[];
+  severity: 'CRITICAL' | 'MAJOR' | 'MINOR' | 'OPPORTUNITY' | string;
+  impact_summary: string;
+  recommended_patch: string;
+}
+
+export interface DisplacementAnalysisResult {
+  target_domain: string;
+  brand_name: string;
+  total_queries_compared: number;
+  net_displacement_score: number;
+  displacements_suffered: number;
+  conquests_achieved: number;
+  critical_alerts: DisplacementAlert[];
+  all_alerts: DisplacementAlert[];
+}
+
+export interface GeoAttributionReport {
+  target_domain: string;
+  brand_name: string;
+  pre_patch_run_id: string;
+  post_patch_run_id: string;
+  pre_mention_rate_pct: number;
+  post_mention_rate_pct: number;
+  mention_rate_delta_pct: number;
+  pre_citation_rate_pct: number;
+  post_citation_rate_pct: number;
+  citation_rate_delta_pct: number;
+  pre_share_of_model_pct: number;
+  post_share_of_model_pct: number;
+  som_delta_pct: number;
+  total_queries_evaluated: number;
+  improved_queries_count: number;
+  regressed_queries_count: number;
+  net_improvement_pct: number;
+  executive_roi_summary: string;
 }

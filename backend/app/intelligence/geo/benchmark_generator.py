@@ -23,8 +23,8 @@ FanOutQueryType = Literal[
 
 class FanOutQuery(BaseModel):
     """
-    Reverse-engineered synthetic sub-query that an AI answer engine (Perplexity, SearchGPT, Gemini)
-    dispatches to underlying search indices to assemble its context window.
+    Modeled query expansion representing potential secondary search intents
+    under Dristik's empirical benchmark expansion methodology.
     """
     fan_out_id: str
     fan_out_type: FanOutQueryType
@@ -71,8 +71,8 @@ class GeoBenchmarkGenerator:
         competitors: Optional[List[str]] = None,
     ) -> List[FanOutQuery]:
         """
-        Synthesizes the 2-4 sub-queries that an AI engine's retrieval agent creates
-        to gather context before writing its response.
+        Synthesizes 2-4 expanded sub-queries representing potential informational angles
+        to evaluate topical coverage across search indices.
         """
         fan_outs: List[FanOutQuery] = []
         comp = (competitors or ["competitors"])[0]

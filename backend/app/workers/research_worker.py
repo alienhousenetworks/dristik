@@ -78,7 +78,7 @@ class CognitiveResearchWorker(BaseCognitiveWorker):
             task_contract=prompt_contract,
             evidence_list=evidence_list,
             rubric=(
-                "1. RAG RETRIEVAL FIDELITY: Synthesize detected answers strictly from on-page evidence. If a query dimension (e.g. pricing or compliance) is absent, mark evidence_quality as 'Missing', assign score <= 4, and record that AI engines will experience retrieval failure or hallucinate.\n"
+                "1. ANSWERABILITY FIDELITY: Synthesize detected answers strictly from on-page evidence. If a query dimension (e.g. pricing or compliance) is absent, mark evidence_quality as 'Missing', assign score <= 4, and record that answerability is ungrounded due to absent on-page information.\n"
                 "2. CITATION SCORING CALIBRATION: Score 8-10 requires a 40-60 word self-contained paragraph under a descriptive header. Score 5-7 for fragmented data. Score 1-4 for missing data or slogans. Never score 8+ when that query's facts are absent.\n"
                 "3. STRUCTURAL GAP DIAGNOSIS: Provide precise architectural diagnoses (e.g. missing Schema.org FAQPage, absent pricing table, buried use-case text).\n"
                 "4. EVIDENCE GROUNDING: Audit claims must reference specific evidence IDs [ev_xxx]."

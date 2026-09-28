@@ -33,6 +33,29 @@ from app.intelligence.geo.crawler_logs import (
     crawler_log_analyzer,
     CrawlerLogAnalysis,
 )
+from app.intelligence.geo.sentiment_engine import (
+    geo_sentiment_engine,
+    HallucinationAuditReport,
+)
+from app.intelligence.geo.semantic_retrieval import (
+    semantic_retrieval_analyzer,
+    rag_retrieval_simulator,
+    ControlledRetrievalReport,
+    RagSimulationReport,
+    RetrievalAnalysisConfig,
+)
+from app.intelligence.geo.offpage_network import (
+    offpage_network_analyzer,
+    OffPageCitationReport,
+)
+from app.intelligence.geo.displacement_sentinel import (
+    displacement_sentinel,
+    DisplacementAnalysisResult,
+)
+from app.intelligence.geo.attribution_engine import (
+    geo_attribution_engine,
+    GeoAttributionReport,
+)
 
 router = APIRouter(prefix="/geo-pipeline", tags=["GEO/AEO Pipeline"])
 
@@ -237,5 +260,128 @@ async def analyze_crawler_logs_endpoint(req: CrawlerLogAnalysisRequest):
         return analysis
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Failed to analyze crawler logs: {str(exc)}")
+
+
+class ControlledRetrievalRequest(BaseModel):
+    page_text: Optional[str] = Field(None, description="Crawled web page body text to chunk and evaluate")
+    query: str = Field(..., description="Target buyer query to test semantic retrieval alignment against")
+    source_url: Optional[str] = Field("https://target.domain/", description="Source URL of page")
+    chunk_size: int = Field(250, ge=50, le=800, description="Dristik chunk word count")
+    chunk_overlap: int = Field(40, ge=0, le=200, description="Dristik chunk overlap words")
+    similarity_threshold: float = Field(0.72, ge=0.0, le=1.0, description="Dristik retrieval qualification threshold")
+    top_k: int = Field(3, ge=1, le=20, description="Number of top qualifying chunks to retrieve")
+
+
+# Backward-compatible alias
+SimulateRagRequest = ControlledRetrievalRequest
+
+
+@router.post("/controlled-retrieval", response_model=ControlledRetrievalReport)
+async def controlled_retrieval_endpoint(req: ControlledRetrievalRequest):
+    """
+    Executes Dristik's controlled semantic retrieval analysis over crawled website content.
+    Applies deterministic sentence-window chunking, configured embeddings (intfloat/e5-small-v2),
+    and cosine similarity against the target query.
+
+    NOTE: This is Dristik's controlled retrieval methodology; it does not measure or simulate
+    proprietary internal retrieval architectures of external AI engines.
+    """
+    try:
+        cfg = RetrievalAnalysisConfig(
+            chunk_size=req.chunk_size,
+            chunk_overlap=req.chunk_overlap,
+            similarity_threshold=req.similarity_threshold,
+            top_k=req.top_k,
+        )
+        report = semantic_retrieval_analyzer.analyze_page_content(
+            page_text=req.page_text,
+            query=req.query,
+            source_url=req.source_url or "https://target.domain/",
+            config=cfg,
+        )
+        return report
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Failed to execute controlled retrieval analysis: {str(exc)}")
+
+
+@router.post("/simulate-rag", response_model=ControlledRetrievalReport, deprecated=True)
+async def simulate_rag_endpoint(req: ControlledRetrievalRequest):
+    """
+    Deprecated alias for /controlled-retrieval.
+    """
+    return await controlled_retrieval_endpoint(req)
+
+
+@router.post("/sentiment-audit", response_model=HallucinationAuditReport)
+async def audit_sentiment_endpoint(req: SentimentAuditRequest):
+    """
+    Audits verbatim AI answer engine responses for brand sentiment polarity,
+    associated brand traits, and ground-truth factual hallucinations.
+    """
+    try:
+        report = geo_sentiment_engine.generate_audit_report(
+            evaluations=req.evaluations,
+            brand_name=req.brand_name,
+        )
+        return report
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Failed to audit sentiment and hallucinations: {str(exc)}")
+
+
+@router.post("/offpage-network", response_model=OffPageCitationReport)
+async def analyze_offpage_network_endpoint(req: OffPageNetworkRequest):
+    """
+    Audits third-party authority hubs (Reddit, G2, TechCrunch, Wikipedia)
+    feeding generative search answers and generates a targeted profile acquisition roadmap.
+    """
+    try:
+        report = offpage_network_analyzer.analyze_citation_network(
+            evaluations=req.evaluations,
+            target_domain=req.domain,
+            brand_name=req.brand_name,
+            competitors=req.competitors,
+        )
+        return report
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Failed to analyze off-page citation network: {str(exc)}")
+
+
+@router.post("/detect-displacements", response_model=DisplacementAnalysisResult)
+async def detect_displacements_endpoint(req: DisplacementDetectionRequest):
+    """
+    Compares two benchmark evaluation sets to isolate competitor conquesting,
+    position drops, and lost citations across live AI engines.
+    """
+    try:
+        result = displacement_sentinel.detect_displacements(
+            baseline_evaluations=req.baseline_evaluations,
+            current_evaluations=req.current_evaluations,
+            target_brand=req.brand_name,
+            target_domain=req.domain,
+            competitors=req.competitors,
+        )
+        return result
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Failed to detect displacements: {str(exc)}")
+
+
+@router.post("/verify-attribution", response_model=GeoAttributionReport)
+async def verify_attribution_endpoint(req: AttributionVerificationRequest):
+    """
+    Measures causal before/after deltas following remediation patch deployments,
+    quantifying mention rate gains, citation gains, and Share of Model ROI.
+    """
+    try:
+        report = geo_attribution_engine.calculate_attribution(
+            pre_patch_evaluations=req.pre_patch_evaluations,
+            post_patch_evaluations=req.post_patch_evaluations,
+            target_domain=req.domain,
+            brand_name=req.brand_name,
+            pre_run_id=req.pre_run_id,
+            post_run_id=req.post_run_id,
+        )
+        return report
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Failed to verify attribution deltas: {str(exc)}")
 
 

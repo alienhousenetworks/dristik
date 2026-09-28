@@ -4,9 +4,10 @@ import { costBasisCaption, formatAuditCost, formatMs } from '../lib/format';
 
 interface TelemetryProps {
   telemetry: TelemetryData;
+  onNavigateToCosting?: () => void;
 }
 
-export function Telemetry({ telemetry }: TelemetryProps) {
+export function Telemetry({ telemetry, onNavigateToCosting }: TelemetryProps) {
   const [showStageTable, setShowStageTable] = useState(false);
   const stageCosts = telemetry.stage_costs ? Object.values(telemetry.stage_costs) : [];
   const models = (telemetry.models_used || []).join(' · ');
@@ -51,15 +52,26 @@ export function Telemetry({ telemetry }: TelemetryProps) {
           )}
         </dl>
 
-        {stageCosts.length > 0 && (
-          <button
-            type="button"
-            onClick={() => setShowStageTable(!showStageTable)}
-            className="text-xs text-pine hover:underline font-semibold flex items-center gap-1 cursor-pointer bg-pine/5 px-2.5 py-1 rounded border border-pine/20 transition-colors hover:bg-pine/10"
-          >
-            {showStageTable ? 'Hide Stage-by-Stage Costs' : 'View Stage-by-Stage Costs'}
-          </button>
-        )}
+        <div className="flex items-center gap-2">
+          {stageCosts.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setShowStageTable(!showStageTable)}
+              className="text-xs text-pine hover:underline font-semibold flex items-center gap-1 cursor-pointer bg-pine/5 px-2.5 py-1 rounded border border-pine/20 transition-colors hover:bg-pine/10"
+            >
+              {showStageTable ? 'Hide Quick Summary' : 'Quick Stage Costs'}
+            </button>
+          )}
+          {onNavigateToCosting && (
+            <button
+              type="button"
+              onClick={onNavigateToCosting}
+              className="text-xs text-pine hover:bg-pine hover:text-white font-semibold flex items-center gap-1 cursor-pointer bg-pine/10 px-2.5 py-1 rounded border border-pine/30 transition-colors"
+            >
+              Full Cost Ledger →
+            </button>
+          )}
+        </div>
       </div>
 
       {showStageTable && stageCosts.length > 0 && (

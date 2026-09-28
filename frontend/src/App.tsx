@@ -36,6 +36,7 @@ import { Pages } from './components/Pages';
 import { ScoringRubricModal } from './components/ScoringRubricModal';
 import { RecentAuditsDropdown } from './components/RecentAuditsDropdown';
 import { PageHeader } from './components/ui';
+import { CostLedgerView } from './components/CostLedgerView';
 
 const VIEWS = new Set<AppView>([
   'home',
@@ -373,7 +374,12 @@ export function App() {
                     description="Crawl, evidence, specialists, and scoring run in sequence. Stay on this page until the report is ready."
                   />
                   <Pipeline run={workspaceRun} />
-                  {workspaceRun.telemetry && <Telemetry telemetry={workspaceRun.telemetry} />}
+                  {workspaceRun.telemetry && (
+                    <Telemetry
+                      telemetry={workspaceRun.telemetry}
+                      onNavigateToCosting={() => setTab('costing')}
+                    />
+                  )}
                   {error && <p className="text-sm text-bad">{error}</p>}
                 </div>
               )}
@@ -520,9 +526,21 @@ export function App() {
                     />
                   )}
 
+                  {/* 13. UNIT ECONOMICS & COST LEDGER */}
+                  {(tab === 'costing' || tab === 'costs') && (
+                    <CostLedgerView
+                      report={report}
+                      telemetry={run?.telemetry || report.telemetry}
+                      onNavigateToTab={setTab}
+                    />
+                  )}
+
                   {report.telemetry && (
                     <div className="pt-4 border-t border-line">
-                      <Telemetry telemetry={report.telemetry} />
+                      <Telemetry
+                        telemetry={report.telemetry}
+                        onNavigateToCosting={() => setTab('costing')}
+                      />
                     </div>
                   )}
                 </div>

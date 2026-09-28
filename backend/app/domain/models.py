@@ -834,6 +834,22 @@ class AgentCallRecord(BaseModel):
     calculated_cost_usd: Optional[float] = None
 
 
+class SubStepCostRecord(BaseModel):
+    sub_step: str
+    display_name: str
+    capability: str = "general"
+    calls_count: int = 0
+    input_tokens: int = 0
+    output_tokens: int = 0
+    total_tokens: int = 0
+    cost_usd: float = 0.0
+    latency_ms: float = 0.0
+    models: List[str] = Field(default_factory=list)
+    is_actual: bool = False
+    cost_basis: str = "unpriced"
+    formula_rate: Optional[str] = None
+
+
 class StageCostRecord(BaseModel):
     stage: str
     display_name: str
@@ -844,6 +860,7 @@ class StageCostRecord(BaseModel):
     cost_usd: float = 0.0
     latency_ms: float = 0.0
     models: List[str] = Field(default_factory=list)
+    sub_steps: Dict[str, SubStepCostRecord] = Field(default_factory=dict)
 
 
 class TelemetryData(BaseModel):

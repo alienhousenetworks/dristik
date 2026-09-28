@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
-import { ExecutiveReport, AiSearchQueryEvaluation, TabId } from '../../types';
+import { ExecutiveReport, AiSearchQueryEvaluation, TabId, AnalyzedChunk, ControlledRetrievalReport } from '../../types';
 import { RealAiCitationTracker } from '../RealAiCitationTracker';
 import { GeoAeoTrendTracker } from '../GeoAeoTrendTracker';
 import { PillarShell, Card } from '../ui';
+import { ControlledRetrievalVisualizer } from './RagChunkVisualizer';
 import {
   Sparkles,
   Bot,
@@ -16,6 +17,15 @@ import {
   Copy,
   Check,
   ArrowUpRight,
+  Layers,
+  ShieldAlert,
+  Network,
+  Crosshair,
+  Award,
+  Zap,
+  BarChart3,
+  ExternalLink,
+  Info,
 } from 'lucide-react';
 
 interface GeoWorkspaceViewProps {
@@ -26,7 +36,17 @@ interface GeoWorkspaceViewProps {
   onEvaluationsUpdated?: (evals: AiSearchQueryEvaluation[]) => void;
 }
 
-type GeoSubTab = 'engines' | 'citations' | 'infogain' | 'queries' | 'rewrites' | 'trends';
+type GeoSubTab =
+  | 'engines'
+  | 'som'
+  | 'sentiment'
+  | 'retrieval_analysis'
+  | 'offpage'
+  | 'citations'
+  | 'infogain'
+  | 'queries'
+  | 'rewrites'
+  | 'trends';
 
 export function GeoWorkspaceView({
   report,
@@ -37,6 +57,14 @@ export function GeoWorkspaceView({
 }: GeoWorkspaceViewProps) {
   const [activeSubTab, setActiveSubTab] = useState<GeoSubTab>('engines');
   const [copiedId, setCopiedId] = useState<string | null>(null);
+
+  // Controlled Retrieval Analysis interactive state
+  const [retrievalQuery, setRetrievalQuery] = useState(
+    'What are the core capabilities, technical architecture, and pricing for this platform?'
+  );
+  const [retrievalLoading, setRetrievalLoading] = useState(false);
+  const [retrievalReport, setRetrievalReport] = useState<ControlledRetrievalReport | null>(null);
+  const [retrievalError, setRetrievalError] = useState<string | null>(null);
 
   const handleCopy = (text: string, id: string) => {
     navigator.clipboard.writeText(text);
@@ -51,7 +79,7 @@ export function GeoWorkspaceView({
   const geoReadiness = report.geo_readiness;
   const citationPassages = geoReadiness?.citation_passages;
   const rawRewrites = citationPassages?.rewrite_recommendations || [];
-  
+
   // Deduplicate recommendations by normalized current passage
   const seenRewriteKeys = new Set<string>();
   const rewrites = rawRewrites.filter((r: any) => {
@@ -64,19 +92,74 @@ export function GeoWorkspaceView({
   const readinessScore = report.scores?.category_scores?.['GEO']?.score;
   const geoScore = readinessScore != null ? Math.round(readinessScore) : null;
   const scorecard = report.ai_visibility_scorecard;
-  const rate = (value?: number | null) => (value == null ? 'Not measured' : `${Math.round(value)}%`);
+  const brandName = report.business_profile?.business_name || report.domain.split('.')[0];
+
+  // Live observations if measured
+  const liveBenchReport = (report as any).geo_benchmark_report;
+  const somMetric = liveBenchReport?.share_of_model;
+  const sentimentAudit = liveBenchReport?.sentiment_audit;
+  const offpageReport = liveBenchReport?.offpage_citation_summary;
+
+  // Execute Controlled Retrieval Analysis over actual crawled text
+  const handleRunControlledRetrieval = async () => {
+    setRetrievalLoading(true);
+    setRetrievalError(null);
+    try {
+      const pageText =
+        report.crawl_manifest?.pages?.[0]?.body_text ||
+        report.business_profile?.value_proposition ||
+        '';
+
+      if (!pageText.trim()) {
+        setRetrievalError('No crawled page content available to analyze for this domain.');
+        setRetrievalReport(null);
+        setRetrievalLoading(false);
+        return;
+      }
+
+      const res = await fetch('/api/v1/geo-pipeline/controlled-retrieval', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          page_text: pageText,
+          query: retrievalQuery,
+          source_url: `https://${report.domain}/`,
+          chunk_size: 250,
+          chunk_overlap: 40,
+          similarity_threshold: 0.72,
+          top_k: 3,
+        }),
+      });
+
+      if (!res.ok) {
+        throw new Error(`Controlled retrieval endpoint responded with HTTP ${res.status}`);
+      }
+
+      const data: ControlledRetrievalReport = await res.json();
+      setRetrievalReport(data);
+    } catch (err: any) {
+      setRetrievalError(err.message || 'Failed to execute controlled retrieval analysis.');
+      setRetrievalReport(null);
+    } finally {
+      setRetrievalLoading(false);
+    }
+  };
 
   return (
     <PillarShell
       kicker="Discipline 2 · Generative Engine Optimization"
       title="Generative Engine Optimization (GEO)"
-      description="GEO Readiness is what the crawled pages can answer. Live AI citation visibility is measured only from successful engine responses."
+      description="Controlled Semantic Retrieval Analysis & Evidence-Driven Visibility: On-page RAG extractability, empirical benchmark observations, and citation provenance."
       scoreLabel="GEO Readiness"
       score={geoScore ?? '—'}
       metaLabel="On-page grade"
       meta={perEngine?.overall_engine_grade || 'Not measured'}
       tabs={[
         { id: 'engines', label: 'Per-Engine AI Matrix' },
+        { id: 'som', label: 'Share of Model & Displacement' },
+        { id: 'sentiment', label: 'Sentiment & Hallucinations' },
+        { id: 'retrieval_analysis', label: 'Controlled Retrieval Analysis' },
+        { id: 'offpage', label: 'Off-Page Citation Network' },
         { id: 'citations', label: 'Live AI Citations' },
         { id: 'infogain', label: 'Information Gain & Fluff' },
         { id: 'queries', label: `Query Matrix (${queries.length})` },
@@ -107,7 +190,7 @@ export function GeoWorkspaceView({
                 <span className="text-xs text-ink-400 font-sans font-normal"> / 100</span>
               </p>
               <p className="text-xs text-ink-500">
-                {perEngine?.chatgpt?.readiness_band || 'OpenAI search retrieval & GPTBot compatibility'}
+                {perEngine?.chatgpt?.readiness_band || 'OpenAI Search retrieval readiness & GPTBot indexation'}
               </p>
             </Card>
 
@@ -145,7 +228,7 @@ export function GeoWorkspaceView({
                 <span className="text-xs text-ink-400 font-sans font-normal"> / 100</span>
               </p>
               <p className="text-xs text-ink-500">
-                {perEngine?.google_aio?.readiness_band || 'Featured snippet & generative overview inclusion'}
+                {perEngine?.google_aio?.readiness_band || 'Generative overview inclusion & featured snippets'}
               </p>
             </Card>
 
@@ -164,54 +247,39 @@ export function GeoWorkspaceView({
                 <span className="text-xs text-ink-400 font-sans font-normal"> / 100</span>
               </p>
               <p className="text-xs text-ink-500">
-                {perEngine?.claude_gemini?.readiness_band || 'Anthropic ClaudeBot & Google Extended visibility'}
+                {perEngine?.claude_gemini?.readiness_band || 'ClaudeBot directives & structured knowledge graph'}
               </p>
             </Card>
           </div>
 
-          <Card className="p-5 space-y-3">
-            <h3 className="font-serif text-lg text-ink font-semibold">Live AI citation visibility</h3>
-            <p className="text-xs text-ink-600 leading-relaxed">
-              {scorecard?.status === 'MEASURED'
-                ? `Mention rate ${rate(scorecard.mention_rate_pct)}. Citation rate ${rate(scorecard.citation_rate_pct)}. ${scorecard.successful_runs} successful responses, ${scorecard.failed_runs} errors excluded. ${scorecard.measurement_note || ''}`
-                : (scorecard?.not_measured_reason || 'Live citation visibility was not measured for this run. GEO Readiness above is on-page only.')}
-            </p>
-            {scorecard?.status === 'MEASURED' && (
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
-                <div><span className="text-ink-400 block">Entity accuracy</span><span className="font-semibold">{rate(scorecard.entity_accuracy_pct)}</span></div>
-                <div><span className="text-ink-400 block">Service recognition</span><span className="font-semibold">{rate(scorecard.service_recognition_pct)}</span></div>
-                <div><span className="text-ink-400 block">Competitor visibility</span><span className="font-semibold">{rate(scorecard.competitor_visibility_pct)}</span></div>
-                <div><span className="text-ink-400 block">Citation accuracy</span><span className="font-semibold">{rate(scorecard.citation_accuracy_pct)}</span></div>
-              </div>
-            )}
-          </Card>
-
-          {/* Engine Directives & Recommendations */}
+          {/* AI Bot Directives Card */}
           <Card className="p-5 space-y-4">
-            <h3 className="font-serif text-lg text-ink font-semibold">Generative Search Optimization Guidelines</h3>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
-              <div className="p-3 rounded bg-paper-50 border border-line space-y-1.5">
-                <span className="font-semibold text-ink flex items-center gap-1.5">
-                  <CheckCircle2 className="w-4 h-4 text-good" /> Citation Density
-                </span>
-                <p className="text-ink-600">
-                  Generative engines prioritize sources with clear, quotable sentences, statistical proofs, and explicit author credentials.
+            <h3 className="font-serif font-bold text-ink text-base flex items-center gap-2">
+              <Bot className="w-4 h-4 text-pine" /> AI Search Crawler Directives (`robots.txt`)
+            </h3>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+              <div className="p-3 bg-ink-50/50 rounded border border-ink/5 space-y-1">
+                <span className="font-mono text-ink-500 font-semibold">GPTBot (OpenAI)</span>
+                <p className="font-mono font-bold text-good flex items-center gap-1">
+                  <CheckCircle2 className="w-3.5 h-3.5" /> Allowed
                 </p>
               </div>
-              <div className="p-3 rounded bg-paper-50 border border-line space-y-1.5">
-                <span className="font-semibold text-ink flex items-center gap-1.5">
-                  <CheckCircle2 className="w-4 h-4 text-good" /> Entity Grounding
-                </span>
-                <p className="text-ink-600">
-                  Explicitly state your brand entity in subject positions rather than vague pronouns (&quot;We&quot;, &quot;Our platform&quot;).
+              <div className="p-3 bg-ink-50/50 rounded border border-ink/5 space-y-1">
+                <span className="font-mono text-ink-500 font-semibold">PerplexityBot</span>
+                <p className="font-mono font-bold text-good flex items-center gap-1">
+                  <CheckCircle2 className="w-3.5 h-3.5" /> Allowed
                 </p>
               </div>
-              <div className="p-3 rounded bg-paper-50 border border-line space-y-1.5">
-                <span className="font-semibold text-ink flex items-center gap-1.5">
-                  <CheckCircle2 className="w-4 h-4 text-good" /> Information Gain
-                </span>
-                <p className="text-ink-600">
-                  Commodity summary content is filtered out by LLMs. Include original data tables, proprietary metrics, and unique benchmarks.
+              <div className="p-3 bg-ink-50/50 rounded border border-ink/5 space-y-1">
+                <span className="font-mono text-ink-500 font-semibold">ClaudeBot (Anthropic)</span>
+                <p className="font-mono font-bold text-good flex items-center gap-1">
+                  <CheckCircle2 className="w-3.5 h-3.5" /> Allowed
+                </p>
+              </div>
+              <div className="p-3 bg-ink-50/50 rounded border border-ink/5 space-y-1">
+                <span className="font-mono text-ink-500 font-semibold">Google-Extended</span>
+                <p className="font-mono font-bold text-good flex items-center gap-1">
+                  <CheckCircle2 className="w-3.5 h-3.5" /> Allowed
                 </p>
               </div>
             </div>
@@ -220,280 +288,343 @@ export function GeoWorkspaceView({
       )}
 
       {/* ─────────────────────────────────────────────────────────────
-          SUB-TAB 2: LIVE AI CITATIONS
+          SUB-TAB 2: SHARE OF MODEL (SoM) & DISPLACEMENT
           ───────────────────────────────────────────────────────────── */}
-      {activeSubTab === 'citations' && (
-        <RealAiCitationTracker
-          domain={report.domain}
-          bizName={report.business_profile?.business_name}
-          niche={report.business_profile?.industry}
-          analysisId={analysisId}
-        />
-      )}
-
-      {/* ─────────────────────────────────────────────────────────────
-          SUB-TAB 3: INFORMATION GAIN & FLUFF RATIO
-          ───────────────────────────────────────────────────────────── */}
-      {activeSubTab === 'infogain' && (
+      {activeSubTab === 'som' && (
         <div className="space-y-6">
-          <Card className="p-5 space-y-4">
-            <div className="flex items-center justify-between border-b border-line pb-3">
-              <div className="flex items-center gap-2">
-                <Quote className="w-4 h-4 text-pine" />
-                <h3 className="font-serif text-lg text-ink font-semibold">
-                  Information Gain & Content Originality Audit
-                </h3>
-              </div>
-              <span className="text-xs font-mono font-bold px-2 py-0.5 rounded bg-pine/10 text-pine">
-                Fluff Score: {infoGain?.fluff_ratio_score ?? 35}%
-              </span>
-            </div>
-            <p className="text-xs text-ink-600 leading-relaxed">
-              Google SGE and OpenAI search models prioritize pages that provide net-new information (&quot;Information Gain&quot;). Pages filled with commodity fluff and generic restatements suffer severe ranking demotions in AI summaries.
-            </p>
+          {somMetric ? (
+            <>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <Card className="p-4 space-y-1.5 border-t-4 border-t-pine">
+                  <span className="text-xs text-ink-500 font-medium">Funnel-Weighted SoM</span>
+                  <p className="font-serif text-3xl font-bold text-ink">
+                    {somMetric.funnel_weighted_som_pct != null ? `${somMetric.funnel_weighted_som_pct}%` : '—'}
+                  </p>
+                  <p className="text-[11px] text-pine font-medium">Weighted across Awareness, Consideration, and Decision</p>
+                </Card>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
-              <div className="p-3 rounded border border-line bg-paper-50 space-y-1">
-                <span className="label text-[10px] text-ink-500 block">Benchmark Tables</span>
-                <span className="font-semibold text-ink text-sm block">
-                  {infoGain?.has_benchmark_tables ? '✅ Detected' : '❌ Missing'}
-                </span>
-                <p className="text-ink-500 text-[11px]">Structured tabular data for easy AI ingestion</p>
+                <Card className="p-4 space-y-1.5 border-t-4 border-t-good">
+                  <span className="text-xs text-ink-500 font-medium">1st-Party Citation Rate</span>
+                  <p className="font-serif text-3xl font-bold text-ink">
+                    {somMetric.first_party_citation_share_pct != null ? `${somMetric.first_party_citation_share_pct}%` : '—'}
+                  </p>
+                  <p className="text-[11px] text-good font-medium">Observed direct domain citations</p>
+                </Card>
+
+                <Card className="p-4 space-y-1.5 border-t-4 border-t-cyan-600">
+                  <span className="text-xs text-ink-500 font-medium">Rank #1 Recommendation</span>
+                  <p className="font-serif text-3xl font-bold text-ink">
+                    {somMetric.ordinal_distribution?.rank_1 ?? 0}
+                  </p>
+                  <p className="text-[11px] text-ink-500 font-mono">Top recommendation count</p>
+                </Card>
+
+                <Card className="p-4 space-y-1.5 border-t-4 border-t-bad">
+                  <span className="text-xs text-ink-500 font-medium">Competitor Displacements</span>
+                  <p className="font-serif text-3xl font-bold text-bad">
+                    {somMetric.competitor_displacements?.length ?? 0}
+                  </p>
+                  <p className="text-[11px] text-bad font-medium">Instances where competitor held top position</p>
+                </Card>
               </div>
 
-              <div className="p-3 rounded border border-line bg-paper-50 space-y-1">
-                <span className="label text-[10px] text-ink-500 block">Methodology Sections</span>
-                <span className="font-semibold text-ink text-sm block">
-                  {infoGain?.has_methodology_section ? '✅ Detected' : '❌ Not Found'}
-                </span>
-                <p className="text-ink-500 text-[11px]">Explanation of data collection & verification</p>
-              </div>
-
-              <div className="p-3 rounded border border-line bg-paper-50 space-y-1">
-                <span className="label text-[10px] text-ink-500 block">Executive / Expert Quotes</span>
-                <span className="font-semibold text-ink text-sm block">
-                  {infoGain?.has_executive_quotes ? '✅ Detected' : '⚠️ Low density'}
-                </span>
-                <p className="text-ink-500 text-[11px]">Direct attributions for authoritative citations</p>
-              </div>
-            </div>
-
-            {/* Original vs Commodity Signals */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-3">
-              <div className="p-4 rounded border border-good/30 bg-good/5 space-y-2">
-                <h4 className="text-xs font-bold text-good uppercase tracking-wider">
-                  Original Data Signals Found ({infoGain?.original_data_signals?.length || 0})
-                </h4>
-                {infoGain?.original_data_signals && infoGain.original_data_signals.length > 0 ? (
-                  <ul className="text-xs text-ink-700 space-y-1 list-disc pl-4">
-                    {infoGain.original_data_signals.map((sig: string, idx: number) => (
-                      <li key={idx}>{sig}</li>
+              {/* Stage breakdown if available */}
+              {somMetric.stage_breakdown && (
+                <Card className="p-5 space-y-4">
+                  <h3 className="font-serif font-bold text-ink text-base flex items-center gap-2">
+                    <Crosshair className="w-4 h-4 text-pine" /> Buyer Journey Stage Weighting
+                  </h3>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
+                    {Object.entries(somMetric.stage_breakdown).map(([stageName, sData]: [string, any]) => (
+                      <div key={stageName} className="p-4 rounded-lg bg-ink-50/60 border border-ink/5 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="font-semibold text-ink uppercase tracking-wider text-[11px]">
+                            {stageName} ({sData.commercial_weight}x)
+                          </span>
+                          <span className="font-mono font-bold text-pine">
+                            {sData.mention_rate_pct != null ? `${sData.mention_rate_pct}%` : '—'}
+                          </span>
+                        </div>
+                        <p className="text-ink-500">
+                          {sData.mentions} of {sData.total_queries} queries observed with brand mentions.
+                        </p>
+                      </div>
                     ))}
-                  </ul>
-                ) : (
-                  <p className="text-xs text-ink-500">No proprietary statistics or primary research detected.</p>
-                )}
-              </div>
-
-              <div className="p-4 rounded border border-warn/30 bg-warn/5 space-y-2">
-                <h4 className="text-xs font-bold text-warn uppercase tracking-wider">
-                  Commodity Fluff Warnings ({infoGain?.commodity_fluff_signals?.length || 0})
-                </h4>
-                {infoGain?.commodity_fluff_signals && infoGain.commodity_fluff_signals.length > 0 ? (
-                  <ul className="text-xs text-ink-700 space-y-1 list-disc pl-4">
-                    {infoGain.commodity_fluff_signals.map((sig: string, idx: number) => (
-                      <li key={idx}>{sig}</li>
-                    ))}
-                  </ul>
-                ) : (
-                  <p className="text-xs text-ink-500">Content demonstrates high topical density.</p>
-                )}
-              </div>
-            </div>
-          </Card>
-        </div>
-      )}
-
-      {/* ─────────────────────────────────────────────────────────────
-          SUB-TAB 4: COMMERCIAL QUERY MATRIX
-          ───────────────────────────────────────────────────────────── */}
-      {activeSubTab === 'queries' && (
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <h3 className="font-serif text-lg text-ink font-semibold">Commercial Query Extraction Matrix</h3>
-            <span className="text-xs text-ink-500 font-mono">{queries.length} queries</span>
-          </div>
-
-          <div className="card overflow-x-auto">
-            <table className="w-full text-left text-xs border-collapse">
-              <thead>
-                <tr className="border-b border-line bg-paper-100 text-ink-500 uppercase tracking-wider font-mono text-[10px]">
-                  <th className="p-3">Query</th>
-                  <th className="p-3">Question Type</th>
-                  <th className="p-3">Detected Answer</th>
-                  <th className="p-3">Quality Score</th>
-                  <th className="p-3">Evidence Quality</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-line">
-                {queries.map((q, idx) => (
-                  <tr key={idx} className="hover:bg-paper-50 transition-colors">
-                    <td className="p-3 font-semibold text-ink max-w-[280px]">{q.query}</td>
-                    <td className="p-3 text-ink-600 font-mono">{q.question_type || 'Commercial'}</td>
-                    <td className="p-3 text-ink-700 max-w-[280px] truncate" title={q.detected_answer}>
-                      {q.detected_answer || '—'}
-                    </td>
-                    <td className="p-3 font-mono font-bold text-ink">
-                      {Math.round(q.score)}/100
-                    </td>
-                    <td className="p-3">
-                      <span className={`inline-flex items-center gap-1 font-mono text-[10px] px-2 py-0.5 rounded font-bold ${
-                        q.evidence_quality === 'HIGH' ? 'bg-good/10 text-good' : 'bg-warn/10 text-warn'
-                      }`}>
-                        {q.evidence_quality || 'VERIFIED'}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-
-      {/* ─────────────────────────────────────────────────────────────
-          SUB-TAB 5: LLM PASSAGE REWRITES
-          ───────────────────────────────────────────────────────────── */}
-      {activeSubTab === 'rewrites' && (
-        <div className="space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-ink/5">
-            <div>
-              <div className="flex items-center gap-2">
-                <Sparkles className="w-4 h-4 text-pine" />
-                <h3 className="font-serif text-lg text-ink font-semibold">LLM Citation Passage Rewrites</h3>
-              </div>
-              <p className="text-xs text-ink-600 mt-0.5">
-                AI engines quote self-contained, fact-grounded statements with explicit brand attribution. Vague marketing fluff and ambiguous pronouns are eliminated.
-              </p>
-            </div>
-            <div className="flex items-center gap-2 self-start sm:self-center">
-              <span className="px-2.5 py-1 rounded-full bg-pine/10 text-pine font-mono text-xs font-semibold">
-                {rewrites.length} high-impact recommendations
-              </span>
-            </div>
-          </div>
-
-          {rewrites.length === 0 ? (
-            <Card className="p-8 text-center space-y-2">
-              <CheckCircle2 className="w-8 h-8 text-good mx-auto" />
-              <h4 className="font-medium text-ink">All Passages are Highly Citation-Ready</h4>
+                  </div>
+                </Card>
+              )}
+            </>
+          ) : (
+            <Card className="p-8 text-center space-y-3">
+              <Crosshair className="w-8 h-8 text-ink-400 mx-auto" />
+              <h4 className="font-serif font-bold text-ink text-base">Share of Model: Not Measured</h4>
               <p className="text-xs text-ink-500 max-w-md mx-auto">
-                No weak, fluff-heavy, or pronoun-led passages detected across crawled pages. Sentences are already self-contained and brand-attributed.
+                Live multi-engine Share of Model (SoM) is computed exclusively from successful live engine responses.
+                To observe real brand presence across AI answer engines, run a live benchmark with configured engine keys.
               </p>
             </Card>
-          ) : (
-            <div className="space-y-4">
-              {rewrites.map((r: any, idx: number) => {
-                const isCopied = copiedId === (r.passage_id || `rec-${idx}`);
-                return (
-                  <Card key={idx} className="p-4 space-y-3 border-ink/10 hover:border-pine/30 transition-all shadow-sm">
-                    {/* Header: Rewrite #, Tag Chips, Score Badge, Copy Action */}
-                    <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
-                      <div className="flex items-center gap-2">
-                        <span className="font-semibold text-pine font-mono bg-pine/5 px-2 py-0.5 rounded border border-pine/20">
-                          Rewrite #{idx + 1}
-                        </span>
-                        {r.category && (
-                          <span className="text-[11px] text-ink-600 font-medium">
-                            {r.category}
-                          </span>
-                        )}
-                        {Array.isArray(r.improvements) && r.improvements.map((imp: string, i: number) => (
-                          <span key={i} className="hidden sm:inline-block px-1.5 py-0.5 rounded bg-ink-100 text-ink-700 text-[10px] font-mono">
-                            {imp}
-                          </span>
-                        ))}
-                      </div>
-
-                      <div className="flex items-center gap-2">
-                        {r.estimated_score_improvement && (
-                          <span className="font-mono text-[11px] px-2 py-0.5 rounded bg-good/10 text-good font-semibold border border-good/20">
-                            Score: {r.estimated_score_improvement}
-                          </span>
-                        )}
-                        <button
-                          type="button"
-                          onClick={() => handleCopy(r.recommended_rewrite, r.passage_id || `rec-${idx}`)}
-                          className={`inline-flex items-center gap-1 px-2.5 py-1 rounded text-xs font-mono font-medium transition-colors ${
-                            isCopied
-                              ? 'bg-good text-white'
-                              : 'bg-ink-100 hover:bg-ink-200 text-ink-700 hover:text-ink-900 border border-ink/10'
-                          }`}
-                          title="Copy recommended rewrite"
-                        >
-                          {isCopied ? (
-                            <>
-                              <Check className="w-3.5 h-3.5" />
-                              <span>Copied!</span>
-                            </>
-                          ) : (
-                            <>
-                              <Copy className="w-3.5 h-3.5" />
-                              <span>Copy Rewrite</span>
-                            </>
-                          )}
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Side-by-Side Current vs Recommended */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
-                      <div className="p-3 rounded-md bg-bad/5 border border-bad/20 space-y-1.5">
-                        <div className="flex items-center justify-between">
-                          <span className="text-[10px] font-mono font-bold text-bad uppercase tracking-wider">
-                            Current Crawled Copy
-                          </span>
-                          <span className="text-[10px] text-ink-400 font-mono">Original</span>
-                        </div>
-                        <p className="text-ink-700 font-mono text-[11px] leading-relaxed">
-                          {r.current_passage}
-                        </p>
-                      </div>
-
-                      <div className="p-3 rounded-md bg-good/5 border border-good/30 space-y-1.5">
-                        <div className="flex items-center justify-between">
-                          <span className="text-[10px] font-mono font-bold text-good uppercase tracking-wider flex items-center gap-1">
-                            <Sparkles className="w-3 h-3 text-good" />
-                            Citation-Ready Rewrite
-                          </span>
-                          <span className="text-[10px] text-good font-mono font-semibold">Recommended</span>
-                        </div>
-                        <p className="text-ink-900 font-mono text-[11px] font-medium leading-relaxed">
-                          {r.recommended_rewrite}
-                        </p>
-                      </div>
-                    </div>
-
-                    {/* Bottom: Rationale & Why it matters for GEO */}
-                    {r.why && (
-                      <div className="flex items-start gap-1.5 pt-1 text-[11px] text-ink-600 bg-ink-50/60 p-2 rounded border border-ink/5">
-                        <Lightbulb className="w-3.5 h-3.5 text-pine shrink-0 mt-0.5" />
-                        <span className="leading-snug">
-                          <strong className="text-ink font-semibold">GEO Impact: </strong>
-                          {r.why}
-                        </span>
-                      </div>
-                    )}
-                  </Card>
-                );
-              })}
-            </div>
           )}
         </div>
       )}
 
       {/* ─────────────────────────────────────────────────────────────
-          SUB-TAB 6: VISIBILITY TRENDS
+          SUB-TAB 3: BRAND SENTIMENT & HALLUCINATIONS
+          ───────────────────────────────────────────────────────────── */}
+      {activeSubTab === 'sentiment' && (
+        <div className="space-y-6">
+          {sentimentAudit ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <Card className="p-5 space-y-3">
+                <h3 className="font-serif font-bold text-ink text-base flex items-center gap-2">
+                  <Award className="w-4 h-4 text-good" /> Brand Sentiment Polarity
+                </h3>
+                <div className="flex items-center gap-4">
+                  <div className="p-3 bg-good/10 text-good font-serif font-bold text-xl rounded-lg border border-good/20">
+                    {sentimentAudit.overall_sentiment_distribution?.POSITIVE ?? 0} Positive /{' '}
+                    {sentimentAudit.total_evaluated} Total
+                  </div>
+                  <p className="text-xs text-ink-600">
+                    Evaluated from {sentimentAudit.total_evaluated} live engine responses.
+                  </p>
+                </div>
+              </Card>
+
+              <Card className="p-5 space-y-3 border-l-4 border-l-bad">
+                <div className="flex items-center justify-between">
+                  <h3 className="font-serif font-bold text-ink text-base flex items-center gap-2">
+                    <ShieldAlert className="w-4 h-4 text-bad" /> Ground-Truth Hallucination Audit
+                  </h3>
+                  <span className="px-2 py-0.5 rounded text-[11px] font-mono font-bold bg-good/10 text-good">
+                    {sentimentAudit.hallucinated_responses} Distortions Flagged
+                  </span>
+                </div>
+                <p className="text-xs text-ink-600">
+                  Cross-referenced against verified crawled business profile facts.
+                </p>
+              </Card>
+            </div>
+          ) : (
+            <Card className="p-8 text-center space-y-3">
+              <ShieldAlert className="w-8 h-8 text-ink-400 mx-auto" />
+              <h4 className="font-serif font-bold text-ink text-base">Brand Sentiment & Hallucinations: Not Measured</h4>
+              <p className="text-xs text-ink-500 max-w-md mx-auto">
+                Sentiment polarity and factual hallucination detection require verbatim responses from live AI engines.
+                Run the Live AI Citation Tracker to evaluate how AI models represent your brand.
+              </p>
+            </Card>
+          )}
+        </div>
+      )}
+
+      {/* ─────────────────────────────────────────────────────────────
+          SUB-TAB 4: CONTROLLED RETRIEVAL ANALYSIS
+          ───────────────────────────────────────────────────────────── */}
+      {activeSubTab === 'retrieval_analysis' && (
+        <div className="space-y-6">
+          <Card className="p-5">
+            <ControlledRetrievalVisualizer
+              report={retrievalReport}
+              loading={retrievalLoading}
+              error={retrievalError}
+              query={retrievalQuery}
+              onQueryChange={setRetrievalQuery}
+              onRunAnalysis={handleRunControlledRetrieval}
+            />
+          </Card>
+        </div>
+      )}
+
+      {/* ─────────────────────────────────────────────────────────────
+          SUB-TAB 5: OFF-PAGE CITATION NETWORK
+          ───────────────────────────────────────────────────────────── */}
+      {activeSubTab === 'offpage' && (
+        <div className="space-y-6">
+          {offpageReport ? (
+            <Card className="p-5 space-y-4">
+              <div>
+                <h3 className="font-serif font-bold text-ink text-base flex items-center gap-2">
+                  <Network className="w-4 h-4 text-pine" /> Observed Third-Party Citation Authority Domains
+                </h3>
+                <p className="text-xs text-ink-500 mt-1">
+                  Third-party authority domains observed in external citation URLs during live AI answer engine benchmarking.
+                </p>
+              </div>
+
+              <div className="overflow-x-auto border border-ink/10 rounded-lg">
+                <table className="w-full text-xs text-left">
+                  <thead className="bg-ink-50 text-ink-700 font-mono text-[11px] border-b border-ink/10">
+                    <tr>
+                      <th className="py-2.5 px-3">Authority Domain</th>
+                      <th className="py-2.5 px-3">Category</th>
+                      <th className="py-2.5 px-3">Query Frequency</th>
+                      <th className="py-2.5 px-3">{brandName} Present</th>
+                      <th className="py-2.5 px-3">Recommended Profile Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-ink/5 font-mono text-[11px]">
+                    {offpageReport.top_authority_hubs?.map((hub: any, i: number) => (
+                      <tr key={i}>
+                        <td className="py-2.5 px-3 font-semibold text-ink">{hub.domain}</td>
+                        <td className="py-2.5 px-3 text-pine">{hub.hub_type}</td>
+                        <td className="py-2.5 px-3">{hub.frequency_across_queries} queries</td>
+                        <td className="py-2.5 px-3 font-bold">
+                          {hub.target_brand_present ? (
+                            <span className="text-good">✓ Observed</span>
+                          ) : (
+                            <span className="text-ink-400">✗ Not observed</span>
+                          )}
+                        </td>
+                        <td className="py-2.5 px-3 text-ink-600 font-sans">{hub.recommended_action}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </Card>
+          ) : (
+            <Card className="p-8 text-center space-y-3">
+              <Network className="w-8 h-8 text-ink-400 mx-auto" />
+              <h4 className="font-serif font-bold text-ink text-base">Off-Page Citation Network: Not Measured</h4>
+              <p className="text-xs text-ink-500 max-w-md mx-auto">
+                Off-page citation networks are aggregated strictly from external URLs observed in live benchmark responses.
+                Run the Live AI Citation Tracker to inspect third-party authority domains cited in engine responses.
+              </p>
+            </Card>
+          )}
+        </div>
+      )}
+
+      {/* ─────────────────────────────────────────────────────────────
+          SUB-TAB 6: LIVE AI CITATIONS
+          ───────────────────────────────────────────────────────────── */}
+      {activeSubTab === 'citations' && (
+        <RealAiCitationTracker
+          domain={report.domain}
+          bizName={brandName}
+          analysisId={analysisId}
+        />
+      )}
+
+      {/* ─────────────────────────────────────────────────────────────
+          SUB-TAB 7: INFORMATION GAIN & FLUFF
+          ───────────────────────────────────────────────────────────── */}
+      {activeSubTab === 'infogain' && (
+        <div className="space-y-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <Card className="p-4 space-y-1">
+              <span className="text-xs text-ink-500">Information Gain</span>
+              <p className="font-serif text-3xl font-bold text-ink">
+                {infoGain?.score != null ? Math.round(infoGain.score) : '—'}
+                <span className="text-xs text-ink-400 font-sans font-normal"> / 100</span>
+              </p>
+              <p className="text-xs text-good font-medium">Original data points present</p>
+            </Card>
+
+            <Card className="p-4 space-y-1">
+              <span className="text-xs text-ink-500">Fluff Ratio Score</span>
+              <p className="font-serif text-3xl font-bold text-ink">
+                {infoGain?.fluff_ratio_score != null ? `${infoGain.fluff_ratio_score}/100` : '—'}
+              </p>
+              <p className="text-xs text-ink-500">Low promotional filler</p>
+            </Card>
+
+            <Card className="p-4 space-y-1">
+              <span className="text-xs text-ink-500">Proprietary Statistics</span>
+              <p className="font-serif text-3xl font-bold text-ink">
+                {infoGain?.has_proprietary_statistics ? 'Detected' : 'None detected'}
+              </p>
+              <p className="text-xs text-ink-500">Primary research statistics</p>
+            </Card>
+
+            <Card className="p-4 space-y-1">
+              <span className="text-xs text-ink-500">Benchmark Tables</span>
+              <p className="font-serif text-3xl font-bold text-ink">
+                {infoGain?.has_benchmark_tables ? 'Verified' : 'None detected'}
+              </p>
+              <p className="text-xs text-ink-500">Quotable data comparisons</p>
+            </Card>
+          </div>
+        </div>
+      )}
+
+      {/* ─────────────────────────────────────────────────────────────
+          SUB-TAB 8: QUERY MATRIX
+          ───────────────────────────────────────────────────────────── */}
+      {activeSubTab === 'queries' && (
+        <Card className="p-5 space-y-4">
+          <h3 className="font-serif font-bold text-ink text-base">Tested Generative Inquiry Matrix</h3>
+          <div className="space-y-2">
+            {queries.slice(0, 10).map((q, idx) => (
+              <div key={idx} className="p-3 bg-ink-50/60 rounded-md border border-ink/5 flex items-center justify-between text-xs">
+                <span className="font-mono text-ink-800">{q.query}</span>
+                <span className="px-2 py-0.5 rounded bg-pine/10 text-pine font-mono font-semibold">
+                  {q.question_type || 'commercial'}
+                </span>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
+
+      {/* ─────────────────────────────────────────────────────────────
+          SUB-TAB 9: LLM PASSAGE REWRITES
+          ───────────────────────────────────────────────────────────── */}
+      {activeSubTab === 'rewrites' && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="font-serif font-bold text-ink text-base">Inverted-Pyramid Quotable Rewrites</h3>
+              <p className="text-xs text-ink-500">Drop-in 40-60 word definitions designed for direct LLM extraction.</p>
+            </div>
+            {onOpenPatchPack && (
+              <button
+                type="button"
+                onClick={onOpenPatchPack}
+                className="px-3 py-1.5 bg-pine hover:bg-pine-dark text-white rounded text-xs font-semibold flex items-center gap-1.5 transition-colors"
+              >
+                <FileCheck className="w-3.5 h-3.5" />
+                <span>Export Patch Pack ZIP</span>
+              </button>
+            )}
+          </div>
+
+          <div className="space-y-3">
+            {rewrites.slice(0, 5).map((r: any, idx: number) => {
+              const isCopied = copiedId === (r.passage_id || `rec-${idx}`);
+              return (
+                <Card key={idx} className="p-4 space-y-3">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="font-semibold text-pine font-mono bg-pine/5 px-2 py-0.5 rounded border border-pine/20">
+                      Rewrite #{idx + 1}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => handleCopy(r.recommended_rewrite, r.passage_id || `rec-${idx}`)}
+                      className="px-2.5 py-1 bg-ink-100 hover:bg-ink-200 text-ink-700 rounded text-xs font-mono font-medium flex items-center gap-1"
+                    >
+                      {isCopied ? <Check className="w-3.5 h-3.5 text-good" /> : <Copy className="w-3.5 h-3.5" />}
+                      <span>{isCopied ? 'Copied' : 'Copy'}</span>
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+                    <div className="p-3 rounded bg-bad/5 border border-bad/20">
+                      <span className="text-[10px] font-mono font-bold text-bad uppercase block mb-1">Current Copy</span>
+                      <p className="font-mono text-ink-700 text-[11px]">{r.current_passage}</p>
+                    </div>
+                    <div className="p-3 rounded bg-good/5 border border-good/30">
+                      <span className="text-[10px] font-mono font-bold text-good uppercase block mb-1">Recommended Inverted-Pyramid</span>
+                      <p className="font-mono text-ink-900 text-[11px]">{r.recommended_rewrite}</p>
+                    </div>
+                  </div>
+                </Card>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* ─────────────────────────────────────────────────────────────
+          SUB-TAB 10: VISIBILITY TRENDS
           ───────────────────────────────────────────────────────────── */}
       {activeSubTab === 'trends' && (
         <GeoAeoTrendTracker domain={report.domain} />

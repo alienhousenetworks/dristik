@@ -2,7 +2,7 @@
 Dristik AI 4-Layer GEO: Causal Citation Gap Engine & Actionable Remediation (Layers 3 & 4).
 
 Layer 3: Causal Citation Intelligence
-Reverse-engineers citation logic across AI search engines:
+Analyzes observed citations across live AI search engine benchmark responses:
 Competitor Citation -> Source URL -> Root Authority Domain Type -> Missing Target Evidence.
 Classifies authority domains (Peer Review, Tech Media, Community Discussion, Official Standards, Vendor Self-Hosted).
 

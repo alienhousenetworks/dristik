@@ -67,15 +67,17 @@ class EngineBenchmarkAggregate(BaseModel):
 class ShareOfModelMetric(BaseModel):
     """
     Enterprise Share of Model (SoM) and Competitor Displacement metrics,
-    benchmarking brand presence vs rivals across AI answer engines.
+    benchmarking brand presence vs rivals across AI answer engines with buyer funnel weighting.
     """
     target_domain: str
     brand_name: str
     total_evaluated_queries: int
     share_of_model_pct: float
+    funnel_weighted_som_pct: float = 0.0
     first_party_citation_share_pct: float
     recommendation_rank_score: float  # 0 to 100 based on position weighting
     ordinal_distribution: Dict[str, int] = Field(default_factory=dict)  # rank_1, rank_2_3, rank_4_plus, unranked
+    stage_breakdown: Dict[str, Dict[str, Any]] = Field(default_factory=dict)  # awareness, consideration, decision
     competitor_shares: Dict[str, float] = Field(default_factory=dict)
     competitor_displacements: List[Dict[str, Any]] = Field(default_factory=list)
 
@@ -100,6 +102,8 @@ class GeoBenchmarkReport(BaseModel):
     reproducibility_hash: str
     is_live_measurement: bool = True
     summary: str = ""
+    sentiment_audit: Optional[Dict[str, Any]] = None
+    offpage_citation_summary: Optional[Dict[str, Any]] = None
 
 
 class GeoBenchmarkRunner:
@@ -377,6 +381,30 @@ class GeoBenchmarkRunner:
             competitors=competitors,
         )
 
+        # Compute sentiment & hallucination audit
+        sentiment_audit_dict = None
+        try:
+            from app.intelligence.geo.sentiment_engine import geo_sentiment_engine
+            sentiment_audit_dict = geo_sentiment_engine.generate_audit_report(
+                evaluations=evaluations,
+                brand_name=brand,
+            ).model_dump()
+        except Exception as exc:
+            logger.debug("[BenchmarkRunner] Sentiment audit skipped: %s", exc)
+
+        # Compute off-page citation authority network
+        offpage_dict = None
+        try:
+            from app.intelligence.geo.offpage_network import offpage_network_analyzer
+            offpage_dict = offpage_network_analyzer.analyze_citation_network(
+                evaluations=evaluations,
+                target_domain=clean_domain,
+                brand_name=brand,
+                competitors=competitors,
+            ).model_dump()
+        except Exception as exc:
+            logger.debug("[BenchmarkRunner] Offpage network skipped: %s", exc)
+
         return GeoBenchmarkReport(
             benchmark_id=benchmark_id,
             target_domain=clean_domain,
@@ -396,6 +424,8 @@ class GeoBenchmarkRunner:
             summary=summary,
             repeats=repeat_count,
             failed_runs=failed_runs,
+            sentiment_audit=sentiment_audit_dict,
+            offpage_citation_summary=offpage_dict,
         )
 
     def calculate_share_of_model(
@@ -495,11 +525,57 @@ class GeoBenchmarkRunner:
         cit_share_pct = round((target_first_party_citations / total) * 100.0, 1)
         rank_score = round((position_weight_sum / total) * 100.0, 1)
 
+        # Stage-weighted metrics
+        # Decision: commercial, comparative, high_intent (weight 4.0)
+        # Consideration: services, problem (weight 2.5)
+        # Awareness: entity, audience, geographic, other (weight 1.0)
+        stages = {
+            "awareness": {"total": 0, "mentions": 0, "weight": 1.0},
+            "consideration": {"total": 0, "mentions": 0, "weight": 2.5},
+            "decision": {"total": 0, "mentions": 0, "weight": 4.0},
+        }
+
+        weighted_mentions = 0.0
+        weighted_total = 0.0
+
+        for ev in successes:
+            cat = (getattr(ev, "category", "") or "").lower()
+            if cat in ("commercial", "comparative", "high_intent"):
+                stage_key = "decision"
+            elif cat in ("services", "problem"):
+                stage_key = "consideration"
+            else:
+                stage_key = "awareness"
+
+            st = stages[stage_key]
+            st["total"] += 1
+            w = st["weight"]
+            weighted_total += w
+
+            if ev.was_mentioned:
+                st["mentions"] += 1
+                weighted_mentions += w
+
+        stage_breakdown: Dict[str, Dict[str, Any]] = {}
+        for s_name, s_data in stages.items():
+            s_tot = s_data["total"]
+            s_men = s_data["mentions"]
+            rate = round((s_men / max(1, s_tot)) * 100.0, 1) if s_tot > 0 else None
+            stage_breakdown[s_name] = {
+                "total_queries": s_tot,
+                "mentions": s_men,
+                "mention_rate_pct": rate,
+                "commercial_weight": s_data["weight"],
+            }
+
+        funnel_som = round((weighted_mentions / max(0.1, weighted_total)) * 100.0, 1) if weighted_total > 0 else som_pct
+
         return ShareOfModelMetric(
             target_domain=clean_domain,
             brand_name=brand_name,
             total_evaluated_queries=total,
             share_of_model_pct=som_pct,
+            funnel_weighted_som_pct=funnel_som,
             first_party_citation_share_pct=cit_share_pct,
             recommendation_rank_score=rank_score,
             ordinal_distribution={
@@ -508,6 +584,7 @@ class GeoBenchmarkRunner:
                 "rank_4_plus": rank_4_plus,
                 "unranked": unranked,
             },
+            stage_breakdown=stage_breakdown,
             competitor_shares=competitor_shares,
             competitor_displacements=displacements[:30],
         )

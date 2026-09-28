@@ -5,7 +5,7 @@ Token counts, latency, and the USD cost of the provider and model that ran.
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Set
 from uuid import uuid4
-from app.domain.models import AgentCallRecord, StageCostRecord, TelemetryData
+from app.domain.models import AgentCallRecord, StageCostRecord, SubStepCostRecord, TelemetryData
 from app.inference.pricing import canonical_provider, price_call_from_settings
 
 
@@ -15,6 +15,8 @@ class TelemetryTracker:
         self._bases: Set[str] = set()
         self.current_stage = "general"
         self.current_stage_display = "General Execution"
+        self.current_sub_step = "default"
+        self.current_sub_step_display = "Default Execution"
 
     def set_active_stage(self, stage: str, display_name: Optional[str] = None) -> None:
         self.current_stage = stage
@@ -23,6 +25,19 @@ class TelemetryTracker:
             self.telemetry.stage_costs[stage] = StageCostRecord(
                 stage=stage,
                 display_name=self.current_stage_display,
+            )
+
+    def set_active_sub_stage(self, sub_step: str, display_name: Optional[str] = None) -> None:
+        self.current_sub_step = sub_step
+        self.current_sub_step_display = display_name or sub_step.replace("_", " ").title()
+        # Ensure parent stage exists
+        if self.current_stage not in self.telemetry.stage_costs:
+            self.set_active_stage(self.current_stage)
+        stage_rec = self.telemetry.stage_costs[self.current_stage]
+        if sub_step not in stage_rec.sub_steps:
+            stage_rec.sub_steps[sub_step] = SubStepCostRecord(
+                sub_step=sub_step,
+                display_name=self.current_sub_step_display,
             )
 
     def get_current_stage_cost(self) -> float:
@@ -108,6 +123,31 @@ class TelemetryTracker:
             stage_rec.cost_usd = round(stage_rec.cost_usd + quote.cost_usd, 6)
         if label not in stage_rec.models:
             stage_rec.models.append(label)
+
+        # Update sub-step level cost breakdown
+        if self.current_sub_step not in stage_rec.sub_steps:
+            stage_rec.sub_steps[self.current_sub_step] = SubStepCostRecord(
+                sub_step=self.current_sub_step,
+                display_name=self.current_sub_step_display,
+                capability=capability,
+            )
+        sub_rec = stage_rec.sub_steps[self.current_sub_step]
+        sub_rec.calls_count += 1
+        sub_rec.input_tokens += input_tokens
+        sub_rec.output_tokens += output_tokens
+        sub_rec.total_tokens += (input_tokens + output_tokens)
+        sub_rec.latency_ms = round(sub_rec.latency_ms + latency_ms, 1)
+        if quote.cost_usd is not None:
+            sub_rec.cost_usd = round(sub_rec.cost_usd + quote.cost_usd, 6)
+        if label not in sub_rec.models:
+            sub_rec.models.append(label)
+        sub_rec.is_actual = quote.is_actual
+        sub_rec.cost_basis = quote.basis
+        if quote.is_actual:
+            sub_rec.formula_rate = "Provider in-band billed"
+        elif quote.cost_usd is not None:
+            from app.inference.budget_manager import BudgetManager
+            sub_rec.formula_rate = BudgetManager.format_rate_formula(served_provider, served_model)
 
         current_agent_time = self.telemetry.agent_timings.get(capability, 0.0)
         self.telemetry.agent_timings[capability] = round(current_agent_time + latency_ms, 1)

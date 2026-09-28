@@ -38,6 +38,10 @@ class ModelRouter:
         if hasattr(self.telemetry, "set_active_stage"):
             self.telemetry.set_active_stage(stage, display_name)
 
+    def set_active_sub_stage(self, sub_step: str, display_name: Optional[str] = None) -> None:
+        if hasattr(self.telemetry, "set_active_sub_stage"):
+            self.telemetry.set_active_sub_stage(sub_step, display_name)
+
     def _record_llm_call(
         self,
         *,

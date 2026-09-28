@@ -326,6 +326,7 @@ class AnalysisOrchestrator:
 
             # 3. Dynamic Capability Scheduling
             model_router.set_active_stage("planning", "Capability Scheduling & Hypotheses")
+            model_router.set_active_sub_stage("capability_scheduling", "Dynamic Capability Scheduling & Wave Planning")
             run.status = AnalysisStage.PLANNING
             mission_caps = self.mission_director.select_capabilities_for_mission(mission_state)
 
@@ -339,6 +340,7 @@ class AnalysisOrchestrator:
 
             # 6. Business identity (declared vs detected) before the 35-agent DAG
             model_router.set_active_stage("business_understanding", "Business Identity Resolution")
+            model_router.set_active_sub_stage("brand_identity_extraction", "Brand Identity, ICP & Value Prop Resolution")
             run.status = AnalysisStage.SPECIALIST_EXECUTION
             await self._emit_event(
                 analysis_id,
@@ -366,6 +368,7 @@ class AnalysisOrchestrator:
 
             # 7. Full 35-agent specialist DAG (dependency waves, no canned fallbacks)
             model_router.set_active_stage("specialist_execution", "35-Agent Specialist DAG")
+            model_router.set_active_sub_stage("specialist_agents_dag", "35-Agent Multi-Disciplinary Analysis Waves")
             agent_pool = AgentPool(model_router)
             await self._emit_event(
                 analysis_id,
@@ -414,6 +417,7 @@ class AnalysisOrchestrator:
 
             # 7b. Per-page SEO, copywriting, and suggested copy
             model_router.set_active_stage("page_intelligence", "Page-Level SEO & Copywriting")
+            model_router.set_active_sub_stage("page_copy_and_hero", "Page-by-Page SEO & Copywriting Rewrites")
             await self._emit_event(
                 analysis_id,
                 "specialist_execution",
@@ -425,6 +429,7 @@ class AnalysisOrchestrator:
 
             # 8. Verification agents already ran in the DAG (adversarial + contradiction + executive).
             model_router.set_active_stage("adversarial_verification", "Adversarial Verification & Integrity Gate")
+            model_router.set_active_sub_stage("critic_verification", "Adversarial Critic & Ground Truth Gate")
             run.status = AnalysisStage.ADVERSARIAL_VERIFICATION
             await self._emit_event(
                 analysis_id,
@@ -467,6 +472,7 @@ class AnalysisOrchestrator:
 
             # 9. Level 3: Causal Reasoning & Root-Cause Bottleneck Discovery
             model_router.set_active_stage("causal_reasoning", "Causal Reasoning & Bottlenecks")
+            model_router.set_active_sub_stage("causal_bottlenecks", "Causal Graph & Bottleneck Isolation")
             await self._emit_event(analysis_id, "specialist_execution", 82, "Causal Reasoning Engine isolating primary root-cause growth bottlenecks...")
             bottlenecks = self.causal_engine.analyze_root_causes(current_claims, blackboard.business_profile)
             blackboard.blackboard_state["root_causes"] = [b.model_dump() for b in bottlenecks]
@@ -485,6 +491,7 @@ class AnalysisOrchestrator:
 
             # 10. AI Answer Engine Discoverability & Commercial Query Simulation
             model_router.set_active_stage("ai_search_simulation", "AI Answer Engine Simulation")
+            model_router.set_active_sub_stage("buyer_query_simulation", "Synthetic Commercial Query Simulation")
             await self._emit_event(
                 analysis_id,
                 "specialist_execution",
@@ -499,6 +506,7 @@ class AnalysisOrchestrator:
 
             # 11. Executive Strategy Narrative Synthesis
             model_router.set_active_stage("executive_synthesis", "Executive Strategy Narrative Synthesis")
+            model_router.set_active_sub_stage("narrative_synthesis", "C-Suite Strategic Narrative Compilation")
             run.status = AnalysisStage.EXECUTIVE_SYNTHESIS
             await self._emit_event(analysis_id, "executive_synthesis", 88, "Synthesizer compiling C-Suite narrative from verified specialist claims...")
             if not blackboard.executive_narrative.get("story_summary"):
@@ -506,6 +514,7 @@ class AnalysisOrchestrator:
 
             # 12. Causal Prioritization & Scoring Engine
             model_router.set_active_stage("scoring_and_remediation", "Scoring & Remediation Blueprints")
+            model_router.set_active_sub_stage("remediation_blueprints", "Autonomous Code Patch Pack Generation")
             run.status = AnalysisStage.SCORING
             await self._emit_event(analysis_id, "scoring", 93, "Deterministic Scoring Engine computing intent-adjusted category scores...")
 

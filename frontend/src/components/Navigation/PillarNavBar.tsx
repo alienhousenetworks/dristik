@@ -16,6 +16,7 @@ import {
   ShieldCheck,
   FileText,
   PlusCircle,
+  Coins,
 } from 'lucide-react';
 
 interface PillarNavBarProps {
@@ -106,6 +107,12 @@ export function PillarNavBar({
       icon: FileCheck2,
       badge: findingsCount || report?.findings?.length || undefined,
     },
+    {
+      id: 'costing' as TabId,
+      label: 'Unit Economics & Cost Ledger',
+      icon: Coins,
+      badge: report?.telemetry?.estimated_cost_usd ? `$${report.telemetry.estimated_cost_usd.toFixed(2)}` : undefined,
+    },
   ];
 
   // Group 4: Engineering & Remediation
@@ -136,6 +143,7 @@ export function PillarNavBar({
     if (id === 'aeo' && tab === 'brand_entity_intelligence') return true;
     if (id === 'cro' && (tab === 'conversion_intelligence' || tab === 'website_experience')) return true;
     if (id === 'competitors' && (tab === 'perspectives' || tab === 'lead_gen')) return true;
+    if ((id === 'costing' || id === 'costs') && (tab === 'costing' || tab === 'costs')) return true;
     return false;
   };
 
