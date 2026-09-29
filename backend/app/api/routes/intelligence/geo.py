@@ -3,6 +3,8 @@ Dristik AI GEO/AEO Live Pipeline API Routes
 Endpoints to trigger live LLM querying, fetch historical time-series trends,
 and inspect raw verbatim response texts with citation provenance.
 """
+from __future__ import annotations
+
 from typing import Optional, List, Dict, Any
 from pydantic import BaseModel, Field
 from fastapi import APIRouter, HTTPException, Query, BackgroundTasks
@@ -310,6 +312,35 @@ async def simulate_rag_endpoint(req: ControlledRetrievalRequest):
     Deprecated alias for /controlled-retrieval.
     """
     return await controlled_retrieval_endpoint(req)
+
+
+class SentimentAuditRequest(BaseModel):
+    evaluations: List[EvaluatedQueryRun] = Field(default_factory=list, description="Evaluated query runs to audit")
+    brand_name: str = Field(..., description="Brand name to evaluate sentiment and hallucinations for")
+
+
+class OffPageNetworkRequest(BaseModel):
+    evaluations: List[EvaluatedQueryRun] = Field(default_factory=list, description="Evaluated query runs to analyze")
+    domain: str = Field(..., description="Target website domain")
+    brand_name: str = Field(..., description="Target brand name")
+    competitors: Optional[List[str]] = Field(default_factory=list, description="Competitor domains or brand names")
+
+
+class DisplacementDetectionRequest(BaseModel):
+    baseline_evaluations: List[EvaluatedQueryRun] = Field(default_factory=list, description="Baseline evaluated query runs")
+    current_evaluations: List[EvaluatedQueryRun] = Field(default_factory=list, description="Current evaluated query runs")
+    brand_name: str = Field(..., description="Target brand name")
+    domain: str = Field(..., description="Target domain")
+    competitors: Optional[List[str]] = Field(default_factory=list, description="Competitor brand names or domains")
+
+
+class AttributionVerificationRequest(BaseModel):
+    pre_patch_evaluations: List[EvaluatedQueryRun] = Field(default_factory=list, description="Pre-patch evaluated query runs")
+    post_patch_evaluations: List[EvaluatedQueryRun] = Field(default_factory=list, description="Post-patch evaluated query runs")
+    domain: str = Field(..., description="Target domain")
+    brand_name: str = Field(..., description="Target brand name")
+    pre_run_id: str = Field("pre_patch", description="Pre-patch run identifier")
+    post_run_id: str = Field("post_patch", description="Post-patch run identifier")
 
 
 @router.post("/sentiment-audit", response_model=HallucinationAuditReport)

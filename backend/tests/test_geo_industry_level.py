@@ -483,3 +483,59 @@ def test_zero_fake_test_8_live_engine_separation():
     for field in forbidden_live_fields:
         assert field not in data, f"Live engine field '{field}' inappropriately present in controlled retrieval report!"
 
+
+def test_geo_api_endpoints_schema_and_execution():
+    """
+    Test 9: Verify FastAPI endpoints for sentiment-audit, offpage-network,
+    detect-displacements, and verify-attribution accept their schemas and execute.
+    """
+    from fastapi.testclient import TestClient
+    from app.main import app
+
+    client = TestClient(app)
+
+    # 1. Sentiment audit endpoint
+    res = client.post("/api/v1/geo-pipeline/sentiment-audit", json={
+        "evaluations": [],
+        "brand_name": "Acme Inc"
+    })
+    assert res.status_code == 200
+    data = res.json()
+    assert data["total_evaluated"] == 0
+    assert "detected_distortions" in data
+
+    # 2. Offpage network endpoint
+    res = client.post("/api/v1/geo-pipeline/offpage-network", json={
+        "evaluations": [],
+        "domain": "acme.com",
+        "brand_name": "Acme Inc",
+        "competitors": ["rival.com"]
+    })
+    assert res.status_code == 200
+    data = res.json()
+    assert data["target_domain"] == "acme.com"
+
+    # 3. Detect displacements endpoint
+    res = client.post("/api/v1/geo-pipeline/detect-displacements", json={
+        "baseline_evaluations": [],
+        "current_evaluations": [],
+        "brand_name": "Acme Inc",
+        "domain": "acme.com",
+        "competitors": ["rival.com"]
+    })
+    assert res.status_code == 200
+    data = res.json()
+    assert data["target_domain"] == "acme.com"
+
+    # 4. Verify attribution endpoint
+    res = client.post("/api/v1/geo-pipeline/verify-attribution", json={
+        "pre_patch_evaluations": [],
+        "post_patch_evaluations": [],
+        "domain": "acme.com",
+        "brand_name": "Acme Inc"
+    })
+    assert res.status_code == 200
+    data = res.json()
+    assert data["target_domain"] == "acme.com"
+
+
