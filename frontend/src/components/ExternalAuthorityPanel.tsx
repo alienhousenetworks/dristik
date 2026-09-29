@@ -52,7 +52,7 @@ export function ExternalAuthorityPanel({
 
   async function load() {
     const payload = await fetchExternalHealth();
-    setRows((payload.connectors || []) as ConnectorRow[]);
+    setRows(((payload.connectors || []) as unknown) as ConnectorRow[]);
   }
 
   useEffect(() => {
