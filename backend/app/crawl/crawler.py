@@ -271,24 +271,25 @@ class CrawlerService:
         # Tier 1: Local High-Speed Playwright ($0 API cost, fast asset-blocked execution)
         if BrowserRenderService.is_available():
             try:
-                pw_html, pw_status, pw_ttfb, pw_headers, pw_err, pw_text = await BrowserRenderService.render_page(url)
+                pw_html, pw_status, pw_ttfb, pw_headers, pw_err, pw_text, pw_perf = await BrowserRenderService.render_page(url)
                 if pw_html:
                     headers = pw_headers or {"x-crawler": "playwright-local-js"}
                     return (
                         pw_html,
                         pw_text,
                         pw_status or 200,
-                        pw_ttfb or ((time.time() - start_time) * 1000),
+                        pw_ttfb if pw_ttfb > 0 else ((time.time() - start_time) * 1000),
                         headers,
                         len(pw_html.encode("utf-8")),
                         None,
+                        pw_perf,
                     )
             except Exception:
                 pass
 
         # Tier 2: Cloud Firecrawl Dynamic Rendering Fallback
         if not settings.FIRECRAWL_API_KEY or not settings.FIRECRAWL_API_KEY.strip():
-            return None, None, 0, (time.time() - start_time) * 1000, {}, 0, "js_render_unavailable"
+            return None, None, 0, (time.time() - start_time) * 1000, {}, 0, "js_render_unavailable", None
 
         try:
             fc_resp = await client.post(
@@ -321,28 +322,30 @@ class CrawlerService:
                         {"x-crawler": "firecrawl-js"},
                         len(payload.encode("utf-8")),
                         None,
+                        None,
                     )
-            return None, None, fc_resp.status_code, (time.time() - start_time) * 1000, {}, 0, f"firecrawl HTTP {fc_resp.status_code}"
+            return None, None, fc_resp.status_code, (time.time() - start_time) * 1000, {}, 0, f"firecrawl HTTP {fc_resp.status_code}", None
         except Exception as exc:
-            return None, None, 0, (time.time() - start_time) * 1000, {}, 0, str(exc)
+            return None, None, 0, (time.time() - start_time) * 1000, {}, 0, str(exc), None
 
     async def _fetch_page_with_fallbacks(
         self,
         url: str,
         client: httpx.AsyncClient,
         force_js: bool = False,
-    ) -> Tuple[Optional[str], int, float, Dict[str, str], int, Optional[str], Optional[str], List[Dict[str, Any]], str]:
+    ) -> Tuple[Optional[str], int, float, Dict[str, str], int, Optional[str], Optional[str], List[Dict[str, Any]], str, Optional[Dict[str, Any]]]:
         """
         Direct HTTP first following redirects step-by-step with SSRF validation on each hop.
         If blocked or force_js for CMS/SPA shells, render in a browser via Playwright/Firecrawl.
         Returns:
-        (html_content, status_code, ttfb_ms, headers, content_bytes, error_msg, markdown, redirect_chain, final_url)
+        (html_content, status_code, ttfb_ms, headers, content_bytes, error_msg, markdown, redirect_chain, final_url, timing_data)
         """
         start_time = time.time()
         direct_err = None
         ttfb_ms = 0.0
         redirect_chain: List[Dict[str, Any]] = []
         final_url = url
+        timing_data: Optional[Dict[str, Any]] = None
 
         if not force_js:
             current_url = url
@@ -362,14 +365,17 @@ class CrawlerService:
 
                 hop_start = time.time()
                 try:
-                    resp = await client.get(current_url)
-                    hop_latency = (time.time() - hop_start) * 1000
+                    async with client.stream("GET", current_url) as stream_resp:
+                        ttfb_hop = (time.time() - hop_start) * 1000
+                        content = await stream_resp.aread()
+                        hop_latency = (time.time() - hop_start) * 1000
+                        status_code = stream_resp.status_code
+                        loc = stream_resp.headers.get("location") or stream_resp.headers.get("Location")
+                        resp_headers = dict(stream_resp.headers)
+                        resp_text = content.decode(stream_resp.encoding or "utf-8", errors="replace")
                 except Exception as e:
                     direct_err = str(e)
                     break
-
-                status_code = resp.status_code
-                loc = resp.headers.get("location") or resp.headers.get("Location")
 
                 if 300 <= status_code < 400 and loc:
                     next_url = urljoin(current_url, loc)
@@ -382,26 +388,32 @@ class CrawlerService:
                     current_url = next_url
                 else:
                     final_url = current_url
-                    ttfb_ms = (time.time() - start_time) * 1000
-                    if status_code < 400 and resp.text:
+                    ttfb_ms = round(ttfb_hop, 1)
+                    timing_data = {
+                        "ttfb_ms": ttfb_ms,
+                        "download_ms": round(max(0.0, hop_latency - ttfb_hop), 1),
+                        "total_transferred_bytes": len(content),
+                    }
+                    if status_code < 400 and resp_text:
                         return (
-                            resp.text,
+                            resp_text,
                             status_code,
                             ttfb_ms,
-                            dict(resp.headers),
-                            len(resp.content),
+                            resp_headers,
+                            len(content),
                             None,
                             None,
                             redirect_chain,
-                            final_url
+                            final_url,
+                            timing_data,
                         )
                     direct_err = f"HTTP {status_code}"
                     break
 
             if direct_err and ("Redirect loop" in direct_err or "SSRF blocked" in direct_err):
-                return None, 0, ttfb_ms, {}, 0, direct_err, None, redirect_chain, final_url
+                return None, 0, ttfb_ms, {}, 0, direct_err, None, redirect_chain, final_url, None
 
-        html, markdown, status, js_ttfb, headers, nbytes, js_err = await self._js_render_page(url, client, start_time)
+        html, markdown, status, js_ttfb, headers, nbytes, js_err, js_perf = await self._js_render_page(url, client, start_time)
         if html:
             return (
                 html,
@@ -412,9 +424,10 @@ class CrawlerService:
                 None,
                 markdown,
                 redirect_chain,
-                final_url
+                final_url,
+                js_perf,
             )
-        return None, 0, ttfb_ms, {}, 0, direct_err or js_err, None, redirect_chain, final_url
+        return None, 0, ttfb_ms, {}, 0, direct_err or js_err, None, redirect_chain, final_url, None
 
     async def crawl_and_analyze(self, target_url: str, evidence_store: EvidenceStore) -> PageEvidence:
         """
@@ -489,7 +502,7 @@ class CrawlerService:
             async def fetch_and_analyze_single_page(page_url: str) -> Optional[PageEvidence]:
                 nonlocal last_fetch_error
                 async with semaphore:
-                    html_content, status_code, ttfb_ms, resp_headers, content_bytes, err, markdown, redirect_chain, final_url = await self._fetch_page_with_fallbacks(page_url, client)
+                    html_content, status_code, ttfb_ms, resp_headers, content_bytes, err, markdown, redirect_chain, final_url, timing_data = await self._fetch_page_with_fallbacks(page_url, client)
                     
                     if not html_content:
                         last_fetch_error = err or "Connection failed"
@@ -521,13 +534,14 @@ class CrawlerService:
                         and is_thin_shell
                         and embedded.get("word_count", 0) < 80
                     ):
-                        js_html, js_status, js_ttfb, js_headers, js_bytes, js_err, js_md, js_chain, js_final = await self._fetch_page_with_fallbacks(
+                        js_html, js_status, js_ttfb, js_headers, js_bytes, js_err, js_md, js_chain, js_final, js_timing = await self._fetch_page_with_fallbacks(
                             page_url, client, force_js=True
                         )
                         if js_html:
                             html_content = js_html
                             status_code = js_status or status_code
                             ttfb_ms = js_ttfb or ttfb_ms
+                            timing_data = js_timing or timing_data
                             resp_headers = js_headers or resp_headers
                             content_bytes = js_bytes or content_bytes
                             markdown = js_md or markdown
@@ -585,7 +599,16 @@ class CrawlerService:
                     dom_res = analyze_dom_structure(soup, page_url, evidence_store)
                     schema_res = analyze_schema_markup(soup, page_url, evidence_store)
                     links_res = analyze_link_graph(soup, page_url, normalized_root, evidence_store)
-                    perf_res = analyze_performance_metrics(page_url, ttfb_ms, content_bytes, resp_headers, evidence_store)
+                    perf_res = analyze_performance_metrics(
+                        page_url,
+                        ttfb_ms,
+                        content_bytes,
+                        resp_headers,
+                        evidence_store,
+                        soup=soup,
+                        timing_data=timing_data,
+                        dom_data=dom_res,
+                    )
                     sec_res = analyze_security_headers(page_url, resp_headers, evidence_store)
 
                     # Extract newly found internal links
@@ -638,6 +661,7 @@ class CrawlerService:
                         images_without_alt=dom_res.get("images_without_alt", 0),
                         total_images=dom_res.get("total_images", 0),
                         ttfb_ms=perf_res.get("ttfb_ms", 0.0),
+                        lab_performance=perf_res.get("lab_performance"),
                         dom_elements_count=dom_res.get("dom_elements_count", 0),
                         scripts_count=dom_res.get("scripts_count", 0),
                         stylesheets_count=dom_res.get("stylesheets_count", 0),
@@ -651,6 +675,7 @@ class CrawlerService:
                         final_url=final_url if final_url != page_url else None,
                         snapshot_id=snap_id,
                         snapshot_path=snap_path,
+                        raw_html=html_content,
                         observed_at=datetime.now(timezone.utc).isoformat(),
                         image_assets=dom_res.get("image_assets", []),
                         x_robots_tag=meta_res.get("x_robots_tag"),
@@ -907,6 +932,9 @@ class CrawlerService:
                     "status": p.status_code,
                     "words": p.word_count,
                     "ttfb_ms": p.ttfb_ms,
+                    "render_blocking_count": p.lab_performance.render_blocking_count if p.lab_performance else 0,
+                    "fcp_ms": p.lab_performance.fcp_ms if p.lab_performance else None,
+                    "transferred_kb": p.lab_performance.total_transferred_kb if p.lab_performance else 0.0,
                     "schema_count": len(p.schema_types),
                     "has_redirects": p.is_redirected,
                     "redirect_hops": len(p.redirect_chain)

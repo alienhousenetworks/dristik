@@ -168,6 +168,7 @@ class ScoringEngine:
 
         from app.domain.enums import RubricConfidence, EvidenceClass
         from app.cognition.finding_registry import _canonical_id
+        from app.scoring.calibration import calibrate_finding, deduction_scales
 
         seen_root_causes: Dict[str, Category] = {}
 
@@ -193,9 +194,14 @@ class ScoringEngine:
             if cid not in seen_root_causes:
                 seen_root_causes[cid] = cat
 
+            calibrate_finding(f)
+            calibrated = f.calibrated_impact
             idx = severity_counts[cat][f.severity]
             base_points = _diminishing_deduction(f.severity, idx)
-            points_lost = round(base_points * 0.5, 1) if is_secondary_downstream else base_points
+            if is_secondary_downstream:
+                base_points = round(base_points * 0.5, 1)
+            business_scale, confidence_scale = deduction_scales(calibrated)
+            points_lost = round(base_points * business_scale * confidence_scale, 1)
 
             category_deductions[cat] += points_lost
             severity_counts[cat][f.severity] = idx + 1
@@ -204,6 +210,10 @@ class ScoringEngine:
                 "finding_id": f.finding_id,
                 "title": f.title + (" (Downstream Consequence)" if is_secondary_downstream else ""),
                 "severity": f.severity.value,
+                "technical_severity": calibrated.technical_severity.value if calibrated else f.severity.value,
+                "business_impact": calibrated.business_impact_label if calibrated else "Medium",
+                "confidence_band": calibrated.confidence_band.value if calibrated else "MEDIUM",
+                "blocking": bool(calibrated.is_blocking) if calibrated else False,
                 "confidence": rubric.customer_label if (rubric and hasattr(rubric, "customer_label")) else "Unknown",
                 "points_lost": round(points_lost, 1),
                 "is_downstream_consequence": is_secondary_downstream,
@@ -302,11 +312,24 @@ class ScoringEngine:
                         f"{raw_score:.0f}/100. Verified compliant execution with zero defects recorded in the crawl sample."
                     )
             else:
-                top = category_weaknesses[cat][0]
-                summary = (
-                    f"{raw_score:.0f}/100 from {n_issues} verified finding{'s' if n_issues != 1 else ''}. "
-                    f"Primary drag: {top}."
-                )
+                items = category_deduction_items[cat]
+                top_item = max(items, key=lambda item: item.get("points_lost", 0)) if items else None
+                if top_item:
+                    blocking_word = "yes" if top_item.get("blocking") else "no"
+                    summary = (
+                        f"{raw_score:.0f}/100 from {n_issues} verified finding{'s' if n_issues != 1 else ''}. "
+                        f"Largest deduction: {top_item['title']} "
+                        f"(technical {top_item.get('technical_severity')}, "
+                        f"business {top_item.get('business_impact')}, "
+                        f"confidence {top_item.get('confidence_band')}, "
+                        f"blocking {blocking_word})."
+                    )
+                else:
+                    top = category_weaknesses[cat][0]
+                    summary = (
+                        f"{raw_score:.0f}/100 from {n_issues} verified finding{'s' if n_issues != 1 else ''}. "
+                        f"Largest deduction: {top}."
+                    )
 
             cat_findings = [f for f in findings if f.category == cat]
             cat_ev_count = sum(1 for f in cat_findings if f.evidence_refs)

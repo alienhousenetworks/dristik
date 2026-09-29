@@ -47,8 +47,8 @@ def derive_finding_metrics(
 
     if scope_affected_urls > 5:
         sev_impact = min(10, sev_impact + 1)
-    if is_blocking:
-        sev_impact = min(10, sev_impact + 1)
+    # `is_blocking` stays on the signature for callers. Blocking does not raise business impact.
+    _ = is_blocking
     impact = sev_impact
 
     effort_map = {
@@ -527,7 +527,7 @@ class CroExperienceReasonerAgent:
                     severity=Severity.CRITICAL,
                     evidence_strength="dom_structure",
                     scope_affected_urls=1,
-                    is_blocking=True,
+                    is_blocking=False,
                     estimated_complexity="trivial"
                 )
                 findings.append(Finding(

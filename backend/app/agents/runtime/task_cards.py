@@ -84,11 +84,12 @@ TASK_CARDS: Dict[str, str] = {
         "Use only crawled URLs and recorded anchors."
     ),
     "seo.performance.v3": (
-        "Use measured TTFB and payload size only. Never invent LCP, CLS, INP, or CrUX values. "
-        "BEFORE finalizing any CWV/performance claim, check ext_xxx from CrUX field data. "
+        "Audit server TTFB, render-blocking JS/CSS, payload weights by type, third-party scripts, and compression from crawl lab evidence. "
+        "Never invent LCP, CLS, INP, or CrUX values. "
+        "BEFORE finalizing any field CWV claim, verify ext_xxx from CrUX field data. "
         "CONFIRMS → cite ev_xxx + ext_xxx, HIGH. CONTRADICTS → CONTESTED, cite both, route to verification.contradiction.v3. "
-        "No usable CrUX ext_xxx → MEDIUM at best, SINGLE_SOURCE_UNVERIFIED. Lab Lighthouse is not a substitute. "
-        "If a vital was not measured, status=unavailable for that metric."
+        "No usable CrUX ext_xxx → state field telemetry is unmeasured. Deterministic lab measurements are evaluated independently. "
+        "If a vital was not measured in CrUX, status=unavailable for that metric."
     ),
     "seo.security.v3": (
         "Audit HTTPS protocol, HSTS header (Strict-Transport-Security), Content-Security-Policy (CSP), "

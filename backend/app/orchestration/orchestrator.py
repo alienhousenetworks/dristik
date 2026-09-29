@@ -42,6 +42,7 @@ from app.agents.page.intelligence import PageIntelligenceAgent
 from app.evidence.site_facts import extract_site_facts
 from app.remediation.patch_pack import generate_character_safe_copy, generate_whatsapp_summary
 from app.intelligence.competitive.bakeoff import CommercialBakeoffEngine
+from app.intelligence.competitive.benchmark import build_competitor_seo_parity_matrix
 from app.intelligence.business.understanding import BusinessUnderstandingOrchestrator
 from app.orchestration.integrity_gate import integrity_gate
 
@@ -297,6 +298,17 @@ class AnalysisOrchestrator:
             # Extract Wave-0 deterministic site facts ($0 inference)
             blackboard.site_facts = extract_site_facts(manifest, blackboard.evidence_store)
 
+            # Establish Canonical Resolved Entity (Single Source of Truth)
+            from app.intelligence.business.entity_resolver import UniversalEntityResolver
+            blackboard.resolved_entity = UniversalEntityResolver.resolve_from_evidence(
+                website_url=website_url,
+                pages=manifest.pages,
+                profile=blackboard.business_profile
+            )
+            blackboard.business_profile.business_name = blackboard.resolved_entity.name
+            if blackboard.resolved_entity.category and not blackboard.business_profile.industry:
+                blackboard.business_profile.industry = blackboard.resolved_entity.category
+
             # Phase 2: Operationalize External Evidence Plane (ext_NNN)
             from app.evidence.enrichment import ExternalEvidenceEnricher
             enricher = ExternalEvidenceEnricher()
@@ -518,7 +530,48 @@ class AnalysisOrchestrator:
             run.status = AnalysisStage.SCORING
             await self._emit_event(analysis_id, "scoring", 93, "Deterministic Scoring Engine computing intent-adjusted category scores...")
 
-            final_findings = self.decision_engine.synthesize_findings(current_claims, blackboard.evidence_store)
+            eval_pages = (manifest.pages if manifest else None) or blackboard.pages or []
+            from app.intelligence.ux.visual_ux_tester import visual_ux_tester
+            from app.analyzers.canonical_auditor import analyze_canonicals
+            from app.analyzers.http_status_auditor import analyze_http_statuses
+            from app.remediation.deduplicator import FindingDeduplicator
+
+            cro_finding = visual_ux_tester.generate_grounded_cro_finding(
+                domain=domain,
+                website_url=website_url,
+                pages=getattr(blackboard, "pages", None),
+            )
+            canonical_audit_rep, can_findings = analyze_canonicals(eval_pages)
+            broken_raw = manifest.crawl_health.get("broken_links") if manifest and manifest.crawl_health else []
+            http_status_rep, http_findings = analyze_http_statuses(eval_pages, broken_links_raw=broken_raw)
+
+            raw_findings = self.decision_engine.synthesize_findings(current_claims, blackboard.evidence_store)
+            if cro_finding is not None:
+                raw_findings = [f for f in raw_findings if f.finding_id != "find_cro_001"]
+                raw_findings.append(cro_finding)
+            for f in can_findings:
+                if not any(x.finding_id == f.finding_id for x in raw_findings):
+                    raw_findings.append(f)
+            for f in http_findings:
+                if not any(x.finding_id == f.finding_id for x in raw_findings):
+                    raw_findings.append(f)
+
+            from app.intelligence.geo.entity_graph import evaluate_entity_graph
+            profile_name = ""
+            if blackboard.business_profile and blackboard.business_profile.business_name:
+                profile_name = blackboard.business_profile.business_name
+            entity_graph_report, entity_graph_findings, entity_graph_contradictions = evaluate_entity_graph(
+                eval_pages,
+                brand_name=profile_name,
+            )
+            for f in entity_graph_findings:
+                if not any(x.finding_id == f.finding_id for x in raw_findings):
+                    raw_findings.append(f)
+            if entity_graph_contradictions:
+                blackboard.identity_contradictions.extend(entity_graph_contradictions)
+
+            # Authoritative Root Cause Deduplication (single source of truth for entire pipeline)
+            final_findings = FindingDeduplicator.deduplicate(raw_findings)
             blackboard.findings = final_findings
 
             overall_scores = self.scoring_engine.calculate_scores(
@@ -648,6 +701,7 @@ class AnalysisOrchestrator:
                 visibility_score=live_citation_score,
                 country=country,
                 language=language,
+                entity_graph=entity_graph_report,
             )
             try:
                 from app.intelligence.geo.readiness import enrich_geo_readiness_citations
@@ -817,9 +871,7 @@ class AnalysisOrchestrator:
                 website_url=website_url,
                 pages=getattr(blackboard, "pages", None),
             )
-            final_findings = [f for f in final_findings if f.finding_id != "find_cro_001"]
-            if cro_finding is not None:
-                final_findings.append(cro_finding)
+            # cro_finding is already integrated into canonical findings
 
             # Synthesize Lifecycle Revenue Intelligence (website -> search -> visitor -> lead -> revenue)
             from app.connectors.lifecycle_revenue import lifecycle_service
@@ -848,6 +900,7 @@ class AnalysisOrchestrator:
             from app.analyzers.security_analyzer import analyze_security_headers
             from app.analyzers.schema_validator import analyze_schema_rich_results
             from app.intelligence.geo.per_engine_evaluator import evaluate_per_engine_ai
+            from app.intelligence.accessibility.wcag_auditor import DeepWcagAuditor
 
             eval_pages = manifest.pages or blackboard.pages or []
             meta_rollup_rep = analyze_meta_rollup(eval_pages)
@@ -859,21 +912,16 @@ class AnalysisOrchestrator:
             form_audit_rep = analyze_forms(eval_pages)
             media_assets_rep = analyze_media_assets(eval_pages)
             schema_validation_rep = analyze_schema_rich_results(eval_pages)
+            wcag_audit_rep, wcag_findings = DeepWcagAuditor.audit_pages(eval_pages)
+            if wcag_findings:
+                final_findings.extend(wcag_findings)
 
-            from app.analyzers.canonical_auditor import analyze_canonicals
-            from app.analyzers.http_status_auditor import analyze_http_statuses
-            from app.intelligence.competitive.benchmark import build_competitor_seo_parity_matrix
-
-            canonical_audit_rep, can_findings = analyze_canonicals(eval_pages)
-            for f in can_findings:
-                if not any(x.finding_id == f.finding_id for x in final_findings):
-                    final_findings.append(f)
-
-            broken_raw = manifest.crawl_health.get("broken_links") if manifest and manifest.crawl_health else []
-            http_status_rep, http_findings = analyze_http_statuses(eval_pages, broken_links_raw=broken_raw)
-            for f in http_findings:
-                if not any(x.finding_id == f.finding_id for x in final_findings):
-                    final_findings.append(f)
+            # cro_finding, can_findings, and http_findings are already consolidated into canonical findings
+            if not canonical_audit_rep:
+                canonical_audit_rep, _ = analyze_canonicals(eval_pages)
+            if not http_status_rep:
+                broken_raw = manifest.crawl_health.get("broken_links") if manifest and manifest.crawl_health else []
+                http_status_rep, _ = analyze_http_statuses(eval_pages, broken_links_raw=broken_raw)
 
             competitor_seo_parity_rep = build_competitor_seo_parity_matrix(
                 target_pages=eval_pages,
@@ -901,6 +949,27 @@ class AnalysisOrchestrator:
                 website_url=website_url
             )
 
+            external_authority_payload = {
+                "title": "External Authority & Entity Intelligence",
+                "universal_authority_score": None,
+                "coverage": [],
+                "findings": [],
+                "notes": ["External authority was not attached. The crawl audit is unchanged."],
+            }
+            try:
+                from app.external_authority.audit_bridge import build_audit_attachment
+                attachment = build_audit_attachment(
+                    project_id=getattr(run, "org_id", None) or "org_default",
+                    domain=domain,
+                    pages=eval_pages,
+                    evidence_store=getattr(blackboard, "evidence_store", None),
+                )
+                external_authority_payload = attachment["report"]
+                final_findings.extend(attachment["domain_findings"])
+            except Exception as exc:
+                logger.info("external authority attachment skipped: %s", type(exc).__name__)
+                external_authority_payload["error"] = type(exc).__name__
+
             report = ExecutiveReport(
                 report_id=report_uuid,
                 analysis_id=analysis_id,
@@ -915,6 +984,7 @@ class AnalysisOrchestrator:
                 domain=domain,
                 generated_at=datetime.now().strftime("%B %d, %Y - %H:%M UTC"),
                 business_profile=blackboard.business_profile,
+                resolved_entity=blackboard.resolved_entity,
                 scores=overall_scores,
                 honest_scores=honest_scores,
                 geo_readiness=geo_readiness,
@@ -984,6 +1054,8 @@ class AnalysisOrchestrator:
                 canonical_audit=canonical_audit_rep,
                 http_status_breakdown=http_status_rep,
                 competitor_seo_parity=competitor_seo_parity_rep,
+                wcag_audit=wcag_audit_rep,
+                external_authority=external_authority_payload,
             )
 
             # -------------------------------------------------------------

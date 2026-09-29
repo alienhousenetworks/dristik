@@ -505,30 +505,49 @@ export function AiSearchIntelligenceView({
             <div className="space-y-6">
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div className="bg-paper-50 border border-line p-4 rounded-lg space-y-1">
-                  <span className="label text-[10px] block">Schema Grounding Score</span>
+                  <span className="label text-[10px] block">Entity graph quality</span>
                   <span className="font-serif text-3xl font-bold text-ink">
-                    {schemaCrosscheck?.grounding_score ?? 60}
+                    {typeof schemaCrosscheck?.quality_score === 'number' ? Math.round(schemaCrosscheck.quality_score) : '—'}
                     <span className="text-sm font-sans text-ink-400 font-normal">/100</span>
                   </span>
-                  <span className="text-xs text-ink-500 block">Properties verified in DOM</span>
+                  <span className="text-xs text-ink-500 block">
+                    {schemaCrosscheck?.present_properties ?? 0} of {schemaCrosscheck?.applicable_properties ?? 0} applicable properties
+                  </span>
                 </div>
 
                 <div className="bg-paper-50 border border-line p-4 rounded-lg space-y-1">
-                  <span className="label text-[10px] block">Properties Verified</span>
+                  <span className="label text-[10px] block">Stated-property grounding</span>
                   <span className="font-serif text-3xl font-bold text-good">
-                    {schemaCrosscheck?.verified_count ?? 0}
+                    {typeof schemaCrosscheck?.grounding_score === 'number' ? Math.round(schemaCrosscheck.grounding_score) : '—'}
+                    <span className="text-sm font-sans text-ink-400 font-normal">/100</span>
                   </span>
-                  <span className="text-xs text-ink-500 block">Matched in visible HTML</span>
+                  <span className="text-xs text-ink-500 block">
+                    {schemaCrosscheck?.verified_count ?? 0} of {schemaCrosscheck?.total_properties_checked ?? 0} stated properties
+                  </span>
                 </div>
 
                 <div className="bg-paper-50 border border-line p-4 rounded-lg space-y-1">
-                  <span className="label text-[10px] block">Discrepancies / Hidden</span>
+                  <span className="label text-[10px] block">Identity contradictions</span>
                   <span className="font-serif text-3xl font-bold text-bad">
-                    {schemaCrosscheck?.unmatched_count ?? 0}
+                    {schemaCrosscheck?.conflicts?.length ?? schemaCrosscheck?.unmatched_count ?? 0}
                   </span>
-                  <span className="text-xs text-ink-500 block">In Schema but missing from DOM</span>
+                  <span className="text-xs text-ink-500 block">Schema, Open Graph, and canonical disagree</span>
                 </div>
               </div>
+
+              {schemaCrosscheck?.summary && (
+                <p className="text-xs text-ink-700 leading-relaxed">{schemaCrosscheck.summary}</p>
+              )}
+
+              {schemaCrosscheck?.conflicts?.length > 0 && (
+                <div className="space-y-2">
+                  {schemaCrosscheck.conflicts.map((conflict: any, idx: number) => (
+                    <div key={idx} className="p-3 rounded border border-bad/30 bg-bad/5 text-xs text-ink-800">
+                      {conflict.left_surface} says {conflict.left_value}. {conflict.right_surface} says {conflict.right_value}.
+                    </div>
+                  ))}
+                </div>
+              )}
 
               {/* Property Checks Table */}
               {schemaCrosscheck?.checks && schemaCrosscheck.checks.length > 0 && (

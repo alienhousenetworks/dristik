@@ -118,3 +118,5 @@ def test_sitewide_schema_rich_results_rollup():
     assert report.entities_with_errors_count == 0
     assert "Organization" in report.detected_types
     assert "Article" in report.detected_types
+    assert "not an entity-graph quality score" in report.summary
+    assert "satisfy Google Rich Results requirements" not in report.summary

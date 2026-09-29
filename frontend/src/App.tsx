@@ -22,6 +22,9 @@ import { AccountPanel, TeamPanel } from './components/AccountPanel';
 import { ContactForm } from './components/ContactForm';
 import { SystemPanel } from './components/SystemPanel';
 import { ConnectorsModal } from './components/ConnectorsModal';
+import { ExternalAuthorityPanel } from './components/ExternalAuthorityPanel';
+import { ExternalAuthorityView } from './components/ExternalAuthorityView';
+import { AuditDataSources } from './components/AuditDataSources';
 import { RemediationFlowModal } from './components/RemediationFlowModal';
 import { AgencyWorkspaceModal } from './components/AgencyWorkspaceModal';
 import { PillarNavBar } from './components/Navigation/PillarNavBar';
@@ -83,6 +86,7 @@ export function App() {
   const [error, setError] = useState<string | null>(null);
   const [plansOpen, setPlansOpen] = useState(false);
   const [connectorsOpen, setConnectorsOpen] = useState(false);
+  const [externalOpen, setExternalOpen] = useState(false);
   const [connectorsInitialTab, setConnectorsInitialTab] = useState<ConnectorType>('google_search_console');
   const [remediationOpen, setRemediationOpen] = useState(false);
   const [agencyOpen, setAgencyOpen] = useState(false);
@@ -327,6 +331,7 @@ export function App() {
           setConnectorsInitialTab('wordpress');
           setConnectorsOpen(true);
         }}
+        onOpenExternal={() => setExternalOpen(true)}
         onOpenRemediation={() => setRemediationOpen(true)}
         onOpenAgency={() => setAgencyOpen(true)}
         onOpenRubric={() => setRubricOpen(true)}
@@ -468,6 +473,10 @@ export function App() {
                   )}
 
                   {/* 5. COMPETITOR INTELLIGENCE WORKSPACE */}
+                  {tab === 'external_authority' && (
+                    <ExternalAuthorityView report={report.external_authority} />
+                  )}
+
                   {(tab === 'competitors' || tab === 'perspectives' || tab === 'lead_gen') && (
                     <CompetitorWorkspaceView
                       report={report}
@@ -629,6 +638,7 @@ export function App() {
 
               <div className="card p-5 sm:p-6">
                 {auditForm}
+                <AuditDataSources domain={url} />
                 {recentAudits.length > 0 && !run && (
                   <div className="mt-4 pt-3 border-t border-line/60 flex flex-wrap items-center gap-2 text-xs">
                     <span className="text-ink-400 font-medium">Recent audits:</span>
@@ -747,6 +757,11 @@ export function App() {
           onClose={() => setConnectorsOpen(false)}
           targetUrl={url || run?.website_url || 'https://example.com'}
           initialTab={connectorsInitialTab}
+        />
+        <ExternalAuthorityPanel
+          isOpen={externalOpen}
+          onClose={() => setExternalOpen(false)}
+          domain={url || run?.website_url || ''}
         />
         <RemediationFlowModal
           isOpen={remediationOpen}

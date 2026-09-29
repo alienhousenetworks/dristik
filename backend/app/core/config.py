@@ -291,10 +291,93 @@ class Settings(BaseSettings):
     GOOGLE_APPLICATION_CREDENTIALS: Optional[str] = None
     GA4_PROPERTY_ID: Optional[str] = None
 
+    # ------------------------------------------------------------------
+    # External Authority & Entity Intelligence
+    # Application credentials only. Customer OAuth tokens are encrypted
+    # in the external-authority database and are never read from here.
+    # ------------------------------------------------------------------
+    GOOGLE_OAUTH_CLIENT_ID: Optional[str] = None
+    GOOGLE_OAUTH_CLIENT_SECRET: Optional[str] = None
+    GSC_ENABLED: bool = True
+    GA4_ENABLED: bool = True
+    GBP_ENABLED: bool = True
+    GSC_URL_INSPECTION_ENABLED: bool = False
+    EXTERNAL_GSC_ROW_LIMIT: int = 250
+
+    BING_WEBMASTER_ENABLED: bool = True
+    BING_OAUTH_CLIENT_ID: Optional[str] = None
+    BING_OAUTH_CLIENT_SECRET: Optional[str] = None
+    BING_OAUTH_REDIRECT_URI: Optional[str] = None
+    BING_OAUTH_AUTHORIZE_URL: str = "https://login.microsoftonline.com/common/oauth2/v2.0/authorize"
+    BING_OAUTH_TOKEN_URL: str = "https://login.microsoftonline.com/common/oauth2/v2.0/token"
+    BING_OAUTH_SCOPE: str = "offline_access https://ssl.bing.com/webmaster/api/.default"
+
+    AHREFS_ENABLED: bool = True
+    AHREFS_CLIENT_ID: Optional[str] = None
+    AHREFS_CLIENT_SECRET: Optional[str] = None
+    AHREFS_REDIRECT_URI: Optional[str] = None
+    AHREFS_API_KEY: Optional[str] = None
+    AHREFS_AUTHORIZE_URL: str = "https://app.ahrefs.com/web/oauth/authorize"
+    AHREFS_TOKEN_URL: str = "https://api.ahrefs.com/v3/oauth/token"
+
+    SEMRUSH_ENABLED: bool = True
+    SEMRUSH_CLIENT_ID: Optional[str] = None
+    SEMRUSH_CLIENT_SECRET: Optional[str] = None
+    SEMRUSH_REDIRECT_URI: Optional[str] = None
+    SEMRUSH_API_KEY: Optional[str] = None
+    SEMRUSH_AUTHORIZE_URL: str = "https://oauth.semrush.com/oauth2/authorize"
+    SEMRUSH_TOKEN_URL: str = "https://oauth.semrush.com/oauth2/token"
+
+    MAJESTIC_ENABLED: bool = True
+    MAJESTIC_API_KEY: Optional[str] = None
+
+    SEO_DATA_PROVIDER: Optional[str] = None
+    DATAFORSEO_ENABLED: bool = False
+    SERPAPI_ENABLED: bool = False
+    SERPAPI_KEY: Optional[str] = None
+
+    BRAND_MENTIONS_ENABLED: bool = False
+    BRAND_MENTIONS_PROVIDER: Optional[str] = None
+    BRAND_MENTIONS_API_KEY: Optional[str] = None
+    BRAND_MENTIONS_BASE_URL: Optional[str] = None
+    BRAND_MENTIONS_SENTIMENT_ENABLED: bool = False
+
+    CITATIONS_ENABLED: bool = False
+    CITATIONS_PROVIDER: Optional[str] = None
+    CITATIONS_API_KEY: Optional[str] = None
+    CITATIONS_BASE_URL: Optional[str] = None
+
+    EXTERNAL_INTEGRATION_ENCRYPTION_KEY: Optional[str] = None
+    OAUTH_STATE_TTL_SECONDS: int = 600
+    OAUTH_TOKEN_REFRESH_ENABLED: bool = True
+    # Hard-disabled in code. Tokens are never written to logs.
+    OAUTH_DEBUG_LOG_TOKENS: bool = False
+
+    EXTERNAL_AUTHORITY_DB_PATH: str = "data/external_authority.db"
+    EXTERNAL_COLLECTION_PLAN: str = "STANDARD"
+    EXTERNAL_SYNC_ON_AUDIT: bool = False
+    EXTERNAL_SYNC_REFRESH_HOURS_FREE: int = 24
+    EXTERNAL_SYNC_REFRESH_HOURS_STANDARD: int = 12
+    EXTERNAL_SYNC_REFRESH_HOURS_ADVANCED: int = 168
+    EXTERNAL_PROVIDER_TIMEOUT_SECONDS: float = 20.0
+    EXTERNAL_OAUTH_REDIRECT_URI: Optional[str] = None
+
     def get_google_sso_client(self) -> tuple[Optional[str], Optional[str]]:
         cid = self.GOOGLE_SSO_CLIENT_ID or self.GOOGLE_CLIENT_ID
         sec = self.GOOGLE_SSO_CLIENT_SECRET or self.GOOGLE_CLIENT_SECRET
         return cid, sec
+
+    def get_external_google_oauth(self) -> tuple[Optional[str], Optional[str]]:
+        """Application OAuth client for Search Console, GA4, and Business Profile."""
+        cid = self.GOOGLE_OAUTH_CLIENT_ID or self.GOOGLE_CLIENT_ID
+        sec = self.GOOGLE_OAUTH_CLIENT_SECRET or self.GOOGLE_CLIENT_SECRET
+        return cid, sec
+
+    def external_oauth_redirect_uri(self) -> str:
+        explicit = self.EXTERNAL_OAUTH_REDIRECT_URI or self.GOOGLE_OAUTH_REDIRECT_URI
+        if explicit and "external-authority" in explicit:
+            return explicit
+        return "http://localhost:8000/api/v1/external-authority/oauth/callback"
 
     def get_github_sso_client(self) -> tuple[Optional[str], Optional[str]]:
         cid = self.GITHUB_SSO_CLIENT_ID or self.GITHUB_CLIENT_ID

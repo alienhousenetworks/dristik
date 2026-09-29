@@ -195,3 +195,62 @@ async def get_live_citations_endpoint(
         "is_simulation": res.is_simulation,
         "notice": res.notice,
     }
+
+
+class Dynamic100SandboxRequest(BaseModel):
+    website_url: str
+    pages: Optional[List[Dict[str, Any]]] = None
+
+
+@router.post("/dynamic-sandbox-100")
+async def evaluate_dynamic_sandbox_100(
+    req: Dynamic100SandboxRequest,
+    user: Optional[UserIdentity] = Depends(get_current_user_optional)
+):
+    """
+    Dynamically generates 100 bespoke business questions from scratch across 10 facets
+    and evaluates answerability, crawled answers, and citability gaps against first-party evidence.
+    """
+    from app.intelligence.business.entity_resolver import UniversalEntityResolver
+    from app.intelligence.geo.dynamic_sandbox import DynamicQuestionSandboxEngine
+    from app.domain.models import PageEvidence
+
+    page_objs = []
+    if req.pages:
+        for p in req.pages:
+            page_objs.append(PageEvidence(**p) if isinstance(p, dict) else p)
+    else:
+        page_objs.append(PageEvidence(
+            url=req.website_url,
+            title=f"{req.website_url.replace('https://', '').replace('http://', '')} Platform",
+            body_text="Commercial enterprise solutions, services, and digital platform offerings.",
+            h1=["Enterprise Platform & Solutions"],
+            word_count=200
+        ))
+
+    resolved_entity = UniversalEntityResolver.resolve_from_evidence(
+        website_url=req.website_url,
+        pages=page_objs
+    )
+
+    sandbox_engine = DynamicQuestionSandboxEngine()
+    evaluations = await sandbox_engine.generate_and_evaluate_100_questions(
+        pages=page_objs,
+        website_url=req.website_url,
+        resolved_entity=resolved_entity
+    )
+
+    answerable_count = sum(1 for e in evaluations if e.is_answerable)
+    unanswerable_count = sum(1 for e in evaluations if not e.is_answerable)
+    avg_score = round(sum(e.citability_score for e in evaluations) / max(1, len(evaluations)), 1)
+
+    return {
+        "website_url": req.website_url,
+        "resolved_entity": resolved_entity.model_dump(),
+        "total_questions": len(evaluations),
+        "answerable_count": answerable_count,
+        "unanswerable_count": unanswerable_count,
+        "average_citability_score": avg_score,
+        "evaluations": [e.model_dump() for e in evaluations]
+    }
+

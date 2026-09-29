@@ -36,6 +36,8 @@ from app.domain.enums import (
     AiVisibilityStatus,
     GeoDimensionKey,
     QueryClass,
+    FindingClassification,
+    ImpactLevel,
 )
 from app.evidence.models import EvidenceRef
 
@@ -189,6 +191,37 @@ class CroEvidenceDissection(BaseModel):
     analytics_connected: bool = False
     grounded_metrics: Optional[Dict[str, Any]] = None # If connected, holds measured numbers
 
+
+class OutcomeImpact(BaseModel):
+    outcome: str
+    level: ImpactLevel = ImpactLevel.MEDIUM
+
+
+class FindingCalibratedImpact(BaseModel):
+    """Technical severity, business impact, confidence, and blocking are independent."""
+    technical_severity: Severity = Severity.MEDIUM
+    business_impact: ImpactLevel = ImpactLevel.MEDIUM
+    business_impact_label: str = "Medium"
+    confidence: float = 0.85
+    confidence_band: ConfidenceBand = ConfidenceBand.MEDIUM
+    is_blocking: bool = False
+    blocks: List[str] = Field(default_factory=list)
+    blocking_reason: Optional[str] = None
+    affected_outcomes: List[OutcomeImpact] = Field(default_factory=list)
+
+
+class SubObservation(BaseModel):
+    observation_id: str
+    title: str
+    description: Optional[str] = None
+    selector: Optional[str] = None
+    snippet: Optional[str] = None
+    url: Optional[str] = None
+    severity: Optional[Severity] = None
+    category: Optional[Category] = None
+    evidence_refs: List[str] = Field(default_factory=list)
+
+
 class Finding(BaseModel):
     finding_id: str
     org_id: str = "org_default"
@@ -196,6 +229,11 @@ class Finding(BaseModel):
     mission_id: Optional[str] = None
     category: Category
     severity: Severity
+    classification: FindingClassification = FindingClassification.VERIFIED_DEFECT
+    calibrated_impact: Optional[FindingCalibratedImpact] = None
+    root_cause_id: Optional[str] = None
+    sub_observations: List[str] = Field(default_factory=list)
+    detailed_observations: List[SubObservation] = Field(default_factory=list)
     title: str
     description: str
     evidence: List[FindingEvidence] = Field(default_factory=list)
@@ -370,8 +408,24 @@ class SemanticBusinessRepresentation(BaseModel):
     llm_status: str = "ok"  # ok | failed
     llm_failure_reason: Optional[str] = None
 
+class ResolvedEntity(BaseModel):
+    name: str = Field(..., description="Canonical entity/brand name (never 'Unknown Business')")
+    legal_name: Optional[str] = Field(None, description="Registered corporate/legal entity name")
+    domain: str = Field(..., description="Canonical website domain")
+    clean_host: Optional[str] = Field(None, description="Normalized hostname")
+    description: Optional[str] = Field(None, description="One-sentence entity identity & core offering")
+    logo: Optional[str] = Field(None, description="URL or asset path to the official entity logo")
+    category: Optional[str] = Field(None, description="Industry sector or business category")
+    location: Optional[str] = Field(None, description="Headquarters geography or service area")
+    same_as: List[str] = Field(default_factory=list, description="Authoritative external entity URLs (Wikidata, Wikipedia, LinkedIn, etc.)")
+    confidence: float = Field(0.85, ge=0.0, le=1.0)
+    extraction_source: str = "DOMAIN_HEURISTIC"  # "ORGANIZATION_SCHEMA" | "OG_SITE_NAME" | "DOM_BRANDING" | "PAGE_TITLE" | "DOMAIN_TOKEN"
+    niche: Optional[str] = None
+    value_proposition: Optional[str] = None
+
+
 class BusinessProfile(BaseModel):
-    business_name: str = "Unknown Business"
+    business_name: str = ""
     industry: Optional[str] = None
     niche: Optional[str] = None
     sub_niche: Optional[str] = None
@@ -433,6 +487,23 @@ class CommercialQueryEvaluation(BaseModel):
     patch_citation_gain: Optional[float] = None
     evidence_snippet: Optional[str] = None
     gap_analysis: Optional[str] = None
+
+
+class DynamicSandboxQuestionEvaluation(BaseModel):
+    question_id: str # e.g. "Q-001" to "Q-100"
+    facet: str # e.g. "Identity & Category", "Pricing & Commercial Model", "Technical Architecture"
+    generated_question: str # bespoke AI generated inquiry from understanding the business
+    buyer_intent: str # intent / rationale why buyers or AI engines ask this
+    is_answerable: bool # whether crawled pages provide enough evidence to answer
+    answerability_status: str = "ANSWERABLE" # "ANSWERABLE" | "PARTIAL" | "UNANSWERABLE" | "CONFLICTING"
+    crawled_answer: str # concrete synthesized answer from raw DOM, or explanation of why missing
+    evidence_url: Optional[str] = None
+    evidence_snippet: Optional[str] = None
+    gap_analysis: Optional[str] = None # obstacle / citation gap on raw site
+    recommended_answer: Optional[str] = None # authoritative post-remediation answer
+    citability_score: int = 5 # 1 to 10
+    projected_patch_gain: float = 0.30 # expected citation gain
+
 
 class CompetitorBakeoffItem(BaseModel):
     question_key: str
@@ -882,6 +953,54 @@ class TelemetryData(BaseModel):
     agent_calls: List[AgentCallRecord] = Field(default_factory=list)
     stage_costs: Dict[str, StageCostRecord] = Field(default_factory=dict)
 
+
+class LabPerformanceMetrics(BaseModel):
+    ttfb_ms: float = 0.0
+    fcp_ms: Optional[float] = None
+    lcp_indicator_ms: Optional[float] = None
+    cls_risk_score: float = 0.0
+    tbt_proxy_ms: Optional[float] = None
+    dns_ms: float = 0.0
+    tcp_ms: float = 0.0
+    tls_ms: float = 0.0
+    download_ms: float = 0.0
+    dom_content_loaded_ms: float = 0.0
+    load_event_ms: float = 0.0
+    total_transferred_kb: float = 0.0
+    js_payload_kb: float = 0.0
+    css_payload_kb: float = 0.0
+    image_payload_kb: float = 0.0
+    font_payload_kb: float = 0.0
+    total_requests: int = 0
+    request_count_by_type: Dict[str, int] = Field(default_factory=dict)
+    render_blocking_count: int = 0
+    render_blocking_resources: List[Dict[str, Any]] = Field(default_factory=list)
+    third_party_scripts_count: int = 0
+    third_party_scripts_kb: float = 0.0
+    third_party_domains: List[str] = Field(default_factory=list)
+    caching_policy: str = "UNSPECIFIED"
+    cache_control: Optional[str] = None
+    content_encoding: str = "none"
+    server: str = "unspecified"
+    font_display_strategy: Optional[str] = None
+    images_missing_dimensions: int = 0
+
+
+class FieldPerformanceMetrics(BaseModel):
+    has_field_data: bool = False
+    origin: str = ""
+    p75_lcp_ms: Optional[float] = None
+    p75_inp_ms: Optional[float] = None
+    p75_cls: Optional[float] = None
+    p75_fcp_ms: Optional[float] = None
+    p75_ttfb_ms: Optional[float] = None
+    device_breakdown: Dict[str, Dict[str, Any]] = Field(default_factory=dict)
+    distributions: Dict[str, Dict[str, float]] = Field(default_factory=dict)
+    status: str = "UNAVAILABLE"
+    unavailability_reason: Optional[str] = None
+    provenance_label: str = "NOT_CONFIGURED"
+
+
 class PageEvidence(BaseModel):
     url: str
     status_code: int = 200
@@ -897,8 +1016,11 @@ class PageEvidence(BaseModel):
     viewport: Optional[str] = None
     og_tags: Dict[str, str] = Field(default_factory=dict)
     twitter_tags: Dict[str, str] = Field(default_factory=dict)
+    meta_tags: Dict[str, str] = Field(default_factory=dict)
     schema_types: List[str] = Field(default_factory=list)
     raw_schema: List[Dict[str, Any]] = Field(default_factory=list)
+    structured_data: List[Dict[str, Any]] = Field(default_factory=list)
+    raw_html: Optional[str] = None
     internal_links: List[str] = Field(default_factory=list)
     external_links: List[str] = Field(default_factory=list)
     images_without_alt: int = 0
@@ -936,6 +1058,8 @@ class PageEvidence(BaseModel):
     outlinks_external_count: int = 0
     thin_content: bool = False
     hreflang_tags: Dict[str, str] = Field(default_factory=dict)
+    lab_performance: Optional[LabPerformanceMetrics] = None
+    field_performance: Optional[FieldPerformanceMetrics] = None
 
 class CopyIssue(BaseModel):
     area: str
@@ -1020,6 +1144,8 @@ class PageUxSignals(BaseModel):
     word_count: int = 0
     viewport: Optional[str] = None
     scripts_count: int = 0
+    lab_performance: Optional[LabPerformanceMetrics] = None
+    field_performance: Optional[FieldPerformanceMetrics] = None
 
 class PageReport(BaseModel):
     url: str
@@ -1242,6 +1368,40 @@ class MediaAssetAuditReport(BaseModel):
     decorative_alt_compliant_count: int = 0
     summary: str = ""
 
+
+class WcagViolation(BaseModel):
+    rule_id: str
+    wcag_criterion: str  # e.g. "1.1.1 Non-text Content", "1.4.3 Contrast (Minimum)"
+    level: str = "AA"     # "A" | "AA" | "AAA"
+    principle: str = "Perceivable"  # "Perceivable" | "Operable" | "Understandable" | "Robust"
+    category: str = "images"  # "contrast", "keyboard", "forms", "headings", "landmarks", "aria", "links", "tables", "navigation", "images", "viewport"
+    severity: Severity = Severity.MEDIUM
+    impact: ImpactLevel = ImpactLevel.MEDIUM
+    description: str
+    selector: Optional[str] = None
+    snippet: Optional[str] = None
+    url: str
+    recommendation: str
+
+
+class WcagCategoryScore(BaseModel):
+    category: str
+    name: str
+    passed: int = 0
+    violations: int = 0
+    score: float = 100.0
+
+
+class WcagAuditSummary(BaseModel):
+    total_checks_performed: int = 0
+    violations_count: int = 0
+    passed_checks_count: int = 0
+    compliance_score: float = 100.0  # 0 to 100
+    conformance_status: str = "PASS"  # "PASS" | "NEEDS_ATTENTION" | "NON_COMPLIANT"
+    violations: List[WcagViolation] = Field(default_factory=list)
+    principle_scores: Dict[str, float] = Field(default_factory=dict)
+    category_breakdown: List[WcagCategoryScore] = Field(default_factory=list)
+
 class SecurityAuditReport(BaseModel):
     target_domain: str = ""
     score: float = 100.0
@@ -1410,6 +1570,7 @@ class ExecutiveReport(BaseModel):
     domain: str
     generated_at: str
     business_profile: BusinessProfile
+    resolved_entity: Optional[ResolvedEntity] = None
     scores: OverallScoreResult
     story_summary: str
     what_site_gets_right: List[str] = Field(default_factory=list)
@@ -1471,6 +1632,8 @@ class ExecutiveReport(BaseModel):
     canonical_audit: Optional[CanonicalAuditRollup] = None
     http_status_breakdown: Optional[HttpStatusBreakdown] = None
     competitor_seo_parity: Optional[CompetitorSeoParityMatrix] = None
+    wcag_audit: Optional[WcagAuditSummary] = None
+    external_authority: Optional[Dict[str, Any]] = None
 
 class AnalysisRequest(BaseModel):
     website_url: str

@@ -438,6 +438,22 @@ class ValidationGate:
             f"Unauthorized certification/assurance claims detected: {assurance_found}"
         )
 
+        from app.scoring.calibration import prose_overclaims
+        overclaim_fields = [
+            name for name, text in (
+                ("story_summary", report.story_summary),
+                ("primary_strategic_opportunity", report.primary_strategic_opportunity),
+                ("consultant_advice_what_to_ignore", report.consultant_advice_what_to_ignore),
+            )
+            if prose_overclaims(text or "")
+        ]
+        record(
+            "outcome_claims_respect_blocking",
+            len(overclaim_fields) == 0,
+            "Narrative treats a defect as freezing SEO, design, conversion, or citations "
+            "without a blocking record for that outcome: " + ", ".join(overclaim_fields),
+        )
+
         # -------------------------------------------------------------
         # 8. RENDERING & ENVIRONMENT CLEANLINESS
         # -------------------------------------------------------------
@@ -458,6 +474,24 @@ class ValidationGate:
             "zero_dev_artifacts_and_encoding_errors",
             len(dev_artifacts) == 0,
             "; ".join(dev_artifacts) if dev_artifacts else ""
+        )
+
+        # 8.5: Canonical Entity Resolved & Non-Generic (Zero 'Unknown Business')
+        from app.intelligence.business.entity_resolver import BANNED_NAMES
+        biz_name = (report.business_profile.business_name if report.business_profile else "") or ""
+        ent_name = (report.resolved_entity.name if getattr(report, "resolved_entity", None) else "") or ""
+        has_generic_name = False
+        if not biz_name.strip() and not ent_name.strip():
+            has_generic_name = True
+        if biz_name.strip() and (biz_name.strip().lower() in BANNED_NAMES or "unknown business" in biz_name.lower()):
+            has_generic_name = True
+        if ent_name.strip() and (ent_name.strip().lower() in BANNED_NAMES or "unknown business" in ent_name.lower()):
+            has_generic_name = True
+
+        record(
+            "canonical_entity_resolved_non_generic",
+            not has_generic_name,
+            f"Business entity name is generic or unresolved ('{biz_name}' / '{ent_name}'). Must be deterministically resolved."
         )
 
         is_valid = len(failed) == 0
@@ -578,7 +612,24 @@ class ValidationGate:
                     setattr(bp, field_name, "Not determinable from crawled evidence (no structured declaration found)")
                     repairs_made.append(f"Replaced placeholder dash in business_profile.{field_name}")
 
-        # 6. Copy linting for banned terms
+        # 6. Outcome claims must follow blocking records
+        from app.reports.narrative import calibrated_field_replacements
+        from app.scoring.calibration import rewrite_outcome_overclaims
+        replacements = calibrated_field_replacements(
+            report.findings or [],
+            report.scores,
+            report.business_profile,
+        )
+        for field_name, replacement in replacements.items():
+            current = getattr(report, field_name, "") or ""
+            updated, changed = rewrite_outcome_overclaims(current, replacement)
+            if changed and updated != current:
+                setattr(report, field_name, updated)
+                repairs_made.append(
+                    f"Rewrote {field_name} so a non-blocking finding is not treated as freezing unrelated outcomes."
+                )
+
+        # 7. Copy linting for banned terms
         for term in BANNED_TERMS:
             pattern = re.compile(r"\b" + re.escape(term) + r"\b", re.IGNORECASE)
             report.story_summary = pattern.sub("enterprise-grade", report.story_summary)
@@ -614,6 +665,28 @@ class ValidationGate:
                         "Ignore vanity cosmetic animations, bulk backlink outreach, and speculative TAM expansion until the foundational Phase 1 architecture is deployed."
                     )
                     repairs_made.append("Aligned 'What to Ignore' directive to deprioritize vanity tasks rather than Phase 1 foundational items.")
+
+        # 8. Canonical Entity auto-repair (eradicate generic or 'Unknown Business')
+        from app.intelligence.business.entity_resolver import UniversalEntityResolver, BANNED_NAMES
+        bp_name = (report.business_profile.business_name if report.business_profile else "") or ""
+        re_name = (report.resolved_entity.name if getattr(report, "resolved_entity", None) else "") or ""
+        if (
+            bp_name.strip().lower() in BANNED_NAMES or
+            re_name.strip().lower() in BANNED_NAMES or
+            "unknown business" in bp_name.lower() or
+            "unknown business" in re_name.lower() or
+            not getattr(report, "resolved_entity", None)
+        ):
+            pages = manifest.pages if (manifest and getattr(manifest, "pages", None)) else (report.crawl_manifest.pages if report.crawl_manifest else [])
+            resolved = UniversalEntityResolver.resolve_from_evidence(
+                website_url=report.website_url or report.domain,
+                pages=pages,
+                profile=report.business_profile
+            )
+            report.resolved_entity = resolved
+            if report.business_profile:
+                report.business_profile.business_name = resolved.name
+            repairs_made.append(f"Auto-resolved canonical entity to '{resolved.name}' and eradicated generic '{bp_name}'.")
 
         return report, repairs_made
 

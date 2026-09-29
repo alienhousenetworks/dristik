@@ -623,7 +623,7 @@ def build_competitor_seo_parity_matrix(
     takeaway = (
         f"{target_profile.brand_name} ranks #{target_rank} of {len(profiles)} in technical SEO health "
         f"({target_profile.overall_seo_score}/100 vs peer avg {peer_avg}/100)."
-    ) if peer_profiles else f"{target_profile.brand_name} technical SEO health is {target_profile.overall_seo_score}/100."
+    ) if peer_profiles else f"{target_profile.brand_name} technical SEO health is {target_profile.overall_seo_score}/100 (Competitive Benchmark: Pending Competitor Crawl)."
 
     return CompetitorSeoParityMatrix(
         target_domain=clean_target,

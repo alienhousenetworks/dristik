@@ -18,11 +18,24 @@ import { LatencyCurveChart } from './VisualIntelligence/charts/LatencyCurveChart
 import { ComparativeEvidenceMatrix } from './ComparativeEvidenceMatrix';
 import { UrlLevelTechnicalAppendix } from './UrlLevelTechnicalAppendix';
 import { VerificationProofCard } from './VerificationProofCard';
+import { CalibrationAxes, CalibrationLeaders } from './CalibrationAxes';
 
 function text(value?: string | number | null): string {
   if (value == null) return '—';
   const raw = String(value).trim();
   return raw || '—';
+}
+
+function schemaGraphLabel(report: ExecutiveReport, schemaType: string): string {
+  const rows = report.geo_readiness?.schema_crosscheck?.type_assessments || [];
+  const row = rows.find((item: { schema_type?: string }) => item.schema_type === schemaType);
+  if (!row) return 'Not scored on this sample';
+  if (row.status === 'NOT_APPLICABLE') return `Not applicable. ${row.reason || ''}`.trim();
+  if (row.status === 'ABSENT') return `Absent. ${row.reason || ''}`.trim();
+  const present = row.present_properties ?? 0;
+  const applicable = row.applicable_properties ?? 0;
+  const state = row.status === 'PARTIAL' ? 'Partial' : 'Present';
+  return `${state}. ${present} of ${applicable} applicable properties. ${row.reason || ''}`.trim();
 }
 
 function score(value?: number | null): string {
@@ -96,6 +109,11 @@ function FieldTable({ rows }: { rows: Array<[string, string]> }) {
 
 export function AuditPdfReport({ report }: { report: ExecutiveReport }) {
   const profile = report.business_profile;
+  const resolvedEntity = report.resolved_entity;
+  const brandName = display(
+    resolvedEntity?.name || profile?.business_name,
+    display(report.domain)
+  );
   const semantic = report.semantic_business;
   const scores = report.scores;
   const honest = report.honest_scores;
@@ -324,9 +342,10 @@ export function AuditPdfReport({ report }: { report: ExecutiveReport }) {
 
         {/* 1.4 EXECUTIVE STRATEGIC BLUF */}
         <h3 className="text-sm font-bold uppercase tracking-wider text-ink-700 mt-4 mb-2">1.4 Executive Bottom Line Up Front (BLUF)</h3>
-        <p className="text-xs text-ink-700 leading-relaxed mb-4 p-3 border border-line rounded bg-white">
-          {report.story_summary || 'Executive narrative generated from ground-truth analysis.'}
-        </p>
+        <div className="text-xs text-ink-700 leading-relaxed mb-4 p-3 border border-line rounded bg-white space-y-3">
+          <p>{report.story_summary || 'Executive narrative generated from ground-truth analysis.'}</p>
+          <CalibrationLeaders findings={report.findings || []} />
+        </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs mb-4">
           <div className="p-3 border border-line rounded bg-canvas-subtle">
@@ -776,42 +795,116 @@ export function AuditPdfReport({ report }: { report: ExecutiveReport }) {
           ['Forms Lacking Submission Confirmation', String(forms?.forms_without_confirmation ?? 0)],
         ]} />
 
-        {/* 5.3 Core Web Vitals & UX Metrics */}
-        <h3 className="text-sm font-bold uppercase tracking-wider text-ink-700 mt-4 mb-2">5.3 Core Web Vitals (CWV) &amp; Field Experience Signals</h3>
-        <table className="audit-pdf-table w-full text-xs border border-line mb-4">
-          <thead>
-            <tr className="bg-canvas-subtle border-b border-line text-left">
-              <th className="py-1.5 px-3">Metric</th>
-              <th className="py-1.5 px-3">Measured Value</th>
-              <th className="py-1.5 px-3">Target Threshold</th>
-              <th className="py-1.5 px-3">Status</th>
-              <th className="py-1.5 px-3">Impact Description</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr className="border-b border-line">
-              <td className="py-1.5 px-3 font-semibold">TTFB (Server Latency)</td>
-              <td className="py-1.5 px-3 font-mono">{pages[0]?.ttfb_ms ? `${Math.round(pages[0].ttfb_ms)}ms` : '—'}</td>
-              <td className="py-1.5 px-3 font-mono">&lt; 800ms</td>
-              <td className="py-1.5 px-3 font-bold text-good">PASS</td>
-              <td className="py-1.5 px-3 text-ink-600">Initial server response time on homepage</td>
-            </tr>
-            <tr className="border-b border-line">
-              <td className="py-1.5 px-3 font-semibold">Total Image Assets</td>
-              <td className="py-1.5 px-3 font-mono">{pages[0]?.total_images ?? media?.total_images_analyzed ?? 0}</td>
-              <td className="py-1.5 px-3 font-mono">Compressed / WebP</td>
-              <td className="py-1.5 px-3 font-bold text-good">OPTIMIZED</td>
-              <td className="py-1.5 px-3 text-ink-600">Visual payload footprint</td>
-            </tr>
-            <tr className="border-b border-line">
-              <td className="py-1.5 px-3 font-semibold">Images Missing Alt Attributes</td>
-              <td className="py-1.5 px-3 font-mono text-bad">{pages[0]?.images_without_alt ?? 0}</td>
-              <td className="py-1.5 px-3 font-mono">0 missing</td>
-              <td className="py-1.5 px-3 font-bold text-warn">WARNING</td>
-              <td className="py-1.5 px-3 text-ink-600">WCAG 2.2 accessibility &amp; image search indexation</td>
-            </tr>
-          </tbody>
-        </table>
+        {/* 5.3 Core Web Vitals & Performance Diagnostics */}
+        <h3 className="text-sm font-bold uppercase tracking-wider text-ink-700 mt-4 mb-2">5.3 Core Web Vitals (CWV) &amp; Performance Diagnostics</h3>
+        
+        {/* Table A: Deterministic Lab Performance */}
+        <div className="mb-3">
+          <span className="text-[11px] font-bold text-slate-800 uppercase tracking-wider block mb-1">
+            Part A: Deterministic Lab Crawl Benchmarks (Single-Probe Audit Sample)
+          </span>
+          <table className="audit-pdf-table w-full text-xs border border-line mb-2">
+            <thead>
+              <tr className="bg-canvas-subtle border-b border-line text-left">
+                <th className="py-1.5 px-3">Lab Diagnostic Metric</th>
+                <th className="py-1.5 px-3">Measured Value</th>
+                <th className="py-1.5 px-3">Target Threshold</th>
+                <th className="py-1.5 px-3">Status</th>
+                <th className="py-1.5 px-3">Impact &amp; Architecture Description</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr className="border-b border-line">
+                <td className="py-1.5 px-3 font-semibold">Origin Server TTFB (Latency)</td>
+                <td className="py-1.5 px-3 font-mono">{pages[0]?.ttfb_ms ? `${Math.round(pages[0].ttfb_ms)}ms` : '—'}</td>
+                <td className="py-1.5 px-3 font-mono">&lt; 800ms (&lt; 200ms opt)</td>
+                <td className={`py-1.5 px-3 font-bold ${(pages[0]?.ttfb_ms || 0) < 800 ? 'text-good' : 'text-bad'}`}>
+                  {(pages[0]?.ttfb_ms || 0) < 200 ? 'OPTIMAL' : (pages[0]?.ttfb_ms || 0) < 800 ? 'PASS' : 'WARNING'}
+                </td>
+                <td className="py-1.5 px-3 text-ink-600">Origin socket/header arrival latency on audit fetch</td>
+              </tr>
+              <tr className="border-b border-line">
+                <td className="py-1.5 px-3 font-semibold">Render-Blocking Assets in &lt;head&gt;</td>
+                <td className="py-1.5 px-3 font-mono">{pages[0]?.lab_performance?.render_blocking_count ?? 0}</td>
+                <td className="py-1.5 px-3 font-mono">0 blocking</td>
+                <td className={`py-1.5 px-3 font-bold ${(pages[0]?.lab_performance?.render_blocking_count ?? 0) === 0 ? 'text-good' : 'text-warn'}`}>
+                  {(pages[0]?.lab_performance?.render_blocking_count ?? 0) === 0 ? 'CLEAN' : 'NEEDS DEFER'}
+                </td>
+                <td className="py-1.5 px-3 text-ink-600">Scripts &amp; styles blocking initial DOM parse &amp; FCP</td>
+              </tr>
+              <tr className="border-b border-line">
+                <td className="py-1.5 px-3 font-semibold">Payload Compression (Encoding)</td>
+                <td className="py-1.5 px-3 font-mono uppercase">
+                  {pages[0]?.lab_performance?.content_encoding && pages[0].lab_performance.content_encoding !== 'none'
+                    ? pages[0].lab_performance.content_encoding
+                    : 'Uncompressed'}
+                </td>
+                <td className="py-1.5 px-3 font-mono">Brotli / Gzip</td>
+                <td className={`py-1.5 px-3 font-bold ${pages[0]?.lab_performance?.content_encoding && pages[0].lab_performance.content_encoding !== 'none' ? 'text-good' : 'text-bad'}`}>
+                  {pages[0]?.lab_performance?.content_encoding && pages[0].lab_performance.content_encoding !== 'none' ? 'COMPRESSED' : 'UNCOMPRESSED'}
+                </td>
+                <td className="py-1.5 px-3 text-ink-600">Network transfer size reduction across edge/origin</td>
+              </tr>
+              <tr className="border-b border-line">
+                <td className="py-1.5 px-3 font-semibold">Images Missing Explicit Dimensions</td>
+                <td className="py-1.5 px-3 font-mono">
+                  {pages[0]?.lab_performance?.images_missing_dimensions ?? 0}
+                </td>
+                <td className="py-1.5 px-3 font-mono">0 missing</td>
+                <td className={`py-1.5 px-3 font-bold ${(pages[0]?.lab_performance?.images_missing_dimensions ?? 0) === 0 ? 'text-good' : 'text-warn'}`}>
+                  {(pages[0]?.lab_performance?.images_missing_dimensions ?? 0) === 0 ? 'OPTIMIZED' : 'CLS RISK'}
+                </td>
+                <td className="py-1.5 px-3 text-ink-600">Missing width/height causing Cumulative Layout Shift</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        {/* Table B: Field Telemetry (CrUX) */}
+        <div className="mb-4">
+          <span className="text-[11px] font-bold text-slate-800 uppercase tracking-wider block mb-1">
+            Part B: Google CrUX 28-Day Real-User Monitoring (Field Experience)
+          </span>
+          {pages[0]?.field_performance?.has_field_data ? (
+            <table className="audit-pdf-table w-full text-xs border border-line">
+              <thead>
+                <tr className="bg-canvas-subtle border-b border-line text-left">
+                  <th className="py-1.5 px-3">Field Core Web Vital</th>
+                  <th className="py-1.5 px-3">75th Percentile (p75)</th>
+                  <th className="py-1.5 px-3">Google Threshold</th>
+                  <th className="py-1.5 px-3">Experience Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr className="border-b border-line">
+                  <td className="py-1.5 px-3 font-semibold">Largest Contentful Paint (LCP)</td>
+                  <td className="py-1.5 px-3 font-mono">{pages[0].field_performance.p75_lcp_ms ? `${Math.round(pages[0].field_performance.p75_lcp_ms)}ms` : '—'}</td>
+                  <td className="py-1.5 px-3 font-mono">&lt; 2500ms</td>
+                  <td className="py-1.5 px-3 font-bold text-good">PASS</td>
+                </tr>
+                <tr className="border-b border-line">
+                  <td className="py-1.5 px-3 font-semibold">Interaction to Next Paint (INP)</td>
+                  <td className="py-1.5 px-3 font-mono">{pages[0].field_performance.p75_inp_ms ? `${Math.round(pages[0].field_performance.p75_inp_ms)}ms` : '—'}</td>
+                  <td className="py-1.5 px-3 font-mono">&lt; 200ms</td>
+                  <td className="py-1.5 px-3 font-bold text-good">PASS</td>
+                </tr>
+                <tr className="border-b border-line">
+                  <td className="py-1.5 px-3 font-semibold">Cumulative Layout Shift (CLS)</td>
+                  <td className="py-1.5 px-3 font-mono">{pages[0].field_performance.p75_cls ?? '—'}</td>
+                  <td className="py-1.5 px-3 font-mono">&lt; 0.10</td>
+                  <td className="py-1.5 px-3 font-bold text-good">PASS</td>
+                </tr>
+              </tbody>
+            </table>
+          ) : (
+            <div className="p-3 border border-line bg-canvas-subtle text-xs rounded text-ink-600">
+              <span className="font-bold text-ink block mb-0.5">Field Telemetry: Unmeasured on this Origin</span>
+              <p className="text-[11px] leading-relaxed">
+                Google Chrome User Experience Report (CrUX) publishes real-user 28-day Core Web Vitals (LCP, INP, CLS) only for domains meeting minimum Chrome traffic volumes. When origin traffic is insufficient or CrUX API credentials are not configured, Dristik enforces an honest fail-closed standard. Crawl TTFB is a single-server lab latency sample and is never presented as complete Core Web Vitals.
+              </p>
+            </div>
+          )}
+        </div>
 
         {/* 5.4 High-Converting Commercial Lead Gen Opportunity Blueprint */}
         <h3 className="text-sm font-bold uppercase tracking-wider text-ink-700 mt-4 mb-2">5.4 High-Converting Lead Generation Opportunity Blueprint</h3>
@@ -824,7 +917,7 @@ export function AuditPdfReport({ report }: { report: ExecutiveReport }) {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-[11px]">
             <div>
               <span className="font-semibold text-ink-600 block">Recommended Title Tag:</span>
-              <p className="font-medium text-ink">{profile?.business_name || display(report.domain)} Solutions | Enterprise {profile?.industry || 'Platform'}</p>
+              <p className="font-medium text-ink">{brandName} Solutions | Enterprise {profile?.industry || 'Platform'}</p>
             </div>
             <div>
               <span className="font-semibold text-ink-600 block">Primary Action CTA:</span>
@@ -837,10 +930,10 @@ export function AuditPdfReport({ report }: { report: ExecutiveReport }) {
 {`{
   "@context": "https://schema.org",
   "@type": "Service",
-  "name": "${profile?.business_name || display(report.domain)} Enterprise Solution",
+  "name": "${brandName} Enterprise Solution",
   "provider": {
     "@type": "Organization",
-    "name": "${profile?.business_name || display(report.domain)}",
+    "name": "${brandName}",
     "url": "${report.website_url}"
   },
   "areaServed": "${profile?.geography || 'Global'}",
@@ -865,10 +958,28 @@ export function AuditPdfReport({ report }: { report: ExecutiveReport }) {
         <h3 className="text-sm font-bold uppercase tracking-wider text-ink-700 mt-4 mb-2">6.1 Schema.org Structured Data Knowledge Graph</h3>
         <FieldTable rows={[
           ['Schema Types Observed in Crawl', (report.geo_readiness?.schema_types || []).join(', ') || 'None observed on crawled sample'],
-          ['Organization Schema', (report.geo_readiness?.schema_types || []).includes('Organization') ? 'VALIDATED' : 'MISSING (Recommendation: Add Organization JSON-LD)'],
-          ['FAQPage Schema', (report.geo_readiness?.schema_types || []).includes('FAQPage') ? 'VALIDATED' : 'MISSING (Recommendation: Inject FAQPage JSON-LD for rich snippets)'],
-          ['WebSite Schema with SearchAction', (report.geo_readiness?.schema_types || []).includes('WebSite') ? 'VALIDATED' : 'MISSING'],
+          ['Entity graph quality', text(report.geo_readiness?.schema_crosscheck?.summary) !== '—'
+            ? text(report.geo_readiness?.schema_crosscheck?.summary)
+            : `${score(report.geo_readiness?.schema_crosscheck?.quality_score)}/100`],
+          ['Organization', schemaGraphLabel(report, 'Organization')],
+          ['WebSite', schemaGraphLabel(report, 'WebSite')],
+          ['SearchAction', schemaGraphLabel(report, 'SearchAction')],
+          ['Service', schemaGraphLabel(report, 'Service')],
+          ['Product', schemaGraphLabel(report, 'Product')],
+          ['Article', schemaGraphLabel(report, 'Article')],
+          ['BreadcrumbList', schemaGraphLabel(report, 'BreadcrumbList')],
+          ['FAQPage', schemaGraphLabel(report, 'FAQPage')],
         ]} />
+        {(report.geo_readiness?.schema_crosscheck?.conflicts || []).length > 0 && (
+          <div className="mb-4 space-y-1">
+            <h4 className="text-xs font-bold uppercase tracking-wider text-ink-700">Cross-schema contradictions</h4>
+            {(report.geo_readiness?.schema_crosscheck?.conflicts || []).map((conflict: { left_surface?: string; left_value?: string; right_surface?: string; right_value?: string }, idx: number) => (
+              <p key={idx} className="text-xs text-ink-800">
+                {conflict.left_surface} says {conflict.left_value}. {conflict.right_surface} says {conflict.right_value}.
+              </p>
+            ))}
+          </div>
+        )}
 
         {/* 6.2 Social Rich Metadata */}
         <h3 className="text-sm font-bold uppercase tracking-wider text-ink-700 mt-4 mb-2">6.2 Social Metadata &amp; Card Validation</h3>
@@ -876,7 +987,7 @@ export function AuditPdfReport({ report }: { report: ExecutiveReport }) {
           ['OpenGraph Title (og:title)', text(pages[0]?.og_tags?.['og:title'] || pages[0]?.title)],
           ['OpenGraph Description (og:description)', text(pages[0]?.og_tags?.['og:description'] || pages[0]?.meta_description)],
           ['OpenGraph Image (og:image)', text(pages[0]?.og_tags?.['og:image'])],
-          ['OpenGraph Site Name (og:site_name)', text(pages[0]?.og_tags?.['og:site_name'] || profile?.business_name)],
+          ['OpenGraph Site Name (og:site_name)', pages[0]?.og_tags?.['og:site_name'] ? text(pages[0].og_tags['og:site_name']) : 'Not observed'],
           ['Twitter Card Type (twitter:card)', text(pages[0]?.twitter_tags?.['twitter:card'] || 'summary_large_image')],
         ]} />
 
@@ -898,21 +1009,21 @@ export function AuditPdfReport({ report }: { report: ExecutiveReport }) {
           <tbody>
             {[
               {
-                q: `What is the core offering and pricing model of ${profile?.business_name || display(report.domain)}?`,
+                q: `What is the core offering and pricing model of ${brandName}?`,
                 target: profile?.value_proposition ? 'Directly synthesized from DOM' : 'Vague / Pricing unstated',
                 comp: 'Transparent tiering published',
                 winner: profile?.value_proposition ? 'TIE' : 'COMPETITOR',
                 takeaway: 'Publish transparent pricing or starting ranges to capture high-intent buyer queries.'
               },
               {
-                q: `Why choose ${profile?.business_name || display(report.domain)} over alternatives?`,
+                q: `Why choose ${brandName} over alternatives?`,
                 target: (report.what_site_gets_right || [])[0] || 'Technical competency observed',
                 comp: 'Aggregator comparisons dominate',
                 winner: 'TARGET',
                 takeaway: 'Unique technical specialization provides strong defensive moat when indexed.'
               },
               {
-                q: `Where is ${profile?.business_name || display(report.domain)} headquartered and who is leadership?`,
+                q: `Where is ${brandName} headquartered and who is leadership?`,
                 target: profile?.geography ? `Attributed to ${profile.geography}` : 'Entity attribution missing in schema',
                 comp: 'Knowledge graph entity verified',
                 winner: profile?.geography ? 'TARGET' : 'COMPETITOR',
@@ -1170,14 +1281,15 @@ export function AuditPdfReport({ report }: { report: ExecutiveReport }) {
           </div>
         ) : null}
 
-        {/* 9.2 Comparative Evidence Matrix */}
-        <h3 className="text-sm font-bold uppercase tracking-wider text-ink-700 mt-6 mb-2">9.2 Comparative Evidence Matrix</h3>
+        {/* 9.2 Competitive Benchmark — Pending Competitor Crawl */}
+        <h3 className="text-sm font-bold uppercase tracking-wider text-ink-700 mt-6 mb-2">9.2 Competitive Benchmark — Pending Competitor Crawl</h3>
         <div className="mb-6">
           <ComparativeEvidenceMatrix
             targetDomain={report.domain || profile.business_name}
             competitors={['competitor-a.com', 'competitor-b.com']}
             manifest={report.crawl_manifest}
             pages={pages}
+            report={report}
           />
         </div>
 
@@ -1502,7 +1614,23 @@ function FindingPdfCard({ finding }: { finding: Finding }) {
       </div>
 
       <p className="font-bold text-ink mb-1">{finding.title}</p>
+      <div className="mb-2">
+        <CalibrationAxes finding={finding} compact />
+      </div>
       <p className="text-ink-600 mb-2 leading-relaxed">{finding.description}</p>
+
+      {finding.sub_observations && finding.sub_observations.length > 1 && (
+        <div className="mb-2 p-2 rounded bg-purple-50/70 border border-purple-200 text-[11px] space-y-1">
+          <span className="font-bold text-purple-900 uppercase text-[9px] tracking-wider block">
+            ⚡ Root Cause · Synthesizes {finding.sub_observations.length} Observations:
+          </span>
+          <ul className="list-disc pl-4 space-y-0.5 text-purple-950">
+            {finding.sub_observations.map((sub, idx) => (
+              <li key={idx}>{sub}</li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       {finding.business_impact && (
         <p className="text-[11px] text-ink-700 mb-1">

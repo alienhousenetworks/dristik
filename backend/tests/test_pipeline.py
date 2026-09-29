@@ -242,9 +242,13 @@ def test_deterministic_scoring_math():
     )
     degraded = scoring.calculate_scores([f_crit], profile)
     assert degraded.overall_score < 100.0
-    assert degraded.category_scores["TECHNICAL_SEO"].score <= 75.0
-    assert "Strong compliance" not in degraded.category_scores["TECHNICAL_SEO"].summary
-    assert "Broken canonical" in degraded.category_scores["TECHNICAL_SEO"].summary
+    # Unknown CRITICAL findings step business impact down to HIGH and default
+    # confidence is LIKELY (medium). 25 * 0.85 * 0.75 = 15.9, so the pillar is 84.1.
+    tech = degraded.category_scores["TECHNICAL_SEO"]
+    assert tech.deductions[0]["points_lost"] == 15.9
+    assert tech.score == 84.1
+    assert "Strong compliance" not in tech.summary
+    assert "Broken canonical" in tech.summary
     empty_summary = clean_scores.category_scores["CONTENT"].summary
     assert "No verified defects" in empty_summary or "No defects recorded" in clean_scores.category_scores["CONTENT"].strengths[0]
 

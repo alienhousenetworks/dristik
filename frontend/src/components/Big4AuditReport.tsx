@@ -10,6 +10,7 @@ import { ExecutiveTopActions } from './ExecutiveTopActions';
 import { RemediationVerificationLoop } from './RemediationVerificationLoop';
 import { RegressionDetectionView } from './RegressionDetectionView';
 import { EvidenceTaxonomyGuide } from './EvidenceTaxonomyGuide';
+import { CalibrationAxes, CalibrationLeaders } from './CalibrationAxes';
 
 interface Big4AuditReportProps {
   report: ExecutiveReport;
@@ -547,6 +548,9 @@ export function Big4AuditReport({
             <p className="text-base text-slate-800 leading-relaxed font-sans">
               {display(report.story_summary)}
             </p>
+            <div className="mt-4">
+              <CalibrationLeaders findings={findings} />
+            </div>
           </div>
 
           {/* Primary Strategic Opportunity */}
@@ -1668,7 +1672,7 @@ export function Big4AuditReport({
               </span>
             </div>
             <div className="p-3 border border-slate-200 bg-slate-50">
-              <span className="text-[9px] uppercase tracking-wider text-slate-500 font-bold block">Average TTFB</span>
+              <span className="text-[9px] uppercase tracking-wider text-slate-500 font-bold block">Avg Lab TTFB</span>
               <span className="font-mono text-xs font-medium text-slate-900">
                 {pages.length > 0
                   ? `${Math.round(pages.reduce((acc, p) => acc + (p.ttfb_ms || 0), 0) / pages.length)}ms`
@@ -1684,7 +1688,7 @@ export function Big4AuditReport({
                 <tr className="bg-paper-100 text-ink border-b border-line text-[10px] uppercase font-mono tracking-wider font-semibold">
                   <th className="p-3">Route / URL</th>
                   <th className="p-3 text-center">Status</th>
-                  <th className="p-3 text-center">TTFB</th>
+                  <th className="p-3 text-center" title="Deterministic server response time from crawl probe; not field Core Web Vitals">Lab TTFB</th>
                   <th className="p-3 text-center">Words</th>
                   <th className="p-3">Title &amp; Semantic H1 Structure</th>
                   <th className="p-3">Schema &amp; Meta</th>
@@ -1737,6 +1741,9 @@ export function Big4AuditReport({
               </tbody>
             </table>
           </div>
+          <p className="text-[10px] text-slate-500 mt-2 italic">
+            * Note: Lab TTFB reflects origin server response latency measured during deterministic audit fetches. It is not a substitute for Google CrUX real-user field Core Web Vitals (LCP, INP, CLS).
+          </p>
           {pages.length > 8 && (
             <p className="mt-2 text-[10px] text-slate-400 font-mono text-right">
               Showing 8 of {pages.length} crawled URLs. Complete sitemap preserved in digital ledger.
@@ -2108,6 +2115,7 @@ export function Big4AuditReport({
                     <h3 className="text-sm font-bold text-slate-900 leading-snug">
                       <EvidenceText text={finding.title} onSelectEvidence={setInspectedEvidenceId} />
                     </h3>
+                    <CalibrationAxes finding={finding} compact />
 
                     {/* 3-PILLAR GRID */}
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-3">

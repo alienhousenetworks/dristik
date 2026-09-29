@@ -7,7 +7,9 @@ All simulated results are strictly labeled as SIMULATED.
 from typing import Dict, Any, Optional, List
 from app.workers.base_worker import BaseCognitiveWorker
 from app.cognition.blackboard import CognitiveBlackboard
-from app.domain.models import AiSearchQueryEvaluation, CommercialQueryEvaluation
+from app.domain.models import AiSearchQueryEvaluation, CommercialQueryEvaluation, DynamicSandboxQuestionEvaluation
+from app.intelligence.business.entity_resolver import UniversalEntityResolver
+from app.intelligence.geo.dynamic_sandbox import DynamicQuestionSandboxEngine
 
 # The Canonical 6 Commercial Questions that close why buyers buy or renew
 CANONICAL_COMMERCIAL_QUESTIONS = [
@@ -66,16 +68,15 @@ class CognitiveSimulatorWorker(BaseCognitiveWorker):
         bp = blackboard.business_profile
         evidence_list = blackboard.evidence_store.get_all()
 
-        biz_name = bp.business_name if bp and bp.business_name not in ["Unknown", "Unknown Business", "Identified Platform", ""] else ""
-        if not biz_name and blackboard.website_url:
-            from urllib.parse import urlparse
-            netloc = urlparse(blackboard.website_url).netloc.replace("www.", "")
-            biz_name = netloc.split(".")[0].capitalize() if netloc else "the target company"
-        if not biz_name:
-            biz_name = "the target company"
-
-        niche_str = bp.niche if bp and bp.niche else (bp.industry if bp and bp.industry else "Digital Platform & Services")
-        val_prop = bp.value_proposition if bp and bp.value_proposition else "Core commercial offerings"
+        resolved_entity = UniversalEntityResolver.resolve_from_evidence(
+            website_url=blackboard.website_url,
+            pages=blackboard.pages,
+            profile=blackboard.business_profile
+        )
+        blackboard.resolved_entity = resolved_entity
+        biz_name = resolved_entity.name
+        niche_str = resolved_entity.niche or "Digital Platform & Services"
+        val_prop = resolved_entity.value_proposition or "Core commercial offerings"
 
         # 1. AI Answer Engine Discoverability & Citation Simulation on 6 Commercial Inquiries
         contract = (
@@ -302,12 +303,23 @@ class CognitiveSimulatorWorker(BaseCognitiveWorker):
                     before_evidence_status=ev_status
                 ))
 
+        # Generate 100 Dynamic Business Inquiries from zero
+        sandbox_engine = DynamicQuestionSandboxEngine(model_router=self.model_router)
+        dynamic_evals = await sandbox_engine.generate_and_evaluate_100_questions(
+            pages=blackboard.pages,
+            website_url=blackboard.website_url,
+            resolved_entity=resolved_entity,
+            profile=blackboard.business_profile
+        )
+        blackboard.dynamic_sandbox_evaluations = dynamic_evals
+
         blackboard.commercial_evaluations = commercial_evals
         blackboard.ai_search_evaluations = ai_matrix
         blackboard.blackboard_state["strategy_scenarios"] = result.get("scenarios", [])
 
-        blackboard.log_step("6 Commercial Inquiries Baseline & Re-Query Completed", self.worker_id, {
-            "questions_evaluated": len(commercial_evals),
+        blackboard.log_step("Dynamic 100-Question Sandbox & 6 Commercial Inquiries Completed", self.worker_id, {
+            "commercial_questions_evaluated": len(commercial_evals),
+            "dynamic_sandbox_questions_evaluated": len(dynamic_evals),
             "avg_before_score": round(sum(c.before_score for c in commercial_evals if c.before_score is not None) / max(1, len([c for c in commercial_evals if c.before_score is not None])), 1) if any(c.before_score is not None for c in commercial_evals) else None,
             "avg_after_score": round(sum(c.after_score for c in commercial_evals if c.after_score is not None) / max(1, len([c for c in commercial_evals if c.after_score is not None])), 1) if any(c.after_score is not None for c in commercial_evals) else None
         })
@@ -315,6 +327,7 @@ class CognitiveSimulatorWorker(BaseCognitiveWorker):
         return {
             "commercial_evaluations": [c.model_dump() for c in commercial_evals],
             "ai_search_matrix": [m.model_dump() for m in ai_matrix],
+            "dynamic_sandbox_evaluations": [d.model_dump() for d in dynamic_evals],
             "scenarios": result.get("scenarios", []),
             "status": "AVAILABLE"
         }

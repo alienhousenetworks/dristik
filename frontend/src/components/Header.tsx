@@ -11,6 +11,7 @@ interface HeaderProps {
   view: AppView;
   onOpenPlans: () => void;
   onOpenConnectors?: () => void;
+  onOpenExternal?: () => void;
   onOpenRemediation?: () => void;
   onOpenAgency?: () => void;
   onOpenRubric?: () => void;
@@ -29,6 +30,7 @@ export function Header({
   view,
   onOpenPlans,
   onOpenConnectors,
+  onOpenExternal,
   onOpenRemediation,
   onOpenAgency,
   onOpenRubric,
@@ -40,12 +42,13 @@ export function Header({
   onAuditDeleted,
 }: HeaderProps) {
   const status = run?.status?.replace(/_/g, ' ') || '';
-  const showTools = Boolean(user && (onOpenConnectors || onOpenRemediation || onOpenAgency || onOpenRubric));
+  const showTools = Boolean(user && (onOpenConnectors || onOpenExternal || onOpenRemediation || onOpenAgency || onOpenRubric));
 
   const toolItems = (
     <>
       <MenuLabel>Workspace</MenuLabel>
       {onOpenConnectors && <MenuItem onClick={onOpenConnectors}>Connectors</MenuItem>}
+      {onOpenExternal && <MenuItem onClick={onOpenExternal}>External authority</MenuItem>}
       {run?.report && onOpenRemediation && <MenuItem onClick={onOpenRemediation}>Remediation</MenuItem>}
       {onOpenAgency && <MenuItem onClick={onOpenAgency}>Agency workspace</MenuItem>}
       {onOpenRubric && <MenuItem onClick={onOpenRubric}>Scoring rubric</MenuItem>}

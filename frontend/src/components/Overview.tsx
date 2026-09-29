@@ -11,6 +11,7 @@ import {
 import { synthesizePillars } from '../lib/pillarSynthesis';
 import { display, scoreTone } from '../lib/format';
 import { ExecutiveTopActions } from './ExecutiveTopActions';
+import { CalibrationLeaders } from './CalibrationAxes';
 import { Card, Section } from './ui';
 import {
   Search,
@@ -304,6 +305,7 @@ export function Overview({
             <p className="text-sm text-ink-700 leading-relaxed font-serif text-[15px]">
               {display(story)}
             </p>
+            <CalibrationLeaders findings={report?.findings || []} />
           </Card>
           <Card className="space-y-2 p-5 bg-pine/5 border-pine/20">
             <p className="label text-pine flex items-center gap-1">

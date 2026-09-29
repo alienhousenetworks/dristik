@@ -614,7 +614,7 @@ export function SeoWorkspaceView({
                 <span className={`text-xs font-mono px-2 py-0.5 rounded font-semibold ${
                   report.schema_validation.entities_with_errors_count === 0 ? 'bg-good/10 text-good' : 'bg-bad/10 text-bad'
                 }`}>
-                  {report.schema_validation.valid_entities_count} of {report.schema_validation.total_entities_detected} Valid
+                  {report.schema_validation.valid_entities_count} of {report.schema_validation.total_entities_detected} without rich-result errors
                 </span>
               </div>
               <p className="text-xs text-ink-600 leading-relaxed">

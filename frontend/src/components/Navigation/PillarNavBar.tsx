@@ -9,6 +9,7 @@ import {
   Bot,
   Zap,
   Swords,
+  Landmark,
   FileSpreadsheet,
   FileCheck2,
   FileCode2,
@@ -90,6 +91,13 @@ export function PillarNavBar({
       icon: Swords,
       score: report ? rollup.competitors.score : undefined,
       badge: rollup.competitors.findingsCount || undefined,
+    },
+    {
+      id: 'external_authority' as TabId,
+      label: 'External Authority',
+      icon: Landmark,
+      score: undefined,
+      badge: undefined,
     },
   ];
 

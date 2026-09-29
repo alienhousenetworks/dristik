@@ -3,8 +3,157 @@ Dristik AI Narrative Generator - Big 4 Executive Briefing Caliber
 Synthesizes C-Suite Strategic Macro Diagnostic, 3-Way Stakeholder Comparison Matrix,
 and pragmatic 'What to Ignore' management consulting advisory.
 """
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 from app.domain.models import BusinessProfile, Finding, OverallScoreResult, ThreeWayComparison
+from app.scoring.calibration import (
+    commercial_sort_key,
+    prose_overclaims,
+    rewrite_outcome_overclaims,
+    technical_sort_key,
+)
+
+def _axes(finding: Finding) -> str:
+    calibrated = finding.calibrated_impact
+    if calibrated is None:
+        return finding.title
+    band = calibrated.confidence_band.value if hasattr(calibrated.confidence_band, "value") else str(calibrated.confidence_band)
+    tech = calibrated.technical_severity.value if hasattr(calibrated.technical_severity, "value") else str(calibrated.technical_severity)
+    label = calibrated.business_impact_label or (
+        calibrated.business_impact.value if hasattr(calibrated.business_impact, "value") else str(calibrated.business_impact)
+    )
+    blocking = "yes" if calibrated.is_blocking else "no"
+    return f"{finding.title} (technical {tech}, business {label}, confidence {band}, blocking {blocking})"
+
+
+def _is_security_header(finding: Finding) -> bool:
+    text = f"{finding.title} {finding.description} {finding.root_cause_id or ''}".lower()
+    return any(
+        token in text
+        for token in ("hsts", "strict-transport", "content-security-policy", "security header", "x-frame-options")
+    )
+
+
+def compose_executive_lines(
+    business_name: str,
+    scores: OverallScoreResult,
+    commercial: Optional[Finding],
+    technical: Optional[Finding],
+) -> Dict[str, str]:
+    """Deterministic executive lines. A non-blocking finding cannot freeze unrelated outcomes."""
+    rollup = (
+        f"{business_name} scores {scores.overall_score:.0f}/100 ({scores.grade}, {scores.health_label}). "
+        "This figure is the weighted rollup of pillar scores."
+    )
+    if commercial and commercial.calibrated_impact and commercial.calibrated_impact.is_blocking:
+        reason = commercial.calibrated_impact.blocking_reason or "Crawlers cannot index the sampled site until this defect is removed."
+        constraint = (
+            f"Indexation blocker: {_axes(commercial)}. {reason} "
+            "This blocks indexation only. Conversion and citation work stay independent findings."
+        )
+        opportunity = f"Restore indexation first: {commercial.title}. {reason}"
+        ignore = (
+            "Ignore vanity work (rebrand, bulk backlinks, animation, extra blog posts) while indexation is blocked. "
+            "Do not spend against invented TAM or competitor giants that are not in this market. "
+            "Conversion and citation work are separate findings and do not wait on unrelated headers."
+        )
+    elif commercial:
+        constraint = (
+            f"Highest commercial impact: {_axes(commercial)}. "
+            "Other pillars move on their own findings."
+        )
+        opportunity = (
+            f"Act on the highest business-impact finding first: {commercial.title}. "
+            "Other pillars move on their own findings."
+        )
+        ignore = (
+            "Ignore vanity work (rebrand, bulk backlinks, animation, extra blog posts). "
+            "Do not spend against invented TAM or competitor giants that are not in this market. "
+            "SEO, design, conversion, and citation work proceed on their own findings."
+        )
+        if _is_security_header(commercial):
+            constraint += (
+                " Missing transport headers do not block indexing, buyer conversion, or AI citations."
+            )
+    else:
+        constraint = "No executive-eligible commercial defect was recorded in the crawled sample."
+        opportunity = "Widen the crawl before inventing a growth program — the current sample recorded no executive-eligible defects."
+        ignore = (
+            "Ignore vanity work (rebrand, bulk backlinks, animation, extra blog posts). "
+            "Do not spend against invented TAM or competitor giants that are not in this market."
+        )
+
+    if (
+        technical
+        and commercial
+        and technical.finding_id != commercial.finding_id
+        and technical.calibrated_impact
+        and not technical.calibrated_impact.is_blocking
+    ):
+        if _is_security_header(technical):
+            label = technical.calibrated_impact.business_impact_label
+            clause = (
+                f" Highest technical severity: {technical.title} is a transport-header defect "
+                f"with business impact {label} and is not blocking. "
+                "SEO, design, conversion, and citation work are independent of it."
+            )
+        else:
+            clause = (
+                f" Highest technical severity: {_axes(technical)}. "
+                "SEO, design, conversion, and citation work are independent of it."
+            )
+        constraint += clause
+        opportunity += clause
+
+    return {
+        "story_summary": f"{rollup} {constraint}",
+        "primary_strategic_opportunity": opportunity,
+        "consultant_advice_what_to_ignore": ignore,
+    }
+
+
+def _prefer_calibrated(incoming: str, fallback: str) -> str:
+    if not (incoming or "").strip():
+        return fallback
+    rewritten, changed = rewrite_outcome_overclaims(incoming, fallback)
+    if not changed:
+        return incoming
+    if "weighted rollup" in fallback and "weighted rollup" not in rewritten:
+        return fallback
+    return rewritten
+
+
+def calibrated_field_replacements(
+    findings: List[Finding],
+    scores: OverallScoreResult,
+    business_profile: Optional[BusinessProfile],
+) -> Dict[str, str]:
+    """Replacements the validation gate uses when prose overclaims a causal block."""
+    from app.remediation.deduplicator import FindingDeduplicator
+    from app.domain.enums import SourceIntegrityLabel, ConfidenceBand, RubricConfidence
+
+    deduped = FindingDeduplicator.deduplicate(findings or [])
+    verified: List[Finding] = []
+    for finding in deduped:
+        conf_val = getattr(finding, "confidence", 0.85)
+        is_unverified = (
+            getattr(finding, "source_integrity_label", None) == SourceIntegrityLabel.SINGLE_SOURCE_UNVERIFIED
+            or getattr(finding, "confidence_rubric", None) in (RubricConfidence.GUESSING, "GUESSING")
+            or getattr(finding, "confidence_band", None) == ConfidenceBand.LOW
+            or (isinstance(conf_val, (int, float)) and conf_val < 0.6)
+        )
+        has_direct_evidence = bool(finding.evidence and len(finding.evidence) > 0)
+        is_corroborated = getattr(finding, "source_integrity_label", None) == SourceIntegrityLabel.CORROBORATED
+        if (is_corroborated or has_direct_evidence) and not is_unverified:
+            verified.append(finding)
+    commercial = max(verified, key=commercial_sort_key) if verified else None
+    technical = max(verified, key=technical_sort_key) if verified else None
+    biz_name = (
+        business_profile.business_name
+        if business_profile and business_profile.business_name and business_profile.business_name.lower() not in ["unknown", "unknown business", "the target company", ""]
+        else "The target enterprise"
+    )
+    return compose_executive_lines(biz_name, scores, commercial, technical)
+
 
 class NarrativeGenerator:
     def build_narrative(
@@ -17,17 +166,22 @@ class NarrativeGenerator:
         """
         Combines deterministic scoring analysis with strategic synthesizer output.
         """
-        biz_name = business_profile.business_name if business_profile and business_profile.business_name not in ["Unknown", "Unknown Business"] else "The target enterprise"
+        biz_name = (
+            business_profile.business_name
+            if business_profile and business_profile.business_name and business_profile.business_name.lower() not in ["unknown", "unknown business", "the target company", ""]
+            else "The target enterprise"
+        )
         
-        # Enterprise Confidence Gating:
-        # Strict Rule: Only CORROBORATED or DOM-evidence-backed findings with HIGH confidence can enter executive weaknesses.
-        # Single-source unverified or guessing hypotheses are gated out of what_is_holding_it_back.
+        # Enterprise Confidence Gating & Deduplication:
+        from app.remediation.deduplicator import FindingDeduplicator
+        deduped_findings = FindingDeduplicator.deduplicate(findings)
+
         from app.domain.enums import SourceIntegrityLabel, ConfidenceBand, RubricConfidence
 
         verified_findings = []
         exploratory_findings = []
 
-        for f in findings:
+        for f in deduped_findings:
             conf_val = getattr(f, "confidence", 0.85)
             is_unverified = (
                 getattr(f, "source_integrity_label", None) == SourceIntegrityLabel.SINGLE_SOURCE_UNVERIFIED
@@ -43,12 +197,11 @@ class NarrativeGenerator:
             else:
                 exploratory_findings.append(f)
 
-        # Build rich strategic weaknesses strictly from verified findings
-        top_weaknesses = [f.title for f in verified_findings if f.severity in ["CRITICAL", "HIGH"]]
-        if not top_weaknesses:
-            top_weaknesses = [f.title for f in verified_findings if f.severity == "MEDIUM"]
-        if not top_weaknesses and not verified_findings:
-            top_weaknesses = []
+        ranked = sorted(verified_findings, key=commercial_sort_key, reverse=True)
+        technical_ranked = sorted(verified_findings, key=technical_sort_key, reverse=True)
+        commercial_leader = ranked[0] if ranked else None
+        technical_leader = technical_ranked[0] if technical_ranked else None
+        top_weaknesses = [f.title for f in ranked[:4]]
 
         top_strengths = []
         for cat_score in scores.category_scores.values():
@@ -69,25 +222,15 @@ class NarrativeGenerator:
             ai_answer_engine_perspective=ai_p or "Evaluation requires completed GEO schema and direct answerability assessment."
         )
         
-        top_issue = top_weaknesses[0] if top_weaknesses else None
-        story = synthesizer_output.get("story_summary") or (
-            (
-                f"{biz_name} scores {scores.overall_score:.0f}/100 ({scores.grade}, {scores.health_label}) "
-                f"from {len(findings)} verified findings. Primary constraint: {top_issue}. "
-                f"Until that defect is removed, additional SEO or design work will not change buyer or citation outcomes."
-            ) if top_issue else (
-                f"{biz_name} scores {scores.overall_score:.0f}/100 ({scores.grade}) on the crawled sample "
-                f"with no high-severity defects recorded. This is an absence of recorded issues, not a live-web proof of excellence."
-            )
+        lines = compose_executive_lines(biz_name, scores, commercial_leader, technical_leader)
+        story = _prefer_calibrated(synthesizer_output.get("story_summary") or "", lines["story_summary"])
+        opportunity = _prefer_calibrated(
+            synthesizer_output.get("primary_strategic_opportunity") or "",
+            lines["primary_strategic_opportunity"],
         )
-        
-        opportunity = synthesizer_output.get("primary_strategic_opportunity") or (
-            f"Remove the highest-severity verified defect first: {top_issue}."
-            if top_issue else "Widen the crawl before inventing a growth program — the current sample recorded no high-severity defects."
-        )
-        
-        what_to_ignore = synthesizer_output.get("consultant_advice_what_to_ignore") or (
-            "Ignore vanity work (rebrand, bulk backlinks, animation, extra blog posts) until the verified root constraint is fixed. Do not spend against invented TAM or competitor giants that are not in this market."
+        what_to_ignore = _prefer_calibrated(
+            synthesizer_output.get("consultant_advice_what_to_ignore") or "",
+            lines["consultant_advice_what_to_ignore"],
         )
         
         return {

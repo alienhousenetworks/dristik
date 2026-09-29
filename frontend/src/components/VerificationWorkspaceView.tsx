@@ -56,11 +56,12 @@ export function VerificationWorkspaceView({ report, analysisId }: VerificationWo
         <RegressionDetectionView report={report} />
       )}
 
-      {/* Comparative Evidence Matrix */}
+      {/* Comparative Benchmark — Pending Competitor Crawl */}
       <ComparativeEvidenceMatrix
         targetDomain={report.domain}
         manifest={report.crawl_manifest}
         pages={report.crawl_manifest?.pages}
+        report={report}
       />
 
       {/* Sample Verified Evidence Cards */}

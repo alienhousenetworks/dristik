@@ -9,6 +9,7 @@ from app.domain.enums import (
     EvidenceConfidence,
     Category,
     Severity,
+    ImpactLevel,
     ConfidenceBand,
     SourceIntegrityLabel,
     RubricConfidence,
@@ -61,14 +62,11 @@ class DecisionEngine:
             else:
                 label = EvidenceConfidence.UNCERTAIN
                 
-            # Causal Prioritization Model:
-            # 0.30 Business Impact + 0.20 Confidence + 0.15 Reach + 0.15 Ease + 0.10 Strategic Value + 0.10 Urgency
-            impact_val = float(claim.impact) # 1 - 10
+            # Reach, ease, and surface weight are known before calibration.
+            # Business impact and urgency are applied after calibrate_finding.
             conf_val = float(claim.confidence * 10.0) # 1 - 10
             reach_val = 8.0 if claim.category in [Category.TECHNICAL_SEO, Category.ON_PAGE_SEO, Category.GEO] else 6.0
             ease_val = max(1.0, 11.0 - float(claim.effort)) # Inverse of effort
-            strategic_val = 9.0 if claim.severity in [Severity.CRITICAL, Severity.HIGH] else 5.0
-            urgency_val = 9.0 if claim.severity == Severity.CRITICAL else (7.0 if claim.severity == Severity.HIGH else 4.0)
 
             # Statistical & Traffic / Surface-Weighted Prioritization:
             # Weight findings that impair the primary commercial surface (homepage / pricing)
@@ -83,16 +81,6 @@ class DecisionEngine:
                 elif any(k in clean_url.lower() for k in ["terms", "privacy", "cookie", "legal"]):
                     surface_weight = 0.80  # Low traffic utility surface
 
-            causal_score = (
-                (0.30 * impact_val * surface_weight) +
-                (0.20 * conf_val) +
-                (0.15 * reach_val) +
-                (0.15 * ease_val) +
-                (0.10 * strategic_val) +
-                (0.10 * urgency_val)
-            )
-            priority = max(1, min(10, round(causal_score)))
-            
             finding = Finding(
                 finding_id=f_id,
                 category=claim.category,
@@ -106,7 +94,7 @@ class DecisionEngine:
                 confidence_label=label,
                 impact=claim.impact,
                 effort=claim.effort,
-                priority=priority,
+                priority=5,
                 recommendation=claim.recommendation or "Implement recommended architectural fix based on evidence.",
                 verification_status=claim.verification_status,
                 verification_notes=claim.verification_notes,
@@ -121,6 +109,29 @@ class DecisionEngine:
                 held_from_executive=claim.held_from_executive,
             )
             apply_rubric_to_finding(finding, evidence_store)
+            from app.scoring.calibration import calibrate_finding
+            calibrate_finding(finding)
+            calibrated = finding.calibrated_impact
+            impact_val = float(finding.impact)
+            business = calibrated.business_impact if calibrated else ImpactLevel.MEDIUM
+            strategic_val = {
+                ImpactLevel.CRITICAL: 9.0,
+                ImpactLevel.HIGH: 8.0,
+                ImpactLevel.MEDIUM: 5.0,
+                ImpactLevel.LOW: 3.0,
+                ImpactLevel.INFO: 1.0,
+            }.get(business, 5.0)
+            urgency_val = 9.0 if calibrated and calibrated.is_blocking else strategic_val
+            # 0.30 Business Impact + 0.20 Confidence + 0.15 Reach + 0.15 Ease + 0.10 Strategic Value + 0.10 Urgency
+            causal_score = (
+                (0.30 * impact_val * surface_weight) +
+                (0.20 * conf_val) +
+                (0.15 * reach_val) +
+                (0.15 * ease_val) +
+                (0.10 * strategic_val) +
+                (0.10 * urgency_val)
+            )
+            finding.priority = max(1, min(10, round(causal_score)))
             findings.append(finding)
 
         # Run through Canonical FindingRegistry to cluster root causes and eliminate duplicate alerts

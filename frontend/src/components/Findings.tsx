@@ -4,6 +4,7 @@ import { CATEGORY_FILTERS, categoryLabel, severityTone } from '../lib/format';
 import { classifyFindingNature } from '../lib/findingClassifier';
 import { EvidenceTaxonomyGuide } from './EvidenceTaxonomyGuide';
 import { CroEvidenceDissectionCard } from './CroEvidenceDissectionCard';
+import { CalibrationAxes } from './CalibrationAxes';
 
 interface FindingsProps {
   findings: Finding[];
@@ -261,10 +262,26 @@ export function Findings({ findings, onSelect }: FindingsProps) {
 
                 {/* ── Card body: 3-Pillar Architecture (Found / Problem / Fix) ───── */}
                 <div className="px-5 py-4 space-y-3.5">
+                  {/* Root Cause Banner if multiple observations clustered */}
+                  {finding.sub_observations && finding.sub_observations.length > 1 && (
+                    <div className="flex items-center justify-between gap-2 px-3 py-1.5 rounded-lg bg-purple-50 dark:bg-purple-950/40 border border-purple-200 dark:border-purple-800/60 text-purple-900 dark:text-purple-300 text-xs font-mono">
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold tracking-wider uppercase text-[10px] bg-purple-200 dark:bg-purple-900/80 text-purple-900 dark:text-purple-200 px-1.5 py-0.5 rounded">
+                          ⚡ ROOT CAUSE
+                        </span>
+                        <span className="font-semibold">Synthesizes {finding.sub_observations.length} underlying observations</span>
+                      </div>
+                      <span className="text-[10px] font-mono text-purple-700 dark:text-purple-400">
+                        Unified Remediation
+                      </span>
+                    </div>
+                  )}
+
                   {/* Headline Title */}
                   <h4 className="font-serif text-base font-bold text-ink leading-snug">
                     {finding.title || finding.finding}
                   </h4>
+                  <CalibrationAxes finding={finding} compact />
 
                   {/* ── 3-PILLAR GRID ── */}
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -278,21 +295,59 @@ export function Findings({ findings, onSelect }: FindingsProps) {
                         <p className="text-xs text-ink-800 dark:text-ink-200 leading-relaxed font-sans">
                           {finding.description || finding.finding}
                         </p>
-                        {(hasSelector || hasObserved) && (
-                          <div className="p-2 bg-paper-200/50 dark:bg-ink-900 rounded font-mono text-[10px] space-y-1 border border-line/40">
-                            {hasSelector && (
-                              <div className="truncate">
-                                <span className="text-ink-400 uppercase font-bold text-[9px]">Selector: </span>
-                                <code className="text-emerald-800 dark:text-emerald-400 font-semibold">{hasSelector}</code>
-                              </div>
-                            )}
-                            {hasObserved && (
-                              <div className="line-clamp-2 text-ink-700 dark:text-ink-300">
-                                <span className="text-ink-400 uppercase font-bold text-[9px]">Observed: </span>
-                                <span>"{hasObserved}"</span>
-                              </div>
-                            )}
+
+                        {/* If clustered root cause, render underlying observations */}
+                        {finding.sub_observations && finding.sub_observations.length > 1 ? (
+                          <div className="space-y-1.5 mt-2 pt-2 border-t border-line/40">
+                            <span className="text-[9px] font-mono font-bold uppercase tracking-wider text-ink-400 block">
+                              Contributing Observations ({finding.sub_observations.length}):
+                            </span>
+                            <div className="space-y-1 max-h-36 overflow-y-auto pr-1">
+                              {finding.detailed_observations && finding.detailed_observations.length > 0 ? (
+                                finding.detailed_observations.map((obs, idx) => (
+                                  <div key={obs.observation_id || idx} className="p-1.5 rounded bg-paper-200/50 dark:bg-ink-900 border border-line/30 text-[10px] space-y-0.5">
+                                    <div className="flex items-center justify-between gap-1">
+                                      <span className="font-semibold text-ink-800 dark:text-ink-200 truncate">• {obs.title}</span>
+                                      {obs.selector && (
+                                        <code className="text-[8px] px-1 py-0.2 rounded bg-paper-100 dark:bg-ink-950 text-emerald-800 dark:text-emerald-400 font-mono shrink-0">
+                                          {obs.selector}
+                                        </code>
+                                      )}
+                                    </div>
+                                    {obs.snippet && (
+                                      <div className="text-[9px] text-ink-600 dark:text-ink-400 italic truncate pl-1 border-l border-line/60">
+                                        "{obs.snippet}"
+                                      </div>
+                                    )}
+                                  </div>
+                                ))
+                              ) : (
+                                finding.sub_observations.map((sub, idx) => (
+                                  <div key={idx} className="text-[10px] text-ink-700 dark:text-ink-300 flex items-start gap-1">
+                                    <span className="text-purple-600 font-bold">•</span>
+                                    <span>{sub}</span>
+                                  </div>
+                                ))
+                              )}
+                            </div>
                           </div>
+                        ) : (
+                          (hasSelector || hasObserved) && (
+                            <div className="p-2 bg-paper-200/50 dark:bg-ink-900 rounded font-mono text-[10px] space-y-1 border border-line/40">
+                              {hasSelector && (
+                                <div className="truncate">
+                                  <span className="text-ink-400 uppercase font-bold text-[9px]">Selector: </span>
+                                  <code className="text-emerald-800 dark:text-emerald-400 font-semibold">{hasSelector}</code>
+                                </div>
+                              )}
+                              {hasObserved && (
+                                <div className="line-clamp-2 text-ink-700 dark:text-ink-300">
+                                  <span className="text-ink-400 uppercase font-bold text-[9px]">Observed: </span>
+                                  <span>"{hasObserved}"</span>
+                                </div>
+                              )}
+                            </div>
+                          )
                         )}
                       </div>
                       {primaryEv?.url && (

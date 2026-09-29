@@ -9,7 +9,8 @@ export type Category =
   | 'SCHEMA'
   | 'UX_CONVERSION'
   | 'TRUST_AUTHORITY'
-  | 'COMPETITIVE';
+  | 'COMPETITIVE'
+  | 'EXTERNAL_AUTHORITY';
 
 export interface FindingEvidence {
   evidence_id?: string;
@@ -38,10 +39,43 @@ export interface CodePatch {
   release_status?: string;
 }
 
+export interface SubObservation {
+  observation_id: string;
+  title: string;
+  description?: string;
+  selector?: string;
+  snippet?: string;
+  url?: string;
+  severity?: Severity;
+  category?: Category;
+  evidence_refs?: string[];
+}
+
+export interface OutcomeImpact {
+  outcome: string;
+  level: string;
+}
+
+export interface FindingCalibratedImpact {
+  technical_severity: Severity;
+  business_impact: string;
+  business_impact_label?: string;
+  confidence: number;
+  confidence_band: 'HIGH' | 'MEDIUM' | 'LOW' | string;
+  is_blocking: boolean;
+  blocks?: string[];
+  blocking_reason?: string | null;
+  affected_outcomes?: OutcomeImpact[];
+}
+
 export interface Finding {
   finding_id: string;
   category: Category;
   severity: Severity;
+  calibrated_impact?: FindingCalibratedImpact;
+  root_cause_id?: string;
+  sub_observations?: string[];
+  detailed_observations?: SubObservation[];
   title: string;
   description: string;
   evidence: FindingEvidence[];
@@ -143,6 +177,22 @@ export interface Claim {
   claim_family?: "icp" | "pricing" | "performance" | "trust" | "authorship";
   confidence_band?: "HIGH" | "MEDIUM" | "LOW";
   routed_to?: string;
+}
+
+export interface ResolvedEntity {
+  name: string;
+  legal_name?: string | null;
+  domain: string;
+  clean_host?: string | null;
+  description?: string | null;
+  logo?: string | null;
+  category?: string | null;
+  location?: string | null;
+  same_as: string[];
+  confidence: number;
+  extraction_source?: string;
+  niche?: string | null;
+  value_proposition?: string | null;
 }
 
 export interface BusinessProfile {
@@ -603,6 +653,65 @@ export interface TelemetryData {
   agent_calls?: AgentCallRecord[];
 }
 
+export interface RenderBlockingResource {
+  url: string;
+  initiator?: string;
+  duration_ms?: number;
+}
+
+export interface ThirdPartyScriptItem {
+  url: string;
+  hostname?: string;
+  transfer_bytes?: number;
+}
+
+export interface LabPerformanceMetrics {
+  ttfb_ms: number;
+  fcp_ms?: number;
+  lcp_indicator_ms?: number;
+  cls_risk_score?: number;
+  tbt_proxy_ms?: number;
+  dns_ms?: number;
+  tcp_ms?: number;
+  tls_ms?: number;
+  download_ms?: number;
+  dom_content_loaded_ms?: number;
+  load_event_ms?: number;
+  total_transferred_kb?: number;
+  js_payload_kb?: number;
+  css_payload_kb?: number;
+  image_payload_kb?: number;
+  font_payload_kb?: number;
+  total_requests?: number;
+  request_count_by_type?: Record<string, number>;
+  render_blocking_count?: number;
+  render_blocking_resources?: RenderBlockingResource[];
+  third_party_scripts_count?: number;
+  third_party_scripts_kb?: number;
+  third_party_domains?: string[];
+  caching_policy?: string;
+  cache_control?: string;
+  content_encoding?: string;
+  server?: string;
+  font_display_strategy?: string;
+  images_missing_dimensions?: number;
+}
+
+export interface FieldPerformanceMetrics {
+  has_field_data: boolean;
+  origin?: string;
+  p75_lcp_ms?: number;
+  p75_inp_ms?: number;
+  p75_cls?: number;
+  p75_fcp_ms?: number;
+  p75_ttfb_ms?: number;
+  device_breakdown?: Record<string, Record<string, number>>;
+  distributions?: Record<string, { good: number; needs_improvement: number; poor: number }>;
+  status: string;
+  unavailability_reason?: string;
+  provenance_label?: string;
+}
+
 export interface PageEvidence {
   url: string;
   status_code: number;
@@ -644,6 +753,8 @@ export interface PageEvidence {
   outlinks_external_count?: number;
   thin_content?: boolean;
   hreflang_tags?: Record<string, string>;
+  lab_performance?: LabPerformanceMetrics;
+  field_performance?: FieldPerformanceMetrics;
 }
 
 export interface CopyIssue {
@@ -829,6 +940,7 @@ export interface ExecutiveReport {
   domain: string;
   generated_at: string;
   business_profile: BusinessProfile;
+  resolved_entity?: ResolvedEntity;
   semantic_business?: SemanticBusinessRepresentation;
   contradictions?: ContradictionReport[];
   scores: OverallScoreResult;
@@ -854,6 +966,7 @@ export interface ExecutiveReport {
   crawl_manifest?: CrawlManifest;
   page_reports?: PageReport[];
   crawl_summary: Record<string, unknown>;
+  external_authority?: ExternalAuthorityReport | null;
   agent_execution_trace: Array<{ step: string; agent: string; details: unknown }>;
   policy_pack?: string;
   honest_scores?: HonestScores;
@@ -935,6 +1048,7 @@ export interface ExecutiveReport {
   canonical_audit?: CanonicalAuditRollup;
   http_status_breakdown?: HttpStatusBreakdown;
   competitor_seo_parity?: CompetitorSeoParityMatrix;
+  wcag_audit?: WcagAuditSummary;
 }
 
 export interface CanonicalAuditItem {
@@ -1204,6 +1318,40 @@ export interface MediaAssetAuditReport {
   summary: string;
 }
 
+export interface WcagViolation {
+  rule_id: string;
+  wcag_criterion: string;
+  level: string;
+  principle: 'Perceivable' | 'Operable' | 'Understandable' | 'Robust' | string;
+  category: string;
+  severity: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW' | 'INFO';
+  impact: string;
+  description: string;
+  selector?: string | null;
+  snippet?: string | null;
+  url: string;
+  recommendation: string;
+}
+
+export interface WcagCategoryScore {
+  category: string;
+  name: string;
+  passed: number;
+  violations: number;
+  score: number;
+}
+
+export interface WcagAuditSummary {
+  total_checks_performed: number;
+  violations_count: number;
+  passed_checks_count: number;
+  compliance_score: number;
+  conformance_status: 'PASS' | 'NEEDS_ATTENTION' | 'NON_COMPLIANT' | string;
+  violations: WcagViolation[];
+  principle_scores: Record<string, number>;
+  category_breakdown: WcagCategoryScore[];
+}
+
 export interface PerEngineAiScore {
   engine_name: string;
   score: number;
@@ -1367,6 +1515,44 @@ export interface PaymentVoucher {
   message: string;
 }
 
+export interface ExternalAuthorityReport {
+  title: string;
+  universal_authority_score: null;
+  score_note?: string;
+  period_days?: number;
+  period_label?: string;
+  coverage?: Array<{
+    provider: string;
+    display_name: string;
+    connection_status: string;
+    data_state: string;
+    note?: string | null;
+    capabilities?: Record<string, boolean>;
+  }>;
+  pillars?: Record<string, { data_state?: string; sources?: string[]; summary?: unknown }>;
+  sections?: {
+    search_performance?: Record<string, number | null>;
+    backlink_profile?: Record<string, Record<string, unknown>>;
+    brand_mentions?: Record<string, number>;
+    local_authority?: Record<string, number | null>;
+    analytics?: Record<string, unknown>;
+  };
+  findings?: Array<{
+    finding_id?: string;
+    severity: string;
+    title: string;
+    description?: string;
+    evidence_basis?: string;
+    provider?: string;
+    data_state?: string;
+    vendor_metric_label?: string | null;
+  }>;
+  entity_signals?: Array<{ signal: string; status: string; detail: string }>;
+  competitor_gap?: Array<{ statement?: string }>;
+  data_sources?: Array<{ source: string; state: string; detail?: string }>;
+  notes?: string[];
+}
+
 export type TabId =
   | 'overview'
   | 'seo'
@@ -1374,6 +1560,7 @@ export type TabId =
   | 'aeo'
   | 'cro'
   | 'competitors'
+  | 'external_authority'
   | 'pages'
   | 'findings'
   | 'patches'

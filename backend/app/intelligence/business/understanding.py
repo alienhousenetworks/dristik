@@ -627,9 +627,16 @@ class BusinessUnderstandingOrchestrator:
         pages = blackboard.pages or []
         first_page = pages[0] if pages else None
 
-        # Extract brand
-        brand_candidates = site_facts.get("business_name_candidates", [])
-        brand = brand_candidates[0] if brand_candidates else (first_page.title if first_page and first_page.title else "Unknown Business")
+        # Extract brand using UniversalEntityResolver or site_facts
+        from app.intelligence.business.entity_resolver import UniversalEntityResolver, BANNED_NAMES
+        brand_candidates = [b for b in site_facts.get("business_name_candidates", []) if b and b.lower() not in BANNED_NAMES]
+        if brand_candidates:
+            brand = brand_candidates[0]
+        elif getattr(blackboard, "resolved_entity", None) and blackboard.resolved_entity.name:
+            brand = blackboard.resolved_entity.name
+        else:
+            entity = UniversalEntityResolver.resolve_from_evidence(blackboard.website_url, pages, profile=blackboard.business_profile)
+            brand = entity.name
 
         # Determine architecture from structural signals
         h1s = first_page.h1 if first_page else []
@@ -678,7 +685,7 @@ class BusinessUnderstandingOrchestrator:
                 f"Observed title/H1: {brand}; CTAs: {', '.join(ctas[:3]) or 'none'}."
             )
         else:
-            confidence = 0.78 if bool(brand and brand != "Unknown Business" and (h1s or ctas)) else 0.40
+            confidence = 0.78 if bool(brand and brand.lower() not in BANNED_NAMES and (h1s or ctas)) else 0.40
             summary = (
                 f"Offline DOM parse: {model} / {intent}. "
                 f"Brand from {'site_facts' if brand_candidates else 'title'}. Not a live market study."

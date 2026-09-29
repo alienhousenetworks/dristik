@@ -9,7 +9,8 @@ Compares Schema.org JSON-LD structured data against visible DOM text:
 - Does FAQPage structured data match visible on-page FAQ copy?
 - Does pricing in Schema (offers.price) match visible pricing text?
 
-Computes Schema Grounding Score: (verified_properties / total_schema_properties) * 100.
+Stated-property grounding is verified values divided by values the schema actually states.
+It is not an entity-graph quality score. Absent properties are scored by entity_graph.py.
 """
 from __future__ import annotations
 
@@ -35,7 +36,7 @@ class SchemaPropertyCheck(BaseModel):
 
 
 class SchemaCrosscheckResult(BaseModel):
-    grounding_score: float  # 0 to 100
+    grounding_score: Optional[float] = None  # stated properties only; null when nothing was stated
     total_properties_checked: int
     verified_count: int
     partial_count: int
@@ -83,7 +84,7 @@ class SchemaContentCrosschecker:
     ) -> SchemaCrosscheckResult:
         if not pages:
             return SchemaCrosscheckResult(
-                grounding_score=0.0,
+                grounding_score=None,
                 total_properties_checked=0,
                 verified_count=0,
                 partial_count=0,
@@ -118,7 +119,7 @@ class SchemaContentCrosschecker:
             # Zero schema detected
             missing = sorted(list(self.recommended_schemas))
             return SchemaCrosscheckResult(
-                grounding_score=0.0,
+                grounding_score=None,
                 total_properties_checked=0,
                 verified_count=0,
                 partial_count=0,
@@ -130,7 +131,7 @@ class SchemaContentCrosschecker:
                 checks=[],
                 discrepancies=["No Schema.org JSON-LD detected across crawled pages."],
                 recommendations=["Deploy structured JSON-LD (Organization, WebSite, Service/Product) on the homepage."],
-                summary="Zero Schema.org JSON-LD detected across the crawled site. Schema Grounding Score: 0/100.",
+                summary="No Schema.org JSON-LD in the crawled sample. Stated-property grounding was not measured.",
             )
 
         for url, sch in flattened:
@@ -164,6 +165,32 @@ class SchemaContentCrosschecker:
                         dom_evidence_url=url,
                         explanation=f"Schema {stype}.name ('{val}') does not appear in visible HTML copy.",
                         remediation=f"Ensure brand name '{val}' is prominently displayed in the H1 or hero section."
+                    ))
+
+            if isinstance(sch.get("description"), str) and str(sch.get("description")).strip():
+                desc = str(sch["description"]).strip()
+                desc_low = desc.lower()
+                needle = desc_low if len(desc_low) <= 80 else desc_low[:80]
+                if needle in all_body:
+                    checks.append(SchemaPropertyCheck(
+                        schema_type=stype,
+                        property_name="description",
+                        schema_value=desc[:180],
+                        status="VERIFIED",
+                        dom_evidence_url=url,
+                        dom_snippet=desc[:120],
+                        explanation=f"Schema {stype}.description is visible in the page copy."
+                    ))
+                else:
+                    discrepancies.append(f"{stype}.description is not visible in the page copy.")
+                    checks.append(SchemaPropertyCheck(
+                        schema_type=stype,
+                        property_name="description",
+                        schema_value=desc[:180],
+                        status="UNMATCHED",
+                        dom_evidence_url=url,
+                        explanation=f"Schema {stype}.description does not appear in visible HTML copy.",
+                        remediation="Use the same description in the visible page and in JSON-LD."
                     ))
 
             # 2. Check sameAs (Social / External profiles)
@@ -292,25 +319,27 @@ class SchemaContentCrosschecker:
         unmatched = sum(1 for c in checks if c.status == "UNMATCHED")
         contradicted = sum(1 for c in checks if c.status == "CONTRADICTED")
 
-        # Grounding score: 100% for verified, 50% for partial, 0% for unmatched/contradicted
+        # Grounding covers stated values only. A thin schema that matches the page is not quality.
         if total_checked > 0:
-            grounding_score = round(((verified * 1.0 + partial * 0.5) / total_checked) * 100.0, 1)
+            grounding_score: Optional[float] = round(((verified * 1.0 + partial * 0.5) / total_checked) * 100.0, 1)
+            summary = (
+                f"Stated-property grounding is {grounding_score:.0f}/100 "
+                f"({verified} of {total_checked} stated properties). "
+                "This is not an entity-graph quality score."
+            )
         else:
-            grounding_score = 40.0
+            grounding_score = None
+            summary = "No stated schema properties were available to ground against the page."
 
         if discrepancies:
-            recommendations.append(f"Resolve {len(discrepancies)} Schema ↔ HTML discrepancies to prevent search engine penalty.")
+            recommendations.append(f"Resolve {len(discrepancies)} Schema to HTML discrepancies so stated values match the page.")
         if "Organization" not in detected_types:
-            recommendations.append("Deploy Schema.org/Organization on the homepage with canonical brand name and sameAs profile links.")
+            recommendations.append("State Organization name, url, logo, description, and sameAs in JSON-LD.")
         if "FAQPage" not in detected_types:
-            recommendations.append("Add FAQPage structured data matching visible accordion questions to enable direct AI citation capture in answer engines (Note: Google restricted standard SERP FAQ rich snippets in Aug 2023 to gov/health authorities; value is primarily in AEO/GEO extractability).")
-
-        summary = (
-            f"Schema Grounding Score: {grounding_score:.0f}/100. "
-            f"Checked {total_checked} structured data properties: {verified} verified in visible DOM, "
-            f"{partial} partial, {unmatched} unmatched/hidden. "
-            f"Entity schema completeness: {entity_completeness:.0f}% ({len(detected_types)} types detected)."
-        )
+            recommendations.append(
+                "Add FAQPage only when the page shows the questions. "
+                "The value is extractability for answer engines."
+            )
 
         return SchemaCrosscheckResult(
             grounding_score=grounding_score,

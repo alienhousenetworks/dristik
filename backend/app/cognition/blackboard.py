@@ -45,7 +45,8 @@ class CognitiveBlackboard:
         self.crawl_manifest: Optional[CrawlManifest] = None
         self.site_facts: Dict[str, Any] = {}
         self.user_declared_site_type: Optional[str] = None
-        self.user_declared_site_type_notes: Optional[str] = None
+        self.resolved_entity: Optional[Any] = None
+        self.crawl_scope_limit: Optional[int] = None
         self.business_profile: BusinessProfile = BusinessProfile()
         self.semantic_business: Optional[SemanticBusinessRepresentation] = None
         self.identity_contradictions: List[ContradictionReport] = []
@@ -55,6 +56,7 @@ class CognitiveBlackboard:
         self.three_way_comparison: Optional[ThreeWayComparison] = None
         self.ai_search_evaluations: List[AiSearchQueryEvaluation] = []
         self.commercial_evaluations: List[Any] = []
+        self.dynamic_sandbox_evaluations: List[Any] = []
         self.competitor_bakeoff: Optional[Any] = None
         self.honest_scores: Optional[Any] = None
         self.geo_readiness: Optional[Any] = None

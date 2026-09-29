@@ -4,6 +4,7 @@ import { categoryLabel, display, formatPercent, severityTone } from '../lib/form
 import { classifyFindingNature } from '../lib/findingClassifier';
 import { RemediationVerificationLoop } from './RemediationVerificationLoop';
 import { CroEvidenceDissectionCard } from './CroEvidenceDissectionCard';
+import { CalibrationAxes } from './CalibrationAxes';
 
 interface DrawerProps {
   finding: Finding | null;
@@ -171,6 +172,67 @@ export function Drawer({ finding, patches, websiteUrl, analysisId, onClose, onOp
           </div>
 
           {/* ═══════════════════════════════════════════════════════ */}
+          {/* ROOT CAUSE HIERARCHY (IF CLUSTERED)                     */}
+          {/* ═══════════════════════════════════════════════════════ */}
+          {finding.sub_observations && finding.sub_observations.length > 1 && (
+            <div className="p-4 rounded-xl border border-purple-200 dark:border-purple-900/50 bg-purple-50/50 dark:bg-purple-950/20 space-y-3 shadow-xs">
+              <div className="flex items-center justify-between border-b border-purple-200/60 dark:border-purple-900/40 pb-2">
+                <span className="text-[11px] font-mono font-black uppercase tracking-wider text-purple-950 dark:text-purple-200 flex items-center gap-1.5">
+                  <span>⚡ Root Cause &amp; Contributing Observations Hierarchy</span>
+                </span>
+                <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-purple-200/80 text-purple-900 dark:bg-purple-900 dark:text-purple-200">
+                  {finding.sub_observations.length} Observations Clustered
+                </span>
+              </div>
+              <p className="text-xs text-purple-950 dark:text-purple-200/90 leading-relaxed font-sans">
+                Rather than treating each symptom as an isolated failure, this canonical finding synthesizes {finding.sub_observations.length} direct observations that stem from the same root-cause architecture.
+              </p>
+              <div className="space-y-2 pt-1">
+                {finding.detailed_observations && finding.detailed_observations.length > 0 ? (
+                  finding.detailed_observations.map((obs, idx) => (
+                    <div key={obs.observation_id || idx} className="p-3 rounded-lg border border-purple-200/60 dark:border-purple-800/40 bg-white/80 dark:bg-ink-900/80 space-y-1.5 text-xs">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="font-bold text-ink-900 dark:text-ink-100 flex items-center gap-1.5">
+                          <span className="text-purple-600 font-mono text-[10px]">{idx + 1}.</span>
+                          <span>{obs.title}</span>
+                        </span>
+                        {obs.selector && (
+                          <code className="text-[10px] px-1.5 py-0.5 rounded bg-paper-100 dark:bg-ink-950 text-emerald-800 dark:text-emerald-400 font-mono font-semibold">
+                            {obs.selector}
+                          </code>
+                        )}
+                      </div>
+                      {obs.description && obs.description !== obs.title && (
+                        <p className="text-[11px] text-ink-700 dark:text-ink-300 font-sans">
+                          {obs.description}
+                        </p>
+                      )}
+                      {obs.snippet && (
+                        <div className="p-2 rounded bg-paper-100 dark:bg-ink-950 text-[10px] font-mono text-ink-700 dark:text-ink-300 border border-line/40">
+                          <span className="text-ink-400 font-bold uppercase text-[9px] block">Observed Snippet:</span>
+                          <span className="line-clamp-2">"{obs.snippet}"</span>
+                        </div>
+                      )}
+                      {obs.url && (
+                        <div className="text-[9px] font-mono text-ink-400 truncate">
+                          URL: <span className="text-blue-700 dark:text-blue-400">{obs.url}</span>
+                        </div>
+                      )}
+                    </div>
+                  ))
+                ) : (
+                  finding.sub_observations.map((sub, idx) => (
+                    <div key={idx} className="flex items-start gap-2 p-2 rounded bg-white/60 dark:bg-ink-900/60 text-xs text-ink-800 dark:text-ink-200 border border-line/40">
+                      <span className="text-purple-600 font-bold">•</span>
+                      <span>{sub}</span>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* ═══════════════════════════════════════════════════════ */}
           {/* PILLAR 1: WHAT WAS FOUND                               */}
           {/* ═══════════════════════════════════════════════════════ */}
           <div className="p-4 rounded-xl border border-slate-300 dark:border-ink-800 bg-white dark:bg-ink-950 space-y-3 shadow-xs">
@@ -291,6 +353,7 @@ export function Drawer({ finding, patches, websiteUrl, analysisId, onClose, onOp
                   `This defect degrades website trust, machine extractability, and search performance for ${categoryLabel(finding.category)}.`
                 )}
               </p>
+              <CalibrationAxes finding={finding} />
             </div>
 
             {/* Impact / Effort / Priority Metrics */}

@@ -44,6 +44,8 @@ export function AeoWorkspaceView({ report, onOpenPatchPack }: AeoWorkspaceViewPr
 
   const schemaTypes = geo?.schema_types || [];
   const schemaCrosscheck = geo?.schema_crosscheck;
+  const typeAssessments = schemaCrosscheck?.type_assessments || [];
+  const graphConflicts = schemaCrosscheck?.conflicts || [];
 
   const handleCopyLlms = async () => {
     const text = botDirectives?.llms_txt_generated || `# ${report.business_profile?.business_name || report.domain}\n\n> ${report.business_profile?.value_proposition || 'Enterprise Web Services'}\n\n## Overview\nWebsite: ${report.website_url}\nIndustry: ${report.business_profile?.industry || 'Technology'}\n`;
@@ -56,7 +58,14 @@ export function AeoWorkspaceView({ report, onOpenPatchPack }: AeoWorkspaceViewPr
     }
   };
 
-  const aeoScore = geo?.extractability_score != null ? Math.round(geo.extractability_score) : 78;
+  const schemaCategory = report.scores?.category_scores?.SCHEMA?.score;
+  const aeoScore = typeof schemaCrosscheck?.quality_score === 'number'
+    ? Math.round(schemaCrosscheck.quality_score)
+    : typeof geo?.extractability_score === 'number'
+      ? Math.round(geo.extractability_score)
+      : typeof schemaCategory === 'number'
+        ? Math.round(schemaCategory)
+        : '—';
 
   return (
     <PillarShell
@@ -177,43 +186,83 @@ export function AeoWorkspaceView({ report, onOpenPatchPack }: AeoWorkspaceViewPr
               </span>
             </div>
 
-            {schemaTypes.length > 0 ? (
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+              <div className="p-3 rounded border border-line bg-paper-50 space-y-1">
+                <span className="text-[10px] font-mono text-ink-500 uppercase">Entity graph quality</span>
+                <p className="font-mono text-2xl font-bold text-ink">
+                  {typeof schemaCrosscheck?.quality_score === 'number' ? Math.round(schemaCrosscheck.quality_score) : '—'}
+                  <span className="text-sm text-ink-400 font-normal">/100</span>
+                </p>
+                <p className="text-[11px] text-ink-500">
+                  {schemaCrosscheck?.present_properties ?? 0} of {schemaCrosscheck?.applicable_properties ?? 0} applicable properties
+                </p>
+              </div>
+              <div className="p-3 rounded border border-line bg-paper-50 space-y-1">
+                <span className="text-[10px] font-mono text-ink-500 uppercase">Stated-property grounding</span>
+                <p className="font-mono text-2xl font-bold text-ink">
+                  {typeof schemaCrosscheck?.grounding_score === 'number' ? Math.round(schemaCrosscheck.grounding_score) : '—'}
+                  <span className="text-sm text-ink-400 font-normal">/100</span>
+                </p>
+                <p className="text-[11px] text-ink-500">Only properties the schema already states</p>
+              </div>
+              <div className="p-3 rounded border border-line bg-paper-50 space-y-1">
+                <span className="text-[10px] font-mono text-ink-500 uppercase">Identity consistency</span>
+                <p className="font-mono text-2xl font-bold text-ink">
+                  {typeof schemaCrosscheck?.consistency_score === 'number' ? Math.round(schemaCrosscheck.consistency_score) : '—'}
+                  <span className="text-sm text-ink-400 font-normal">/100</span>
+                </p>
+                <p className="text-[11px] text-ink-500">{graphConflicts.length} cross-schema conflicts</p>
+              </div>
+            </div>
+
+            {schemaCrosscheck?.summary && (
+              <p className="text-xs text-ink-700 leading-relaxed">{schemaCrosscheck.summary}</p>
+            )}
+
+            {graphConflicts.length > 0 && (
+              <div className="space-y-2">
+                {graphConflicts.map((conflict: any, idx: number) => (
+                  <div key={idx} className="p-3 rounded border border-bad/30 bg-bad/5 text-xs text-ink-800">
+                    <span className="font-mono text-[10px] font-bold text-bad uppercase">{conflict.severity} {conflict.field}</span>
+                    <p className="mt-1">
+                      {conflict.left_surface} says {conflict.left_value}. {conflict.right_surface} says {conflict.right_value}.
+                    </p>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {typeAssessments.length > 0 ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                {typeAssessments.map((row: any) => (
+                  <div key={row.schema_type} className="p-3 rounded border border-line bg-paper-50 space-y-1">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-mono text-pine font-bold">{row.schema_type}</span>
+                      <span className={`text-[10px] font-mono px-2 py-0.5 rounded font-bold ${
+                        row.status === 'PRESENT' ? 'bg-good/10 text-good' :
+                        row.status === 'NOT_APPLICABLE' ? 'bg-paper-200 text-ink-500' :
+                        row.status === 'PARTIAL' ? 'bg-amber-100 text-amber-800' : 'bg-warn/10 text-warn'
+                      }`}>
+                        {row.status === 'NOT_APPLICABLE' ? 'Not applicable' : row.status === 'PRESENT' ? `${row.present_properties} of ${row.applicable_properties}` : row.status === 'PARTIAL' ? `${row.present_properties} of ${row.applicable_properties}` : 'Absent'}
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-ink-500">{row.reason}</p>
+                  </div>
+                ))}
+              </div>
+            ) : schemaTypes.length > 0 ? (
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
                 {schemaTypes.map((st: string, idx: number) => (
                   <div key={idx} className="p-3 rounded border border-line bg-paper-50 space-y-1">
                     <span className="font-mono text-pine font-bold block">{st}</span>
-                    <p className="text-[11px] text-ink-500">Validated JSON-LD schema entity</p>
+                    <p className="text-[11px] text-ink-500">Type observed. Property fill was not scored on this report.</p>
                   </div>
                 ))}
               </div>
             ) : (
               <div className="p-4 rounded border border-warn/30 bg-warn/5 text-xs text-ink-700 space-y-1">
-                <p className="font-bold text-warn">⚠️ No JSON-LD Structured Data Detected</p>
-                <p>Add Organization, WebSite, and FAQPage schemas to enable Google Knowledge Panel and rich snippets.</p>
-              </div>
-            )}
-
-            {/* Schema Crosscheck & Missing Recommended */}
-            {schemaCrosscheck && (
-              <div className="mt-4 pt-3 border-t border-line space-y-3">
-                <h4 className="text-xs font-bold text-ink uppercase tracking-wider">
-                  Recommended Schema Entities for {report.business_profile?.industry || 'Your Domain'}
-                </h4>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-                  {['Organization', 'WebSite', 'ProductOrService', 'FAQPage', 'BreadcrumbList'].map((rec, i) => {
-                    const present = schemaTypes.some(t => t.toLowerCase().includes(rec.toLowerCase()));
-                    return (
-                      <div key={i} className="flex items-center justify-between p-2.5 rounded bg-paper-50 border border-line">
-                        <span className="font-mono text-ink-800">{rec}</span>
-                        <span className={`text-[10px] font-mono px-2 py-0.5 rounded font-bold ${
-                          present ? 'bg-good/10 text-good' : 'bg-warn/10 text-warn'
-                        }`}>
-                          {present ? '✓ Implemented' : '⚡ Missing'}
-                        </span>
-                      </div>
-                    );
-                  })}
-                </div>
+                <p className="font-bold text-warn">No JSON-LD in this sample</p>
+                <p>Organization and WebSite identity properties are unstated. FAQPage is expected only when the sample shows a visible FAQ.</p>
               </div>
             )}
           </Card>

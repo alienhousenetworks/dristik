@@ -144,13 +144,16 @@ export function synthesizePillars(report: ExecutiveReport | undefined | null): W
     botDirectives.perplexitybot_allowed,
     botDirectives.claudebot_allowed,
     botDirectives.google_extended_allowed,
-  ].filter(Boolean).length : 4;
-  const botScore = (botPermissionCount / 4) * 100;
+  ].filter(Boolean).length : 0;
+  const botScore = botDirectives ? (botPermissionCount / 4) * 100 : null;
+  const graphQuality = report.geo_readiness?.schema_crosscheck?.quality_score;
+  const graphPresent = report.geo_readiness?.schema_crosscheck?.present_properties;
+  const graphApplicable = report.geo_readiness?.schema_crosscheck?.applicable_properties;
 
   const aeoParts = [schemaScore, extractabilityScore, botScore].filter((n): n is number => typeof n === 'number');
   const aeoScore = aeoParts.length
     ? Math.round(aeoParts.reduce((sum, n) => sum + n, 0) / aeoParts.length)
-    : (typeof extractabilityScore === 'number' ? Math.round(extractabilityScore) : 70);
+    : null;
 
   const aeoFindings = findings.filter(f =>
     f.category === 'SCHEMA' || (f.category === 'AI_SEARCH' && !f.title?.toLowerCase().includes('citation'))
@@ -164,11 +167,15 @@ export function synthesizePillars(report: ExecutiveReport | undefined | null): W
     score: aeoScore,
     grade: getGrade(aeoScore),
     health: getHealth(aeoScore),
-    headline: aeoScore >= 75 ? 'Structured for Autonomous Agents & Machine Extractability' : 'Unstructured Data Restricting Agent Retrieval',
+    headline: aeoScore == null
+      ? 'AEO was not scored on this crawl'
+      : (aeoScore >= 75 ? 'Structured for Autonomous Agents & Machine Extractability' : 'Unstructured Data Restricting Agent Retrieval'),
     summary: 'Audits Schema.org JSON-LD graphs, machine-readable documentation (llms.txt), AI bot crawler accessibility, and 50-question deterministic extractability.',
     highlights: [
-      `JSON-LD Schema Graph: ${report.geo_readiness?.schema_types?.length || 0} types detected`,
-      `Agent Bot Access: ${botPermissionCount}/4 major AI crawlers allowed`,
+      typeof graphQuality === 'number'
+        ? `Entity graph quality: ${Math.round(graphQuality)}/100 (${graphPresent ?? 0} of ${graphApplicable ?? 0} applicable properties)`
+        : `JSON-LD types observed: ${report.geo_readiness?.schema_types?.length || 0}`,
+      `Agent Bot Access: ${botDirectives ? `${botPermissionCount}/4 major AI crawlers allowed` : 'Not measured'}`,
       `llms.txt Machine File: ${botDirectives?.llms_txt_found ? '✅ Detected' : '⚡ Generated ready'}`,
       `Q&A Extractability: ${report.geo_readiness?.questions_supported || 0} supported answers`,
     ],

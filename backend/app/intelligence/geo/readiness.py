@@ -38,7 +38,7 @@ from app.intelligence.geo.entity_consistency import entity_consistency_analyzer
 from app.intelligence.geo.claim_extractor import claim_extractor
 from app.intelligence.geo.question_graph import question_graph_engine
 from app.intelligence.geo.citation_passages import passage_analyzer
-from app.intelligence.geo.schema_crosscheck import schema_crosschecker
+from app.intelligence.geo.entity_graph import EntityGraphReport, evaluate_entity_graph
 
 
 _FLUFF = (
@@ -433,6 +433,7 @@ def evaluate_geo_readiness(
     country: Optional[str] = None,
     language: Optional[str] = None,
     extended_questions: bool = False,
+    entity_graph: Optional[EntityGraphReport] = None,
 ) -> GeoReadinessReport:
     profile = profile or BusinessProfile()
     name = profile.business_name if profile.business_name not in ("Unknown", "Unknown Business", "") else ""
@@ -494,10 +495,12 @@ def evaluate_geo_readiness(
     except Exception:
         passage_res = None
 
-    try:
-        schema_res = schema_crosschecker.crosscheck(pages, brand_name=name)
-    except Exception:
-        schema_res = None
+    schema_res = entity_graph
+    if schema_res is None:
+        try:
+            schema_res, _, _ = evaluate_entity_graph(pages, brand_name=name)
+        except Exception:
+            schema_res = None
 
     # ------------------------------------------------------------------
     # 3. Multi-Dimensional Scoring (v2)
@@ -532,12 +535,13 @@ def evaluate_geo_readiness(
     # 4. Schema types
     # ------------------------------------------------------------------
     schema_types = sorted({t for p in pages for t in (p.schema_types or [])})
-    schema_summary = (
-        f"Schema.org types observed: {', '.join(schema_types) or 'none'}. "
-        "Schema is a machine-readable evidence layer, not a GEO score."
-    )
-    if schema_res:
-        schema_summary += f" Schema Grounding Score: {schema_res.grounding_score:.0f}/100 ({schema_res.verified_count} properties verified in DOM)."
+    if schema_res and schema_res.summary:
+        schema_summary = schema_res.summary
+    else:
+        schema_summary = (
+            f"Schema.org types observed: {', '.join(schema_types) or 'none'}. "
+            "Schema is a machine-readable evidence layer, not a GEO score."
+        )
 
     # ------------------------------------------------------------------
     # 5. Legacy dimensions list (backwards-compat with existing report views)

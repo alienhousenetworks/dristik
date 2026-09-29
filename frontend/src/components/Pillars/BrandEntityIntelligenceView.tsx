@@ -15,6 +15,8 @@ export function BrandEntityIntelligenceView({ report }: BrandEntityIntelligenceV
   const semantic = report.semantic_business;
   const contradictions = report.contradictions || (semantic?.contradiction ? [semantic.contradiction] : []);
   const schemaTypes = report.geo_readiness?.schema_types || [];
+  const schemaCrosscheck = report.geo_readiness?.schema_crosscheck;
+  const typeAssessments = schemaCrosscheck?.type_assessments || [];
   const rawTrust = report.scores?.category_scores?.['TRUST_AUTHORITY']?.score;
   const trustScore = typeof rawTrust === 'number' ? Math.round(rawTrust) : null;
 
@@ -73,20 +75,32 @@ export function BrandEntityIntelligenceView({ report }: BrandEntityIntelligenceV
       {/* SUB-VIEW 2: SCHEMA VALIDATION */}
       {activeSubTab === 'schema' && (
         <div className="sheet border border-line rounded-lg p-6 space-y-6">
-          <h3 className="font-serif text-2xl text-ink font-bold">Structured Data & JSON-LD Schema Validation</h3>
-          <div className="space-y-3">
-            <span className="label text-[10px] block">Extracted Schema Types</span>
-            <div className="flex flex-wrap gap-2">
-              {schemaTypes.length > 0 ? (
-                schemaTypes.map((st, i) => (
+          <h3 className="font-serif text-2xl text-ink font-bold">Entity graph quality</h3>
+          <p className="text-sm text-ink-700">
+            {typeof schemaCrosscheck?.quality_score === 'number'
+              ? `${Math.round(schemaCrosscheck.quality_score)}/100. ${schemaCrosscheck.present_properties ?? 0} of ${schemaCrosscheck.applicable_properties ?? 0} applicable properties are present.`
+              : 'Property fill was not scored on this report.'}
+          </p>
+          {schemaCrosscheck?.summary && (
+            <p className="text-xs text-ink-600 leading-relaxed">{schemaCrosscheck.summary}</p>
+          )}
+          <div className="space-y-2">
+            {typeAssessments.length > 0 ? typeAssessments.map((row: any) => (
+              <div key={row.schema_type} className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border border-line rounded-md px-3 py-2">
+                <span className="font-mono text-xs text-ink">{row.schema_type}</span>
+                <span className="text-[11px] text-ink-600">{row.status === 'NOT_APPLICABLE' ? 'Not applicable' : row.status === 'ABSENT' ? 'Absent' : `${row.present_properties} of ${row.applicable_properties}`}. {row.reason}</span>
+              </div>
+            )) : (
+              <div className="flex flex-wrap gap-2">
+                {schemaTypes.length > 0 ? schemaTypes.map((st, i) => (
                   <span key={i} className="px-3 py-1 bg-paper-100 dark:bg-ink-800 border border-line rounded-md font-mono text-xs text-ink font-medium">
-                    🏷️ {st}
+                    {st}
                   </span>
-                ))
-              ) : (
-                <p className="text-xs text-ink-500">No JSON-LD schemas discovered.</p>
-              )}
-            </div>
+                )) : (
+                  <p className="text-xs text-ink-500">No JSON-LD schemas discovered.</p>
+                )}
+              </div>
+            )}
           </div>
         </div>
       )}

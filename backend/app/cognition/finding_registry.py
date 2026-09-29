@@ -30,7 +30,7 @@ from app.domain.enums import (
     Severity,
     Category,
 )
-from app.domain.models import Finding
+from app.domain.models import Finding, SubObservation
 
 
 # ---------------------------------------------------------------------------
@@ -45,6 +45,21 @@ def _canonical_id(finding: Finding) -> str:
     different pillars.
     """
     norm_text = f"{finding.title} {finding.description} {getattr(finding, 'finding', '')}".lower()
+    rule = finding.rule_id or ""
+    if rule == "entity_graph_contradiction":
+        return f"root_schema_identity_contradiction_{finding.finding_id}"
+    if rule == "entity_graph_incomplete":
+        return "root_schema_entity_graph_incomplete"
+    if rule == "entity_graph_contact":
+        return "root_schema_contact_details"
+    if rule == "entity_graph_applicability":
+        return "root_schema_applicable_type_absent"
+
+    # Align with authoritative Root Cause Clusters
+    from app.remediation.deduplicator import ROOT_CAUSE_CLUSTERS
+    for cluster in ROOT_CAUSE_CLUSTERS:
+        if any(kw in norm_text for kw in cluster["keywords"]):
+            return f"root_{cluster['id'].lower()}"
 
     # 1. Structural Archetype Clustering - Heading & Identity
     if ("h1" in norm_text or "headline" in norm_text) and (
@@ -350,6 +365,41 @@ class FindingRegistry:
                         if e.evidence_id:
                             seen_ev_ids.add(e.evidence_id)
 
+                # Consolidate sub-observations and detailed observations
+                sub_obs = list(getattr(existing, "sub_observations", []) or [])
+                if not sub_obs:
+                    sub_obs = [existing.title]
+                if finding.title not in sub_obs:
+                    sub_obs.append(finding.title)
+
+                detailed_obs = list(getattr(existing, "detailed_observations", []) or [])
+                if not detailed_obs:
+                    p_ev = existing.evidence[0] if (existing.evidence and len(existing.evidence) > 0) else None
+                    detailed_obs.append(SubObservation(
+                        observation_id=existing.finding_id,
+                        title=existing.title,
+                        description=existing.description or getattr(existing, "finding", "") or existing.title,
+                        selector=p_ev.selector if p_ev and p_ev.selector else (p_ev.element if p_ev else None),
+                        snippet=(p_ev.snippet or p_ev.value) if p_ev else None,
+                        url=p_ev.url if p_ev else None,
+                        severity=existing.severity,
+                        category=existing.category,
+                        evidence_refs=existing.evidence_refs or []
+                    ))
+
+                in_p_ev = finding.evidence[0] if (finding.evidence and len(finding.evidence) > 0) else None
+                detailed_obs.append(SubObservation(
+                    observation_id=finding.finding_id,
+                    title=finding.title,
+                    description=finding.description or getattr(finding, "finding", "") or finding.title,
+                    selector=in_p_ev.selector if in_p_ev and in_p_ev.selector else (in_p_ev.element if in_p_ev else None),
+                    snippet=(in_p_ev.snippet or in_p_ev.value) if in_p_ev else None,
+                    url=in_p_ev.url if in_p_ev else None,
+                    severity=finding.severity,
+                    category=finding.category,
+                    evidence_refs=finding.evidence_refs or []
+                ))
+
                 # Upgrade severity to the highest
                 best_severity = existing.severity
                 if self._severity_rank(finding.severity) > self._severity_rank(existing.severity):
@@ -363,6 +413,8 @@ class FindingRegistry:
                     "surfaces_affected": surfaces,
                     "evidence_refs": combined_refs,
                     "evidence": combined_ev,
+                    "sub_observations": sub_obs,
+                    "detailed_observations": detailed_obs,
                 })
                 return entry, False
             else:
@@ -376,7 +428,30 @@ class FindingRegistry:
                             "selector": ev.selector,
                             "details": (ev.snippet or ev.value or "")[:120] or None,
                         })
-                finding = finding.model_copy(update={"surfaces_affected": initial_surfaces})
+
+                init_sub = list(getattr(finding, "sub_observations", []) or [])
+                if not init_sub:
+                    init_sub = [finding.title]
+                init_detailed = list(getattr(finding, "detailed_observations", []) or [])
+                if not init_detailed:
+                    p_ev = finding.evidence[0] if (finding.evidence and len(finding.evidence) > 0) else None
+                    init_detailed = [SubObservation(
+                        observation_id=finding.finding_id,
+                        title=finding.title,
+                        description=finding.description or getattr(finding, "finding", "") or finding.title,
+                        selector=p_ev.selector if p_ev and p_ev.selector else (p_ev.element if p_ev else None),
+                        snippet=(p_ev.snippet or p_ev.value) if p_ev else None,
+                        url=p_ev.url if p_ev else None,
+                        severity=finding.severity,
+                        category=finding.category,
+                        evidence_refs=finding.evidence_refs or []
+                    )]
+
+                finding = finding.model_copy(update={
+                    "surfaces_affected": initial_surfaces,
+                    "sub_observations": init_sub,
+                    "detailed_observations": init_detailed,
+                })
                 entry = RegistryEntry(canonical_id=cid, finding=finding)
                 self._entries[cid] = entry
                 self._id_index[finding.finding_id] = cid

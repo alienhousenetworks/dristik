@@ -267,11 +267,16 @@ def analyze_schema_rich_results(pages: List[PageEvidence]) -> SchemaValidationRe
     if total_entities == 0:
         summary = "No JSON-LD structured data entities were detected across crawled pages."
     elif entities_with_errors == 0:
-        summary = f"All {total_entities} detected structured data entities satisfy Google Rich Results requirements."
+        summary = (
+            f"No blocking rich-result errors on {total_entities} entities. "
+            f"{entities_with_warnings} recommended fields are absent. "
+            "Rich-result syntax is not an entity-graph quality score."
+        )
     else:
         summary = (
             f"Audited {total_entities} schema entities across {total_pages_with_schema} pages. "
-            f"Found {entities_with_errors} entity syntax error(s) and {entities_with_warnings} warning(s)."
+            f"Found {entities_with_errors} entity syntax error(s) and {entities_with_warnings} warning(s). "
+            "Rich-result syntax is not an entity-graph quality score."
         )
 
     return SchemaValidationReport(

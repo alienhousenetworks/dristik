@@ -52,16 +52,25 @@ class LeadGenEngine:
 
         crawled_urls = []
 
+        from app.intelligence.business.entity_resolver import UniversalEntityResolver, BANNED_NAMES
+
         # 1. Pull actual crawl evidence if analysis_id is provided
         if analysis_id:
             run = orchestrator.get_run(analysis_id)
             if run and run.report:
                 target_domain = run.report.domain or target_domain
-                if run.report.business_profile:
-                    brand = run.report.business_profile.business_name or brand
+                if getattr(run.report, "resolved_entity", None) and run.report.resolved_entity.name:
+                    brand = run.report.resolved_entity.name
+                elif run.report.business_profile and run.report.business_profile.business_name:
+                    brand = run.report.business_profile.business_name
+                if run.report.business_profile and run.report.business_profile.industry:
                     industry = run.report.business_profile.industry or industry
                 if run.report.crawl_manifest and run.report.crawl_manifest.pages:
                     crawled_urls = [p.url.lower() for p in run.report.crawl_manifest.pages]
+
+        if not brand or brand.strip().lower() in BANNED_NAMES:
+            host_stem = target_domain.split(".")[0] if target_domain else "company"
+            brand = UniversalEntityResolver._clean_host_to_brand_name(host_stem)
 
         # No crawl → no canned blueprints. Empty list, not mock landing pages.
         if not crawled_urls:

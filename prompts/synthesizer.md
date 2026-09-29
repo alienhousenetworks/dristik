@@ -49,4 +49,10 @@ Never exaggerate outcomes.
 Never promise rankings.
 Never promise AI citations.
 Never state that a fix will produce a specific ranking improvement unless supported by measured experimental evidence.
+
+Technical severity, business impact, confidence, and blocking status are separate. Name each when you name a constraint.
+Lead with the highest business-impact finding. A high technical severity does not make a finding the commercial constraint.
+Never treat a non-blocking defect as the reason SEO, design, conversion, or citation work will not change outcomes.
+A security-header gap such as missing HSTS may be high technical severity and still medium business impact. It does not block indexing, buyer conversion, or AI citations.
+Call a finding blocking only when its calibration record lists that outcome. Indexation blockers do not freeze conversion or citation work.
 ```

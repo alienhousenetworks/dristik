@@ -65,12 +65,10 @@ class VisualIntelligenceEngine:
         word_counts = [p.word_count for p in pages if p.word_count is not None]
         min_words = min(word_counts) if word_counts else None
 
-        # Severity breakdown
-        sev_counts = {"CRITICAL": 0, "HIGH": 0, "MEDIUM": 0, "LOW": 0, "INFO": 0}
-        for f in findings:
-            sev = f.severity if isinstance(f.severity, str) else getattr(f.severity, "value", "INFO")
-            sev_counts[sev] = sev_counts.get(sev, 0) + 1
-        total_defects = len(findings)
+        # Strict severity breakdown & deduplication (guarantees mathematical invariant)
+        from app.remediation.deduplicator import FindingDeduplicator
+        deduped_findings = FindingDeduplicator.deduplicate(findings)
+        sev_counts, total_defects = FindingDeduplicator.get_severity_breakdown(deduped_findings)
 
         cat_scores = scores.category_scores or {}
 
@@ -205,8 +203,8 @@ class VisualIntelligenceEngine:
                 ChartSpecification(
                     id="chart_ttfb_latency",
                     chart_type="latency_curve",
-                    title="Crawl Latency & Response Speed (TTFB)",
-                    subtitle="Page-by-page server response times measured across crawl paths vs Google budget thresholds",
+                    title="Server Response Latency (TTFB - Lab Crawl Sample)",
+                    subtitle="Deterministic server response times measured across crawl paths. Real-user Core Web Vitals (LCP, INP, CLS) require Google CrUX field monitoring.",
                     ai_insight=latency_insight,
                     category="TECHNICAL_SEO",
                     data={
@@ -261,7 +259,7 @@ class VisualIntelligenceEngine:
             order += 1
 
         category_counts: Dict[str, int] = {}
-        for finding in findings:
+        for finding in deduped_findings:
             label = finding.category.value if hasattr(finding.category, "value") else str(finding.category)
             category_counts[label] = category_counts.get(label, 0) + 1
         category_bars = [
@@ -385,7 +383,7 @@ class VisualIntelligenceEngine:
                 unit="pages",
                 change_indicator="DOM-verified",
                 status="good",
-                significance="All diagnostic observations and code patches are cryptographically bound to live DOM evidence across these URLs.",
+                significance=f"Crawl scope: {page_count} pages — intentional audit limit. Site-wide conclusions are mathematically bounded to this verified sample.",
                 category="OVERALL",
             ),
         ])

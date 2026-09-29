@@ -78,12 +78,15 @@ class CognitiveSynthesizerWorker(BaseCognitiveWorker):
         synth_card = (
             "Produce the C-suite diagnostic from verified claims and site_facts only.\n"
             "Write a Minto CEO brief from verified claims only.\n"
-            "Lead with the single deepest commercial constraint.\n"
+            "Lead with the highest business-impact finding.\n"
+            "Technical severity, business impact, confidence, and blocking are separate axes.\n"
+            "Call a finding blocking only when its calibration record blocks that outcome.\n"
+            "A missing HSTS or other security header is not a reason to pause SEO, design, conversion, or citation work.\n"
             "what_site_gets_right: 3 items, each grounded.\n"
-            "what_is_holding_it_back: 3 items.\n"
+            "what_is_holding_it_back: 3 items, ordered by business impact.\n"
             "financial_impact_model: uses bands only (cac_pressure, organic_pipeline_at_risk, conversion_velocity_uplift).\n"
             "Do not introduce new statistics.\n"
-            "what_to_ignore must name tactics that do not fix the stated root constraint.\n"
+            "what_to_ignore must not tell the reader to wait on a non-blocking defect.\n"
             "Max 3 board bullets."
         )
 

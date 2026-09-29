@@ -317,14 +317,76 @@ class SpecialistAgent(BaseAgent):
                 add(f"Crawler recorded {broken} broken internal link(s).", Severity.HIGH, "Fix or remove broken internal hrefs.")
 
         elif aid == "seo.performance.v3":
+            # 1. Server Response TTFB (Infrastructure & Backend Latency)
             avg_ttfb = float(ch.get("avg_ttfb_ms") or 0.0)
             observations["avg_ttfb_ms"] = avg_ttfb
             if avg_ttfb > 800:
                 add(
-                    f"Measured average TTFB is {avg_ttfb:.0f} ms.",
+                    f"Measured average server response time (TTFB) is {avg_ttfb:.0f} ms.",
                     Severity.HIGH if avg_ttfb > 1500 else Severity.MEDIUM,
-                    "Improve origin TTFB (caching, less blocking work). LCP/CLS were not measured.",
+                    "Enable edge CDN caching, optimize database queries, and reduce backend processing to bring origin TTFB below 200ms.",
                 )
+
+            # 2. Render-Blocking Resources (Critical Path Optimization)
+            blocking_count = sum(getattr(p.lab_performance, "render_blocking_count", 0) for p in pages if getattr(p, "lab_performance", None))
+            observations["render_blocking_count"] = blocking_count
+            if blocking_count > 0:
+                add(
+                    f"{blocking_count} render-blocking stylesheet/script asset(s) delay initial page render.",
+                    Severity.HIGH if blocking_count > 3 else Severity.MEDIUM,
+                    "Add async or defer to non-critical head scripts, specify type='module', and inline critical CSS to eliminate render-blocking latency.",
+                )
+
+            # 3. Payload Compression & Encoding
+            uncompressed = [p.url for p in pages if getattr(p, "lab_performance", None) and p.lab_performance.content_encoding.lower() not in ("gzip", "br", "zstd", "deflate")]
+            observations["uncompressed_pages"] = len(uncompressed)
+            if uncompressed:
+                add(
+                    f"{len(uncompressed)} crawled page(s) are served without Gzip/Brotli compression.",
+                    Severity.HIGH,
+                    "Enable Brotli or Gzip compression on your origin or CDN to reduce transferred HTML/text bytes by up to 70%.",
+                )
+
+            # 4. Third-Party Script Overhead
+            third_party_cnt = sum(getattr(p.lab_performance, "third_party_scripts_count", 0) for p in pages if getattr(p, "lab_performance", None))
+            observations["third_party_scripts_count"] = third_party_cnt
+            if third_party_cnt >= 5:
+                add(
+                    f"Page loads {third_party_cnt} third-party tracker/widget scripts.",
+                    Severity.LOW,
+                    "Audit third-party scripts and consider server-side tag management to avoid main-thread congestion.",
+                )
+
+            # 5. Core Web Vitals Field Telemetry (CrUX)
+            crux_ev = None
+            if blackboard and blackboard.evidence_store:
+                for ev in blackboard.evidence_store.get_external():
+                    if ev.analyzer in ("crux", "crux_origin_field_data") or (ev.metadata and ev.metadata.get("source") == "crux"):
+                        crux_ev = ev
+                        break
+
+            if crux_ev and isinstance(crux_ev.value, dict) and crux_ev.value.get("status") == "CONNECTED":
+                p75_lcp = crux_ev.value.get("p75_lcp_ms")
+                p75_cls = crux_ev.value.get("p75_cls")
+                p75_inp = crux_ev.value.get("p75_inp_ms")
+                observations["crux_lcp_p75"] = p75_lcp
+                observations["crux_cls_p75"] = p75_cls
+                observations["crux_inp_p75"] = p75_inp
+
+                if p75_lcp and p75_lcp > 2500:
+                    add(
+                        f"CrUX real-user 75th percentile LCP is {p75_lcp:.0f} ms (threshold > 2500ms).",
+                        Severity.HIGH,
+                        "Optimize hero image loading (fetchpriority='high'), eliminate render-blocking CSS, and use edge caching to lower LCP.",
+                    )
+                if p75_cls and p75_cls > 0.1:
+                    add(
+                        f"CrUX real-user 75th percentile Cumulative Layout Shift is {p75_cls} (threshold > 0.1).",
+                        Severity.MEDIUM,
+                        "Specify width/height attributes on media elements and avoid dynamic content insertion above the fold to stabilize layout.",
+                    )
+            else:
+                observations["crux_telemetry_status"] = "UNMEASURED"
 
         elif aid == "seo.security.v3":
             url = blackboard.website_url or (manifest.base_url if manifest else "")

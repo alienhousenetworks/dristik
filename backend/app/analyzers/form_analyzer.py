@@ -20,7 +20,15 @@ class FormAccessibilityAnalyzer:
         raw_html_map = raw_html_map or {}
 
         for p in pages:
-            html = raw_html_map.get(p.url)
+            html = raw_html_map.get(p.url) or getattr(p, "raw_html", None)
+            if not html and getattr(p, "snapshot_path", None):
+                try:
+                    from pathlib import Path
+                    sp = Path(p.snapshot_path)
+                    if sp.exists():
+                        html = sp.read_text(encoding="utf-8", errors="ignore")
+                except Exception:
+                    pass
             if html:
                 soup = BeautifulSoup(html, "html.parser")
                 form_tags = soup.find_all("form")

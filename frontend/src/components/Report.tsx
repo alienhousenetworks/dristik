@@ -9,6 +9,7 @@ import { CharacterSafeCopyWidget } from './CharacterSafeCopyWidget';
 import { WhatsAppShareButton } from './WhatsAppShareButton';
 import { GstInvoiceModal } from './GstInvoiceModal';
 import { ScoringRubricModal } from './ScoringRubricModal';
+import { CalibrationLeaders } from './CalibrationAxes';
 
 interface ReportProps {
   report: ExecutiveReport;
@@ -240,6 +241,9 @@ export function Report({
           <p className="text-base leading-relaxed text-ink font-serif mt-1">
             {display(report.story_summary)}
           </p>
+          <div className="mt-4">
+            <CalibrationLeaders findings={report.findings || []} />
+          </div>
         </div>
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs border-t border-line pt-4">
