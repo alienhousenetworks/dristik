@@ -835,6 +835,7 @@ class AnalysisOrchestrator:
                 findings=final_findings,
                 ai_search_matrix=blackboard.ai_search_evaluations,
                 commercial_evaluations=blackboard.commercial_evaluations,
+                dynamic_sandbox_evaluations=getattr(blackboard, "dynamic_sandbox_evaluations", []),
                 geo_readiness=geo_readiness,
                 competitor_bakeoff=blackboard.competitor_bakeoff,
             )
@@ -1053,6 +1054,7 @@ class AnalysisOrchestrator:
                 ai_visibility_scorecard=ai_visibility_scorecard,
                 agent_readiness=agent_readiness,
                 commercial_evaluations=blackboard.commercial_evaluations,
+                dynamic_sandbox_evaluations=getattr(blackboard, "dynamic_sandbox_evaluations", []),
                 competitor_bakeoff=blackboard.competitor_bakeoff,
                 character_safe_copy=character_copy,
                 whatsapp_summary=wa_summary,

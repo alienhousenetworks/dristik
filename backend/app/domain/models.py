@@ -1787,6 +1787,7 @@ class ExecutiveReport(BaseModel):
     manifest_id: Optional[str] = None
     honest_scores: Optional[HonestScores] = None
     commercial_evaluations: List[CommercialQueryEvaluation] = Field(default_factory=list)
+    dynamic_sandbox_evaluations: List[DynamicSandboxQuestionEvaluation] = Field(default_factory=list)
     competitor_bakeoff: Optional[CompetitorBakeoffResult] = None
     character_safe_copy: Optional[CharacterSafeCopy] = None
     whatsapp_summary: Optional[str] = None

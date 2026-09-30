@@ -121,11 +121,14 @@ class RegressionDetector:
         historical_snapshots: Optional[List[AuditSnapshot]] = None,
     ) -> RegressionReport:
         now = datetime.now(timezone.utc)
-        current_score = round(float(current_scores.overall_score), 1)
+        current_score = round(float(current_scores.overall_score), 1) if current_scores and current_scores.overall_score is not None else 0.0
 
         current_cat_scores: Dict[str, float] = {}
         for key, value in (current_scores.category_scores or {}).items():
-            current_cat_scores[key] = round(float(value.score), 1)
+            if value and getattr(value, "score", None) is not None:
+                current_cat_scores[key] = round(float(value.score), 1)
+            else:
+                current_cat_scores[key] = 0.0
 
         current_schema_types = _schema_types_from_ledger(evidence_ledger or {})
         timeline = [

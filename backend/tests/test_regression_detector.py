@@ -156,3 +156,27 @@ def test_regression_detector_custom_snapshots():
     assert any(r.title == "Service schema removed" for r in report.regressions)
     assert all("50 to 42" not in r.description for r in report.regressions)
     assert all("66 to 63" not in r.description for r in report.regressions)
+
+
+def test_regression_detector_handles_none_category_scores():
+    detector = RegressionDetector()
+    current_scores = OverallScoreResult(
+        overall_score=55.0,
+        grade="C",
+        health_label="Needs Attention",
+        category_scores={
+            Category.TECHNICAL_SEO.value: CategoryScore(category=Category.TECHNICAL_SEO, score=None, weight=0.14, summary="Pending score"),
+        },
+    )
+
+    report = detector.evaluate_audit_run(
+        domain="null-scores.org",
+        current_scores=current_scores,
+        findings=[],
+        evidence_ledger={},
+        snapshot_id="snap_null_001",
+    )
+
+    assert report.has_regression is False
+    assert report.current_run.score == 55.0
+    assert report.current_run.category_scores[Category.TECHNICAL_SEO.value] == 0.0

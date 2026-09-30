@@ -314,6 +314,22 @@ export interface CommercialQueryEvaluation {
   gap_analysis?: string;
 }
 
+export interface DynamicSandboxQuestionEvaluation {
+  question_id: string;
+  facet: string;
+  generated_question: string;
+  buyer_intent: string;
+  is_answerable: boolean;
+  answerability_status: 'ANSWERABLE' | 'PARTIAL' | 'UNANSWERABLE' | 'CONFLICTING' | string;
+  crawled_answer: string;
+  evidence_url?: string | null;
+  evidence_snippet?: string | null;
+  gap_analysis?: string | null;
+  recommended_answer?: string | null;
+  citability_score: number;
+  projected_patch_gain: number;
+}
+
 export interface CompetitorBakeoffItem {
   question_key: string;
   question_title: string;
@@ -1082,6 +1098,7 @@ export interface ExecutiveReport {
     schema_crosscheck?: any;
   };
   commercial_evaluations?: CommercialQueryEvaluation[];
+  dynamic_sandbox_evaluations?: DynamicSandboxQuestionEvaluation[];
   competitor_bakeoff?: CompetitorBakeoffResult;
   character_safe_copy?: CharacterSafeCopy;
   whatsapp_summary?: string;

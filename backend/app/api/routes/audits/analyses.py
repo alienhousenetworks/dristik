@@ -460,13 +460,89 @@ async def simulate_ai_search(
 
     if blackboard.commercial_evaluations:
         run.report.commercial_evaluations = blackboard.commercial_evaluations
+    if getattr(blackboard, "dynamic_sandbox_evaluations", None):
+        run.report.dynamic_sandbox_evaluations = blackboard.dynamic_sandbox_evaluations
     if blackboard.ai_search_evaluations:
         run.report.ai_search_matrix = blackboard.ai_search_evaluations
 
     return {
         "status": sim_res.get("status", "AVAILABLE"),
         "commercial_evaluations": [c.model_dump() for c in run.report.commercial_evaluations or []],
+        "dynamic_sandbox_evaluations": [d.model_dump() for d in getattr(run.report, "dynamic_sandbox_evaluations", []) or []],
         "ai_search_matrix": [m.model_dump() for m in run.report.ai_search_matrix or []]
+    }
+
+@router.post("/{analysis_id}/dynamic-sandbox")
+async def generate_audit_dynamic_sandbox(
+    analysis_id: str,
+    user: Optional[UserIdentity] = Depends(get_current_user_optional)
+):
+    """
+    Synthesizes and evaluates 100 bespoke business questions across 10 strategic facets
+    for this specific audit report using its crawled DOM evidence and active LLM.
+    """
+    from app.intelligence.business.entity_resolver import UniversalEntityResolver
+    from app.intelligence.geo.dynamic_sandbox import DynamicQuestionSandboxEngine
+    from app.domain.models import PageEvidence
+
+    run = _get_org_run(analysis_id, user)
+    if not run.report:
+        raise HTTPException(status_code=404, detail="Analysis report not ready yet.")
+
+    pages = []
+    if run.report.page_reports:
+        for p in run.report.page_reports:
+            pages.append(PageEvidence(
+                url=p.url,
+                title=p.title,
+                meta_description=p.meta_description,
+                h1=[p.h1] if isinstance(p.h1, str) else (p.h1 or []),
+                h2=p.h2 or [],
+                body_text=p.body_text or "",
+                word_count=p.word_count or 0
+            ))
+    elif run.report.crawl_manifest and run.report.crawl_manifest.crawled_urls:
+        for u in run.report.crawl_manifest.crawled_urls:
+            pages.append(PageEvidence(
+                url=u,
+                title=run.report.domain,
+                body_text=run.report.story_summary or "",
+                word_count=100
+            ))
+    else:
+        pages.append(PageEvidence(
+            url=run.report.website_url,
+            title=f"{run.report.domain} Official",
+            body_text=run.report.story_summary or "Digital platform offering commercial services.",
+            word_count=100
+        ))
+
+    resolved_entity = UniversalEntityResolver.resolve_from_evidence(
+        website_url=run.report.website_url,
+        pages=pages
+    )
+
+    sandbox_engine = DynamicQuestionSandboxEngine(model_router=orchestrator.model_router)
+    evaluations = await sandbox_engine.generate_and_evaluate_100_questions(
+        pages=pages,
+        website_url=run.report.website_url,
+        resolved_entity=resolved_entity,
+        profile=run.report.business_profile
+    )
+
+    run.report.dynamic_sandbox_evaluations = evaluations
+
+    answerable = sum(1 for e in evaluations if e.is_answerable)
+    unanswerable = sum(1 for e in evaluations if not e.is_answerable)
+    avg_score = round(sum(e.citability_score for e in evaluations) / max(1, len(evaluations)), 1)
+
+    return {
+        "status": "AVAILABLE",
+        "total_questions": len(evaluations),
+        "answerable_count": answerable,
+        "unanswerable_count": unanswerable,
+        "average_citability_score": avg_score,
+        "evaluations": [e.model_dump() for e in evaluations]
     }
 
 @router.post("/{analysis_id}/re-query")
