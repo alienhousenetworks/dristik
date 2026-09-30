@@ -48,11 +48,18 @@ set -a
 source "$ENV_FILE" 2>/dev/null || true
 set +a
 
-# Validate AUTH_SECRET length
+# Validate AUTH_SECRET length or auto-generate
 if [ -z "$AUTH_SECRET" ] || [ ${#AUTH_SECRET} -lt 32 ] || [ "$AUTH_SECRET" = "dristik-dev-secret-change-me" ]; then
-    echo -e "${RED}✗ Error: AUTH_SECRET in .env is missing or weaker than 32 characters!${RESET}"
-    echo -e "  Generate one using: openssl rand -hex 32"
-    exit 1
+    echo -e "${YELLOW}⚡ Notice: AUTH_SECRET in .env is missing or weak. Auto-generating a secure 32-byte secret...${RESET}"
+    NEW_SECRET=$(openssl rand -hex 32 2>/dev/null || python3 -c "import secrets; print(secrets.token_hex(32))" 2>/dev/null || date +%s%N | sha256sum | head -c 64)
+    if grep -q "^AUTH_SECRET=" "$ENV_FILE" 2>/dev/null; then
+        # Replace existing key in .env
+        sed -i "s/^AUTH_SECRET=.*/AUTH_SECRET=${NEW_SECRET}/" "$ENV_FILE" 2>/dev/null || sed -i "" "s/^AUTH_SECRET=.*/AUTH_SECRET=${NEW_SECRET}/" "$ENV_FILE" 2>/dev/null || true
+    else
+        echo "AUTH_SECRET=${NEW_SECRET}" >> "$ENV_FILE"
+    fi
+    export AUTH_SECRET="$NEW_SECRET"
+    echo -e "${GREEN}✓ Generated secure AUTH_SECRET and updated ${ENV_FILE}${RESET}"
 fi
 
 # Validate SYSTEM_ADMIN_PASSWORD
