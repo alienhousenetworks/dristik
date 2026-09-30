@@ -2,6 +2,7 @@
 Dristik AI Domain Models & Pydantic Schemas
 Strict typed models for Evidence, Claims, Findings, Scores, Reports, and Telemetry.
 """
+from __future__ import annotations
 from typing import List, Dict, Any, Optional, Union
 from pydantic import BaseModel, Field, field_validator
 from app.domain.enums import (
@@ -1166,6 +1167,61 @@ class PageReport(BaseModel):
     ux: PageUxSignals = Field(default_factory=PageUxSignals)
     findings: List[str] = Field(default_factory=list)
 
+class RenderedVsRawDelta(BaseModel):
+    raw_word_count: int = 0
+    rendered_word_count: int = 0
+    word_count_delta: int = 0
+    raw_headings: List[str] = Field(default_factory=list)
+    rendered_headings: List[str] = Field(default_factory=list)
+    js_only_headings: List[str] = Field(default_factory=list)
+    raw_internal_links: int = 0
+    rendered_internal_links: int = 0
+    js_only_links_count: int = 0
+    js_dependency_risk: str = "LOW"  # "LOW" | "MEDIUM" | "CRITICAL"
+
+class IndexationPageStatus(BaseModel):
+    url: str
+    status_code: int = 200
+    crawlable: bool = True
+    indexable: bool = True
+    indexed_state: str = "UNVERIFIED_NO_GSC"  # "INDEXED" | "NOT_INDEXED" | "UNVERIFIED_NO_GSC"
+    canonical_declared: Optional[str] = None
+    canonical_selected: Optional[str] = None
+    canonical_match: bool = True
+    has_noindex: bool = False
+    x_robots_tag: Optional[str] = None
+    robots_blocked: bool = False
+    is_soft_404: bool = False
+    is_duplicate: bool = False
+    duplicate_of_url: Optional[str] = None
+    gsc_coverage_state: Optional[str] = None  # "Discovered - currently not indexed", "Crawled - currently not indexed", etc.
+    alternate_canonical: Optional[str] = None
+    is_redirect: bool = False
+    redirect_target: Optional[str] = None
+    is_js_only_content: bool = False
+    blocked_resources: List[str] = Field(default_factory=list)
+    render_delta: Optional[RenderedVsRawDelta] = None
+
+class IndexationAuditRollup(BaseModel):
+    total_pages_evaluated: int = 0
+    crawlable_count: int = 0
+    indexable_count: int = 0
+    indexed_count: int = 0
+    blocked_by_robots_count: int = 0
+    noindex_count: int = 0
+    x_robots_tag_count: int = 0
+    soft_404_count: int = 0
+    duplicate_count: int = 0
+    canonical_mismatch_count: int = 0
+    discovered_not_indexed_count: int = 0
+    crawled_not_indexed_count: int = 0
+    alternate_canonical_count: int = 0
+    redirect_count: int = 0
+    js_dependent_count: int = 0
+    blocked_resources_count: int = 0
+    pages: List[IndexationPageStatus] = Field(default_factory=list)
+    summary: str = ""
+
 class CrawlManifest(BaseModel):
     domain: str = ""
     base_url: str = ""
@@ -1510,62 +1566,6 @@ class CanonicalAuditRollup(BaseModel):
     canonical_health_score: float = 100.0
     items: List[CanonicalAuditItem] = Field(default_factory=list)
     summary: str = ""
-
-class RenderedVsRawDelta(BaseModel):
-    raw_word_count: int = 0
-    rendered_word_count: int = 0
-    word_count_delta: int = 0
-    raw_headings: List[str] = Field(default_factory=list)
-    rendered_headings: List[str] = Field(default_factory=list)
-    js_only_headings: List[str] = Field(default_factory=list)
-    raw_internal_links: int = 0
-    rendered_internal_links: int = 0
-    js_only_links_count: int = 0
-    js_dependency_risk: str = "LOW"  # "LOW" | "MEDIUM" | "CRITICAL"
-
-class IndexationPageStatus(BaseModel):
-    url: str
-    status_code: int = 200
-    crawlable: bool = True
-    indexable: bool = True
-    indexed_state: str = "UNVERIFIED_NO_GSC"  # "INDEXED" | "NOT_INDEXED" | "UNVERIFIED_NO_GSC"
-    canonical_declared: Optional[str] = None
-    canonical_selected: Optional[str] = None
-    canonical_match: bool = True
-    has_noindex: bool = False
-    x_robots_tag: Optional[str] = None
-    robots_blocked: bool = False
-    is_soft_404: bool = False
-    is_duplicate: bool = False
-    duplicate_of_url: Optional[str] = None
-    gsc_coverage_state: Optional[str] = None  # "Discovered - currently not indexed", "Crawled - currently not indexed", etc.
-    alternate_canonical: Optional[str] = None
-    is_redirect: bool = False
-    redirect_target: Optional[str] = None
-    is_js_only_content: bool = False
-    blocked_resources: List[str] = Field(default_factory=list)
-    render_delta: Optional[RenderedVsRawDelta] = None
-
-class IndexationAuditRollup(BaseModel):
-    total_pages_evaluated: int = 0
-    crawlable_count: int = 0
-    indexable_count: int = 0
-    indexed_count: int = 0
-    blocked_by_robots_count: int = 0
-    noindex_count: int = 0
-    x_robots_tag_count: int = 0
-    soft_404_count: int = 0
-    duplicate_count: int = 0
-    canonical_mismatch_count: int = 0
-    discovered_not_indexed_count: int = 0
-    crawled_not_indexed_count: int = 0
-    alternate_canonical_count: int = 0
-    redirect_count: int = 0
-    js_dependent_count: int = 0
-    blocked_resources_count: int = 0
-    pages: List[IndexationPageStatus] = Field(default_factory=list)
-    summary: str = ""
-
 
 class HttpStatusItem(BaseModel):
     url: str
