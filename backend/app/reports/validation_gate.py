@@ -86,8 +86,9 @@ class ValidationGate:
         # 1.1 & 1.2: Overall score == sum of weighted contributions
         cat_scores = report.scores.category_scores.values() if report.scores and report.scores.category_scores else []
         if cat_scores:
-            calc_sum = sum(c.weighted_score for c in cat_scores)
-            is_close = abs(report.scores.overall_score - calc_sum) <= 0.5
+            calc_sum = sum(c.weighted_score for c in cat_scores if c.weighted_score is not None)
+            overall_val = report.scores.overall_score if report.scores.overall_score is not None else 0.0
+            is_close = abs(overall_val - calc_sum) <= 0.5
             record(
                 "overall_score_equals_weighted_sum",
                 is_close,
@@ -95,7 +96,7 @@ class ValidationGate:
             )
 
             # 1.3: Base weights MUST sum to exactly 100% (or 1.0)
-            weight_sum = sum(c.weight for c in cat_scores)
+            weight_sum = sum(c.weight for c in cat_scores if c.weight is not None)
             weights_ok = abs(weight_sum - 100.0) <= 0.5 or abs(weight_sum - 1.0) <= 0.01
             record(
                 "weights_sum_to_100_percent",
@@ -113,7 +114,8 @@ class ValidationGate:
                 if kpi.label.lower() in ["overall health", "health score", "overall score"]:
                     try:
                         kpi_val = float(str(kpi.value).replace("/100", "").replace("%", "").strip())
-                        if abs(kpi_val - report.scores.overall_score) > 1.0:
+                        overall_val = report.scores.overall_score if report.scores.overall_score is not None else 0.0
+                        if abs(kpi_val - overall_val) > 1.0:
                             score_inconsistencies.append(f"Visual KPI {kpi.label}={kpi_val} vs Overall={report.scores.overall_score}")
                     except ValueError:
                         pass
@@ -263,7 +265,7 @@ class ValidationGate:
         # 4.1 & 4.2: Zero 100-scores coexisting with findings in same category
         coexisting_flaws = []
         for cat_name, cat_obj in (report.scores.category_scores or {}).items():
-            if cat_obj.score >= 99.5:
+            if cat_obj.score is not None and cat_obj.score >= 99.5:
                 has_high_defects = any(
                     f.category == cat_obj.category and str(f.severity).upper() in ["CRITICAL", "HIGH", "SEVERITY.CRITICAL", "SEVERITY.HIGH"]
                     for f in report.findings
@@ -539,7 +541,7 @@ class ValidationGate:
         # 0. Rule 4.2: Cross-check 100-scores against findings and rescore
         if report.scores and report.scores.category_scores:
             for cat_name, cat_obj in report.scores.category_scores.items():
-                if cat_obj.score >= 99.5:
+                if cat_obj.score is not None and cat_obj.score >= 99.5:
                     cat_defects = [
                         f for f in report.findings
                         if f.category == cat_obj.category and str(f.severity).upper() in ["CRITICAL", "HIGH", "SEVERITY.CRITICAL", "SEVERITY.HIGH"]
@@ -547,20 +549,22 @@ class ValidationGate:
                     if cat_defects:
                         deduction = sum(25.0 if "CRITICAL" in str(f.severity).upper() else 15.0 for f in cat_defects)
                         cat_obj.score = max(35.0, 100.0 - deduction)
-                        cat_obj.weighted_score = round((cat_obj.score * cat_obj.weight) / 100.0, 2)
+                        cat_obj.weighted_score = round((cat_obj.score * (cat_obj.weight or 0.0)) / 100.0, 2)
                         repairs_made.append(f"Rescored {cat_name} from 100.0 to {cat_obj.score} due to {len(cat_defects)} HIGH/CRITICAL finding(s).")
 
         # 1. Reconcile scoring arithmetic
         if report.scores and report.scores.category_scores:
             total_weighted = 0.0
-            total_weight = sum(c.weight for c in report.scores.category_scores.values())
+            total_weight = sum(c.weight for c in report.scores.category_scores.values() if c.weight is not None)
             for cat_key, cat_obj in report.scores.category_scores.items():
                 if 0.99 <= total_weight <= 1.01:
-                    cat_obj.weight = cat_obj.weight * 100.0
-                cat_obj.weighted_score = round((cat_obj.score * cat_obj.weight) / 100.0, 2)
+                    cat_obj.weight = (cat_obj.weight or 0.0) * 100.0
+                score_val = float(cat_obj.score) if cat_obj.score is not None else 0.0
+                cat_obj.weighted_score = round((score_val * (cat_obj.weight or 0.0)) / 100.0, 2)
                 total_weighted += cat_obj.weighted_score
             new_overall = round(total_weighted, 1)
-            if abs(report.scores.overall_score - new_overall) > 0.1:
+            curr_overall = report.scores.overall_score if report.scores.overall_score is not None else 0.0
+            if abs(curr_overall - new_overall) > 0.1:
                 repairs_made.append(f"Reconciled overall score from {report.scores.overall_score} to exact weighted sum {new_overall}")
                 report.scores.overall_score = new_overall
 

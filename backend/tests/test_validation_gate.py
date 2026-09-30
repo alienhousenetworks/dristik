@@ -323,3 +323,26 @@ def test_validation_gate_catches_contradictory_superlative():
     assert "composite_scores_derivable" in res.failed_checks
 
 
+def test_validation_gate_handles_none_score_categories():
+    """Verify ValidationGate handles categories with score=None (unmeasured/offline connectors) without TypeError."""
+    report = create_sample_report(overall_score=80.0, weighted_sum=80.0)
+    report.scores.category_scores["trust_authority"] = CategoryScore(
+        category=Category.TRUST_AUTHORITY,
+        score=None,
+        confidence=0.0,
+        weight=0.0,
+        weighted_score=0.0,
+        summary="Connector unavailable",
+        status="NOT_MEASURED",
+        provenance="CONNECTOR_UNAVAILABLE",
+    )
+    # Both validate_report and enforce_gate must succeed without throwing TypeError
+    res = ValidationGate.validate_report(report)
+    assert isinstance(res.is_valid, bool)
+
+    repaired, gate_result = ValidationGate.enforce_gate(report)
+    assert repaired is not None
+    assert isinstance(gate_result.is_valid, bool)
+
+
+
