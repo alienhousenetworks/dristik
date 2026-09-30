@@ -14,6 +14,9 @@ from app.analyzers.host_and_redirects import HostRedirectProber, probe_host_and_
 from app.analyzers.link_depth import LinkDepthAnalyzer, analyze_link_depth_and_orphans
 from app.analyzers.form_analyzer import FormAccessibilityAnalyzer, analyze_forms
 from app.analyzers.media_asset_analyzer import MediaAssetAnalyzer, analyze_media_assets
+from app.analyzers.local_seo_analyzer import analyze_local_seo
+from app.analyzers.international_seo_analyzer import analyze_international_seo
+from app.analyzers.topical_authority_analyzer import analyze_topical_authority
 
 __all__ = [
     "MetaRollupAnalyzer",
@@ -28,4 +31,7 @@ __all__ = [
     "analyze_forms",
     "MediaAssetAnalyzer",
     "analyze_media_assets",
+    "analyze_local_seo",
+    "analyze_international_seo",
+    "analyze_topical_authority",
 ]

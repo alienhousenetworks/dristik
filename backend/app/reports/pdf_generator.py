@@ -19,10 +19,18 @@ class ExecutiveDeckGenerator:
     """
 
     def render_executive_deck_html(self, run_data: Dict[str, Any]) -> str:
-        domain = run_data.get("domain", "example.com")
-        overall_score = run_data.get("overall_score", 85)
-        grade = "A" if overall_score >= 80 else ("B" if overall_score >= 70 else "C")
-        created_at = run_data.get("created_at", "2026-09-18")
+        domain = run_data.get("domain") or "unspecified"
+        overall_score = run_data.get("overall_score")
+        if overall_score is not None:
+            grade = "A" if overall_score >= 80 else ("B" if overall_score >= 70 else "C")
+            score_display = f"SCORE: {int(round(overall_score))}/100 [GRADE {grade}]"
+        else:
+            score_display = "SCORE: UNMEASURED"
+
+        created_at = run_data.get("created_at") or "Measured on audit execution"
+        human_perspective = run_data.get("human_visitor_perspective") or "Human visitor experience diagnostic unmeasured."
+        search_perspective = run_data.get("search_engine_perspective") or "Search engine crawlability diagnostic unmeasured."
+        ai_perspective = run_data.get("ai_answer_engine_perspective") or "AI answer engine extractability diagnostic unmeasured."
 
         html = f"""<!DOCTYPE html>
 <html lang="en">
@@ -77,7 +85,7 @@ class ExecutiveDeckGenerator:
             <div>STRICT EVIDENCE-DRIVEN AUDIT</div>
         </div>
         <div>
-            <div class="score-pill">SCORE: {overall_score}/100 [GRADE {grade}]</div>
+            <div class="score-pill">{score_display}</div>
             <div class="title">{domain}</div>
             <p style="font-size: 22px; color: #94a3b8;">Autonomous Growth, GEO, and Organic Discovery Diagnostic</p>
         </div>
@@ -96,15 +104,15 @@ class ExecutiveDeckGenerator:
         <div class="grid-3">
             <div class="card">
                 <h3>1. Human Visitor Experience</h3>
-                <p>High-friction narrative. Value proposition is fragmented across secondary views with ambiguous CTA hierarchy.</p>
+                <p>{human_perspective}</p>
             </div>
             <div class="card">
                 <h3>2. Traditional Search Engine</h3>
-                <p>Crawl budget preserved. Structured semantic schema present on core product nodes with valid canonical hierarchy.</p>
+                <p>{search_perspective}</p>
             </div>
             <div class="card">
                 <h3>3. AI Answer Engines (GEO/AEO)</h3>
-                <p>Limited extractability. Brand absent from primary Perplexity and ChatGPT direct answer synthesis for high-intent queries.</p>
+                <p>{ai_perspective}</p>
             </div>
         </div>
         <div class="footer">
@@ -136,12 +144,24 @@ async def get_executive_deck(
     run = orchestrator.get_run(analysis_id)
     if not run:
         raise HTTPException(status_code=404, detail=f"Analysis run '{analysis_id}' not found.")
+    report = getattr(run, "report", None)
+    p = getattr(report, "perspective", None) if report else None
+    human_p = getattr(p, "human_visitor_perspective", None) if p else None
+    search_p = getattr(p, "search_engine_perspective", None) if p else None
+    ai_p = getattr(p, "ai_answer_engine_perspective", None) if p else None
+
+    score = getattr(report.scores, "overall_score", None) if (report and getattr(report, "scores", None)) else None
+    date_str = (getattr(report, "generated_at", None) if report else None) or getattr(run, "created_at", None) or "Measured on audit execution"
+    domain_val = (getattr(report, "domain", None) if report else None) or getattr(run, "domain", None) or getattr(run, "website_url", "unspecified")
 
     gen = get_executive_deck_generator()
     html_content = gen.render_executive_deck_html({
-        "domain": getattr(run, "domain", None) or getattr(run.report, "domain", "example.com") if run.report else "example.com",
-        "overall_score": getattr(run.report.scores, "overall_score", 85) if run.report and run.report.scores else 85,
-        "created_at": getattr(run, "created_at", "2026-09-18"),
+        "domain": domain_val,
+        "overall_score": score,
+        "created_at": str(date_str),
+        "human_visitor_perspective": human_p,
+        "search_engine_perspective": search_p,
+        "ai_answer_engine_perspective": ai_p,
     })
 
     if format == "json":

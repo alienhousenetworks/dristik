@@ -497,7 +497,19 @@ def _compute_profile_metrics(pages: List[PageEvidence], domain: str, is_target: 
             brand_name=domain.split(".")[0].title(),
             is_target=is_target,
             pages_sampled=0,
-            summary_verdict="No pages crawled."
+            technical_health_score=None,
+            onpage_score=None,
+            content_depth_score=None,
+            schema_score=None,
+            overall_seo_score=None,
+            http_200_rate_pct=0.0,
+            title_optimal_pct=0.0,
+            meta_optimal_pct=0.0,
+            h1_health_pct=0.0,
+            avg_word_count=0,
+            schema_types_count=0,
+            modern_image_pct=0.0,
+            summary_verdict="Uncrawled competitor domain — metrics unmeasured."
         )
     total = len(pages)
     http_200_count = sum(1 for p in pages if p.status_code == 200)
@@ -528,7 +540,7 @@ def _compute_profile_metrics(pages: List[PageEvidence], domain: str, is_target: 
             total_imgs += 1
             if img.get("is_modern_format"):
                 modern_imgs += 1
-    modern_img_pct = round((modern_imgs / max(1, total_imgs)) * 100, 1) if total_imgs > 0 else 60.0
+    modern_img_pct = round((modern_imgs / max(1, total_imgs)) * 100, 1) if total_imgs > 0 else 0.0
 
     tech_score = int(round(max(20, min(100, (http_200_pct * 0.6) + (40 if avg_ttfb < 600 else 20)))))
     onpage_score = int(round(max(20, min(100, (title_opt_pct * 0.35) + (meta_opt_pct * 0.35) + (h1_health_pct * 0.30)))))
@@ -573,7 +585,6 @@ def build_competitor_seo_parity_matrix(
 
     raw_comps = list(competitors or [])
     if not raw_comps and not comp_map:
-        # Default placeholder peers if user didn't enter competitors
         raw_comps = []
 
     for c in raw_comps:
@@ -587,16 +598,21 @@ def build_competitor_seo_parity_matrix(
         if c_dom != clean_target and not any(p.domain == c_dom for p in profiles):
             profiles.append(_compute_profile_metrics(c_pages, c_dom, is_target=False))
 
-    # Calculate ranking
-    sorted_profiles = sorted(profiles, key=lambda p: p.overall_seo_score, reverse=True)
+    # Calculate ranking only among measured profiles
+    measured_profiles = [p for p in profiles if p.overall_seo_score is not None]
+    sorted_measured = sorted(measured_profiles, key=lambda p: (p.overall_seo_score or 0), reverse=True)
     target_rank = 1
-    for idx, p in enumerate(sorted_profiles):
+    for idx, p in enumerate(sorted_measured):
         if p.is_target:
             target_rank = idx + 1
             break
 
-    peer_profiles = [p for p in profiles if not p.is_target]
-    peer_avg = int(round(sum(p.overall_seo_score for p in peer_profiles) / max(1, len(peer_profiles)))) if peer_profiles else target_profile.overall_seo_score
+    peer_profiles = [p for p in profiles if not p.is_target and p.overall_seo_score is not None]
+    peer_avg = (
+        int(round(sum(p.overall_seo_score for p in peer_profiles if p.overall_seo_score is not None) / len(peer_profiles)))
+        if peer_profiles
+        else None
+    )
 
     advantages = []
     deficits = []
@@ -620,10 +636,17 @@ def build_competitor_seo_parity_matrix(
         elif target_profile.schema_types_count < max_peer_schemas:
             deficits.append(f"Schema coverage gap ({target_profile.schema_types_count} types vs rival {max_peer_schemas})")
 
-    takeaway = (
-        f"{target_profile.brand_name} ranks #{target_rank} of {len(profiles)} in technical SEO health "
-        f"({target_profile.overall_seo_score}/100 vs peer avg {peer_avg}/100)."
-    ) if peer_profiles else f"{target_profile.brand_name} technical SEO health is {target_profile.overall_seo_score}/100 (Competitive Benchmark: Pending Competitor Crawl)."
+    target_score_str = f"{target_profile.overall_seo_score}/100" if target_profile.overall_seo_score is not None else "Unmeasured"
+    if peer_profiles and peer_avg is not None:
+        takeaway = (
+            f"{target_profile.brand_name} ranks #{target_rank} of {len(measured_profiles)} in technical SEO health "
+            f"({target_score_str} vs peer avg {peer_avg}/100)."
+        )
+    else:
+        takeaway = (
+            f"{target_profile.brand_name} technical SEO health is {target_score_str} "
+            f"(Competitive Benchmark: Pending Competitor Crawl — peer parity unmeasured)."
+        )
 
     return CompetitorSeoParityMatrix(
         target_domain=clean_target,

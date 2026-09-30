@@ -755,6 +755,9 @@ export interface PageEvidence {
   hreflang_tags?: Record<string, string>;
   lab_performance?: LabPerformanceMetrics;
   field_performance?: FieldPerformanceMetrics;
+  raw_html?: string;
+  x_robots_tag?: string;
+  final_url?: string;
 }
 
 export interface CopyIssue {
@@ -859,6 +862,60 @@ export interface PageReport {
   findings: string[];
 }
 
+export interface RenderedVsRawDelta {
+  raw_word_count: number;
+  rendered_word_count: number;
+  word_count_delta: number;
+  raw_headings: string[];
+  rendered_headings: string[];
+  js_only_headings: string[];
+  raw_internal_links: number;
+  rendered_internal_links: number;
+  js_injected_links_count: number;
+  js_dependency_risk: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+}
+
+export interface IndexationPageStatus {
+  url: string;
+  status_code: number;
+  crawlable: boolean;
+  indexable: boolean;
+  indexed_state: string;
+  canonical_declared?: string | null;
+  canonical_selected?: string | null;
+  canonical_match: boolean;
+  has_noindex: boolean;
+  x_robots_tag?: string | null;
+  robots_blocked: boolean;
+  is_soft_404: boolean;
+  is_duplicate: boolean;
+  duplicate_of_url?: string | null;
+  gsc_coverage_state?: string | null;
+  alternate_canonical?: string | null;
+  is_redirect: boolean;
+  redirect_target?: string | null;
+  is_js_only_content: boolean;
+  blocked_resources: string[];
+  render_delta?: RenderedVsRawDelta | null;
+}
+
+export interface IndexationAuditRollup {
+  total_pages_audited: number;
+  crawlable_count: number;
+  indexable_count: number;
+  noindex_count: number;
+  x_robots_blocked_count: number;
+  robots_blocked_count: number;
+  soft_404_count: number;
+  duplicate_count: number;
+  canonical_mismatch_count: number;
+  redirect_count: number;
+  js_only_count: number;
+  high_js_risk_count: number;
+  pages: IndexationPageStatus[];
+  summary: string;
+}
+
 export interface CrawlManifest {
   domain: string;
   base_url: string;
@@ -869,6 +926,7 @@ export interface CrawlManifest {
   robots_txt_found: boolean;
   robots_txt_content?: string;
   crawl_health: Record<string, unknown>;
+  indexation_rollup?: IndexationAuditRollup;
 }
 
 export interface ContradictionReport {
@@ -964,6 +1022,7 @@ export interface ExecutiveReport {
   lifecycle_revenue?: LifecycleRevenueIntelligence;
   telemetry: TelemetryData;
   crawl_manifest?: CrawlManifest;
+  indexation_intelligence?: IndexationAuditRollup;
   page_reports?: PageReport[];
   crawl_summary: Record<string, unknown>;
   external_authority?: ExternalAuthorityReport | null;
@@ -1049,6 +1108,194 @@ export interface ExecutiveReport {
   http_status_breakdown?: HttpStatusBreakdown;
   competitor_seo_parity?: CompetitorSeoParityMatrix;
   wcag_audit?: WcagAuditSummary;
+  causal_diagnostic_chains?: CausalDiagnosticChain[];
+  scoring_explanation?: string;
+  observatory_records?: ObservatoryRecord[];
+  competitive_evidence_graph?: CompetitiveEvidenceGraphResult;
+  local_seo?: LocalSeoAuditReport;
+  international_seo?: InternationalSeoAuditReport;
+  topical_authority?: TopicalAuthorityAuditReport;
+}
+
+export interface NapRecord {
+  page_url: string;
+  phone_numbers: string[];
+  addresses: string[];
+  has_map_embed: boolean;
+  map_embed_urls: string[];
+  gbp_links: string[];
+  citation_links: string[];
+}
+
+export interface LocalLandingPageAudit {
+  url: string;
+  target_location?: string | null;
+  has_unique_nap: boolean;
+  has_local_schema: boolean;
+  has_map: boolean;
+  has_local_reviews: boolean;
+  status: 'PASS' | 'INCOMPLETE' | 'CRITICAL';
+  issues: string[];
+}
+
+export interface LocalSeoAuditReport {
+  status: 'PASS' | 'NEEDS_ATTENTION' | 'NOT_APPLICABLE' | 'FAILED';
+  nap_consistency_score: number;
+  detected_company_name?: string | null;
+  consistent_phone?: string | null;
+  consistent_address?: string | null;
+  phone_conflicts: Array<{ phone: string; occurrences: number; pages: string[] }>;
+  address_conflicts: Array<{ address: string; occurrences: number; pages: string[] }>;
+  has_google_business_profile: boolean;
+  gbp_urls: string[];
+  has_google_maps_embed: boolean;
+  local_citations_found: string[];
+  local_business_schema_found: boolean;
+  local_schema_completeness_pct: number;
+  schema_missing_fields: string[];
+  local_landing_pages: LocalLandingPageAudit[];
+  nap_records: NapRecord[];
+  summary: string;
+}
+
+export interface HreflangEntry {
+  hreflang: string;
+  href: string;
+}
+
+export interface HreflangValidationIssue {
+  url: string;
+  issue_type: string;
+  severity: 'ERROR' | 'WARNING';
+  target_hreflang?: string | null;
+  target_url?: string | null;
+  message: string;
+}
+
+export interface HreflangMatrixItem {
+  url: string;
+  declared_lang?: string | null;
+  alternates_count: number;
+  alternates: HreflangEntry[];
+  has_x_default: boolean;
+  return_tags_valid: boolean;
+  missing_return_tags: string[];
+  canonical_aligned: boolean;
+}
+
+export interface InternationalSeoAuditReport {
+  status: 'PASS' | 'WARNING' | 'FAILED' | 'NOT_APPLICABLE';
+  is_multilingual: boolean;
+  total_pages_with_hreflang: number;
+  locales_detected: string[];
+  has_x_default: boolean;
+  return_tags_healthy: boolean;
+  issues: HreflangValidationIssue[];
+  matrix: HreflangMatrixItem[];
+  summary: string;
+}
+
+export interface CannibalizationCluster {
+  cluster_id: string;
+  primary_topic: string;
+  urls: string[];
+  similarity_score: number;
+  shared_headings: string[];
+  recommendation: string;
+}
+
+export interface PageContentAuthority {
+  url: string;
+  word_count: number;
+  topical_entities: string[];
+  information_gain_score: number;
+  original_data_points: number;
+  first_party_evidence_markers: string[];
+  expert_signals: string[];
+  unbacked_claims: string[];
+  search_intent: string;
+  intent_mismatch: boolean;
+  intent_notes: string;
+}
+
+export interface TopicalAuthorityAuditReport {
+  status: 'PASS' | 'NEEDS_IMPROVEMENT' | 'THIN_COMMODITY';
+  topical_coverage_score: number;
+  avg_information_gain: number;
+  total_original_data_points: number;
+  first_party_evidence_density: number;
+  pages_with_expert_signals: number;
+  unbacked_claims_total: number;
+  cannibalization_clusters: CannibalizationCluster[];
+  search_intent_distribution: Record<string, number>;
+  pages: PageContentAuthority[];
+  summary: string;
+}
+
+export interface CausalDiagnosticChain {
+  bottleneck_id: string;
+  title: string;
+  primary_category: string;
+  observed_symptoms: string[];
+  inferred_root_cause: string;
+  business_consequence: string;
+  prescribed_remediation: string;
+  expected_mechanism: string;
+  verification_step: string;
+  external_verification: string;
+  projected_outcome: string;
+  severity: string;
+  confidence: number;
+  contributing_finding_ids?: string[];
+}
+
+export interface ObservatoryRecord {
+  record_id?: string;
+  query_id?: string;
+  query_text?: string;
+  commercial_intent?: string;
+  engine_id?: string;
+  engine_name?: string;
+  timestamp?: string;
+  latency_ms?: number;
+  verbatim_answer?: string;
+  brand_mentioned?: boolean;
+  brand_cited?: boolean;
+  cited_url?: string | null;
+  cited_passage?: string | null;
+  competitors_mentioned?: string[];
+  competitors_cited?: Array<{ name: string; url?: string; domain?: string }>;
+  position_prominence?: string;
+  sentiment_framing?: string;
+  claim_accuracy?: string;
+}
+
+export interface CompetitiveEvidenceGraphResult {
+  target_domain: string;
+  brand_name: string;
+  competitors_analyzed: string[];
+  matrix_rows: Array<{
+    question_key: string;
+    question_text: string;
+    intent_category: string;
+    target_status: string;
+    target_answer_summary: string;
+    competitor_statuses: Record<string, {
+      competitor_domain: string;
+      competitor_name: string;
+      status: string;
+      answer_summary: string;
+      winning_factor?: string;
+    }>;
+    winning_entity: string;
+    why_winner_won: string;
+  }>;
+  target_wins: number;
+  competitor_wins: number;
+  ties: number;
+  uncontested: number;
+  executive_synthesis: string;
+  strategic_interventions: string[];
 }
 
 export interface CanonicalAuditItem {
@@ -1111,11 +1358,11 @@ export interface CompetitorSeoParityProfile {
   brand_name: string;
   is_target: boolean;
   pages_sampled: number;
-  technical_health_score: number;
-  onpage_score: number;
-  content_depth_score: number;
-  schema_score: number;
-  overall_seo_score: number;
+  technical_health_score?: number | null;
+  onpage_score?: number | null;
+  content_depth_score?: number | null;
+  schema_score?: number | null;
+  overall_seo_score?: number | null;
   avg_ttfb_ms: number;
   http_200_rate_pct: number;
   title_optimal_pct: number;
@@ -1132,7 +1379,7 @@ export interface CompetitorSeoParityMatrix {
   target_domain: string;
   competitors: CompetitorSeoParityProfile[];
   target_rank: number;
-  peer_avg_seo_score: number;
+  peer_avg_seo_score?: number | null;
   top_advantages: string[];
   critical_deficits: string[];
   strategic_takeaway: string;
@@ -1748,6 +1995,14 @@ export type ConnectorType =
   | 'webflow'
   | 'google_search_console'
   | 'google_analytics_4'
+  | 'google_business_profile'
+  | 'ahrefs'
+  | 'semrush'
+  | 'majestic'
+  | 'backlink_api'
+  | 'business_directories'
+  | 'review_platforms'
+  | 'social_entity_sources'
   | 'crm'
   | 'dataforseo'
   | 'live_ai_search'

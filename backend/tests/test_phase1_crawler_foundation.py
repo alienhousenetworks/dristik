@@ -41,7 +41,7 @@ async def test_hop_by_hop_redirect_tracking():
     crawler = CrawlerService()
 
     async with httpx.AsyncClient(transport=transport, follow_redirects=False) as client:
-        html, status, ttfb, headers, nbytes, err, md, chain, final_url = await crawler._fetch_page_with_fallbacks(
+        html, status, ttfb, headers, nbytes, err, md, chain, final_url, _timing = await crawler._fetch_page_with_fallbacks(
             "http://example.com/start", client
         )
 
@@ -75,7 +75,7 @@ async def test_redirect_loop_detection():
     crawler = CrawlerService()
 
     async with httpx.AsyncClient(transport=transport, follow_redirects=False) as client:
-        html, status, ttfb, headers, nbytes, err, md, chain, final_url = await crawler._fetch_page_with_fallbacks(
+        html, status, ttfb, headers, nbytes, err, md, chain, final_url, _timing = await crawler._fetch_page_with_fallbacks(
             "http://example.com/loop-a", client
         )
 

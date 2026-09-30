@@ -34,8 +34,119 @@ def validate_schema_entity(entity: Dict[str, Any], url: str) -> List[SchemaIssue
         ))
         return issues
 
-    # 1. Organization / LocalBusiness / Corporation
-    if stype in ("Organization", "LocalBusiness", "Corporation"):
+    LOCAL_BUSINESS_TYPES = {
+        "LocalBusiness", "Store", "Restaurant", "MedicalBusiness", "Dentist",
+        "LegalService", "FinancialService", "AutomotiveBusiness", "RealEstateAgent",
+        "Hotel", "LodgingBusiness", "HealthAndBeautyBusiness", "HomeAndConstructionBusiness",
+        "ProfessionalService", "ChildCare", "DryCleaningOrLaundry", "EmergencyService",
+        "EmploymentAgency", "EntertainmentBusiness", "FoodEstablishment", "GovernmentOffice",
+        "Library", "RadioStation", "RecyclingCenter", "SelfStorage", "ShoppingCenter",
+        "SportsActivityLocation", "TelevisionStation", "TouristInformationCenter", "TravelAgency"
+    }
+
+    # 1. LocalBusiness and specific subtypes
+    if stype in LOCAL_BUSINESS_TYPES:
+        if not entity.get("name"):
+            issues.append(SchemaIssue(
+                url=url,
+                schema_type=stype,
+                severity="ERROR",
+                field="name",
+                message=f"Missing required 'name' property for Google {stype} entity."
+            ))
+        
+        # Address validation
+        address = entity.get("address")
+        if not address:
+            issues.append(SchemaIssue(
+                url=url,
+                schema_type=stype,
+                severity="ERROR",
+                field="address",
+                message=f"Missing required 'address' (PostalAddress) for Google {stype} entity."
+            ))
+        elif isinstance(address, dict):
+            req_address_fields = ["addressLocality", "addressCountry"]
+            for af in req_address_fields:
+                if not address.get(af):
+                    issues.append(SchemaIssue(
+                        url=url,
+                        schema_type=stype,
+                        severity="WARNING",
+                        field=f"address.{af}",
+                        message=f"Missing '{af}' in PostalAddress for {stype}."
+                    ))
+            if not (address.get("streetAddress") or address.get("postalCode")):
+                issues.append(SchemaIssue(
+                    url=url,
+                    schema_type=stype,
+                    severity="WARNING",
+                    field="address.streetAddress",
+                    message=f"PostalAddress for {stype} should include streetAddress or postalCode."
+                ))
+        
+        # Telephone
+        if not entity.get("telephone"):
+            issues.append(SchemaIssue(
+                url=url,
+                schema_type=stype,
+                severity="WARNING",
+                field="telephone",
+                message=f"Missing recommended 'telephone' for Google {stype} local entity."
+            ))
+
+        # Geo Coordinates
+        geo = entity.get("geo")
+        if not geo:
+            issues.append(SchemaIssue(
+                url=url,
+                schema_type=stype,
+                severity="WARNING",
+                field="geo",
+                message=f"Missing recommended 'geo' (GeoCoordinates: latitude, longitude) for {stype} map entity."
+            ))
+        elif isinstance(geo, dict):
+            if "latitude" not in geo or "longitude" not in geo:
+                issues.append(SchemaIssue(
+                    url=url,
+                    schema_type=stype,
+                    severity="ERROR",
+                    field="geo.coordinates",
+                    message=f"GeoCoordinates for {stype} must specify both 'latitude' and 'longitude'."
+                ))
+
+        # Opening Hours
+        if not (entity.get("openingHours") or entity.get("openingHoursSpecification")):
+            issues.append(SchemaIssue(
+                url=url,
+                schema_type=stype,
+                severity="WARNING",
+                field="openingHours",
+                message=f"Missing recommended 'openingHours' or 'openingHoursSpecification' for {stype}."
+            ))
+
+        # URL
+        if not entity.get("url"):
+            issues.append(SchemaIssue(
+                url=url,
+                schema_type=stype,
+                severity="WARNING",
+                field="url",
+                message=f"Missing recommended 'url' property for Google {stype} entity."
+            ))
+
+        # Logo or image
+        if not (entity.get("image") or entity.get("logo")):
+            issues.append(SchemaIssue(
+                url=url,
+                schema_type=stype,
+                severity="WARNING",
+                field="image",
+                message=f"Missing recommended 'image' or 'logo' for {stype} visual card."
+            ))
+
+    # 1b. Organization / Corporation
+    elif stype in ("Organization", "Corporation"):
         if not entity.get("name"):
             issues.append(SchemaIssue(
                 url=url,

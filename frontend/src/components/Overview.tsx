@@ -26,6 +26,8 @@ import {
   Building2,
   Target,
   FileCheck,
+  Activity,
+  GitBranch,
 } from 'lucide-react';
 
 interface OverviewProps {
@@ -97,7 +99,7 @@ export function Overview({
 }: OverviewProps) {
   const rollup = synthesizePillars(report);
   const activeContradictions = contradictions || (semantic?.contradiction ? [semantic.contradiction] : []);
-  const overallScore = Math.round(scores.overall_score || 75);
+  const overallScore = typeof scores?.overall_score === 'number' ? Math.round(scores.overall_score) : null;
 
   const disciplineCards = [
     {
@@ -189,8 +191,8 @@ export function Overview({
           <div className="flex items-center gap-4 shrink-0 bg-paper-50 p-4 rounded-xl border border-line">
             <div className="text-right">
               <span className="label text-[10px] text-ink-500 block">Overall Score</span>
-              <span className={`font-serif text-4xl sm:text-5xl font-bold leading-none ${scoreTone(overallScore)}`}>
-                {overallScore}
+              <span className={`font-serif text-4xl sm:text-5xl font-bold leading-none ${scoreTone(overallScore ?? 0)}`}>
+                {overallScore != null ? overallScore : '—'}
               </span>
               <span className="text-xs text-ink-400 block mt-0.5">/ 100</span>
             </div>
@@ -198,7 +200,7 @@ export function Overview({
             <div className="space-y-1 text-xs">
               <div className="flex items-center gap-1.5 font-mono">
                 <span className="text-ink-400">Pages:</span>
-                <span className="font-bold text-ink">{report?.crawl_manifest?.pages?.length || 1}</span>
+                <span className="font-bold text-ink">{report?.crawl_manifest?.pages?.length ?? 0}</span>
               </div>
               <div className="flex items-center gap-1.5 font-mono">
                 <span className="text-ink-400">Issues:</span>
@@ -212,6 +214,100 @@ export function Overview({
           </div>
         </div>
       </Card>
+
+      {/* ─────────────────────────────────────────────────────────────
+          1b. SCORING PERSPECTIVE & HARMONY BRIDGE
+          ───────────────────────────────────────────────────────────── */}
+      {report?.scoring_explanation && (
+        <Card className="p-4 bg-paper-50 border-l-4 border-pine rounded-l-none text-xs space-y-1.5">
+          <div className="flex items-center gap-1.5 font-mono text-[11px] font-bold text-pine uppercase tracking-wider">
+            <Activity className="w-3.5 h-3.5" /> Multi-Perspective Scoring Harmony
+          </div>
+          <p className="text-ink-700 leading-relaxed">
+            {report.scoring_explanation}
+          </p>
+        </Card>
+      )}
+
+      {/* ─────────────────────────────────────────────────────────────
+          1c. CAUSAL GROWTH BOTTLENECKS (Root-Cause Attribution)
+          ───────────────────────────────────────────────────────────── */}
+      {report?.causal_diagnostic_chains && report.causal_diagnostic_chains.length > 0 && (
+        <Section title="Causal Growth Bottlenecks & Strategic Attribution">
+          <div className="space-y-4">
+            <p className="text-xs text-ink-500">
+              Causal intelligence models the exact mechanism linking observed defects to business consequences, verifiable remediations, and measured outcomes.
+            </p>
+            <div className="grid grid-cols-1 gap-4">
+              {report.causal_diagnostic_chains.map((chain, idx) => (
+                <div key={chain.bottleneck_id || idx} className="card p-5 border border-line hover:border-pine/60 transition-all space-y-4 bg-paper-50/60">
+                  <div className="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-line">
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono text-[10px] font-bold px-2 py-0.5 rounded bg-pine/10 text-pine uppercase">
+                        {chain.primary_category}
+                      </span>
+                      <h3 className="font-serif text-base font-semibold text-ink">
+                        {chain.title}
+                      </h3>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-warn/10 text-warn font-semibold">
+                        {chain.severity}
+                      </span>
+                      <span className="text-[11px] font-mono text-ink-500">
+                        {Math.round((chain.confidence || 0.9) * 100)}% confidence
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+                    <div className="space-y-2 p-3 rounded-lg bg-paper-100 border border-line/60">
+                      <span className="label text-ink-500 block font-mono text-[10px]">1. Observed Symptoms</span>
+                      <ul className="list-disc pl-4 space-y-1 text-ink-700">
+                        {chain.observed_symptoms.map((sym, sIdx) => (
+                          <li key={sIdx}>{sym}</li>
+                        ))}
+                      </ul>
+                    </div>
+
+                    <div className="space-y-2 p-3 rounded-lg bg-paper-100 border border-line/60">
+                      <span className="label text-ink-500 block font-mono text-[10px]">2. Inferred Root Cause</span>
+                      <p className="text-ink-800 font-medium leading-relaxed">
+                        {chain.inferred_root_cause}
+                      </p>
+                      <div className="pt-2 border-t border-line/40">
+                        <span className="label text-warn block font-mono text-[10px]">Business Consequence:</span>
+                        <p className="text-ink-600 mt-0.5">{chain.business_consequence}</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs pt-1">
+                    <div className="p-3 rounded-lg bg-pine/5 border border-pine/20 space-y-1">
+                      <span className="label text-pine block font-mono text-[10px]">3. Prescribed Remediation</span>
+                      <p className="text-ink-800 font-medium">{chain.prescribed_remediation}</p>
+                      <p className="text-[11px] text-ink-500 mt-1 italic">{chain.expected_mechanism}</p>
+                    </div>
+
+                    <div className="p-3 rounded-lg bg-paper-100 border border-line/60 space-y-1">
+                      <span className="label text-ink-500 block font-mono text-[10px]">4. Automated Verification</span>
+                      <p className="text-ink-700">{chain.verification_step}</p>
+                      {chain.external_verification && (
+                        <p className="text-[11px] text-ink-500 mt-1">{chain.external_verification}</p>
+                      )}
+                    </div>
+
+                    <div className="p-3 rounded-lg bg-good/5 border border-good/20 space-y-1">
+                      <span className="label text-good block font-mono text-[10px]">5. Target Outcome Shift</span>
+                      <p className="text-ink-800 font-bold">{chain.projected_outcome}</p>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </Section>
+      )}
 
       {/* ─────────────────────────────────────────────────────────────
           2. CORE DISCIPLINE WORKSPACE TILES (Direct Jump Links)
@@ -240,7 +336,7 @@ export function Overview({
                       <span className="font-semibold text-ink text-sm">{disc.shortName}</span>
                     </div>
                     <div className="flex items-center gap-1.5">
-                      <span className={`font-mono text-sm font-bold ${scoreTone(disc.score || 70)}`}>
+                      <span className={`font-mono text-sm font-bold ${scoreTone(disc.score ?? 0)}`}>
                         {disc.score != null ? Math.round(disc.score) : '—'}
                       </span>
                       <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-paper-200 text-ink-600">

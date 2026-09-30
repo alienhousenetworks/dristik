@@ -424,6 +424,28 @@ class ValidationGate:
             "; ".join(contradictory_statements[:2]) if contradictory_statements else ""
         )
 
+        # 6.4: Zero heading contradictions between findings and rollups
+        heading_contradictions = []
+        missing_h1_cnt = 0
+        if report.heading_hierarchy and hasattr(report.heading_hierarchy, "missing_h1"):
+            missing_h1_cnt = len(report.heading_hierarchy.missing_h1 or [])
+        elif report.crawl_summary:
+            missing_h1_cnt = int(report.crawl_summary.get("missing_h1_count", 0))
+
+        if missing_h1_cnt == 0:
+            for f in (report.findings or []):
+                if getattr(f, "held_from_executive", False):
+                    continue
+                f_text = f"{f.title} {f.description or ''}".lower()
+                if "document lacks a top-level <h1>" in f_text or "missing an <h1> tag" in f_text or "lacks a top-level h1" in f_text:
+                    heading_contradictions.append(f"Finding {f.finding_id} claims document lacks <h1> but heading hierarchy verifies 0 missing H1 pages.")
+
+        record(
+            "heading_hierarchy_consistent_with_findings",
+            len(heading_contradictions) == 0,
+            "; ".join(heading_contradictions) if heading_contradictions else ""
+        )
+
         # -------------------------------------------------------------
         # 7. LANGUAGE AND CLAIM RESTRAINT
         # -------------------------------------------------------------
@@ -586,6 +608,28 @@ class ValidationGate:
             else:
                 repairs_made.append(f"Merged duplicate root cause finding: {f.title}")
         report.findings = clean_findings
+
+        # 3b. Contradiction reconciliation with crawl ground truth & pairwise conflicts
+        from app.cognition.contradiction_engine import contradiction_engine
+        from app.cognition.report_critic import ReportCritic
+        manifest_for_repair = manifest or getattr(report, "crawl_manifest", None)
+        report, critic_actions = ReportCritic.reconcile_report(
+            report, manifest=manifest_for_repair, heading_hierarchy=report.heading_hierarchy
+        )
+        repairs_made.extend(critic_actions)
+
+        reconciled_findings, rollup_actions = contradiction_engine.reconcile_with_manifest_and_rollups(
+            report.findings, manifest=manifest_for_repair, heading_hierarchy=report.heading_hierarchy
+        )
+        repairs_made.extend(rollup_actions)
+
+        # Pairwise contradiction resolution across findings
+        ctrd_reports, reconciled_findings = contradiction_engine.reconcile(reconciled_findings)
+        # Suppress loser findings from executive reporting
+        report.findings = [f for f in reconciled_findings if not getattr(f, "held_from_executive", False)]
+        if ctrd_reports:
+            report.contradictions = (report.contradictions or []) + ctrd_reports
+            repairs_made.append(f"Reconciled {len(ctrd_reports)} pairwise finding contradiction(s).")
 
         # 4. Clean patches (strip unobserved sameAs social links & nulls)
         for patch in report.code_patches:

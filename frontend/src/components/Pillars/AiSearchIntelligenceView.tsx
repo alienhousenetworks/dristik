@@ -360,7 +360,7 @@ export function AiSearchIntelligenceView({
                     {claimsAnalysis?.citable_claims_count ?? 0} machine-citable claims • {claimsAnalysis?.fluff_claims_count ?? 0} fluff-penalized
                   </span>
                   <span className="text-xs font-mono text-good font-semibold">
-                    Clarity Score: {claimsAnalysis?.claim_clarity_score ?? 70}/100
+                    Clarity Score: {claimsAnalysis?.claim_clarity_score != null ? `${claimsAnalysis.claim_clarity_score}/100` : '—'}
                   </span>
                 </div>
 

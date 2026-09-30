@@ -107,8 +107,8 @@ class BusinessUnderstandingOrchestrator:
                 "primary_model", "secondary_model", "commercial_motion",
                 "conversion_model",
             ]),
-            "user_declared_site_type": blackboard.user_declared_site_type,
-            "user_declared_notes": blackboard.user_declared_site_type_notes,
+            "user_declared_site_type": getattr(blackboard, "user_declared_site_type", None),
+            "user_declared_notes": getattr(blackboard, "user_declared_site_type_notes", None),
         }
         strategist_res, s_err = await self._run_optional_agent(
             "Semantic Strategist",
@@ -137,8 +137,8 @@ class BusinessUnderstandingOrchestrator:
 
         # 3. Contradiction Engine (User Declared vs Evidence & Cross-agent)
         contradiction = self._detect_contradictions(
-            user_declared=blackboard.user_declared_site_type,
-            user_notes=blackboard.user_declared_site_type_notes,
+            user_declared=getattr(blackboard, "user_declared_site_type", None),
+            user_notes=getattr(blackboard, "user_declared_site_type_notes", None),
             discovery=discovery_res,
             commercial=commercial_res,
             intent=intent_res,

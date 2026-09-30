@@ -505,33 +505,33 @@ export function WebsiteExperienceView({
                     name: '1. Perceivable',
                     desc: 'Contrast, alt text, headings, landmarks, zoom',
                     icon: Eye,
-                    score: wcag?.principle_scores?.['Perceivable'] ?? 85,
+                    score: wcag?.principle_scores?.['Perceivable'] ?? null,
                   },
                   {
                     key: 'Operable',
                     name: '2. Operable',
                     desc: 'Keyboard nav, focus order, target size, skip link',
                     icon: Keyboard,
-                    score: wcag?.principle_scores?.['Operable'] ?? 80,
+                    score: wcag?.principle_scores?.['Operable'] ?? null,
                   },
                   {
                     key: 'Understandable',
                     name: '3. Understandable',
                     desc: 'Page language, input purpose, form labels',
                     icon: FileText,
-                    score: wcag?.principle_scores?.['Understandable'] ?? 90,
+                    score: wcag?.principle_scores?.['Understandable'] ?? null,
                   },
                   {
                     key: 'Robust',
                     name: '4. Robust',
                     desc: 'ARIA markup, button names, modal dialogs',
                     icon: ShieldCheck,
-                    score: wcag?.principle_scores?.['Robust'] ?? 75,
+                    score: wcag?.principle_scores?.['Robust'] ?? null,
                   },
                 ].map((p) => {
                   const Icon = p.icon;
-                  const isGood = p.score >= 85;
-                  const isFair = p.score >= 70 && p.score < 85;
+                  const isGood = p.score != null && p.score >= 85;
+                  const isFair = p.score != null && p.score >= 70 && p.score < 85;
                   return (
                     <div
                       key={p.key}
@@ -542,15 +542,19 @@ export function WebsiteExperienceView({
                         <Icon className="w-4 h-4 text-ink-500" />
                       </div>
                       <div className="flex items-baseline gap-2">
-                        <span className="font-serif text-2xl font-bold text-ink">{Math.round(p.score)}%</span>
-                        <span className="text-[10px] text-ink-500">integrity</span>
+                        <span className="font-serif text-2xl font-bold text-ink">
+                          {p.score != null ? `${Math.round(p.score)}%` : '—'}
+                        </span>
+                        <span className="text-[10px] text-ink-500">
+                          {p.score != null ? 'integrity' : 'unmeasured'}
+                        </span>
                       </div>
                       <div className="w-full h-1.5 bg-paper-200 dark:bg-paper-200/40 rounded-full overflow-hidden">
                         <div
                           className={`h-full rounded-full ${
-                            isGood ? 'bg-emerald-500' : isFair ? 'bg-amber-500' : 'bg-rose-500'
+                            p.score == null ? 'bg-slate-300' : isGood ? 'bg-emerald-500' : isFair ? 'bg-amber-500' : 'bg-rose-500'
                           }`}
-                          style={{ width: `${Math.min(100, Math.max(5, p.score))}%` }}
+                          style={{ width: `${p.score != null ? Math.min(100, Math.max(5, p.score)) : 0}%` }}
                         />
                       </div>
                       <p className="text-[10px] text-ink-500 line-clamp-1">{p.desc}</p>

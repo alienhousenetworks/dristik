@@ -72,7 +72,7 @@ export function CroWorkspaceView({
                 Total Forms Detected
               </span>
               <p className="font-serif text-3xl font-bold text-ink">
-                {formAudit?.total_forms_detected ?? 1}
+                {formAudit?.total_forms_detected ?? 0}
               </p>
               <p className="text-xs text-ink-500">
                 Lead capture, demo, contact, or checkout forms
@@ -84,7 +84,7 @@ export function CroWorkspaceView({
                 Friction Grade
               </span>
               <p className="font-serif text-3xl font-bold text-pine">
-                {formAudit?.cro_friction_grade || 'A'}
+                {formAudit?.cro_friction_grade || '—'}
               </p>
               <p className="text-xs text-ink-500">
                 Friction risk rating across all input fields
@@ -192,15 +192,15 @@ export function CroWorkspaceView({
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-4 border-t border-line text-xs">
               <div className="p-3 rounded bg-paper-50 border border-line space-y-1">
                 <span className="label text-[10px] text-ink-500 block">Target Audience</span>
-                <p className="font-semibold text-ink text-sm">{profile?.target_audience || 'Commercial Buyers'}</p>
+                <p className="font-semibold text-ink text-sm">{profile?.target_audience || 'Unspecified'}</p>
               </div>
               <div className="p-3 rounded bg-paper-50 border border-line space-y-1">
                 <span className="label text-[10px] text-ink-500 block">Primary Intent</span>
-                <p className="font-semibold text-ink text-sm">{profile?.primary_intent || 'Commercial Consideration'}</p>
+                <p className="font-semibold text-ink text-sm">{profile?.primary_intent || 'Unspecified'}</p>
               </div>
               <div className="p-3 rounded bg-paper-50 border border-line space-y-1">
                 <span className="label text-[10px] text-ink-500 block">Business Model</span>
-                <p className="font-semibold text-ink text-sm">{profile?.business_model || 'Enterprise B2B'}</p>
+                <p className="font-semibold text-ink text-sm">{profile?.business_model || 'Unspecified'}</p>
               </div>
             </div>
           </Card>
@@ -220,7 +220,7 @@ export function CroWorkspaceView({
                   Primary Call to Action
                 </span>
                 <p className="font-mono text-base font-bold text-ink">
-                  &quot;{profile?.primary_cta || 'Get Started'}&quot;
+                  {profile?.primary_cta ? `"${profile.primary_cta}"` : 'None detected'}
                 </p>
                 <p className="text-ink-600">
                   Primary high-intent action button above the fold.
@@ -232,7 +232,7 @@ export function CroWorkspaceView({
                   Secondary Call to Action
                 </span>
                 <p className="font-mono text-base font-bold text-ink">
-                  &quot;{profile?.secondary_cta || 'Learn More / Book Demo'}&quot;
+                  {profile?.secondary_cta ? `"${profile.secondary_cta}"` : 'None detected'}
                 </p>
                 <p className="text-ink-600">
                   Low-friction nurture step for uncommitted visitors.

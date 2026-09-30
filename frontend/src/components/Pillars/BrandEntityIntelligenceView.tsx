@@ -142,7 +142,9 @@ export function BrandEntityIntelligenceView({ report }: BrandEntityIntelligenceV
             <div className="border border-line p-4 rounded-lg bg-paper-50 space-y-1">
               <span className="label text-[10px] block">Trust Authority Score</span>
               <span className="font-serif text-3xl font-bold text-ink">{trustScore == null ? '—' : `${trustScore} / 100`}</span>
-              <span className="text-xs text-ink-500 block">{trustScore == null ? 'Not scored' : 'From this audit'}</span>
+              <span className="text-xs text-ink-500 block">
+                {trustScore == null ? 'Not measured — connector unavailable' : 'From verified link graph'}
+              </span>
             </div>
             <div className="border border-line p-4 rounded-lg bg-paper-50 space-y-1">
               <span className="label text-[10px] block">Privacy & Legal Compliance</span>

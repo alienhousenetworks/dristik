@@ -21,19 +21,18 @@ def test_max_crawl_pages_parsing():
 
 def test_e5_query_and_document_prefixes():
     service = EmbeddingService()
-    with patch.object(service, "_load_local_model", return_value=None):
-        # Test deterministic fallback vector dimensions and normalization (384-dim for e5-small)
+    with patch.object(service, "_load_local_model", return_value=None), \
+         patch.object(service, "_embed_remote_sync", return_value=None):
+        # Zero-fake standard: fail-closed returns [] when neural embedding models are offline
         vec_q = service.embed_query("best fintech billing platform")
-        assert len(vec_q) == 384
+        assert vec_q == []
 
         passages = [
             "Acme provides automated recurring billing APIs for enterprise banks.",
             "Pricing starts at $99 per month with unlimited webhook deliveries."
         ]
         vec_docs = service.embed_documents(passages)
-        assert len(vec_docs) == 2
-        assert len(vec_docs[0]) == 384
-        assert len(vec_docs[1]) == 384
+        assert vec_docs == []
 
 
 def test_vector_store_indexing_and_search(tmp_path):
@@ -82,7 +81,7 @@ def test_semantic_gap_engine_evaluation(tmp_path):
          patch("app.intelligence.competitive.semantic_gap.embedding_service.embed_query", return_value=mock_vec):
         # Empty evaluation
         res = semantic_gap_engine.evaluate_intent_coverage("testdomain.com", [])
-        assert res["coverage_score"] == 0
+        assert res["coverage_score"] is None
 
         # Query evaluation with mock matches
         mock_queries = [

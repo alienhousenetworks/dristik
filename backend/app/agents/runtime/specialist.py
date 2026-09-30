@@ -426,6 +426,73 @@ class SpecialistAgent(BaseAgent):
             elif not any(t.lower() in ("organization", "corporation", "localbusiness") for t in types):
                 add("Missing Organization or LocalBusiness structured data schema.", Severity.MEDIUM, "Implement Organization JSON-LD with official brand name, logo, and sameAs social profiles.")
 
+        elif aid == "content.depth.v3":
+            # Evaluates Information Gain, original data points, and first-party evidence rather than raw word count
+            total_data_points = sum((p.content_authority or {}).get("original_data_points", 0) for p in pages)
+            total_tables = sum((p.content_authority or {}).get("data_tables_count", 0) for p in pages)
+            avg_ig = (
+                sum((p.content_authority or {}).get("information_gain_score", 50.0) for p in pages) / max(1, len(pages))
+                if pages else 50.0
+            )
+            observations["avg_information_gain"] = round(avg_ig, 1)
+            observations["total_original_data_points"] = total_data_points
+            observations["total_data_tables"] = total_tables
+
+            if avg_ig < 50.0 and total_data_points < 3:
+                add(
+                    f"Crawled pages show low non-commodity Information Gain ({avg_ig:.0f}/100) and lack original data.",
+                    Severity.HIGH,
+                    "Incorporate proprietary benchmarks, customer case study metrics, and structured comparison tables.",
+                )
+            elif total_data_points == 0:
+                add(
+                    "Content contains zero original empirical data points or verified statistics.",
+                    Severity.MEDIUM,
+                    "Enrich key landing pages with primary research data, customer metrics, and data tables.",
+                )
+
+        elif aid == "content.quality.v3":
+            # Evaluates unbacked superlative claims and expert author attribution
+            unbacked_total = sum(len((p.content_authority or {}).get("unbacked_claims", [])) for p in pages)
+            has_experts = any(bool((p.content_authority or {}).get("expert_signals")) for p in pages)
+            observations["unbacked_claims_count"] = unbacked_total
+            observations["has_expert_signals"] = has_experts
+
+            if unbacked_total > 0:
+                add(
+                    f"Detected {unbacked_total} unsupported superlative marketing claims without proximal data proof.",
+                    Severity.HIGH if unbacked_total > 3 else Severity.MEDIUM,
+                    "Substantiate superlative statements with specific performance metrics or customer testimonials.",
+                )
+            if pages and not has_experts:
+                add(
+                    "Editorial and service content lacks expert author bylines or verifiable professional credentials.",
+                    Severity.LOW,
+                    "Add author bylines with professional credentials or organizational reviewer attribution.",
+                )
+
+        elif aid == "content.topic_coverage.v3":
+            # Evaluates heading hierarchy depth and semantic concept coverage
+            total_h2 = sum(len(p.h2 or []) for p in pages)
+            unique_entities = set(
+                ent for p in pages for ent in ((p.content_authority or {}).get("topical_entities", []))
+            )
+            observations["total_h2_headings"] = total_h2
+            observations["unique_entities_count"] = len(unique_entities)
+
+            if total_h2 < len(pages):
+                add(
+                    "Pages lack sufficient heading outline depth (H2/H3 subtopics are sparse or missing).",
+                    Severity.MEDIUM,
+                    "Organize content with clear H2/H3 topical subheadings covering direct buyer questions and specifications.",
+                )
+            elif len(unique_entities) < 3 and len(pages) >= 2:
+                add(
+                    "Topical concept breadth is narrow across crawled service pages.",
+                    Severity.LOW,
+                    "Expand semantic coverage to address related subtopics, industry use cases, and technical details.",
+                )
+
         elif aid == "content.cannibalization.v3":
             dup = int(ch.get("duplicate_titles_count") or 0)
             observations["duplicate_titles_count"] = dup
@@ -439,6 +506,15 @@ class SpecialistAgent(BaseAgent):
                 }
             if dup:
                 add(f"{dup} duplicate title collision(s) across crawled pages.", Severity.HIGH, "Give each URL a distinct title.")
+            # Check for shared identical H1s
+            all_h1s = [h.lower().strip() for p in pages for h in (p.h1 or [])]
+            h1_duplicates = len(all_h1s) - len(set(all_h1s))
+            if h1_duplicates > 0:
+                add(
+                    f"{h1_duplicates} duplicate H1 heading(s) found across pages, creating keyword cannibalization risk.",
+                    Severity.HIGH,
+                    "Ensure every landing page features a unique primary H1 focused on a distinct user search intent.",
+                )
 
         elif aid == "cro.conversion.v3":
             no_cta = [p.url for p in pages if not getattr(p, "ctas", None)]

@@ -486,7 +486,11 @@ class AnalysisOrchestrator:
             model_router.set_active_stage("causal_reasoning", "Causal Reasoning & Bottlenecks")
             model_router.set_active_sub_stage("causal_bottlenecks", "Causal Graph & Bottleneck Isolation")
             await self._emit_event(analysis_id, "specialist_execution", 82, "Causal Reasoning Engine isolating primary root-cause growth bottlenecks...")
-            bottlenecks = self.causal_engine.analyze_root_causes(current_claims, blackboard.business_profile)
+            bottlenecks = self.causal_engine.analyze_root_causes(
+                claims=current_claims,
+                business_profile=blackboard.business_profile,
+                crawl_summary=manifest.crawl_health if manifest else None,
+            )
             blackboard.blackboard_state["root_causes"] = [b.model_dump() for b in bottlenecks]
 
             # Update Hypotheses with accumulated evidence
@@ -778,6 +782,14 @@ class AnalysisOrchestrator:
                                 f.provenance_hash = ev.hash
 
             blackboard.evidence_graph.link_findings_and_claims(final_findings, current_claims)
+            from app.evidence.fusion import multi_plane_fusion
+            multi_plane_fusion.fuse_all_planes(
+                graph=blackboard.evidence_graph,
+                domain=domain,
+                manifest=manifest,
+                evidence_store=blackboard.evidence_store,
+                observatory_records=(ai_visibility_scorecard.observatory_records if ai_visibility_scorecard else []),
+            )
             graph_summary = blackboard.evidence_graph.export_graph_summary()
 
             from app.audit.manifest import build_run_manifest, seal_manifest
@@ -916,6 +928,36 @@ class AnalysisOrchestrator:
             if wcag_findings:
                 final_findings.extend(wcag_findings)
 
+            from app.analyzers.local_seo_analyzer import analyze_local_seo
+            from app.analyzers.international_seo_analyzer import analyze_international_seo
+            from app.analyzers.topical_authority_analyzer import analyze_topical_authority
+
+            local_seo_rep, local_findings = analyze_local_seo(eval_pages, target_domain=domain)
+            for f in local_findings:
+                if not any(x.finding_id == f.finding_id for x in final_findings):
+                    final_findings.append(f)
+
+            intl_seo_rep, intl_findings = analyze_international_seo(eval_pages, target_domain=domain)
+            for f in intl_findings:
+                if not any(x.finding_id == f.finding_id for x in final_findings):
+                    final_findings.append(f)
+
+            topical_auth_rep, topical_findings = analyze_topical_authority(eval_pages, target_domain=domain)
+            for f in topical_findings:
+                if not any(x.finding_id == f.finding_id for x in final_findings):
+                    final_findings.append(f)
+
+            from app.intelligence.indexation.classifier import indexation_classifier
+            indexation_rollup_rep, indexation_findings = indexation_classifier.audit(
+                manifest=manifest,
+                pages=eval_pages,
+            )
+            for f in indexation_findings:
+                if not any(x.finding_id == f.finding_id for x in final_findings):
+                    final_findings.append(f)
+            if manifest:
+                manifest.indexation_rollup = indexation_rollup_rep
+
             # cro_finding, can_findings, and http_findings are already consolidated into canonical findings
             if not canonical_audit_rep:
                 canonical_audit_rep, _ = analyze_canonicals(eval_pages)
@@ -969,6 +1011,26 @@ class AnalysisOrchestrator:
             except Exception as exc:
                 logger.info("external authority attachment skipped: %s", type(exc).__name__)
                 external_authority_payload["error"] = type(exc).__name__
+
+            from app.intelligence.competitive.evidence_graph import competitive_evidence_graph_engine
+            comp_graph_res = competitive_evidence_graph_engine.build_graph(
+                target_profile=blackboard.business_profile,
+                target_domain=domain,
+                target_evals=blackboard.commercial_evaluations,
+                observatory_records=(ai_visibility_scorecard.observatory_records if ai_visibility_scorecard else []),
+            )
+
+            # Synthesize final Causal Diagnostic Chains with multi-source evidence
+            causal_diagnostic_chains = self.causal_engine.analyze_root_causes(
+                claims=current_claims,
+                business_profile=blackboard.business_profile,
+                findings=final_findings,
+                ai_search_evaluations=blackboard.ai_search_evaluations,
+                competitor_bakeoff=blackboard.competitor_bakeoff,
+                crawl_summary=manifest.crawl_health,
+                observatory_records=(ai_visibility_scorecard.observatory_records if ai_visibility_scorecard else []),
+                competitive_graph=comp_graph_res,
+            )
 
             report = ExecutiveReport(
                 report_id=report_uuid,
@@ -1033,7 +1095,7 @@ class AnalysisOrchestrator:
                     "dom_selectors_count": graph_summary.get("dom_selectors_count", 0),
                     "evidence_gaps_count": len(evidence_gaps),
                     "growth_opportunities_count": len(opportunities),
-                    "root_cause_bottlenecks_count": len(bottlenecks),
+                    "root_cause_bottlenecks_count": len(causal_diagnostic_chains),
                     "page_reports_count": len(blackboard.page_reports),
                 },
                 agent_execution_trace=blackboard.execution_trace,
@@ -1056,6 +1118,13 @@ class AnalysisOrchestrator:
                 competitor_seo_parity=competitor_seo_parity_rep,
                 wcag_audit=wcag_audit_rep,
                 external_authority=external_authority_payload,
+                causal_diagnostic_chains=causal_diagnostic_chains,
+                observatory_records=(ai_visibility_scorecard.observatory_records if ai_visibility_scorecard else []),
+                competitive_evidence_graph=comp_graph_res.model_dump(),
+                indexation_intelligence=indexation_rollup_rep,
+                local_seo=local_seo_rep,
+                international_seo=intl_seo_rep,
+                topical_authority=topical_auth_rep,
             )
 
             # -------------------------------------------------------------
@@ -1083,6 +1152,7 @@ class AnalysisOrchestrator:
             run.telemetry = telemetry_data
 
             try:
+                final_findings = report.findings or final_findings
                 self.repository.persist_findings(analysis_id, final_findings)
                 self.repository.save_run(run)
                 self.repository.save_checkpoint(StageCheckpoint(

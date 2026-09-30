@@ -277,7 +277,7 @@ class CrawlerService:
                     return (
                         pw_html,
                         pw_text,
-                        pw_status or 200,
+                        pw_status if pw_status else 0,
                         pw_ttfb if pw_ttfb > 0 else ((time.time() - start_time) * 1000),
                         headers,
                         len(pw_html.encode("utf-8")),
@@ -687,6 +687,10 @@ class CrawlerService:
                         title_pixel_status=t_status,
                         meta_pixel_status=m_status,
                         thin_content=is_thin,
+                        hreflang_tags=meta_res.get("hreflang_tags", {}),
+                        html_lang=meta_res.get("html_lang"),
+                        nap_data=html_res.get("nap_data"),
+                        content_authority=html_res.get("content_authority"),
                     )
 
             # Iteratively fetch top priority pages until target_max_pages reached or queue empty

@@ -7,6 +7,7 @@ import os
 import re
 import asyncio
 import httpx
+from datetime import datetime, timezone
 from typing import List, Dict, Any, Optional, Tuple
 from pydantic import BaseModel, Field
 
@@ -34,8 +35,27 @@ class EngineQueryResult(BaseModel):
     source_domains_used: List[str] = Field(default_factory=list)
     synthesized_snippet: str
     extractability_health: str
+    cited_passage: Optional[str] = None
+    prominence_rank: Optional[int] = None
+    claim_accuracy: str = "ACCURATE"
+    sentiment_framing: str = "NEUTRAL"
+    competitor_displacement_reason: Optional[str] = None
     failure_reason: Optional[str] = None
     failure_code: Optional[str] = None
+
+
+class ObservatorySnapshot(BaseModel):
+    query_id: str
+    buyer_query: str
+    engine: str
+    timestamp: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    was_cited: bool
+    prominence_rank: Optional[int] = None
+    cited_url: Optional[str] = None
+    cited_passage: Optional[str] = None
+    sentiment_framing: str = "NEUTRAL"
+    competitor_cited: Optional[str] = None
+    competitor_displacement_reason: Optional[str] = None
 
 
 class RealBuyerQueryEvaluation(BaseModel):
@@ -55,6 +75,7 @@ class AiCitationTrackingDashboard(BaseModel):
     overall_ai_citation_score: Optional[int] = None
     engines_breakdown: Dict[str, float] = Field(default_factory=dict)
     tracked_queries: List[RealBuyerQueryEvaluation] = Field(default_factory=list)
+    observatory_snapshots: List[ObservatorySnapshot] = Field(default_factory=list)
     critical_ai_blindspots: List[str] = Field(default_factory=list)
     is_live: bool = False
     provider_used: Optional[str] = None
@@ -122,7 +143,14 @@ def _engine_matches_active_provider(engine_provider: str) -> bool:
         cross = str(settings.AI_CITATION_CROSS_PROVIDER)
     if _parse_bool(cross, default=False):
         return True
-    active = (os.environ.get("LLM_PROVIDER") or settings.get_active_provider() or "").lower().strip()
+    active_env = (os.environ.get("LLM_PROVIDER") or "").lower().strip()
+    active_settings = (getattr(settings, "LLM_PROVIDER", None) or "").lower().strip()
+    if active_env and active_env != "openrouter":
+        active = active_env
+    elif active_settings and active_settings != "openrouter":
+        active = active_settings
+    else:
+        active = active_env or active_settings or settings.get_active_provider() or ""
     family = _provider_family(active)
     return (engine_provider or "").lower().strip() in family
 
@@ -620,6 +648,10 @@ class AiCitationTracker:
         has_hallucination = bool(competitor_cited and has_mention)
         hallucination_note = f"Engine substituted {competitor_cited} for {brand}." if competitor_cited else None
 
+        prominence_rank = 1 if position == 1 else (2 if (position and position <= 3) else (3 if position else None))
+        sentiment_framing = "RECOMMENDED" if (position == 1 and is_factually_correct) else ("CAUTIONARY" if competitor_confusion or has_hallucination else "NEUTRAL")
+        displacement_reason = f"Competitor {competitor_cited} provided explicit comparative landing page answering this buyer intent" if competitor_cited else None
+
         return EngineQueryResult(
             engine=engine_name,
             was_mentioned=has_mention,
@@ -636,7 +668,12 @@ class AiCitationTracker:
             competitor_cited_instead=competitor_cited,
             source_domains_used=extracted_domains[:4],
             synthesized_snippet=snippet,
-            extractability_health=health
+            extractability_health=health,
+            cited_passage=snippet if has_link else None,
+            prominence_rank=prominence_rank,
+            claim_accuracy="ACCURATE" if is_factually_correct else ("DISTORTED" if competitor_confusion else "UNVERIFIED"),
+            sentiment_framing=sentiment_framing,
+            competitor_displacement_reason=displacement_reason,
         )
 
     def _engine_disabled(self, engine_name: str) -> EngineQueryResult:
@@ -785,10 +822,11 @@ class AiCitationTracker:
                     engine_errors.append(f"Perplexity: {base_search_res['error']}")
                     if not (base_search_res.get("content") or base_search_res.get("citations")):
                         base_search_res = None
+            active_prov = (os.environ.get("LLM_PROVIDER") or settings.get_active_provider() or "").lower().strip()
             if (
                 not base_search_res
                 and or_key
-                and settings.get_active_provider() == "openrouter"
+                and active_prov == "openrouter"
             ):
                 base_search_res = await self._query_openrouter_engine(base_query, "perplexity/sonar", or_key, client)
                 if base_search_res.get("error"):
@@ -953,12 +991,29 @@ class AiCitationTracker:
         if unique_errors:
             status_msg += " Some engines encountered errors — see engine errors for details."
 
+        snapshots: List[ObservatorySnapshot] = []
+        for q in evaluations:
+            for eng in q.engines:
+                snapshots.append(ObservatorySnapshot(
+                    query_id=q.query_id,
+                    buyer_query=q.buyer_query,
+                    engine=eng.engine,
+                    was_cited=eng.was_cited,
+                    prominence_rank=eng.prominence_rank,
+                    cited_url=eng.cited_url,
+                    cited_passage=eng.cited_passage,
+                    sentiment_framing=eng.sentiment_framing,
+                    competitor_cited=eng.competitor_cited_instead,
+                    competitor_displacement_reason=eng.competitor_displacement_reason,
+                ))
+
         return AiCitationTrackingDashboard(
             target_domain=target_domain,
             total_queries_tracked=total_evals,
             overall_ai_citation_score=overall_score,
             engines_breakdown=engines_breakdown,
             tracked_queries=evaluations,
+            observatory_snapshots=snapshots,
             critical_ai_blindspots=blindspots,
             is_live=True,
             provider_used=provider_used,

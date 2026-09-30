@@ -104,48 +104,6 @@ class CruxConnector(BaseConnector, ExternalTelemetryConnector):
                 provenance_label="LAB_DIAGNOSTICS_ONLY",
             )
 
-        # In test environments with mock key
-        if key.startswith("AIzaSyTest") or "test" in key.lower():
-            metrics = {
-                "origin": f"https://{domain}",
-                "p75_lcp_ms": 1820.0,
-                "p75_inp_ms": 140.0,
-                "p75_cls": 0.04,
-                "p75_fcp_ms": 980.0,
-                "p75_ttfb_ms": 420.0,
-                "origin_eligibility": True,
-                "device_breakdown": {
-                    "phone": {"p75_lcp_ms": 2100.0, "p75_inp_ms": 160.0, "p75_cls": 0.05, "p75_fcp_ms": 1100.0},
-                    "desktop": {"p75_lcp_ms": 1450.0, "p75_inp_ms": 110.0, "p75_cls": 0.02, "p75_fcp_ms": 820.0},
-                },
-                "distributions": {
-                    "largest_contentful_paint": {"good": 0.82, "needs_improvement": 0.12, "poor": 0.06},
-                    "interaction_to_next_paint": {"good": 0.88, "needs_improvement": 0.09, "poor": 0.03},
-                    "cumulative_layout_shift": {"good": 0.94, "needs_improvement": 0.04, "poor": 0.02},
-                    "first_contentful_paint": {"good": 0.85, "needs_improvement": 0.10, "poor": 0.05},
-                }
-            }
-            ev_hash = hashlib.sha256(json.dumps(metrics, sort_keys=True).encode()).hexdigest()
-            ev_ref = EvidenceRef(
-                source_type="external",
-                source_id=f"crux_{domain}",
-                evidence_hash=ev_hash,
-                url=f"https://{domain}",
-                snippet=f"CrUX field metrics: p75 LCP {metrics['p75_lcp_ms']}ms, p75 INP {metrics['p75_inp_ms']}ms, p75 CLS {metrics['p75_cls']}",
-                metadata=metrics
-            )
-            return ExternalTelemetryResult(
-                connector_id="crux",
-                connector_name="Chrome User Experience Report",
-                domain=domain,
-                status="CONNECTED",
-                is_connected=True,
-                lab_fallback_only=False,
-                metrics=metrics,
-                evidence_ref=ev_ref,
-                provenance_label="LIVE_EXTERNAL_QUERY",
-            )
-
         # Real Google CrUX API Query
         endpoint = f"https://chromeuxreport.googleapis.com/v1/records:queryRecord?key={key}"
         try:
@@ -155,13 +113,13 @@ class CruxConnector(BaseConnector, ExternalTelemetryConnector):
                     data = res.json()
                     raw_metrics = data.get("record", {}).get("metrics", {})
                     
-                    def _extract_metric(m_name: str, default_val: float = 0.0) -> float:
+                    def _extract_metric(m_name: str) -> Optional[float]:
                         m_obj = raw_metrics.get(m_name, {})
                         val = m_obj.get("percentiles", {}).get("p75")
                         try:
-                            return float(val) if val is not None else default_val
+                            return float(val) if val is not None else None
                         except (ValueError, TypeError):
-                            return default_val
+                            return None
 
                     def _extract_distribution(m_name: str) -> Dict[str, float]:
                         m_obj = raw_metrics.get(m_name, {})
@@ -175,11 +133,11 @@ class CruxConnector(BaseConnector, ExternalTelemetryConnector):
 
                     metrics = {
                         "origin": f"https://{domain}",
-                        "p75_lcp_ms": _extract_metric("largest_contentful_paint", 1800.0),
-                        "p75_inp_ms": _extract_metric("interaction_to_next_paint", 120.0),
-                        "p75_cls": _extract_metric("cumulative_layout_shift", 0.03),
-                        "p75_fcp_ms": _extract_metric("first_contentful_paint", 900.0),
-                        "p75_ttfb_ms": _extract_metric("experimental_time_to_first_byte", 350.0),
+                        "p75_lcp_ms": _extract_metric("largest_contentful_paint"),
+                        "p75_inp_ms": _extract_metric("interaction_to_next_paint"),
+                        "p75_cls": _extract_metric("cumulative_layout_shift"),
+                        "p75_fcp_ms": _extract_metric("first_contentful_paint"),
+                        "p75_ttfb_ms": _extract_metric("experimental_time_to_first_byte"),
                         "origin_eligibility": True,
                         "device_breakdown": {},
                         "distributions": {
@@ -191,12 +149,21 @@ class CruxConnector(BaseConnector, ExternalTelemetryConnector):
                     }
 
                     ev_hash = hashlib.sha256(json.dumps(metrics, sort_keys=True).encode()).hexdigest()
+                    snippet_parts = []
+                    if metrics["p75_lcp_ms"] is not None:
+                        snippet_parts.append(f"p75 LCP {metrics['p75_lcp_ms']}ms")
+                    if metrics["p75_inp_ms"] is not None:
+                        snippet_parts.append(f"p75 INP {metrics['p75_inp_ms']}ms")
+                    if metrics["p75_cls"] is not None:
+                        snippet_parts.append(f"p75 CLS {metrics['p75_cls']}")
+                    snippet_str = ", ".join(snippet_parts) or "CrUX field metrics recorded"
+
                     ev_ref = EvidenceRef(
                         source_type="external",
                         source_id=f"crux_{domain}",
                         evidence_hash=ev_hash,
                         url=f"https://{domain}",
-                        snippet=f"CrUX field metrics: p75 LCP {metrics['p75_lcp_ms']}ms, p75 INP {metrics['p75_inp_ms']}ms, p75 CLS {metrics['p75_cls']}",
+                        snippet=f"CrUX field metrics: {snippet_str}",
                         metadata=metrics
                     )
                     return ExternalTelemetryResult(

@@ -57,6 +57,35 @@ def analyze_meta_tags(
         if prop and content:
             og_tags[prop] = content
             
+    # Extract <html lang="..."> attribute
+    html_tag = soup.find("html")
+    html_lang = html_tag.get("lang", "").strip() if html_tag and html_tag.get("lang") else None
+
+    # Extract hreflang alternates from <link rel="alternate" hreflang="..." href="...">
+    hreflang_tags: Dict[str, str] = {}
+    from urllib.parse import urljoin
+    for link in soup.find_all("link", attrs={"rel": lambda x: x and "alternate" in (x if isinstance(x, list) else [x])}):
+        hl = link.get("hreflang")
+        href = link.get("href")
+        if hl and href:
+            resolved_href = urljoin(url, href.strip())
+            hreflang_tags[hl.strip().lower()] = resolved_href
+
+    # Parse HTTP Link headers for hreflang
+    if resp_headers:
+        for k, v in resp_headers.items():
+            if k.lower() == "link" and v:
+                import re
+                # e.g., <https://example.com/fr>; rel="alternate"; hreflang="fr"
+                parts = str(v).split(",")
+                for part in parts:
+                    if 'rel="alternate"' in part.lower() or "rel=alternate" in part.lower():
+                        url_m = re.search(r"<([^>]+)>", part)
+                        hl_m = re.search(r'hreflang=["\']?([^"\'\s;]+)["\']?', part, re.IGNORECASE)
+                        if url_m and hl_m:
+                            resolved_href = urljoin(url, url_m.group(1).strip())
+                            hreflang_tags[hl_m.group(1).strip().lower()] = resolved_href
+
     # Twitter Tags
     twitter_tags = {}
     for tw in soup.find_all("meta", attrs={"name": lambda x: x and x.startswith("twitter:")}):
@@ -64,8 +93,26 @@ def analyze_meta_tags(
         content = tw.get("content")
         if name and content:
             twitter_tags[name] = content
-            
-    # Add Evidence
+
+    # Register evidence for html_lang and hreflang
+    if html_lang:
+        evidence_store.add_evidence(
+            source_type="meta",
+            analyzer="meta_analyzer",
+            url=url,
+            selector="html[lang]",
+            text=f"HTML Language Declaration: {html_lang}",
+            value={"html_lang": html_lang}
+        )
+    if hreflang_tags:
+        evidence_store.add_evidence(
+            source_type="meta",
+            analyzer="meta_analyzer",
+            url=url,
+            selector="link[rel='alternate'][hreflang]",
+            text=f"Hreflang alternates declared: {len(hreflang_tags)}",
+            value={"hreflang_tags": hreflang_tags}
+        )
     if title:
         evidence_store.add_evidence(
             source_type="meta",
@@ -131,5 +178,7 @@ def analyze_meta_tags(
         "x_robots_tag": x_robots_tag,
         "viewport": viewport,
         "og_tags": og_tags,
-        "twitter_tags": twitter_tags
+        "twitter_tags": twitter_tags,
+        "html_lang": html_lang,
+        "hreflang_tags": hreflang_tags,
     }

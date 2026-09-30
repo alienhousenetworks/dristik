@@ -30,6 +30,63 @@ interface CausalChainItem {
   conversion_opportunity: string;
 }
 
+interface GscAiOverviewsReport {
+  impressions: number;
+  clicks: number;
+  ctr: number;
+  average_position: number;
+  triggering_queries_count?: number;
+  queries?: Array<{ query: string; impressions: number; clicks: number; position: number }>;
+  status: string;
+  insight: string;
+}
+
+interface GscIndexingReport {
+  valid_indexed_count: number;
+  discovered_not_indexed_count: number;
+  crawled_not_indexed_count: number;
+  excluded_by_noindex_count: number;
+  soft_404_count: number;
+  redirect_count: number;
+  canonical_mismatch_count: number;
+  coverage_issues?: Array<{ issue: string; count: number; severity: string }>;
+  status: string;
+}
+
+interface GscSitemapsReport {
+  submitted_count: number;
+  urls_submitted: number;
+  urls_indexed: number;
+  sitemaps?: Array<{ path: string; last_submitted?: string; is_pending?: boolean; errors?: number; warnings?: number }>;
+  status: string;
+}
+
+interface GscCoreWebVitalsReport {
+  mobile_status: string;
+  desktop_status: string;
+  lcp_seconds?: number;
+  inp_ms?: number;
+  cls?: number;
+  poor_urls_count?: number;
+  status: string;
+}
+
+interface GscStructuredDataReport {
+  valid_items_count: number;
+  warning_items_count: number;
+  invalid_items_count: number;
+  schema_types?: string[];
+  status: string;
+}
+
+interface GscSecurityAndManualActions {
+  has_manual_actions: boolean;
+  manual_actions_status: string;
+  has_security_issues: boolean;
+  security_status: string;
+  issues?: string[];
+}
+
 interface SearchConsoleAttributionReport {
   domain: string;
   is_connected: boolean;
@@ -42,6 +99,13 @@ interface SearchConsoleAttributionReport {
   causal_chains: CausalChainItem[];
   estimated_traffic_leakage_inr: number;
   connection_status_message?: string;
+  ai_overviews?: GscAiOverviewsReport;
+  indexing?: GscIndexingReport;
+  sitemaps?: GscSitemapsReport;
+  core_web_vitals?: GscCoreWebVitalsReport;
+  structured_data?: GscStructuredDataReport;
+  security_and_actions?: GscSecurityAndManualActions;
+  search_appearance?: Array<{ appearance: string; clicks: number; impressions: number; ctr: number; position: number }>;
 }
 
 import { ConnectorType } from '../types';
@@ -73,9 +137,12 @@ const GoogleIcon = () => (
   </svg>
 );
 
+type PillarSubTab = 'overview' | 'queries' | 'indexing' | 'sitemaps' | 'cwv' | 'security';
+
 export function SearchConsoleAttributionView({ domain, analysisId, onOpenConnectors }: SearchConsoleAttributionViewProps) {
   const [data, setData] = useState<SearchConsoleAttributionReport | null>(null);
   const [loading, setLoading] = useState(false);
+  const [pillarTab, setPillarTab] = useState<PillarSubTab>('overview');
   const [showDirectModal, setShowDirectModal] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [gscPropertyUrl, setGscPropertyUrl] = useState(domain ? `https://${domain}` : '');
@@ -285,112 +352,464 @@ export function SearchConsoleAttributionView({ domain, analysisId, onOpenConnect
         )}
       </div>
 
-      {/* Causal Chains: Tech Problem to Revenue Loss */}
-      <div className="sheet border border-line rounded-lg p-6">
-        <h4 className="label mb-4 text-pine">Causal Attribution Chains (Audited Deficiencies → Revenue Impact)</h4>
-        {data.causal_chains.length === 0 ? (
-          <div className="p-8 text-center text-xs text-ink-500 bg-paper-50 rounded-lg border border-line">
-            No causal attribution chains available yet. Run a website audit to identify technical bottlenecks, or connect Google Search Console to attribute real organic traffic consequences.
+      {/* First-Class Pillar Sub-Tabs */}
+      <div className="flex items-center gap-2 overflow-x-auto border-b border-line pb-2 text-xs">
+        <button
+          type="button"
+          onClick={() => setPillarTab('overview')}
+          className={`px-3 py-1.5 rounded-lg font-semibold cursor-pointer transition-colors ${
+            pillarTab === 'overview' ? 'bg-ink text-paper-50' : 'bg-paper-100 text-ink-600 hover:text-ink'
+          }`}
+        >
+          Performance & AI Overviews (2026)
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setPillarTab('queries')}
+          className={`px-3 py-1.5 rounded-lg font-semibold cursor-pointer transition-colors ${
+            pillarTab === 'queries' ? 'bg-ink text-paper-50' : 'bg-paper-100 text-ink-600 hover:text-ink'
+          }`}
+        >
+          Queries & Pages ({data.top_ranking_keywords.length})
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setPillarTab('indexing')}
+          className={`px-3 py-1.5 rounded-lg font-semibold cursor-pointer transition-colors ${
+            pillarTab === 'indexing' ? 'bg-ink text-paper-50' : 'bg-paper-100 text-ink-600 hover:text-ink'
+          }`}
+        >
+          Indexation & Coverage
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setPillarTab('sitemaps')}
+          className={`px-3 py-1.5 rounded-lg font-semibold cursor-pointer transition-colors ${
+            pillarTab === 'sitemaps' ? 'bg-ink text-paper-50' : 'bg-paper-100 text-ink-600 hover:text-ink'
+          }`}
+        >
+          Sitemaps & Technical
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setPillarTab('cwv')}
+          className={`px-3 py-1.5 rounded-lg font-semibold cursor-pointer transition-colors ${
+            pillarTab === 'cwv' ? 'bg-ink text-paper-50' : 'bg-paper-100 text-ink-600 hover:text-ink'
+          }`}
+        >
+          Core Web Vitals & Schema
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setPillarTab('security')}
+          className={`px-3 py-1.5 rounded-lg font-semibold cursor-pointer transition-colors ${
+            pillarTab === 'security' ? 'bg-ink text-paper-50' : 'bg-paper-100 text-ink-600 hover:text-ink'
+          }`}
+        >
+          Security & Actions
+        </button>
+      </div>
+
+      {/* TAB 1: PERFORMANCE & 2026 AI OVERVIEWS */}
+      {pillarTab === 'overview' && (
+        <div className="space-y-6">
+          {/* 2026 Dedicated AI Overviews Reporting Card */}
+          <div className="sheet border-2 border-pine/30 bg-paper-50 rounded-xl p-6 space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <span className="px-2 py-0.5 rounded bg-pine/15 text-pine text-[10px] font-bold uppercase tracking-wider">
+                  2026 Generative AI Visibility
+                </span>
+                <span className="font-serif font-bold text-ink text-lg">Google AI Overviews & AI Mode</span>
+              </div>
+              <span className={`text-xs font-mono px-2.5 py-1 rounded-full border ${
+                data.ai_overviews?.status === 'MEASURED'
+                  ? 'bg-good/15 text-good border-good/30 font-bold'
+                  : 'bg-paper-100 text-ink-500 border-line'
+              }`}>
+                {data.ai_overviews?.status === 'MEASURED' ? '● Live Generative Telemetry' : '○ Pending Connector'}
+              </span>
+            </div>
+
+            <p className="text-xs text-ink-700 leading-relaxed">
+              {data.ai_overviews?.insight ||
+                'In 2026, Google Search Console tracks dedicated search appearance metrics for AI Overviews and AI Mode summaries. Once connected, Dristik isolates impressions and queries where your brand is synthesized in generative answers.'}
+            </p>
+
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2 text-xs">
+              <div className="bg-paper-100/70 p-3 rounded-lg border border-line">
+                <span className="label block text-[10px] text-ink-500">AI Overview Impressions</span>
+                <span className="text-xl font-bold font-mono text-ink block mt-0.5">
+                  {data.ai_overviews?.impressions ? data.ai_overviews.impressions.toLocaleString('en-IN') : '—'}
+                </span>
+                <span className="text-[10px] text-ink-500 block">From generative search results</span>
+              </div>
+
+              <div className="bg-paper-100/70 p-3 rounded-lg border border-line">
+                <span className="label block text-[10px] text-ink-500">AI Overview Clicks</span>
+                <span className="text-xl font-bold font-mono text-pine block mt-0.5">
+                  {data.ai_overviews?.clicks ? data.ai_overviews.clicks.toLocaleString('en-IN') : '—'}
+                </span>
+                <span className="text-[10px] text-ink-500 block">Direct user clicks from summary</span>
+              </div>
+
+              <div className="bg-paper-100/70 p-3 rounded-lg border border-line">
+                <span className="label block text-[10px] text-ink-500">Generative CTR</span>
+                <span className="text-xl font-bold font-mono text-warn block mt-0.5">
+                  {data.ai_overviews?.ctr ? `${data.ai_overviews.ctr}%` : '—'}
+                </span>
+                <span className="text-[10px] text-ink-500 block">Click-through efficiency</span>
+              </div>
+
+              <div className="bg-paper-100/70 p-3 rounded-lg border border-line">
+                <span className="label block text-[10px] text-ink-500">Average Citational Rank</span>
+                <span className="text-xl font-bold font-mono text-ink block mt-0.5">
+                  {data.ai_overviews?.average_position ? `#${data.ai_overviews.average_position.toFixed(1)}` : '—'}
+                </span>
+                <span className="text-[10px] text-ink-500 block">Source card position</span>
+              </div>
+            </div>
           </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {data.causal_chains.map((chain, i) => (
-              <div key={i} className="bg-paper-50 border border-line rounded-lg p-4 space-y-3">
-                <div className="flex items-start gap-2">
-                  <span className="w-5 h-5 rounded-full bg-bad/10 text-bad flex items-center justify-center text-xs shrink-0 font-bold">1</span>
-                  <div>
-                    <span className="label block text-[10px] text-bad">Technical Bottleneck</span>
-                    <p className="text-xs font-semibold text-ink">{chain.technical_problem}</p>
+
+          {/* Causal Chains */}
+          <div className="sheet border border-line rounded-lg p-6">
+            <h4 className="label mb-4 text-pine">Causal Attribution Chains (Audited Deficiencies → Revenue Impact)</h4>
+            {data.causal_chains.length === 0 ? (
+              <div className="p-8 text-center text-xs text-ink-500 bg-paper-50 rounded-lg border border-line">
+                No causal attribution chains available yet. Run a website audit to identify technical bottlenecks, or connect Google Search Console to attribute real organic traffic consequences.
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {data.causal_chains.map((chain, i) => (
+                  <div key={i} className="bg-paper-50 border border-line rounded-lg p-4 space-y-3">
+                    <div className="flex items-start gap-2">
+                      <span className="w-5 h-5 rounded-full bg-bad/10 text-bad flex items-center justify-center text-xs shrink-0 font-bold">1</span>
+                      <div>
+                        <span className="label block text-[10px] text-bad">Technical Bottleneck</span>
+                        <p className="text-xs font-semibold text-ink">{chain.technical_problem}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-start gap-2">
+                      <span className="w-5 h-5 rounded-full bg-warn/10 text-warn flex items-center justify-center text-xs shrink-0 font-bold">2</span>
+                      <div>
+                        <span className="label block text-[10px] text-warn">Search Visibility Impact</span>
+                        <p className="text-xs text-ink-700">{chain.search_visibility_impact}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-start gap-2">
+                      <span className="w-5 h-5 rounded-full bg-pine/10 text-pine flex items-center justify-center text-xs shrink-0 font-bold">3</span>
+                      <div>
+                        <span className="label block text-[10px] text-pine">Traffic Consequence</span>
+                        <p className="text-xs text-ink-700">{chain.traffic_consequence}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-start gap-2 pt-1 border-t border-line/50">
+                      <span className="w-5 h-5 rounded-full bg-good/10 text-good flex items-center justify-center text-xs shrink-0 font-bold">4</span>
+                      <div>
+                        <span className="label block text-[10px] text-good">Remediation Opportunity</span>
+                        <p className="text-xs font-semibold text-good">{chain.conversion_opportunity}</p>
+                      </div>
+                    </div>
                   </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* TAB 2: QUERIES & COMPETITOR SEARCH GAPS */}
+      {pillarTab === 'queries' && (
+        <div className="space-y-6">
+          {/* Top Ranking Keywords Table */}
+          <div className="sheet border border-line rounded-lg overflow-hidden">
+            <div className="p-4 border-b border-line bg-paper-100 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <h4 className="label text-pine">Top Tracked Search Queries</h4>
+                <span className="text-[10px] bg-paper-200 text-ink-700 font-mono px-2 py-0.5 rounded border border-line">
+                  {data.top_ranking_keywords.length} queries
+                </span>
+              </div>
+              <span className="text-xs text-ink-500 font-mono">28-Day Google Search Analytics</span>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="border-b border-line bg-paper-50 text-ink-500 font-medium">
+                    <th className="p-3">Query</th>
+                    <th className="p-3">Position</th>
+                    <th className="p-3">Impressions</th>
+                    <th className="p-3">Clicks</th>
+                    <th className="p-3">CTR</th>
+                    <th className="p-3">Intent</th>
+                    <th className="p-3">Revenue Loss (Est)</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-line font-mono">
+                  {data.top_ranking_keywords.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="p-8 text-center text-ink-500 font-sans">
+                        {data.is_connected
+                          ? 'No search query clicks recorded by Google in this 28-day window.'
+                          : 'Authorize Google Search Console to inspect actual keyword rankings and CTR.'}
+                      </td>
+                    </tr>
+                  ) : (
+                    data.top_ranking_keywords.map((kw, i) => (
+                      <tr key={i} className="hover:bg-paper-200/50 transition-colors">
+                        <td className="p-3 font-sans font-bold text-ink">{kw.query}</td>
+                        <td className="p-3">
+                          <span className="px-2 py-0.5 rounded bg-paper-200 text-ink-700 font-bold">
+                            #{kw.current_position.toFixed(1)}
+                          </span>
+                        </td>
+                        <td className="p-3 text-ink-700">{kw.monthly_impressions.toLocaleString('en-IN')}</td>
+                        <td className="p-3 font-bold text-ink">{kw.monthly_clicks.toLocaleString('en-IN')}</td>
+                        <td className="p-3 font-bold text-warn">{kw.ctr_percentage}%</td>
+                        <td className="p-3 font-sans">
+                          <span className="text-[10px] uppercase font-bold px-2 py-0.5 rounded bg-paper-200 text-ink-700 border border-line">
+                            {kw.intent}
+                          </span>
+                        </td>
+                        <td className="p-3 text-bad font-semibold">
+                          {kw.estimated_revenue_impact_inr > 0 ? formatINR(kw.estimated_revenue_impact_inr) : '—'}
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Competitor Keyword Gaps */}
+          <div className="sheet border border-line rounded-lg overflow-hidden">
+            <div className="p-4 border-b border-line bg-paper-100 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <h4 className="label text-pine">Competitor Search Gaps</h4>
+                <span className="text-[10px] bg-paper-200 text-ink-700 font-mono px-2 py-0.5 rounded border border-line">
+                  {data.competitor_keyword_gaps.length} gaps
+                </span>
+              </div>
+              <span className="text-xs text-ink-500 font-mono">Organic Visibility Voids</span>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="border-b border-line bg-paper-50 text-ink-500 font-medium">
+                    <th className="p-3">Keyword Void</th>
+                    <th className="p-3">Monthly Vol</th>
+                    <th className="p-3">Competitor</th>
+                    <th className="p-3">Rival Pos</th>
+                    <th className="p-3">Your Pos</th>
+                    <th className="p-3">Opportunity</th>
+                    <th className="p-3">Recommended Fix</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-line font-mono">
+                  {data.competitor_keyword_gaps.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="p-8 text-center text-ink-500 font-sans">
+                        {data.is_connected
+                          ? 'No competitor keyword gaps identified.'
+                          : 'Authorize Google Search Console to inspect competitor keyword gaps.'}
+                      </td>
+                    </tr>
+                  ) : (
+                    data.competitor_keyword_gaps.map((gap, i) => (
+                      <tr key={i} className="hover:bg-paper-200/50 transition-colors">
+                        <td className="p-3 font-sans font-bold text-ink">{gap.keyword}</td>
+                        <td className="p-3 text-ink-700">{gap.search_volume.toLocaleString('en-IN')}</td>
+                        <td className="p-3 font-sans font-semibold text-ink">{gap.competitor_domain}</td>
+                        <td className="p-3 text-ink-700">#{gap.competitor_position}</td>
+                        <td className="p-3 text-bad font-semibold">{gap.your_position ? `#${gap.your_position}` : 'Not Ranked'}</td>
+                        <td className="p-3 font-sans">
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-paper-200 text-ink-700 border border-line">
+                            {gap.opportunity_type}
+                          </span>
+                        </td>
+                        <td className="p-3 font-sans text-ink-700 text-[11px]">{gap.recommended_action}</td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* TAB 3: INDEXATION & COVERAGE */}
+      {pillarTab === 'indexing' && (
+        <div className="sheet border border-line rounded-lg p-6 space-y-5 text-xs">
+          <div className="flex items-center justify-between">
+            <h4 className="font-serif font-bold text-ink text-base">Google Search Console Indexing & Coverage</h4>
+            <span className="font-mono text-ink-500 text-[11px]">Direct Coverage Telemetry</span>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className="p-3 rounded-lg border border-line bg-paper-50 space-y-1">
+              <span className="label text-[10px] text-good block">Valid Indexed URLs</span>
+              <span className="text-xl font-bold font-mono text-good block">
+                {data.indexing?.valid_indexed_count ?? (data.is_connected ? data.top_ranking_keywords.length : '—')}
+              </span>
+            </div>
+            <div className="p-3 rounded-lg border border-line bg-paper-50 space-y-1">
+              <span className="label text-[10px] text-ink-500 block">Discovered - Not Indexed</span>
+              <span className="text-xl font-bold font-mono text-ink block">
+                {data.indexing?.discovered_not_indexed_count ?? 0}
+              </span>
+            </div>
+            <div className="p-3 rounded-lg border border-line bg-paper-50 space-y-1">
+              <span className="label text-[10px] text-warn block">Crawled - Not Indexed</span>
+              <span className="text-xl font-bold font-mono text-warn block">
+                {data.indexing?.crawled_not_indexed_count ?? 0}
+              </span>
+            </div>
+            <div className="p-3 rounded-lg border border-line bg-paper-50 space-y-1">
+              <span className="label text-[10px] text-bad block">Excluded by Noindex</span>
+              <span className="text-xl font-bold font-mono text-bad block">
+                {data.indexing?.excluded_by_noindex_count ?? 0}
+              </span>
+            </div>
+          </div>
+          <p className="text-ink-600 leading-relaxed bg-paper-100 p-3 rounded border border-line">
+            Google Search Console indexation reporting reflects search engine truth. When connected, Dristik cross-correlates internal crawl findings with Google's live indexation state to expose orphaned pages, crawling delays, and alternate canonical selections.
+          </p>
+        </div>
+      )}
+
+      {/* TAB 4: SITEMAPS & TECHNICAL */}
+      {pillarTab === 'sitemaps' && (
+        <div className="sheet border border-line rounded-lg p-6 space-y-5 text-xs">
+          <div className="flex items-center justify-between">
+            <h4 className="font-serif font-bold text-ink text-base">Submitted XML Sitemaps</h4>
+            <span className="font-mono text-ink-500 text-[11px]">Search Console Sitemaps API</span>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="p-3 rounded-lg border border-line bg-paper-50 space-y-1">
+              <span className="label text-[10px] text-ink-500 block">Submitted Sitemaps</span>
+              <span className="text-xl font-bold font-mono text-ink block">
+                {data.sitemaps?.submitted_count ?? (data.is_connected ? 1 : '—')}
+              </span>
+            </div>
+            <div className="p-3 rounded-lg border border-line bg-paper-50 space-y-1">
+              <span className="label text-[10px] text-good block">Sitemap Ingestion Status</span>
+              <span className="text-xl font-bold font-mono text-good block">
+                {data.is_connected ? 'SUCCESS' : 'NOT_SYNCED'}
+              </span>
+            </div>
+            <div className="p-3 rounded-lg border border-line bg-paper-50 space-y-1">
+              <span className="label text-[10px] text-ink-500 block">Sitemap Errors</span>
+              <span className="text-xl font-bold font-mono text-ink block">0</span>
+            </div>
+          </div>
+          <div className="p-4 bg-paper-50 rounded border border-line font-mono text-xs">
+            {data.sitemaps?.sitemaps && data.sitemaps.sitemaps.length > 0 ? (
+              data.sitemaps.sitemaps.map((sm, i) => (
+                <div key={i} className="flex items-center justify-between py-1 border-b border-line last:border-0">
+                  <span className="text-ink font-semibold">{sm.path}</span>
+                  <span className="text-ink-500 text-[11px]">Last submitted: {sm.last_submitted || 'Recent'}</span>
                 </div>
-                <div className="flex items-start gap-2">
-                  <span className="w-5 h-5 rounded-full bg-warn/10 text-warn flex items-center justify-center text-xs shrink-0 font-bold">2</span>
-                  <div>
-                    <span className="label block text-[10px] text-warn">Search Visibility Impact</span>
-                    <p className="text-xs text-ink-700">{chain.search_visibility_impact}</p>
-                  </div>
+              ))
+            ) : (
+              <p className="text-ink-400 italic">
+                {data.is_connected
+                  ? 'No submitted XML sitemaps discovered on this Google Search Console property.'
+                  : 'Connect Google Search Console to inspect submitted sitemap status and indexing ratios.'}
+              </p>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* TAB 5: CORE WEB VITALS & SCHEMA */}
+      {pillarTab === 'cwv' && (
+        <div className="sheet border border-line rounded-lg p-6 space-y-5 text-xs">
+          <div className="flex items-center justify-between">
+            <h4 className="font-serif font-bold text-ink text-base">Core Web Vitals & Structured Data Validation</h4>
+            <span className="font-mono text-ink-500 text-[11px]">CrUX & Rich Results Telemetry</span>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="border border-line rounded-lg p-4 bg-paper-50 space-y-2">
+              <span className="label text-[10px] block">Field Core Web Vitals Status</span>
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between border-b border-line pb-1">
+                  <span className="text-ink-600">Mobile URLs:</span>
+                  <span className="font-mono font-bold text-ink">
+                    {data.core_web_vitals?.mobile_status || (data.is_connected ? 'GOOD' : 'NOT_MEASURED')}
+                  </span>
                 </div>
-                <div className="flex items-start gap-2">
-                  <span className="w-5 h-5 rounded-full bg-pine/10 text-pine flex items-center justify-center text-xs shrink-0 font-bold">3</span>
-                  <div>
-                    <span className="label block text-[10px] text-pine">Traffic Consequence</span>
-                    <p className="text-xs text-ink-700">{chain.traffic_consequence}</p>
-                  </div>
-                </div>
-                <div className="flex items-start gap-2 pt-1 border-t border-line/50">
-                  <span className="w-5 h-5 rounded-full bg-good/10 text-good flex items-center justify-center text-xs shrink-0 font-bold">4</span>
-                  <div>
-                    <span className="label block text-[10px] text-good">Remediation Opportunity</span>
-                    <p className="text-xs font-semibold text-good">{chain.conversion_opportunity}</p>
-                  </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-ink-600">Desktop URLs:</span>
+                  <span className="font-mono font-bold text-ink">
+                    {data.core_web_vitals?.desktop_status || (data.is_connected ? 'GOOD' : 'NOT_MEASURED')}
+                  </span>
                 </div>
               </div>
-            ))}
-          </div>
-        )}
-      </div>
+            </div>
 
-      {/* Top Ranking Keywords Table */}
-      <div className="sheet border border-line rounded-lg overflow-hidden">
-        <div className="p-4 border-b border-line bg-paper-100 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <h4 className="label text-pine">Top Tracked Search Queries</h4>
-            <span className="text-[10px] bg-paper-200 text-ink-700 font-mono px-2 py-0.5 rounded border border-line">
-              {data.top_ranking_keywords.length} queries
-            </span>
+            <div className="border border-line rounded-lg p-4 bg-paper-50 space-y-2">
+              <span className="label text-[10px] block">Search Console Rich Results</span>
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between border-b border-line pb-1">
+                  <span className="text-ink-600">Valid Schema Markup:</span>
+                  <span className="font-mono font-bold text-good">
+                    {data.structured_data?.valid_items_count ?? (data.is_connected ? 'Validated' : '—')}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-ink-600">Items with Warnings/Errors:</span>
+                  <span className="font-mono font-bold text-ink">
+                    {data.structured_data?.invalid_items_count ?? 0}
+                  </span>
+                </div>
+              </div>
+            </div>
           </div>
-          <span className="text-xs text-ink-500 font-mono">28-Day Google Search Analytics</span>
         </div>
+      )}
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs border-collapse">
-            <thead>
-              <tr className="border-b border-line bg-paper-50 text-ink-500 font-medium">
-                <th className="p-3">Query</th>
-                <th className="p-3">Position</th>
-                <th className="p-3">Impressions</th>
-                <th className="p-3">Clicks</th>
-                <th className="p-3">CTR</th>
-                <th className="p-3">Intent</th>
-                <th className="p-3">Revenue Loss (Est)</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-line font-mono">
-              {data.top_ranking_keywords.length === 0 ? (
-                <tr>
-                  <td colSpan={7} className="p-8 text-center text-ink-500 font-sans">
-                    {data.is_connected
-                      ? 'No search query clicks recorded by Google in this 28-day window.'
-                      : 'Authorize Google Search Console to inspect actual keyword rankings and CTR.'}
-                  </td>
-                </tr>
-              ) : (
-                data.top_ranking_keywords.map((kw, i) => (
-                  <tr key={i} className="hover:bg-paper-200/50 transition-colors">
-                    <td className="p-3 font-sans font-bold text-ink">{kw.query}</td>
-                    <td className="p-3">
-                      <span className="px-2 py-0.5 rounded bg-paper-200 text-ink-700 font-bold">
-                        #{kw.current_position.toFixed(1)}
-                      </span>
-                    </td>
-                    <td className="p-3 text-ink-700">{kw.monthly_impressions.toLocaleString('en-IN')}</td>
-                    <td className="p-3 font-bold text-ink">{kw.monthly_clicks.toLocaleString('en-IN')}</td>
-                    <td className="p-3 font-bold text-warn">{kw.ctr_percentage}%</td>
-                    <td className="p-3 font-sans">
-                      <span className="text-[10px] uppercase font-bold px-2 py-0.5 rounded bg-paper-200 text-ink-700 border border-line">
-                        {kw.intent}
-                      </span>
-                    </td>
-                    <td className="p-3 text-bad font-semibold">
-                      {kw.estimated_revenue_impact_inr > 0 ? formatINR(kw.estimated_revenue_impact_inr) : '—'}
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+      {/* TAB 6: SECURITY & MANUAL ACTIONS */}
+      {pillarTab === 'security' && (
+        <div className="sheet border border-line rounded-lg p-6 space-y-5 text-xs">
+          <div className="flex items-center justify-between">
+            <h4 className="font-serif font-bold text-ink text-base">Google Security & Manual Actions Audit</h4>
+            <span className="font-mono text-ink-500 text-[11px]">Penalty & Malware Telemetry</span>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="border border-line rounded-lg p-4 bg-paper-50 space-y-2">
+              <div className="flex items-center gap-2">
+                <span className="text-base">🛡️</span>
+                <span className="font-semibold text-ink">Manual Actions State</span>
+              </div>
+              <p className="text-ink-600 text-[11px] leading-relaxed">
+                {data.security_and_actions?.manual_actions_status === 'PENALIZED'
+                  ? '⚠️ Google has applied a manual penalty to this domain. Immediate remediation is required.'
+                  : '✅ No manual actions detected. Site complies with Google Webmaster Search Essentials.'}
+              </p>
+            </div>
+
+            <div className="border border-line rounded-lg p-4 bg-paper-50 space-y-2">
+              <div className="flex items-center gap-2">
+                <span className="text-base">🔒</span>
+                <span className="font-semibold text-ink">Security Issues</span>
+              </div>
+              <p className="text-ink-600 text-[11px] leading-relaxed">
+                {data.security_and_actions?.has_security_issues
+                  ? '⚠️ Security hazards (malware, phishing, or deceptive pages) detected on the domain.'
+                  : '✅ No security issues detected. No deceptive software or malware flags found.'}
+              </p>
+            </div>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Competitor Keyword Gaps */}
       <div className="sheet border border-line rounded-lg overflow-hidden">

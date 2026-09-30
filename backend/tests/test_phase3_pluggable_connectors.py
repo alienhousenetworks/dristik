@@ -140,17 +140,48 @@ async def test_crux_connector_insufficient_origin_traffic():
 
 @pytest.mark.asyncio
 async def test_crux_connector_eligible_origin_with_field_metrics():
-    connector = CruxConnector(ConnectorCredentials(provider=ConnectorType.CRUX, api_key="AIzaSyTestKey"))
-    res = await connector.fetch_telemetry("enterprise-domain.com")
+    crux_api_response = {
+        "record": {
+            "key": {"origin": "https://enterprise-domain.com"},
+            "metrics": {
+                "largest_contentful_paint": {
+                    "percentiles": {"p75": 1750.0},
+                    "histogram": [{"density": 0.85}, {"density": 0.10}, {"density": 0.05}],
+                },
+                "interaction_to_next_paint": {
+                    "percentiles": {"p75": 130.0},
+                    "histogram": [{"density": 0.90}, {"density": 0.07}, {"density": 0.03}],
+                },
+                "cumulative_layout_shift": {
+                    "percentiles": {"p75": 0.04},
+                    "histogram": [{"density": 0.95}, {"density": 0.03}, {"density": 0.02}],
+                },
+                "first_contentful_paint": {
+                    "percentiles": {"p75": 920.0},
+                    "histogram": [{"density": 0.88}, {"density": 0.08}, {"density": 0.04}],
+                },
+            }
+        }
+    }
 
-    assert res.status == "CONNECTED"
-    assert res.is_connected is True
-    assert res.lab_fallback_only is False
-    assert res.metrics["p75_lcp_ms"] > 0
-    assert res.metrics["p75_inp_ms"] > 0
-    assert res.metrics["p75_cls"] >= 0.0
-    assert res.evidence_ref is not None
-    assert res.evidence_ref.source_type == "external"
+    mock_resp = AsyncMock()
+    mock_resp.status_code = 200
+    mock_resp.json = lambda: crux_api_response
+
+    with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
+        mock_post.return_value = mock_resp
+        connector = CruxConnector(ConnectorCredentials(provider=ConnectorType.CRUX, api_key="AIzaSyTestKey"))
+        res = await connector.fetch_telemetry("enterprise-domain.com")
+
+        assert res.status == "CONNECTED"
+        assert res.is_connected is True
+        assert res.lab_fallback_only is False
+        assert res.metrics["p75_lcp_ms"] == 1750.0
+        assert res.metrics["p75_inp_ms"] == 130.0
+        assert res.metrics["p75_cls"] == 0.04
+        assert res.metrics["p75_fcp_ms"] == 920.0
+        assert res.evidence_ref is not None
+        assert res.evidence_ref.source_type == "external"
 
 
 # ------------------------------------------------------------------------------
@@ -198,7 +229,24 @@ async def test_external_telemetry_service_aggregation():
     service = ExternalTelemetryService(gsc=gsc, ga4=ga4, crux=crux, external_seo=seo)
     estore = EvidenceStore("run_test_telemetry")
 
-    package = await service.fetch_all_telemetry("enterprise-domain.com", evidence_store=estore)
+    crux_api_response = {
+        "record": {
+            "key": {"origin": "https://enterprise-domain.com"},
+            "metrics": {
+                "largest_contentful_paint": {
+                    "percentiles": {"p75": 1750.0},
+                    "histogram": [{"density": 0.85}, {"density": 0.10}, {"density": 0.05}],
+                },
+            }
+        }
+    }
+    mock_resp = AsyncMock()
+    mock_resp.status_code = 200
+    mock_resp.json = lambda: crux_api_response
+
+    with patch("httpx.AsyncClient.post", new_callable=AsyncMock) as mock_post:
+        mock_post.return_value = mock_resp
+        package = await service.fetch_all_telemetry("enterprise-domain.com", evidence_store=estore)
 
     assert package.domain == "enterprise-domain.com"
     assert package.total_connectors == 4

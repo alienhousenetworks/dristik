@@ -6,23 +6,24 @@ interface AnalyticsIntegrationsModalProps {
   domain?: string;
 }
 
+interface IntegrationItem {
+  connected: boolean;
+  provider: string;
+  capabilities: string[];
+  property_id?: string;
+}
+
 interface IntegrationStatus {
-  google_search_console: {
-    connected: boolean;
-    provider: string;
-    capabilities: string[];
-  };
-  google_analytics_4: {
-    connected: boolean;
-    property_id?: string;
-    provider: string;
-    capabilities: string[];
-  };
-  dataforseo_keyword_index: {
-    connected: boolean;
-    provider: string;
-    capabilities: string[];
-  };
+  google_search_console: IntegrationItem;
+  google_analytics_4: IntegrationItem;
+  dataforseo_keyword_index: IntegrationItem;
+  ahrefs?: IntegrationItem;
+  semrush?: IntegrationItem;
+  majestic?: IntegrationItem;
+  google_business_profile?: IntegrationItem;
+  brand_mentions?: IntegrationItem;
+  citations_directories?: IntegrationItem;
+  [key: string]: any;
 }
 
 export function AnalyticsIntegrationsModal({
@@ -35,7 +36,7 @@ export function AnalyticsIntegrationsModal({
   const [isSavingGa4, setIsSavingGa4] = useState(false);
   const [ga4SavedNotice, setGa4SavedNotice] = useState(false);
   const [ga4Error, setGa4Error] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'overview' | 'gsc' | 'ga4' | 'backlinks'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'gsc' | 'ga4' | 'backlinks' | 'entity'>('overview');
 
   useEffect(() => {
     if (isOpen) {
@@ -101,10 +102,10 @@ export function AnalyticsIntegrationsModal({
               <span className="font-mono text-xs text-ink-500">Domain: {domain}</span>
             </div>
             <h2 className="font-serif text-2xl text-ink font-bold mt-1">
-              Analytics &amp; Search Index Connectors
+              Analytics &amp; Authority Connectors
             </h2>
             <p className="text-xs text-ink-500 mt-0.5">
-              Connect your verified Google Search Console, GA4 property, and DataForSEO link graph for empirical telemetry.
+              Connect Google Search Console, GA4, Ahrefs, Semrush, Majestic, and Local Entity graphs for empirical telemetry.
             </p>
           </div>
           <button
@@ -117,18 +118,19 @@ export function AnalyticsIntegrationsModal({
         </div>
 
         {/* Tab Bar */}
-        <div className="flex border-b border-line px-6 gap-3 bg-paper-50 dark:bg-ink-900/30">
+        <div className="flex border-b border-line px-6 gap-3 bg-paper-50 dark:bg-ink-900/30 overflow-x-auto">
           {[
             { id: 'overview', label: 'Connector Overview' },
             { id: 'gsc', label: 'Google Search Console' },
             { id: 'ga4', label: 'Google Analytics 4' },
-            { id: 'backlinks', label: 'Backlink Graph' },
+            { id: 'backlinks', label: 'Backlink & Authority (Ahrefs/Semrush/Majestic)' },
+            { id: 'entity', label: 'Local Entity & Citations (GBP/Reviews)' },
           ].map((tab) => (
             <button
               key={tab.id}
               type="button"
               onClick={() => setActiveTab(tab.id as any)}
-              className={`py-3 px-2 text-xs font-semibold border-b-2 transition-colors ${
+              className={`py-3 px-2 text-xs font-semibold whitespace-nowrap border-b-2 transition-colors ${
                 activeTab === tab.id
                   ? 'border-pine text-pine'
                   : 'border-transparent text-ink-500 hover:text-ink'
@@ -142,89 +144,201 @@ export function AnalyticsIntegrationsModal({
         {/* Body */}
         <div className="p-6 overflow-y-auto space-y-6 flex-1 text-sm text-ink-700 dark:text-ink-300">
           {activeTab === 'overview' && (
-            <div className="space-y-4">
-              {/* GSC Card */}
-              <div className="p-4 rounded-xl border border-line bg-paper-50 dark:bg-ink-900/40 flex items-start justify-between">
-                <div className="space-y-1">
-                  <div className="flex items-center gap-2">
-                    <span className="font-serif font-bold text-ink text-base">Google Search Console</span>
-                    <span
-                      className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded border ${
-                        status?.google_search_console.connected
-                          ? 'bg-good/10 text-good border-good/30'
-                          : 'bg-amber-500/10 text-amber-600 border-amber-500/30'
-                      }`}
+            <div className="space-y-6">
+              {/* Category 1: Search Console & Traffic */}
+              <div className="space-y-3">
+                <h4 className="text-xs font-mono font-bold tracking-wider text-ink-500 uppercase">
+                  Search Telemetry &amp; Traffic (First-Party)
+                </h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {/* GSC Card */}
+                  <div className="p-4 rounded-xl border border-line bg-paper-50 dark:bg-ink-900/40 flex flex-col justify-between">
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-between">
+                        <span className="font-serif font-bold text-ink text-sm">Google Search Console</span>
+                        <span
+                          className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded border ${
+                            status?.google_search_console.connected
+                              ? 'bg-good/10 text-good border-good/30'
+                              : 'bg-amber-500/10 text-amber-600 border-amber-500/30'
+                          }`}
+                        >
+                          {status?.google_search_console.connected ? '● CONNECTED' : '○ UNCONNECTED'}
+                        </span>
+                      </div>
+                      <p className="text-xs text-ink-500">
+                        Streams real search impressions, search queries, average positions, and Googlebot crawl indexing errors.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab('gsc')}
+                      className="mt-3 text-xs font-semibold text-pine underline hover:text-ink self-start"
                     >
-                      {status?.google_search_console.connected ? '● CONNECTED' : '○ NOT CONNECTED'}
-                    </span>
+                      Configure →
+                    </button>
                   </div>
-                  <p className="text-xs text-ink-500">
-                    Streams real search impressions, search queries, average positions, and Googlebot crawl indexing errors.
-                  </p>
+
+                  {/* GA4 Card */}
+                  <div className="p-4 rounded-xl border border-line bg-paper-50 dark:bg-ink-900/40 flex flex-col justify-between">
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-between">
+                        <span className="font-serif font-bold text-ink text-sm">Google Analytics 4 (GA4)</span>
+                        <span
+                          className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded border ${
+                            status?.google_analytics_4.connected
+                              ? 'bg-good/10 text-good border-good/30'
+                              : 'bg-amber-500/10 text-amber-600 border-amber-500/30'
+                          }`}
+                        >
+                          {status?.google_analytics_4.connected ? '● CONNECTED' : '○ UNCONNECTED'}
+                        </span>
+                      </div>
+                      <p className="text-xs text-ink-500">
+                        Replaces bounce/conversion hypotheses with verified 30-day session dwell times and conversion funnels.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab('ga4')}
+                      className="mt-3 text-xs font-semibold text-pine underline hover:text-ink self-start"
+                    >
+                      Configure →
+                    </button>
+                  </div>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => setActiveTab('gsc')}
-                  className="text-xs font-semibold text-pine underline hover:text-ink"
-                >
-                  Configure →
-                </button>
               </div>
 
-              {/* GA4 Card */}
-              <div className="p-4 rounded-xl border border-line bg-paper-50 dark:bg-ink-900/40 flex items-start justify-between">
-                <div className="space-y-1">
-                  <div className="flex items-center gap-2">
-                    <span className="font-serif font-bold text-ink text-base">Google Analytics 4 (GA4)</span>
-                    <span
-                      className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded border ${
-                        status?.google_analytics_4.connected
-                          ? 'bg-good/10 text-good border-good/30'
-                          : 'bg-amber-500/10 text-amber-600 border-amber-500/30'
-                      }`}
+              {/* Category 2: Authority & Backlink Graph */}
+              <div className="space-y-3">
+                <h4 className="text-xs font-mono font-bold tracking-wider text-ink-500 uppercase">
+                  Backlink Graph &amp; Off-Page Authority
+                </h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {/* DataForSEO Card */}
+                  <div className="p-4 rounded-xl border border-line bg-paper-50 dark:bg-ink-900/40 flex flex-col justify-between">
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-between">
+                        <span className="font-serif font-bold text-ink text-sm">DataForSEO Backlinks API</span>
+                        <span
+                          className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded border ${
+                            status?.dataforseo_keyword_index.connected
+                              ? 'bg-good/10 text-good border-good/30'
+                              : 'bg-paper-200 text-ink-500 border-line'
+                          }`}
+                        >
+                          {status?.dataforseo_keyword_index.connected ? '● LICENSED' : '○ UNCONNECTED'}
+                        </span>
+                      </div>
+                      <p className="text-xs text-ink-500">
+                        Live referring domain graphs, anchor distribution, and search volumes.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab('backlinks')}
+                      className="mt-3 text-xs font-semibold text-pine underline hover:text-ink self-start"
                     >
-                      {status?.google_analytics_4.connected ? '● CONNECTED' : '○ NOT CONNECTED'}
-                    </span>
+                      Details →
+                    </button>
                   </div>
-                  <p className="text-xs text-ink-500">
-                    Replaces bounce/conversion hypotheses with verified 30-day session dwell times and conversion funnels.
-                  </p>
+
+                  {/* Ahrefs / Semrush / Majestic Card */}
+                  <div className="p-4 rounded-xl border border-line bg-paper-50 dark:bg-ink-900/40 flex flex-col justify-between">
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-between">
+                        <span className="font-serif font-bold text-ink text-sm">Ahrefs / Semrush / Majestic</span>
+                        <span
+                          className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded border ${
+                            status?.ahrefs?.connected || status?.semrush?.connected || status?.majestic?.connected
+                              ? 'bg-good/10 text-good border-good/30'
+                              : 'bg-paper-200 text-ink-500 border-line'
+                          }`}
+                        >
+                          {status?.ahrefs?.connected || status?.semrush?.connected || status?.majestic?.connected
+                            ? '● CONNECTED'
+                            : '○ UNCONNECTED'}
+                        </span>
+                      </div>
+                      <p className="text-xs text-ink-500">
+                        Authoritative Domain Rating, Citation Flow, Trust Flow, and referring IP topology.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab('backlinks')}
+                      className="mt-3 text-xs font-semibold text-pine underline hover:text-ink self-start"
+                    >
+                      Configure →
+                    </button>
+                  </div>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => setActiveTab('ga4')}
-                  className="text-xs font-semibold text-pine underline hover:text-ink"
-                >
-                  Configure →
-                </button>
               </div>
 
-              {/* Backlink Graph Card */}
-              <div className="p-4 rounded-xl border border-line bg-paper-50 dark:bg-ink-900/40 flex items-start justify-between">
-                <div className="space-y-1">
-                  <div className="flex items-center gap-2">
-                    <span className="font-serif font-bold text-ink text-base">DataForSEO / Majestic Backlink Index</span>
-                    <span
-                      className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded border ${
-                        status?.dataforseo_keyword_index.connected
-                          ? 'bg-good/10 text-good border-good/30'
-                          : 'bg-paper-200 text-ink-500 border-line'
-                      }`}
+              {/* Category 3: Local Entity & Brand Reputation */}
+              <div className="space-y-3">
+                <h4 className="text-xs font-mono font-bold tracking-wider text-ink-500 uppercase">
+                  Entity Graph &amp; Brand Reputation
+                </h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {/* Google Business Profile */}
+                  <div className="p-4 rounded-xl border border-line bg-paper-50 dark:bg-ink-900/40 flex flex-col justify-between">
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-between">
+                        <span className="font-serif font-bold text-ink text-sm">Google Business Profile (GBP)</span>
+                        <span
+                          className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded border ${
+                            status?.google_business_profile?.connected
+                              ? 'bg-good/10 text-good border-good/30'
+                              : 'bg-paper-200 text-ink-500 border-line'
+                          }`}
+                        >
+                          {status?.google_business_profile?.connected ? '● CONNECTED' : '○ UNCONNECTED'}
+                        </span>
+                      </div>
+                      <p className="text-xs text-ink-500">
+                        Local map pack rankings, verified business attributes, opening hours, and direct review telemetry.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab('entity')}
+                      className="mt-3 text-xs font-semibold text-pine underline hover:text-ink self-start"
                     >
-                      {status?.dataforseo_keyword_index.connected ? '● LICENSED' : '○ UNCONNECTED'}
-                    </span>
+                      Details →
+                    </button>
                   </div>
-                  <p className="text-xs text-ink-500">
-                    Live referring domain graphs and keyword search volume. (Zero-Fake standard: On-Page Trust is strictly reported without fabricated link counts when unconnected).
-                  </p>
+
+                  {/* Reviews & Citations */}
+                  <div className="p-4 rounded-xl border border-line bg-paper-50 dark:bg-ink-900/40 flex flex-col justify-between">
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-between">
+                        <span className="font-serif font-bold text-ink text-sm">Review Platforms &amp; Citations</span>
+                        <span
+                          className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded border ${
+                            status?.citations_directories?.connected || status?.brand_mentions?.connected
+                              ? 'bg-good/10 text-good border-good/30'
+                              : 'bg-paper-200 text-ink-500 border-line'
+                          }`}
+                        >
+                          {status?.citations_directories?.connected || status?.brand_mentions?.connected
+                            ? '● CONNECTED'
+                            : '○ UNCONNECTED'}
+                        </span>
+                      </div>
+                      <p className="text-xs text-ink-500">
+                        Aggregates Yelp, Trustpilot, G2, directory NAP consistency, and co-citation web mentions.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab('entity')}
+                      className="mt-3 text-xs font-semibold text-pine underline hover:text-ink self-start"
+                    >
+                      Details →
+                    </button>
+                  </div>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => setActiveTab('backlinks')}
-                  className="text-xs font-semibold text-pine underline hover:text-ink"
-                >
-                  Details →
-                </button>
               </div>
             </div>
           )}
@@ -278,21 +392,60 @@ export function AnalyticsIntegrationsModal({
 
           {activeTab === 'backlinks' && (
             <div className="space-y-4">
-              <div className="p-4 rounded-xl bg-paper-100/60 dark:bg-ink-900/60 border border-line space-y-2">
-                <h3 className="font-serif font-bold text-ink text-base">Backlink Graph &amp; Keyword Index License</h3>
+              <div className="p-4 rounded-xl bg-paper-100/60 dark:bg-ink-900/60 border border-line space-y-3">
+                <h3 className="font-serif font-bold text-ink text-base">Backlink Graph &amp; Off-Page Authority Providers</h3>
                 <p className="text-xs text-ink-600 dark:text-ink-400 leading-relaxed">
-                  Unlike legacy SEO tools that fabricate synthetic domain scores, Dristik never claims backlink authority without a live verified link graph provider.
+                  Unlike legacy SEO tools that fabricate synthetic domain scores, Dristik never reports backlink authority without a live verified link graph provider. When unconnected, Dristik labels trust authority as <span className="font-semibold text-amber-600">Not measured — connector unavailable</span> and renormalizes the audit score strictly across measured categories.
                 </p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-2">
+                  <div className="p-3 bg-paper-50 dark:bg-ink-950 rounded border border-line space-y-1">
+                    <div className="font-bold text-xs text-ink">Ahrefs API v3</div>
+                    <div className="text-[11px] text-ink-500">Connect via OAuth or API Key in <span className="font-mono">.env</span>:</div>
+                    <div className="font-mono text-[10px] text-ink-600">AHREFS_API_KEY=your_key</div>
+                    <div className="font-mono text-[10px] text-ink-600">AHREFS_CLIENT_ID=your_id</div>
+                  </div>
+                  <div className="p-3 bg-paper-50 dark:bg-ink-950 rounded border border-line space-y-1">
+                    <div className="font-bold text-xs text-ink">Semrush Authority API</div>
+                    <div className="text-[11px] text-ink-500">Configure OAuth or API token:</div>
+                    <div className="font-mono text-[10px] text-ink-600">SEMRUSH_API_KEY=your_key</div>
+                    <div className="font-mono text-[10px] text-ink-600">SEMRUSH_CLIENT_ID=your_id</div>
+                  </div>
+                  <div className="p-3 bg-paper-50 dark:bg-ink-950 rounded border border-line space-y-1">
+                    <div className="font-bold text-xs text-ink">Majestic SEO</div>
+                    <div className="text-[11px] text-ink-500">Flow metrics &amp; Topical Trust:</div>
+                    <div className="font-mono text-[10px] text-ink-600">MAJESTIC_API_KEY=your_key</div>
+                  </div>
+                  <div className="p-3 bg-paper-50 dark:bg-ink-950 rounded border border-line space-y-1">
+                    <div className="font-bold text-xs text-ink">DataForSEO Link Index</div>
+                    <div className="text-[11px] text-ink-500">Live referring domains &amp; backlink counts:</div>
+                    <div className="font-mono text-[10px] text-ink-600">DATAFORSEO_LOGIN=login</div>
+                    <div className="font-mono text-[10px] text-ink-600">DATAFORSEO_PASSWORD=pass</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'entity' && (
+            <div className="space-y-4">
+              <div className="p-4 rounded-xl bg-paper-100/60 dark:bg-ink-900/60 border border-line space-y-3">
+                <h3 className="font-serif font-bold text-ink text-base">Local Business, Reviews &amp; Directory Citations</h3>
                 <p className="text-xs text-ink-600 dark:text-ink-400 leading-relaxed">
-                  To enable live competitor backlink comparisons (referring domains, citation flow), configure DataForSEO credentials in your <span className="font-mono">.env</span> file:
+                  Real reputation signals feed into local pack visibility and Knowledge Graph entity verification.
                 </p>
-                <div className="p-3 bg-paper-50 dark:bg-ink-950 rounded border border-line font-mono text-xs text-ink-600 space-y-1">
-                  <div>DATAFORSEO_LOGIN=your_api_login</div>
-                  <div>DATAFORSEO_PASSWORD=your_api_password</div>
-                  <div>CRUX_API_KEY=your_chrome_ux_report_key</div>
-                  <div>CLEARBIT_API_KEY=your_clearbit_key</div>
-                  <div>BUILTWITH_API_KEY=your_builtwith_key</div>
-                  <div>CRUNCHBASE_API_KEY=your_crunchbase_user_key</div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-2">
+                  <div className="p-3 bg-paper-50 dark:bg-ink-950 rounded border border-line space-y-1">
+                    <div className="font-bold text-xs text-ink">Google Business Profile (GBP)</div>
+                    <div className="text-[11px] text-ink-500">Configure GBP credentials:</div>
+                    <div className="font-mono text-[10px] text-ink-600">GBP_ACCOUNT_ID=account_id</div>
+                    <div className="font-mono text-[10px] text-ink-600">GOOGLE_APPLICATION_CREDENTIALS=...</div>
+                  </div>
+                  <div className="p-3 bg-paper-50 dark:bg-ink-950 rounded border border-line space-y-1">
+                    <div className="font-bold text-xs text-ink">Review Platforms &amp; Brand Mentions</div>
+                    <div className="text-[11px] text-ink-500">Yelp, Trustpilot, G2 &amp; co-citation trackers:</div>
+                    <div className="font-mono text-[10px] text-ink-600">BRAND_MENTIONS_ENABLED=true</div>
+                    <div className="font-mono text-[10px] text-ink-600">BRAND_MENTIONS_API_KEY=...</div>
+                  </div>
                 </div>
               </div>
             </div>

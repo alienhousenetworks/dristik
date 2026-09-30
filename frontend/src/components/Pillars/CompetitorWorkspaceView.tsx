@@ -24,7 +24,7 @@ export function CompetitorWorkspaceView({
 
   const bakeoff = report.competitor_bakeoff;
   const totalBakeoff = (bakeoff?.target_wins || 0) + (bakeoff?.competitor_wins || 0) + (bakeoff?.ties || 0);
-  const winRate = totalBakeoff > 0 ? Math.round(((bakeoff?.target_wins || 0) / totalBakeoff) * 100) : 68;
+  const winRate = totalBakeoff > 0 ? Math.round(((bakeoff?.target_wins || 0) / totalBakeoff) * 100) : null;
   const compFindings = (report.findings || []).filter((f) => f.category === 'COMPETITIVE');
 
   return (
@@ -33,7 +33,7 @@ export function CompetitorWorkspaceView({
       title="Competitor Intelligence & Benchmarks"
       description="Head-to-head intent bake-offs, side-by-side metric benchmarks, market gap discovery, and 3-way perspective alignment."
       scoreLabel="Win Rate"
-      score={`${winRate}%`}
+      score={winRate != null ? `${winRate}%` : '—'}
       metaLabel="Competitors"
       meta={bakeoff?.competitor_domain || 'Market rivals'}
       tabs={[

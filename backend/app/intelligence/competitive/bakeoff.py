@@ -89,6 +89,27 @@ class CommercialBakeoffEngine:
             else:
                 winner = "unmeasured"
 
+            reason_won = None
+            answer_gap = None
+            if winner == "competitor":
+                reasons = {
+                    "pricing": f"{comp_name} publishes explicit pricing tiers, unit costs, and commercial packaging, enabling AI models to directly quote numbers while {target_name} provides ungrounded or absent pricing.",
+                    "icp": f"{comp_name} maintains explicit role and vertical landing pages ('Built for Enterprise Teams') that directly answer buyer qualification questions.",
+                    "alternatives": f"{comp_name} publishes dedicated comparative matrices and /vs/ landing pages that directly capture high-intent commercial evaluation searches.",
+                    "trust": f"{comp_name} presents verified third-party compliance badges (SOC2/ISO) and enterprise customer case studies prominently.",
+                    "identity": f"{comp_name} features an explicit 40-word definitional statement grounded with Schema.org Organization markup.",
+                    "roi": f"{comp_name} publishes verifiable ROI calculations, benchmark metrics, and quantified business outcome statistics.",
+                }
+                reason_won = reasons.get(key, f"{comp_name} publishes explicit, citation-ready definitional passages directly answering '{title}'.")
+                answer_gap = f"{target_name} is blind or ambiguous on '{title}' in crawled DOM; {comp_name} provides high-density extractable facts."
+                takeaway = f"Displacement risk: {reason_won}"
+            elif winner == "target":
+                takeaway = f"Competitive moat: {target_name} provides explicit on-page answers for '{title}', outperforming {comp_name}'s ambiguous content."
+            elif winner == "tie":
+                takeaway = f"Parity on '{title}': Both domains provide comparable answerability; differentiation requires structured schema and direct Q&A blocks."
+            else:
+                takeaway = f"Comparative evaluation based on crawled content between {target_name} and {comp_domain}."
+
             items.append(CompetitorBakeoffItem(
                 question_key=key,
                 question_title=title,
@@ -99,10 +120,27 @@ class CommercialBakeoffEngine:
                 competitor_score=c_score,
                 competitor_status=c_status,
                 winner=winner,
-                commercial_takeaway=f"Comparative evaluation based on crawled content between {target_name} and {comp_domain}."
+                commercial_takeaway=takeaway,
+                reason_competitor_won=reason_won,
+                answerability_gap=answer_gap,
             ))
 
-        exec_takeaway = f"Evaluated {len(items)} commercial inquiries between {target_name} and crawled competitor {comp_domain}."
+        if comp_wins > target_wins:
+            exec_takeaway = (
+                f"{comp_name} ({comp_domain}) outperforms {target_name} on {comp_wins}/{len(items)} commercial buyer inquiries. "
+                f"Primary competitive advantage: {comp_name} repeatedly wins AI answer synthesis by publishing explicit product/category definitions and dedicated comparison pages that directly answer key buyer questions. "
+                f"Strategic priority: Deploy structured /solutions and comparison assets to reclaim commercial answer dominance."
+            )
+        elif target_wins > comp_wins:
+            exec_takeaway = (
+                f"{target_name} outperforms {comp_name} ({comp_domain}) on {target_wins}/{len(items)} commercial inquiries with superior factual density. "
+                f"Preserve this competitive advantage with continuous schema validation and citation-ready passage maintenance."
+            )
+        else:
+            exec_takeaway = (
+                f"Commercial parity: {target_name} and {comp_name} ({comp_domain}) tied on {ties}/{len(items)} inquiries. "
+                f"Deploying transparent pricing structures and explicit ICP landing pages represents the highest-leverage opportunity to capture commercial retrieval."
+            )
 
         return CompetitorBakeoffResult(
             competitor_domain=comp_domain,

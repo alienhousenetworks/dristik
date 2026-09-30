@@ -150,7 +150,7 @@ def analyze_performance_metrics(
     lab_perf = LabPerformanceMetrics(
         ttfb_ms=effective_ttfb,
         fcp_ms=fcp_ms,
-        lcp_indicator_ms=round(effective_ttfb + (fcp_ms or 300) + 400, 1) if effective_ttfb > 0 else None,
+        lcp_indicator_ms=round(effective_ttfb + fcp_ms + 400, 1) if (effective_ttfb > 0 and fcp_ms is not None) else None,
         cls_risk_score=cls_risk_score,
         tbt_proxy_ms=round(js_payload_kb * 0.5, 1) if js_payload_kb > 200 else 0.0,
         dns_ms=dns_ms,

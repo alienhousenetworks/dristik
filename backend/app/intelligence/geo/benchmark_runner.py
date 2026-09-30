@@ -689,6 +689,16 @@ def build_visibility_scorecard(
         source_consistency = _pct(stable, seen)
 
     engines_live = sum(1 for agg in report.engine_aggregates.values() if agg.queries_succeeded > 0)
+    
+    # Compile deep AI Retrieval Observatory metrics
+    from app.intelligence.geo.observatory import AiRetrievalObservatory
+    obs_summary = AiRetrievalObservatory.compile_observatory(
+        evaluations=report.evaluations,
+        brand_name=report.brand_name or "",
+        target_domain=report.target_domain,
+        competitors=competitors,
+    )
+
     return AiVisibilityScorecard(
         status="MEASURED",
         engines_measured=engines_live,
@@ -705,9 +715,11 @@ def build_visibility_scorecard(
         icp_recognition_pct=_pct(icp_hits, icp_total),
         pricing_recognition_pct=_pct(pricing_hits, pricing_total),
         competitor_visibility_pct=_pct(competitor_hits, len(successes)) if competitor_terms else None,
-        hallucination_rate_pct=None,
+        hallucination_rate_pct=obs_summary.hallucination_rate_pct if obs_summary.total_evaluations > 0 else None,
         source_consistency_pct=source_consistency,
         matrix_grounding=matrix_grounding,
+        observatory_records=[r.model_dump() for r in obs_summary.records],
+        observatory_summary=obs_summary.model_dump(),
     )
 
 

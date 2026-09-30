@@ -28,6 +28,7 @@ import re
 from typing import List, Optional, Tuple, Dict, Any
 
 from app.domain.enums import (
+    Category,
     ContradictionStatus,
     EvidenceClass,
     EvidenceLevel,
@@ -43,7 +44,7 @@ from app.domain.models import ContradictionReport, Finding, FindingEvidence
 _NEGATION_PAIRS: List[Tuple[str, str]] = [
     # Title / H1
     (r"missing\s+title|no\s+title|title\s+absent", r"title\s+present|title\s+too\s+(long|short)|title\s+truncated"),
-    (r"missing\s+h1|no\s+h1|h1\s+absent", r"h1\s+present|multiple\s+h1|h1\s+too\s+long"),
+    (r"missing\s+<?h1>?|no\s+<?h1>?|<?h1>?\s+absent|lacks\s+(?:a\s+)?(?:top-level\s+)?<?h1>?", r"<?h1>?\s+present|multiple\s+<?h1>?|<?h1>?\s+too\s+long"),
     # Meta description
     (r"missing\s+meta\s+desc|no\s+meta\s+desc", r"meta\s+desc\s+too\s+(long|short)|meta\s+desc\s+truncated"),
     # Schema
@@ -104,14 +105,24 @@ def _evidence_rank(finding: Finding) -> int:
 def _are_contradictory(a: Finding, b: Finding) -> Optional[Tuple[str, str]]:
     """
     Returns (pattern_a, pattern_b) if the pair is contradictory, else None.
-    Contradiction only applies within the same category.
+    Contradictions apply within the same category, or across structural categories
+    (e.g., SEO, Technical, Schema, Accessibility/UX) for foundational site invariants.
     """
-    if a.category != b.category:
+    structural_cats = {
+        Category.ON_PAGE_SEO, Category.TECHNICAL_SEO, Category.SCHEMA,
+        Category.UX_CONVERSION, Category.CONTENT,
+    }
+    is_compatible_cat = (a.category == b.category) or (a.category in structural_cats and b.category in structural_cats)
+    if not is_compatible_cat:
         return None
+
+    text_a = f"{a.title} {a.description or ''}"
+    text_b = f"{b.title} {b.description or ''}"
+
     for pat_a, pat_b in _NEGATION_PAIRS:
-        if _title_matches(a.title, pat_a) and _title_matches(b.title, pat_b):
+        if _title_matches(text_a, pat_a) and _title_matches(text_b, pat_b):
             return (pat_a, pat_b)
-        if _title_matches(a.title, pat_b) and _title_matches(b.title, pat_a):
+        if _title_matches(text_a, pat_b) and _title_matches(text_b, pat_a):
             return (pat_b, pat_a)
     return None
 
@@ -251,6 +262,93 @@ class ContradictionEngine:
                 if "human reviewer" in r.reason
             ],
         }
+
+    def reconcile_with_manifest_and_rollups(
+        self,
+        findings: List[Finding],
+        manifest: Optional[Any] = None,
+        heading_hierarchy: Optional[Any] = None,
+    ) -> Tuple[List[Finding], List[str]]:
+        """
+        Reconciles findings against deterministic crawl ground truth (HeadingHierarchyRollup, CrawlManifest):
+        1. If heading_hierarchy shows missing_h1 == 0 (no pages missing H1),
+           any finding claiming "Document lacks a top-level <h1>" or "missing an <h1>"
+           is reconciled (clause stripped if multiple H1s are present, or suppressed).
+        2. If manifest.sitemap_found == True, findings claiming "no sitemap found" are suppressed.
+        3. If manifest.robots_txt_found == True, findings claiming "robots.txt missing" are suppressed.
+        """
+        reconciled: List[Finding] = []
+        actions_taken: List[str] = []
+
+        missing_h1_total = 0
+        if heading_hierarchy and hasattr(heading_hierarchy, "missing_h1"):
+            missing_h1_total = len(heading_hierarchy.missing_h1 or [])
+        elif manifest and hasattr(manifest, "crawl_health"):
+            missing_h1_total = int(manifest.crawl_health.get("missing_h1_count", 0))
+
+        sitemap_found = bool(manifest and getattr(manifest, "sitemap_found", False))
+        robots_found = bool(manifest and getattr(manifest, "robots_txt_found", False))
+
+        for f in findings:
+            desc = (f.description or "").lower()
+            title = f.title.lower()
+            full_text = f"{title} {desc}"
+
+            # 1. Heading check: if sitewide missing H1 is 0, but finding claims document lacks an H1
+            if missing_h1_total == 0 and any(k in full_text for k in ["lacks a top-level <h1>", "lacks a top-level h1", "missing an <h1>", "no <h1> tag"]):
+                if "multiple" in full_text:
+                    clean_desc = re.sub(r"(?:Document|Page\s*\([^)]*\))\s*lacks\s*a\s*top-level\s*<h1\b[^>]*>\s*(?:heading)?\.?;?\s*", "", f.description or "", flags=re.I).strip()
+                    clean_desc = re.sub(r"page\s*is\s*completely\s*missing\s*an\s*<h1>\s*tag\.?;?\s*", "", clean_desc, flags=re.I).strip()
+                    if not clean_desc:
+                        clean_desc = "Page contains multiple competing <h1> tags diluting primary topical authority."
+                    clean_title = f.title
+                    if any(k in clean_title.lower() for k in ["lacks", "missing"]):
+                        clean_title = "Multiple <h1> tags compete for primary topical authority"
+                    f_updated = f.model_copy(update={"title": clean_title, "description": clean_desc})
+                    reconciled.append(f_updated)
+                    actions_taken.append(f"Reconciled heading finding {f.finding_id}: updated to multiple H1s because crawl proved 0 pages missing H1.")
+                    continue
+                else:
+                    f_held = f.model_copy(update={
+                        "held_from_executive": True,
+                        "verification_notes": (
+                            (f.verification_notes or "") +
+                            " [CONTRADICTION SUPPRESSED: HeadingAnalyzer verified 0 pages missing an H1.]"
+                        )
+                    })
+                    reconciled.append(f_held)
+                    actions_taken.append(f"Suppressed finding {f.finding_id} ('{f.title}') due to contradiction with verified 0 missing H1 count.")
+                    continue
+
+            # 2. Sitemap check
+            if sitemap_found and any(k in full_text for k in ["no sitemap found", "sitemap missing", "sitemap absent"]):
+                f_held = f.model_copy(update={
+                    "held_from_executive": True,
+                    "verification_notes": (
+                        (f.verification_notes or "") +
+                        " [CONTRADICTION SUPPRESSED: Crawl manifest verified valid sitemap.xml present.]"
+                    )
+                })
+                reconciled.append(f_held)
+                actions_taken.append(f"Suppressed finding {f.finding_id} ('{f.title}') because sitemap.xml was verified present.")
+                continue
+
+            # 3. Robots.txt check
+            if robots_found and any(k in full_text for k in ["robots.txt missing", "no robots.txt"]):
+                f_held = f.model_copy(update={
+                    "held_from_executive": True,
+                    "verification_notes": (
+                        (f.verification_notes or "") +
+                        " [CONTRADICTION SUPPRESSED: Crawl manifest verified valid robots.txt present.]"
+                    )
+                })
+                reconciled.append(f_held)
+                actions_taken.append(f"Suppressed finding {f.finding_id} ('{f.title}') because robots.txt was verified present.")
+                continue
+
+            reconciled.append(f)
+
+        return reconciled, actions_taken
 
 
 # Singleton

@@ -82,12 +82,12 @@ export function synthesizePillars(report: ExecutiveReport | undefined | null): W
     health: getHealth(seoScore),
     headline: seoScore == null ? 'SEO was not scored' : (seoScore >= 80 ? 'Solid Technical & On-Page Foundation' : 'Crawl, Structure & Technical Debt Detected'),
     summary: catScores['TECHNICAL_SEO']?.summary ||
-      `Evaluates Googlebot crawlability, HTTP status codes, robots.txt, redirect paths, XML sitemaps, heading hierarchy, and meta architecture across ${report.crawl_manifest?.pages?.length || 1} pages.`,
+      `Evaluates Googlebot crawlability, HTTP status codes, robots.txt, redirect paths, XML sitemaps, heading hierarchy, and meta architecture across ${report.crawl_manifest?.pages?.length ?? 0} pages.`,
     highlights: [
       techScore == null ? 'Crawl index: not scored' : `Technical Crawl: ${Math.round(techScore)}/100`,
       onPageScore == null ? 'On-page: not scored' : `On-Page & Structure: ${Math.round(onPageScore)}/100`,
       `Sitemap & Robots: ${report.crawl_manifest?.sitemap_found ? 'Detected' : 'Missing'}`,
-      `Pages Audited: ${report.crawl_manifest?.pages?.length || 1} crawled`,
+      `Pages Audited: ${report.crawl_manifest?.pages?.length ?? 0} crawled`,
     ],
     findingsCount: seoFindings.length,
   };
@@ -223,7 +223,7 @@ export function synthesizePillars(report: ExecutiveReport | undefined | null): W
   const totalBakeoff = (bakeoff?.target_wins || 0) + (bakeoff?.competitor_wins || 0) + (bakeoff?.ties || 0);
   const competitorScore = totalBakeoff > 0
     ? Math.round(((bakeoff?.target_wins || 0) / totalBakeoff) * 100)
-    : 70;
+    : null;
 
   const competitorPillar: PillarScoreData = {
     id: 'competitors',
@@ -233,10 +233,10 @@ export function synthesizePillars(report: ExecutiveReport | undefined | null): W
     score: competitorScore,
     grade: getGrade(competitorScore),
     health: getHealth(competitorScore),
-    headline: competitorScore >= 60 ? 'Competitive Parity in High-Intent Buyer Queries' : 'Competitor Dominance in Commercial Search Queries',
+    headline: competitorScore == null ? 'Competitor intelligence unmeasured' : (competitorScore >= 60 ? 'Competitive Parity in High-Intent Buyer Queries' : 'Competitor Dominance in Commercial Search Queries'),
     summary: 'Head-to-head intent bake-off benchmarking your offerings, pricing transparency, and authority against key market rivals.',
     highlights: [
-      `Commercial Query Win Rate: ${competitorScore}%`,
+      competitorScore != null ? `Commercial Query Win Rate: ${competitorScore}%` : 'Commercial Query Win Rate: Unmeasured',
       `Rival Domain: ${bakeoff?.competitor_domain || 'Market peers'}`,
       `Market Gaps Logged: ${compFindings.length} competitive findings`,
     ],
@@ -245,7 +245,9 @@ export function synthesizePillars(report: ExecutiveReport | undefined | null): W
 
   // Experience / SXO bridging calculation for legacy compatibility
   const ttfb = report.crawl_manifest?.pages?.[0]?.ttfb_ms;
-  const sxoScore = Math.round(((seoScore || 70) + (croScore || 70)) / 2);
+  const sxoScore = (seoScore != null && croScore != null)
+    ? Math.round((seoScore + croScore) / 2)
+    : (seoScore ?? croScore ?? null);
 
   const experiencePillar: PillarScoreData = {
     id: 'website_experience',

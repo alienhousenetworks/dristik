@@ -13,7 +13,7 @@ export interface ComparativeEvidenceRow {
   dimension: string;
   pillar: BenchmarkPillarCategory;
   targetValue: string;
-  targetStatus: 'GOOD' | 'WARN' | 'BAD' | 'NEUTRAL';
+  targetStatus: 'GOOD' | 'WARN' | 'BAD' | 'NEUTRAL' | 'UNMEASURED';
   competitorValues: Record<string, { value: string; status: 'GOOD' | 'WARN' | 'BAD' | 'UNMEASURED' }>;
   whyItMatters: string;
 }
@@ -47,9 +47,10 @@ export function ComparativeEvidenceMatrix({
   const hasViewport = homePage?.viewport ? 'Configured (width=device-width)' : 'Missing mobile viewport tag';
   const viewportStatus = homePage?.viewport ? 'GOOD' : 'BAD';
 
-  const ttfbNum = homePage?.ttfb_ms || 200;
-  const ttfbVal = homePage?.ttfb_ms ? `${Math.round(homePage.ttfb_ms)}ms` : 'Measured on crawl';
-  const ttfbStatus = ttfbNum < 600 ? 'GOOD' : ttfbNum < 1200 ? 'WARN' : 'BAD';
+  const ttfbVal = homePage?.ttfb_ms != null ? `${Math.round(homePage.ttfb_ms)}ms` : 'Unmeasured';
+  const ttfbStatus: 'GOOD' | 'WARN' | 'BAD' | 'UNMEASURED' = homePage?.ttfb_ms != null
+    ? (homePage.ttfb_ms < 600 ? 'GOOD' : homePage.ttfb_ms < 1200 ? 'WARN' : 'BAD')
+    : 'UNMEASURED';
 
   const hasCanonical = homePage?.canonical_url
     ? (homePage.canonical_url.includes(targetClean) ? 'Valid self-referencing canonical' : 'Points to non-canonical target')
@@ -99,10 +100,12 @@ export function ComparativeEvidenceMatrix({
     {
       dimension: 'Content Depth',
       pillar: 'CONTENT_ARCH',
-      targetValue: homePage?.word_count
+      targetValue: homePage?.word_count != null && homePage.word_count > 0
         ? `${homePage.word_count.toLocaleString()} words (Analyzed homepage copy)`
-        : '1,200+ words across core sections',
-      targetStatus: (homePage?.word_count || 1200) >= 400 ? 'GOOD' : 'WARN',
+        : 'No content extracted',
+      targetStatus: homePage?.word_count != null && homePage.word_count > 0
+        ? (homePage.word_count >= 400 ? 'GOOD' : 'WARN')
+        : 'UNMEASURED',
       competitorValues: {
         [competitors[0] || 'comp1.com']: competitorData[competitors[0]]?.word_count
           ? { value: `${competitorData[competitors[0]].word_count} words`, status: 'GOOD' }
@@ -120,8 +123,8 @@ export function ComparativeEvidenceMatrix({
       pillar: 'CONTENT_ARCH',
       targetValue: report?.heading_hierarchy
         ? `H1 Health: ${report.heading_hierarchy.h1_health_score}/100 (${report.heading_hierarchy.total_heading_issues} issues)`
-        : (homePage?.h1?.length ? `${homePage.h1.length} H1 tag, ${homePage.h2?.length || 0} H2 sections` : 'Single H1 verified; nested H2/H3'),
-      targetStatus: 'GOOD',
+        : (homePage?.h1?.length ? `${homePage.h1.length} H1 tag, ${homePage.h2?.length || 0} H2 sections` : 'No headings detected'),
+      targetStatus: (report?.heading_hierarchy || homePage?.h1?.length) ? 'GOOD' : 'BAD',
       competitorValues: {
         [competitors[0] || 'comp1.com']: competitorData[competitors[0]]?.architecture
           ? { value: competitorData[competitors[0]].architecture, status: 'GOOD' }
@@ -178,7 +181,9 @@ export function ComparativeEvidenceMatrix({
       targetValue: (homePage?.body_text || '').includes('$') || (homePage?.body_text || '').toLowerCase().includes('pricing') || report?.commercial_evaluations?.some(c => c.buyer_query.toLowerCase().includes('pricing'))
         ? 'Public pricing tiers visible'
         : 'Gated / Contact Sales only',
-      targetStatus: 'GOOD',
+      targetStatus: (homePage?.body_text || '').includes('$') || (homePage?.body_text || '').toLowerCase().includes('pricing') || report?.commercial_evaluations?.some(c => c.buyer_query.toLowerCase().includes('pricing'))
+        ? 'GOOD'
+        : 'WARN',
       competitorValues: {
         [competitors[0] || 'comp1.com']: competitorData[competitors[0]]?.pricing
           ? { value: competitorData[competitors[0]].pricing, status: 'GOOD' }
@@ -196,8 +201,8 @@ export function ComparativeEvidenceMatrix({
       pillar: 'COMMERCIAL_CRO',
       targetValue: homePage?.ctas && homePage.ctas.length > 0
         ? `${homePage.ctas.length} conversion actions ("${homePage.ctas[0]}")`
-        : 'Primary conversion CTA deployed',
-      targetStatus: 'GOOD',
+        : 'No conversion CTA detected',
+      targetStatus: homePage?.ctas && homePage.ctas.length > 0 ? 'GOOD' : 'BAD',
       competitorValues: {
         [competitors[0] || 'comp1.com']: competitorData[competitors[0]]?.cta
           ? { value: competitorData[competitors[0]].cta, status: 'GOOD' }
@@ -215,8 +220,8 @@ export function ComparativeEvidenceMatrix({
       pillar: 'COMMERCIAL_CRO',
       targetValue: report?.commercial_evaluations?.length
         ? `${report.commercial_evaluations.length} buyer intents evaluated`
-        : 'Comparison & feature matrices deployed',
-      targetStatus: 'GOOD',
+        : 'Unmeasured',
+      targetStatus: report?.commercial_evaluations?.length ? 'GOOD' : 'UNMEASURED',
       competitorValues: {
         [competitors[0] || 'comp1.com']: competitorData[competitors[0]]?.commercial_intent
           ? { value: competitorData[competitors[0]].commercial_intent, status: 'GOOD' }
@@ -234,8 +239,8 @@ export function ComparativeEvidenceMatrix({
       pillar: 'AUTHORITY_AI',
       targetValue: report?.anchor_text_audit
         ? `${report.anchor_text_audit.total_links_analyzed || 0} links analyzed (${report.anchor_text_audit.flagged_anchor_instances?.length || 0} flagged)`
-        : 'Verified referring domain footprint',
-      targetStatus: 'GOOD',
+        : 'External backlink provider unconnected',
+      targetStatus: report?.anchor_text_audit ? 'GOOD' : 'UNMEASURED',
       competitorValues: {
         [competitors[0] || 'comp1.com']: competitorData[competitors[0]]?.backlinks
           ? { value: competitorData[competitors[0]].backlinks, status: 'GOOD' }
@@ -272,8 +277,10 @@ export function ComparativeEvidenceMatrix({
       pillar: 'AUTHORITY_AI',
       targetValue: report?.ai_visibility_scorecard?.citation_rate_pct != null
         ? `${report.ai_visibility_scorecard.citation_rate_pct}% multi-engine citation rate`
-        : 'Empirical AI citations measured',
-      targetStatus: (report?.ai_visibility_scorecard?.citation_rate_pct ?? 70) >= 50 ? 'GOOD' : 'WARN',
+        : 'Unmeasured',
+      targetStatus: report?.ai_visibility_scorecard?.citation_rate_pct != null
+        ? (report.ai_visibility_scorecard.citation_rate_pct >= 50 ? 'GOOD' : 'WARN')
+        : 'UNMEASURED',
       competitorValues: {
         [competitors[0] || 'comp1.com']: competitorData[competitors[0]]?.ai_citations
           ? { value: competitorData[competitors[0]].ai_citations, status: 'GOOD' }
@@ -291,8 +298,8 @@ export function ComparativeEvidenceMatrix({
       pillar: 'AUTHORITY_AI',
       targetValue: report?.ai_visibility_scorecard?.citation_accuracy_pct != null
         ? `${report.ai_visibility_scorecard.citation_accuracy_pct}% factual correctness`
-        : '100% verified factual claims (Zero-Fake)',
-      targetStatus: 'GOOD',
+        : 'Unmeasured',
+      targetStatus: report?.ai_visibility_scorecard?.citation_accuracy_pct != null ? 'GOOD' : 'UNMEASURED',
       competitorValues: {
         [competitors[0] || 'comp1.com']: competitorData[competitors[0]]?.ai_accuracy
           ? { value: competitorData[competitors[0]].ai_accuracy, status: 'GOOD' }
@@ -310,8 +317,8 @@ export function ComparativeEvidenceMatrix({
       pillar: 'AUTHORITY_AI',
       targetValue: report?.geo_readiness?.extractability_score != null
         ? `${report.geo_readiness.extractability_score}/100 extractability & topical depth`
-        : 'High topical coverage indexed',
-      targetStatus: 'GOOD',
+        : 'Unmeasured',
+      targetStatus: report?.geo_readiness?.extractability_score != null ? 'GOOD' : 'UNMEASURED',
       competitorValues: {
         [competitors[0] || 'comp1.com']: competitorData[competitors[0]]?.topical_coverage
           ? { value: competitorData[competitors[0]].topical_coverage, status: 'GOOD' }
@@ -327,8 +334,8 @@ export function ComparativeEvidenceMatrix({
     {
       dimension: 'Performance',
       pillar: 'PERFORMANCE',
-      targetValue: `${ttfbVal} TTFB (${hasViewport})`,
-      targetStatus: ttfbStatus === 'GOOD' && viewportStatus === 'GOOD' ? 'GOOD' : 'WARN',
+      targetValue: ttfbVal !== 'Unmeasured' ? `${ttfbVal} TTFB (${hasViewport})` : `TTFB Unmeasured (${hasViewport})`,
+      targetStatus: ttfbStatus === 'UNMEASURED' ? 'UNMEASURED' : (ttfbStatus === 'GOOD' && viewportStatus === 'GOOD' ? 'GOOD' : 'WARN'),
       competitorValues: {
         [competitors[0] || 'comp1.com']: competitorData[competitors[0]]?.ttfb
           ? { value: `${competitorData[competitors[0]].ttfb}ms TTFB`, status: 'GOOD' }
@@ -489,7 +496,7 @@ export function ComparativeEvidenceMatrix({
                 <td className="py-3 px-3 bg-blue-50/30 border-l border-r border-blue-200">
                   <div className="flex items-start gap-1.5">
                     <span className="font-bold text-xs mt-0.5">
-                      {row.targetStatus === 'GOOD' ? '✓' : row.targetStatus === 'WARN' ? '⚠' : '✕'}
+                      {row.targetStatus === 'GOOD' ? '✓' : row.targetStatus === 'WARN' ? '⚠' : row.targetStatus === 'UNMEASURED' ? '—' : '✕'}
                     </span>
                     <span
                       className={`text-xs font-semibold ${
@@ -497,6 +504,8 @@ export function ComparativeEvidenceMatrix({
                           ? 'text-emerald-900'
                           : row.targetStatus === 'WARN'
                           ? 'text-amber-900'
+                          : row.targetStatus === 'UNMEASURED'
+                          ? 'text-slate-600'
                           : 'text-red-900'
                       }`}
                     >

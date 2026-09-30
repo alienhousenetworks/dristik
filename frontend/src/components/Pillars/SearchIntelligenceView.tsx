@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { ExecutiveReport, Finding } from '../../types';
 import { Pages } from '../Pages';
 import { SearchConsoleAttributionView } from '../SearchConsoleAttributionView';
+import { IndexationIntelligenceView } from '../IndexationIntelligenceView';
 import { PillarShell } from '../ui';
 
 interface SearchIntelligenceViewProps {
@@ -11,7 +12,7 @@ interface SearchIntelligenceViewProps {
   onOpenConnectors?: (tabId?: string) => void;
 }
 
-type SearchSubTab = 'overview' | 'technical' | 'onpage' | 'content' | 'links' | 'gsc' | 'pages';
+type SearchSubTab = 'overview' | 'indexation' | 'technical' | 'onpage' | 'content' | 'links' | 'gsc' | 'pages';
 
 export function SearchIntelligenceView({
   report,
@@ -42,6 +43,7 @@ export function SearchIntelligenceView({
       meta={`${findings.length}`}
       tabs={[
         { id: 'overview', label: 'Overview' },
+        { id: 'indexation', label: 'Indexation' },
         { id: 'technical', label: 'Technical' },
         { id: 'onpage', label: 'On-page' },
         { id: 'content', label: 'Content' },
@@ -142,6 +144,15 @@ export function SearchIntelligenceView({
         </div>
       )}
 
+      {/* SUB-VIEW: INDEXATION INTELLIGENCE */}
+      {activeSubTab === 'indexation' && (
+        <IndexationIntelligenceView
+          manifest={crawl}
+          pages={pages}
+          domain={report.domain}
+        />
+      )}
+
       {/* SUB-VIEW 2: TECHNICAL SEO */}
       {activeSubTab === 'technical' && (
         <div className="sheet border border-line rounded-lg p-6 space-y-6">
@@ -217,27 +228,125 @@ export function SearchIntelligenceView({
         </div>
       )}
 
-      {/* SUB-VIEW 4: CONTENT DEPTH & EEAT */}
+      {/* SUB-VIEW 4: CONTENT DEPTH, INFORMATION GAIN & EEAT */}
       {activeSubTab === 'content' && (
         <div className="sheet border border-line rounded-lg p-6 space-y-6">
-          <h3 className="font-serif text-2xl text-ink font-bold">Content Depth, Readability & E-E-A-T Signals</h3>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div className="border border-line p-4 rounded-lg bg-paper-50 space-y-1">
-              <span className="label text-[10px] block">Word Count</span>
-              <span className="font-serif text-3xl font-bold text-ink">{homePage?.word_count || 0} words</span>
-              <span className="text-xs text-ink-500 block">Across main content tags</span>
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="font-serif text-2xl text-ink font-bold">Topical Authority, Information Gain & Non-Commodity Value</h3>
+              <p className="text-xs text-ink-500 mt-1">
+                Aligned with Google AI-search guidance: rewarding unique first-party data, expert signals, and empirical proof over commodity word counts.
+              </p>
             </div>
-            <div className="border border-line p-4 rounded-lg bg-paper-50 space-y-1">
-              <span className="label text-[10px] block">Readability Score</span>
-              <span className="font-serif text-3xl font-bold text-ink">{homePage?.readability_score ?? '—'}{homePage?.readability_score != null ? ' / 100' : ''}</span>
-              <span className="text-xs text-ink-500 block">Flesch-Kincaid Reading Ease</span>
-            </div>
-            <div className="border border-line p-4 rounded-lg bg-paper-50 space-y-1">
-              <span className="label text-[10px] block">Image Alt Attributes</span>
-              <span className="font-serif text-3xl font-bold text-ink">
-                {homePage?.total_images ? `${(homePage.total_images - (homePage.images_without_alt || 0))}/${homePage.total_images}` : 'N/A'}
+            {report.topical_authority && (
+              <span className={`text-xs font-mono font-bold px-2.5 py-1 rounded ${
+                report.topical_authority.status === 'PASS' ? 'bg-good/10 text-good' :
+                report.topical_authority.status === 'NEEDS_IMPROVEMENT' ? 'bg-amber-500/10 text-amber-700' :
+                'bg-red-500/10 text-red-700'
+              }`}>
+                {report.topical_authority.status.replace('_', ' ')}
               </span>
-              <span className="text-xs text-ink-500 block">{homePage?.images_without_alt || 0} images missing alt text</span>
+            )}
+          </div>
+
+          {/* Vitals Grid */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="border border-line p-4 rounded-lg bg-paper-50 space-y-1">
+              <span className="label text-[10px] block text-ink-500 uppercase font-mono font-semibold">Information Gain</span>
+              <span className="font-serif text-3xl font-bold text-ink">
+                {report.topical_authority ? `${report.topical_authority.avg_information_gain}/100` : '50/100'}
+              </span>
+              <span className="text-xs text-ink-500 block">Unique data vs commodity copy</span>
+            </div>
+
+            <div className="border border-line p-4 rounded-lg bg-paper-50 space-y-1">
+              <span className="label text-[10px] block text-ink-500 uppercase font-mono font-semibold">Original Data Points</span>
+              <span className="font-serif text-3xl font-bold text-ink">
+                {report.topical_authority?.total_original_data_points ?? 0}
+              </span>
+              <span className="text-xs text-ink-500 block">Metrics, percentages, currencies</span>
+            </div>
+
+            <div className="border border-line p-4 rounded-lg bg-paper-50 space-y-1">
+              <span className="label text-[10px] block text-ink-500 uppercase font-mono font-semibold">Unbacked Claims</span>
+              <span className={`font-serif text-3xl font-bold ${(report.topical_authority?.unbacked_claims_total ?? 0) > 0 ? 'text-amber-600' : 'text-good'}`}>
+                {report.topical_authority?.unbacked_claims_total ?? 0}
+              </span>
+              <span className="text-xs text-ink-500 block">Superlatives without proof</span>
+            </div>
+
+            <div className="border border-line p-4 rounded-lg bg-paper-50 space-y-1">
+              <span className="label text-[10px] block text-ink-500 uppercase font-mono font-semibold">Readability & Length</span>
+              <span className="font-serif text-3xl font-bold text-ink">
+                {homePage?.word_count || 0} <span className="text-sm font-sans font-normal text-ink-500">words</span>
+              </span>
+              <span className="text-xs text-ink-500 block">
+                Flesch: {homePage?.readability_score ?? '—'} / 100
+              </span>
+            </div>
+          </div>
+
+          {/* Diagnostic Details */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 text-xs">
+            {/* Left: First-party Evidence & Expert Signals */}
+            <div className="border border-line p-4 rounded-lg bg-paper-50 space-y-3">
+              <span className="label text-[10px] block uppercase font-mono font-semibold text-ink-700">
+                First-Party Evidence & E-E-A-T Signals
+              </span>
+              <div className="space-y-2">
+                <div className="flex items-center justify-between pb-1.5 border-b border-line/60">
+                  <span className="text-ink-600">Pages with Expert / Author Bylines:</span>
+                  <span className="font-mono font-bold text-ink">
+                    {report.topical_authority?.pages_with_expert_signals ?? 0} of {pages.length}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between pb-1.5 border-b border-line/60">
+                  <span className="text-ink-600">First-Party Evidence Density:</span>
+                  <span className="font-mono font-bold text-ink">
+                    {report.topical_authority?.first_party_evidence_density ?? 0} points/page
+                  </span>
+                </div>
+                <div className="flex items-center justify-between pb-1.5 border-b border-line/60">
+                  <span className="text-ink-600">Topical Concept Breadth:</span>
+                  <span className="font-mono font-bold text-ink">
+                    {report.topical_authority?.topical_coverage_score ?? 0} / 100
+                  </span>
+                </div>
+                <div className="pt-2">
+                  <span className="label text-[10px] block text-ink-500 mb-1">Search Intent Distribution</span>
+                  <div className="flex flex-wrap gap-2">
+                    {Object.entries(report.topical_authority?.search_intent_distribution || {}).map(([intent, cnt]) => (
+                      <span key={intent} className="px-2 py-0.5 rounded font-mono font-semibold bg-paper-100 border border-line text-ink">
+                        {intent}: {cnt}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Right: Synthesis & Cannibalization Alerts */}
+            <div className="border border-line p-4 rounded-lg bg-paper-50 space-y-3">
+              <span className="label text-[10px] block uppercase font-mono font-semibold text-ink-700">
+                Topical Authority Synthesis
+              </span>
+              <p className="text-ink-700 leading-relaxed">
+                {report.topical_authority?.summary || 'Topical authority evaluation complete.'}
+              </p>
+
+              {report.topical_authority?.cannibalization_clusters && report.topical_authority.cannibalization_clusters.length > 0 && (
+                <div className="p-3 rounded border border-red-200 bg-red-50 dark:bg-red-950/20 space-y-1.5">
+                  <span className="text-[10px] font-bold text-red-700 uppercase block">
+                    Content Cannibalization Warning ({report.topical_authority.cannibalization_clusters.length} clusters)
+                  </span>
+                  {report.topical_authority.cannibalization_clusters.map((c, i) => (
+                    <div key={i} className="text-ink-700 text-[11px] space-y-0.5">
+                      <span className="font-semibold text-red-900 dark:text-red-200 block">Topic: {c.primary_topic} ({Math.round(c.similarity_score * 100)}% text similarity)</span>
+                      <span className="font-mono text-ink-500 truncate block">{c.urls.join(' ↔ ')}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         </div>

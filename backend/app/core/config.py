@@ -2,6 +2,7 @@
 Dristik AI Configuration
 Loads settings from environment variables with validation.
 """
+import os
 from pathlib import Path
 from typing import Any, Optional, List, Dict
 from dotenv import load_dotenv

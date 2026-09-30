@@ -63,6 +63,8 @@ class OutcomeRecord(BaseModel):
     external_metric_delta: Dict[str, Any] = Field(default_factory=dict)
     confidence_this_delta_is_attributable_to_the_fix: str = "LOW"
     confounds: List[str] = Field(default_factory=list)
+    causal_bottleneck_id: Optional[str] = None
+    expected_mechanism: Optional[str] = None
     observed_outcome: str = "unresolved_no_change"
     attribution_disclaimer: str = (
         "A metric delta coincident with a fix is correlation, not proof of causation."

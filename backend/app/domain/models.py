@@ -516,6 +516,8 @@ class CompetitorBakeoffItem(BaseModel):
     competitor_status: str # "Answerable" | "Ambiguous" | "Blind"
     winner: str # "target" | "competitor" | "tie" | "unmeasured"
     commercial_takeaway: str
+    reason_competitor_won: Optional[str] = None
+    answerability_gap: Optional[str] = None
 
 class CompetitorBakeoffResult(BaseModel):
     competitor_domain: str
@@ -699,6 +701,8 @@ class AiVisibilityScorecard(BaseModel):
     source_consistency_pct: Optional[float] = None
     not_measured_reason: Optional[str] = None
     matrix_grounding: Optional[str] = None
+    observatory_records: List[Dict[str, Any]] = Field(default_factory=list)
+    observatory_summary: Optional[Dict[str, Any]] = None
 
 
 class HonestScores(BaseModel):
@@ -746,15 +750,17 @@ class CharacterSafeCopy(BaseModel):
 
 class CategoryScore(BaseModel):
     category: Category
-    score: float # 0 - 100
+    score: Optional[float] = None # 0 - 100 or None if unmeasured
     confidence: float = 0.90 # 0 - 1.00
-    weight: float # 0.0 - 1.0
-    weighted_score: float # score * weight
+    weight: float = 0.0 # 0.0 - 1.0
+    weighted_score: float = 0.0 # score * weight
     strengths: List[str] = Field(default_factory=list)
     weaknesses: List[str] = Field(default_factory=list)
     summary: str
     deductions: List[Dict[str, Any]] = Field(default_factory=list)
     formula_breakdown: List[Dict[str, Any]] = Field(default_factory=list)
+    status: str = "MEASURED" # "MEASURED" | "NOT_MEASURED" | "PROVISIONAL"
+    provenance: Optional[str] = None
 
 class OverallScoreResult(BaseModel):
     overall_score: float # 0 - 100
@@ -1058,6 +1064,9 @@ class PageEvidence(BaseModel):
     outlinks_external_count: int = 0
     thin_content: bool = False
     hreflang_tags: Dict[str, str] = Field(default_factory=dict)
+    html_lang: Optional[str] = None
+    nap_data: Optional[Dict[str, Any]] = None
+    content_authority: Optional[Dict[str, Any]] = None
     lab_performance: Optional[LabPerformanceMetrics] = None
     field_performance: Optional[FieldPerformanceMetrics] = None
 
@@ -1171,6 +1180,7 @@ class CrawlManifest(BaseModel):
     crawl_budget: Dict[str, Any] = Field(default_factory=dict)
     sitemap_urls: List[str] = Field(default_factory=list)
     orphan_urls: List[str] = Field(default_factory=list)
+    indexation_rollup: Optional[IndexationAuditRollup] = None
 
 class UntrustedObservation(BaseModel):
     id: str
@@ -1404,8 +1414,8 @@ class WcagAuditSummary(BaseModel):
 
 class SecurityAuditReport(BaseModel):
     target_domain: str = ""
-    score: float = 100.0
-    grade: str = "A"
+    score: Optional[float] = None
+    grade: Optional[str] = None
     hsts_enabled: bool = False
     hsts_header: Optional[str] = None
     csp_enabled: bool = False
@@ -1448,13 +1458,13 @@ class PerEngineAiScore(BaseModel):
     recommended_fixes: List[str] = Field(default_factory=list)
 
 class InformationGainReport(BaseModel):
-    score: float = 50.0
-    grade: str = "C"
+    score: Optional[float] = None
+    grade: Optional[str] = None
     has_proprietary_statistics: bool = False
     has_benchmark_tables: bool = False
     has_methodology_section: bool = False
     has_executive_quotes: bool = False
-    fluff_ratio_score: float = 50.0
+    fluff_ratio_score: Optional[float] = None
     original_data_signals: List[str] = Field(default_factory=list)
     commodity_fluff_signals: List[str] = Field(default_factory=list)
     recommendations: List[str] = Field(default_factory=list)
@@ -1501,6 +1511,62 @@ class CanonicalAuditRollup(BaseModel):
     items: List[CanonicalAuditItem] = Field(default_factory=list)
     summary: str = ""
 
+class RenderedVsRawDelta(BaseModel):
+    raw_word_count: int = 0
+    rendered_word_count: int = 0
+    word_count_delta: int = 0
+    raw_headings: List[str] = Field(default_factory=list)
+    rendered_headings: List[str] = Field(default_factory=list)
+    js_only_headings: List[str] = Field(default_factory=list)
+    raw_internal_links: int = 0
+    rendered_internal_links: int = 0
+    js_only_links_count: int = 0
+    js_dependency_risk: str = "LOW"  # "LOW" | "MEDIUM" | "CRITICAL"
+
+class IndexationPageStatus(BaseModel):
+    url: str
+    status_code: int = 200
+    crawlable: bool = True
+    indexable: bool = True
+    indexed_state: str = "UNVERIFIED_NO_GSC"  # "INDEXED" | "NOT_INDEXED" | "UNVERIFIED_NO_GSC"
+    canonical_declared: Optional[str] = None
+    canonical_selected: Optional[str] = None
+    canonical_match: bool = True
+    has_noindex: bool = False
+    x_robots_tag: Optional[str] = None
+    robots_blocked: bool = False
+    is_soft_404: bool = False
+    is_duplicate: bool = False
+    duplicate_of_url: Optional[str] = None
+    gsc_coverage_state: Optional[str] = None  # "Discovered - currently not indexed", "Crawled - currently not indexed", etc.
+    alternate_canonical: Optional[str] = None
+    is_redirect: bool = False
+    redirect_target: Optional[str] = None
+    is_js_only_content: bool = False
+    blocked_resources: List[str] = Field(default_factory=list)
+    render_delta: Optional[RenderedVsRawDelta] = None
+
+class IndexationAuditRollup(BaseModel):
+    total_pages_evaluated: int = 0
+    crawlable_count: int = 0
+    indexable_count: int = 0
+    indexed_count: int = 0
+    blocked_by_robots_count: int = 0
+    noindex_count: int = 0
+    x_robots_tag_count: int = 0
+    soft_404_count: int = 0
+    duplicate_count: int = 0
+    canonical_mismatch_count: int = 0
+    discovered_not_indexed_count: int = 0
+    crawled_not_indexed_count: int = 0
+    alternate_canonical_count: int = 0
+    redirect_count: int = 0
+    js_dependent_count: int = 0
+    blocked_resources_count: int = 0
+    pages: List[IndexationPageStatus] = Field(default_factory=list)
+    summary: str = ""
+
+
 class HttpStatusItem(BaseModel):
     url: str
     status_code: int = 200
@@ -1535,11 +1601,11 @@ class CompetitorSeoParityProfile(BaseModel):
     brand_name: str
     is_target: bool = False
     pages_sampled: int = 1
-    technical_health_score: int = 80
-    onpage_score: int = 80
-    content_depth_score: int = 80
-    schema_score: int = 80
-    overall_seo_score: int = 80
+    technical_health_score: Optional[int] = None
+    onpage_score: Optional[int] = None
+    content_depth_score: Optional[int] = None
+    schema_score: Optional[int] = None
+    overall_seo_score: Optional[int] = None
     avg_ttfb_ms: float = 0.0
     http_200_rate_pct: float = 100.0
     title_optimal_pct: float = 100.0
@@ -1555,10 +1621,131 @@ class CompetitorSeoParityMatrix(BaseModel):
     target_domain: str
     competitors: List[CompetitorSeoParityProfile] = Field(default_factory=list)
     target_rank: int = 1
-    peer_avg_seo_score: int = 80
+    peer_avg_seo_score: Optional[int] = None
     top_advantages: List[str] = Field(default_factory=list)
     critical_deficits: List[str] = Field(default_factory=list)
     strategic_takeaway: str = ""
+
+class CausalDiagnosticChain(BaseModel):
+    bottleneck_id: str
+    title: str
+    primary_category: Category
+    observed_symptoms: List[str] = Field(default_factory=list)
+    inferred_root_cause: str
+    business_consequence: str
+    prescribed_remediation: str
+    expected_mechanism: str
+    verification_step: str
+    external_verification: str
+    projected_outcome: str
+    severity: Severity = Severity.HIGH
+    confidence: float = 0.90
+    contributing_finding_ids: List[str] = Field(default_factory=list)
+
+class NapRecord(BaseModel):
+    page_url: str
+    phone_numbers: List[str] = Field(default_factory=list)
+    addresses: List[str] = Field(default_factory=list)
+    has_map_embed: bool = False
+    map_embed_urls: List[str] = Field(default_factory=list)
+    gbp_links: List[str] = Field(default_factory=list)
+    citation_links: List[str] = Field(default_factory=list)
+
+class LocalLandingPageAudit(BaseModel):
+    url: str
+    target_location: Optional[str] = None
+    has_unique_nap: bool = False
+    has_local_schema: bool = False
+    has_map: bool = False
+    has_local_reviews: bool = False
+    status: str = "PASS"  # "PASS" | "INCOMPLETE" | "CRITICAL"
+    issues: List[str] = Field(default_factory=list)
+
+class LocalSeoAuditReport(BaseModel):
+    status: str = "PASS"  # "PASS" | "NEEDS_ATTENTION" | "NOT_APPLICABLE" | "FAILED"
+    nap_consistency_score: float = 100.0  # 0 - 100
+    detected_company_name: Optional[str] = None
+    consistent_phone: Optional[str] = None
+    consistent_address: Optional[str] = None
+    phone_conflicts: List[Dict[str, Any]] = Field(default_factory=list)
+    address_conflicts: List[Dict[str, Any]] = Field(default_factory=list)
+    has_google_business_profile: bool = False
+    gbp_urls: List[str] = Field(default_factory=list)
+    has_google_maps_embed: bool = False
+    local_citations_found: List[str] = Field(default_factory=list)
+    local_business_schema_found: bool = False
+    local_schema_completeness_pct: float = 0.0
+    schema_missing_fields: List[str] = Field(default_factory=list)
+    local_landing_pages: List[LocalLandingPageAudit] = Field(default_factory=list)
+    nap_records: List[NapRecord] = Field(default_factory=list)
+    summary: str = ""
+
+class HreflangEntry(BaseModel):
+    hreflang: str
+    href: str
+
+class HreflangValidationIssue(BaseModel):
+    url: str
+    issue_type: str  # "invalid_language_code" | "missing_return_tag" | "missing_x_default" | "canonical_conflict" | "lang_mismatch"
+    severity: str    # "ERROR" | "WARNING"
+    target_hreflang: Optional[str] = None
+    target_url: Optional[str] = None
+    message: str
+
+class HreflangMatrixItem(BaseModel):
+    url: str
+    declared_lang: Optional[str] = None
+    alternates_count: int = 0
+    alternates: List[HreflangEntry] = Field(default_factory=list)
+    has_x_default: bool = False
+    return_tags_valid: bool = True
+    missing_return_tags: List[str] = Field(default_factory=list)
+    canonical_aligned: bool = True
+
+class InternationalSeoAuditReport(BaseModel):
+    status: str = "PASS"  # "PASS" | "WARNING" | "FAILED" | "NOT_APPLICABLE"
+    is_multilingual: bool = False
+    total_pages_with_hreflang: int = 0
+    locales_detected: List[str] = Field(default_factory=list)
+    has_x_default: bool = False
+    return_tags_healthy: bool = True
+    issues: List[HreflangValidationIssue] = Field(default_factory=list)
+    matrix: List[HreflangMatrixItem] = Field(default_factory=list)
+    summary: str = ""
+
+class CannibalizationCluster(BaseModel):
+    cluster_id: str
+    primary_topic: str
+    urls: List[str] = Field(default_factory=list)
+    similarity_score: float = 0.0  # 0.0 - 1.0
+    shared_headings: List[str] = Field(default_factory=list)
+    recommendation: str = ""
+
+class PageContentAuthority(BaseModel):
+    url: str
+    word_count: int = 0
+    topical_entities: List[str] = Field(default_factory=list)
+    information_gain_score: float = 0.0  # 0 - 100
+    original_data_points: int = 0
+    first_party_evidence_markers: List[str] = Field(default_factory=list)
+    expert_signals: List[str] = Field(default_factory=list)
+    unbacked_claims: List[str] = Field(default_factory=list)
+    search_intent: str = "INFORMATIONAL"  # "INFORMATIONAL" | "COMMERCIAL" | "TRANSACTIONAL" | "NAVIGATIONAL"
+    intent_mismatch: bool = False
+    intent_notes: str = ""
+
+class TopicalAuthorityAuditReport(BaseModel):
+    status: str = "PASS"  # "PASS" | "NEEDS_IMPROVEMENT" | "THIN_COMMODITY"
+    topical_coverage_score: float = 0.0  # 0 - 100
+    avg_information_gain: float = 0.0    # 0 - 100
+    total_original_data_points: int = 0
+    first_party_evidence_density: float = 0.0
+    pages_with_expert_signals: int = 0
+    unbacked_claims_total: int = 0
+    cannibalization_clusters: List[CannibalizationCluster] = Field(default_factory=list)
+    search_intent_distribution: Dict[str, int] = Field(default_factory=dict)
+    pages: List[PageContentAuthority] = Field(default_factory=list)
+    summary: str = ""
 
 class ExecutiveReport(BaseModel):
     report_id: str
@@ -1634,6 +1821,14 @@ class ExecutiveReport(BaseModel):
     competitor_seo_parity: Optional[CompetitorSeoParityMatrix] = None
     wcag_audit: Optional[WcagAuditSummary] = None
     external_authority: Optional[Dict[str, Any]] = None
+    causal_diagnostic_chains: List[CausalDiagnosticChain] = Field(default_factory=list)
+    scoring_explanation: Optional[str] = None
+    observatory_records: List[Dict[str, Any]] = Field(default_factory=list)
+    competitive_evidence_graph: Optional[Dict[str, Any]] = None
+    indexation_intelligence: Optional[IndexationAuditRollup] = None
+    local_seo: Optional[LocalSeoAuditReport] = None
+    international_seo: Optional[InternationalSeoAuditReport] = None
+    topical_authority: Optional[TopicalAuthorityAuditReport] = None
 
 class AnalysisRequest(BaseModel):
     website_url: str

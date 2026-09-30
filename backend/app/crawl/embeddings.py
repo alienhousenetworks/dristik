@@ -96,7 +96,8 @@ class EmbeddingService:
                     logger.error("[EmbeddingService] Local embedding generation failed: %s", exc)
 
         # 2. OpenRouter / Remote Provider
-        return self._embed_remote_sync(prefixed)
+        res = self._embed_remote_sync(prefixed)
+        return res if res is not None else []
 
     def embed_query(self, query: str) -> List[float]:
         """

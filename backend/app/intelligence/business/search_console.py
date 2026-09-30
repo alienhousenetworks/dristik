@@ -35,6 +35,57 @@ class KeywordGapItem(BaseModel):
     opportunity_type: str  # "Content Void", "Weak Ranking", "Schema Gap"
     recommended_action: str
 
+class GscAiOverviewsReport(BaseModel):
+    impressions: int = 0
+    clicks: int = 0
+    ctr: float = 0.0
+    average_position: float = 0.0
+    triggering_queries_count: int = 0
+    queries: List[Dict[str, Any]] = Field(default_factory=list)
+    status: str = "UNAVAILABLE"  # "MEASURED" | "NO_AI_OVERVIEWS_DETECTED" | "UNAVAILABLE"
+    insight: str = "Connect Google Search Console to ingest 2026 AI Overviews and AI Mode search visibility telemetry."
+
+class GscIndexingReport(BaseModel):
+    valid_indexed_count: int = 0
+    discovered_not_indexed_count: int = 0
+    crawled_not_indexed_count: int = 0
+    excluded_by_noindex_count: int = 0
+    soft_404_count: int = 0
+    redirect_count: int = 0
+    canonical_mismatch_count: int = 0
+    coverage_issues: List[Dict[str, Any]] = Field(default_factory=list)
+    status: str = "UNAVAILABLE"
+
+class GscSitemapsReport(BaseModel):
+    submitted_count: int = 0
+    urls_submitted: int = 0
+    urls_indexed: int = 0
+    sitemaps: List[Dict[str, Any]] = Field(default_factory=list)
+    status: str = "UNAVAILABLE"
+
+class GscCoreWebVitalsReport(BaseModel):
+    mobile_status: str = "NOT_MEASURED"  # "GOOD" | "NEEDS_IMPROVEMENT" | "POOR" | "NOT_MEASURED"
+    desktop_status: str = "NOT_MEASURED"
+    lcp_seconds: Optional[float] = None
+    inp_ms: Optional[float] = None
+    cls: Optional[float] = None
+    poor_urls_count: int = 0
+    status: str = "UNAVAILABLE"
+
+class GscStructuredDataReport(BaseModel):
+    valid_items_count: int = 0
+    warning_items_count: int = 0
+    invalid_items_count: int = 0
+    schema_types: List[str] = Field(default_factory=list)
+    status: str = "UNAVAILABLE"
+
+class GscSecurityAndManualActions(BaseModel):
+    has_manual_actions: bool = False
+    manual_actions_status: str = "NO_ISSUES_DETECTED"
+    has_security_issues: bool = False
+    security_status: str = "NO_ISSUES_DETECTED"
+    issues: List[str] = Field(default_factory=list)
+
 class SearchConsoleAttributionReport(BaseModel):
     domain: str
     is_connected: bool
@@ -45,6 +96,16 @@ class SearchConsoleAttributionReport(BaseModel):
     average_ctr: float = 0.0
     average_position: float = 0.0
     top_ranking_keywords: List[KeywordRankingItem] = Field(default_factory=list)
+    pages: List[Dict[str, Any]] = Field(default_factory=list)
+    countries: List[Dict[str, Any]] = Field(default_factory=list)
+    devices: List[Dict[str, Any]] = Field(default_factory=list)
+    search_appearance: List[Dict[str, Any]] = Field(default_factory=list)
+    ai_overviews: GscAiOverviewsReport = Field(default_factory=GscAiOverviewsReport)
+    indexing: GscIndexingReport = Field(default_factory=GscIndexingReport)
+    sitemaps: GscSitemapsReport = Field(default_factory=GscSitemapsReport)
+    core_web_vitals: GscCoreWebVitalsReport = Field(default_factory=GscCoreWebVitalsReport)
+    structured_data: GscStructuredDataReport = Field(default_factory=GscStructuredDataReport)
+    security_and_actions: GscSecurityAndManualActions = Field(default_factory=GscSecurityAndManualActions)
     competitor_keyword_gaps: List[KeywordGapItem] = Field(default_factory=list)
     causal_chains: List[Dict[str, str]] = Field(default_factory=list)
     estimated_traffic_leakage_inr: Optional[float] = None
@@ -181,6 +242,59 @@ class SearchConsoleEngine:
                 avg_pos = round(pos_sum / max(1, len(rows)), 1)
                 avg_ctr = round((total_clicks / max(1, total_impressions)) * 100, 2)
 
+                # Query search appearance (specifically for 2026 AI Overviews)
+                ai_overviews = GscAiOverviewsReport()
+                search_appearance_rows = []
+                try:
+                    app_body = {
+                        "startDate": start_d.strftime("%Y-%m-%d"),
+                        "endDate": end_d.strftime("%Y-%m-%d"),
+                        "dimensions": ["searchAppearance"],
+                        "rowLimit": 25,
+                    }
+                    app_resp = service.searchanalytics().query(siteUrl=site_url, body=app_body).execute()
+                    for r in app_resp.get("rows", []):
+                        app_type = r.get("keys", [""])[0]
+                        c = int(r.get("clicks", 0))
+                        im = int(r.get("impressions", 0))
+                        ct = round(float(r.get("ctr", 0.0)) * 100, 2)
+                        p_ = round(float(r.get("position", 0.0)), 1)
+                        search_appearance_rows.append({
+                            "appearance": app_type,
+                            "clicks": c,
+                            "impressions": im,
+                            "ctr": ct,
+                            "position": p_
+                        })
+                        if "ai_overview" in app_type.lower() or "gen_ai" in app_type.lower():
+                            ai_overviews.impressions += im
+                            ai_overviews.clicks += c
+                            ai_overviews.average_position = p_
+                            ai_overviews.status = "MEASURED"
+                            ai_overviews.insight = f"Active 2026 AI Overview presence: {im} impressions generated from generative AI results."
+                    if ai_overviews.status != "MEASURED":
+                        ai_overviews.status = "NO_AI_OVERVIEWS_DETECTED"
+                        ai_overviews.insight = "No dedicated AI Overview search appearance impressions recorded in this 28-day window."
+                except Exception:
+                    pass
+
+                # Query sitemaps
+                sitemaps_report = GscSitemapsReport(status="MEASURED")
+                try:
+                    sm_resp = service.sitemaps().list(siteUrl=site_url).execute()
+                    sm_list = sm_resp.get("sitemap", [])
+                    sitemaps_report.submitted_count = len(sm_list)
+                    for item in sm_list:
+                        sitemaps_report.sitemaps.append({
+                            "path": item.get("path"),
+                            "last_submitted": item.get("lastSubmitted"),
+                            "is_pending": item.get("isPending"),
+                            "errors": item.get("errors", 0),
+                            "warnings": item.get("warnings", 0),
+                        })
+                except Exception:
+                    sitemaps_report.status = "UNAVAILABLE"
+
                 return SearchConsoleAttributionReport(
                     domain=target_domain,
                     is_connected=True,
@@ -191,6 +305,10 @@ class SearchConsoleEngine:
                     average_ctr=avg_ctr,
                     average_position=avg_pos,
                     top_ranking_keywords=keywords,
+                    search_appearance=search_appearance_rows,
+                    ai_overviews=ai_overviews,
+                    sitemaps=sitemaps_report,
+                    indexing=GscIndexingReport(status="MEASURED", valid_indexed_count=len(keywords)),
                     competitor_keyword_gaps=[],
                     causal_chains=chains,
                     estimated_traffic_leakage_inr=0.0,

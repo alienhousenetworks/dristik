@@ -51,6 +51,36 @@ def get_integrations_status() -> Dict[str, Any]:
             "provider": "DataForSEO Live SERP & Backlink API",
             "capabilities": ["search_volume", "keyword_difficulty", "cpc", "referring_domains", "backlink_count"],
         },
+        "ahrefs": {
+            "connected": bool(settings.AHREFS_API_KEY or (settings.AHREFS_CLIENT_ID and settings.AHREFS_CLIENT_SECRET)),
+            "provider": "Ahrefs API v3",
+            "capabilities": ["referring_domains", "domain_rating", "backlink_growth", "anchor_distribution"],
+        },
+        "semrush": {
+            "connected": bool(settings.SEMRUSH_API_KEY or (settings.SEMRUSH_CLIENT_ID and settings.SEMRUSH_CLIENT_SECRET)),
+            "provider": "Semrush Authority & Backlinks API",
+            "capabilities": ["authority_score", "referring_domains", "toxic_backlinks", "keyword_trends"],
+        },
+        "majestic": {
+            "connected": bool(settings.MAJESTIC_API_KEY),
+            "provider": "Majestic SEO Flow Metrics",
+            "capabilities": ["trust_flow", "citation_flow", "topical_trust", "referring_subnets"],
+        },
+        "google_business_profile": {
+            "connected": bool(os.getenv("GBP_ACCOUNT_ID") or os.getenv("GOOGLE_BUSINESS_PROFILE_ID")),
+            "provider": "Google Business Profile API",
+            "capabilities": ["local_reviews", "rating_aggregation", "business_attributes", "local_search_impressions"],
+        },
+        "brand_mentions": {
+            "connected": bool(settings.BRAND_MENTIONS_ENABLED and (settings.BRAND_MENTIONS_API_KEY or settings.BRAND_MENTIONS_PROVIDER)),
+            "provider": settings.BRAND_MENTIONS_PROVIDER or "Brand Entity Tracker",
+            "capabilities": ["unlinked_mentions", "sentiment_analysis", "co_citation_volume"],
+        },
+        "citations_directories": {
+            "connected": bool(settings.CITATIONS_ENABLED and (settings.CITATIONS_API_KEY or settings.CITATIONS_PROVIDER)),
+            "provider": settings.CITATIONS_PROVIDER or "Directory & Citation Aggregator",
+            "capabilities": ["nap_consistency", "business_directory_citations", "local_directory_listing"],
+        },
     }
 
 

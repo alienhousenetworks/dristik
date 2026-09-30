@@ -2,7 +2,7 @@
 Dristik AI Intent-Adaptive Scoring Weights
 Defines baseline category weights and dynamic re-balancing multipliers based on business intent.
 """
-from typing import Dict
+from typing import Dict, Optional, List
 from app.domain.enums import BusinessIntent, Category
 
 BASELINE_WEIGHTS: Dict[Category, float] = {
@@ -47,14 +47,19 @@ INTENT_MULTIPLIERS: Dict[BusinessIntent, Dict[Category, float]] = {
     }
 }
 
-def compute_intent_adjusted_weights(intent: BusinessIntent) -> Dict[Category, float]:
+def compute_intent_adjusted_weights(
+    intent: BusinessIntent,
+    active_categories: Optional[List[Category]] = None
+) -> Dict[Category, float]:
     multipliers = INTENT_MULTIPLIERS.get(intent, {})
     adjusted = {}
     
-    for cat, base_w in BASELINE_WEIGHTS.items():
-        mult = multipliers.get(cat, 1.0)
-        adjusted[cat] = base_w * mult
+    cats = active_categories if active_categories is not None else list(BASELINE_WEIGHTS.keys())
+    for cat in cats:
+        if cat in BASELINE_WEIGHTS:
+            mult = multipliers.get(cat, 1.0)
+            adjusted[cat] = BASELINE_WEIGHTS[cat] * mult
         
-    total = sum(adjusted.values())
+    total = sum(adjusted.values()) or 1.0
     # Normalize accurately
     return {cat: (w / total) for cat, w in adjusted.items()}

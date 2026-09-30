@@ -49,38 +49,41 @@ class RoadmapBuilder:
         synth_r7 = synthesizer_roadmap.get("roadmap_7_days", [])
         if len(r7) < 2 and synth_r7:
             for item in synth_r7:
-                r7.append(RoadmapItem(
-                    timeframe="7_days",
-                    title=item.get("title", "Quick Win"),
-                    description=item.get("description", "Execute immediate high-ROI architectural fix."),
-                    impact=item.get("impact", "High"),
-                    effort=item.get("effort", "Low"),
-                    category=Category.SCHEMA
-                ))
+                if isinstance(item, dict) and item.get("title") and item.get("description"):
+                    r7.append(RoadmapItem(
+                        timeframe="7_days",
+                        title=str(item["title"]).strip(),
+                        description=str(item["description"]).strip(),
+                        impact=item.get("impact", "High"),
+                        effort=item.get("effort", "Low"),
+                        category=Category.SCHEMA
+                    ))
                 
         synth_r30 = synthesizer_roadmap.get("roadmap_30_days", [])
         if len(r30) < 2 and synth_r30:
             for item in synth_r30:
-                r30.append(RoadmapItem(
-                    timeframe="30_days",
-                    title=item.get("title", "30-Day Milestone"),
-                    description=item.get("description", "Implement structured answerability & friction reduction."),
-                    impact=item.get("impact", "High"),
-                    effort=item.get("effort", "Medium"),
-                    category=Category.AI_SEARCH
-                ))
+                if isinstance(item, dict) and item.get("title") and item.get("description"):
+                    r30.append(RoadmapItem(
+                        timeframe="30_days",
+                        title=str(item["title"]).strip(),
+                        description=str(item["description"]).strip(),
+                        impact=item.get("impact", "High"),
+                        effort=item.get("effort", "Medium"),
+                        category=Category.AI_SEARCH
+                    ))
                 
         synth_r90 = synthesizer_roadmap.get("roadmap_90_days", [])
         if len(r90) < 2 and synth_r90:
             for item in synth_r90:
-                r90.append(RoadmapItem(
-                    timeframe="90_days",
-                    title=item.get("title", "Strategic Initiative"),
-                    description=item.get("description", "Build comprehensive topic cluster architecture and authority moat."),
-                    impact=item.get("impact", "High"),
-                    effort=item.get("effort", "High"),
-                    category=Category.CONTENT
-                ))
+                if isinstance(item, dict) and item.get("title") and item.get("description"):
+                    r90.append(RoadmapItem(
+                        timeframe="90_days",
+                        title=str(item["title"]).strip(),
+                        description=str(item["description"]).strip(),
+                        impact=item.get("impact", "High"),
+                        effort=item.get("effort", "High"),
+                        category=Category.CONTENT
+                    ))
                 
         return r7[:5], r30[:5], r90[:5]
 

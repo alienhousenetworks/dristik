@@ -702,17 +702,39 @@ export function AuditPdfReport({ report }: { report: ExecutiveReport }) {
           </thead>
           <tbody>
             {[
-              { name: 'ChatGPT Search (OpenAI)', score: perEngine?.chatgpt?.score ?? honest?.ai_readiness_score ?? 60, status: perEngine?.chatgpt?.readiness_band ?? 'Partial', source: 'Bing index + first-party DOM' },
-              { name: 'Perplexity AI', score: perEngine?.perplexity?.score ?? honest?.ai_readiness_score ?? 65, status: perEngine?.perplexity?.readiness_band ?? 'Partial', source: 'Live web index + academic sources' },
-              { name: 'Google AI Overviews', score: perEngine?.google_aio?.score ?? honest?.google_score ?? 70, status: perEngine?.google_aio?.readiness_band ?? 'Cited', source: 'Google Knowledge Graph + schema' },
-              { name: 'Claude & Gemini Multi-Model', score: perEngine?.claude_gemini?.score ?? honest?.ai_readiness_score ?? 65, status: perEngine?.claude_gemini?.readiness_band ?? 'Partial', source: 'Pre-training + web retrieval' },
+              {
+                name: 'ChatGPT Search (OpenAI)',
+                score: perEngine?.chatgpt?.score ?? honest?.ai_readiness_score ?? null,
+                status: perEngine?.chatgpt?.readiness_band ?? (perEngine?.chatgpt?.score != null ? 'Partial' : 'Unmeasured'),
+                source: 'Bing index + first-party DOM',
+              },
+              {
+                name: 'Perplexity AI',
+                score: perEngine?.perplexity?.score ?? honest?.ai_readiness_score ?? null,
+                status: perEngine?.perplexity?.readiness_band ?? (perEngine?.perplexity?.score != null ? 'Partial' : 'Unmeasured'),
+                source: 'Live web index + academic sources',
+              },
+              {
+                name: 'Google AI Overviews',
+                score: perEngine?.google_aio?.score ?? honest?.google_score ?? null,
+                status: perEngine?.google_aio?.readiness_band ?? (perEngine?.google_aio?.score != null ? 'Cited' : 'Unmeasured'),
+                source: 'Google Knowledge Graph + schema',
+              },
+              {
+                name: 'Claude & Gemini Multi-Model',
+                score: perEngine?.claude_gemini?.score ?? honest?.ai_readiness_score ?? null,
+                status: perEngine?.claude_gemini?.readiness_band ?? (perEngine?.claude_gemini?.score != null ? 'Partial' : 'Unmeasured'),
+                source: 'Pre-training + web retrieval',
+              },
             ].map((eng) => (
               <tr key={eng.name} className="border-b border-line">
                 <td className="py-1.5 px-3 font-semibold">{eng.name}</td>
-                <td className="py-1.5 px-3 font-mono font-bold text-pine">{score(eng.score)} / 100</td>
-                <td className="py-1.5 px-3 font-bold text-good">Yes</td>
+                <td className="py-1.5 px-3 font-mono font-bold text-pine">
+                  {eng.score != null ? `${score(eng.score)} / 100` : '—'}
+                </td>
+                <td className="py-1.5 px-3 font-bold text-good">{eng.score != null ? 'Yes' : 'Unmeasured'}</td>
                 <td className="py-1.5 px-3 font-semibold">{eng.status}</td>
-                <td className="py-1.5 px-3 text-good font-mono font-semibold">Verified</td>
+                <td className="py-1.5 px-3 text-good font-mono font-semibold">{eng.score != null ? 'Verified' : '—'}</td>
                 <td className="py-1.5 px-3 text-ink-600">{eng.source}</td>
               </tr>
             ))}
@@ -921,7 +943,7 @@ export function AuditPdfReport({ report }: { report: ExecutiveReport }) {
             </div>
             <div>
               <span className="font-semibold text-ink-600 block">Primary Action CTA:</span>
-              <p className="font-medium text-good font-mono">{profile?.primary_cta || 'Book an Enterprise Architecture Assessment'}</p>
+              <p className="font-medium text-good font-mono">{profile?.primary_cta || 'None detected'}</p>
             </div>
           </div>
           <div>
@@ -936,8 +958,8 @@ export function AuditPdfReport({ report }: { report: ExecutiveReport }) {
     "name": "${brandName}",
     "url": "${report.website_url}"
   },
-  "areaServed": "${profile?.geography || 'Global'}",
-  "serviceType": "${profile?.industry || 'Enterprise Technology'}"
+  "areaServed": "${profile?.geography || 'Unspecified'}",
+  "serviceType": "${profile?.industry || 'Unspecified'}"
 }`}
             </pre>
           </div>
@@ -988,7 +1010,7 @@ export function AuditPdfReport({ report }: { report: ExecutiveReport }) {
           ['OpenGraph Description (og:description)', text(pages[0]?.og_tags?.['og:description'] || pages[0]?.meta_description)],
           ['OpenGraph Image (og:image)', text(pages[0]?.og_tags?.['og:image'])],
           ['OpenGraph Site Name (og:site_name)', pages[0]?.og_tags?.['og:site_name'] ? text(pages[0].og_tags['og:site_name']) : 'Not observed'],
-          ['Twitter Card Type (twitter:card)', text(pages[0]?.twitter_tags?.['twitter:card'] || 'summary_large_image')],
+          ['Twitter Card Type (twitter:card)', text(pages[0]?.twitter_tags?.['twitter:card'] || 'Not observed')],
         ]} />
 
         {/* 6.3 Competitor Head-to-Head Bake-Off Matrix */}
@@ -1017,7 +1039,7 @@ export function AuditPdfReport({ report }: { report: ExecutiveReport }) {
               },
               {
                 q: `Why choose ${brandName} over alternatives?`,
-                target: (report.what_site_gets_right || [])[0] || 'Technical competency observed',
+                target: (report.what_site_gets_right || [])[0] || 'No verified advantages noted',
                 comp: 'Aggregator comparisons dominate',
                 winner: 'TARGET',
                 takeaway: 'Unique technical specialization provides strong defensive moat when indexed.'
@@ -1341,7 +1363,7 @@ function PageRemediationPdfCard({
           </span>
         </div>
         <div className="flex items-center gap-3 font-mono text-[11px]">
-          <span>Status: <strong>{page.status_code || 200}</strong></span>
+          <span>Status: <strong>{page.status_code != null ? page.status_code : '—'}</strong></span>
           <span>Words: <strong>{page.word_count || 0}</strong></span>
           <span>TTFB: <strong>{page.ttfb_ms ? `${Math.round(page.ttfb_ms)}ms` : '—'}</strong></span>
           <span className="font-bold text-pine">SEO: {pageReport?.seo?.score != null ? score(pageReport.seo.score) : '—'}</span>

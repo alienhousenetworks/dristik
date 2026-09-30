@@ -22,6 +22,8 @@ import {
   Users,
   Search,
   Filter,
+  MapPin,
+  Languages,
 } from 'lucide-react';
 
 interface SeoWorkspaceViewProps {
@@ -31,7 +33,7 @@ interface SeoWorkspaceViewProps {
   onOpenConnectors?: (tabId?: string) => void;
 }
 
-type SeoSubTab = 'crawl' | 'onpage' | 'assets' | 'links' | 'security' | 'competitors' | 'gsc' | 'appendix' | 'findings';
+type SeoSubTab = 'crawl' | 'onpage' | 'assets' | 'links' | 'local' | 'international' | 'security' | 'competitors' | 'gsc' | 'appendix' | 'findings';
 
 export function SeoWorkspaceView({
   report,
@@ -70,8 +72,10 @@ export function SeoWorkspaceView({
   const canonicalAudit = report.canonical_audit;
   const httpStatus = report.http_status_breakdown;
   const compParity = report.competitor_seo_parity;
+  const localSeo = report.local_seo;
+  const intlSeo = report.international_seo;
 
-  const seoScore = report.scores?.category_scores?.['TECHNICAL_SEO']?.score ?? 80;
+  const seoScore = report.scores?.category_scores?.['TECHNICAL_SEO']?.score;
 
   // Title and Meta pixel widths
   const titleText = currentSerpPage?.title || report.domain;
@@ -83,9 +87,9 @@ export function SeoWorkspaceView({
     <PillarShell
       kicker="Discipline 1 · Technical & On-Page SEO"
       title="Search Engine Optimization (SEO)"
-      description="Crawlability, HTTP status codes, canonical integrity, Google SERP truncation, heading hierarchy, and competitor technical parity."
+      description="Crawlability, HTTP status codes, canonical integrity, Google SERP truncation, heading hierarchy, local NAP consistency, and international targeting."
       scoreLabel="SEO Index"
-      score={Math.round(seoScore)}
+      score={seoScore != null ? Math.round(seoScore) : '—'}
       metaLabel="Issues"
       meta={`${seoFindings.length} flagged`}
       tabs={[
@@ -93,6 +97,8 @@ export function SeoWorkspaceView({
         { id: 'onpage', label: 'On-Page & SERP' },
         { id: 'assets', label: 'Images & Performance' },
         { id: 'links', label: 'Internal Link Equity' },
+        { id: 'local', label: 'Local SEO' },
+        { id: 'international', label: 'International SEO' },
         { id: 'competitors', label: 'Competitor Parity' },
         { id: 'security', label: 'Security & Host' },
         { id: 'gsc', label: 'Search Console' },
@@ -115,7 +121,7 @@ export function SeoWorkspaceView({
               </span>
               <div className="flex items-center gap-1.5 text-ink font-semibold">
                 <span className="font-mono text-base text-good">
-                  {httpStatus ? `${Math.round((httpStatus.count_2xx / Math.max(1, httpStatus.total_urls_checked)) * 100)}%` : '100%'}
+                  {httpStatus && httpStatus.total_urls_checked > 0 ? `${Math.round((httpStatus.count_2xx / httpStatus.total_urls_checked) * 100)}%` : '—'}
                 </span>
                 <span className="text-xs font-mono text-ink-500">HTTP 200 OK</span>
               </div>
@@ -164,7 +170,7 @@ export function SeoWorkspaceView({
               </span>
               <div className="flex items-center gap-1.5 text-ink font-semibold">
                 <Layers className="w-4 h-4 text-pine shrink-0" />
-                <span className="font-mono text-base">{clickDepth?.max_click_depth ?? 2} Clicks</span>
+                <span className="font-mono text-base">{clickDepth?.max_click_depth != null ? `${clickDepth.max_click_depth} Clicks` : '—'}</span>
               </div>
               <p className="text-xs text-ink-500">
                 {clickDepth?.high_depth_warning_count ? `${clickDepth.high_depth_warning_count} deep pages (>3)` : 'Good crawl hierarchy'}
@@ -751,6 +757,393 @@ export function SeoWorkspaceView({
       )}
 
       {/* ─────────────────────────────────────────────────────────────
+          SUB-TAB: LOCAL SEO
+          ───────────────────────────────────────────────────────────── */}
+      {activeSubTab === 'local' && (
+        <div className="space-y-6">
+          {/* Top Vitals */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <Card className="p-4 space-y-1.5">
+              <span className="text-[10px] font-mono uppercase tracking-wider text-ink-500 font-semibold block">
+                NAP Consistency Score
+              </span>
+              <div className="flex items-baseline justify-between">
+                <span className="text-2xl font-bold font-serif text-ink">
+                  {localSeo ? `${localSeo.nap_consistency_score}%` : '100%'}
+                </span>
+                <span className={`text-xs font-mono font-bold px-1.5 py-0.5 rounded ${
+                  (localSeo?.nap_consistency_score ?? 100) >= 80 ? 'bg-good/10 text-good' : 'bg-red-500/10 text-red-600'
+                }`}>
+                  {(localSeo?.nap_consistency_score ?? 100) >= 80 ? 'Consistent' : 'Conflicts Detected'}
+                </span>
+              </div>
+              <span className="text-xs text-ink-500 block">Name, Address, Phone alignment</span>
+            </Card>
+
+            <Card className="p-4 space-y-1.5">
+              <span className="text-[10px] font-mono uppercase tracking-wider text-ink-500 font-semibold block">
+                Google Business Profile
+              </span>
+              <div className="flex items-baseline justify-between">
+                <span className="text-xl font-bold font-serif text-ink">
+                  {localSeo?.has_google_business_profile ? 'Linked' : 'Not Linked'}
+                </span>
+                <span className={`text-xs font-mono font-bold px-1.5 py-0.5 rounded ${
+                  localSeo?.has_google_business_profile ? 'bg-good/10 text-good' : 'bg-amber-500/10 text-amber-600'
+                }`}>
+                  {localSeo?.has_google_business_profile ? 'Verified' : 'Missing Link'}
+                </span>
+              </div>
+              <span className="text-xs text-ink-500 block">Maps co-reference authority</span>
+            </Card>
+
+            <Card className="p-4 space-y-1.5">
+              <span className="text-[10px] font-mono uppercase tracking-wider text-ink-500 font-semibold block">
+                Google Maps Embed
+              </span>
+              <div className="flex items-baseline justify-between">
+                <span className="text-xl font-bold font-serif text-ink">
+                  {localSeo?.has_google_maps_embed ? 'Embedded' : 'Missing'}
+                </span>
+                <span className={`text-xs font-mono font-bold px-1.5 py-0.5 rounded ${
+                  localSeo?.has_google_maps_embed ? 'bg-good/10 text-good' : 'bg-ink-500/10 text-ink-500'
+                }`}>
+                  {localSeo?.has_google_maps_embed ? 'Interactive' : 'No iframe'}
+                </span>
+              </div>
+              <span className="text-xs text-ink-500 block">Local contact landing proof</span>
+            </Card>
+
+            <Card className="p-4 space-y-1.5">
+              <span className="text-[10px] font-mono uppercase tracking-wider text-ink-500 font-semibold block">
+                LocalBusiness Schema
+              </span>
+              <div className="flex items-baseline justify-between">
+                <span className="text-xl font-bold font-serif text-ink">
+                  {localSeo?.local_business_schema_found ? `${localSeo.local_schema_completeness_pct}%` : 'Absent'}
+                </span>
+                <span className={`text-xs font-mono font-bold px-1.5 py-0.5 rounded ${
+                  localSeo?.local_business_schema_found ? 'bg-good/10 text-good' : 'bg-red-500/10 text-red-600'
+                }`}>
+                  {localSeo?.local_business_schema_found ? 'JSON-LD' : 'Missing'}
+                </span>
+              </div>
+              <span className="text-xs text-ink-500 block">Address, Geo, Hours, Telephone</span>
+            </Card>
+          </div>
+
+          {/* Diagnostic Details */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <Card className="p-5 space-y-4">
+              <div className="flex items-center gap-2 border-b border-line pb-3">
+                <MapPin className="w-4 h-4 text-pine" />
+                <h3 className="font-serif text-lg text-ink font-semibold">
+                  NAP Consistency & Contact Footprint
+                </h3>
+              </div>
+              <div className="space-y-3 text-xs">
+                <div className="p-3 rounded border border-line bg-paper-50 space-y-1">
+                  <span className="label text-[10px] text-ink-500 block">Authoritative Phone Detected</span>
+                  <span className="font-mono font-semibold text-ink text-sm">
+                    {localSeo?.consistent_phone || 'No phone number declared in main text'}
+                  </span>
+                </div>
+                <div className="p-3 rounded border border-line bg-paper-50 space-y-1">
+                  <span className="label text-[10px] text-ink-500 block">Authoritative Physical Address</span>
+                  <span className="text-ink-700 leading-relaxed block">
+                    {localSeo?.consistent_address || 'No physical address block detected on crawled pages'}
+                  </span>
+                </div>
+                {localSeo?.phone_conflicts && localSeo.phone_conflicts.length > 1 && (
+                  <div className="p-3 rounded border border-red-300 bg-red-50 dark:bg-red-950/20 space-y-2">
+                    <span className="text-[10px] font-bold text-red-700 uppercase">Conflicting Phone Numbers</span>
+                    <div className="space-y-1 font-mono">
+                      {localSeo.phone_conflicts.map((c, i) => (
+                        <div key={i} className="flex justify-between text-red-600">
+                          <span>{c.phone}</span>
+                          <span>({c.occurrences} pages)</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {localSeo?.schema_missing_fields && localSeo.schema_missing_fields.length > 0 && (
+                  <div className="p-3 rounded border border-amber-300 bg-amber-50 dark:bg-amber-950/20 space-y-1">
+                    <span className="text-[10px] font-bold text-amber-700 uppercase">Missing LocalBusiness Schema Fields</span>
+                    <span className="text-xs text-amber-800 dark:text-amber-300 block">
+                      {localSeo.schema_missing_fields.join(', ')}
+                    </span>
+                  </div>
+                )}
+              </div>
+            </Card>
+
+            <Card className="p-5 space-y-4">
+              <div className="flex items-center gap-2 border-b border-line pb-3">
+                <Globe className="w-4 h-4 text-pine" />
+                <h3 className="font-serif text-lg text-ink font-semibold">
+                  Google Business Profile & Local Citations
+                </h3>
+              </div>
+              <div className="space-y-3 text-xs">
+                <div className="p-3 rounded border border-line bg-paper-50 space-y-1.5">
+                  <span className="label text-[10px] text-ink-500 block">Google Business Profile Links</span>
+                  {localSeo?.gbp_urls && localSeo.gbp_urls.length > 0 ? (
+                    <div className="space-y-1 font-mono">
+                      {localSeo.gbp_urls.map((u, i) => (
+                        <a key={i} href={u} target="_blank" rel="noopener noreferrer" className="text-pine flex items-center gap-1 hover:underline truncate">
+                          <ExternalLink className="w-3 h-3 flex-shrink-0" />
+                          <span className="truncate">{u}</span>
+                        </a>
+                      ))}
+                    </div>
+                  ) : (
+                    <span className="text-ink-500 italic block">No links to maps.google.com or g.page found</span>
+                  )}
+                </div>
+
+                <div className="p-3 rounded border border-line bg-paper-50 space-y-1.5">
+                  <span className="label text-[10px] text-ink-500 block">Local Directory Citations Found</span>
+                  {localSeo?.local_citations_found && localSeo.local_citations_found.length > 0 ? (
+                    <div className="space-y-1 font-mono">
+                      {localSeo.local_citations_found.map((u, i) => (
+                        <a key={i} href={u} target="_blank" rel="noopener noreferrer" className="text-pine flex items-center gap-1 hover:underline truncate">
+                          <ExternalLink className="w-3 h-3 flex-shrink-0" />
+                          <span className="truncate">{u}</span>
+                        </a>
+                      ))}
+                    </div>
+                  ) : (
+                    <span className="text-ink-500 italic block">No outbound citations to Yelp, Apple Maps, or Bing Places</span>
+                  )}
+                </div>
+
+                <div className="p-3 rounded border border-line bg-paper-50 space-y-1">
+                  <span className="label text-[10px] text-ink-500 block">Local SEO Synthesis</span>
+                  <p className="text-ink-700 leading-relaxed">
+                    {localSeo?.summary || 'Local SEO evaluation complete.'}
+                  </p>
+                </div>
+              </div>
+            </Card>
+          </div>
+
+          {/* Local Landing Pages Table */}
+          {localSeo?.local_landing_pages && localSeo.local_landing_pages.length > 0 && (
+            <Card className="p-5 space-y-4">
+              <div className="flex items-center justify-between border-b border-line pb-3">
+                <h3 className="font-serif text-lg text-ink font-semibold">
+                  Local Landing Pages Audit ({localSeo.local_landing_pages.length})
+                </h3>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs text-left border-collapse border border-line">
+                  <thead className="bg-paper-100 font-mono text-[11px] text-ink-700">
+                    <tr>
+                      <th className="p-2.5 border border-line">Location URL</th>
+                      <th className="p-2.5 border border-line">Target</th>
+                      <th className="p-2.5 border border-line">Unique NAP</th>
+                      <th className="p-2.5 border border-line">Local Schema</th>
+                      <th className="p-2.5 border border-line">Map / GBP</th>
+                      <th className="p-2.5 border border-line">Status</th>
+                      <th className="p-2.5 border border-line">Issues</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {localSeo.local_landing_pages.map((lp, i) => (
+                      <tr key={i} className="hover:bg-paper-50 transition-colors">
+                        <td className="p-2.5 border border-line font-mono truncate max-w-xs">{lp.url}</td>
+                        <td className="p-2.5 border border-line font-semibold">{lp.target_location || '—'}</td>
+                        <td className="p-2.5 border border-line">{lp.has_unique_nap ? '✅ Yes' : '❌ No'}</td>
+                        <td className="p-2.5 border border-line">{lp.has_local_schema ? '✅ Yes' : '❌ No'}</td>
+                        <td className="p-2.5 border border-line">{lp.has_map ? '✅ Yes' : '❌ No'}</td>
+                        <td className="p-2.5 border border-line">
+                          <span className={`px-1.5 py-0.5 rounded font-mono font-bold text-[10px] ${
+                            lp.status === 'PASS' ? 'bg-good/10 text-good' : 'bg-red-500/10 text-red-600'
+                          }`}>
+                            {lp.status}
+                          </span>
+                        </td>
+                        <td className="p-2.5 border border-line text-ink-500">
+                          {lp.issues.length ? lp.issues.join('; ') : 'All localized signals present'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </Card>
+          )}
+        </div>
+      )}
+
+      {/* ─────────────────────────────────────────────────────────────
+          SUB-TAB: INTERNATIONAL SEO
+          ───────────────────────────────────────────────────────────── */}
+      {activeSubTab === 'international' && (
+        <div className="space-y-6">
+          {/* Top Vitals */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <Card className="p-4 space-y-1.5">
+              <span className="text-[10px] font-mono uppercase tracking-wider text-ink-500 font-semibold block">
+                Targeting Architecture
+              </span>
+              <div className="flex items-baseline justify-between">
+                <span className="text-xl font-bold font-serif text-ink">
+                  {intlSeo?.is_multilingual ? 'Multilingual' : 'Single Locale'}
+                </span>
+                <span className={`text-xs font-mono font-bold px-1.5 py-0.5 rounded ${
+                  intlSeo?.is_multilingual ? 'bg-pine/10 text-pine' : 'bg-paper-100 text-ink-600'
+                }`}>
+                  {intlSeo?.locales_detected?.length || 1} Locales
+                </span>
+              </div>
+              <span className="text-xs text-ink-500 block">Hreflang & language declarations</span>
+            </Card>
+
+            <Card className="p-4 space-y-1.5">
+              <span className="text-[10px] font-mono uppercase tracking-wider text-ink-500 font-semibold block">
+                Hreflang Return Tags
+              </span>
+              <div className="flex items-baseline justify-between">
+                <span className="text-xl font-bold font-serif text-ink">
+                  {intlSeo?.return_tags_healthy ? 'Reciprocal' : 'Broken'}
+                </span>
+                <span className={`text-xs font-mono font-bold px-1.5 py-0.5 rounded ${
+                  intlSeo?.return_tags_healthy ? 'bg-good/10 text-good' : 'bg-red-500/10 text-red-600'
+                }`}>
+                  {intlSeo?.return_tags_healthy ? 'Valid' : 'Errors Flagged'}
+                </span>
+              </div>
+              <span className="text-xs text-ink-500 block">Bidirectional confirmation</span>
+            </Card>
+
+            <Card className="p-4 space-y-1.5">
+              <span className="text-[10px] font-mono uppercase tracking-wider text-ink-500 font-semibold block">
+                x-default Fallback
+              </span>
+              <div className="flex items-baseline justify-between">
+                <span className="text-xl font-bold font-serif text-ink">
+                  {intlSeo?.has_x_default ? 'Present' : 'Absent'}
+                </span>
+                <span className={`text-xs font-mono font-bold px-1.5 py-0.5 rounded ${
+                  intlSeo?.has_x_default ? 'bg-good/10 text-good' : 'bg-amber-500/10 text-amber-600'
+                }`}>
+                  {intlSeo?.has_x_default ? 'Active' : 'Missing'}
+                </span>
+              </div>
+              <span className="text-xs text-ink-500 block">Fallback for unmatched users</span>
+            </Card>
+
+            <Card className="p-4 space-y-1.5">
+              <span className="text-[10px] font-mono uppercase tracking-wider text-ink-500 font-semibold block">
+                Localized Canonical Integrity
+              </span>
+              <div className="flex items-baseline justify-between">
+                <span className="text-xl font-bold font-serif text-ink">
+                  {intlSeo?.issues?.some((i) => i.issue_type === 'canonical_conflict') ? 'Conflicts' : 'Aligned'}
+                </span>
+                <span className={`text-xs font-mono font-bold px-1.5 py-0.5 rounded ${
+                  intlSeo?.issues?.some((i) => i.issue_type === 'canonical_conflict') ? 'bg-red-500/10 text-red-600' : 'bg-good/10 text-good'
+                }`}>
+                  {intlSeo?.issues?.some((i) => i.issue_type === 'canonical_conflict') ? 'De-index Risk' : 'Self-Referencing'}
+                </span>
+              </div>
+              <span className="text-xs text-ink-500 block">No cross-language conflicts</span>
+            </Card>
+          </div>
+
+          {/* International SEO Summary & Issues */}
+          {intlSeo?.issues && intlSeo.issues.length > 0 && (
+            <Card className="p-5 space-y-3 border-red-200 dark:border-red-900/50 bg-red-50/40 dark:bg-red-950/20">
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 text-red-600" />
+                <h4 className="font-semibold text-sm text-red-900 dark:text-red-200">
+                  International SEO Deficiencies Detected ({intlSeo.issues.length})
+                </h4>
+              </div>
+              <div className="space-y-2 text-xs">
+                {intlSeo.issues.map((iss, i) => (
+                  <div key={i} className="p-2.5 rounded bg-white dark:bg-ink-900/60 border border-red-200 dark:border-red-900 flex items-start gap-2">
+                    <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-red-100 text-red-700">
+                      {iss.issue_type.toUpperCase()}
+                    </span>
+                    <span className="text-ink-700">{iss.message}</span>
+                  </div>
+                ))}
+              </div>
+            </Card>
+          )}
+
+          {/* Hreflang Matrix Table */}
+          <Card className="p-5 space-y-4">
+            <div className="flex items-center justify-between border-b border-line pb-3">
+              <div className="flex items-center gap-2">
+                <Languages className="w-4 h-4 text-pine" />
+                <h3 className="font-serif text-lg text-ink font-semibold">
+                  Hreflang & Regional Alternates Matrix
+                </h3>
+              </div>
+              <span className="text-xs font-mono text-ink-500">
+                {intlSeo?.matrix?.length || 0} Pages Audited
+              </span>
+            </div>
+
+            {intlSeo?.matrix && intlSeo.matrix.length > 0 ? (
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs text-left border-collapse border border-line">
+                  <thead className="bg-paper-100 font-mono text-[11px] text-ink-700">
+                    <tr>
+                      <th className="p-2.5 border border-line">Page URL</th>
+                      <th className="p-2.5 border border-line">&lt;html lang&gt;</th>
+                      <th className="p-2.5 border border-line">Alternates Count</th>
+                      <th className="p-2.5 border border-line">Alternates Declared</th>
+                      <th className="p-2.5 border border-line">x-default</th>
+                      <th className="p-2.5 border border-line">Return Tags</th>
+                      <th className="p-2.5 border border-line">Canonical Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {intlSeo.matrix.map((row, i) => (
+                      <tr key={i} className="hover:bg-paper-50 transition-colors">
+                        <td className="p-2.5 border border-line font-mono truncate max-w-xs">{row.url}</td>
+                        <td className="p-2.5 border border-line font-mono font-semibold">{row.declared_lang || '—'}</td>
+                        <td className="p-2.5 border border-line font-mono">{row.alternates_count}</td>
+                        <td className="p-2.5 border border-line font-mono">
+                          {row.alternates.length > 0
+                            ? row.alternates.map((a) => a.hreflang).join(', ')
+                            : 'None declared'}
+                        </td>
+                        <td className="p-2.5 border border-line">{row.has_x_default ? '✅' : '—'}</td>
+                        <td className="p-2.5 border border-line">
+                          {row.return_tags_valid ? (
+                            <span className="text-good font-semibold">✅ Valid</span>
+                          ) : (
+                            <span className="text-red-600 font-semibold">❌ Missing return</span>
+                          )}
+                        </td>
+                        <td className="p-2.5 border border-line">
+                          {row.canonical_aligned ? (
+                            <span className="text-good font-semibold">Self-Canonical</span>
+                          ) : (
+                            <span className="text-amber-600 font-semibold">Cross-Target</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div className="p-6 text-center text-ink-500 text-xs italic">
+                No hreflang alternate tags detected in HTML headers or HTTP response links.
+              </div>
+            )}
+          </Card>
+        </div>
+      )}
+
+      {/* ─────────────────────────────────────────────────────────────
           SUB-TAB 5: COMPETITOR SEO PARITY
           ───────────────────────────────────────────────────────────── */}
       {activeSubTab === 'competitors' && (
@@ -764,7 +1157,9 @@ export function SeoWorkspaceView({
                 </h3>
               </div>
               <span className="text-xs font-mono font-bold px-2 py-0.5 rounded bg-pine/10 text-pine">
-                Rank #{compParity?.target_rank ?? 1} of {compParity?.competitors?.length ?? 1}
+                {compParity?.target_rank != null
+                  ? `Rank #${compParity.target_rank} of ${compParity?.competitors?.length ?? 1}`
+                  : 'Pending Competitor Crawl'}
               </span>
             </div>
 
@@ -790,7 +1185,7 @@ export function SeoWorkspaceView({
                     <td className="p-2.5 font-medium text-ink-600">Overall SEO Score</td>
                     {compParity?.competitors.map((c, idx) => (
                       <td key={idx} className="p-2.5 font-mono font-bold text-ink">
-                        {c.overall_seo_score}/100
+                        {c.overall_seo_score != null ? `${c.overall_seo_score}/100` : '—'}
                       </td>
                     ))}
                   </tr>
@@ -798,7 +1193,7 @@ export function SeoWorkspaceView({
                     <td className="p-2.5 font-medium text-ink-600">Technical Health</td>
                     {compParity?.competitors.map((c, idx) => (
                       <td key={idx} className="p-2.5 font-mono text-ink-700">
-                        {c.technical_health_score}/100
+                        {c.technical_health_score != null ? `${c.technical_health_score}/100` : '—'}
                       </td>
                     ))}
                   </tr>
@@ -806,7 +1201,7 @@ export function SeoWorkspaceView({
                     <td className="p-2.5 font-medium text-ink-600">On-Page Optimization</td>
                     {compParity?.competitors.map((c, idx) => (
                       <td key={idx} className="p-2.5 font-mono text-ink-700">
-                        {c.onpage_score}/100
+                        {c.onpage_score != null ? `${c.onpage_score}/100` : '—'}
                       </td>
                     ))}
                   </tr>
@@ -814,7 +1209,7 @@ export function SeoWorkspaceView({
                     <td className="p-2.5 font-medium text-ink-600">Average Word Count</td>
                     {compParity?.competitors.map((c, idx) => (
                       <td key={idx} className="p-2.5 font-mono text-ink-700">
-                        {c.avg_word_count} words
+                        {c.avg_word_count != null ? `${c.avg_word_count} words` : '—'}
                       </td>
                     ))}
                   </tr>
@@ -822,7 +1217,7 @@ export function SeoWorkspaceView({
                     <td className="p-2.5 font-medium text-ink-600">Schema Types Count</td>
                     {compParity?.competitors.map((c, idx) => (
                       <td key={idx} className="p-2.5 font-mono text-ink-700">
-                        {c.schema_types_count} types
+                        {c.schema_types_count != null ? `${c.schema_types_count} types` : '—'}
                       </td>
                     ))}
                   </tr>
@@ -830,7 +1225,7 @@ export function SeoWorkspaceView({
                     <td className="p-2.5 font-medium text-ink-600">Server Latency (TTFB)</td>
                     {compParity?.competitors.map((c, idx) => (
                       <td key={idx} className="p-2.5 font-mono text-ink-700">
-                        {c.avg_ttfb_ms} ms
+                        {c.avg_ttfb_ms != null ? `${c.avg_ttfb_ms} ms` : '—'}
                       </td>
                     ))}
                   </tr>
@@ -838,7 +1233,7 @@ export function SeoWorkspaceView({
                     <td className="p-2.5 font-medium text-ink-600">HTTP 200 Pass Rate</td>
                     {compParity?.competitors.map((c, idx) => (
                       <td key={idx} className="p-2.5 font-mono text-good font-semibold">
-                        {c.http_200_rate_pct}%
+                        {c.http_200_rate_pct != null ? `${c.http_200_rate_pct}%` : '—'}
                       </td>
                     ))}
                   </tr>

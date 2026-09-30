@@ -39,16 +39,16 @@ def _get_category_formula_breakdown(
             ("Semantic consistency & bot access", 15.0, "MEASURED_DOM", ["llms.txt", "bot", "crawler", "robots", "access"]),
         ],
         Category.CONTENT: [
-            ("Topic depth & service capability coverage", 25.0, "MEASURED_DOM", ["depth", "word", "thin", "coverage", "service"]),
-            ("Readability & scan-friendly syntax", 25.0, "MEASURED_DOM", ["readability", "flesch", "scan", "syntax", "grammar"]),
-            ("Value proposition & heading clarity", 25.0, "MEASURED_DOM", ["heading", "h1", "value proposition", "clarity", "title"]),
-            ("Semantic hierarchy & outline structure", 25.0, "MEASURED_DOM", ["hierarchy", "outline", "h2", "h3", "structure"]),
+            ("Topical coverage & non-commodity information gain", 25.0, "MEASURED_DOM", ["depth", "word", "thin", "coverage", "service", "information gain", "commodity", "entity"]),
+            ("First-party evidence & empirical proof", 25.0, "MEASURED_DOM", ["evidence", "data", "benchmark", "claim", "unbacked", "superlative", "proof", "expert"]),
+            ("Semantic outline & cannibalization prevention", 25.0, "MEASURED_DOM", ["hierarchy", "outline", "h2", "h3", "structure", "cannibalization", "subtopic"]),
+            ("Readability & value proposition clarity", 25.0, "MEASURED_DOM", ["readability", "flesch", "scan", "syntax", "value proposition", "heading", "h1"]),
         ],
         Category.TECHNICAL_SEO: [
-            ("Crawl accessibility, robots.txt & sitemap hygiene", 25.0, "MEASURED_DOM", ["robots", "sitemap", "crawl", "index"]),
+            ("Crawl accessibility, sitemaps & international targeting", 25.0, "MEASURED_DOM", ["robots", "sitemap", "crawl", "index", "hreflang", "return tag", "x-default", "international"]),
             ("HTTPS security & protocol transport", 25.0, "MEASURED_TRANSPORT", ["https", "ssl", "tls", "security", "transport"]),
             ("TTFB & response latency", 25.0, "MEASURED_PERFORMANCE", ["ttfb", "latency", "speed", "performance", "response", "load"]),
-            ("Canonical DOM & link hygiene", 25.0, "MEASURED_DOM", ["canonical", "link", "broken", "redirect", "href"]),
+            ("Canonical integrity & local NAP hygiene", 25.0, "MEASURED_DOM", ["canonical", "link", "broken", "redirect", "href", "nap", "phone", "address", "conflict"]),
         ],
         Category.SCHEMA: [
             ("Entity Organization graph definition", 30.0, "MEASURED_DOM", ["organization", "entity", "sameas", "graph"]),
@@ -153,17 +153,18 @@ class ScoringEngine:
         business_profile: BusinessProfile,
         has_schema: bool = True,
         is_https: bool = True,
-        readability: float = 65.0
+        readability: float = 65.0,
+        external_authority_connected: bool = False
     ) -> OverallScoreResult:
         intent = business_profile.primary_intent if business_profile else BusinessIntent.LEAD_GENERATION
-        weights = compute_intent_adjusted_weights(intent)
+        base_weights = compute_intent_adjusted_weights(intent)
 
-        category_deductions: Dict[Category, float] = {cat: 0.0 for cat in weights.keys()}
-        category_deduction_items: Dict[Category, List[Dict[str, Any]]] = {cat: [] for cat in weights.keys()}
-        category_strengths: Dict[Category, List[str]] = {cat: [] for cat in weights.keys()}
-        category_weaknesses: Dict[Category, List[str]] = {cat: [] for cat in weights.keys()}
+        category_deductions: Dict[Category, float] = {cat: 0.0 for cat in base_weights.keys()}
+        category_deduction_items: Dict[Category, List[Dict[str, Any]]] = {cat: [] for cat in base_weights.keys()}
+        category_strengths: Dict[Category, List[str]] = {cat: [] for cat in base_weights.keys()}
+        category_weaknesses: Dict[Category, List[str]] = {cat: [] for cat in base_weights.keys()}
         severity_counts: Dict[Category, Dict[Severity, int]] = {
-            cat: {s: 0 for s in Severity} for cat in weights.keys()
+            cat: {s: 0 for s in Severity} for cat in base_weights.keys()
         }
 
         from app.domain.enums import RubricConfidence, EvidenceClass
@@ -283,6 +284,21 @@ class ScoringEngine:
             2
         ) if total_findings > 0 else 0.0
 
+        # Determine whether external authority is active / measured
+        has_external_authority = external_authority_connected or any(
+            f.category in (Category.TRUST_AUTHORITY, Category.EXTERNAL_AUTHORITY) and (
+                any(getattr(ref, "source_type", None) == "external" for ref in getattr(f, "evidence_refs", []))
+                or getattr(f, "evidence_class", None) in (EvidenceClass.EXTERNALLY_VERIFIED, EvidenceClass.OBSERVED)
+            )
+            for f in findings
+        )
+
+        if not has_external_authority:
+            active_cats = [c for c in base_weights.keys() if c not in (Category.TRUST_AUTHORITY, Category.EXTERNAL_AUTHORITY)]
+            weights = compute_intent_adjusted_weights(intent, active_categories=active_cats)
+        else:
+            weights = base_weights
+
         for cat, weight in weights.items():
             raw_score = max(20.0, min(100.0, 100.0 - category_deductions[cat]))
             n_issues = len(category_weaknesses[cat])
@@ -361,17 +377,35 @@ class ScoringEngine:
                 strengths=category_strengths[cat][:3],
                 weaknesses=category_weaknesses[cat][:4],
                 summary=summary,
+                status="PROVISIONAL" if is_provisional else "MEASURED",
+                provenance="PROVISIONAL_NEUTRAL" if is_provisional else "OBSERVED_CRAWL",
                 deductions=category_deduction_items[cat],
                 formula_breakdown=formula_breakdown
             )
             cat_scores[cat.value] = c_score
             total_weighted += raw_score * weight
 
+        if not has_external_authority:
+            cat_scores[Category.TRUST_AUTHORITY.value] = CategoryScore(
+                category=Category.TRUST_AUTHORITY,
+                score=None,
+                confidence=0.0,
+                weight=0.0,
+                weighted_score=0.0,
+                strengths=[],
+                weaknesses=["External backlink authority provider is not connected."],
+                summary="Not measured — connector unavailable",
+                status="NOT_MEASURED",
+                provenance="CONNECTOR_UNAVAILABLE",
+                deductions=[],
+                formula_breakdown=[]
+            )
+
         math_derivation = []
         for cat, weight in weights.items():
             raw = cat_scores[cat.value].score
             w_pct = round(weight * 100.0, 1)
-            contribution = round(raw * weight, 2)
+            contribution = round((raw or 0.0) * weight, 2)
             math_derivation.append({
                 "category": cat.value,
                 "category_label": cat.value.replace("_", " ").title(),
@@ -379,6 +413,18 @@ class ScoringEngine:
                 "weight_pct": w_pct,
                 "weight": round(weight, 3),
                 "weighted_points": contribution
+            })
+
+        if not has_external_authority:
+            math_derivation.append({
+                "category": Category.TRUST_AUTHORITY.value,
+                "category_label": "Trust Authority",
+                "raw_score": "Not measured",
+                "weight_pct": 0.0,
+                "weight": 0.0,
+                "weighted_points": 0.0,
+                "status": "NOT_MEASURED",
+                "provenance": "CONNECTOR_UNAVAILABLE"
             })
 
         overall_score = round(max(0.0, min(100.0, sum(row["weighted_points"] for row in math_derivation))), 1)

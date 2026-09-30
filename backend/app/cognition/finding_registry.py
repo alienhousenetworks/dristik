@@ -55,11 +55,6 @@ def _canonical_id(finding: Finding) -> str:
     if rule == "entity_graph_applicability":
         return "root_schema_applicable_type_absent"
 
-    # Align with authoritative Root Cause Clusters
-    from app.remediation.deduplicator import ROOT_CAUSE_CLUSTERS
-    for cluster in ROOT_CAUSE_CLUSTERS:
-        if any(kw in norm_text for kw in cluster["keywords"]):
-            return f"root_{cluster['id'].lower()}"
 
     # 1. Structural Archetype Clustering - Heading & Identity
     if ("h1" in norm_text or "headline" in norm_text) and (
@@ -155,6 +150,12 @@ def _canonical_id(finding: Finding) -> str:
 
     if "redirect" in norm_text or "301" in norm_text or "canonical host" in norm_text or "www" in norm_text or "hop" in norm_text:
         return "root_host_redirection_consolidation"
+
+    # Align with authoritative Root Cause Clusters
+    from app.remediation.deduplicator import ROOT_CAUSE_CLUSTERS
+    for cluster in ROOT_CAUSE_CLUSTERS:
+        if any(kw in norm_text for kw in cluster["keywords"]):
+            return f"root_{cluster['id'].lower()}"
 
     if finding.rule_id:
         return f"root_rule_{finding.rule_id}"
