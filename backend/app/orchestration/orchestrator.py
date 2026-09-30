@@ -835,7 +835,6 @@ class AnalysisOrchestrator:
                 findings=final_findings,
                 ai_search_matrix=blackboard.ai_search_evaluations,
                 commercial_evaluations=blackboard.commercial_evaluations,
-                dynamic_sandbox_evaluations=getattr(blackboard, "dynamic_sandbox_evaluations", []),
                 geo_readiness=geo_readiness,
                 competitor_bakeoff=blackboard.competitor_bakeoff,
             )

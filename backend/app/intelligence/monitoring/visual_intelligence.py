@@ -41,6 +41,8 @@ class VisualIntelligenceEngine:
         geo_readiness: Optional[GeoReadinessReport] = None,
         competitor_bakeoff: Optional[CompetitorBakeoffResult] = None,
         user_overrides: Optional[Dict[str, Any]] = None,
+        dynamic_sandbox_evaluations: Optional[List[Any]] = None,
+        **kwargs: Any,
     ) -> VisualIntelligencePayload:
         findings = findings or []
         ai_search_matrix = ai_search_matrix or []
