@@ -674,8 +674,19 @@ class ScoringEngine:
         # Google View: Technical (40%) + On-Page (30%) + Schema (30%)
         google_score = round(tech_score * 0.40 + onpage_score * 0.30 + schema_score * 0.30, 1)
 
-        # AI Readiness View: GEO Category Score only
-        ai_readiness_score = round(geo_score, 1)
+        # AI Readiness View: GEO Category Score blended with question support / commercial evaluations if available
+        if geo_readiness is not None and getattr(geo_readiness, "questions_total", 0) > 0:
+            support_ratio = getattr(geo_readiness, "questions_supported", 0) / geo_readiness.questions_total
+            ai_readiness_score = round(geo_score * 0.6 + (support_ratio * 100.0) * 0.4, 1)
+        elif commercial_evals:
+            valid_comm = [getattr(c, "before_score", None) for c in commercial_evals if getattr(c, "before_score", None) is not None]
+            if valid_comm:
+                avg_comm = sum(valid_comm) / len(valid_comm)
+                ai_readiness_score = round(geo_score * 0.5 + (avg_comm * 10.0) * 0.5, 1)
+            else:
+                ai_readiness_score = round(geo_score, 1)
+        else:
+            ai_readiness_score = round(geo_score, 1)
 
         # AI Visibility: Live empirical outcome only
         if live_citation_score is not None:
@@ -717,7 +728,7 @@ class ScoringEngine:
             ai_readiness_score=ai_readiness_score,
             ai_visibility_score=ai_visibility_score,
             ai_visibility_status=ai_visibility_status,
-            ai_citation_score=ai_readiness_score,
+            ai_citation_score=ai_visibility_score,
             on_page_proxy_score=ai_readiness_score,
             live_ai_citation_score=live_ai_citation_score,
             overall_score=overall,

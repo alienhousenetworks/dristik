@@ -596,6 +596,23 @@ class ValidationGate:
                 repairs_made.append(f"Reconciled overall score from {report.scores.overall_score} to exact weighted sum {new_overall}")
                 report.scores.overall_score = new_overall
 
+        # 1b. Align composite AI citation score with query matrix or live citation status
+        if report.honest_scores and report.honest_scores.ai_citation_score is not None:
+            if getattr(report.honest_scores, "live_ai_citation_score", None) is None:
+                report.honest_scores.ai_citation_score = None
+                repairs_made.append("Cleared ai_citation_score because live engine measurement was unexecuted.")
+            elif report.ai_search_matrix:
+                def _get_q_score(q):
+                    if hasattr(q, "score") and q.score is not None:
+                        return float(q.score) * 10.0
+                    if hasattr(q, "citation_probability") and q.citation_probability is not None:
+                        return float(q.citation_probability) * 100.0
+                    return float(getattr(q, "citability_score", 50.0))
+                matrix_avg = sum(_get_q_score(q) for q in report.ai_search_matrix) / len(report.ai_search_matrix)
+                if abs(report.honest_scores.ai_citation_score - matrix_avg) > 50:
+                    report.honest_scores.ai_citation_score = round(matrix_avg, 1)
+                    repairs_made.append(f"Reconciled composite AI citation score with query matrix average ({matrix_avg:.1f}).")
+
         # 2. Roadmap deduplication
         seen_roadmap_titles: Set[str] = set()
         clean_r7 = []

@@ -345,4 +345,24 @@ def test_validation_gate_handles_none_score_categories():
     assert isinstance(gate_result.is_valid, bool)
 
 
+def test_validation_gate_handles_unmeasured_ai_citation_and_matrix_reconciliation():
+    """Verify ValidationGate handles unmeasured live citations without falsely flagging divergence against query matrix."""
+    from app.domain.models import AiSearchQueryEvaluation
+    report = create_sample_report(overall_score=80.0, weighted_sum=80.0)
+    report.honest_scores.live_ai_citation_score = None
+    report.honest_scores.ai_citation_score = None
+    report.honest_scores.ai_readiness_score = 100.0
+    report.ai_search_matrix = [
+        AiSearchQueryEvaluation(
+            query="best cloud mesh",
+            question_type="Identity",
+            evidence_quality="Moderate",
+            score=2,
+            detected_answer="Found some mention"
+        )
+    ]
+    repaired, gate_result = ValidationGate.enforce_gate(report)
+    assert "composite_scores_derivable" in gate_result.passed_checks
+
+
 
