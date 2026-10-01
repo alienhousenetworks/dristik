@@ -1,15 +1,7 @@
-import { readError } from './api';
+import { api } from './http';
 
-async function send<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(path, {
-    credentials: 'include',
-    headers: { 'Content-Type': 'application/json', ...(init?.headers || {}) },
-    ...init,
-  });
-  if (!response.ok) {
-    throw new Error(await readError(response, 'External authority request failed'));
-  }
-  return response.json();
+function send<T>(path: string, init?: RequestInit): Promise<T> {
+  return api<T>(path, init, 'External authority request failed');
 }
 
 export function fetchExternalProviders() {

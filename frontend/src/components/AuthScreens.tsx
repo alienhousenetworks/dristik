@@ -36,9 +36,7 @@ function OAuthSSOButtons({ onAuthed }: { onAuthed: () => void }) {
     setSsoNotice(null);
     const provInfo = providers?.[provider];
     if (provInfo && !provInfo.configured) {
-      setSsoNotice(
-        `${provider === 'google' ? 'Google' : 'GitHub'} OAuth SSO requires ${provInfo.client_id_env} and secret in backend/.env.`
-      );
+      setSsoNotice(`${provider === 'google' ? 'Google' : 'GitHub'} sign-in is not configured for this workspace.`);
       return;
     }
 
@@ -173,7 +171,7 @@ export function LoginScreen({
       <form className="space-y-6" onSubmit={submit}>
         <Field label="Email" type="email" value={email} onChange={setEmail} autoComplete="email" />
         <Field label="Password" type="password" value={password} onChange={setPassword} autoComplete="current-password" />
-        {error && <p className="text-sm text-bad">{error}</p>}
+        {error && <p className="text-sm text-bad" role="alert">{error}</p>}
         <button type="submit" disabled={busy} className="btn-primary px-5 py-2.5 text-sm tracking-wide disabled:opacity-50">
           {busy ? 'Signing in…' : 'Sign in with Password'}
         </button>
@@ -235,7 +233,7 @@ export function SignupScreen({
         <Field label="Work email" type="email" value={email} onChange={setEmail} autoComplete="email" />
         <Field label="Password" type="password" value={password} onChange={setPassword} autoComplete="new-password" />
         <p className="text-xs text-ink-400">At least 8 characters, with upper and lower case and a number.</p>
-        {error && <p className="text-sm text-bad">{error}</p>}
+        {error && <p className="text-sm text-bad" role="alert">{error}</p>}
         <button type="submit" disabled={busy} className="btn-primary px-5 py-2.5 text-sm tracking-wide disabled:opacity-50">
           {busy ? 'Creating…' : 'Create account'}
         </button>
@@ -276,9 +274,9 @@ export function ForgotScreen({ onView }: { onView: (view: AppView) => void }) {
     <AuthShell kicker="Password" title="Reset your password.">
       <form className="space-y-6" onSubmit={submit}>
         <Field label="Email" type="email" value={email} onChange={setEmail} autoComplete="email" />
-        {error && <p className="text-sm text-bad">{error}</p>}
+        {error && <p className="text-sm text-bad" role="alert">{error}</p>}
         {message && <p className="text-sm text-ink-700">{message}</p>}
-        {resetPath && (
+        {import.meta.env.DEV && resetPath && (
           <p className="text-sm text-ink-500">
             Development reset link:{' '}
             <button type="button" className="text-ink underline" onClick={() => { window.location.hash = resetPath.replace(/^#/, ''); }}>
@@ -339,7 +337,7 @@ export function ResetScreen({
       ) : (
         <form className="space-y-6" onSubmit={submit}>
           <Field label="New password" type="password" value={password} onChange={setPassword} autoComplete="new-password" />
-          {error && <p className="text-sm text-bad">{error}</p>}
+          {error && <p className="text-sm text-bad" role="alert">{error}</p>}
           <button type="submit" disabled={busy} className="btn-primary px-5 py-2.5 text-sm tracking-wide disabled:opacity-50">
             {busy ? 'Saving…' : 'Update password'}
           </button>

@@ -2,6 +2,7 @@ import React from 'react';
 import { TabId, ExecutiveReport } from '../../types';
 import { synthesizePillars } from '../../lib/pillarSynthesis';
 import { cn, ScorePill } from '../ui';
+import { tabMatches } from '../../routes/navigation';
 import {
   LayoutDashboard,
   Search,
@@ -27,6 +28,8 @@ interface PillarNavBarProps {
   findingsCount?: number;
   pagesCount?: number;
   onNewAudit?: () => void;
+  embedded?: boolean;
+  collapsed?: boolean;
 }
 
 export function PillarNavBar({
@@ -36,6 +39,8 @@ export function PillarNavBar({
   findingsCount = 0,
   pagesCount = 0,
   onNewAudit,
+  embedded = false,
+  collapsed = false,
 }: PillarNavBarProps) {
   const rollup = synthesizePillars(report);
   const patchesCount = (report?.code_patches?.length || 0) + (report?.remediation_patches?.length || 0);
@@ -144,165 +149,81 @@ export function PillarNavBar({
   ];
 
   // Helper to determine if a tab is active (supporting aliases)
-  const isTabActive = (id: TabId) => {
-    if (tab === id) return true;
-    if (id === 'seo' && (tab === 'search_intelligence' || tab === 'search_console')) return true;
-    if (id === 'geo' && (tab === 'ai_search_intelligence' || tab === 'ai_citations' || tab === 'ai_search')) return true;
-    if (id === 'aeo' && tab === 'brand_entity_intelligence') return true;
-    if (id === 'cro' && (tab === 'conversion_intelligence' || tab === 'website_experience')) return true;
-    if (id === 'competitors' && (tab === 'perspectives' || tab === 'lead_gen')) return true;
-    if ((id === 'costing' || id === 'costs') && (tab === 'costing' || tab === 'costs')) return true;
-    return false;
-  };
+  const isTabActive = (id: TabId) => tabMatches(tab, id);
 
-  return (
-    <aside className="no-print lg:w-64 xl:w-72 shrink-0 border-b lg:border-b-0 lg:border-r border-line bg-paper-100/80 backdrop-blur-sm">
-      <nav className="lg:sticky lg:top-14 lg:h-[calc(100vh-3.5rem)] lg:overflow-y-auto px-3 py-3 lg:px-4 lg:py-5 flex lg:flex-col gap-5 overflow-x-auto">
-        
-        {/* EXECUTIVE */}
-        <div className="space-y-1">
-          <p className="hidden lg:block text-[10px] font-mono font-bold uppercase tracking-[0.14em] text-ink-400 px-2.5 mb-1.5">
-            Executive
-          </p>
-          {executiveItems.map((item) => {
-            const Icon = item.icon;
-            const active = isTabActive(item.id);
-            return (
-              <button
-                key={item.id}
-                type="button"
-                onClick={() => onSelectTab(item.id)}
-                className={cn('workspace-link text-xs font-medium', active && 'is-active')}
-              >
-                <div className="flex items-center gap-2.5 truncate">
-                  <Icon className={cn("w-4 h-4 shrink-0", active ? "text-paper-100" : "text-ink-500")} />
-                  <span className="truncate">{item.label}</span>
-                </div>
-                {item.score != null && <ScorePill score={item.score} />}
-              </button>
-            );
-          })}
+  const renderItem = (item: {
+    id: TabId;
+    label: string;
+    icon: React.ComponentType<{ className?: string }>;
+    score?: number | null;
+    badge?: string | number;
+  }) => {
+    const Icon = item.icon;
+    const active = isTabActive(item.id);
+    return (
+      <button
+        key={item.id}
+        type="button"
+        onClick={() => onSelectTab(item.id)}
+        aria-current={active ? 'page' : undefined}
+        title={item.label}
+        className={cn('workspace-link text-xs font-medium', active && 'is-active')}
+      >
+        <div className="flex items-center gap-2.5 truncate">
+          <Icon className={cn('w-4 h-4 shrink-0', active ? 'text-pine' : 'text-ink-500')} />
+          {!collapsed && <span className="truncate">{item.label}</span>}
         </div>
-
-        {/* CORE DISCIPLINES */}
-        <div className="space-y-1">
-          <div className="flex items-center justify-between px-2.5 mb-1.5">
-            <p className="hidden lg:block text-[10px] font-mono font-bold uppercase tracking-[0.14em] text-ink-400">
-              Core Disciplines
-            </p>
-            <span className="hidden lg:inline text-[9px] font-mono px-1.5 py-0.5 rounded bg-pine/10 text-pine font-semibold">
-              Separated
-            </span>
-          </div>
-          {disciplineItems.map((item) => {
-            const Icon = item.icon;
-            const active = isTabActive(item.id);
-            return (
-              <button
-                key={item.id}
-                type="button"
-                onClick={() => onSelectTab(item.id)}
-                className={cn('workspace-link text-xs font-medium', active && 'is-active')}
-              >
-                <div className="flex items-center gap-2.5 truncate">
-                  <Icon className={cn("w-4 h-4 shrink-0", active ? "text-paper-100" : "text-ink-500")} />
-                  <span className="truncate">{item.label}</span>
-                </div>
-                <div className="flex items-center gap-1.5 shrink-0">
-                  {item.badge != null && (
-                    <span className={cn(
-                      "text-[10px] font-mono px-1.5 py-0.2 rounded-full",
-                      active ? "bg-white/20 text-paper-100" : "bg-ink/5 text-ink-600"
-                    )}>
-                      {item.badge}
-                    </span>
-                  )}
-                  {item.score != null && <ScorePill score={item.score} />}
-                </div>
-              </button>
-            );
-          })}
-        </div>
-
-        {/* DEEP DIAGNOSTICS */}
-        <div className="space-y-1">
-          <p className="hidden lg:block text-[10px] font-mono font-bold uppercase tracking-[0.14em] text-ink-400 px-2.5 mb-1.5">
-            Diagnostics
-          </p>
-          {diagnosticItems.map((item) => {
-            const Icon = item.icon;
-            const active = isTabActive(item.id);
-            return (
-              <button
-                key={item.id}
-                type="button"
-                onClick={() => onSelectTab(item.id)}
-                className={cn('workspace-link text-xs font-medium', active && 'is-active')}
-              >
-                <div className="flex items-center gap-2.5 truncate">
-                  <Icon className={cn("w-4 h-4 shrink-0", active ? "text-paper-100" : "text-ink-500")} />
-                  <span className="truncate">{item.label}</span>
-                </div>
-                {item.badge != null && (
-                  <span className={cn(
-                    "text-[10px] font-mono px-1.5 py-0.2 rounded-full",
-                    active ? "bg-white/20 text-paper-100" : "bg-ink/5 text-ink-600"
-                  )}>
-                    {item.badge}
-                  </span>
-                )}
-              </button>
-            );
-          })}
-        </div>
-
-        {/* ENGINEERING & REMEDIATION */}
-        <div className="space-y-1">
-          <p className="hidden lg:block text-[10px] font-mono font-bold uppercase tracking-[0.14em] text-ink-400 px-2.5 mb-1.5">
-            Engineering
-          </p>
-          {engineeringItems.map((item) => {
-            const Icon = item.icon;
-            const active = isTabActive(item.id);
-            return (
-              <button
-                key={item.id}
-                type="button"
-                onClick={() => onSelectTab(item.id)}
-                className={cn('workspace-link text-xs font-medium', active && 'is-active')}
-              >
-                <div className="flex items-center gap-2.5 truncate">
-                  <Icon className={cn("w-4 h-4 shrink-0", active ? "text-paper-100" : "text-ink-500")} />
-                  <span className="truncate">{item.label}</span>
-                </div>
-                {item.badge != null && (
-                  <span className={cn(
-                    "text-[10px] font-mono px-1.5 py-0.2 rounded-full",
-                    active ? "bg-white/20 text-paper-100" : "bg-ink/5 text-ink-600"
-                  )}>
-                    {item.badge}
-                  </span>
-                )}
-              </button>
-            );
-          })}
-        </div>
-
-        {onNewAudit && (
-          <div className="lg:mt-auto lg:pt-4 border-t border-line/60">
-            <button
-              type="button"
-              onClick={onNewAudit}
-              className="workspace-link text-xs text-ink-600 hover:text-ink font-semibold"
-            >
-              <div className="flex items-center gap-2">
-                <PlusCircle className="w-4 h-4 text-pine" />
-                <span>New Audit</span>
-              </div>
-            </button>
+        {!collapsed && (
+          <div className="flex items-center gap-1.5 shrink-0">
+            {item.badge != null && (
+              <span className="text-[10px] font-mono px-1.5 py-0.5 rounded-full bg-ink/5 text-ink-600">{item.badge}</span>
+            )}
+            {item.score != null && <ScorePill score={item.score} />}
           </div>
         )}
-      </nav>
+      </button>
+    );
+  };
+
+  const groupLabel = (label: string) =>
+    !collapsed && <p className="text-[10px] font-mono font-bold uppercase tracking-[0.14em] text-ink-400 px-2.5 mb-1.5">{label}</p>;
+
+  const nav = (
+    <nav className={cn('flex flex-col gap-5', !embedded && 'px-3 py-3 lg:px-4 lg:py-5')} aria-label="Audit sections">
+      <div className="space-y-1">
+        {groupLabel('Executive')}
+        {executiveItems.map(renderItem)}
+      </div>
+      <div className="space-y-1">
+        {groupLabel('Disciplines')}
+        {disciplineItems.map(renderItem)}
+      </div>
+      <div className="space-y-1">
+        {groupLabel('Diagnostics')}
+        {diagnosticItems.map(renderItem)}
+      </div>
+      <div className="space-y-1">
+        {groupLabel('Engineering')}
+        {engineeringItems.map(renderItem)}
+      </div>
+      {onNewAudit && (
+        <div className="pt-3 border-t border-line">
+          <button type="button" onClick={onNewAudit} className="workspace-link text-xs font-semibold" title="New audit">
+            <span className="flex items-center gap-2">
+              <PlusCircle className="w-4 h-4 text-pine" />
+              {!collapsed && <span>New audit</span>}
+            </span>
+          </button>
+        </div>
+      )}
+    </nav>
+  );
+
+  if (embedded) return nav;
+
+  return (
+    <aside className="no-print lg:w-64 xl:w-72 shrink-0 border-b lg:border-b-0 lg:border-r border-line bg-paper-50">
+      {nav}
     </aside>
   );
 }

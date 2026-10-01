@@ -53,6 +53,18 @@ export function Pipeline({ run, onRefreshRun }: PipelineProps) {
               );
             })}
           </ol>
+          <div className="flex items-center gap-1.5 font-mono text-xs">
+            <span className="text-ink-500">Progress:</span>
+            <span
+              className={`font-bold px-2 py-0.5 rounded border ${
+                done
+                  ? 'bg-emerald-500/10 text-emerald-700 border-emerald-500/30'
+                  : 'bg-pine/10 text-pine border-pine/30'
+              }`}
+            >
+              {done ? '100% Complete' : `${run.progress_percentage ?? 0}%`}
+            </span>
+          </div>
         </div>
 
       {/* Live Stage Cost Meter */}

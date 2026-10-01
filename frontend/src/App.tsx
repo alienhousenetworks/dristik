@@ -1,77 +1,45 @@
-import React, { useEffect, useState } from 'react';
+import React, { Suspense, lazy, useEffect, useRef, useState } from 'react';
 import { AnalysisRun, AnalysisSummary, AppView, AuthUser, ConnectorType, Finding, TabId } from './types';
 import { deleteAnalysis, getAnalysis, listAnalyses, openAnalysisStream, startAnalysis } from './services/api';
 import { can, fetchMe, logout } from './services/auth';
-import { Header } from './components/Header';
 import { AuditForm } from './components/AuditForm';
 import { Pipeline } from './components/Pipeline';
 import { Telemetry } from './components/Telemetry';
-import { Overview } from './components/Overview';
-import { Perspectives } from './components/Perspectives';
-import { Findings } from './components/Findings';
-import { Roadmap } from './components/Roadmap';
-import { Report } from './components/Report';
-import { Big4AuditReport } from './components/Big4AuditReport';
-import { AuditPdfReport } from './components/AuditPdfReport';
-import { Pricing } from './components/Pricing';
 import { Drawer } from './components/Drawer';
 import { PricingModal } from './components/PricingModal';
 import { Intro } from './components/Intro';
 import { ForgotScreen, LoginScreen, ResetScreen, SignupScreen } from './components/AuthScreens';
 import { AccountPanel, TeamPanel } from './components/AccountPanel';
 import { ContactForm } from './components/ContactForm';
-import { SystemPanel } from './components/SystemPanel';
 import { ConnectorsModal } from './components/ConnectorsModal';
 import { ExternalAuthorityPanel } from './components/ExternalAuthorityPanel';
-import { ExternalAuthorityView } from './components/ExternalAuthorityView';
 import { AuditDataSources } from './components/AuditDataSources';
 import { RemediationFlowModal } from './components/RemediationFlowModal';
 import { AgencyWorkspaceModal } from './components/AgencyWorkspaceModal';
-import { PillarNavBar } from './components/Navigation/PillarNavBar';
-import { SeoWorkspaceView } from './components/Pillars/SeoWorkspaceView';
-import { GeoWorkspaceView } from './components/Pillars/GeoWorkspaceView';
-import { AeoWorkspaceView } from './components/Pillars/AeoWorkspaceView';
-import { CroWorkspaceView } from './components/Pillars/CroWorkspaceView';
-import { CompetitorWorkspaceView } from './components/Pillars/CompetitorWorkspaceView';
-import { DevPatchPackView } from './components/DevPatchPackView';
-import { VerificationWorkspaceView } from './components/VerificationWorkspaceView';
-import { Pages } from './components/Pages';
 import { ScoringRubricModal } from './components/ScoringRubricModal';
-import { RecentAuditsDropdown } from './components/RecentAuditsDropdown';
-import { PageHeader } from './components/ui';
-import { CostLedgerView } from './components/CostLedgerView';
+import { ConfirmDialog, EmptyState, ErrorState, LoadingBlock, PageHeader, notify } from './components/ui';
+import { ErrorBoundary } from './components/ErrorBoundary';
+import { AppShell } from './layouts/AppShell';
+import { parseNavigation, syncAnalysisQuery } from './routes/navigation';
 
-const VIEWS = new Set<AppView>([
-  'home',
-  'pricing',
-  'login',
-  'signup',
-  'forgot',
-  'reset',
-  'account',
-  'contact',
-  'team',
-  'system',
-]);
-
-function parseNavigation(): { view: AppView; token?: string; analysisId?: string } {
-  const searchParams = new URLSearchParams(window.location.search);
-  const searchAnalysisId = searchParams.get('analysis_id') || undefined;
-
-  const raw = window.location.hash.replace(/^#\/?/, '');
-  if (!raw) {
-    return {
-      view: 'home',
-      analysisId: searchAnalysisId || localStorage.getItem('dristik_active_analysis_id') || undefined,
-    };
-  }
-  const [path, qs] = raw.split('?');
-  const view = (VIEWS.has(path as AppView) ? path : 'home') as AppView;
-  const hashParams = new URLSearchParams(qs || '');
-  const token = hashParams.get('token') || undefined;
-  const analysisId = hashParams.get('analysis_id') || searchAnalysisId || localStorage.getItem('dristik_active_analysis_id') || undefined;
-  return { view, token, analysisId };
-}
+const Overview = lazy(() => import('./components/Overview').then((m) => ({ default: m.Overview })));
+const Findings = lazy(() => import('./components/Findings').then((m) => ({ default: m.Findings })));
+const Roadmap = lazy(() => import('./components/Roadmap').then((m) => ({ default: m.Roadmap })));
+const Report = lazy(() => import('./components/Report').then((m) => ({ default: m.Report })));
+const Big4AuditReport = lazy(() => import('./components/Big4AuditReport').then((m) => ({ default: m.Big4AuditReport })));
+const AuditPdfReport = lazy(() => import('./components/AuditPdfReport').then((m) => ({ default: m.AuditPdfReport })));
+const Pricing = lazy(() => import('./components/Pricing').then((m) => ({ default: m.Pricing })));
+const SystemPanel = lazy(() => import('./components/SystemPanel').then((m) => ({ default: m.SystemPanel })));
+const ExternalAuthorityView = lazy(() => import('./components/ExternalAuthorityView').then((m) => ({ default: m.ExternalAuthorityView })));
+const SeoWorkspaceView = lazy(() => import('./components/Pillars/SeoWorkspaceView').then((m) => ({ default: m.SeoWorkspaceView })));
+const GeoWorkspaceView = lazy(() => import('./components/Pillars/GeoWorkspaceView').then((m) => ({ default: m.GeoWorkspaceView })));
+const AeoWorkspaceView = lazy(() => import('./components/Pillars/AeoWorkspaceView').then((m) => ({ default: m.AeoWorkspaceView })));
+const CroWorkspaceView = lazy(() => import('./components/Pillars/CroWorkspaceView').then((m) => ({ default: m.CroWorkspaceView })));
+const CompetitorWorkspaceView = lazy(() => import('./components/Pillars/CompetitorWorkspaceView').then((m) => ({ default: m.CompetitorWorkspaceView })));
+const DevPatchPackView = lazy(() => import('./components/DevPatchPackView').then((m) => ({ default: m.DevPatchPackView })));
+const VerificationWorkspaceView = lazy(() => import('./components/VerificationWorkspaceView').then((m) => ({ default: m.VerificationWorkspaceView })));
+const Pages = lazy(() => import('./components/Pages').then((m) => ({ default: m.Pages })));
+const CostLedgerView = lazy(() => import('./components/CostLedgerView').then((m) => ({ default: m.CostLedgerView })));
 
 export function App() {
   const initial = parseNavigation();
@@ -99,23 +67,11 @@ export function App() {
   const [previewDeck, setPreviewDeck] = useState(false);
   const [recentAudits, setRecentAudits] = useState<AnalysisSummary[]>([]);
 
+  const [pendingDelete, setPendingDelete] = useState<{ id: string; label: string } | null>(null);
+  const [deleting, setDeleting] = useState(false);
+
   const syncActiveAnalysisId = (id: string | null) => {
-    if (id) {
-      localStorage.setItem('dristik_active_analysis_id', id);
-      const searchParams = new URLSearchParams(window.location.search);
-      searchParams.set('analysis_id', id);
-      const newUrl = `${window.location.pathname}?${searchParams.toString()}${window.location.hash}`;
-      window.history.replaceState(null, '', newUrl);
-    } else {
-      localStorage.removeItem('dristik_active_analysis_id');
-      const searchParams = new URLSearchParams(window.location.search);
-      searchParams.delete('analysis_id');
-      const queryStr = searchParams.toString();
-      const newUrl = queryStr
-        ? `${window.location.pathname}?${queryStr}${window.location.hash}`
-        : `${window.location.pathname}${window.location.hash}`;
-      window.history.replaceState(null, '', newUrl);
-    }
+    syncAnalysisQuery(id);
   };
 
   const go = (next: AppView, extra?: string) => {
@@ -148,6 +104,7 @@ export function App() {
             setRun((prev) => {
               if (!prev) return prev;
               const liveTelemetry = payload.telemetry ?? payload.data?.telemetry ?? prev.telemetry;
+              const liveGraph = payload.graph ?? payload.data?.graph ?? prev.graph;
               return {
                 ...prev,
                 progress_percentage: payload.progress ?? prev.progress_percentage,
@@ -155,6 +112,7 @@ export function App() {
                 status: payload.stage ?? prev.status,
                 report: payload.data?.report ?? prev.report,
                 telemetry: liveTelemetry,
+                graph: liveGraph,
               };
             });
             if (payload.stage === 'completed') {
@@ -214,9 +172,27 @@ export function App() {
         loadAudit(parsed.analysisId);
       }
     };
+    const onUnauthorized = () => setUser(null);
     window.addEventListener('hashchange', onHash);
-    return () => window.removeEventListener('hashchange', onHash);
+    window.addEventListener('dristik:unauthorized', onUnauthorized);
+    return () => {
+      window.removeEventListener('hashchange', onHash);
+      window.removeEventListener('dristik:unauthorized', onUnauthorized);
+    };
   }, []);
+
+  const statusKey = useRef<string | null>(null);
+  useEffect(() => {
+    if (!run?.status || !run.analysis_id) return;
+    const key = `${run.analysis_id}|${run.status}`;
+    const previous = statusKey.current;
+    statusKey.current = key;
+    if (!previous || previous === key) return;
+    const [previousId, previousStatus] = previous.split('|');
+    if (previousId !== run.analysis_id || previousStatus === run.status) return;
+    if (run.status === 'completed') notify({ title: 'Audit ready', description: run.website_url, tone: 'success' });
+    if (run.status === 'failed') notify({ title: 'Audit failed', description: run.current_step, tone: 'danger' });
+  }, [run?.status, run?.analysis_id, run?.website_url, run?.current_step]);
 
   const start = async (overrideUrl?: string) => {
     const target = (overrideUrl ?? url).trim();
@@ -317,64 +293,77 @@ export function App() {
     />
   );
 
+  const confirmDelete = async () => {
+    if (!pendingDelete) return;
+    setDeleting(true);
+    try {
+      await deleteAnalysis(pendingDelete.id);
+      setRecentAudits((prev) => prev.filter((item) => item.analysis_id !== pendingDelete.id));
+      if (run?.analysis_id === pendingDelete.id) clearAudit();
+      notify({ title: 'Audit deleted', tone: 'success' });
+      window.dispatchEvent(new CustomEvent('dristik:audits-changed'));
+      setPendingDelete(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not delete the audit.');
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   return (
-    <div className="min-h-screen text-ink flex flex-col">
-      <Header
-        run={run}
-        isLoading={loading}
-        user={user}
-        view={view}
-        onView={(next) => go(next)}
-        onLogout={async () => {
-          await logout();
-          setUser(null);
-          go('home');
-        }}
-        onOpenPlans={() => setPlansOpen(true)}
-        onOpenConnectors={() => {
-          setConnectorsInitialTab('wordpress');
-          setConnectorsOpen(true);
-        }}
-        onOpenExternal={() => setExternalOpen(true)}
-        onOpenRemediation={() => setRemediationOpen(true)}
-        onOpenAgency={() => setAgencyOpen(true)}
-        onOpenRubric={() => setRubricOpen(true)}
-        onExport={() => {
-          try {
-            window.print();
-          } catch {
-            const id = run?.report?.analysis_id || run?.report?.report_id || run?.analysis_id;
-            if (id) window.open(`/api/v1/reports/${id}/executive-deck`, '_blank');
-          }
-        }}
-        onSelectAudit={(id) => loadAudit(id)}
-        onNewAudit={clearAudit}
-        onAuditDeleted={async (id) => {
-          try {
-            await deleteAnalysis(id);
-            setRecentAudits((prev) => prev.filter((item) => item.analysis_id !== id));
-            if (run?.analysis_id === id) clearAudit();
-          } catch (err) {
-            setError(err instanceof Error ? err.message : 'Could not delete the audit.');
-          }
-        }}
-      />
-
+    <AppShell
+      user={user}
+      view={view}
+      tab={tab}
+      run={run}
+      loading={loading}
+      workspace={Boolean(workspaceRun)}
+      report={report || null}
+      findingsCount={findingsCount}
+      pagesCount={pagesCount}
+      onNavigate={go}
+      onSelectTab={setTab}
+      onLogout={async () => {
+        await logout();
+        setUser(null);
+        go('home');
+      }}
+      onNewAudit={() => {
+        clearAudit();
+        go('home');
+      }}
+      onSelectAudit={(id) => {
+        go('home');
+        loadAudit(id);
+      }}
+      onDeleteAudit={(id, label) => {
+        const match = recentAudits.find((item) => item.analysis_id === id);
+        setPendingDelete({
+          id,
+          label: label || match?.domain || run?.website_url?.replace(/^https?:\/\//, '') || 'this audit',
+        });
+      }}
+      onOpenPlans={() => setPlansOpen(true)}
+      onOpenConnectors={() => {
+        setConnectorsInitialTab('wordpress');
+        setConnectorsOpen(true);
+      }}
+      onOpenExternal={() => setExternalOpen(true)}
+      onOpenRemediation={() => setRemediationOpen(true)}
+      onOpenAgency={() => setAgencyOpen(true)}
+      onOpenRubric={() => setRubricOpen(true)}
+      onExport={() => {
+        try {
+          window.print();
+        } catch {
+          const id = run?.report?.analysis_id || run?.report?.report_id || run?.analysis_id;
+          if (id) window.open(`/api/v1/reports/${id}/executive-deck`, '_blank');
+        }
+      }}
+    >
       {workspaceRun ? (
-        <div className="no-print flex-1 flex flex-col lg:flex-row min-h-0">
-          {report && (
-            <PillarNavBar
-              tab={tab}
-              onSelectTab={setTab}
-              report={report}
-              findingsCount={findingsCount}
-              pagesCount={pagesCount}
-              onNewAudit={clearAudit}
-            />
-          )}
-
-          <main className="no-print flex-1 min-w-0">
-            <div className="max-w-[1100px] mx-auto px-5 sm:px-8 py-8 space-y-6">
+        <div className="no-print">
+            <div className="max-w-page mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 space-y-6">
               {!report && (
                 <div className="space-y-6">
                   <PageHeader
@@ -389,11 +378,13 @@ export function App() {
                       onNavigateToCosting={() => setTab('costing')}
                     />
                   )}
-                  {error && <p className="text-sm text-bad">{error}</p>}
+                  {error && <ErrorState title="Audit problem" description={error} />}
                 </div>
               )}
 
               {report && (
+                <ErrorBoundary key={tab}>
+                <Suspense fallback={<LoadingBlock label="Loading this section" />}>
                 <div className="space-y-8">
                   {tab === 'overview' && (
                     <Overview
@@ -557,12 +548,13 @@ export function App() {
                     </div>
                   )}
                 </div>
+                </Suspense>
+                </ErrorBoundary>
               )}
             </div>
-          </main>
         </div>
       ) : (
-        <main className="no-print flex-1 max-w-[1120px] w-full mx-auto px-6 lg:px-8 py-10">
+        <div className="no-print max-w-[1120px] w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-10">
           {view === 'login' && (
             <LoginScreen
               onAuthed={async () => {
@@ -603,14 +595,20 @@ export function App() {
             />
           )}
           {view === 'team' && user && <TeamPanel user={user} />}
-          {view === 'system' && user?.is_system && <SystemPanel />}
+          {view === 'system' && user?.is_system && (
+            <Suspense fallback={<LoadingBlock label="Loading admin" />}>
+              <SystemPanel />
+            </Suspense>
+          )}
           {view === 'pricing' && (
-            <Pricing
-              onSelectPlan={(id) => {
-                setPlanId(id);
-                setPlansOpen(true);
-              }}
-            />
+            <Suspense fallback={<LoadingBlock label="Loading pricing" />}>
+              <Pricing
+                onSelectPlan={(id) => {
+                  setPlanId(id);
+                  setPlansOpen(true);
+                }}
+              />
+            </Suspense>
           )}
 
           {view === 'home' && (
@@ -668,16 +666,7 @@ export function App() {
                           type="button"
                           className="text-[10px] text-ink-400 hover:text-bad px-1"
                           title={`Delete audit for ${item.domain}`}
-                          onClick={async () => {
-                            const label = item.domain || item.website_url;
-                            if (!window.confirm(`Delete the audit for ${label}? This cannot be undone.`)) return;
-                            try {
-                              await deleteAnalysis(item.analysis_id);
-                              setRecentAudits((prev) => prev.filter((row) => row.analysis_id !== item.analysis_id));
-                            } catch (err) {
-                              setError(err instanceof Error ? err.message : 'Could not delete the audit.');
-                            }
-                          }}
+                          onClick={() => setPendingDelete({ id: item.analysis_id, label: item.domain || item.website_url })}
                         >
                           Delete
                         </button>
@@ -689,16 +678,19 @@ export function App() {
               <Intro />
             </section>
           )}
-        </main>
-      )}
-
-      {report && !previewDeck && (
-        <div className="print-only">
-          <AuditPdfReport report={report} />
         </div>
       )}
 
+      {report && !previewDeck && (
+        <Suspense fallback={null}>
+          <div className="print-only">
+            <AuditPdfReport report={report} />
+          </div>
+        </Suspense>
+      )}
+
       {previewDeck && report && (
+        <Suspense fallback={<LoadingBlock label="Loading report" />}>
         <div className="scrim fixed inset-0 z-50 overflow-y-auto p-3 sm:p-6 flex flex-col items-center print:static print:p-0 print:overflow-visible print:bg-transparent">
           <div className="w-full max-w-[1400px] my-auto print:max-w-none print:w-full print:my-0">
             <Big4AuditReport
@@ -716,20 +708,7 @@ export function App() {
             />
           </div>
         </div>
-      )}
-
-      {!workspaceRun && (
-        <footer className="no-print border-t border-line mt-auto">
-          <div className="max-w-[1120px] mx-auto px-6 lg:px-8 py-6 text-sm text-ink-400 flex items-center justify-between gap-4">
-            <span className="font-serif text-lg text-ink-500">Dristik</span>
-            <div className="flex items-center gap-5">
-              <button type="button" onClick={() => go('contact')} className="hover:text-ink">
-                Contact
-              </button>
-              <span className="hidden sm:inline">Evidence-first website audits</span>
-            </div>
-          </div>
-        </footer>
+        </Suspense>
       )}
 
       <div className="no-print">
@@ -782,8 +761,17 @@ export function App() {
           }}
         />
         <ScoringRubricModal isOpen={rubricOpen} onClose={() => setRubricOpen(false)} />
+        <ConfirmDialog
+          open={Boolean(pendingDelete)}
+          title="Delete this audit?"
+          description={pendingDelete ? `Delete the audit for ${pendingDelete.label}. This cannot be undone.` : ''}
+          confirmLabel="Delete audit"
+          busy={deleting}
+          onConfirm={confirmDelete}
+          onClose={() => setPendingDelete(null)}
+        />
       </div>
-    </div>
+    </AppShell>
   );
 }
 

@@ -6,7 +6,7 @@ interface RecentAuditsDropdownProps {
   currentAnalysisId?: string;
   onSelectAudit: (analysisId: string) => void;
   onNewAudit?: () => void;
-  onAuditDeleted?: (analysisId: string) => void | Promise<void>;
+  onAuditDeleted?: (analysisId: string, label?: string) => void | Promise<void>;
   className?: string;
 }
 
@@ -36,6 +36,9 @@ export function RecentAuditsDropdown({
 
   useEffect(() => {
     load();
+    const onChange = () => load();
+    window.addEventListener('dristik:audits-changed', onChange);
+    return () => window.removeEventListener('dristik:audits-changed', onChange);
   }, [currentAnalysisId]);
 
   // Close on outside click
@@ -76,9 +79,10 @@ export function RecentAuditsDropdown({
         }}
         className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-line hover:border-pine bg-paper-50 dark:bg-ink-900 text-ink-700 dark:text-ink-200 text-xs font-medium transition-colors shadow-2xs"
         title="Browse and revisit past website audits"
+        aria-expanded={isOpen}
+        aria-haspopup="dialog"
       >
-        <span className="text-pine">📂</span>
-        <span>Audits History</span>
+        <span>Audits</span>
         {audits.length > 0 && (
           <span className="font-mono text-[10px] bg-paper-200 dark:bg-ink-800 text-ink-600 px-1.5 py-0.5 rounded">
             {audits.length}
@@ -180,21 +184,18 @@ export function RecentAuditsDropdown({
                         type="button"
                         className="shrink-0 px-2 py-1 text-[11px] font-semibold text-bad border border-bad/40 rounded hover:bg-bad/10"
                         title={`Delete audit for ${item.domain}`}
-                        onClick={async (event) => {
+                        onClick={(event) => {
                           event.stopPropagation();
-                          const label = item.domain || item.website_url;
-                          if (!window.confirm(`Delete the audit for ${label}? This cannot be undone.`)) return;
                           setDeleteError(null);
-                          try {
-                            if (onAuditDeleted) {
-                              await onAuditDeleted(item.analysis_id);
-                            } else {
-                              await deleteAnalysis(item.analysis_id);
-                            }
-                            setAudits((prev) => prev.filter((row) => row.analysis_id !== item.analysis_id));
-                          } catch (err) {
-                            setDeleteError(err instanceof Error ? err.message : 'Could not delete the audit.');
+                          if (onAuditDeleted) {
+                            void onAuditDeleted(item.analysis_id, item.domain || item.website_url);
+                            return;
                           }
+                          void deleteAnalysis(item.analysis_id)
+                            .then(() => setAudits((prev) => prev.filter((row) => row.analysis_id !== item.analysis_id)))
+                            .catch((err: unknown) => {
+                              setDeleteError(err instanceof Error ? err.message : 'Could not delete the audit.');
+                            });
                         }}
                       >
                         Delete

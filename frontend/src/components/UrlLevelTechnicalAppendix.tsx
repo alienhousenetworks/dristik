@@ -211,7 +211,7 @@ export function UrlLevelTechnicalAppendix({
             { key: 'CANONICAL_ISSUE', label: `Non-Canonical (${canonicalIssueCount})` },
             { key: 'MISSING_H1', label: `Missing H1 (${missingH1Count})` },
             { key: 'THIN_CONTENT', label: `Thin Content (${thinContentCount})` },
-            { key: 'PIXEL_TRUNCATED', label: `Pixel &gt; 580px (${pixelTruncatedCount})` },
+            { key: 'PIXEL_TRUNCATED', label: `Pixel > 580px (${pixelTruncatedCount})` },
           ].map((item) => (
             <button
               key={item.key}
@@ -223,7 +223,7 @@ export function UrlLevelTechnicalAppendix({
                   : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
               }`}
             >
-              <span dangerouslySetInnerHTML={{ __html: item.label }} />
+              <span>{item.label}</span>
             </button>
           ))}
         </div>

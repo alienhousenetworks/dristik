@@ -1,4 +1,5 @@
 import { PaymentOrder, PaymentVoucher } from '../types';
+import { api } from './http';
 
 declare global {
   interface Window {
@@ -32,18 +33,11 @@ export async function createPaymentOrder(params: {
   company_name?: string;
   gstin?: string;
 }): Promise<PaymentOrder> {
-  const res = await fetch('/api/v1/payments/create-order', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(params),
-  });
-
-  if (!res.ok) {
-    const errorData = await res.json().catch(() => ({}));
-    throw new Error(errorData.detail || `Could not create the order (${res.status})`);
-  }
-
-  return res.json();
+  return api<PaymentOrder>(
+    '/api/v1/payments/create-order',
+    { method: 'POST', body: JSON.stringify(params) },
+    'Could not create the order',
+  );
 }
 
 export async function verifyPaymentSignature(params: {
@@ -54,18 +48,11 @@ export async function verifyPaymentSignature(params: {
   target_url: string;
   customer_email?: string;
 }): Promise<PaymentVoucher> {
-  const res = await fetch('/api/v1/payments/verify-payment', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(params),
-  });
-
-  if (!res.ok) {
-    const errorData = await res.json().catch(() => ({}));
-    throw new Error(errorData.detail || `Payment verification failed (${res.status})`);
-  }
-
-  return res.json();
+  return api<PaymentVoucher>(
+    '/api/v1/payments/verify-payment',
+    { method: 'POST', body: JSON.stringify(params) },
+    'Payment verification failed',
+  );
 }
 
 export async function launchRazorpayCheckout(options: {

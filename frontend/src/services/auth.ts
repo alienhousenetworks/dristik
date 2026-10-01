@@ -1,16 +1,8 @@
 import { AdminOrganization, AuthProvidersResponse, AuthUser, ContactRecord, OrgSummary, PlatformOverview } from '../types';
-import { readError } from './api';
+import { api } from './http';
 
-async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const response = await fetch(path, {
-    credentials: 'include',
-    headers: { 'Content-Type': 'application/json', ...(init.headers || {}) },
-    ...init,
-  });
-  if (!response.ok) {
-    throw new Error(await readError(response, 'Request failed'));
-  }
-  return response.json();
+function request<T>(path: string, init: RequestInit = {}): Promise<T> {
+  return api<T>(path, init);
 }
 
 export async function fetchMe(): Promise<AuthUser | null> {
@@ -198,6 +190,7 @@ export function startSSOAuth(provider: 'google' | 'github', onComplete: () => vo
   let timer: any = null;
 
   const handleMessage = (e: MessageEvent) => {
+    if (e.origin !== window.location.origin) return;
     if (e.data && e.data.type === 'AUTH_SUCCESS') {
       cleanup();
       onComplete();

@@ -1,10 +1,5 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { clsx } from 'clsx';
-import { twMerge } from 'tailwind-merge';
-
-export function cn(...classes: Array<string | false | null | undefined>) {
-  return twMerge(clsx(classes));
-}
+import React, { useEffect, useId, useRef, useState } from 'react';
+import { cn } from '../../lib/cn';
 
 export function PageHeader({
   kicker,
@@ -20,11 +15,11 @@ export function PageHeader({
   children?: React.ReactNode;
 }) {
   return (
-    <header className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between mb-8">
+    <header className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between mb-6">
       <div className="min-w-0 max-w-2xl space-y-2">
         {kicker && <p className="label">{kicker}</p>}
-        <h1 className="font-serif text-[2rem] sm:text-4xl leading-[1.12] text-ink tracking-tight">{title}</h1>
-        {description && <p className="text-ink-500 leading-relaxed">{description}</p>}
+        <h1 className="font-serif text-[1.85rem] sm:text-4xl leading-[1.12] text-ink tracking-tight">{title}</h1>
+        {description && <p className="text-body text-ink-500 leading-relaxed">{description}</p>}
         {children}
       </div>
       {actions && <div className="flex flex-wrap items-center gap-2 shrink-0">{actions}</div>}
@@ -73,48 +68,19 @@ export function Card({
   return <div className={cn('card', padding && 'p-5 sm:p-6', className)}>{children}</div>;
 }
 
-export function Stat({
-  label,
-  value,
-  hint,
-  tone,
-}: {
-  label: string;
-  value: React.ReactNode;
-  hint?: string;
-  tone?: 'default' | 'good' | 'warn' | 'bad';
-}) {
-  const valueClass =
-    tone === 'good' ? 'text-good' : tone === 'warn' ? 'text-warn' : tone === 'bad' ? 'text-bad' : 'text-ink';
-  return (
-    <div className="card p-4">
-      <p className="label mb-1.5">{label}</p>
-      <p className={cn('font-serif text-3xl leading-none', valueClass)}>{value}</p>
-      {hint && <p className="mt-2 text-xs text-ink-500 leading-relaxed">{hint}</p>}
-    </div>
-  );
-}
-
-export function ScorePill({ score }: { score?: number | null }) {
-  if (score == null || Number.isNaN(score)) {
-    return <span className="score-pill text-ink-400">—</span>;
-  }
-  const n = Math.round(score);
-  const tone = n >= 80 ? 'text-good bg-good/10' : n >= 60 ? 'text-warn bg-warn/10' : 'text-bad bg-bad/10';
-  return <span className={cn('score-pill', tone)}>{n}</span>;
-}
-
 export function SubNav<T extends string>({
   items,
   value,
   onChange,
+  label = 'Section',
 }: {
   items: Array<{ id: T; label: string }>;
   value: T;
   onChange: (id: T) => void;
+  label?: string;
 }) {
   return (
-    <div className="subnav" role="tablist">
+    <div className="subnav" role="tablist" aria-label={label}>
       {items.map((item) => (
         <button
           key={item.id}
@@ -135,25 +101,43 @@ export function Dropdown({
   label,
   align = 'right',
   children,
+  menuLabel,
 }: {
   label: React.ReactNode;
   align?: 'left' | 'right';
   children: React.ReactNode;
+  menuLabel?: string;
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const menuId = useId();
 
   useEffect(() => {
-    const onDoc = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    if (!open) return;
+    const onDoc = (event: MouseEvent) => {
+      if (ref.current && !ref.current.contains(event.target as Node)) setOpen(false);
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setOpen(false);
     };
     document.addEventListener('mousedown', onDoc);
-    return () => document.removeEventListener('mousedown', onDoc);
-  }, []);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDoc);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
 
   return (
     <div className="relative" ref={ref}>
-      <button type="button" className="nav-link inline-flex items-center" onClick={() => setOpen((v) => !v)}>
+      <button
+        type="button"
+        className="nav-link inline-flex items-center px-2 py-1"
+        aria-expanded={open}
+        aria-haspopup="menu"
+        aria-controls={menuId}
+        onClick={() => setOpen((value) => !value)}
+      >
         {label}
         <span className="ml-1 text-[10px] text-ink-400" aria-hidden>
           ▾
@@ -161,9 +145,12 @@ export function Dropdown({
       </button>
       {open && (
         <div
+          id={menuId}
+          role="menu"
+          aria-label={menuLabel}
           className={cn(
-            'absolute top-full mt-2 min-w-[208px] card py-1.5 z-50 shadow-lg',
-            align === 'right' ? 'right-0' : 'left-0'
+            'absolute top-full mt-2 min-w-[220px] card py-1.5 z-dropdown shadow-lg',
+            align === 'right' ? 'right-0' : 'left-0',
           )}
           onClick={() => setOpen(false)}
         >
@@ -186,10 +173,11 @@ export function MenuItem({
   return (
     <button
       type="button"
+      role="menuitem"
       onClick={onClick}
       className={cn(
-        'w-full text-left px-3.5 py-2 text-sm hover:bg-paper-50 transition-colors',
-        danger ? 'text-bad' : 'text-ink-700'
+        'w-full text-left px-3.5 py-2 text-sm hover:bg-paper-100 transition-colors',
+        danger ? 'text-bad' : 'text-ink-700',
       )}
     >
       {children}
@@ -247,7 +235,7 @@ export function PillarShell({
           )}
         </div>
       </div>
-      <SubNav items={tabs} value={activeTab} onChange={(id) => onTab(id)} />
+      <SubNav items={tabs} value={activeTab} onChange={(id) => onTab(id)} label={title} />
       {children}
     </div>
   );

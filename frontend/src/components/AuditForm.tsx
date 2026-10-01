@@ -130,7 +130,11 @@ export function AuditForm({
         Site type is treated as context, not truth. Dristik verifies the live pages independently.
       </p>
 
-      {error && <p className="text-sm text-bad">{error}</p>}
+      {error && (
+        <p className="text-sm text-bad" role="alert">
+          {error}
+        </p>
+      )}
     </form>
   );
 }
