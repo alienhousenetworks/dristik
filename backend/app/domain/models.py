@@ -3,8 +3,9 @@ Dristik AI Domain Models & Pydantic Schemas
 Strict typed models for Evidence, Claims, Findings, Scores, Reports, and Telemetry.
 """
 from __future__ import annotations
-from typing import List, Dict, Any, Optional, Union
-from pydantic import BaseModel, Field, field_validator
+from datetime import datetime
+from typing import List, Dict, Any, Optional, Union, Tuple
+from pydantic import BaseModel, Field, field_validator, model_validator, ConfigDict
 from app.domain.enums import (
     Severity,
     Category,
@@ -39,6 +40,7 @@ from app.domain.enums import (
     QueryClass,
     FindingClassification,
     ImpactLevel,
+    ClaimSourceType,
 )
 from app.evidence.models import EvidenceRef
 
@@ -223,6 +225,65 @@ class SubObservation(BaseModel):
     evidence_refs: List[str] = Field(default_factory=list)
 
 
+class GroundedRecommendation(BaseModel):
+    """
+    Layer 4 — Grounded Recommendation.
+    Prescriptive action synthesized by LLM/reasoner, strictly anchored to underlying finding and evidence.
+    Cannot manufacture underlying website facts.
+    """
+    recommendation_id: str
+    underlying_finding_id: str
+    underlying_evidence_ids: List[str] = Field(default_factory=list)
+    what_to_change: str = Field(..., description="Actionable change instruction")
+    why: str = Field(..., description="Causal reason and impact explanation")
+    how_to_change: str = Field(..., description="Concrete implementation guidance")
+    example: Optional[str] = Field(default=None, description="Concrete code snippet or content example")
+    target_file: Optional[str] = None
+
+
+class DerivedMetric(BaseModel):
+    """
+    Layer 3 — Derived Intelligence Metric.
+    Every derived metric must carry: formula, input evidence, algorithm version, and timestamp.
+    """
+    metric_id: str
+    name: str = Field(..., description="e.g. topic_coverage, entity_consistency, intent_coverage, information_gain, citation_readiness")
+    score: float = Field(..., ge=0.0, le=100.0, description="Normalized score 0-100")
+    formula: str = Field(..., description="Explicit mathematical or deterministic formula expression")
+    input_evidence_ids: List[str] = Field(default_factory=list, description="IDs of backing Layer 1 machine observations")
+    algorithm_version: str = Field(default="dristik_v2.1", description="Version of derivation algorithm")
+    timestamp: str = Field(default_factory=lambda: datetime.utcnow().isoformat())
+    details: Dict[str, Any] = Field(default_factory=dict)
+
+
+class ClaimLedgerEntry(BaseModel):
+    """
+    Phase 2 — Claim Ledger Record.
+    Every factual statement in the report is indexed with provenance and confidence.
+    """
+    claim_id: str
+    claim: str
+    source_type: ClaimSourceType = ClaimSourceType.OBSERVED
+    evidence_ids: List[str] = Field(default_factory=list)
+    confidence: float = 1.0
+    scope: str = "site_wide"
+    created_by: str = "system"
+    timestamp: str = ""
+    is_valid_fact: bool = True
+    rejection_reason: Optional[str] = None
+
+
+class ClaimLedger(BaseModel):
+    """
+    Phase 2 — System-wide Claim Ledger for Certified Zero-Fake integrity.
+    """
+    ledger_id: str
+    run_id: str
+    entries: List[ClaimLedgerEntry] = Field(default_factory=list)
+    certified_zero_fake: bool = True
+    rejected_unsupported_count: int = 0
+
+
 class Finding(BaseModel):
     finding_id: str
     org_id: str = "org_default"
@@ -239,6 +300,7 @@ class Finding(BaseModel):
     description: str
     evidence: List[FindingEvidence] = Field(default_factory=list)
     evidence_refs: List[str] = Field(default_factory=list)
+    evidence_ids: List[str] = Field(default_factory=list)
     evidence_ref_objects: List[EvidenceRef] = Field(default_factory=list)
     rule_id: Optional[str] = None
     confidence: float = Field(default=0.90, ge=0.0, le=1.0)
@@ -247,6 +309,7 @@ class Finding(BaseModel):
     effort: int = Field(default=5, ge=1, le=10)
     priority: int = Field(default=5, ge=1, le=10)
     recommendation: str
+    grounded_recommendation: Optional[GroundedRecommendation] = None
     reasoning: Optional[str] = None
     business_impact: Optional[str] = None
     verification_status: VerificationStatus = VerificationStatus.VERIFIED
@@ -311,6 +374,24 @@ class Finding(BaseModel):
     @property
     def id(self) -> str:
         return self.finding_id
+
+    @model_validator(mode="after")
+    def sync_evidence_ids_and_refs(self) -> "Finding":
+        if self.evidence_ids and not self.evidence_refs:
+            self.evidence_refs = list(self.evidence_ids)
+        elif self.evidence_refs and not self.evidence_ids:
+            self.evidence_ids = list(self.evidence_refs)
+        return self
+
+    def to_layer2_json(self) -> dict[str, Any]:
+        """Layer 2 canonical JSON schema: finding_id, rule_id, evidence_ids, confidence."""
+        conf_str = "certain" if self.confidence >= 0.99 or str(self.confidence_rubric).upper() in ["VERIFIED", "CERTAIN", "RUBRICCONFIDENCE.VERIFIED"] else "high"
+        return {
+            "finding_id": self.finding_id,
+            "rule_id": self.rule_id or "RULE_CUSTOM_001",
+            "evidence_ids": list(self.evidence_ids or self.evidence_refs or []),
+            "confidence": conf_str,
+        }
 
     def emission_contract(self) -> dict:
         """Exact agent-emission schema required of every finding."""
@@ -455,6 +536,7 @@ class ThreeWayComparison(BaseModel):
     ai_answer_engine_perspective: str
 
 class AiSearchQueryEvaluation(BaseModel):
+    model_config = ConfigDict(protected_namespaces=())
     query: str
     question_type: str # e.g. "Identity", "Offering", "Target Audience", "Differentiation", "Pricing"
     evidence_quality: str # "Excellent", "Good", "Moderate", "Weak", "Missing"
@@ -533,10 +615,14 @@ class CompetitorBakeoffResult(BaseModel):
 class GeoQuestionEvidence(BaseModel):
     question_key: str
     question: str
+    category: str = "General"
     status: str
+    answer: Optional[str] = None
+    answer_snippet: Optional[str] = None
     evidence_url: Optional[str] = None
     evidence_snippet: Optional[str] = None
     why: str = ""
+    recommended_answer: Optional[str] = None
 
 
 class GeoDimension(BaseModel):
@@ -749,10 +835,54 @@ class CharacterSafeCopy(BaseModel):
     primary_cta: str = ""
 
 
+class CheckEvidenceItem(BaseModel):
+    url: Optional[str] = None
+    snippet: Optional[str] = None
+    status: str = "PASS"  # PASS | FAIL | WARNING
+    detail: Optional[str] = None
+
+
+class LLMJudgeRecord(BaseModel):
+    model_config = ConfigDict(protected_namespaces=())
+    rubric_id: str
+    model: str = "gemini-2.5-flash"
+    model_version: Optional[str] = None
+    temperature: float = 0.0
+    input_evidence: Optional[str] = None
+    raw_judgment: Optional[str] = None
+    normalized_score: float = 1.0
+    calibration_version: str = "v5.0"
+
+
+class CheckResult(BaseModel):
+    check_id: str
+    name: str
+    score: float  # 0.0 - 1.0
+    weight: float
+    sample_size: int = 1
+    passed: int = 1
+    failed: int = 0
+    coverage: float = 1.0  # 0.0 - 1.0
+    status: str = "PASS"  # PASS | PARTIAL | DEFICIT | NOT_MEASURED
+    confidence_interval: Optional[Tuple[float, float]] = None
+    evidence: List[Dict[str, Any]] = Field(default_factory=list)
+    llm_judge: Optional[LLMJudgeRecord] = None
+    methodology_version: str = "5.0"
+
+
+class AuditScopeInfo(BaseModel):
+    plan_tier: str = "starter"
+    requested_pages: int = 5
+    measured_pages: int = 5
+    scope_coverage: float = 1.0  # measured_pages / requested_pages
+
+
 class CategoryScore(BaseModel):
     category: Category
     score: Optional[float] = None # 0 - 100 or None if unmeasured
     confidence: float = 0.90 # 0 - 1.00
+    coverage: float = 1.0 # measured_weight / total_weight (>=0.60 MEASURED, 0.30-0.5999 PARTIAL, <0.30 NOT_MEASURED)
+    score_interval: Optional[Tuple[float, float]] = None
     weight: float = 0.0 # 0.0 - 1.0
     weighted_score: float = 0.0 # score * weight
     strengths: List[str] = Field(default_factory=list)
@@ -760,7 +890,8 @@ class CategoryScore(BaseModel):
     summary: str
     deductions: List[Dict[str, Any]] = Field(default_factory=list)
     formula_breakdown: List[Dict[str, Any]] = Field(default_factory=list)
-    status: str = "MEASURED" # "MEASURED" | "NOT_MEASURED" | "PROVISIONAL"
+    check_results: List[CheckResult] = Field(default_factory=list)
+    status: str = "MEASURED" # "MEASURED" | "PARTIAL" | "NOT_MEASURED"
     provenance: Optional[str] = None
 
 class OverallScoreResult(BaseModel):
@@ -942,6 +1073,7 @@ class StageCostRecord(BaseModel):
 
 
 class TelemetryData(BaseModel):
+    model_config = ConfigDict(protected_namespaces=())
     total_tokens: int = 0
     input_tokens: int = 0
     output_tokens: int = 0
@@ -1830,6 +1962,8 @@ class ExecutiveReport(BaseModel):
     local_seo: Optional[LocalSeoAuditReport] = None
     international_seo: Optional[InternationalSeoAuditReport] = None
     topical_authority: Optional[TopicalAuthorityAuditReport] = None
+    derived_intelligence: List[DerivedMetric] = Field(default_factory=list)
+    claim_ledger: Optional[ClaimLedger] = None
 
 class AnalysisRequest(BaseModel):
     website_url: str

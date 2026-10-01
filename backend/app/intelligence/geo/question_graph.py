@@ -381,6 +381,55 @@ class GeoQuestionGraphEngine:
     def __init__(self, brand_name: str = ""):
         self.brand_name = brand_name
 
+    def _clean_snippet(self, raw: str) -> str:
+        s = re.sub(r"\s+", " ", raw).strip()
+        # If snippet starts with a lowercase word fragment, trim to the next full sentence or clean boundary
+        if len(s) > 20 and s[0].islower() and " " in s:
+            first_period = s.find(". ")
+            if 0 < first_period < len(s) - 20:
+                s = s[first_period + 2:].strip()
+        return s
+
+    def _synthesize_answer(
+        self,
+        status: str,
+        brand: str,
+        cat: str,
+        q_key: str,
+        snippet: Optional[str],
+        price_amounts: set[str],
+    ) -> Tuple[Optional[str], Optional[str]]:
+        category_recommendations = {
+            "Entity Identity": f"Publish an authoritative 'About' page or structured FAQ explicitly stating {brand}'s exact business category, founding year, leadership, headquarters, and core mission.",
+            "Core Capabilities & Services": f"Provide structured service/product documentation detailing {brand}'s primary features, supported technical integrations, deployment models, and tangible client deliverables.",
+            "Target Audience & ICP": f"Explicitly list target customer profiles, ideal organization sizes (e.g. enterprise vs startups), and served verticals in hero headers or solution pages.",
+            "Pricing & Commercial Terms": f"Publish a dedicated /pricing page with transparent tiers, free trial availability, setup fees, billing intervals, or an explicit enterprise quotation pathway.",
+            "Security, Trust & Compliance": f"Deploy a /security or trust center publishing compliance certifications (SOC 2, ISO 27001, GDPR), data encryption policies, and verified client testimonials.",
+            "Comparative & Differentiators": f"Create comparison or 'Why {brand}' assets detailing competitive differentiators, advantages over legacy methods, and seamless migration assistance.",
+            "Implementation & Onboarding": f"Document expected onboarding timelines, developer effort requirements, documentation links, and customer support availability (SLA, chat, email).",
+            "High-Intent Purchase Actions": f"Ensure clear, prominent conversion calls-to-action (schedule a demo, self-service register, contact sales) are visible on all primary pages.",
+        }
+        rec = category_recommendations.get(cat, f"Publish clear, extractable content answering this question directly on {brand}'s website.")
+
+        if status == "SUPPORTED":
+            clean = self._clean_snippet(snippet or "")
+            ans = f"According to {brand}'s crawled pages: \"{clean}\""
+            return ans, None
+        elif status == "PARTIAL":
+            clean = self._clean_snippet(snippet or "") if snippet else ""
+            if clean:
+                ans = f"Partially addressed on {brand}'s website: \"{clean}\" (lacks full standalone depth)."
+            else:
+                ans = f"Partially mentioned on {brand}'s website: Related keywords were found, but no standalone answer block exists."
+            return ans, rec
+        elif status == "CONFLICTING":
+            ans = f"Conflicting data found across crawled pages: {', '.join(list(price_amounts)[:3])}."
+            rec_conf = f"Standardize all public references to pricing across all pages for {brand} to eliminate AI engine confusion."
+            return ans, rec_conf
+        else:  # UNSUPPORTED
+            ans = f"No direct answer found on crawled pages. AI search engines and agents cannot answer this question from first-party evidence."
+            return ans, rec
+
     def _page_hits(self, pages: List[PageEvidence], pattern: re.Pattern) -> List[Tuple[str, str]]:
         hits = []
         for p in pages:
@@ -478,13 +527,26 @@ class GeoQuestionGraphEngine:
 
             category_stats[cat][status.lower()] += 1
 
+            ans, rec_ans = self._synthesize_answer(
+                status=status,
+                brand=brand,
+                cat=cat,
+                q_key=q_key,
+                snippet=evidence_snippet,
+                price_amounts=price_amounts,
+            )
+
             evaluated_questions.append(GeoQuestionEvidence(
                 question_key=q_key,
                 question=rendered_q,
+                category=cat,
                 status=status,
+                answer=ans,
+                answer_snippet=evidence_snippet,
                 evidence_url=evidence_url,
                 evidence_snippet=evidence_snippet,
                 why=why,
+                recommended_answer=rec_ans,
             ))
 
         total_q = len(evaluated_questions)

@@ -225,6 +225,15 @@ class ClaimType(str, Enum):
     RECOMMENDATION = "recommendation"
 
 
+class ClaimSourceType(str, Enum):
+    OBSERVED = "OBSERVED"
+    DERIVED = "DERIVED"
+    MODEL_ANALYZED = "MODEL_ANALYZED"
+    INFERRED = "INFERRED"
+    RECOMMENDATION = "RECOMMENDATION"
+    UNSUPPORTED = "UNSUPPORTED"
+
+
 class BusinessIntent(str, Enum):
     LEAD_GENERATION = "lead_generation"
     SAAS = "saas"

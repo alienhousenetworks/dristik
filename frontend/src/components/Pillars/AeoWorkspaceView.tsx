@@ -22,6 +22,74 @@ interface AeoWorkspaceViewProps {
 
 type AeoSubTab = 'directives' | 'schema' | 'questions' | 'triples';
 
+export const QUESTION_KEY_CATEGORY_MAP: Record<string, string> = {
+  identity_what: 'Entity Identity',
+  identity_leadership: 'Entity Identity',
+  identity_headquarters: 'Entity Identity',
+  identity_category: 'Entity Identity',
+  identity_mission: 'Entity Identity',
+
+  caps_primary_offerings: 'Core Capabilities & Services',
+  caps_tech_stack: 'Core Capabilities & Services',
+  caps_custom_integrations: 'Core Capabilities & Services',
+  caps_key_deliverables: 'Core Capabilities & Services',
+  caps_how_it_works: 'Core Capabilities & Services',
+  caps_deployment_model: 'Core Capabilities & Services',
+  caps_problem_solved: 'Core Capabilities & Services',
+  caps_automation: 'Core Capabilities & Services',
+  caps_maintenance_support: 'Core Capabilities & Services',
+  caps_prerequisites: 'Core Capabilities & Services',
+
+  icp_target_customer: 'Target Audience & ICP',
+  icp_enterprise_suitability: 'Target Audience & ICP',
+  icp_smb_startup_suitability: 'Target Audience & ICP',
+  icp_buyer_roles: 'Target Audience & ICP',
+  icp_verticals: 'Target Audience & ICP',
+
+  price_cost: 'Pricing & Commercial Terms',
+  price_tiers: 'Pricing & Commercial Terms',
+  price_free_trial: 'Pricing & Commercial Terms',
+  price_setup_fees: 'Pricing & Commercial Terms',
+  price_billing_cycle: 'Pricing & Commercial Terms',
+  price_volume_discounts: 'Pricing & Commercial Terms',
+  price_refund_cancellation: 'Pricing & Commercial Terms',
+
+  trust_data_security: 'Security, Trust & Compliance',
+  trust_compliance_standards: 'Security, Trust & Compliance',
+  trust_data_privacy: 'Security, Trust & Compliance',
+  trust_testimonials: 'Security, Trust & Compliance',
+  trust_client_logos: 'Security, Trust & Compliance',
+  trust_uptime_sla: 'Security, Trust & Compliance',
+  trust_support_channels: 'Security, Trust & Compliance',
+  trust_third_party_audits: 'Security, Trust & Compliance',
+
+  diff_alternatives: 'Comparative & Differentiators',
+  diff_core_moat: 'Comparative & Differentiators',
+  diff_traditional_vs_brand: 'Comparative & Differentiators',
+  diff_limitations: 'Comparative & Differentiators',
+  diff_migration: 'Comparative & Differentiators',
+
+  impl_setup_time: 'Implementation & Onboarding',
+  impl_engineering_effort: 'Implementation & Onboarding',
+  impl_business_roi: 'Implementation & Onboarding',
+  impl_dedicated_success: 'Implementation & Onboarding',
+  impl_documentation: 'Implementation & Onboarding',
+
+  intent_schedule_demo: 'High-Intent Purchase Actions',
+  intent_self_serve: 'High-Intent Purchase Actions',
+  intent_status_changelog: 'High-Intent Purchase Actions',
+  intent_global_currencies: 'High-Intent Purchase Actions',
+  intent_next_steps: 'High-Intent Purchase Actions',
+};
+
+export function resolveQuestionCategory(q: any): string {
+  if (q?.category && q.category !== 'General') return q.category;
+  if (q?.question_key && QUESTION_KEY_CATEGORY_MAP[q.question_key]) {
+    return QUESTION_KEY_CATEGORY_MAP[q.question_key];
+  }
+  return q?.category || 'General';
+}
+
 export function AeoWorkspaceView({ report, onOpenPatchPack }: AeoWorkspaceViewProps) {
   const [activeSubTab, setActiveSubTab] = useState<AeoSubTab>('directives');
   const [selectedQuestionCategory, setSelectedQuestionCategory] = useState<string>('All');
@@ -33,14 +101,16 @@ export function AeoWorkspaceView({ report, onOpenPatchPack }: AeoWorkspaceViewPr
   const qGraph = geo?.question_graph_50;
   const questionItems = qGraph?.questions || geo?.questions || [];
 
+  const resolveCategory = resolveQuestionCategory;
+
   const rawCategories: string[] = Array.from(
-    new Set<string>(questionItems.map((q: any) => String(q.category || 'General')))
+    new Set<string>(questionItems.map((q: any) => resolveCategory(q)))
   );
   const categories: string[] = ['All', ...rawCategories];
 
   const filteredQuestions = selectedQuestionCategory === 'All'
     ? questionItems
-    : questionItems.filter((q: any) => (q.category || 'General') === selectedQuestionCategory);
+    : questionItems.filter((q: any) => resolveCategory(q) === selectedQuestionCategory);
 
   const schemaTypes = geo?.schema_types || [];
   const schemaCrosscheck = geo?.schema_crosscheck;
@@ -303,29 +373,129 @@ export function AeoWorkspaceView({ report, onOpenPatchPack }: AeoWorkspaceViewPr
 
           <div className="space-y-3">
             {filteredQuestions.map((q: any, idx: number) => {
-              const supported = q.supported ?? (q.answer_confidence ? q.answer_confidence > 0.5 : true);
+              const category = resolveCategory(q);
+              const rawStatus = (q.status || (q.supported === true ? 'SUPPORTED' : (q.supported === false ? 'UNSUPPORTED' : ''))).toUpperCase();
+              const isSupported = rawStatus === 'SUPPORTED' || q.supported === true;
+              const isPartial = rawStatus === 'PARTIAL';
+              const isConflicting = rawStatus === 'CONFLICTING';
+              const isUnsupported = rawStatus === 'UNSUPPORTED' || (!isSupported && !isPartial && !isConflicting);
+
+              const excerpt = q.answer_snippet || q.evidence_snippet;
+              const directAnswer = q.answer || (
+                isSupported && excerpt
+                  ? `According to crawled pages: "${excerpt.trim()}"`
+                  : isPartial && excerpt
+                    ? `Partially addressed on-page: "${excerpt.trim()}" (lacks complete standalone explanation).`
+                    : isUnsupported
+                      ? 'No direct answer found on crawled pages. AI agents cannot answer this question from first-party evidence.'
+                      : q.why || null
+              );
+              const sourceUrl = q.evidence_url;
+              const recommendedAnswer = q.recommended_answer || (!isSupported && q.why ? q.why : null);
+
+              let pathname = '/';
+              if (sourceUrl) {
+                try {
+                  pathname = new URL(sourceUrl, 'https://localhost').pathname || '/';
+                } catch {
+                  pathname = sourceUrl;
+                }
+              }
+
               return (
-                <Card key={idx} className="p-4 space-y-2">
-                  <div className="flex items-start justify-between gap-3">
+                <Card key={idx} className="p-4 space-y-3 border border-line">
+                  <div className="flex flex-wrap items-start justify-between gap-2">
                     <div className="space-y-1">
                       <div className="flex items-center gap-2">
-                        <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-paper-200 text-ink-600">
-                          {q.category || 'General'}
+                        <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-paper-200 text-ink-700 font-medium">
+                          {category}
                         </span>
-                        <span className={`text-[10px] font-mono px-2 py-0.2 rounded font-bold ${
-                          supported ? 'bg-good/10 text-good' : 'bg-warn/10 text-warn'
+                        <span className={`text-[10px] font-mono px-2 py-0.5 rounded font-bold ${
+                          isSupported
+                            ? 'bg-good/10 text-good border border-good/20'
+                            : isPartial
+                              ? 'bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/20'
+                              : isConflicting
+                                ? 'bg-purple-500/10 text-purple-700 dark:text-purple-400 border border-purple-500/20'
+                                : 'bg-bad/10 text-bad border border-bad/20'
                         }`}>
-                          {supported ? '✓ Supported Answer' : '✗ Unanswered On-Page'}
+                          {isSupported
+                            ? '✓ Supported Answer'
+                            : isPartial
+                              ? '◐ Partial Evidence'
+                              : isConflicting
+                                ? '⚠ Conflicting Data'
+                                : '✗ Unanswered On-Page'}
                         </span>
                       </div>
-                      <h4 className="text-sm font-semibold text-ink">{q.question}</h4>
+                      <h4 className="text-sm font-semibold text-ink leading-snug">{q.question}</h4>
                     </div>
                   </div>
 
-                  {q.answer_snippet && (
-                    <div className="p-2.5 rounded bg-paper-50 border border-line text-xs font-mono text-ink-800">
-                      <span className="text-pine font-bold">Answer Excerpt: </span>
-                      {q.answer_snippet}
+                  {/* Direct Answer Block */}
+                  {directAnswer && (
+                    <div className={`p-3 rounded-md text-xs leading-relaxed ${
+                      isSupported
+                        ? 'bg-good/5 border border-good/20 text-ink-900'
+                        : isPartial
+                          ? 'bg-amber-500/5 border border-amber-500/20 text-ink-900'
+                          : isConflicting
+                            ? 'bg-purple-500/5 border border-purple-500/20 text-ink-900'
+                            : 'bg-paper-100 dark:bg-ink-900/50 border border-line text-ink-700'
+                    }`}>
+                      <div className="flex items-center gap-1.5 font-bold mb-1 text-[11px]">
+                        {isSupported ? (
+                          <span className="text-good flex items-center gap-1">
+                            <CheckCircle2 className="w-3.5 h-3.5" /> Answer
+                          </span>
+                        ) : isPartial ? (
+                          <span className="text-amber-700 dark:text-amber-400 flex items-center gap-1">
+                            <Sparkles className="w-3.5 h-3.5" /> Partial Answer
+                          </span>
+                        ) : isConflicting ? (
+                          <span className="text-purple-700 dark:text-purple-400 flex items-center gap-1">
+                            <XCircle className="w-3.5 h-3.5" /> Conflicting Answer
+                          </span>
+                        ) : (
+                          <span className="text-ink-500 flex items-center gap-1">
+                            <HelpCircle className="w-3.5 h-3.5" /> Unanswered On-Page
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-ink-800 dark:text-paper-100">{directAnswer}</p>
+                    </div>
+                  )}
+
+                  {/* Verbatim Crawl Evidence Snippet */}
+                  {excerpt && (
+                    <div className="p-2.5 rounded bg-paper-50 dark:bg-ink-900/60 border border-line text-xs font-mono text-ink-800 space-y-1">
+                      <div className="flex items-center justify-between text-[10px] text-ink-500">
+                        <span className="text-pine font-bold uppercase tracking-wider">Verbatim Crawl Evidence</span>
+                        {sourceUrl && (
+                          <a
+                            href={sourceUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-pine hover:underline truncate max-w-[200px]"
+                            title={sourceUrl}
+                          >
+                            Source: {pathname}
+                          </a>
+                        )}
+                      </div>
+                      <p className="italic text-ink-700 dark:text-paper-200">"{excerpt}"</p>
+                    </div>
+                  )}
+
+                  {/* Recommended Answer / Fix for Unanswered or Partial Questions */}
+                  {(isUnsupported || isPartial || isConflicting) && recommendedAnswer && (
+                    <div className="p-2.5 rounded bg-pine/5 border border-pine/20 text-xs space-y-1">
+                      <span className="text-pine font-bold text-[11px] block">
+                        💡 Recommended Content to Add:
+                      </span>
+                      <p className="text-xs text-ink-700 dark:text-paper-200 leading-relaxed">
+                        {recommendedAnswer}
+                      </p>
                     </div>
                   )}
                 </Card>

@@ -446,6 +446,14 @@ def evaluate_geo_readiness(
     # ------------------------------------------------------------------
     # 1. Canonical 6-Question Evaluation
     # ------------------------------------------------------------------
+    category_map = {
+        "identity": "Entity Identity",
+        "icp": "Target Audience & ICP",
+        "pricing": "Pricing & Commercial Terms",
+        "offering": "Core Capabilities & Services",
+        "trust": "Security, Trust & Compliance",
+        "compare": "Comparative & Differentiators",
+    }
     canonical_questions: List[GeoQuestionEvidence] = []
     for key, q, needles in _questions(name):
         pattern = re.compile("|".join(re.escape(n) for n in needles if n.strip()), re.I)
@@ -458,13 +466,24 @@ def evaluate_geo_readiness(
             "UNSUPPORTED": "The crawled sample does not contain an answer to this buyer question.",
             "CONFLICTING": "Multiple distinct price/value strings appear across the crawled sample.",
         }[status]
+        cat = category_map.get(key, "General")
+        ans = (
+            f"According to {name}'s crawled pages: \"{snippet.strip()}\""
+            if status == "SUPPORTED" and snippet
+            else (f"Partially mentioned on {name}'s website." if status == "PARTIAL" else f"No direct answer found on crawled pages for {name}.")
+        )
+        rec = None if status == "SUPPORTED" else f"Publish explicit on-page answers for {q} to secure generative search citations."
         canonical_questions.append(GeoQuestionEvidence(
             question_key=key,
             question=q,
+            category=cat,
             status=status,
+            answer=ans,
+            answer_snippet=snippet,
             evidence_url=url,
             evidence_snippet=snippet,
             why=why,
+            recommended_answer=rec,
         ))
 
     supported = sum(1 for q in canonical_questions if q.status == "SUPPORTED")

@@ -4,15 +4,17 @@ Thread-safe registry of all deterministic observations for an audit run.
 """
 from datetime import datetime, timezone
 from typing import List, Dict, Optional, Any
-from app.evidence.models import Evidence
+from app.evidence.models import Evidence, MachineObservation
 from app.evidence.provenance import compute_evidence_hash, compute_raw_source_hash
 
 class EvidenceStore:
     def __init__(self, run_id: str, snapshots=None):
         self.run_id = run_id
         self._evidence: Dict[str, Evidence] = {}
+        self._observations: Dict[str, MachineObservation] = {}
         self._counter: int = 0
         self._ext_counter: int = 0
+        self._obs_counter: int = 0
         self.snapshots = snapshots
         self._current_fetch: Optional[Dict[str, Any]] = None
 
@@ -170,14 +172,107 @@ class EvidenceStore:
                 pass
         return evidence
 
+    def add_observation(
+        self,
+        attribute: str,
+        value: Any,
+        source: str = "html",
+        url: Optional[str] = None,
+        selector: Optional[str] = None,
+        content_sha256: Optional[str] = None,
+        evidence_id: Optional[str] = None,
+    ) -> MachineObservation:
+        """
+        Record an immutable Layer 1 Machine Observation.
+        Canonical contract:
+        {
+          "type": "observation",
+          "attribute": "title",
+          "value": "Business Consulting",
+          "source": "html",
+          "evidence_id": "EV_001"
+        }
+        """
+        if not evidence_id:
+            self._obs_counter += 1
+            evidence_id = f"EV_{self._obs_counter:03d}"
+
+        if content_sha256 is None:
+            fetch = self._current_fetch or {}
+            content_sha256 = fetch.get("content_sha256") or compute_raw_source_hash(value)
+
+        obs = MachineObservation(
+            type="observation",
+            attribute=attribute,
+            value=value,
+            source=source,
+            evidence_id=evidence_id,
+            url=url,
+            selector=selector,
+            content_sha256=content_sha256,
+            timestamp=datetime.now(timezone.utc),
+        )
+        self._observations[evidence_id] = obs
+        self._observations[evidence_id.lower()] = obs
+        self._observations[evidence_id.upper()] = obs
+
+        # Backward compatibility registration in legacy Evidence table
+        ev_legacy = Evidence(
+            id=evidence_id,
+            source_type=source,
+            url=url,
+            selector=selector,
+            text=str(value) if value is not None else "",
+            value=value,
+            analyzer=f"layer1_{source}",
+            hash=compute_evidence_hash(source, f"layer1_{source}", url, selector, str(value), value),
+            content_sha256=content_sha256 or "",
+            fetched_at=datetime.now(timezone.utc),
+            raw_snapshot_id=(self._current_fetch or {}).get("raw_snapshot_id"),
+            metadata={"attribute": attribute, "is_machine_observation": True},
+        )
+        self._evidence[evidence_id] = ev_legacy
+        self._evidence[evidence_id.lower()] = ev_legacy
+        self._evidence[evidence_id.upper()] = ev_legacy
+        return obs
+
+    def get_observation(self, evidence_id: str) -> Optional[MachineObservation]:
+        return (
+            self._observations.get(evidence_id)
+            or self._observations.get(evidence_id.lower())
+            or self._observations.get(evidence_id.upper())
+        )
+
+    def get_all_observations(self) -> List[MachineObservation]:
+        seen = set()
+        res = []
+        for obs in self._observations.values():
+            if obs.evidence_id not in seen:
+                seen.add(obs.evidence_id)
+                res.append(obs)
+        return res
+
+    def get_observations_by_attribute(self, attribute: str) -> List[MachineObservation]:
+        return [o for o in self.get_all_observations() if o.attribute.lower() == attribute.lower()]
+
     def get(self, evidence_id: str) -> Optional[Evidence]:
-        return self._evidence.get(evidence_id)
+        return (
+            self._evidence.get(evidence_id)
+            or self._evidence.get(evidence_id.lower())
+            or self._evidence.get(evidence_id.upper())
+        )
 
     def get_all(self) -> List[Evidence]:
-        return list(self._evidence.values())
+        seen = set()
+        res = []
+        for ev in self._evidence.values():
+            if ev.id not in seen:
+                seen.add(ev.id)
+                res.append(ev)
+        return res
 
     def get_by_source_type(self, source_type: str) -> List[Evidence]:
-        return [ev for ev in self._evidence.values() if ev.source_type == source_type]
+        return [ev for ev in self.get_all() if ev.source_type == source_type]
 
     def count(self) -> int:
-        return len(self._evidence)
+        return len(self.get_all())

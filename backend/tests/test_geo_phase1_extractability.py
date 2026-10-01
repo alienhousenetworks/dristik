@@ -138,6 +138,16 @@ def test_scaled_50_question_graph():
     assert "Security, Trust & Compliance" in res.category_scores
     assert "Comparative & Differentiators" in res.category_scores
 
+    # Verify every question has category and answer populated
+    for q in res.questions:
+        assert q.category in res.category_scores
+        assert q.answer is not None and len(q.answer) > 0
+        if q.status == "SUPPORTED":
+            assert q.answer_snippet is not None
+            assert "According to AlienHouse's crawled pages" in q.answer
+        elif q.status == "UNSUPPORTED":
+            assert q.recommended_answer is not None and len(q.recommended_answer) > 0
+
 
 def test_citation_passage_detection_and_rewriter():
     """

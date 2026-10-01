@@ -309,6 +309,39 @@ class AnalysisOrchestrator:
             if blackboard.resolved_entity.category and not blackboard.business_profile.industry:
                 blackboard.business_profile.industry = blackboard.resolved_entity.category
 
+            # Layer 1 — Record Machine Observations into EvidenceStore
+            for p in manifest.pages:
+                if p.title:
+                    blackboard.evidence_store.add_observation("title", p.title, source="html", url=p.url, selector="title")
+                if p.h1:
+                    blackboard.evidence_store.add_observation("h1", p.h1, source="dom", url=p.url, selector="h1")
+                if p.h2:
+                    blackboard.evidence_store.add_observation("h2", p.h2, source="dom", url=p.url, selector="h2")
+                if p.meta_description:
+                    blackboard.evidence_store.add_observation("meta_description", p.meta_description, source="html", url=p.url, selector='meta[name="description"]')
+                if p.status_code:
+                    blackboard.evidence_store.add_observation("status_code", p.status_code, source="http_header", url=p.url)
+                if p.ttfb_ms:
+                    blackboard.evidence_store.add_observation("ttfb_ms", p.ttfb_ms, source="http_header", url=p.url)
+                if p.schema_types:
+                    blackboard.evidence_store.add_observation("schema_types", p.schema_types, source="html", url=p.url, selector='script[type="application/ld+json"]')
+                if p.ctas:
+                    blackboard.evidence_store.add_observation("cta_texts", p.ctas, source="dom", url=p.url)
+
+            if blackboard.site_facts:
+                sf = blackboard.site_facts
+                if sf.get("sameas_urls"):
+                    blackboard.evidence_store.add_observation("sameas_urls", sf.get("sameas_urls"), source="schema", url=website_url)
+                if sf.get("visible_pricing_text"):
+                    blackboard.evidence_store.add_observation("visible_pricing_text", sf.get("visible_pricing_text"), source="html", url=website_url)
+                if sf.get("faq_questions"):
+                    blackboard.evidence_store.add_observation("faq_questions", sf.get("faq_questions"), source="html", url=website_url)
+                if sf.get("nav_labels"):
+                    blackboard.evidence_store.add_observation("nav_labels", sf.get("nav_labels"), source="dom", url=website_url)
+                blackboard.evidence_store.add_observation("pricing_signals", sf.get("pricing_signals_present", False), source="html", url=website_url)
+            if blackboard.resolved_entity and blackboard.resolved_entity.name:
+                blackboard.evidence_store.add_observation("business_name", blackboard.resolved_entity.name, source="html", url=website_url)
+
             # Phase 2: Operationalize External Evidence Plane (ext_NNN)
             from app.evidence.enrichment import ExternalEvidenceEnricher
             enricher = ExternalEvidenceEnricher()
@@ -558,6 +591,14 @@ class AnalysisOrchestrator:
                     raw_findings.append(f)
             for f in http_findings:
                 if not any(x.finding_id == f.finding_id for x in raw_findings):
+                    raw_findings.append(f)
+
+            # Layer 2 — Deterministic Finding Engine evaluation
+            from app.evidence.deterministic_rules import DeterministicFindingEngine
+            deterministic_engine = DeterministicFindingEngine()
+            layer2_findings = deterministic_engine.evaluate(blackboard.evidence_store, manifest)
+            for f in layer2_findings:
+                if not any(x.finding_id == f.finding_id or (x.rule_id and x.rule_id == f.rule_id) for x in raw_findings):
                     raw_findings.append(f)
 
             from app.intelligence.geo.entity_graph import evaluate_entity_graph
@@ -1032,6 +1073,11 @@ class AnalysisOrchestrator:
                 competitive_graph=comp_graph_res,
             )
 
+            # Layer 3 — Derived Intelligence Engine evaluation
+            from app.evidence.derived import DerivedIntelligenceEngine
+            derived_engine = DerivedIntelligenceEngine()
+            derived_intel_metrics = derived_engine.compute_all(blackboard.evidence_store, manifest)
+
             report = ExecutiveReport(
                 report_id=report_uuid,
                 analysis_id=analysis_id,
@@ -1126,10 +1172,20 @@ class AnalysisOrchestrator:
                 local_seo=local_seo_rep,
                 international_seo=intl_seo_rep,
                 topical_authority=topical_auth_rep,
+                derived_intelligence=derived_intel_metrics,
+            )
+
+            # Phase 2 — Build Claim Ledger with strict source provenance
+            from app.evidence.claim_ledger import ClaimLedgerBuilder
+            ledger_builder = ClaimLedgerBuilder(run_id=analysis_id)
+            report.claim_ledger = ledger_builder.build_ledger(
+                report=report,
+                store=blackboard.evidence_store,
+                derived_metrics=derived_intel_metrics,
             )
 
             # -------------------------------------------------------------
-            # Enforce 20-Point VALIDATION GATE Before Shipping
+            # Enforce VALIDATION GATE with Certified Zero-Fake Check
             # -------------------------------------------------------------
             from app.reports.validation_gate import ValidationGate
             report, gate_result = ValidationGate.enforce_gate(report, manifest=manifest)

@@ -117,3 +117,31 @@ class EvidenceRef(BaseModel):
     model_config = ConfigDict(frozen=True)
 
 
+class MachineObservation(BaseModel):
+    """
+    Layer 1 — Canonical Machine Observation.
+    Immutable empirical observation directly extracted by crawler, DOM parser, or HTTP probe.
+    """
+    type: str = Field(default="observation", description="Literal type identifier for Layer 1 machine observations")
+    attribute: str = Field(..., description="Observed machine attribute, e.g. title, h1, status_code, schema_org")
+    value: Any = Field(..., description="Exact extracted machine value")
+    source: str = Field(..., description="Machine extraction channel, e.g. html, http_header, dom, robots, sitemap")
+    evidence_id: str = Field(..., description="Unique immutable evidence ID, e.g. EV_001")
+    url: Optional[str] = None
+    selector: Optional[str] = None
+    content_sha256: Optional[str] = None
+    timestamp: datetime = Field(default_factory=datetime.utcnow)
+
+    model_config = ConfigDict(frozen=True)
+
+    def to_layer1_json(self) -> dict[str, Any]:
+        """Returns the exact canonical Layer 1 JSON representation."""
+        return {
+            "type": self.type,
+            "attribute": self.attribute,
+            "value": self.value,
+            "source": self.source,
+            "evidence_id": self.evidence_id,
+        }
+
+

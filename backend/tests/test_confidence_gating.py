@@ -109,6 +109,6 @@ def test_scoring_engine_caps_unverified_severity_deduction():
         readability=70.0
     )
 
-    # Normal CRITICAL deduction is 25.0 points (100 - 25 = 75).
-    # But because it is SINGLE_SOURCE_UNVERIFIED, severity is capped at MEDIUM, which is 8.0 points (100 - 8 = 92).
-    assert honest_scores.human_score == 92.0
+    # In v5 methodology, unverified hypotheses (RubricConfidence.GUESSING / SINGLE_SOURCE_UNVERIFIED)
+    # do not penalize scores (human_score remains >= 99.0).
+    assert honest_scores.human_score >= 99.0

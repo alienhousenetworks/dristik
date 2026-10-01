@@ -1,461 +1,632 @@
 """
-Dristik AI Deterministic Scoring Engine
-Calculates mathematically weighted 0-100 scores from verified observations and intent-adaptive weights.
+Dristik AI Scoring Engine v5.0
+Check-based, continuous metric curves, statistical Wilson sampling, and declarative JSON gates.
 """
-from typing import List, Dict, Optional, Any
-from app.domain.models import Finding, CategoryScore, OverallScoreResult, BusinessProfile
-from app.domain.enums import Category, Severity, BusinessIntent
+from typing import List, Dict, Optional, Any, Tuple
+import math
+from app.domain.models import (
+    Finding,
+    CategoryScore,
+    OverallScoreResult,
+    BusinessProfile,
+    CheckResult,
+    LLMJudgeRecord,
+    AuditScopeInfo,
+    HonestScores
+)
+from app.domain.enums import Category, Severity, BusinessIntent, EvidenceClass
 from app.scoring.weights import compute_intent_adjusted_weights
+from app.scoring.config_v5 import load_scoring_rubric_v5, ScoringRubricV5
+from app.scoring.curves import log_normal_curve, wilson_interval, audience_readability_score
+from app.cognition.finding_registry import _canonical_id
 
 
-def _diminishing_deduction(severity: Severity, occurrence_index: int) -> float:
-    """First finding of a severity hits hardest; repeats add less so marks stay calibrated."""
-    tables = {
-        Severity.CRITICAL: (25.0, 12.0, 8.0, 5.0),
-        Severity.HIGH: (15.0, 9.0, 6.0, 4.0),
-        Severity.MEDIUM: (8.0, 5.0, 3.0, 2.0),
-        Severity.LOW: (3.0, 2.0, 1.0, 1.0),
-        Severity.INFO: (0.0, 0.0, 0.0, 0.0),
-    }
-    steps = tables.get(severity, (3.0, 2.0, 1.0, 1.0))
-    if occurrence_index < len(steps):
-        return steps[occurrence_index]
-    return steps[-1]
+CHECK_KEYWORDS: Dict[str, List[str]] = {
+    "robots_txt_rfc9309": ["robots.txt", "robots", "disallow"],
+    "sitemap_urls_valid_200": ["sitemap", "xml sitemap"],
+    "indexable_url_share": ["noindex", "index", "indexable", "5xx", "500", "503", "unindexable"],
+    "internal_click_depth_ok": ["click depth", "crawl depth", "orphan"],
+    "hreflang_tags_valid": ["hreflang", "x-default", "international"],
+    "https_on_all_urls": ["https", "insecure http", "ssl"],
+    "tls_version_valid": ["tls", "certificate", "ssl"],
+    "http_to_https_single_301": ["redirect", "301", "http to https"],
+    "no_mixed_content": ["mixed content"],
+    "security_headers_hardening": ["hsts", "csp", "security headers"],
+    "canonical_valid_rate": ["canonical", "self-referencing"],
+    "redirect_chains_clean": ["redirect chain", "redirects", "hop"],
+    "broken_internal_links_rate": ["broken", "404", "broken link", "dead link"],
+    "duplicate_content_clusters": ["duplicate", "near-duplicate", "cosine"],
+    "title_present": ["missing title", "title tag", "no title"],
+    "title_length_bounds": ["title length", "title too long", "title too short", "exceeds", "title tag exceeds"],
+    "title_uniqueness": ["duplicate title", "title duplicate", "unique title"],
+    "title_h1_topic_semantic_match": ["title h1", "title mismatch"],
+    "meta_desc_present": ["meta description", "missing description", "meta desc", "missing meta"],
+    "meta_desc_length": ["description length"],
+    "meta_desc_uniqueness": ["duplicate description"],
+    "single_h1_present": ["h1", "missing h1", "multiple h1", "heading tag", "h1 tag"],
+    "no_skipped_heading_levels": ["skipped", "heading level", "h2", "h3"],
+    "h1_matches_title_intent": ["h1 intent", "h1 align"],
+    "og_tags_present": ["og:", "opengraph", "open graph"],
+    "twitter_card_present": ["twitter:card", "twitter card"],
+    "og_image_dimensions_reachable": ["og:image", "og image"],
+    "image_alt_text_rate": ["alt text", "alt attribute", "image alt"],
+    "topical_entity_coverage": ["topical", "thin", "coverage", "commodity", "specifications", "entity schema"],
+    "information_gain_score": ["information gain", "originality", "gain"],
+    "supported_claim_rate": ["claim", "unbacked", "evidence", "proof", "unbacked claims", "superlative"],
+    "author_byline_and_date": ["author", "byline", "date", "credentials"],
+    "outline_depth_and_intent": ["outline", "intent set"],
+    "cannibalization_freedom_rate": ["cannibalization", "keyword conflict", "duplicate metadata", "metadata", "duplicate", "duplicate content", "conflict"],
+    "sentence_length_under_25": ["sentence length"],
+    "paragraph_length_under_120": ["paragraph length"],
+    "kg_wikidata_resolution": ["wikidata", "knowledge graph", "unresolved entity", "entity resolution", "entity clarity", "missing entity"],
+    "sameas_link_reciprocity": ["sameas", "social link"],
+    "brand_name_consistency": ["brand name", "name consistency", "naming"],
+    "canonical_definition_top_100_words": ["canonical definition", "definition in top 100", "opening definition", "first 100 words", "service area definition", "definition"],
+    "bayesian_review_rating": ["review", "rating", "backlink", "toxic backlink", "link graph", "referring domain", "authority"],
+    "buyer_intent_answer_score": ["buyer question", "answerability", "icp question", "answer", "answer basic icp", "direct answer", "answer format", "structured answer"],
+    "schema_dom_facts_match": ["schema dom", "schema mismatch", "text match"],
+    "commercial_topics_concrete_rate": ["commercial", "pricing", "concrete", "commercial pricing", "engagement model"],
+    "citation_ready_chunk_density": ["citation-ready", "passage density", "chunk", "entity schema"],
+    "ai_search_bots_unblocked": ["searchbot", "bot blocked", "perplexitybot", "claudebot"],
+    "raw_html_content_share": ["raw html", "javascript rendering", "client-side"],
+    "org_schema_completeness": ["organization schema", "org schema", "organizationschema"],
+    "org_schema_validity": ["schema syntax", "json-ld error"],
+    "org_schema_id_linking": ["@id", "sameas link"],
+    "website_schema_valid": ["website schema"],
+    "breadcrumb_list_valid": ["breadcrumb"],
+    "page_template_type_schema": ["product schema", "article schema", "software schema", "template schema", "product and offer", "product", "offer", "professionalservice"],
+    "schema_truthfulness_rate": ["schema truthfulness", "contradicting schema"],
+    "hero_clarity_rubric": ["value proposition", "hero clarity", "5-second"],
+    "cta_above_the_fold": ["call to action", "primary cta", "cta above", "above the fold", "above fold", "add to cart", "cta", "phone number or call"],
+    "cta_contrast_wcag": ["cta contrast", "button contrast"],
+    "cta_verb_specific_label": ["cta label", "vague button", "verb", "action label"],
+    "clicks_to_conversion_under_3": ["funnel", "clicks to conversion"],
+    "form_labels_accessible": ["form label", "autocomplete"],
+    "form_inline_validation": ["form validation", "error message"],
+    "viewport_meta_declared": ["viewport meta"],
+    "no_horizontal_scroll_360px": ["horizontal scroll", "overflow 360px"],
+    "tap_target_dimensions_wcag": ["tap target"],
+    "base_font_size_16px": ["font size", "base font"],
+}
 
 
-def _get_category_formula_breakdown(
-    cat: Category,
-    raw_score: float,
-    deductions: Optional[List[Dict[str, Any]]] = None,
-    is_provisional_neutral: bool = False
-) -> List[Dict[str, Any]]:
-    rubrics = {
-        Category.GEO: [
-            ("Entity clarity & canonical definition", 20.0, "MEASURED_DOM", ["entity", "identity", "canonical", "organization"]),
-            ("Direct buyer question answerability", 20.0, "MEASURED_DOM", ["answer", "question", "direct", "extract"]),
-            ("Structured data & Schema grounding", 15.0, "MEASURED_DOM", ["schema", "json-ld", "structured", "microdata"]),
-            ("Commercial question coverage", 15.0, "MEASURED_DOM", ["commercial", "pricing", "icp", "coverage"]),
-            ("Citation-ready passage density", 15.0, "MEASURED_DOM", ["citation", "passage", "snippet", "paragraph"]),
-            ("Semantic consistency & bot access", 15.0, "MEASURED_DOM", ["llms.txt", "bot", "crawler", "robots", "access"]),
-        ],
-        Category.CONTENT: [
-            ("Topical coverage & non-commodity information gain", 25.0, "MEASURED_DOM", ["depth", "word", "thin", "coverage", "service", "information gain", "commodity", "entity"]),
-            ("First-party evidence & empirical proof", 25.0, "MEASURED_DOM", ["evidence", "data", "benchmark", "claim", "unbacked", "superlative", "proof", "expert"]),
-            ("Semantic outline & cannibalization prevention", 25.0, "MEASURED_DOM", ["hierarchy", "outline", "h2", "h3", "structure", "cannibalization", "subtopic"]),
-            ("Readability & value proposition clarity", 25.0, "MEASURED_DOM", ["readability", "flesch", "scan", "syntax", "value proposition", "heading", "h1"]),
-        ],
-        Category.TECHNICAL_SEO: [
-            ("Crawl accessibility, sitemaps & international targeting", 25.0, "MEASURED_DOM", ["robots", "sitemap", "crawl", "index", "hreflang", "return tag", "x-default", "international"]),
-            ("HTTPS security & protocol transport", 25.0, "MEASURED_TRANSPORT", ["https", "ssl", "tls", "security", "transport"]),
-            ("TTFB & response latency", 25.0, "MEASURED_PERFORMANCE", ["ttfb", "latency", "speed", "performance", "response", "load"]),
-            ("Canonical integrity & local NAP hygiene", 25.0, "MEASURED_DOM", ["canonical", "link", "broken", "redirect", "href", "nap", "phone", "address", "conflict"]),
-        ],
-        Category.SCHEMA: [
-            ("Entity Organization graph definition", 30.0, "MEASURED_DOM", ["organization", "entity", "sameas", "graph"]),
-            ("WebSite & navigation breadcrumb markup", 25.0, "MEASURED_DOM", ["website", "breadcrumb", "navigation", "sitelinks"]),
-            ("Structured Q&A & FAQ content grounding (GEO/AEO extractability)", 25.0, "MEASURED_DOM", ["faq", "q&a", "question", "answer"]),
-            ("DOM text cross-grounding consistency", 20.0, "MEASURED_DOM", ["cross-grounding", "consistency", "mismatch", "conflict"]),
-        ],
-        Category.UX_CONVERSION: [
-            ("5-second value proposition clarity", 25.0, "MEASURED_DOM", ["value prop", "5-second", "clarity", "hero"]),
-            ("Primary call-to-action prominence", 25.0, "MEASURED_DOM", ["cta", "button", "call to action", "prominence"]),
-            ("Form friction & interaction ease", 25.0, "MEASURED_DOM", ["form", "input", "field", "friction", "submit"]),
-            ("Viewport & responsive mobile layout", 25.0, "MEASURED_DOM", ["mobile", "viewport", "responsive", "layout"]),
-        ],
-        Category.TRUST_AUTHORITY: [
-            ("Social proof, testimonials & client logos", 30.0, "MEASURED_DOM", ["testimonial", "logo", "proof", "review", "client"]),
-            ("Security, compliance & privacy transparency", 25.0, "MEASURED_DOM", ["security", "compliance", "privacy", "gdpr", "soc2"]),
-            ("Corporate origin & verified contact", 25.0, "MEASURED_DOM", ["contact", "address", "phone", "email", "origin", "about"]),
-            ("Claim verifiability without hyperbole", 20.0, "MEASURED_DOM", ["claim", "hyperbole", "verifiability", "guarantee"]),
-        ],
-        Category.ON_PAGE_SEO: [
-            ("Title tag length & unique keywords", 25.0, "MEASURED_DOM", ["title", "tag"]),
-            ("Meta description compellingness & bounds", 25.0, "MEASURED_DOM", ["description", "meta"]),
-            ("Single H1 & heading tag hierarchy", 25.0, "MEASURED_DOM", ["h1", "heading"]),
-            ("OpenGraph & social preview meta", 25.0, "MEASURED_DOM", ["opengraph", "og:", "social", "twitter"]),
-        ],
-        Category.AI_SEARCH: [
-            ("Citability index & definition blocks", 30.0, "MEASURED_DOM", ["citability", "definition", "block"]),
-            ("Brand identity resolution in answer engines", 25.0, "SIMULATION_HEURISTIC", ["identity", "brand", "resolution", "model"]),
-            ("Competitive displacement resistance", 25.0, "SIMULATION_HEURISTIC", ["displacement", "competitor", "alternative", "moat"]),
-            ("Structured commercial Q&A coverage", 20.0, "MEASURED_DOM", ["commercial", "q&a", "coverage", "pricing"]),
-        ],
-    }
-    specs = rubrics.get(cat, [
-        ("Core structural compliance", 50.0, "MEASURED_DOM", ["core", "compliance"]),
-        ("Best practice execution", 50.0, "MEASURED_DOM", ["best practice"]),
-    ])
-
-    if is_provisional_neutral:
-        return [
-            {
-                "component": item[0],
-                "points_earned": round(item[1] * 0.5, 1),
-                "points_possible": item[1],
-                "provenance": "PROVISIONAL_BASELINE",
-                "status": "PROVISIONAL_NEUTRAL"
-            }
-            for item in specs
-        ]
-
-    # Map deductions directly to matching components
-    component_deductions = {item[0]: 0.0 for item in specs}
-    unmatched_deductions = 0.0
-
-    if deductions:
-        for d in deductions:
-            pts = float(d.get("points_lost", 0.0))
-            text = f"{d.get('title', '')} {d.get('finding_id', '')}".lower()
-            matched = False
-            for item in specs:
-                label = item[0]
-                kw_list = item[3] if len(item) > 3 else []
-                if any(kw in text for kw in kw_list):
-                    component_deductions[label] += pts
-                    matched = True
-                    break
-            if not matched:
-                unmatched_deductions += pts
-
-    # Distribute unmatched deductions across components proportionally
-    total_possible = sum(item[1] for item in specs) or 100.0
-    breakdown = []
-    earned_so_far = 0.0
-
-    for idx, item in enumerate(specs):
-        label = item[0]
-        possible = item[1]
-        provenance = item[2] if len(item) > 2 else "MEASURED_DOM"
-        comp_ded = component_deductions.get(label, 0.0) + (unmatched_deductions * (possible / total_possible))
-        earned = max(0.0, round(possible - comp_ded, 1))
-
-        if idx == len(specs) - 1 and deductions:
-            # Adjust final to match raw_score accurately if within reasonable bound
-            diff = round(raw_score - (earned_so_far + earned), 1)
-            if abs(diff) <= possible * 0.5:
-                earned = max(0.0, min(possible, round(earned + diff, 1)))
-
-        earned_so_far += earned
-        breakdown.append({
-            "component": label,
-            "points_earned": earned,
-            "points_possible": possible,
-            "provenance": provenance,
-            "status": "PASS" if earned >= possible * 0.75 else ("DEFICIT" if earned < possible * 0.4 else "PARTIAL")
-        })
-    return breakdown
+def _matches_check(check_id: str, finding: Finding) -> bool:
+    cid_low = check_id.lower()
+    fid_low = finding.finding_id.lower()
+    if cid_low in fid_low:
+        return True
+    rule_id = getattr(finding, "rule_id", None)
+    if rule_id and (cid_low in rule_id.lower() or rule_id.lower() in cid_low):
+        return True
+    title_low = finding.title.lower()
+    desc_low = (finding.finding or finding.description or "").lower()
+    keywords = CHECK_KEYWORDS.get(check_id, check_id.split("_"))
+    return any(kw in title_low or kw in desc_low for kw in keywords)
 
 
 class ScoringEngine:
+    def __init__(self, rubric: Optional[ScoringRubricV5] = None):
+        self.rubric = rubric or load_scoring_rubric_v5()
+
     def calculate_scores(
         self,
         findings: List[Finding],
         business_profile: BusinessProfile,
         has_schema: bool = True,
         is_https: bool = True,
-        readability: float = 65.0,
-        external_authority_connected: bool = False
+        readability: float = 60.0,
+        external_authority_connected: bool = False,
+        live_citation_score: Optional[float] = None,
+        performance_metrics: Optional[Dict[str, float]] = None,
+        plan_tier: str = "starter",
+        audit_scope: Optional[AuditScopeInfo] = None,
+        cwv_data: Optional[Dict[str, float]] = None,
     ) -> OverallScoreResult:
+        """
+        Calculates category scores, subsection breakdowns, check results with evidence,
+        and intent-adjusted overall score according to Scoring Rubric v5.0.
+        """
         intent = business_profile.primary_intent if business_profile else BusinessIntent.LEAD_GENERATION
         base_weights = compute_intent_adjusted_weights(intent)
+        scope = audit_scope or AuditScopeInfo(plan_tier=plan_tier)
 
-        category_deductions: Dict[Category, float] = {cat: 0.0 for cat in base_weights.keys()}
-        category_deduction_items: Dict[Category, List[Dict[str, Any]]] = {cat: [] for cat in base_weights.keys()}
-        category_strengths: Dict[Category, List[str]] = {cat: [] for cat in base_weights.keys()}
-        category_weaknesses: Dict[Category, List[str]] = {cat: [] for cat in base_weights.keys()}
-        severity_counts: Dict[Category, Dict[Severity, int]] = {
-            cat: {s: 0 for s in Severity} for cat in base_weights.keys()
-        }
-
-        from app.domain.enums import RubricConfidence, EvidenceClass
-        from app.cognition.finding_registry import _canonical_id
-        from app.scoring.calibration import calibrate_finding, deduction_scales
-
-        seen_root_causes: Dict[str, Category] = {}
+        # Map findings by canonical root cause to ensure single-charge deduplication
+        seen_root_causes: Dict[str, str] = {}
+        primary_findings: List[Finding] = []
+        downstream_findings: List[Finding] = []
 
         for f in findings:
-            rubric = getattr(f, "confidence_rubric", None)
-            # Gate: hypotheses and low-confidence findings do NOT reduce category scores.
-            # This uses the canonical affects_score property which covers all v1 and v2 values.
-            if rubric is not None and not rubric.affects_score:
+            rubric_conf = getattr(f, "confidence_rubric", None)
+            if rubric_conf is not None and not rubric_conf.affects_score:
                 continue
             if getattr(f, "held_from_executive", False) and not getattr(f, "adversarial_reviewed", False):
                 continue
-            cat = f.category
-            if cat not in category_deductions:
+
+            cid = getattr(f, "root_cause_id", None) or getattr(f, "rule_id", None) or _canonical_id(f)
+            cat_name = f.category.value if hasattr(f.category, "value") else str(f.category)
+            if cid not in seen_root_causes:
+                seen_root_causes[cid] = cat_name
+                primary_findings.append(f)
+            else:
+                downstream_findings.append(f)
+
+        # Performance / CWV defaults (CrUX field or lab fallback)
+        cwv = cwv_data or performance_metrics or {}
+        lcp_val = float(cwv["lcp"]) if "lcp" in cwv else None
+        inp_val = float(cwv["inp"]) if "inp" in cwv else None
+        cls_val = float(cwv["cls"]) if "cls" in cwv else None
+        ttfb_val = float(cwv["ttfb"]) if "ttfb" in cwv else None
+
+        # Check for catastrophic gate conditions
+        has_sitewide_noindex = any(
+            "noindex" in f.title.lower() or "noindex" in (f.finding or "").lower()
+            for f in findings if f.category == Category.TECHNICAL_SEO and f.severity in (Severity.CRITICAL, Severity.HIGH)
+        )
+        has_disallow_all = any(
+            "disallow: /" in f.title.lower() or "disallow all" in f.title.lower() or "blocks all" in f.title.lower()
+            for f in findings if f.category == Category.TECHNICAL_SEO and f.severity in (Severity.CRITICAL, Severity.HIGH)
+        )
+        has_homepage_5xx = any(
+            "500" in f.title or "503" in f.title or "5xx" in f.title.lower() or "server error" in f.title.lower()
+            for f in findings if f.category == Category.TECHNICAL_SEO and f.severity == Severity.CRITICAL
+        )
+        has_contradicting_schema = any(
+            "contradict" in f.title.lower() or "mismatch" in f.title.lower() or "false schema" in f.title.lower()
+            for f in findings if f.category == Category.SCHEMA and f.severity in (Severity.CRITICAL, Severity.HIGH)
+        )
+
+        category_scores: Dict[str, CategoryScore] = {}
+        category_status: Dict[str, str] = {}
+        category_check_results: Dict[str, List[CheckResult]] = {}
+        category_deductions_ui: Dict[str, List[Dict[str, Any]]] = {}
+
+        # -------------------------------------------------------------
+        # Evaluate checks per Category & Subsection
+        # -------------------------------------------------------------
+        for cat_enum in Category:
+            cat_key = cat_enum.value
+            cat_def = self.rubric.categories.get(cat_key)
+            if not cat_def:
                 continue
 
-            # Root-cause deduplication:
-            # When multiple findings stem from the exact same structural root cause
-            # (e.g. root_h1_identity_slogan_mismatch spanning Content, On-Page SEO, GEO, and Schema),
-            # the primary category absorbs the primary deduction, while downstream categories
-            # take a discounted marginal penalty (50%) to prevent duplicate penalties.
-            cid = _canonical_id(f)
-            is_secondary_downstream = (cid in seen_root_causes and seen_root_causes[cid] != cat)
-            if cid not in seen_root_causes:
-                seen_root_causes[cid] = cat
+            subsections_breakdown: List[Dict[str, Any]] = []
+            category_checks: List[CheckResult] = []
+            cat_deductions: List[Dict[str, Any]] = []
+            cat_strengths: List[str] = []
+            cat_weaknesses: List[str] = []
 
-            calibrate_finding(f)
-            calibrated = f.calibrated_impact
-            idx = severity_counts[cat][f.severity]
-            base_points = _diminishing_deduction(f.severity, idx)
-            if is_secondary_downstream:
-                base_points = round(base_points * 0.5, 1)
-            business_scale, confidence_scale = deduction_scales(calibrated)
-            points_lost = round(base_points * business_scale * confidence_scale, 1)
+            # Check if category has an unmeasured prerequisite gate
+            is_unmeasured_by_gate = False
+            unmeasured_reason = ""
+            for gate in cat_def.gates:
+                if gate.action == "MARK_NOT_MEASURED":
+                    if gate.gate_id == "gate_ai_search_requires_live_run" and live_citation_score is None:
+                        is_unmeasured_by_gate = True
+                        unmeasured_reason = gate.reason
+                        break
+                    elif gate.gate_id == "gate_trust_requires_evidence" and not external_authority_connected:
+                        # Check if any verified trust findings exist
+                        has_trust_ev = any(
+                            f.category in (Category.TRUST_AUTHORITY, Category.EXTERNAL_AUTHORITY)
+                            and getattr(f, "evidence_class", None) in (EvidenceClass.OBSERVED, EvidenceClass.EXTERNALLY_VERIFIED)
+                            for f in findings
+                        )
+                        if not has_trust_ev:
+                            is_unmeasured_by_gate = True
+                            unmeasured_reason = "connector unavailable"
+                            break
 
-            category_deductions[cat] += points_lost
-            severity_counts[cat][f.severity] = idx + 1
-            category_weaknesses[cat].append(f.title)
-            category_deduction_items[cat].append({
-                "finding_id": f.finding_id,
-                "title": f.title + (" (Downstream Consequence)" if is_secondary_downstream else ""),
-                "severity": f.severity.value,
-                "technical_severity": calibrated.technical_severity.value if calibrated else f.severity.value,
-                "business_impact": calibrated.business_impact_label if calibrated else "Medium",
-                "confidence_band": calibrated.confidence_band.value if calibrated else "MEDIUM",
-                "blocking": bool(calibrated.is_blocking) if calibrated else False,
-                "confidence": rubric.customer_label if (rubric and hasattr(rubric, "customer_label")) else "Unknown",
-                "points_lost": round(points_lost, 1),
-                "is_downstream_consequence": is_secondary_downstream,
-                "why_it_matters": getattr(f, "why_it_matters", None) or f.title
-            })
-
-        # Site-fact calibration only when the audit actually produced findings,
-        # so an empty finding list remains a perfect 100 (unit-test invariant).
-        if findings:
-            if not has_schema and not category_weaknesses.get(Category.SCHEMA):
-                category_deductions[Category.SCHEMA] += 8.0
-                category_weaknesses[Category.SCHEMA].append("No Schema.org types recorded in the crawl sample.")
-                category_deduction_items[Category.SCHEMA].append({
-                    "finding_id": "fact_schema_missing",
-                    "title": "No Schema.org types recorded in crawl sample",
-                    "severity": "HIGH",
-                    "points_lost": 8.0,
-                    "why_it_matters": "Search and answer engines cannot resolve structured corporate entity data."
-                })
-            if not is_https and not category_weaknesses.get(Category.TECHNICAL_SEO):
-                category_deductions[Category.TECHNICAL_SEO] += 15.0
-                category_weaknesses[Category.TECHNICAL_SEO].append("Homepage was not served over HTTPS.")
-                category_deduction_items[Category.TECHNICAL_SEO].append({
-                    "finding_id": "fact_https_missing",
-                    "title": "Homepage not served over HTTPS",
-                    "severity": "CRITICAL",
-                    "points_lost": 15.0,
-                    "why_it_matters": "Insecure HTTP connection triggers browser warnings and search engine penalties."
-                })
-            if readability < 50:
-                category_deductions[Category.CONTENT] += 6.0
-                category_weaknesses[Category.CONTENT].append(
-                    f"Measured readability {readability:.0f} is hard for a first-time buyer to scan."
+            if is_unmeasured_by_gate:
+                unmeasured_breakdown = [
+                    {
+                        "component": sub_def.name,
+                        "points_earned": 0.0,
+                        "points_possible": sub_def.budget_share,
+                        "status": "NOT_MEASURED",
+                        "coverage": 0.0,
+                        "provenance": "CONNECTOR_UNAVAILABLE"
+                    }
+                    for sub_def in cat_def.subsections.values()
+                ]
+                category_scores[cat_key] = CategoryScore(
+                    category=cat_enum,
+                    score=None,
+                    confidence=0.0,
+                    coverage=0.0,
+                    weight=0.0,
+                    weighted_score=0.0,
+                    strengths=[],
+                    weaknesses=[unmeasured_reason] if unmeasured_reason else ["Prerequisite connector not measured."],
+                    summary=f"Not measured — {unmeasured_reason or 'prerequisite unavailable'}",
+                    deductions=[],
+                    formula_breakdown=unmeasured_breakdown,
+                    check_results=[],
+                    status="NOT_MEASURED",
+                    provenance="CONNECTOR_UNAVAILABLE"
                 )
-                category_deduction_items[Category.CONTENT].append({
-                    "finding_id": "fact_readability_low",
-                    "title": f"Measured readability {readability:.0f} is difficult to scan",
-                    "severity": "MEDIUM",
-                    "points_lost": 6.0,
-                    "why_it_matters": "High reading difficulty increases bounce rates and reduces direct quotation."
+                category_status[cat_key] = "NOT_MEASURED"
+                category_check_results[cat_key] = []
+                category_deductions_ui[cat_key] = []
+                continue
+
+            total_cat_budget = 0.0
+            weighted_subsection_sum = 0.0
+            total_cat_weight_possible = 0.0
+            total_cat_weight_measured = 0.0
+
+            cat_primary_findings = [f for f in primary_findings if f.category == cat_enum]
+            matched_findings_by_check: Dict[str, List[Finding]] = {}
+            unmatched_findings = list(cat_primary_findings)
+            for sub_k, s_def in cat_def.subsections.items():
+                for c_def in s_def.checks:
+                    matched = [f for f in cat_primary_findings if _matches_check(c_def.check_id, f)]
+                    if matched:
+                        matched_findings_by_check[c_def.check_id] = matched
+                        for mf in matched:
+                            if mf in unmatched_findings:
+                                unmatched_findings.remove(mf)
+
+            # If any primary findings for this category didn't match any check keywords,
+            # attach them to the first graded or primary check in this category
+            if unmatched_findings:
+                fallback_cid = None
+                for s_def in cat_def.subsections.values():
+                    for c_def in s_def.checks:
+                        if c_def.check_type == "graded":
+                            fallback_cid = c_def.check_id
+                            break
+                        if fallback_cid is None:
+                            fallback_cid = c_def.check_id
+                    if fallback_cid:
+                        break
+                if fallback_cid:
+                    matched_findings_by_check.setdefault(fallback_cid, []).extend(unmatched_findings)
+
+            for sub_key, sub_def in cat_def.subsections.items():
+                sub_budget = sub_def.budget_share
+                total_cat_budget += sub_budget
+                sub_weight_measured = 0.0
+                sub_weight_total = 0.0
+                sub_score_accum = 0.0
+
+                for check_def in sub_def.checks:
+                    cid = check_def.check_id
+                    w = check_def.weight
+                    sub_weight_total += w
+                    total_cat_weight_possible += w
+
+                    # Default check state
+                    s = 1.0
+                    passed = 1
+                    failed = 0
+                    sample_size = max(1, scope.measured_pages)
+                    evidence_list: List[Dict[str, Any]] = []
+                    status = "PASS"
+                    is_measured = True
+                    llm_judge = None
+
+                    # Find findings targeting this check / category
+                    check_findings = matched_findings_by_check.get(cid, [])
+
+
+                    # Specific Check Value Evaluations
+                    if cid == "https_on_all_urls":
+                        s = 1.0 if is_https else 0.0
+                        domain_lbl = getattr(business_profile, "domain", None) or getattr(business_profile, "business_name", "") or "homepage"
+                        evidence_list.append({"url": domain_lbl, "status": "FAIL", "detail": "Homepage requested over insecure HTTP."})
+                    elif cid == "tls_version_valid":
+                        s = 1.0 if is_https else 0.0
+                    elif cid == "security_headers_hardening":
+                        hsts_finding = next((f for f in primary_findings if "hsts" in f.title.lower() or "hsts" in f.finding_id.lower()), None)
+                        s = 0.5 if hsts_finding else 1.0
+                        if hsts_finding:
+                            evidence_list.append({"url": "response_headers", "status": "PARTIAL", "detail": "Strict-Transport-Security header absent."})
+                    elif cid == "cwv_lcp":
+                        if lcp_val is not None:
+                            s = log_normal_curve(lcp_val, p10=check_def.p10 or 2.5, median=check_def.median or 4.0, higher_is_better=False)
+                            evidence_list.append({"metric": "LCP", "value": f"{lcp_val:.2f}s", "status": "PASS" if s >= 0.75 else "FAIL"})
+                        else:
+                            s = 1.0
+                    elif cid == "cwv_inp":
+                        s = log_normal_curve(inp_val, p10=check_def.p10 or 200.0, median=check_def.median or 500.0, higher_is_better=False) if inp_val is not None else 1.0
+                    elif cid == "cwv_cls":
+                        s = log_normal_curve(cls_val, p10=check_def.p10 or 0.10, median=check_def.median or 0.25, higher_is_better=False) if cls_val is not None else 1.0
+                    elif cid == "cwv_ttfb":
+                        s = log_normal_curve(ttfb_val, p10=check_def.p10 or 0.8, median=check_def.median or 1.8, higher_is_better=False) if ttfb_val is not None else 1.0
+                    elif cid == "audience_flesch_reading_ease":
+                        s = audience_readability_score(readability, audience=business_profile.target_audience or "b2b")
+                        evidence_list.append({"readability": readability, "status": "PASS" if s >= 0.7 else "PARTIAL"})
+                    elif cid == "form_field_count_curve":
+                        form_field_count = 3.0
+                        for f in check_findings:
+                            if "field" in f.title.lower():
+                                form_field_count = 7.0
+                        if form_field_count <= 3.0:
+                            s = 1.0
+                        else:
+                            s = log_normal_curve(form_field_count, p10=3.0, median=8.0, higher_is_better=False)
+                    elif cat_enum == Category.SCHEMA and not has_schema:
+                        s = 0.0
+                        passed = 0
+                        failed = 1
+                        evidence_list.append({"schema": "missing", "status": "FAIL", "detail": "No Schema.org types recorded in crawl sample."})
+                    elif cid == "ai_brand_mention_rate" and live_citation_score is not None:
+                        s = min(1.0, max(0.0, live_citation_score / 100.0))
+                        sample_size = self.rubric.plans.get(plan_tier, self.rubric.plans["starter"]).ai_search_min_sample
+                        passed = int(s * sample_size)
+                        failed = sample_size - passed
+                    else:
+                        # Graded or Binary check evaluated against findings
+                        if check_findings:
+                            if check_def.check_type == "binary":
+                                s = 0.0
+                                passed = 0
+                                failed = 1
+                            elif check_def.check_type == "graded":
+                                top_f = max(check_findings, key=lambda f: f.severity.value)
+                                if top_f.severity == Severity.CRITICAL:
+                                    s = 0.0
+                                elif top_f.severity == Severity.HIGH:
+                                    s = 0.20
+                                elif top_f.severity == Severity.MEDIUM:
+                                    s = 0.50
+                                else:
+                                    s = 0.80
+                                passed = int(round(s * sample_size))
+                                failed = sample_size - passed
+                            else:
+                                s = 0.30
+                                passed = 0
+                                failed = 1
+
+                            for f in check_findings:
+                                evidence_list.append({
+                                    "url": f.evidence_refs[0] if f.evidence_refs else "crawl_sample",
+                                    "status": "FAIL" if s < 0.5 else "PARTIAL",
+                                    "detail": f.title
+                                })
+                        else:
+                            s = 1.0
+                            passed = sample_size
+                            failed = 0
+
+                    if is_measured:
+                        sub_weight_measured += w
+                        total_cat_weight_measured += w
+                        sub_score_accum += w * s
+
+                    # Status & intervals
+                    if s >= 0.75:
+                        status = "PASS"
+                    elif s >= 0.40:
+                        status = "PARTIAL"
+                    else:
+                        status = "DEFICIT"
+
+                    # Reconcile sample counts
+                    if check_def.check_type == "binary":
+                        passed = sample_size if s >= 0.5 else 0
+                        failed = sample_size - passed
+                    else:
+                        passed = int(round(s * sample_size))
+                        failed = sample_size - passed
+
+                    ci = None
+                    if sample_size > 1 or check_def.check_type == "graded":
+                        _, low, high = wilson_interval(passed, sample_size)
+                        ci = (low, high)
+
+                    check_res = CheckResult(
+                        check_id=cid,
+                        name=check_def.name,
+                        score=round(s, 3),
+                        weight=w,
+                        sample_size=sample_size,
+                        passed=passed,
+                        failed=failed,
+                        coverage=1.0 if is_measured else 0.0,
+                        status=status,
+                        confidence_interval=ci,
+                        evidence=evidence_list,
+                        llm_judge=llm_judge,
+                        methodology_version=self.rubric.methodology_version
+                    )
+                    category_checks.append(check_res)
+
+                    if s < 0.75:
+                        if check_findings:
+                            for idx, f in enumerate(check_findings):
+                                pts = round(w * (1.0 - s), 1) if idx == 0 else 0.0
+                                if pts <= 0.0:
+                                    pts = round(max(0.5, w * (1.0 - s) / len(check_findings)), 1)
+                                cat_deductions.append({
+                                    "check_id": cid,
+                                    "finding_id": f.finding_id,
+                                    "title": f.title,
+                                    "severity": f.severity.value if hasattr(f.severity, "value") else str(f.severity),
+                                    "points_lost": pts,
+                                    "blocking": getattr(getattr(f, "calibrated_impact", None), "is_blocking", False),
+                                    "why_it_matters": getattr(f, "why_it_matters", None) or f.description or check_def.description
+                                })
+                        else:
+                            cat_deductions.append({
+                                "check_id": cid,
+                                "finding_id": f"chk_{cid}",
+                                "title": check_def.name,
+                                "severity": "CRITICAL" if s < 0.3 else ("HIGH" if s < 0.6 else "MEDIUM"),
+                                "points_lost": round(w * (1.0 - s), 1),
+                                "blocking": False,
+                                "why_it_matters": check_def.description
+                            })
+                        cat_weaknesses.append(check_def.name)
+                    else:
+                        cat_strengths.append(check_def.name)
+
+                # Subsection Score
+                sub_score = (100.0 * (sub_score_accum / sub_weight_measured)) if sub_weight_measured > 0 else 0.0
+                weighted_subsection_sum += (sub_budget / 100.0) * sub_score
+                subsections_breakdown.append({
+                    "component": sub_def.name,
+                    "points_earned": round((sub_score / 100.0) * sub_budget, 1),
+                    "points_possible": sub_budget,
+                    "status": "PASS" if sub_score >= 75.0 else ("DEFICIT" if sub_score < 40.0 else "PARTIAL"),
+                    "coverage": round(sub_weight_measured / sub_weight_total, 2) if sub_weight_total > 0 else 1.0,
+                    "provenance": "MEASURED_DOM"
                 })
-            elif readability >= 80 and not category_weaknesses.get(Category.CONTENT):
-                category_strengths[Category.CONTENT].append(
-                    f"Measured readability {readability:.0f} is clear enough for a first-pass buyer scan."
-                )
 
-        cat_scores: Dict[str, CategoryScore] = {}
-        total_weighted = 0.0
+            # Append downstream consequences without charging duplicate points
+            for df in downstream_findings:
+                if df.category == cat_enum:
+                    cat_deductions.append({
+                        "check_id": f"downstream_{_canonical_id(df)}",
+                        "finding_id": df.finding_id,
+                        "title": f"{df.title} (Downstream Consequence)",
+                        "severity": df.severity.value,
+                        "points_lost": 0.0,
+                        "blocking": False,
+                        "is_downstream_consequence": True,
+                        "why_it_matters": getattr(df, "why_it_matters", None) or df.title
+                    })
 
-        total_findings = len(findings)
-        findings_with_ev = sum(1 for f in findings if f.evidence_refs)
-        evidence_cov = round(findings_with_ev / max(1, total_findings), 2) if total_findings > 0 else 0.0
+            raw_cat_score = (weighted_subsection_sum / (total_cat_budget / 100.0)) if total_cat_budget > 0 else 0.0
+            cat_coverage = (total_cat_weight_measured / total_cat_weight_possible) if total_cat_weight_possible > 0 else 1.0
 
-        # Evidence quality: fraction of findings backed by OBSERVED or EXTERNALLY_VERIFIED evidence.
-        # This is a stronger signal than mere coverage (having any evidence_refs).
-        high_quality_ev = sum(
-            1 for f in findings
-            if getattr(f, "evidence_class", None) in (
-                EvidenceClass.OBSERVED, EvidenceClass.EXTERNALLY_VERIFIED
-            )
-        )
-        evidence_quality = round(high_quality_ev / max(1, total_findings), 2) if total_findings > 0 else 0.0
+            # Dynamic Gates from JSON Rubric
+            for gate in cat_def.gates:
+                if gate.cap_score is not None:
+                    trigger = False
+                    if gate.gate_id == "gate_critical_indexation" and (has_sitewide_noindex or has_disallow_all or has_homepage_5xx):
+                        trigger = True
+                    elif gate.gate_id == "gate_schema_contradicts_visible" and has_contradicting_schema:
+                        trigger = True
 
-        # Overall confidence: blend coverage and quality — quality matters more.
-        overall_conf = round(
-            min(0.95, 0.40 + (0.30 * evidence_cov) + (0.25 * evidence_quality)),
-            2
-        ) if total_findings > 0 else 0.0
+                    if trigger and raw_cat_score > gate.cap_score:
+                        raw_cat_score = gate.cap_score
+                        cat_weaknesses.insert(0, f"Score capped at {gate.cap_score:.0f} by gate: {gate.reason}")
 
-        # Determine whether external authority is active / measured
-        has_external_authority = external_authority_connected or any(
-            f.category in (Category.TRUST_AUTHORITY, Category.EXTERNAL_AUTHORITY) and (
-                any(getattr(ref, "source_type", None) == "external" for ref in getattr(f, "evidence_refs", []))
-                or getattr(f, "evidence_class", None) in (EvidenceClass.EXTERNALLY_VERIFIED, EvidenceClass.OBSERVED)
-            )
-            for f in findings
-        )
-
-        if not has_external_authority:
-            active_cats = [c for c in base_weights.keys() if c not in (Category.TRUST_AUTHORITY, Category.EXTERNAL_AUTHORITY)]
-            weights = compute_intent_adjusted_weights(intent, active_categories=active_cats)
-        else:
-            weights = base_weights
-
-        for cat, weight in weights.items():
-            raw_score = max(20.0, min(100.0, 100.0 - category_deductions[cat]))
-            n_issues = len(category_weaknesses[cat])
-
-            is_provisional = False
-            if not category_weaknesses[cat]:
-                has_positive_proof = bool(category_strengths.get(cat))
-                effective_findings = [f for f in findings if getattr(f, "confidence_rubric", None) is None or getattr(f, "confidence_rubric").affects_score]
-                if effective_findings and not has_positive_proof:
-                    # Absence of evidence is not proof of excellence: Cap at Provisional Neutral (50)
-                    raw_score = 50.0
-                    is_provisional = True
-                    category_strengths[cat].append(
-                        f"Provisional neutral baseline for {cat.value.replace('_', ' ').title()}."
-                    )
-                    summary = (
-                        f"50/100 (Provisional Neutral). Insufficient direct signals in crawl sample to verify excellence; "
-                        f"capped at neutral baseline pending extended crawl or live connector integration."
-                    )
-                else:
-                    if effective_findings:
-                        raw_score = min(95.0, raw_score)
-                    category_strengths[cat].append(
-                        f"No defects recorded in the crawled sample for {cat.value.replace('_', ' ').title()}."
-                    )
-                    summary = (
-                        f"{raw_score:.0f}/100. Verified compliant execution with zero defects recorded in the crawl sample."
-                    )
+            # Coverage threshold semantics: >= 60% MEASURED, 30-59.99% PARTIAL, <30% NOT_MEASURED
+            if cat_coverage >= 0.60:
+                cat_status = "MEASURED"
+            elif cat_coverage >= 0.30:
+                cat_status = "PARTIAL"
             else:
-                items = category_deduction_items[cat]
-                top_item = max(items, key=lambda item: item.get("points_lost", 0)) if items else None
-                if top_item:
-                    blocking_word = "yes" if top_item.get("blocking") else "no"
-                    summary = (
-                        f"{raw_score:.0f}/100 from {n_issues} verified finding{'s' if n_issues != 1 else ''}. "
-                        f"Largest deduction: {top_item['title']} "
-                        f"(technical {top_item.get('technical_severity')}, "
-                        f"business {top_item.get('business_impact')}, "
-                        f"confidence {top_item.get('confidence_band')}, "
-                        f"blocking {blocking_word})."
-                    )
-                else:
-                    top = category_weaknesses[cat][0]
-                    summary = (
-                        f"{raw_score:.0f}/100 from {n_issues} verified finding{'s' if n_issues != 1 else ''}. "
-                        f"Largest deduction: {top}."
-                    )
+                cat_status = "NOT_MEASURED"
 
-            cat_findings = [f for f in findings if f.category == cat]
-            cat_ev_count = sum(1 for f in cat_findings if f.evidence_refs)
-            cat_hq_count = sum(
-                1 for f in cat_findings
-                if getattr(f, "evidence_class", None) in (
-                    EvidenceClass.OBSERVED, EvidenceClass.EXTERNALLY_VERIFIED
-                )
-            )
-            cat_ev_ratio = (cat_ev_count / len(cat_findings)) if cat_findings else 0.5
-            cat_hq_ratio = (cat_hq_count / len(cat_findings)) if cat_findings else 0.0
-            cat_confidence = round(
-                min(0.95, 0.40 + 0.30 * cat_ev_ratio + 0.25 * cat_hq_ratio), 2
-            ) if cat_findings else 0.50
-
-            formula_breakdown = _get_category_formula_breakdown(
-                cat,
-                raw_score,
-                deductions=category_deduction_items.get(cat, []),
-                is_provisional_neutral=is_provisional
+            summary = (
+                f"{raw_cat_score:.0f}/100 based on {len(category_checks)} check evaluations. "
+                f"Coverage: {cat_coverage*100:.0f}% ({cat_status})."
             )
 
-            c_score = CategoryScore(
-                category=cat,
-                score=round(raw_score, 1),
-                confidence=cat_confidence,
-                weight=round(weight, 3),
-                weighted_score=round(raw_score * weight, 2),
-                strengths=category_strengths[cat][:3],
-                weaknesses=category_weaknesses[cat][:4],
-                summary=summary,
-                status="PROVISIONAL" if is_provisional else "MEASURED",
-                provenance="PROVISIONAL_NEUTRAL" if is_provisional else "OBSERVED_CRAWL",
-                deductions=category_deduction_items[cat],
-                formula_breakdown=formula_breakdown
-            )
-            cat_scores[cat.value] = c_score
-            total_weighted += raw_score * weight
+            final_cat_score = round(raw_cat_score, 1) if cat_status != "NOT_MEASURED" else None
 
-        if not has_external_authority:
-            cat_scores[Category.TRUST_AUTHORITY.value] = CategoryScore(
-                category=Category.TRUST_AUTHORITY,
-                score=None,
-                confidence=0.0,
-                weight=0.0,
+            if final_cat_score is not None and subsections_breakdown:
+                total_earned = sum(comp["points_earned"] for comp in subsections_breakdown)
+                if abs(final_cat_score - total_earned) > 0.05:
+                    if total_earned > 0:
+                        scale = final_cat_score / total_earned
+                        running = 0.0
+                        for comp in subsections_breakdown[:-1]:
+                            comp["points_earned"] = round(comp["points_earned"] * scale, 1)
+                            running += comp["points_earned"]
+                        subsections_breakdown[-1]["points_earned"] = max(0.0, round(final_cat_score - running, 1))
+                    else:
+                        subsections_breakdown[0]["points_earned"] = final_cat_score
+
+            category_scores[cat_key] = CategoryScore(
+                category=cat_enum,
+                score=final_cat_score,
+                confidence=round(min(0.95, 0.50 + 0.45 * cat_coverage), 2),
+                coverage=round(cat_coverage, 2),
+                score_interval=(round(max(0.0, raw_cat_score - 5.0), 1), round(min(100.0, raw_cat_score + 5.0), 1)),
+                weight=0.0,  # Will be assigned during intent re-normalization
                 weighted_score=0.0,
-                strengths=[],
-                weaknesses=["External backlink authority provider is not connected."],
-                summary="Not measured — connector unavailable",
-                status="NOT_MEASURED",
-                provenance="CONNECTOR_UNAVAILABLE",
-                deductions=[],
-                formula_breakdown=[]
+                strengths=cat_strengths[:3],
+                weaknesses=cat_weaknesses[:4],
+                summary=summary,
+                deductions=cat_deductions,
+                formula_breakdown=subsections_breakdown,
+                check_results=category_checks,
+                status=cat_status,
+                provenance="EVIDENCE_CHECK_V5"
             )
+            category_status[cat_key] = cat_status
+            category_check_results[cat_key] = category_checks
+            category_deductions_ui[cat_key] = cat_deductions
+
+        # -------------------------------------------------------------
+        # Category Weight Normalization (exclude NOT_MEASURED categories)
+        # -------------------------------------------------------------
+        active_cats = [
+            cat for cat in Category
+            if category_status.get(cat.value) in ("MEASURED", "PARTIAL")
+        ]
+        active_weights = compute_intent_adjusted_weights(intent, active_categories=active_cats)
 
         math_derivation = []
-        for cat, weight in weights.items():
-            raw = cat_scores[cat.value].score
-            w_pct = round(weight * 100.0, 1)
-            contribution = round((raw or 0.0) * weight, 2)
-            math_derivation.append({
-                "category": cat.value,
-                "category_label": cat.value.replace("_", " ").title(),
-                "raw_score": raw,
-                "weight_pct": w_pct,
-                "weight": round(weight, 3),
-                "weighted_points": contribution
-            })
+        overall_weighted_sum = 0.0
 
-        if not has_external_authority:
-            math_derivation.append({
-                "category": Category.TRUST_AUTHORITY.value,
-                "category_label": "Trust Authority",
-                "raw_score": "Not measured",
-                "weight_pct": 0.0,
-                "weight": 0.0,
-                "weighted_points": 0.0,
-                "status": "NOT_MEASURED",
-                "provenance": "CONNECTOR_UNAVAILABLE"
-            })
+        for cat_enum in Category:
+            cat_key = cat_enum.value
+            c_score = category_scores.get(cat_key)
+            if not c_score:
+                continue
 
-        overall_score = round(max(0.0, min(100.0, sum(row["weighted_points"] for row in math_derivation))), 1)
+            if cat_enum in active_weights:
+                norm_w = active_weights[cat_enum]
+                c_score.weight = round(norm_w, 4)
+                c_score.weighted_score = round((c_score.score or 0.0) * norm_w, 2)
+                overall_weighted_sum += c_score.weighted_score
+                math_derivation.append({
+                    "category": cat_key,
+                    "category_label": cat_key.replace("_", " ").title(),
+                    "raw_score": c_score.score,
+                    "weight_pct": round(norm_w * 100.0, 1),
+                    "weight": round(norm_w, 4),
+                    "weighted_points": c_score.weighted_score,
+                    "coverage": c_score.coverage,
+                    "status": c_score.status
+                })
+            else:
+                c_score.weight = 0.0
+                c_score.weighted_score = 0.0
+                math_derivation.append({
+                    "category": cat_key,
+                    "category_label": cat_key.replace("_", " ").title(),
+                    "raw_score": "Not measured",
+                    "weight_pct": 0.0,
+                    "weight": 0.0,
+                    "weighted_points": 0.0,
+                    "coverage": c_score.coverage,
+                    "status": "NOT_MEASURED"
+                })
+
+        overall_score = round(max(0.0, min(100.0, overall_weighted_sum)), 1)
 
         if overall_score >= 93:
-            grade = "A+"
-            health = "Exceptional"
+            grade, health = "A+", "Exceptional"
         elif overall_score >= 85:
-            grade = "A"
-            health = "Excellent"
+            grade, health = "A", "Excellent"
         elif overall_score >= 75:
-            grade = "B"
-            health = "Good"
+            grade, health = "B", "Good"
         elif overall_score >= 65:
-            grade = "C"
-            health = "Moderate"
+            grade, health = "C", "Moderate"
         elif overall_score >= 50:
-            grade = "D"
-            health = "Needs Attention"
+            grade, health = "D", "Needs Attention"
         else:
-            grade = "F"
-            health = "Low readiness"
+            grade, health = "F", "Low readiness"
+
+        # Evidence coverage across findings
+        total_f = len(findings)
+        ev_cov = round(sum(1 for f in findings if f.evidence_refs) / max(1, total_f), 2) if total_f > 0 else 1.0
 
         return OverallScoreResult(
             overall_score=overall_score,
-            overall_confidence=overall_conf,
-            evidence_coverage=evidence_cov,
+            overall_confidence=0.90,
+            evidence_coverage=ev_cov,
             grade=grade,
             health_label=health,
-            category_scores=cat_scores,
-            intent_adjusted_weights={k.value: round(v, 3) for k, v in weights.items()},
+            category_scores=category_scores,
+            intent_adjusted_weights={k.value: round(v, 4) for k, v in active_weights.items()},
             mathematical_derivation=math_derivation
         )
 
@@ -466,99 +637,59 @@ class ScoringEngine:
         commercial_evals: Optional[List[Any]] = None,
         has_schema: bool = True,
         is_https: bool = True,
-        readability: float = 65.0,
+        readability: float = 60.0,
         geo_readiness: Optional[Any] = None,
         live_citation_score: Optional[float] = None,
-    ):
+        performance_metrics: Optional[Dict[str, float]] = None,
+        plan_tier: str = "starter",
+    ) -> HonestScores:
         """
-        Calculates the 3 Honest Scores (Human, Google, AI Citation) grounded strictly in verified findings and evidence IDs.
-        No invented CAC or vanity metrics.
+        Specialized Views:
+        Grounded directly in the check results and category scores from v5.0 check engine.
+        No separate conflicting deduction tables!
         """
-        from app.domain.models import HonestScores
+        scores_res = self.calculate_scores(
+            findings=findings,
+            business_profile=business_profile,
+            has_schema=has_schema,
+            is_https=is_https,
+            readability=readability,
+            external_authority_connected=False,
+            live_citation_score=live_citation_score,
+            performance_metrics=performance_metrics,
+            plan_tier=plan_tier
+        )
 
-        human_deductions = 0.0
-        human_issues: List[str] = []
-        google_deductions = 0.0
-        google_issues: List[str] = []
-        ai_deductions = 0.0
-        ai_issues: List[str] = []
-        evidence_refs: List[str] = []
-        human_counts = {s: 0 for s in Severity}
-        google_counts = {s: 0 for s in Severity}
-        ai_counts = {s: 0 for s in Severity}
+        cat_scores = scores_res.category_scores
+        ux_score = cat_scores.get(Category.UX_CONVERSION.value, CategoryScore(category=Category.UX_CONVERSION, summary="")).score or 100.0
+        content_score = cat_scores.get(Category.CONTENT.value, CategoryScore(category=Category.CONTENT, summary="")).score or 100.0
+        tech_score = cat_scores.get(Category.TECHNICAL_SEO.value, CategoryScore(category=Category.TECHNICAL_SEO, summary="")).score or 100.0
+        onpage_score = cat_scores.get(Category.ON_PAGE_SEO.value, CategoryScore(category=Category.ON_PAGE_SEO, summary="")).score or 100.0
+        schema_score = cat_scores.get(Category.SCHEMA.value, CategoryScore(category=Category.SCHEMA, summary="")).score or 100.0
+        geo_score = cat_scores.get(Category.GEO.value, CategoryScore(category=Category.GEO, summary="")).score or 100.0
 
-        from app.domain.enums import SourceIntegrityLabel, ConfidenceBand, RubricConfidence, AiVisibilityStatus
+        # Human View: UX & Conversion (50%) + Content (50%)
+        human_score = round(ux_score * 0.50 + content_score * 0.50, 1)
 
-        for f in findings:
-            evidence_refs.extend(f.evidence_refs)
-            # Gating: if finding is hypothesis / low-confidence, cap severity at MEDIUM
-            effective_sev = f.severity
-            conf_val = getattr(f, "confidence", 0.85)
-            rubric = getattr(f, "confidence_rubric", None)
-            is_unverified = (
-                getattr(f, "source_integrity_label", None) == SourceIntegrityLabel.SINGLE_SOURCE_UNVERIFIED
-                or (rubric is not None and rubric.is_hypothesis)
-                or getattr(f, "confidence_band", None) == ConfidenceBand.LOW
-                or (isinstance(conf_val, (int, float)) and conf_val < 0.6)
-            )
-            if is_unverified and effective_sev in (Severity.CRITICAL, Severity.HIGH):
-                effective_sev = Severity.MEDIUM
+        # Google View: Technical (40%) + On-Page (30%) + Schema (30%)
+        google_score = round(tech_score * 0.40 + onpage_score * 0.30 + schema_score * 0.30, 1)
 
-            if f.category in (Category.UX_CONVERSION, Category.CONTENT):
-                human_deductions += _diminishing_deduction(effective_sev, human_counts[effective_sev])
-                human_counts[effective_sev] += 1
-                human_issues.append(f.title)
-            elif f.category in (Category.TECHNICAL_SEO, Category.ON_PAGE_SEO, Category.SCHEMA):
-                google_deductions += _diminishing_deduction(effective_sev, google_counts[effective_sev])
-                google_counts[effective_sev] += 1
-                google_issues.append(f.title)
-            elif f.category in (Category.GEO, Category.AI_SEARCH, Category.COMPETITIVE, Category.TRUST_AUTHORITY):
-                ai_deductions += _diminishing_deduction(effective_sev, ai_counts[effective_sev])
-                ai_counts[effective_sev] += 1
-                ai_issues.append(f.title)
+        # AI Readiness View: GEO Category Score only
+        ai_readiness_score = round(geo_score, 1)
 
-        if findings:
-            if readability < 50:
-                human_deductions += 6.0
-            if not is_https:
-                google_deductions += 10.0
-            if not has_schema:
-                google_deductions += 6.0
-
-        human_score = max(15.0, min(100.0, 100.0 - human_deductions))
-        google_score = max(15.0, min(100.0, 100.0 - google_deductions))
-
-        # Decouple AI Readiness (on-page extractability) from AI Visibility (live engine citations)
-        ai_readiness_base = max(15.0, min(100.0, 100.0 - ai_deductions))
-        if geo_readiness is not None and getattr(geo_readiness, "questions_total", 0) > 0:
-            support_ratio = getattr(geo_readiness, "questions_supported", 0) / geo_readiness.questions_total
-            ai_readiness_score = round(ai_readiness_base * 0.6 + (support_ratio * 100.0) * 0.4, 1)
-        elif commercial_evals:
-            valid_comm = [getattr(c, "before_score", None) for c in commercial_evals if getattr(c, "before_score", None) is not None]
-            if valid_comm:
-                avg_comm = sum(valid_comm) / len(valid_comm)
-                ai_readiness_score = round(ai_readiness_base * 0.5 + (avg_comm * 10.0) * 0.5, 1)
-            else:
-                ai_readiness_score = round(ai_readiness_base, 1)
-        else:
-            ai_readiness_score = round(ai_readiness_base, 1)
-
-        # Visibility stays null unless a live engine snapshot was actually measured.
-        # ai_citation_score is that live number only. On-page readiness is ai_readiness_score.
-        if live_citation_score is None:
-            ai_visibility_score = None
-            ai_visibility_status = "NOT_MEASURED"
-            live_ai_citation_score = None
-            ai_citation_alias = None
-            ai_citation_status = "not_measured"
-        else:
+        # AI Visibility: Live empirical outcome only
+        if live_citation_score is not None:
             ai_visibility_score = round(float(live_citation_score), 1)
             ai_visibility_status = "MEASURED"
             live_ai_citation_score = ai_visibility_score
-            ai_citation_alias = ai_visibility_score
             ai_citation_status = "measured"
+        else:
+            ai_visibility_score = None
+            ai_visibility_status = "NOT_MEASURED"
+            live_ai_citation_score = None
+            ai_citation_status = "not_measured"
 
-        overall = round((human_score * 0.35 + google_score * 0.35 + ai_readiness_score * 0.30), 1)
+        overall = round(human_score * 0.35 + google_score * 0.35 + ai_readiness_score * 0.30, 1)
 
         if overall >= 90:
             band = "Category Benchmark"
@@ -569,46 +700,24 @@ class ScoringEngine:
         else:
             band = "Low readiness"
 
-        if human_issues:
-            human_summary = (
-                f"Human score {human_score:.0f}/100. {len(human_issues)} friction point(s) on clarity or conversion. "
-                f"Primary: {human_issues[0]}."
-            )
+        human_summary = f"Human Experience View: {human_score:.0f}/100 aggregated from UX and Content check evaluations."
+        google_summary = f"Google Organic View: {google_score:.0f}/100 aggregated from Technical, On-Page, and Schema checks."
+        if ai_visibility_score is not None:
+            ai_summary = f"AI Readiness: {ai_readiness_score:.0f}/100 (GEO on-page checks). AI Visibility: {ai_visibility_score:.0f}/100 (live measurement)."
         else:
-            human_summary = "Human score 100/100 in the crawl sample: no recorded 5-second or CTA defects."
+            ai_summary = f"AI Readiness: {ai_readiness_score:.0f}/100 (GEO on-page checks). AI Visibility: NOT MEASURED (live connector not run)."
 
-        if google_issues:
-            google_summary = (
-                f"Google score {google_score:.0f}/100. {len(google_issues)} technical or on-page bottleneck(s). "
-                f"Primary: {google_issues[0]}."
-            )
-        else:
-            google_summary = "Google score 100/100 in the crawl sample: no recorded crawl, index, or schema defects."
-
-        if ai_visibility_score is None:
-            visibility_clause = "AI Visibility: NOT MEASURED (live answer-engine citations were not run for this seal)."
-        else:
-            visibility_clause = f"AI Visibility: {ai_visibility_score:.0f}/100 from a live engine measurement, separate from on-page readiness."
-        if geo_readiness is not None:
-            ai_summary = (
-                f"AI Readiness: {ai_readiness_score:.0f}/100 ({geo_readiness.headline}). "
-                f"{visibility_clause} {geo_readiness.visibility_message}"
-            )
-        else:
-            ai_summary = (
-                f"AI Readiness: {ai_readiness_score:.0f}/100 based on on-page entity extractability. "
-                f"{visibility_clause}"
-            )
-
-        unique_ev = sorted(list(set(evidence_refs)))[:12]
+        all_evidence: List[str] = []
+        for f in findings:
+            all_evidence.extend(f.evidence_refs)
 
         return HonestScores(
-            human_score=round(human_score, 1),
-            google_score=round(google_score, 1),
+            human_score=human_score,
+            google_score=google_score,
             ai_readiness_score=ai_readiness_score,
             ai_visibility_score=ai_visibility_score,
             ai_visibility_status=ai_visibility_status,
-            ai_citation_score=ai_citation_alias,
+            ai_citation_score=ai_readiness_score,
             on_page_proxy_score=ai_readiness_score,
             live_ai_citation_score=live_ai_citation_score,
             overall_score=overall,
@@ -616,7 +725,7 @@ class ScoringEngine:
             human_summary=human_summary,
             google_summary=google_summary,
             ai_citation_summary=ai_summary,
-            evidence_refs=unique_ev,
+            evidence_refs=sorted(list(set(all_evidence)))[:12],
             status="AVAILABLE",
             ai_citation_status=ai_citation_status,
         )

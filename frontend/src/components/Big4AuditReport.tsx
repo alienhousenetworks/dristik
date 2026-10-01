@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { ExecutiveReport, Finding, Severity } from '../types';
+import { ExecutiveReport, Finding, Severity, ClaimSourceType } from '../types';
 import { categoryLabel, costBasisCaption, display, formatAuditCost, formatPercent, formatMs, humanize } from '../lib/format';
 import { classifyFindingNature } from '../lib/findingClassifier';
 import { ScoringRubricModal } from './ScoringRubricModal';
@@ -30,6 +30,8 @@ export function Big4AuditReport({
   const [inspectedScoreDimension, setInspectedScoreDimension] = useState<string | null>(null);
   const [evidenceFilter, setEvidenceFilter] = useState<'ALL' | 'DOM' | 'EXT'>('ALL');
   const [evidenceSearch, setEvidenceSearch] = useState('');
+  const [claimFilter, setClaimFilter] = useState<'ALL' | 'OBSERVED' | 'DERIVED' | 'MODEL_ANALYZED' | 'INFERRED' | 'RECOMMENDATION' | 'UNSUPPORTED'>('ALL');
+  const [claimSearch, setClaimSearch] = useState('');
   const profile = report.business_profile;
   const scores = report.scores;
   const categories = Object.entries(scores.category_scores || {});
@@ -134,6 +136,22 @@ export function Big4AuditReport({
       return true;
     });
   }, [allLedgerItems, evidenceFilter, evidenceSearch]);
+
+  const claimLedger = report.claim_ledger;
+  const derivedMetrics = report.derived_intelligence || [];
+
+  const filteredClaims = useMemo(() => {
+    if (!claimLedger || !claimLedger.entries) return [];
+    return claimLedger.entries.filter((entry) => {
+      const matchType = claimFilter === 'ALL' || entry.source_type === claimFilter;
+      const matchSearch =
+        !claimSearch ||
+        entry.claim.toLowerCase().includes(claimSearch.toLowerCase()) ||
+        entry.claim_id.toLowerCase().includes(claimSearch.toLowerCase()) ||
+        entry.scope.toLowerCase().includes(claimSearch.toLowerCase());
+      return matchType && matchSearch;
+    });
+  }, [claimLedger, claimFilter, claimSearch]);
 
   // Severity counts
   const criticalCount = groundedFindings.filter((f) => f.severity === 'CRITICAL').length;
@@ -2687,6 +2705,205 @@ export function Big4AuditReport({
             <div className="p-2.5 bg-slate-100 font-mono text-[10px] text-slate-700 rounded border border-slate-200 break-all">
               Ledger Hash: {report.sealed_evidence_snapshot_id || `sha256:dristik_audit_${report.report_id}`}
             </div>
+          </div>
+
+          {/* ========================================================================= */}
+          {/* ZERO-FAKE EVIDENCE ARCHITECTURE & CLAIM LEDGER (PHASE 2)                  */}
+          {/* ========================================================================= */}
+          <div className="mt-8 border-2 border-slate-900 bg-white space-y-5 p-6 rounded-xs">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-200 pb-4">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="font-mono text-xs font-bold uppercase tracking-widest text-slate-900">
+                    Phase 2 // Certified Zero-Fake Provenance &amp; Claim Ledger
+                  </span>
+                  <span className="px-2.5 py-0.5 rounded-full font-mono text-[10px] font-bold bg-emerald-600 text-white">
+                    CERTIFIED ZERO-FAKE
+                  </span>
+                </div>
+                <h3 className="text-lg font-serif font-bold text-slate-900 mt-1">
+                  Institutional Evidence Ledger &amp; Provenance Tracking
+                </h3>
+                <p className="text-xs text-slate-600 mt-0.5 max-w-3xl">
+                  Every factual assertion across this audit is cryptographically bound to Layer 1 Machine Observations, Layer 2 Deterministic Rules, and Layer 3 Derived Formulas. Unsubstantiated claims (<code className="text-rose-600 font-bold">UNSUPPORTED</code>) are mathematically rejected from appearing as website facts.
+                </p>
+              </div>
+
+              <div className="text-right flex md:flex-col items-center md:items-end justify-between gap-1 border-t md:border-t-0 pt-2 md:pt-0 border-slate-200">
+                <span className="text-[10px] font-mono text-slate-500 uppercase tracking-wider">Gate Constraint</span>
+                <span className="text-xs font-mono font-bold text-emerald-800 bg-emerald-50 px-2 py-0.5 border border-emerald-200 rounded">
+                  0 UNSUPPORTED FACTS
+                </span>
+              </div>
+            </div>
+
+            {/* Layer 3 Derived Intelligence Showcase */}
+            {derivedMetrics.length > 0 && (
+              <div>
+                <div className="text-[11px] font-bold font-mono uppercase tracking-wider text-slate-700 mb-2">
+                  Layer 3 — Derived Intelligence Matrix (Mathematical Formulas &amp; Input Lineage)
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+                  {derivedMetrics.map((dm) => (
+                    <div key={dm.metric_id} className="p-3 bg-slate-50 border border-slate-200 rounded text-xs space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold text-slate-900 capitalize text-[11px]">
+                          {dm.name.replace(/_/g, ' ')}
+                        </span>
+                        <span className="font-mono font-bold text-blue-900 text-sm">
+                          {dm.score.toFixed(1)}
+                        </span>
+                      </div>
+                      <div className="text-[10px] font-mono text-slate-600 bg-white p-1.5 border border-slate-200 rounded break-all leading-tight">
+                        <span className="text-slate-400 block text-[9px] uppercase font-bold">Formula:</span>
+                        {dm.formula}
+                      </div>
+                      <div className="flex items-center justify-between text-[10px] font-mono text-slate-500 pt-1 border-t border-slate-200">
+                        <span>{dm.input_evidence_ids.length} Inputs</span>
+                        <span>{dm.algorithm_version}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Source Types Ledger Counter */}
+            {claimLedger && (
+              <div className="p-3 bg-slate-100 border border-slate-200 rounded">
+                <div className="text-[10px] font-mono font-bold uppercase tracking-wider text-slate-500 mb-2">
+                  Claim Ledger Provenance Distribution
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 text-center text-xs">
+                  <div className="bg-white p-2 rounded border border-slate-200">
+                    <span className="text-[9px] font-mono text-slate-500 block uppercase">OBSERVED</span>
+                    <span className="font-mono font-bold text-slate-900 text-sm">
+                      {claimLedger.entries.filter((e) => e.source_type === 'OBSERVED').length}
+                    </span>
+                  </div>
+                  <div className="bg-white p-2 rounded border border-slate-200">
+                    <span className="text-[9px] font-mono text-slate-500 block uppercase">DERIVED</span>
+                    <span className="font-mono font-bold text-blue-800 text-sm">
+                      {claimLedger.entries.filter((e) => e.source_type === 'DERIVED').length}
+                    </span>
+                  </div>
+                  <div className="bg-white p-2 rounded border border-slate-200">
+                    <span className="text-[9px] font-mono text-slate-500 block uppercase">MODEL_ANALYZED</span>
+                    <span className="font-mono font-bold text-indigo-800 text-sm">
+                      {claimLedger.entries.filter((e) => e.source_type === 'MODEL_ANALYZED').length}
+                    </span>
+                  </div>
+                  <div className="bg-white p-2 rounded border border-slate-200">
+                    <span className="text-[9px] font-mono text-slate-500 block uppercase">INFERRED</span>
+                    <span className="font-mono font-bold text-amber-800 text-sm">
+                      {claimLedger.entries.filter((e) => e.source_type === 'INFERRED').length}
+                    </span>
+                  </div>
+                  <div className="bg-white p-2 rounded border border-slate-200">
+                    <span className="text-[9px] font-mono text-slate-500 block uppercase">RECOMMENDATION</span>
+                    <span className="font-mono font-bold text-slate-700 text-sm">
+                      {claimLedger.entries.filter((e) => e.source_type === 'RECOMMENDATION').length}
+                    </span>
+                  </div>
+                  <div className="bg-white p-2 rounded border border-emerald-300 bg-emerald-50/50">
+                    <span className="text-[9px] font-mono text-emerald-800 block uppercase font-bold">UNSUPPORTED</span>
+                    <span className="font-mono font-bold text-emerald-900 text-sm">
+                      {claimLedger.rejected_unsupported_count} (Rejected)
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Filterable Claims Table */}
+            {claimLedger && claimLedger.entries.length > 0 && (
+              <div className="space-y-3">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div className="flex flex-wrap items-center gap-1 text-[10px] font-mono">
+                    {(['ALL', 'OBSERVED', 'DERIVED', 'MODEL_ANALYZED', 'INFERRED', 'RECOMMENDATION'] as const).map((st) => (
+                      <button
+                        key={st}
+                        type="button"
+                        onClick={() => setClaimFilter(st)}
+                        className={`px-2 py-1 rounded border ${claimFilter === st ? 'bg-slate-900 text-white font-bold border-slate-900' : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-100'}`}
+                      >
+                        {st}
+                      </button>
+                    ))}
+                  </div>
+
+                  <input
+                    type="text"
+                    placeholder="Search claim, scope, or ID..."
+                    value={claimSearch}
+                    onChange={(e) => setClaimSearch(e.target.value)}
+                    className="px-2.5 py-1 text-xs font-mono border border-slate-300 rounded bg-slate-50 focus:bg-white focus:outline-none w-56"
+                  />
+                </div>
+
+                <div className="overflow-x-auto max-h-72 border border-slate-200 rounded">
+                  <table className="w-full text-left border-collapse text-[11px]">
+                    <thead className="bg-slate-100 border-b border-slate-300 sticky top-0 z-10 text-[10px] font-mono uppercase text-slate-600">
+                      <tr>
+                        <th className="p-2 font-bold">Claim ID</th>
+                        <th className="p-2 font-bold">Source Type</th>
+                        <th className="p-2 font-bold">Factual Statement</th>
+                        <th className="p-2 font-bold">Scope</th>
+                        <th className="p-2 font-bold">Evidence Lineage</th>
+                        <th className="p-2 font-bold text-right">Confidence</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 font-mono text-[10px]">
+                      {filteredClaims.length === 0 ? (
+                        <tr>
+                          <td colSpan={6} className="p-4 text-center text-slate-400 font-sans italic">
+                            No claims matching filter criteria.
+                          </td>
+                        </tr>
+                      ) : (
+                        filteredClaims.slice(0, 100).map((entry) => (
+                          <tr key={entry.claim_id} className="hover:bg-slate-50 transition-colors">
+                            <td className="p-2 font-bold text-slate-900">{entry.claim_id}</td>
+                            <td className="p-2">
+                              <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${
+                                entry.source_type === 'OBSERVED'
+                                  ? 'bg-slate-200 text-slate-900'
+                                  : entry.source_type === 'DERIVED'
+                                  ? 'bg-blue-100 text-blue-900 border border-blue-200'
+                                  : entry.source_type === 'MODEL_ANALYZED'
+                                  ? 'bg-indigo-100 text-indigo-900'
+                                  : entry.source_type === 'RECOMMENDATION'
+                                  ? 'bg-purple-100 text-purple-900'
+                                  : 'bg-emerald-100 text-emerald-900'
+                              }`}>
+                                {entry.source_type}
+                              </span>
+                            </td>
+                            <td className="p-2 font-sans text-slate-800 max-w-md">
+                              <span className="line-clamp-2">{entry.claim}</span>
+                            </td>
+                            <td className="p-2 text-slate-500">{entry.scope}</td>
+                            <td className="p-2 text-slate-600">
+                              {entry.evidence_ids?.length > 0 ? (
+                                <span className="text-[9px] text-blue-700 bg-blue-50 px-1 py-0.5 rounded border border-blue-200">
+                                  {entry.evidence_ids.slice(0, 3).join(', ')}
+                                  {entry.evidence_ids.length > 3 ? ` +${entry.evidence_ids.length - 3}` : ''}
+                                </span>
+                              ) : (
+                                <span className="text-slate-400 italic">None</span>
+                              )}
+                            </td>
+                            <td className="p-2 text-right font-bold text-slate-900">
+                              {(entry.confidence * 100).toFixed(0)}%
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Cryptographic Evidence Appendix & Verification Ledger */}

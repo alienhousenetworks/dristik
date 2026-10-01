@@ -1,0 +1,974 @@
+{
+  "methodology_version": "5.0",
+  "methodology_name": "Dristik Evidence-Based Check & Curve Scoring Architecture",
+  "last_updated": "October 2026",
+  "coverage_rules": {
+    "measured_threshold": 0.60,
+    "partial_threshold": 0.30,
+    "unmeasured_threshold": 0.30,
+    "semantics": {
+      "measured": ">= 60% of subsection check weights measured; included in overall rollup.",
+      "partial": "30% - 59.99% measured; included in rollup but flagged as PARTIAL.",
+      "not_measured": "< 30% measured; excluded from rollup and active weights renormalized."
+    }
+  },
+  "plans": {
+    "starter": {
+      "name": "Starter Audit",
+      "default_scope_pages": 5,
+      "ai_search_min_sample": 10,
+      "ai_search_min_prompts": 10,
+      "ai_search_repeats": 1
+    },
+    "growth": {
+      "name": "Growth Audit",
+      "default_scope_pages": 15,
+      "ai_search_min_sample": 50,
+      "ai_search_min_prompts": 25,
+      "ai_search_repeats": 2
+    },
+    "enterprise": {
+      "name": "Enterprise Audit",
+      "default_scope_pages": 50,
+      "ai_search_min_sample": 100,
+      "ai_search_min_prompts": 30,
+      "ai_search_repeats": 3
+    }
+  },
+  "categories": {
+    "TECHNICAL_SEO": {
+      "name": "Technical SEO",
+      "baseline_weight": 0.15,
+      "gates": [
+        {
+          "gate_id": "gate_critical_indexation",
+          "trigger_condition": "has_sitewide_noindex OR has_disallow_all OR has_homepage_5xx",
+          "cap_score": 20.0,
+          "reason": "Catastrophic indexation defect (sitewide noindex, Disallow: /, or 5xx) blocks site discovery."
+        }
+      ],
+      "subsections": {
+        "crawl_indexation": {
+          "name": "Crawl, Indexation, Sitemaps & Hreflang",
+          "budget_share": 30.0,
+          "checks": [
+            {
+              "check_id": "robots_txt_rfc9309",
+              "name": "Robots.txt RFC 9309 Valid Syntax",
+              "check_type": "binary",
+              "weight": 3.0,
+              "description": "Robots.txt parses correctly according to RFC 9309 without fatal syntax errors."
+            },
+            {
+              "check_id": "sitemap_urls_valid_200",
+              "name": "XML Sitemap Valid URLs & Matching Canonicals",
+              "check_type": "graded",
+              "weight": 4.0,
+              "description": "Proportion of sitemap URLs that return HTTP 200 and match self-canonical."
+            },
+            {
+              "check_id": "indexable_url_share",
+              "name": "Indexable Sample URL Share",
+              "check_type": "graded",
+              "weight": 6.0,
+              "description": "Share of crawled sample URLs that return 200, lack noindex, and self-canonicalize."
+            },
+            {
+              "check_id": "internal_click_depth_ok",
+              "name": "Internal Click Depth <= 3",
+              "check_type": "graded",
+              "weight": 2.0,
+              "description": "Share of sample URLs accessible within 3 clicks from homepage."
+            },
+            {
+              "check_id": "hreflang_tags_valid",
+              "name": "Hreflang Return Tags & Valid Codes",
+              "check_type": "graded",
+              "weight": 3.0,
+              "description": "If multilingual, share of hreflang tags with valid ISO codes and reciprocal return tags."
+            }
+          ]
+        },
+        "https_transport": {
+          "name": "HTTPS & Transport",
+          "budget_share": 15.0,
+          "checks": [
+            {
+              "check_id": "https_on_all_urls",
+              "name": "HTTPS on All Sampled URLs",
+              "check_type": "binary",
+              "weight": 5.0,
+              "description": "All sampled URLs are requested and served over HTTPS."
+            },
+            {
+              "check_id": "tls_version_valid",
+              "name": "Valid SSL Certificate & TLS >= 1.2",
+              "check_type": "binary",
+              "weight": 4.0,
+              "description": "SSL certificate is valid, unexpired, and uses modern TLS 1.2 or 1.3."
+            },
+            {
+              "check_id": "http_to_https_single_301",
+              "name": "HTTP to HTTPS Single 301 Redirect",
+              "check_type": "binary",
+              "weight": 3.0,
+              "description": "Insecure HTTP requests redirect to HTTPS in a single clean 301 hop."
+            },
+            {
+              "check_id": "no_mixed_content",
+              "name": "No Insecure Mixed Content",
+              "check_type": "graded",
+              "weight": 3.0,
+              "description": "Share of page resources loaded securely without mixed active/passive content."
+            },
+            {
+              "check_id": "security_headers_hardening",
+              "name": "Security Headers Hardening (HSTS/CSP)",
+              "check_type": "graded",
+              "weight": 2.0,
+              "description": "Presence of HSTS and security posture headers (modest weight, not direct ranking factor)."
+            }
+          ]
+        },
+        "performance": {
+          "name": "Core Web Vitals & Performance",
+          "budget_share": 35.0,
+          "checks": [
+            {
+              "check_id": "cwv_lcp",
+              "name": "Largest Contentful Paint (LCP p75)",
+              "check_type": "curve",
+              "weight": 10.0,
+              "p10": 2.5,
+              "median": 4.0,
+              "higher_is_better": false,
+              "unit": "seconds",
+              "description": "CrUX field LCP p75 (or lab Lighthouse fallback). Thresholds: 2.5s good, 4.0s poor."
+            },
+            {
+              "check_id": "cwv_inp",
+              "name": "Interaction to Next Paint (INP p75)",
+              "check_type": "curve",
+              "weight": 10.0,
+              "p10": 200.0,
+              "median": 500.0,
+              "higher_is_better": false,
+              "unit": "milliseconds",
+              "description": "CrUX field INP p75. Thresholds: 200ms good, 500ms poor."
+            },
+            {
+              "check_id": "cwv_cls",
+              "name": "Cumulative Layout Shift (CLS p75)",
+              "check_type": "curve",
+              "weight": 8.0,
+              "p10": 0.10,
+              "median": 0.25,
+              "higher_is_better": false,
+              "unit": "score",
+              "description": "CrUX field CLS p75. Thresholds: 0.10 good, 0.25 poor."
+            },
+            {
+              "check_id": "cwv_ttfb",
+              "name": "Time to First Byte (TTFB p75)",
+              "check_type": "curve",
+              "weight": 7.0,
+              "p10": 0.8,
+              "median": 1.8,
+              "higher_is_better": false,
+              "unit": "seconds",
+              "description": "CrUX / server TTFB p75. Thresholds: 0.8s good, 1.8s poor."
+            }
+          ]
+        },
+        "canonicals_hygiene": {
+          "name": "Canonicals & URL Hygiene",
+          "budget_share": 20.0,
+          "checks": [
+            {
+              "check_id": "canonical_valid_rate",
+              "name": "Valid Self-Referencing Canonical Tag",
+              "check_type": "graded",
+              "weight": 6.0,
+              "description": "Proportion of sampled URLs specifying a valid self-referencing canonical."
+            },
+            {
+              "check_id": "redirect_chains_clean",
+              "name": "Redirect Chains <= 1 Hop",
+              "check_type": "graded",
+              "weight": 4.0,
+              "description": "Proportion of redirecting links that resolve within 1 hop."
+            },
+            {
+              "check_id": "broken_internal_links_rate",
+              "name": "Zero Broken Internal Links (4xx/5xx)",
+              "check_type": "graded",
+              "weight": 5.0,
+              "description": "1 - (broken links / total internal links)."
+            },
+            {
+              "check_id": "duplicate_content_clusters",
+              "name": "Near-Duplicate Content Prevention",
+              "check_type": "graded",
+              "weight": 5.0,
+              "description": "Absence of duplicate content clusters with cosine similarity >= 0.95."
+            }
+          ]
+        }
+      }
+    },
+    "ON_PAGE_SEO": {
+      "name": "On-Page SEO",
+      "baseline_weight": 0.10,
+      "gates": [],
+      "subsections": {
+        "title": {
+          "name": "Title Tag Optimization",
+          "budget_share": 30.0,
+          "checks": [
+            {
+              "check_id": "title_present",
+              "name": "Title Tag Present",
+              "check_type": "binary",
+              "weight": 4.0,
+              "description": "HTML <title> tag is present and non-empty."
+            },
+            {
+              "check_id": "title_length_bounds",
+              "name": "Title Length 30-60 Characters",
+              "check_type": "graded",
+              "weight": 2.0,
+              "description": "Title character length stays within 30-60 characters (approx <= 580px rendered width)."
+            },
+            {
+              "check_id": "title_uniqueness",
+              "name": "Unique Titles Across Crawl Sample",
+              "check_type": "graded",
+              "weight": 3.0,
+              "description": "Share of unique title tags across crawled pages."
+            },
+            {
+              "check_id": "title_h1_topic_semantic_match",
+              "name": "Semantic Match to H1 and Page Topic",
+              "check_type": "graded",
+              "weight": 3.0,
+              "description": "Cosine similarity between Title and H1 is >= 0.60."
+            }
+          ]
+        },
+        "meta_description": {
+          "name": "Meta Description Optimization",
+          "budget_share": 20.0,
+          "checks": [
+            {
+              "check_id": "meta_desc_present",
+              "name": "Meta Description Present",
+              "check_type": "binary",
+              "weight": 4.0,
+              "description": "Meta description tag exists and is non-empty."
+            },
+            {
+              "check_id": "meta_desc_length",
+              "name": "Meta Description 70-160 Characters",
+              "check_type": "graded",
+              "weight": 2.0,
+              "description": "Character count stays within recommended snippet length (70-160 chars)."
+            },
+            {
+              "check_id": "meta_desc_uniqueness",
+              "name": "Unique Descriptions Across Sample",
+              "check_type": "graded",
+              "weight": 3.0,
+              "description": "Share of unique meta descriptions across sampled pages."
+            }
+          ]
+        },
+        "headings": {
+          "name": "Heading Tag Structure",
+          "budget_share": 30.0,
+          "checks": [
+            {
+              "check_id": "single_h1_present",
+              "name": "Exactly One Non-Empty H1",
+              "check_type": "graded",
+              "weight": 5.0,
+              "description": "Each crawled page contains exactly one non-empty H1 tag."
+            },
+            {
+              "check_id": "no_skipped_heading_levels",
+              "name": "Logical Heading Hierarchy (No Skipped Levels)",
+              "check_type": "graded",
+              "weight": 3.0,
+              "description": "Headings do not skip levels (e.g. H1 to H3 without H2)."
+            },
+            {
+              "check_id": "h1_matches_title_intent",
+              "name": "H1 Aligns with Page Intent",
+              "check_type": "graded",
+              "weight": 2.0,
+              "description": "H1 matches title intent and target query theme."
+            }
+          ]
+        },
+        "social_image": {
+          "name": "Social Metadata & Image Attributes",
+          "budget_share": 20.0,
+          "checks": [
+            {
+              "check_id": "og_tags_present",
+              "name": "Required Open Graph Tags Present",
+              "check_type": "graded",
+              "weight": 4.0,
+              "description": "og:title, og:type, og:image, og:url present on primary pages."
+            },
+            {
+              "check_id": "twitter_card_present",
+              "name": "Twitter Card Tag Present",
+              "check_type": "graded",
+              "weight": 1.0,
+              "description": "twitter:card tag declared."
+            },
+            {
+              "check_id": "og_image_dimensions_reachable",
+              "name": "OG Image Reachable & Valid Dimensions",
+              "check_type": "graded",
+              "weight": 2.0,
+              "description": "OG image URL is reachable and recommended >= 1200x630 resolution."
+            },
+            {
+              "check_id": "image_alt_text_rate",
+              "name": "Descriptive Alt Text on Content Images",
+              "check_type": "graded",
+              "weight": 3.0,
+              "description": "Share of content images containing meaningful alt attributes."
+            }
+          ]
+        }
+      }
+    },
+    "CONTENT": {
+      "name": "Content & Information Gain",
+      "baseline_weight": 0.15,
+      "gates": [],
+      "subsections": {
+        "topical_coverage_gain": {
+          "name": "Topical Coverage & Information Gain",
+          "budget_share": 35.0,
+          "checks": [
+            {
+              "check_id": "topical_entity_coverage",
+              "name": "SERP Entity & Subtopic Coverage",
+              "check_type": "graded",
+              "weight": 6.0,
+              "description": "Weighted coverage of entities and subtopics present in top-10 SERP."
+            },
+            {
+              "check_id": "information_gain_score",
+              "name": "Original Information Gain (Sentence Cosine < 0.80)",
+              "check_type": "graded",
+              "weight": 4.0,
+              "description": "Share of original sentences with max competitor cosine < 0.80."
+            }
+          ]
+        },
+        "first_party_evidence": {
+          "name": "First-Party Evidence & Empirical Proof",
+          "budget_share": 25.0,
+          "checks": [
+            {
+              "check_id": "supported_claim_rate",
+              "name": "Supported Fact & Claim Rate (Wilson Lower Bound)",
+              "check_type": "graded",
+              "weight": 6.0,
+              "description": "Wilson lower bound of supported claims (numbers with units, named sources, original data)."
+            },
+            {
+              "check_id": "author_byline_and_date",
+              "name": "Author Byline, Credentials & Timestamp",
+              "check_type": "binary",
+              "weight": 4.0,
+              "description": "Explicit author byline, verifiable credentials, and published/updated dates."
+            }
+          ]
+        },
+        "outline_cannibalization": {
+          "name": "Semantic Outline & Cannibalization Prevention",
+          "budget_share": 25.0,
+          "checks": [
+            {
+              "check_id": "outline_depth_and_intent",
+              "name": "Outline Depth & Section Intent Coverage",
+              "check_type": "graded",
+              "weight": 5.0,
+              "description": "Heading depth and section coverage against query intent set."
+            },
+            {
+              "check_id": "cannibalization_freedom_rate",
+              "name": "Zero URL Conflict Clusters",
+              "check_type": "graded",
+              "weight": 5.0,
+              "description": "1 - (URLs in conflict clusters / URLs sampled). Flags cosine >= 0.85 with split impressions."
+            }
+          ]
+        },
+        "readability": {
+          "name": "Audience Readability & Structure",
+          "budget_share": 15.0,
+          "checks": [
+            {
+              "check_id": "audience_flesch_reading_ease",
+              "name": "Flesch Reading Ease in Target Band",
+              "check_type": "curve",
+              "weight": 6.0,
+              "description": "Scores Flesch against audience band (Consumer 60-80, B2B 30-60) with smooth decay."
+            },
+            {
+              "check_id": "sentence_length_under_25",
+              "name": "Average Sentence Length <= 25 Words",
+              "check_type": "graded",
+              "weight": 2.0,
+              "description": "Share of sentences containing 25 words or fewer."
+            },
+            {
+              "check_id": "paragraph_length_under_120",
+              "name": "Paragraph Length <= 120 Words",
+              "check_type": "graded",
+              "weight": 2.0,
+              "description": "Share of paragraphs containing 120 words or fewer."
+            }
+          ]
+        }
+      }
+    },
+    "AI_SEARCH": {
+      "name": "AI Search Intelligence",
+      "baseline_weight": 0.15,
+      "gates": [
+        {
+          "gate_id": "gate_ai_search_requires_live_run",
+          "trigger_condition": "has_live_run IS FALSE",
+          "cap_score": null,
+          "action": "MARK_NOT_MEASURED",
+          "reason": "AI Search outcomes cannot be simulated without live engine query execution."
+        }
+      ],
+      "subsections": {
+        "mention_citation": {
+          "name": "Brand Mention & Domain Citation",
+          "budget_share": 30.0,
+          "checks": [
+            {
+              "check_id": "ai_brand_mention_rate",
+              "name": "Wilson Lower Bound Brand Mention Rate",
+              "check_type": "graded",
+              "weight": 6.0,
+              "description": "Wilson lower bound of brand mention rate across answering AI engines."
+            },
+            {
+              "check_id": "ai_domain_citation_rate",
+              "name": "Wilson Lower Bound Domain Citation Rate",
+              "check_type": "graded",
+              "weight": 4.0,
+              "description": "Wilson lower bound of own-domain citation link rate across AI answers."
+            }
+          ]
+        },
+        "brand_accuracy": {
+          "name": "Brand Accuracy & Fact Preservation",
+          "budget_share": 25.0,
+          "checks": [
+            {
+              "check_id": "ai_fact_precision_recall",
+              "name": "Fact Sheet Precision x Recall Score",
+              "check_type": "graded",
+              "weight": 10.0,
+              "description": "Comparison against ground-truth fact sheet via temperature 0.0 consensus LLM judge."
+            }
+          ]
+        },
+        "competitor_displacement": {
+          "name": "Competitor Displacement Resistance",
+          "budget_share": 25.0,
+          "checks": [
+            {
+              "check_id": "ai_displacement_resistance",
+              "name": "1 - Competitor Displacement Rate",
+              "check_type": "graded",
+              "weight": 10.0,
+              "description": "1 - (prompts where >=1 competitor appears and brand is absent / prompts where any tracked brand appears)."
+            }
+          ]
+        },
+        "decision_stage_coverage": {
+          "name": "Commercial Decision-Stage Coverage",
+          "budget_share": 20.0,
+          "checks": [
+            {
+              "check_id": "ai_decision_stage_mention",
+              "name": "Mention Rate on Comparison & Pricing Prompts",
+              "check_type": "graded",
+              "weight": 10.0,
+              "description": "Mention rate on high-intent decision stage queries (comparison, pricing, best X for Y)."
+            }
+          ]
+        }
+      }
+    },
+    "GEO": {
+      "name": "Generative Engine Optimization (GEO)",
+      "baseline_weight": 0.15,
+      "gates": [],
+      "subsections": {
+        "entity_clarity": {
+          "name": "Entity Clarity & Canonical Definition",
+          "budget_share": 20.0,
+          "checks": [
+            {
+              "check_id": "kg_wikidata_resolution",
+              "name": "Wikidata or Google Knowledge Graph Resolution",
+              "check_type": "binary",
+              "weight": 5.0,
+              "description": "Entity resolution in Wikidata or Google Knowledge Graph."
+            },
+            {
+              "check_id": "sameas_link_reciprocity",
+              "name": "SameAs Links Resolve & Reciprocate",
+              "check_type": "graded",
+              "weight": 3.0,
+              "description": "Declared sameAs URLs resolve with HTTP 200 and link back or verify entity."
+            },
+            {
+              "check_id": "brand_name_consistency",
+              "name": "Brand Name Jaro-Winkler >= 0.92 Across Surfaces",
+              "check_type": "graded",
+              "weight": 4.0,
+              "description": "Brand naming consistency across homepage, about page, and schema."
+            },
+            {
+              "check_id": "category_embedding_agreement",
+              "name": "Category Embedding Agreement",
+              "check_type": "graded",
+              "weight": 3.0,
+              "description": "Self-stated category aligns with standard industry ontology."
+            },
+            {
+              "check_id": "canonical_definition_top_100_words",
+              "name": "Canonical Definition in Top 100 Words",
+              "check_type": "binary",
+              "weight": 3.0,
+              "description": "Clear statement of what the company/product is within first 100 words of hero."
+            }
+          ]
+        },
+        "buyer_answerability": {
+          "name": "Buyer Question Direct Answerability",
+          "budget_share": 20.0,
+          "checks": [
+            {
+              "check_id": "buyer_intent_answer_score",
+              "name": "Answers Fully Without Outside Context",
+              "check_type": "graded",
+              "weight": 10.0,
+              "description": "Mean score (0 / 0.5 / 1.0) across 8 buyer questions evaluated against site chunks via calibrated judge."
+            }
+          ]
+        },
+        "structured_data_grounding": {
+          "name": "Structured Data Grounding",
+          "budget_share": 10.0,
+          "checks": [
+            {
+              "check_id": "schema_dom_facts_match",
+              "name": "Key Entity Facts in JSON-LD Match Visible Text",
+              "check_type": "graded",
+              "weight": 10.0,
+              "description": "Share of key entity facts (name, URL, logo, contact, description) that match visible text."
+            }
+          ]
+        },
+        "commercial_coverage": {
+          "name": "Commercial Question Coverage",
+          "budget_share": 15.0,
+          "checks": [
+            {
+              "check_id": "commercial_topics_concrete_rate",
+              "name": "Pricing, ICP, Integrations, Security Concrete Coverage",
+              "check_type": "graded",
+              "weight": 10.0,
+              "description": "Composite score of presence, concrete specifics, and cross-page consistency on commercial topics."
+            }
+          ]
+        },
+        "passage_density": {
+          "name": "Citation-Ready Passage Density",
+          "budget_share": 20.0,
+          "checks": [
+            {
+              "check_id": "citation_ready_chunk_density",
+              "name": "Self-Contained Chunks Scoring >= 0.70",
+              "check_type": "graded",
+              "weight": 10.0,
+              "description": "Share of 100-300 token content passages scoring >= 0.70 on entity clarity and specific claims."
+            }
+          ]
+        },
+        "crawler_access": {
+          "name": "AI Crawler Access & Renderability",
+          "budget_share": 15.0,
+          "checks": [
+            {
+              "check_id": "ai_search_bots_unblocked",
+              "name": "AI Search Bots Allowed (OAI-SearchBot, PerplexityBot, Claude-SearchBot)",
+              "check_type": "binary",
+              "weight": 6.0,
+              "description": "RFC 9309 longest-match allows live search/user bots. (Training bot blocking is non-penalized)."
+            },
+            {
+              "check_id": "raw_html_content_share",
+              "name": "Main Content Present in Raw HTML (No JS Required)",
+              "check_type": "graded",
+              "weight": 4.0,
+              "description": "Share of primary text content rendered in initial HTML before client-side script execution."
+            }
+          ]
+        }
+      }
+    },
+    "SCHEMA": {
+      "name": "Schema & Structured Data",
+      "baseline_weight": 0.10,
+      "gates": [
+        {
+          "gate_id": "gate_schema_contradicts_visible",
+          "trigger_condition": "has_contradicting_schema IS TRUE",
+          "cap_score": 60.0,
+          "reason": "Structured data contradicts visible on-page content, violating search engine trust guidelines."
+        }
+      ],
+      "subsections": {
+        "organization_graph": {
+          "name": "Organization Graph Definition",
+          "budget_share": 30.0,
+          "checks": [
+            {
+              "check_id": "org_schema_completeness",
+              "name": "Organization Schema Completeness",
+              "check_type": "graded",
+              "weight": 5.0,
+              "description": "Share of required and recommended Organization properties per Google & Schema.org."
+            },
+            {
+              "check_id": "org_schema_validity",
+              "name": "Organization Schema Valid Syntax",
+              "check_type": "binary",
+              "weight": 3.0,
+              "description": "JSON-LD parses cleanly without schema syntax errors."
+            },
+            {
+              "check_id": "org_schema_id_linking",
+              "name": "Stable @id and Resolving SameAs",
+              "check_type": "graded",
+              "weight": 2.0,
+              "description": "Stable entity URI @id and valid resolving sameAs references."
+            }
+          ]
+        },
+        "website_breadcrumb": {
+          "name": "WebSite & Navigation Breadcrumb",
+          "budget_share": 20.0,
+          "checks": [
+            {
+              "check_id": "website_schema_valid",
+              "name": "WebSite Name, AlternateName, and URL",
+              "check_type": "binary",
+              "weight": 5.0,
+              "description": "WebSite schema properly declared with name and URL."
+            },
+            {
+              "check_id": "breadcrumb_list_valid",
+              "name": "BreadcrumbList Matches Visible Trail",
+              "check_type": "graded",
+              "weight": 5.0,
+              "description": "BreadcrumbList valid and matching visible navigation on inner pages."
+            }
+          ]
+        },
+        "page_type_markup": {
+          "name": "Page-Type Markup",
+          "budget_share": 25.0,
+          "checks": [
+            {
+              "check_id": "page_template_type_schema",
+              "name": "Matching Schema per Template (Product/Article/Software)",
+              "check_type": "graded",
+              "weight": 8.0,
+              "description": "Specific matching schema type present with Google required fields."
+            },
+            {
+              "check_id": "faq_page_markup",
+              "name": "FAQPage Markup (Answer Engine Extractability)",
+              "check_type": "graded",
+              "weight": 2.0,
+              "description": "Valid FAQPage markup for answer engine extractability (modest weight)."
+            }
+          ]
+        },
+        "markup_matches_page": {
+          "name": "Markup Matches Visible Content",
+          "budget_share": 25.0,
+          "checks": [
+            {
+              "check_id": "schema_truthfulness_rate",
+              "name": "Verified Properties Match Text (Exact Numbers, String Fuzzy >= 0.90)",
+              "check_type": "graded",
+              "weight": 10.0,
+              "description": "(verified + 0.5 * partial) / stated properties compared to visible text."
+            }
+          ]
+        }
+      }
+    },
+    "UX_CONVERSION": {
+      "name": "UX & Conversion Intelligence",
+      "baseline_weight": 0.10,
+      "gates": [],
+      "subsections": {
+        "value_proposition": {
+          "name": "5-Second Value Proposition Clarity",
+          "budget_share": 25.0,
+          "checks": [
+            {
+              "check_id": "hero_clarity_rubric",
+              "name": "Hero Text Who, What, Why & Specificity Rubric",
+              "check_type": "graded",
+              "weight": 10.0,
+              "description": "Rubric scoring on above-the-fold hero messaging clarity and target audience specificity."
+            }
+          ]
+        },
+        "primary_cta": {
+          "name": "Primary Call-to-Action Prominence",
+          "budget_share": 25.0,
+          "checks": [
+            {
+              "check_id": "cta_above_the_fold",
+              "name": "Dominant CTA Above the Fold on Desktop & Mobile",
+              "check_type": "binary",
+              "weight": 4.0,
+              "description": "Clear primary CTA rendered above the fold at 1366x768 and 390x844."
+            },
+            {
+              "check_id": "cta_contrast_wcag",
+              "name": "CTA Contrast >= 3:1 (WCAG 1.4.11)",
+              "check_type": "binary",
+              "weight": 2.0,
+              "description": "Button contrast meets WCAG non-text contrast threshold."
+            },
+            {
+              "check_id": "cta_verb_specific_label",
+              "name": "Specific Action Verb Label",
+              "check_type": "binary",
+              "weight": 2.0,
+              "description": "CTA uses actionable, specific verb+object label."
+            },
+            {
+              "check_id": "clicks_to_conversion_under_3",
+              "name": "Clicks to Conversion <= 2",
+              "check_type": "binary",
+              "weight": 2.0,
+              "description": "Direct funnel path requires 2 or fewer clicks to conversion event."
+            }
+          ]
+        },
+        "form_friction": {
+          "name": "Form Friction & Input Usability",
+          "budget_share": 25.0,
+          "checks": [
+            {
+              "check_id": "form_field_count_curve",
+              "name": "Field Count Curve (<=3 fields = 1.0, 8 = 0.5, 12+ = 0.2)",
+              "check_type": "curve",
+              "weight": 4.0,
+              "p10": 3.0,
+              "median": 8.0,
+              "higher_is_better": false,
+              "description": "Form field count scored via log-normal curve based on Baymard friction research."
+            },
+            {
+              "check_id": "form_labels_accessible",
+              "name": "Programmatic Field Labels & Autocomplete",
+              "check_type": "graded",
+              "weight": 3.0,
+              "description": "All input fields have associated label tags and appropriate autocomplete attributes."
+            },
+            {
+              "check_id": "form_inline_validation",
+              "name": "Inline Error Validation & Clear Confirmation",
+              "check_type": "binary",
+              "weight": 3.0,
+              "description": "Form provides inline error hints and unambiguous submission feedback."
+            }
+          ]
+        },
+        "mobile_responsive": {
+          "name": "Mobile Responsiveness & Tap Targets",
+          "budget_share": 25.0,
+          "checks": [
+            {
+              "check_id": "viewport_meta_declared",
+              "name": "Standard Viewport Meta Declared",
+              "check_type": "binary",
+              "weight": 2.0,
+              "description": "Meta viewport tag declared with width=device-width."
+            },
+            {
+              "check_id": "no_horizontal_scroll_360px",
+              "name": "No Horizontal Overflow at 360px Width",
+              "check_type": "binary",
+              "weight": 3.0,
+              "description": "Page layout renders without horizontal scroll at 360px viewport."
+            },
+            {
+              "check_id": "tap_target_dimensions_wcag",
+              "name": "Tap Targets >= 24x24px (WCAG 2.2 SC 2.5.8)",
+              "check_type": "graded",
+              "weight": 3.0,
+              "description": "Share of interactive buttons/links meeting minimum tap target dimensions."
+            },
+            {
+              "check_id": "base_font_size_16px",
+              "name": "Base Body Font Size >= 16px",
+              "check_type": "binary",
+              "weight": 2.0,
+              "description": "Body text font size is at least 16 CSS px for mobile readability."
+            }
+          ]
+        }
+      }
+    },
+    "TRUST_AUTHORITY": {
+      "name": "Trust & Authority Architecture",
+      "baseline_weight": 0.10,
+      "gates": [
+        {
+          "gate_id": "gate_trust_requires_evidence",
+          "trigger_condition": "has_connector_or_signals IS FALSE",
+          "cap_score": null,
+          "action": "MARK_NOT_MEASURED",
+          "reason": "External authority and trust reviews are marked unmeasured without connected evidence."
+        }
+      ],
+      "subsections": {
+        "social_proof": {
+          "name": "Attributed Social Proof & Reviews",
+          "budget_share": 30.0,
+          "checks": [
+            {
+              "check_id": "bayesian_review_rating",
+              "name": "Bayesian Normalized Review Rating",
+              "check_type": "graded",
+              "weight": 5.0,
+              "description": "(C*m + sum(r)) / (C + n) from connected review platforms."
+            },
+            {
+              "check_id": "review_volume_log_scale",
+              "name": "Review Volume Scale min(1, log10(n+1)/3)",
+              "check_type": "graded",
+              "weight": 3.0,
+              "description": "Logarithmic scaling of review volume up to 1000+ reviews."
+            },
+            {
+              "check_id": "attributed_testimonials",
+              "name": "Attributed Testimonials (Named Person & Company)",
+              "check_type": "graded",
+              "weight": 2.0,
+              "description": "On-page quotes and case studies attributed to verifiable individuals and companies."
+            }
+          ]
+        },
+        "security_compliance": {
+          "name": "Security, Compliance & Privacy Transparency",
+          "budget_share": 25.0,
+          "checks": [
+            {
+              "check_id": "privacy_terms_linked",
+              "name": "Privacy Policy & Terms of Service Linked",
+              "check_type": "binary",
+              "weight": 3.0,
+              "description": "Privacy policy and terms of service URLs exist and return HTTP 200."
+            },
+            {
+              "check_id": "compliance_verifiable_links",
+              "name": "Compliance Claims Link to Verifiable Reports (SOC2/ISO)",
+              "check_type": "graded",
+              "weight": 4.0,
+              "description": "Security claims (SOC 2, ISO, HIPAA) link to active trust center or third-party report."
+            },
+            {
+              "check_id": "cookie_consent_present",
+              "name": "Consent Mechanism (EU/UK Traffic)",
+              "check_type": "binary",
+              "weight": 3.0,
+              "description": "Cookie banner / consent management platform present if targeting regulated regions."
+            }
+          ]
+        },
+        "corporate_origin": {
+          "name": "Corporate Origin & Contact Verifiability",
+          "budget_share": 25.0,
+          "checks": [
+            {
+              "check_id": "contact_channels_present",
+              "name": "Physical Address, Phone, Email & About Team Page",
+              "check_type": "graded",
+              "weight": 6.0,
+              "description": "Verified presence of corporate contact channels and about page."
+            },
+            {
+              "check_id": "corporate_registry_match",
+              "name": "Official Corporate Registry Match",
+              "check_type": "binary",
+              "weight": 4.0,
+              "description": "Entity verified in state or national corporate registry (OpenCorporates, Companies House, SEC)."
+            }
+          ]
+        },
+        "claims_without_hyperbole": {
+          "name": "Objective Claims Without Hyperbole",
+          "budget_share": 20.0,
+          "checks": [
+            {
+              "check_id": "backed_superlative_ratio",
+              "name": "1 - (Unbacked Superlatives / Total Claims)",
+              "check_type": "graded",
+              "weight": 10.0,
+              "description": "Proportion of superlative claims backed by citation or empirical evidence."
+            }
+          ]
+        }
+      }
+    }
+  },
+  "specialized_views": {
+    "human": {
+      "name": "Human Experience View",
+      "formula": "0.35 * UX_CONVERSION + 0.35 * CONTENT + 0.15 * ACCESSIBILITY + 0.15 * CWV_PERFORMANCE",
+      "categories": ["UX_CONVERSION", "CONTENT"]
+    },
+    "google": {
+      "name": "Google Organic Discoverability View",
+      "formula": "0.40 * TECHNICAL_SEO + 0.30 * ON_PAGE_SEO + 0.30 * SCHEMA",
+      "categories": ["TECHNICAL_SEO", "ON_PAGE_SEO", "SCHEMA"]
+    },
+    "ai_readiness": {
+      "name": "AI Search Readiness View",
+      "formula": "1.0 * GEO",
+      "categories": ["GEO"]
+    },
+    "ai_visibility": {
+      "name": "AI Search Empirical Visibility View",
+      "formula": "1.0 * AI_SEARCH",
+      "categories": ["AI_SEARCH"],
+      "live_only": true
+    }
+  }
+}

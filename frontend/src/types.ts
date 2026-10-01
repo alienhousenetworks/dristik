@@ -68,6 +68,69 @@ export interface FindingCalibratedImpact {
   affected_outcomes?: OutcomeImpact[];
 }
 
+export type ClaimSourceType =
+  | 'OBSERVED'
+  | 'DERIVED'
+  | 'MODEL_ANALYZED'
+  | 'INFERRED'
+  | 'RECOMMENDATION'
+  | 'UNSUPPORTED';
+
+export interface MachineObservation {
+  type: string;
+  attribute: string;
+  value: any;
+  source: string;
+  evidence_id: string;
+  url?: string;
+  selector?: string;
+  content_sha256?: string;
+  timestamp?: string;
+}
+
+export interface GroundedRecommendation {
+  recommendation_id: string;
+  underlying_finding_id: string;
+  underlying_evidence_ids: string[];
+  what_to_change: string;
+  why: string;
+  how_to_change: string;
+  example?: string;
+  target_file?: string;
+}
+
+export interface DerivedMetric {
+  metric_id: string;
+  name: string;
+  score: number;
+  formula: string;
+  input_evidence_ids: string[];
+  algorithm_version: string;
+  timestamp: string;
+  details?: Record<string, any>;
+}
+
+export interface ClaimLedgerEntry {
+  claim_id: string;
+  claim: string;
+  source_type: ClaimSourceType;
+  evidence_ids: string[];
+  confidence: number;
+  scope: string;
+  created_by: string;
+  timestamp: string;
+  is_valid_fact: boolean;
+  rejection_reason?: string;
+}
+
+export interface ClaimLedger {
+  ledger_id: string;
+  run_id: string;
+  entries: ClaimLedgerEntry[];
+  certified_zero_fake: boolean;
+  rejected_unsupported_count: number;
+}
+
 export interface Finding {
   finding_id: string;
   category: Category;
@@ -80,7 +143,9 @@ export interface Finding {
   description: string;
   evidence: FindingEvidence[];
   evidence_refs: string[];
+  evidence_ids?: string[];
   rule_id?: string;
+  grounded_recommendation?: GroundedRecommendation;
   confidence: number;
   confidence_label: string;
   impact: number;
@@ -1036,6 +1101,8 @@ export interface ExecutiveReport {
   evidence_taxonomy?: EvidenceTaxonomyReport;
   visual_ux?: VisualUxInspectionReport;
   lifecycle_revenue?: LifecycleRevenueIntelligence;
+  derived_intelligence?: DerivedMetric[];
+  claim_ledger?: ClaimLedger;
   telemetry: TelemetryData;
   crawl_manifest?: CrawlManifest;
   indexation_intelligence?: IndexationAuditRollup;
@@ -1083,10 +1150,14 @@ export interface ExecutiveReport {
     questions: Array<{
       question_key: string;
       question: string;
+      category?: string;
       status: string;
+      answer?: string | null;
+      answer_snippet?: string | null;
       evidence_url?: string | null;
       evidence_snippet?: string | null;
       why: string;
+      recommended_answer?: string | null;
     }>;
     dimensions: Array<{ key: string; label: string; band: string; summary: string }>;
     schema_types: string[];

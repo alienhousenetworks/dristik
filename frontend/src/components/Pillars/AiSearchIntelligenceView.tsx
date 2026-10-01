@@ -4,6 +4,7 @@ import { RealAiCitationTracker } from '../RealAiCitationTracker';
 import { AiSearch } from '../AiSearch';
 import { GeoAeoTrendTracker } from '../GeoAeoTrendTracker';
 import { PillarShell } from '../ui';
+import { resolveQuestionCategory } from './AeoWorkspaceView';
 
 interface AiSearchIntelligenceViewProps {
   report: ExecutiveReport;
@@ -60,12 +61,12 @@ export function AiSearchIntelligenceView({
 
   // Active question set (prefers 50-question graph if present)
   const questionItems = qGraph?.questions || geo?.questions || [];
-  const rawCategories: string[] = Array.from(new Set<string>(questionItems.map((q: any) => String(q.category || 'General'))));
+  const rawCategories: string[] = Array.from(new Set<string>(questionItems.map((q: any) => resolveQuestionCategory(q))));
   const categories: string[] = ['All', ...rawCategories];
 
   const filteredQuestions = selectedQuestionCategory === 'All'
     ? questionItems
-    : questionItems.filter((q: any) => (q.category || 'General') === selectedQuestionCategory);
+    : questionItems.filter((q: any) => resolveQuestionCategory(q) === selectedQuestionCategory);
 
   return (
     <PillarShell
@@ -240,33 +241,57 @@ export function AiSearchIntelligenceView({
                 )}
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {filteredQuestions.map((q: any, idx: number) => (
-                    <div key={idx} className="bg-paper-50 dark:bg-ink-900/40 border border-line rounded-lg p-4 space-y-2.5">
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="font-bold text-[11px] text-ink-500 font-mono">
-                          {q.category ? `${q.category} • ` : ''}{q.question_key || `Q-${idx + 1}`}
-                        </span>
-                        <span className={`text-[10px] font-mono px-2 py-0.5 rounded font-bold ${
-                          q.status === 'SUPPORTED' ? 'bg-good/15 text-good' :
-                          q.status === 'PARTIAL' ? 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300' :
-                          q.status === 'CONFLICTING' ? 'bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300' :
-                          'bg-bad/15 text-bad'
-                        }`}>
-                          {q.status}
-                        </span>
-                      </div>
-                      <p className="font-semibold text-sm text-ink">{q.question}</p>
-                      <p className="text-xs text-ink-600 leading-relaxed">{q.why}</p>
-                      {q.evidence_snippet && (
-                        <div className="bg-paper-100 dark:bg-ink-950 p-2.5 rounded border border-line text-[11px] font-mono text-ink-700">
-                          <span className="text-[10px] text-ink-400 block mb-1">
-                            Evidence from: {q.evidence_url ? new URL(q.evidence_url).pathname || '/' : 'Page'}
+                  {filteredQuestions.map((q: any, idx: number) => {
+                    const category = resolveQuestionCategory(q);
+                    const excerpt = q.answer_snippet || q.evidence_snippet;
+                    let pathname = '/';
+                    if (q.evidence_url) {
+                      try {
+                        pathname = new URL(q.evidence_url, 'https://localhost').pathname || '/';
+                      } catch {
+                        pathname = q.evidence_url;
+                      }
+                    }
+                    return (
+                      <div key={idx} className="bg-paper-50 dark:bg-ink-900/40 border border-line rounded-lg p-4 space-y-2.5">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="font-bold text-[11px] text-ink-500 font-mono">
+                            {category ? `${category} • ` : ''}{q.question_key || `Q-${idx + 1}`}
                           </span>
-                          "{q.evidence_snippet}"
+                          <span className={`text-[10px] font-mono px-2 py-0.5 rounded font-bold ${
+                            q.status === 'SUPPORTED' ? 'bg-good/15 text-good' :
+                            q.status === 'PARTIAL' ? 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300' :
+                            q.status === 'CONFLICTING' ? 'bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300' :
+                            'bg-bad/15 text-bad'
+                          }`}>
+                            {q.status}
+                          </span>
                         </div>
-                      )}
-                    </div>
-                  ))}
+                        <p className="font-semibold text-sm text-ink">{q.question}</p>
+                        {q.answer && (
+                          <div className="text-xs text-ink-800 dark:text-paper-100 bg-paper-100/70 dark:bg-ink-950/60 p-2.5 rounded border border-line">
+                            <span className="font-bold text-pine block mb-0.5">Answer:</span>
+                            {q.answer}
+                          </div>
+                        )}
+                        <p className="text-xs text-ink-600 leading-relaxed">{q.why}</p>
+                        {excerpt && (
+                          <div className="bg-paper-100 dark:bg-ink-950 p-2.5 rounded border border-line text-[11px] font-mono text-ink-700">
+                            <span className="text-[10px] text-ink-400 block mb-1">
+                              Evidence from: {pathname}
+                            </span>
+                            "{excerpt}"
+                          </div>
+                        )}
+                        {q.recommended_answer && q.status !== 'SUPPORTED' && (
+                          <div className="text-xs text-ink-600 bg-pine/5 border border-pine/20 p-2 rounded">
+                            <span className="font-bold text-pine block text-[11px] mb-0.5">Recommended Addition:</span>
+                            {q.recommended_answer}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             )}

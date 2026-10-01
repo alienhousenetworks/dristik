@@ -51,14 +51,13 @@ def test_scoring_mathematical_derivation_and_formula_breakdowns():
         assert cat_score.formula_breakdown is not None
         assert len(cat_score.formula_breakdown) > 0
 
-        # Component points earned must sum to the category raw score.
-        # Calibrated deductions land on tenths, so compare at one decimal.
-        breakdown_sum = sum(comp["points_earned"] for comp in cat_score.formula_breakdown)
-        assert round(breakdown_sum, 1) == round(cat_score.score, 1)
+        if cat_score.score is not None:
+            breakdown_sum = sum(comp["points_earned"] for comp in cat_score.formula_breakdown)
+            assert round(breakdown_sum, 1) == round(cat_score.score, 1)
 
         # Check status field validity
         for comp in cat_score.formula_breakdown:
-            assert comp["status"] in ("PASS", "PARTIAL", "DEFICIT", "PROVISIONAL_NEUTRAL")
+            assert comp["status"] in ("PASS", "PARTIAL", "DEFICIT", "NOT_MEASURED", "PROVISIONAL_NEUTRAL")
             assert comp["points_possible"] > 0
             assert comp["points_earned"] <= comp["points_possible"]
 

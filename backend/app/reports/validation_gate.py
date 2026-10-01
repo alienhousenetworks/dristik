@@ -518,6 +518,34 @@ class ValidationGate:
             f"Business entity name is generic or unresolved ('{biz_name}' / '{ent_name}'). Must be deterministically resolved."
         )
 
+        # -------------------------------------------------------------
+        # 9. EVIDENCE PROVENANCE & ZERO-FAKE CLAIM LEDGER ENFORCEMENT
+        # -------------------------------------------------------------
+        # 9.1: Zero unsupported claims allowed as current website facts
+        unsupported_facts = []
+        if getattr(report, "claim_ledger", None) and report.claim_ledger and getattr(report.claim_ledger, "entries", None):
+            for entry in report.claim_ledger.entries:
+                st = str(entry.source_type.value if hasattr(entry.source_type, "value") else entry.source_type).upper()
+                if (
+                    st == "UNSUPPORTED"
+                    and not entry.scope.startswith("recommendation")
+                    and not entry.scope.startswith("quarantined")
+                ):
+                    unsupported_facts.append(f"[{entry.claim_id}] {entry.claim[:60]}")
+        else:
+            # Check findings directly for evidence presence
+            for f in report.findings:
+                if not getattr(f, "held_from_executive", False):
+                    ev_count = len(f.evidence_ids or f.evidence_refs or f.evidence or [])
+                    if ev_count == 0:
+                        unsupported_facts.append(f"Finding {f.finding_id} has 0 evidence")
+
+        record(
+            "zero_unsupported_website_facts",
+            len(unsupported_facts) == 0,
+            f"Unsupported factual claims detected in current website facts: {'; '.join(unsupported_facts[:3])}"
+        )
+
         is_valid = len(failed) == 0
         return ValidationResult(
             is_valid=is_valid,
@@ -735,6 +763,21 @@ class ValidationGate:
             if report.business_profile:
                 report.business_profile.business_name = resolved.name
             repairs_made.append(f"Auto-resolved canonical entity to '{resolved.name}' and eradicated generic '{bp_name}'.")
+
+        # 9. Sanitize UNSUPPORTED claims from website facts to enforce Certified Zero-Fake
+        if getattr(report, "claim_ledger", None) and report.claim_ledger:
+            from app.evidence.claim_ledger import ClaimLedgerBuilder
+            report, ledger_repairs = ClaimLedgerBuilder.sanitize_unsupported_facts(report, report.claim_ledger)
+            repairs_made.extend(ledger_repairs)
+
+        clean_ev_findings = []
+        for f in report.findings:
+            ev_cnt = len(f.evidence_ids or f.evidence_refs or f.evidence or [])
+            if ev_cnt == 0:
+                repairs_made.append(f"Quarantined unbacked finding {f.finding_id} ('{f.title}') from executive facts.")
+            else:
+                clean_ev_findings.append(f)
+        report.findings = clean_ev_findings
 
         return report, repairs_made
 
