@@ -12,13 +12,14 @@ import {
   Settings,
   Sun,
   Users,
+  Wrench,
   X,
 } from 'lucide-react';
 import { AnalysisRun, AppView, AuthUser, ExecutiveReport, TabId } from '../types';
 import { can } from '../services/auth';
 import { PillarNavBar } from '../components/Navigation/PillarNavBar';
 import { RecentAuditsDropdown } from '../components/RecentAuditsDropdown';
-import { Avatar, Button } from '../components/ui';
+import { Avatar, Button, Dropdown, MenuItem, MenuLabel } from '../components/ui';
 import { useTheme } from '../theme/ThemeProvider';
 import { TAB_LABELS, VIEW_LABELS } from '../routes/navigation';
 import { CommandAction, CommandPalette } from './CommandPalette';
@@ -278,16 +279,25 @@ export function AppShell(props: AppShellProps) {
               </nav>
             )}
           </div>
-          {workspace && (
-            <div className="border-t border-line p-2">
-              <button type="button" className="workspace-link text-sm" onClick={() => onNavigate('pricing')} title="Pricing">
-                <span className="flex items-center gap-2.5">
-                  <CreditCard className="h-4 w-4" aria-hidden />
-                  {!compact && <span>Pricing</span>}
-                </span>
-              </button>
-            </div>
-          )}
+          <div className="border-t border-line p-2 space-y-1">
+            <button
+              type="button"
+              className="workspace-link text-sm"
+              onClick={() => setCommandOpen(true)}
+              title="Open Tools & Quick Actions (⌘K)"
+            >
+              <span className="flex items-center gap-2.5">
+                <Wrench className="h-4 w-4 text-pine" aria-hidden />
+                {!compact && <span>Tools Menu</span>}
+              </span>
+            </button>
+            <button type="button" className="workspace-link text-sm" onClick={() => onNavigate('pricing')} title="Pricing">
+              <span className="flex items-center gap-2.5">
+                <CreditCard className="h-4 w-4" aria-hidden />
+                {!compact && <span>Pricing</span>}
+              </span>
+            </button>
+          </div>
         </aside>
 
         <div className="flex-1 min-w-0 flex flex-col">
@@ -337,6 +347,76 @@ export function AppShell(props: AppShellProps) {
                 <kbd className="hidden md:inline font-mono text-[10px] text-ink-400 border border-line rounded px-1">⌘K</kbd>
               </Button>
               <RecentAuditsDropdown currentAnalysisId={run?.analysis_id} onSelectAudit={onSelectAudit} onNewAudit={onNewAudit} onAuditDeleted={onDeleteAudit} />
+              
+              {/* Tools Dropdown Menu */}
+              <Dropdown
+                align="right"
+                label={
+                  <span className="inline-flex items-center gap-1.5 font-medium text-xs text-ink-700 hover:text-ink">
+                    <Wrench className="h-3.5 w-3.5 text-pine" />
+                    <span>Tools</span>
+                  </span>
+                }
+              >
+                <MenuLabel>Workspace Tools</MenuLabel>
+                {onOpenConnectors && (
+                  <MenuItem onClick={onOpenConnectors}>
+                    <div className="py-0.5">
+                      <span className="font-semibold text-xs text-ink block">Connectors</span>
+                      <span className="text-[10px] text-ink-500 block">Google Search Console &amp; GA4</span>
+                    </div>
+                  </MenuItem>
+                )}
+                {onOpenExternal && (
+                  <MenuItem onClick={onOpenExternal}>
+                    <div className="py-0.5">
+                      <span className="font-semibold text-xs text-ink block">External Authority</span>
+                      <span className="text-[10px] text-ink-500 block">Live link graph &amp; citation verification</span>
+                    </div>
+                  </MenuItem>
+                )}
+                {onOpenRemediation && (
+                  <MenuItem onClick={onOpenRemediation}>
+                    <div className="py-0.5">
+                      <span className="font-semibold text-xs text-ink block">Remediation Engine</span>
+                      <span className="text-[10px] text-ink-500 block">Self-contained code patches &amp; ZIP bundle</span>
+                    </div>
+                  </MenuItem>
+                )}
+                {onOpenAgency && (
+                  <MenuItem onClick={onOpenAgency}>
+                    <div className="py-0.5">
+                      <span className="font-semibold text-xs text-ink block">Agency Workspace</span>
+                      <span className="text-[10px] text-ink-500 block">Multi-client branding &amp; white-label</span>
+                    </div>
+                  </MenuItem>
+                )}
+                {onOpenRubric && (
+                  <MenuItem onClick={onOpenRubric}>
+                    <div className="py-0.5">
+                      <span className="font-semibold text-xs text-ink block">Scoring Rubric</span>
+                      <span className="text-[10px] text-ink-500 block">Dristik v5.0 deterministic curves</span>
+                    </div>
+                  </MenuItem>
+                )}
+                <MenuLabel>Billing &amp; Delivery</MenuLabel>
+                {onOpenPlans && (
+                  <MenuItem onClick={onOpenPlans}>
+                    <div className="py-0.5">
+                      <span className="font-semibold text-xs text-ink block">Pay for an audit</span>
+                      <span className="text-[10px] text-ink-500 block">Audit passes &amp; tiers</span>
+                    </div>
+                  </MenuItem>
+                )}
+                {report && onExport && (
+                  <MenuItem onClick={onExport}>
+                    <div className="py-0.5">
+                      <span className="font-semibold text-xs text-ink block">Export PDF Report</span>
+                      <span className="text-[10px] text-ink-500 block">Download presentation slide deck</span>
+                    </div>
+                  </MenuItem>
+                )}
+              </Dropdown>
               <button
                 type="button"
                 className="relative p-1.5 rounded-md text-ink-600 hover:bg-paper-200"
