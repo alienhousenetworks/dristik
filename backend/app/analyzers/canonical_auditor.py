@@ -105,7 +105,7 @@ class CanonicalAuditor:
                 rollup.items.append(item)
                 continue
 
-            # Check broken target if target exists in crawled sample
+            # Check broken or redirecting target if target exists in crawled sample
             if can_clean in url_status_map:
                 target_status = url_status_map[can_clean]
                 if target_status >= 400:
@@ -121,6 +121,49 @@ class CanonicalAuditor:
                     issues_detected.append(item)
                     rollup.items.append(item)
                     continue
+                elif 300 <= target_status < 400:
+                    item = CanonicalAuditItem(
+                        url=p.url,
+                        canonical_url=raw_canonical,
+                        status="redirect_target",
+                        detail=f"Canonical points to HTTP {target_status} redirecting target '{raw_canonical}'. Canonicals must point strictly to direct HTTP 200 destinations.",
+                        is_issue=True,
+                        severity="HIGH"
+                    )
+                    rollup.broken_canonical_count += 1
+                    issues_detected.append(item)
+                    rollup.items.append(item)
+                    continue
+
+            # Check contradiction between noindex and canonical
+            robots_str = f"{p.robots_meta or ''} {p.x_robots_tag or ''}".lower()
+            has_noindex = "noindex" in robots_str
+            if has_noindex and can_clean == page_clean:
+                item = CanonicalAuditItem(
+                    url=p.url,
+                    canonical_url=raw_canonical,
+                    status="noindex_conflict",
+                    detail=f"Contradiction: page specifies 'noindex' while simultaneously declaring a self-referencing canonical tag. Search engines may ignore both directives.",
+                    is_issue=True,
+                    severity="HIGH"
+                )
+                issues_detected.append(item)
+                rollup.items.append(item)
+                continue
+
+            # Check tracking/query parameters in canonical tag
+            if any(q in raw_canonical.lower() for q in ["utm_", "gclid", "fbclid", "sessionid", "ref="]):
+                item = CanonicalAuditItem(
+                    url=p.url,
+                    canonical_url=raw_canonical,
+                    status="tracking_params",
+                    detail=f"Canonical URL contains tracking query parameters: '{raw_canonical}'. Canonicals must point to clean base URLs.",
+                    is_issue=True,
+                    severity="MEDIUM"
+                )
+                issues_detected.append(item)
+                rollup.items.append(item)
+                continue
 
             # Check self-canonical vs canonicalized
             if can_clean == page_clean:
@@ -214,6 +257,36 @@ class CanonicalAuditor:
                 impact=7,
                 effort=2,
                 priority=7
+            ))
+
+        noindex_conflicts = [item for item in rollup.items if item.status == "noindex_conflict"]
+        if noindex_conflicts:
+            findings.append(Finding(
+                finding_id="finding_canonical_noindex_conflict",
+                category=Category.TECHNICAL_SEO,
+                severity=Severity.HIGH,
+                title=f"{len(noindex_conflicts)} Page(s) Have Contradictory 'noindex' and Canonical Tags",
+                description=(
+                    f"{len(noindex_conflicts)} page(s) specify both 'noindex' and a canonical tag. "
+                    "This sends conflicting signals to search engine crawlers."
+                ),
+                recommendation="Remove self-referencing canonical tags from pages designated as 'noindex', or remove 'noindex' if the page is intended to be indexed.",
+                why_it_matters="Google warns that conflicting directives may cause crawler confusion and improper indexation consolidation.",
+                validation_criteria="Pages with 'noindex' should not have self-referencing canonicals.",
+                evidence=[
+                    FindingEvidence(
+                        url=item.url,
+                        element="head",
+                        value=item.canonical_url or "",
+                        snippet=item.detail,
+                        source="crawl"
+                    )
+                    for item in noindex_conflicts
+                ],
+                evidence_refs=["canonical_audit"],
+                impact=8,
+                effort=2,
+                priority=8
             ))
 
         return rollup, findings

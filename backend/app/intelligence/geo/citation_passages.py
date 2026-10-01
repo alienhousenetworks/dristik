@@ -71,6 +71,11 @@ class CitationPassage(BaseModel):
     detected_subject: str = "generic_we" # "canonical_brand", "generic_we", "unnamed"
     fluff_detected: List[str] = Field(default_factory=list)
     factual_anchors: List[str] = Field(default_factory=list)
+    keyword_stuffing_detected: bool = False
+    keyword_stuffing_penalty: float = 0.0
+    statistics_density_score: float = 0.0
+    quotation_density_score: float = 0.0
+    citation_anchor_score: float = 0.0
     needs_rewrite: bool = False
     rewrite_recommendation: Optional[str] = None
     rewrite_rationale: Optional[str] = None
@@ -84,6 +89,12 @@ class CitationRewriteItem(BaseModel):
     why: str
     estimated_score_improvement: str
     category: Optional[str] = "Core Offerings"
+    primary_geo_lever: str = "FLUENCY_OPTIMIZATION"  # STATISTICS_ADDITION | QUOTATION_ADDITION | CITE_SOURCES | FLUENCY_OPTIMIZATION | SIMPLIFICATION
+    provenance_tag: str = "SITE_EXTRACTED"           # CLIENT_SUPPLIED | SITE_EXTRACTED | VERIFIED_THIRD_PARTY | UNVERIFIED_PLACEHOLDER
+    provenance_source: Optional[str] = None
+    approval_status: str = "DRAFT_PENDING_APPROVAL"  # DRAFT_PENDING_APPROVAL | APPROVED | REJECTED
+    keyword_stuffing_detected: bool = False
+    keyword_stuffing_penalty: float = 0.0
     improvements: List[str] = Field(default_factory=list)
     score_before: Optional[float] = None
     score_after: Optional[float] = None
@@ -175,11 +186,33 @@ class CitationPassageAnalyzer:
         candidates.sort(key=passage_priority, reverse=True)
         return candidates
 
+    def _detect_keyword_stuffing(self, text: str, brand: str) -> Tuple[bool, float]:
+        """
+        Detects repetitive keyword/brand stuffing in passages.
+        Aggarwal et al. (KDD 2024) demonstrated keyword stuffing harms visibility (-8% to -10%).
+        Emits a 10.0 point penalty deduction if detected.
+        """
+        words = text.lower().split()
+        if len(words) < 8:
+            return False, 0.0
+
+        brand_tokens = [t for t in re.findall(r"\b[a-z0-9]+\b", brand.lower()) if len(t) > 2]
+        if not brand_tokens:
+            return False, 0.0
+
+        for tok in brand_tokens:
+            count = sum(1 for w in words if tok in w)
+            density = float(count) / float(len(words))
+            # Flag if keyword occurs > 3 times in < 45 words or density > 6%
+            if (count >= 3 and len(words) <= 45) or density > 0.06:
+                return True, 10.0
+        return False, 0.0
+
     def _score_passage(
         self,
         text: str,
         brand: str
-    ) -> Tuple[float, float, float, float, PassageTier, str, List[str], List[str]]:
+    ) -> Tuple[float, float, float, float, PassageTier, str, List[str], List[str], float, float, float, bool, float]:
         words = text.split()
         word_count = len(words)
         low = text.lower()
@@ -237,7 +270,21 @@ class CitationPassageAnalyzer:
         factuality -= min(17.0, len(fluff_found) * 7.0)
         factuality = max(5.0, factuality)
 
-        total = clarity + attribution + info_gain + factuality
+        # Keyword stuffing penalty check (Aggarwal et al., KDD 2024 negative impact finding: -8% to -10%)
+        kw_stuffed, kw_penalty = self._detect_keyword_stuffing(text, brand)
+
+        # Statistics density score (0 - 25)
+        stat_score = min(25.0, len(metrics) * 10.0 + (5.0 if any(c in text for c in ["%", "$", "€", "₹", "ms", "SLA"]) else 0.0))
+
+        # Quotation density score (0 - 25)
+        quotes = re.findall(r'"([^"]{8,})"', text) or re.findall(r"'([^']{8,})'", text)
+        quote_score = min(25.0, len(quotes) * 12.5)
+
+        # Citation anchor score (0 - 25)
+        anchors = [f for f in factual_anchors if any(t in f.lower() for t in ["soc 2", "iso", "api", "gdpr", "hipaa", "aws", "docker"])]
+        anchor_score = min(25.0, len(anchors) * 8.0)
+
+        total = clarity + attribution + info_gain + factuality - kw_penalty
         total = max(10.0, min(100.0, total))
 
         if total >= 75.0:
@@ -247,7 +294,7 @@ class CitationPassageAnalyzer:
         else:
             tier = "WEAK"
 
-        return clarity, attribution, info_gain, factuality, tier, detected_subj, fluff_found, factual_anchors
+        return clarity, attribution, info_gain, factuality, tier, detected_subj, fluff_found, factual_anchors, stat_score, quote_score, anchor_score, kw_stuffed, kw_penalty
 
     def _to_third_person(self, verb: str) -> str:
         word = verb.lower()
@@ -441,13 +488,13 @@ class CitationPassageAnalyzer:
 
         passage_idx = 1
         for primary_url, raw_text, all_urls in paragraphs:
-            clarity, attribution, info_gain, factuality, tier, detected_subj, fluff_found, factual_anchors = self._score_passage(raw_text, brand)
-            total = clarity + attribution + info_gain + factuality
+            clarity, attribution, info_gain, factuality, tier, detected_subj, fluff_found, factual_anchors, stat_score, quote_score, anchor_score, kw_stuffed, kw_penalty = self._score_passage(raw_text, brand)
+            total = clarity + attribution + info_gain + factuality - kw_penalty
 
             pid = f"PASS-{passage_idx:03d}"
             passage_idx += 1
 
-            needs_rewrite = (tier in ["PARTIALLY_CITABLE", "WEAK"]) or (detected_subj == "generic_we") or (len(fluff_found) > 0)
+            needs_rewrite = (tier in ["PARTIALLY_CITABLE", "WEAK"]) or (detected_subj == "generic_we") or (len(fluff_found) > 0) or kw_stuffed
             rec_text = None
             rec_why = None
 
@@ -455,6 +502,23 @@ class CitationPassageAnalyzer:
                 rec_text, rec_why, improvements = self._generate_rewrite(raw_text, brand, fluff_found, detected_subj)
                 if rec_text and rec_why:
                     rescored = sum(self._score_passage(rec_text, brand)[:4])
+
+                    # Determine primary GEO lever
+                    primary_lever = "FLUENCY_OPTIMIZATION"
+                    if "Fluff Elimination" in improvements:
+                        primary_lever = "SIMPLIFICATION"
+                    elif stat_score > 10.0:
+                        primary_lever = "STATISTICS_ADDITION"
+                    elif quote_score > 10.0:
+                        primary_lever = "QUOTATION_ADDITION"
+                    elif anchor_score > 10.0:
+                        primary_lever = "CITE_SOURCES"
+                    elif "Entity Grounding" in improvements:
+                        primary_lever = "FLUENCY_OPTIMIZATION"
+
+                    # Provenance and zero-hallucination guard
+                    prov_tag = "UNVERIFIED_PLACEHOLDER" if "[ADD VERIFIED" in rec_text else "SITE_EXTRACTED"
+
                     raw_rewrites.append(CitationRewriteItem(
                         passage_id=pid,
                         source_url=primary_url,
@@ -463,6 +527,12 @@ class CitationPassageAnalyzer:
                         why=rec_why,
                         estimated_score_improvement=f"{total:.0f} → {min(100, round(rescored)):.0f}/100",
                         improvements=improvements,
+                        primary_geo_lever=primary_lever,
+                        provenance_tag=prov_tag,
+                        provenance_source=primary_url,
+                        approval_status="DRAFT_PENDING_APPROVAL",
+                        keyword_stuffing_detected=kw_stuffed,
+                        keyword_stuffing_penalty=kw_penalty,
                         score_before=round(total, 1),
                         score_after=round(min(100.0, rescored), 1),
                         all_source_urls=all_urls,
@@ -485,6 +555,11 @@ class CitationPassageAnalyzer:
                 detected_subject=detected_subj,
                 fluff_detected=fluff_found,
                 factual_anchors=factual_anchors,
+                keyword_stuffing_detected=kw_stuffed,
+                keyword_stuffing_penalty=kw_penalty,
+                statistics_density_score=round(stat_score, 1),
+                quotation_density_score=round(quote_score, 1),
+                citation_anchor_score=round(anchor_score, 1),
                 needs_rewrite=needs_rewrite,
                 rewrite_recommendation=rec_text,
                 rewrite_rationale=rec_why,

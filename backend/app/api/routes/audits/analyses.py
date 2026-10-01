@@ -820,6 +820,26 @@ async def get_analysis_checkpoints(analysis_id: str, user: Optional[UserIdentity
     }
 
 
+@router.get("/{analysis_id}/graph")
+async def get_analysis_graph(analysis_id: str, user: Optional[UserIdentity] = Depends(get_current_user_optional)):
+    """
+    Returns the full DAG execution topology, node statuses, dependency prerequisites,
+    and recent activity events for the analysis.
+    """
+    _get_org_run(analysis_id, user)
+    return orchestrator.get_pipeline_graph(analysis_id)
+
+
+@router.post("/{analysis_id}/pause")
+async def pause_analysis(analysis_id: str, user: UserIdentity = Depends(require_permission("mission:create"))):
+    """
+    Cooperatively pauses a running analysis run.
+    """
+    _get_org_run(analysis_id, user)
+    success = orchestrator.pause_analysis_pipeline(analysis_id)
+    return {"status": "paused" if success else "failed", "analysis_id": analysis_id}
+
+
 @router.post("/{analysis_id}/resume")
 async def resume_analysis(analysis_id: str, user: UserIdentity = Depends(require_permission("mission:create"))):
     """
@@ -830,6 +850,18 @@ async def resume_analysis(analysis_id: str, user: UserIdentity = Depends(require
     if not success:
         raise HTTPException(status_code=400, detail=f"Analysis '{analysis_id}' could not be resumed.")
     return {"status": "resumed", "analysis_id": analysis_id}
+
+
+@router.post("/{analysis_id}/nodes/{node_id}/run")
+async def run_single_graph_node(analysis_id: str, node_id: str, user: UserIdentity = Depends(require_permission("mission:create"))):
+    """
+    Executes an individual sub-section or agent node separately, provided its upstream dependencies are met.
+    """
+    _get_org_run(analysis_id, user)
+    res = await orchestrator.run_pipeline_node(analysis_id, node_id)
+    if not res.get("success"):
+        raise HTTPException(status_code=400, detail=res.get("error", f"Node '{node_id}' could not be executed."))
+    return res
 
 
 @router.get("/{analysis_id}/visual_intelligence")

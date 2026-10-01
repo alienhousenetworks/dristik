@@ -1,4 +1,4 @@
-import { AnalysisRun, AnalysisSummary, PlansCatalog } from '../types';
+import { AnalysisRun, AnalysisSummary, PlansCatalog, PipelineGraphState } from '../types';
 
 export async function readError(response: Response, fallback: string): Promise<string> {
   try {
@@ -74,4 +74,48 @@ export async function getPlans(): Promise<PlansCatalog> {
 
 export function openAnalysisStream(analysisId: string): EventSource {
   return new EventSource(`/api/v1/analyses/${analysisId}/stream`);
+}
+
+export async function getExecutionGraph(analysisId: string): Promise<PipelineGraphState> {
+  const response = await fetch(`/api/v1/analyses/${analysisId}/graph`, { credentials: 'include' });
+  if (!response.ok) {
+    throw new Error(await readError(response, 'Could not fetch execution graph'));
+  }
+  return response.json();
+}
+
+export async function pauseAnalysis(analysisId: string): Promise<{ status: string; analysis_id: string }> {
+  const response = await fetch(`/api/v1/analyses/${analysisId}/pause`, {
+    method: 'POST',
+    credentials: 'include',
+  });
+  if (!response.ok) {
+    throw new Error(await readError(response, 'Could not pause the audit'));
+  }
+  return response.json();
+}
+
+export async function resumeAnalysis(analysisId: string): Promise<{ status: string; analysis_id: string }> {
+  const response = await fetch(`/api/v1/analyses/${analysisId}/resume`, {
+    method: 'POST',
+    credentials: 'include',
+  });
+  if (!response.ok) {
+    throw new Error(await readError(response, 'Could not resume the audit'));
+  }
+  return response.json();
+}
+
+export async function runGraphNode(
+  analysisId: string,
+  nodeId: string
+): Promise<{ success: boolean; node_id: string; status: string }> {
+  const response = await fetch(`/api/v1/analyses/${analysisId}/nodes/${nodeId}/run`, {
+    method: 'POST',
+    credentials: 'include',
+  });
+  if (!response.ok) {
+    throw new Error(await readError(response, `Could not execute step '${nodeId}'`));
+  }
+  return response.json();
 }

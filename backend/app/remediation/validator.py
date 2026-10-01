@@ -49,7 +49,11 @@ class PatchValidator:
                     if "@context" not in parsed:
                         schema_ok = False
                         errors.append("Schema markup missing '@context': 'https://schema.org'.")
-                    if "@type" not in parsed:
+                    has_type = "@type" in parsed or (
+                        isinstance(parsed.get("@graph"), list)
+                        and any(isinstance(item, dict) and "@type" in item for item in parsed["@graph"])
+                    )
+                    if not has_type:
                         schema_ok = False
                         errors.append("Schema markup missing '@type' declaration.")
                 except json.JSONDecodeError as je:

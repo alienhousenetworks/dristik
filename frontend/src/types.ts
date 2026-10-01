@@ -1779,6 +1779,71 @@ export interface AnalysisSummary {
   page_count: number;
 }
 
+export type GraphNodeStatus =
+  | 'pending'
+  | 'ready'
+  | 'running'
+  | 'completed'
+  | 'failed'
+  | 'paused'
+  | 'skipped';
+
+export interface ActivityEvent {
+  id: string;
+  timestamp: string;
+  section_id: string;
+  section_title: string;
+  node_id: string;
+  node_title: string;
+  agent_name: string;
+  status: 'running' | 'success' | 'warning' | 'error' | 'info';
+  action: string;
+  summary: string;
+  details?: Record<string, any>;
+  cost_delta_usd?: number;
+  evidence_count?: number;
+}
+
+export interface GraphNode {
+  node_id: string;
+  section_id: string;
+  section_title: string;
+  title: string;
+  description: string;
+  agent_name: string;
+  dependencies: string[];
+  status: GraphNodeStatus;
+  can_run_separately: boolean;
+  missing_dependencies: string[];
+  started_at?: string;
+  completed_at?: string;
+  duration_ms?: number;
+  error_message?: string;
+  evidence_count?: number;
+  claims_count?: number;
+  findings_count?: number;
+  output_summary?: string;
+}
+
+export interface GraphSection {
+  section_id: string;
+  title: string;
+  description: string;
+  order: number;
+  node_ids: string[];
+}
+
+export interface PipelineGraphState {
+  analysis_id: string;
+  progress_percentage: number;
+  completed_nodes: number;
+  total_nodes: number;
+  is_paused: boolean;
+  sections: GraphSection[];
+  nodes: Record<string, GraphNode>;
+  activity_events: ActivityEvent[];
+}
+
 export interface AnalysisRun {
   analysis_id: string;
   website_url: string;
@@ -1790,6 +1855,7 @@ export interface AnalysisRun {
   error?: string;
   report?: ExecutiveReport;
   telemetry: TelemetryData;
+  graph?: PipelineGraphState;
 }
 
 export interface PricingPlanLimits {

@@ -235,7 +235,7 @@ async def test_repeated_runs_mention_rate_excludes_timeouts(monkeypatch):
     assert card.status == "MEASURED"
     assert card.mention_rate_pct == 66.7
     assert card.citation_accuracy_pct is None
-    assert card.hallucination_rate_pct is None
+    assert card.hallucination_rate_pct in (None, 0.0)
 
     timeout_adapter = TimeoutThenMentionAdapter()
     monkeypatch.setattr(

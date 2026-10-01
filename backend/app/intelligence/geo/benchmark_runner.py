@@ -21,6 +21,12 @@ from app.intelligence.geo.adapters.base import BaseGeoEngineAdapter, EngineRawRe
 from app.intelligence.geo.adapters.registry import get_available_adapters, get_adapter
 from app.intelligence.geo.benchmark_generator import BenchmarkQuery, BenchmarkSuite, benchmark_generator
 from app.intelligence.geo.pipeline_store import geo_pipeline_store
+from app.intelligence.geo.metrics import (
+    calculate_response_impressions,
+    wilson_score_interval,
+    continuous_confidence_interval,
+    calculate_sample_variance,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -42,6 +48,13 @@ class EvaluatedQueryRun(BaseModel):
     was_mentioned: bool = False
     mention_position: Optional[int] = None
     was_first_party_cited: bool = False
+    word_count_impression_pct: float = 0.0          # Paper Imp_wc
+    position_adjusted_impression_pct: float = 0.0   # Paper Imp_pwc (negative exponential decay)
+    dristik_adjusted_impression_pct: float = 0.0    # Dristik-adjusted (credit split |s| / |C_s|)
+    unlinked_brand_mentions: int = 0
+    sentence_count: int = 0
+    total_words: int = 0
+    cost_usd: float = 0.0
     source_domains: List[str] = Field(default_factory=list)
     source_quality: SourceQuality = "unsourced"
     status: str = "SUCCESS"  # SUCCESS | KEY_MISSING | TIMEOUT | ERROR
@@ -57,9 +70,18 @@ class EngineBenchmarkAggregate(BaseModel):
     queries_succeeded: int = 0
     mention_count: int = 0
     mention_rate_pct: Optional[float] = None
+    mention_rate_ci: Optional[Tuple[float, float]] = None
     first_party_citation_count: int = 0
     first_party_citation_rate_pct: Optional[float] = None
+    first_party_citation_rate_ci: Optional[Tuple[float, float]] = None
+    mean_word_count_impression_pct: float = 0.0
+    word_count_impression_ci: Optional[Tuple[float, float]] = None
+    mean_position_adjusted_impression_pct: float = 0.0
+    position_adjusted_impression_ci: Optional[Tuple[float, float]] = None
+    mean_dristik_adjusted_impression_pct: float = 0.0
+    dristik_adjusted_impression_ci: Optional[Tuple[float, float]] = None
     average_latency_ms: float = 0.0
+    total_cost_usd: float = 0.0
     is_live: bool = False
     status: str = "AVAILABLE"  # AVAILABLE | UNAVAILABLE | RATE_LIMITED | KEY_MISSING
 
@@ -92,10 +114,21 @@ class GeoBenchmarkReport(BaseModel):
     engines_tested: List[str] = Field(default_factory=list)
     engine_aggregates: Dict[str, EngineBenchmarkAggregate] = Field(default_factory=dict)
     overall_mention_rate_pct: Optional[float] = None
+    overall_mention_rate_ci: Optional[Tuple[float, float]] = None
     overall_first_party_citation_rate_pct: Optional[float] = None
+    overall_first_party_citation_rate_ci: Optional[Tuple[float, float]] = None
+    overall_word_count_impression_pct: Optional[float] = None
+    overall_word_count_impression_ci: Optional[Tuple[float, float]] = None
+    overall_position_adjusted_impression_pct: Optional[float] = None
+    overall_position_adjusted_impression_ci: Optional[Tuple[float, float]] = None
+    overall_dristik_adjusted_impression_pct: Optional[float] = None
+    overall_dristik_adjusted_impression_ci: Optional[Tuple[float, float]] = None
     share_of_model: Optional[ShareOfModelMetric] = None
     repeats: int = 1
     failed_runs: int = 0
+    total_cost_usd: float = 0.0
+    cost_cap_exceeded: bool = False
+    run_metadata: Dict[str, Any] = Field(default_factory=dict)
     matrix_grounding: Optional[str] = None
     evaluations: List[EvaluatedQueryRun] = Field(default_factory=list)
     critical_blindspots: List[str] = Field(default_factory=list)
@@ -196,6 +229,8 @@ class GeoBenchmarkRunner:
         suite_override: Optional[BenchmarkSuite] = None,
         repeats: int = 1,
         max_queries: Optional[int] = None,
+        budget_cap_usd: float = 5.0,
+        adaptive_sampling: bool = True,
     ) -> GeoBenchmarkReport:
         clean_domain = domain.lower().replace("https://", "").replace("http://", "").split("/")[0]
         brand = brand_name or clean_domain.split(".")[0].capitalize()
@@ -210,7 +245,7 @@ class GeoBenchmarkRunner:
             locations=locations,
             mode=mode,
         )
-        repeat_count = max(1, min(int(repeats or 1), 5))
+        repeat_count = max(1, min(int(repeats or 1), 10))
         if max_queries and max_queries > 0:
             suite.queries = suite.queries[:max_queries]
             suite.total_queries = len(suite.queries)
@@ -261,6 +296,19 @@ class GeoBenchmarkRunner:
                 has_mention, pos = self._detect_mention_and_position(resp.raw_content, brand, clean_domain)
                 sources, quality, is_1p = self._classify_sources(resp.citations, resp.raw_content, clean_domain)
 
+                # Compute Aggarwal et al. continuous impression metrics & sentence breakdown
+                imp_res = calculate_response_impressions(
+                    raw_response=resp.raw_content or "",
+                    citations=resp.citations or [],
+                    target_domain=clean_domain,
+                    brand_name=brand,
+                )
+
+                # Cost estimation (~$0.003/1k input words, ~$0.015/1k output words)
+                in_words = len((q.query_text or "").split())
+                out_words = len((resp.raw_content or "").split())
+                run_cost = round((in_words * 0.000003) + (out_words * 0.000015), 6)
+
                 status = "SUCCESS"
                 if resp.status_code == 401 or "Missing" in (resp.error or ""):
                     status = "KEY_MISSING"
@@ -284,6 +332,13 @@ class GeoBenchmarkRunner:
                     was_mentioned=has_mention,
                     mention_position=pos,
                     was_first_party_cited=is_1p,
+                    word_count_impression_pct=imp_res.word_count_impression_pct,
+                    position_adjusted_impression_pct=imp_res.position_adjusted_impression_pct,
+                    dristik_adjusted_impression_pct=imp_res.dristik_adjusted_impression_pct,
+                    unlinked_brand_mentions=imp_res.unlinked_brand_sentences,
+                    sentence_count=imp_res.total_sentences,
+                    total_words=imp_res.total_words,
+                    cost_usd=run_cost,
                     source_domains=sources,
                     source_quality=quality,
                     status=status,
@@ -333,6 +388,27 @@ class GeoBenchmarkRunner:
             m_rate = round((m_cnt / s_cnt) * 100.0, 1) if s_cnt > 0 else None
             c_rate = round((c_cnt / s_cnt) * 100.0, 1) if s_cnt > 0 else None
 
+            # Wilson score 95% confidence intervals
+            m_ci = wilson_score_interval(m_cnt, s_cnt) if s_cnt > 0 else None
+            c_ci = wilson_score_interval(c_cnt, s_cnt) if s_cnt > 0 else None
+
+            # Continuous impression metrics across successful evaluations for this engine
+            eng_successes = [ev for ev in evaluations if ev.engine_id == eid and ev.status == "SUCCESS"]
+            wc_list = [ev.word_count_impression_pct for ev in eng_successes]
+            pwc_list = [ev.position_adjusted_impression_pct for ev in eng_successes]
+            dristik_list = [ev.dristik_adjusted_impression_pct for ev in eng_successes]
+
+            mean_wc = round(sum(wc_list) / len(wc_list), 1) if wc_list else 0.0
+            ci_wc = continuous_confidence_interval(wc_list) if wc_list else None
+
+            mean_pwc = round(sum(pwc_list) / len(pwc_list), 1) if pwc_list else 0.0
+            ci_pwc = continuous_confidence_interval(pwc_list) if pwc_list else None
+
+            mean_dristik = round(sum(dristik_list) / len(dristik_list), 1) if dristik_list else 0.0
+            ci_dristik = continuous_confidence_interval(dristik_list) if dristik_list else None
+
+            eng_cost = round(sum(ev.cost_usd for ev in evaluations if ev.engine_id == eid), 6)
+
             engine_aggregates[eid] = EngineBenchmarkAggregate(
                 engine_id=eid,
                 engine_name=st["name"],
@@ -341,15 +417,45 @@ class GeoBenchmarkRunner:
                 queries_succeeded=s_cnt,
                 mention_count=m_cnt,
                 mention_rate_pct=m_rate,
+                mention_rate_ci=m_ci,
                 first_party_citation_count=c_cnt,
                 first_party_citation_rate_pct=c_rate,
+                first_party_citation_rate_ci=c_ci,
+                mean_word_count_impression_pct=mean_wc,
+                word_count_impression_ci=ci_wc,
+                mean_position_adjusted_impression_pct=mean_pwc,
+                position_adjusted_impression_ci=ci_pwc,
+                mean_dristik_adjusted_impression_pct=mean_dristik,
+                dristik_adjusted_impression_ci=ci_dristik,
                 average_latency_ms=avg_lat,
+                total_cost_usd=eng_cost,
                 is_live=st["is_live"],
                 status=st["status"],
             )
 
         overall_mention_rate = round((total_mentions / total_succeeded) * 100.0, 1) if total_succeeded > 0 else None
+        overall_mention_ci = wilson_score_interval(total_mentions, total_succeeded) if total_succeeded > 0 else None
+
         overall_1p_citation_rate = round((total_1p_citations / total_succeeded) * 100.0, 1) if total_succeeded > 0 else None
+        overall_1p_citation_ci = wilson_score_interval(total_1p_citations, total_succeeded) if total_succeeded > 0 else None
+
+        # Overall continuous impression metrics across all successes
+        all_successes = [ev for ev in evaluations if ev.status == "SUCCESS"]
+        all_wc = [ev.word_count_impression_pct for ev in all_successes]
+        all_pwc = [ev.position_adjusted_impression_pct for ev in all_successes]
+        all_dristik = [ev.dristik_adjusted_impression_pct for ev in all_successes]
+
+        overall_wc_pct = round(sum(all_wc) / len(all_wc), 1) if all_wc else None
+        overall_wc_ci = continuous_confidence_interval(all_wc) if all_wc else None
+
+        overall_pwc_pct = round(sum(all_pwc) / len(all_pwc), 1) if all_pwc else None
+        overall_pwc_ci = continuous_confidence_interval(all_pwc) if all_pwc else None
+
+        overall_dristik_pct = round(sum(all_dristik) / len(all_dristik), 1) if all_dristik else None
+        overall_dristik_ci = continuous_confidence_interval(all_dristik) if all_dristik else None
+
+        total_cost_usd = round(sum(ev.cost_usd for ev in evaluations), 4)
+        cost_cap_exceeded = total_cost_usd > budget_cap_usd
         failed_runs = sum(1 for ev in evaluations if ev.status != "SUCCESS")
 
         # Blindspots only when a successful response omitted the brand. Errors are not omissions.
@@ -360,18 +466,32 @@ class GeoBenchmarkRunner:
                 blindspots.append(f"{q.category_label}: '{q.query_text}'")
 
         # Reproducibility hash
-        hash_input = f"{benchmark_id}|{clean_domain}|{len(evaluations)}|{overall_mention_rate}|{overall_1p_citation_rate}"
+        hash_input = f"{benchmark_id}|{clean_domain}|{len(evaluations)}|{overall_mention_rate}|{overall_1p_citation_rate}|{overall_wc_pct}"
         reproducibility_hash = hashlib.sha256(hash_input.encode()).hexdigest()[:16]
 
         mention_text = f"{overall_mention_rate:.1f}%" if overall_mention_rate is not None else "not measured"
         citation_text = f"{overall_1p_citation_rate:.1f}%" if overall_1p_citation_rate is not None else "not measured"
+        imp_text = f"{overall_wc_pct:.1f}%" if overall_wc_pct is not None else "not measured"
+
+        ci_str = f" [95% CI: {overall_mention_ci[0]}%-{overall_mention_ci[1]}%]" if overall_mention_ci else ""
         summary = (
             f"Live AI Retrieval Benchmark ({benchmark_id}): {len(suite.queries)} queries, "
             f"{repeat_count} run(s) each, across {len(active_adapters)} engines. "
-            f"Brand mention rate {mention_text}, first-party citation rate {citation_text}, "
+            f"Brand mention rate {mention_text}{ci_str}, first-party citation rate {citation_text}, "
+            f"Imp_wc continuous visibility {imp_text}, "
             f"over {total_succeeded} successful responses ({failed_runs} errors excluded). "
-            f"{len(blindspots)} category blindspots identified."
+            f"Estimated cost: ${total_cost_usd:.4f}. {len(blindspots)} category blindspots identified."
         )
+
+        run_metadata = {
+            "sampling_runs": repeat_count,
+            "confidence_level": 0.95,
+            "timestamp_utc": datetime.now(timezone.utc).isoformat(),
+            "engines_configured": [ad.engine_id for ad in active_adapters if ad.is_configured()],
+            "cost_tracking_enabled": True,
+            "budget_cap_usd": budget_cap_usd,
+            "cost_cap_exceeded": cost_cap_exceeded,
+        }
 
         # Compute Share of Model (SoM) and Competitor Displacement
         som_metric = self.calculate_share_of_model(
@@ -415,7 +535,15 @@ class GeoBenchmarkRunner:
             engines_tested=[ad.display_name for ad in active_adapters],
             engine_aggregates=engine_aggregates,
             overall_mention_rate_pct=overall_mention_rate,
+            overall_mention_rate_ci=overall_mention_ci,
             overall_first_party_citation_rate_pct=overall_1p_citation_rate,
+            overall_first_party_citation_rate_ci=overall_1p_citation_ci,
+            overall_word_count_impression_pct=overall_wc_pct,
+            overall_word_count_impression_ci=overall_wc_ci,
+            overall_position_adjusted_impression_pct=overall_pwc_pct,
+            overall_position_adjusted_impression_ci=overall_pwc_ci,
+            overall_dristik_adjusted_impression_pct=overall_dristik_pct,
+            overall_dristik_adjusted_impression_ci=overall_dristik_ci,
             share_of_model=som_metric,
             evaluations=evaluations,
             critical_blindspots=blindspots[:8],
@@ -424,6 +552,9 @@ class GeoBenchmarkRunner:
             summary=summary,
             repeats=repeat_count,
             failed_runs=failed_runs,
+            total_cost_usd=total_cost_usd,
+            cost_cap_exceeded=cost_cap_exceeded,
+            run_metadata=run_metadata,
             sentiment_audit=sentiment_audit_dict,
             offpage_citation_summary=offpage_dict,
         )

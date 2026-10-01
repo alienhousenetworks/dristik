@@ -420,6 +420,116 @@ class AuditRepository:
                 conn.executemany(sql, rows)
                 conn.commit()
 
+    def get_persisted_crawl_pages(self, analysis_id: str) -> List[PageEvidence]:
+        """Loads persisted crawl page records for an audit run."""
+        with self._lock:
+            with self._get_conn() as conn:
+                cur = conn.execute("SELECT * FROM audit_pages WHERE analysis_id = ? ORDER BY crawled_at ASC", (analysis_id,))
+                rows = [dict(r) for r in cur.fetchall()]
+
+        pages: List[PageEvidence] = []
+        for r in rows:
+            meta = json.loads(r.get("raw_metadata_json") or "{}")
+            pages.append(PageEvidence(
+                url=r["url"],
+                status_code=r.get("status_code", 200),
+                title=r.get("title"),
+                word_count=r.get("word_count", 0),
+                readability_score=r.get("readability_score", 0.0) or 0.0,
+                ttfb_ms=r.get("ttfb_ms", 0.0) or 0.0,
+                page_type=r.get("page_type") or "general",
+                h1=meta.get("h1", []),
+                schema_types=meta.get("schema_types", []),
+            ))
+        return pages
+
+    def get_persisted_evidence_items(self, analysis_id: str) -> List[Evidence]:
+        """Loads persisted evidence records into immutable Evidence objects."""
+        with self._lock:
+            with self._get_conn() as conn:
+                cur = conn.execute("SELECT * FROM audit_evidence WHERE analysis_id = ?", (analysis_id,))
+                rows = [dict(r) for r in cur.fetchall()]
+
+        evidence_items: List[Evidence] = []
+        for r in rows:
+            meta = json.loads(r.get("metadata_json") or "{}")
+            evidence_items.append(Evidence(
+                id=r["evidence_id"],
+                source_type=r.get("source_type") or "dom",
+                url=r.get("url"),
+                selector=r.get("selector"),
+                text=r.get("text_extract"),
+                analyzer=r.get("source_name") or "crawler",
+                hash=r.get("evidence_hash") or "hash_persisted",
+                raw_snapshot_id=r.get("raw_snapshot_id"),
+                metadata=meta,
+            ))
+        return evidence_items
+
+    def get_persisted_claims(self, analysis_id: str) -> List[Claim]:
+        """Loads persisted claim records for an audit run."""
+        from app.domain.enums import Category, Severity, VerificationStatus
+        with self._lock:
+            with self._get_conn() as conn:
+                cur = conn.execute("SELECT * FROM audit_claims WHERE analysis_id = ?", (analysis_id,))
+                rows = [dict(r) for r in cur.fetchall()]
+
+        claims: List[Claim] = []
+        for r in rows:
+            ev_refs = json.loads(r.get("evidence_refs_json") or "[]")
+            cat_str = r.get("category") or "CONTENT"
+            try:
+                cat = Category(cat_str)
+            except ValueError:
+                cat = Category.CONTENT
+
+            claims.append(Claim(
+                id=r["claim_id"],
+                agent_id=r["agent_id"],
+                statement=r["statement"],
+                category=cat,
+                severity=Severity.MEDIUM,
+                evidence_refs=ev_refs,
+                verification_status=VerificationStatus.VERIFIED if r.get("verification_status") == "verified" else VerificationStatus.PROVISIONAL,
+            ))
+        return claims
+
+    def get_persisted_findings(self, analysis_id: str) -> List[Finding]:
+        """Loads persisted findings records for an audit run."""
+        from app.domain.enums import Category, Severity, VerificationStatus
+        with self._lock:
+            with self._get_conn() as conn:
+                cur = conn.execute("SELECT * FROM audit_findings WHERE analysis_id = ?", (analysis_id,))
+                rows = [dict(r) for r in cur.fetchall()]
+
+        findings: List[Finding] = []
+        for r in rows:
+            ev_refs = json.loads(r.get("evidence_refs_json") or "[]")
+            cat_str = r.get("category") or "CONTENT"
+            try:
+                cat = Category(cat_str)
+            except ValueError:
+                cat = Category.CONTENT
+            sev_str = (r.get("severity") or "MEDIUM").upper()
+            sev = Severity.MEDIUM
+            for s in Severity:
+                if s.value == sev_str or s.name == sev_str:
+                    sev = s
+                    break
+
+            findings.append(Finding(
+                finding_id=r["finding_id"],
+                category=cat,
+                severity=sev,
+                title=r["title"],
+                description=r.get("description") or "",
+                impact=r.get("impact") or 5 if isinstance(r.get("impact"), int) else 5,
+                recommendation=r.get("recommendation") or "",
+                evidence_refs=ev_refs,
+                verification_status=VerificationStatus.VERIFIED if r.get("verification_status") == "verified" else VerificationStatus.PROVISIONAL,
+            ))
+        return findings
+
     # -------------------------------------------------------------------------
     # Evidence Explorer Deep Traceability (Item 16)
     # -------------------------------------------------------------------------

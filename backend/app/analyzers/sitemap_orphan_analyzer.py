@@ -95,9 +95,88 @@ class SitemapOrphanAnalyzer:
             )
             findings.append(finding)
 
+        # XML Sitemap Hygiene Checks against crawled pages
+        crawled_pages = manifest.pages or []
+        page_map = {p.url.rstrip("/"): p for p in crawled_pages if p.url}
+
+        dirty_sitemap_urls = []
+        for s_url in sitemap_urls:
+            norm_s = s_url.rstrip("/")
+            if norm_s in page_map:
+                pe = page_map[norm_s]
+                # Non-200
+                if pe.status_code >= 300:
+                    dirty_sitemap_urls.append({
+                        "url": s_url,
+                        "issue": f"Returns HTTP {pe.status_code}",
+                        "status_code": pe.status_code
+                    })
+                # Noindex
+                robots_str = f"{pe.robots_meta or ''} {pe.x_robots_tag or ''}".lower()
+                if "noindex" in robots_str:
+                    dirty_sitemap_urls.append({
+                        "url": s_url,
+                        "issue": "Declares 'noindex' directive",
+                        "status_code": pe.status_code
+                    })
+                # Canonicalized to different URL
+                if pe.canonical_url and pe.canonical_url.rstrip("/") != norm_s and pe.canonical_url.startswith("http"):
+                    dirty_sitemap_urls.append({
+                        "url": s_url,
+                        "issue": f"Canonicalized to '{pe.canonical_url}'",
+                        "status_code": pe.status_code
+                    })
+
+        if dirty_sitemap_urls:
+            ev_hash_dirty = _compute_hash({"dirty_sitemap_urls": [d["url"] for d in dirty_sitemap_urls]})
+            ev_ref_dirty = EvidenceRef(
+                source_type="crawl",
+                source_id="sitemap_hygiene_report",
+                evidence_hash=ev_hash_dirty,
+                url=dirty_sitemap_urls[0]["url"],
+                snippet=f"{len(dirty_sitemap_urls)} non-indexable/redirecting URLs in XML sitemap",
+                metadata={"dirty_count": len(dirty_sitemap_urls), "items": dirty_sitemap_urls[:10]}
+            )
+            findings.append(Finding(
+                finding_id=f"finding_sitemap_hygiene_{ev_hash_dirty[:8]}",
+                category=Category.TECHNICAL_SEO,
+                severity=Severity.HIGH,
+                title=f"{len(dirty_sitemap_urls)} Non-Indexable or Redirecting URL(s) in XML Sitemap",
+                description=(
+                    f"Discovered {len(dirty_sitemap_urls)} URL(s) listed in the XML sitemap that return non-200 HTTP statuses, "
+                    "declare 'noindex', or point to alternate canonical URLs. "
+                    f"Sample: {', '.join(d['url'] for d in dirty_sitemap_urls[:3])}"
+                ),
+                recommendation=(
+                    "Clean the XML sitemap so it strictly contains canonical, indexable HTTP 200 URLs. "
+                    "Remove 3xx redirects, 404 client errors, and noindexed pages immediately."
+                ),
+                why_it_matters=(
+                    "Google uses XML sitemaps to allocate crawl budget. Feeding search engines non-indexable or redirecting URLs "
+                    "wastes crawl capacity and delays indexing of new commercial content."
+                ),
+                validation_criteria="Every URL listed in the XML sitemap must return HTTP 200, lack 'noindex', and be self-canonical.",
+                evidence=[
+                    FindingEvidence(
+                        url=d["url"],
+                        element="sitemap.xml",
+                        value=d["issue"],
+                        source="crawl",
+                        evidence_ref=ev_ref_dirty,
+                    )
+                    for d in dirty_sitemap_urls[:5]
+                ],
+                evidence_refs=[ev_ref_dirty.source_id],
+                evidence_ref_objects=[ev_ref_dirty],
+                impact=7,
+                effort=2,
+                priority=7,
+            ))
+
         summary = {
             "sitemap_urls_count": sitemap_count,
             "orphan_urls_count": orphan_count,
+            "dirty_sitemap_urls_count": len(dirty_sitemap_urls),
             "orphan_ratio": round(orphan_ratio, 4),
             "findings_count": len(findings),
             "sample_orphans": orphan_urls[:10],

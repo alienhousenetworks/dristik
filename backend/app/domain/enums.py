@@ -424,6 +424,8 @@ class AnalysisStage(str, Enum):
     EXECUTIVE_SYNTHESIS = "executive_synthesis"
     COMPLETED = "completed"
     FAILED = "failed"
+    PAUSED = "paused"
+    STOPPED = "stopped"
 
 
 class ReleaseStatus(str, Enum):

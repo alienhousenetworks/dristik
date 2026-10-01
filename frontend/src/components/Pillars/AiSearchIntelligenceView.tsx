@@ -314,12 +314,39 @@ export function AiSearchIntelligenceView({
                     <div className="space-y-4">
                       {usefulRewrites.map((rew: any, i: number) => (
                         <div key={i} className="bg-paper-50 dark:bg-ink-900 border border-line rounded-lg p-4 space-y-3">
-                          <div className="flex items-center justify-between gap-2 border-b border-line pb-2">
-                            <span className="text-xs font-mono font-bold text-ink">Passage ID: {rew.passage_id}</span>
-                            <span className="text-xs font-mono text-good bg-good/10 px-2 py-0.5 rounded">
+                          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line pb-2">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="text-xs font-mono font-bold text-ink">Passage ID: {rew.passage_id}</span>
+                              {rew.primary_geo_lever && (
+                                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-pine/10 text-pine font-semibold border border-pine/20">
+                                  Lever: {rew.primary_geo_lever.replace(/_/g, ' ')}
+                                </span>
+                              )}
+                              {rew.provenance_tag && (
+                                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-paper-100 dark:bg-ink-800 text-ink-600 border border-line">
+                                  {rew.provenance_tag.replace(/_/g, ' ')}
+                                </span>
+                              )}
+                              {rew.approval_status && (
+                                <span className={`text-[10px] font-mono px-2 py-0.5 rounded font-semibold ${
+                                  rew.approval_status === 'APPROVED'
+                                    ? 'bg-good/10 text-good border border-good/20'
+                                    : 'bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/20'
+                                }`}>
+                                  {rew.approval_status === 'DRAFT_PENDING_APPROVAL' ? 'Draft · Pending Approval' : rew.approval_status}
+                                </span>
+                              )}
+                            </div>
+                            <span className="text-xs font-mono text-good bg-good/10 px-2 py-0.5 rounded font-semibold">
                               Score: {rew.estimated_score_improvement}
                             </span>
                           </div>
+
+                          {rew.keyword_stuffing_detected && (
+                            <div className="text-[11px] font-mono text-bad bg-bad/10 border border-bad/20 p-2 rounded flex items-center gap-1.5">
+                              <span>⚠️ Repetitive keyword stuffing detected (-10.0 penalty applied per Aggarwal et al. KDD 2024 guardrails).</span>
+                            </div>
+                          )}
 
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
                             <div className="space-y-1">
@@ -338,7 +365,7 @@ export function AiSearchIntelligenceView({
                           </div>
 
                           <p className="text-[11px] text-ink-500 font-mono">
-                            <span className="font-bold text-ink-700">Rationale:</span> {rew.why}
+                            <span className="font-bold text-ink-700 dark:text-ink-300">Rationale:</span> {rew.why}
                           </p>
                         </div>
                       ))}
@@ -355,20 +382,30 @@ export function AiSearchIntelligenceView({
                     {(citationPassages?.passages || []).map((p: any, idx: number) => (
                       <div key={idx} className="bg-paper-50 dark:bg-ink-900/40 border border-line rounded-lg p-3.5 space-y-2">
                         <div className="flex items-center justify-between gap-2">
-                          <span className="font-mono text-xs text-ink font-bold">{p.passage_id}</span>
+                          <div className="flex items-center gap-2">
+                            <span className="font-mono text-xs text-ink font-bold">{p.passage_id}</span>
+                            {p.keyword_stuffing_detected && (
+                              <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-bad/15 text-bad font-semibold">
+                                Stuffed (-{p.keyword_stuffing_penalty} pts)
+                              </span>
+                            )}
+                          </div>
                           <span className={`text-[10px] font-mono px-2 py-0.5 rounded font-bold ${
                             p.readiness_tier === 'HIGHLY_CITABLE' ? 'bg-good/15 text-good' :
-                            p.readiness_tier === 'PARTIALLY_CITABLE' ? 'bg-amber-100 text-amber-800' :
+                            p.readiness_tier === 'PARTIALLY_CITABLE' ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-300' :
                             'bg-bad/15 text-bad'
                           }`}>
                             {p.readiness_tier?.replace('_', ' ')} ({p.total_score}/100)
                           </span>
                         </div>
-                        <p className="text-xs text-ink-800 leading-relaxed font-serif">"{p.raw_text}"</p>
+                        <p className="text-xs text-ink-800 dark:text-ink-200 leading-relaxed font-serif">"{p.raw_text}"</p>
                         <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-line text-[10px] font-mono text-ink-500">
                           <span>Attribution: {p.subject_attribution_score}/25</span>
                           <span>Clarity: {p.standalone_clarity_score}/25</span>
                           <span>Density: {p.informational_gain_score}/25</span>
+                          {typeof p.statistics_density_score === 'number' && p.statistics_density_score > 0 && (
+                            <span className="text-pine">Stats: {p.statistics_density_score}/25</span>
+                          )}
                         </div>
                       </div>
                     ))}

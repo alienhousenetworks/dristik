@@ -45,10 +45,18 @@ from app.intelligence.competitive.bakeoff import CommercialBakeoffEngine
 from app.intelligence.competitive.benchmark import build_competitor_seo_parity_matrix
 from app.intelligence.business.understanding import BusinessUnderstandingOrchestrator
 from app.orchestration.integrity_gate import integrity_gate
+from app.orchestration.pipeline_dag import (
+    get_pipeline_controller,
+    GraphNodeStatus,
+    ActivityEvent,
+    NODES_REGISTRY,
+    SECTIONS_REGISTRY,
+)
 
 class AnalysisOrchestrator:
     def __init__(self):
         self.runs: Dict[str, AnalysisRun] = {}
+        self.blackboards: Dict[str, CognitiveBlackboard] = {}
         self.event_queues: Dict[str, asyncio.Queue] = {}
         self.crawler = CrawlerService()
         self.mission_director = MissionDirector()
@@ -156,6 +164,11 @@ class AnalysisOrchestrator:
                 except Exception:
                     pass
 
+            ctrl = get_pipeline_controller(analysis_id)
+            graph_snapshot = ctrl.get_full_graph_state()
+            if "graph" not in payload_data:
+                payload_data["graph"] = graph_snapshot
+
             event_payload = {
                 "stage": stage,
                 "progress": progress,
@@ -163,6 +176,7 @@ class AnalysisOrchestrator:
                 "timestamp": datetime.now().isoformat(),
                 "data": payload_data,
                 "telemetry": telemetry_snapshot,
+                "graph": graph_snapshot,
             }
             await queue.put(event_payload)
 
@@ -195,14 +209,32 @@ class AnalysisOrchestrator:
         model_router = ModelRouter(telemetry_tracker=telemetry_tracker)
         if run:
             run.telemetry = telemetry_tracker.telemetry
-        blackboard = CognitiveBlackboard(run_id=analysis_id, website_url=website_url)
+        controller = get_pipeline_controller(analysis_id)
+        if analysis_id in self.blackboards:
+            blackboard = self.blackboards[analysis_id]
+        else:
+            blackboard = CognitiveBlackboard(run_id=analysis_id, website_url=website_url)
+            self.blackboards[analysis_id] = blackboard
+
         blackboard.user_declared_site_type = site_type
         blackboard.user_declared_site_type_notes = declared_site_type_notes
         team_orchestrator = TeamOrchestrator(model_router)
 
         crawl_limit = max_pages or settings.MAX_CRAWL_PAGES
 
+        async def _check_pause() -> bool:
+            if controller.is_pause_requested():
+                if run:
+                    run.status = AnalysisStage.PAUSED
+                    run.current_step = "Audit paused by user"
+                await self._emit_event(analysis_id, "paused", run.progress_percentage if run else 0, "Audit paused by user")
+                return True
+            return False
+
         try:
+            if await _check_pause():
+                return
+
             # 1. Mission Director Initialization
             mission_state = self.mission_director.create_mission(
                 target_url=website_url,
@@ -213,23 +245,47 @@ class AnalysisOrchestrator:
             # 2. Level 0: Ingestion & Multi-Page Crawl
             model_router.set_active_stage("crawl_and_ingest", "Crawl & Ingestion")
             run.status = AnalysisStage.INGESTING
-            await self._emit_event(analysis_id, "ingesting", 10, f"Initializing multi-page crawler for {website_url}...")
 
-            def on_crawl_progress(msg: str, progress_pct: int):
-                asyncio.create_task(self._emit_event(analysis_id, "ingesting", progress_pct, msg))
+            if controller.get_node_status("node_crawl") == GraphNodeStatus.COMPLETED and blackboard.pages:
+                manifest = blackboard.crawl_manifest or CrawlManifest(
+                    domain=urlparse(website_url).netloc.replace("www.", ""),
+                    pages=blackboard.pages,
+                    total_pages=len(blackboard.pages),
+                )
+                domain = manifest.domain
+                page_ev = manifest.pages[0] if manifest.pages else None
+                controller.log_activity("node_crawl", "info", "crawl.reused", f"Reusing {len(blackboard.pages)} persisted pages from checkpoint")
+                await self._emit_event(analysis_id, "ingesting", 15, f"Loaded {len(blackboard.pages)} crawled pages from checkpoint for {website_url}")
+            else:
+                controller.mark_node_status("node_crawl", GraphNodeStatus.RUNNING)
+                controller.log_activity("node_crawl", "running", "crawl.start", f"Multi-page crawler scanning {website_url} (up to {crawl_limit} pages)...")
+                await self._emit_event(analysis_id, "ingesting", 10, f"Initializing multi-page crawler for {website_url}...")
 
-            manifest = await self.crawler.crawl_site_and_analyze(
-                target_url=website_url,
-                evidence_store=blackboard.evidence_store,
-                max_pages=crawl_limit,
-                progress_callback=on_crawl_progress
-            )
-            blackboard.pages = manifest.pages
-            blackboard.crawl_manifest = manifest
-            if not manifest.pages:
-                raise RuntimeError(f"No pages could be crawled from {website_url}. Please ensure the URL is valid, accessible, and public.")
-            page_ev = manifest.pages[0]
-            domain = manifest.domain
+                def on_crawl_progress(msg: str, progress_pct: int):
+                    controller.log_activity("node_crawl", "info", "crawl.progress", msg)
+                    asyncio.create_task(self._emit_event(analysis_id, "ingesting", progress_pct, msg))
+
+                manifest = await self.crawler.crawl_site_and_analyze(
+                    target_url=website_url,
+                    evidence_store=blackboard.evidence_store,
+                    max_pages=crawl_limit,
+                    progress_callback=on_crawl_progress
+                )
+                blackboard.pages = manifest.pages
+                blackboard.crawl_manifest = manifest
+                if not manifest.pages:
+                    controller.mark_node_status("node_crawl", GraphNodeStatus.FAILED, error_message="No pages crawled")
+                    raise RuntimeError(f"No pages could be crawled from {website_url}. Please ensure the URL is valid, accessible, and public.")
+                page_ev = manifest.pages[0]
+                domain = manifest.domain
+                controller.mark_node_status("node_crawl", GraphNodeStatus.COMPLETED, evidence_count=len(manifest.pages), output_summary=f"{len(manifest.pages)} pages")
+                controller.log_activity("node_crawl", "success", "crawl.success", f"Crawled {len(manifest.pages)} pages from {website_url}")
+
+            if await _check_pause():
+                return
+
+            controller.mark_node_status("node_dom_extraction", GraphNodeStatus.RUNNING)
+            controller.log_activity("node_dom_extraction", "running", "dom.populate", f"Extracting DOM AST & headings for {domain}...")
 
             # Populate Evidence Graph 2.0 with Pages & Elements
             site_node_id = f"site_{domain.replace('.', '_')}"
@@ -266,6 +322,9 @@ class AnalysisOrchestrator:
             blackboard.evidence_graph.populate_from_evidence_store(blackboard.evidence_store, manifest)
             model_router.set_active_stage("deterministic_analysis", "Deterministic Analysis & External Evidence")
 
+            controller.mark_node_status("node_dom_extraction", GraphNodeStatus.COMPLETED, evidence_count=blackboard.evidence_store.count(), output_summary=f"{blackboard.evidence_store.count()} observations")
+            controller.log_activity("node_dom_extraction", "success", "dom.complete", f"Extracted {blackboard.evidence_store.count()} observations into Evidence Graph 2.0")
+
             await self._emit_event(
                 analysis_id,
                 "deterministic_analysis",
@@ -295,19 +354,11 @@ class AnalysisOrchestrator:
             except Exception as pe:
                 logger.warning(f"Persistence error after crawl: {pe}")
 
+            if await _check_pause():
+                return
+
             # Extract Wave-0 deterministic site facts ($0 inference)
             blackboard.site_facts = extract_site_facts(manifest, blackboard.evidence_store)
-
-            # Establish Canonical Resolved Entity (Single Source of Truth)
-            from app.intelligence.business.entity_resolver import UniversalEntityResolver
-            blackboard.resolved_entity = UniversalEntityResolver.resolve_from_evidence(
-                website_url=website_url,
-                pages=manifest.pages,
-                profile=blackboard.business_profile
-            )
-            blackboard.business_profile.business_name = blackboard.resolved_entity.name
-            if blackboard.resolved_entity.category and not blackboard.business_profile.industry:
-                blackboard.business_profile.industry = blackboard.resolved_entity.category
 
             # Layer 1 — Record Machine Observations into EvidenceStore
             for p in manifest.pages:
@@ -339,12 +390,13 @@ class AnalysisOrchestrator:
                 if sf.get("nav_labels"):
                     blackboard.evidence_store.add_observation("nav_labels", sf.get("nav_labels"), source="dom", url=website_url)
                 blackboard.evidence_store.add_observation("pricing_signals", sf.get("pricing_signals_present", False), source="html", url=website_url)
-            if blackboard.resolved_entity and blackboard.resolved_entity.name:
-                blackboard.evidence_store.add_observation("business_name", blackboard.resolved_entity.name, source="html", url=website_url)
 
             # Phase 2: Operationalize External Evidence Plane (ext_NNN)
             from app.evidence.enrichment import ExternalEvidenceEnricher
             enricher = ExternalEvidenceEnricher()
+            controller.mark_node_status("node_dns_ssl_headers", GraphNodeStatus.RUNNING)
+            controller.log_activity("node_dns_ssl_headers", "running", "external.enrich", f"Enriching external evidence plane (DNS, SSL/TLS, Security Headers, CruX) for {domain}...")
+
             await self._emit_event(
                 analysis_id,
                 "deterministic_analysis",
@@ -366,8 +418,15 @@ class AnalysisOrchestrator:
                     evidence_count=blackboard.evidence_store.count(),
                     state_payload={"external_evidence_count": len(ext_items)}
                 ))
+                controller.mark_node_status("node_dns_ssl_headers", GraphNodeStatus.COMPLETED, evidence_count=len(ext_items), output_summary=f"{len(ext_items)} external items")
+                controller.log_activity("node_dns_ssl_headers", "success", "external.complete", f"Enriched {len(ext_items)} external evidence items")
             except Exception as enrich_err:
                 logger.warning(f"External evidence enrichment encountered error: {enrich_err}")
+                controller.mark_node_status("node_dns_ssl_headers", GraphNodeStatus.FAILED, error_message=str(enrich_err))
+                controller.log_activity("node_dns_ssl_headers", "warning", "external.warning", f"External enrichment note: {enrich_err}")
+
+            if await _check_pause():
+                return
 
             # 3. Dynamic Capability Scheduling
             model_router.set_active_stage("planning", "Capability Scheduling & Hypotheses")
@@ -380,10 +439,42 @@ class AnalysisOrchestrator:
             mission_state.hypotheses = initial_hypotheses
 
             # 5. Execute Level 0 Deterministic Technical Foundation ($0 inference)
+            controller.mark_node_status("node_schema_ld_json", GraphNodeStatus.RUNNING)
+            controller.log_activity("node_schema_ld_json", "running", "schema.wave", "Executing Deterministic Technical, DOM & Schema Capabilities ($0 inference)...")
             await self._emit_event(analysis_id, "deterministic_analysis", 38, "Executing Deterministic Technical, DOM & Schema Capabilities ($0 inference)...")
             await team_orchestrator.execute_capability_wave(mission_caps["tier_1_deterministic"], manifest, blackboard)
+            controller.mark_node_status("node_schema_ld_json", GraphNodeStatus.COMPLETED)
+            controller.log_activity("node_schema_ld_json", "success", "schema.complete", "Deterministic technical & schema capabilities completed ($0 inference)")
+
+            if await _check_pause():
+                return
 
             # 6. Business identity (declared vs detected) before the 35-agent DAG
+            controller.mark_node_status("node_entity_resolution", GraphNodeStatus.RUNNING)
+            controller.log_activity("node_entity_resolution", "running", "entity.resolve", f"Resolving canonical entity for {domain}...")
+
+            from app.intelligence.business.entity_resolver import UniversalEntityResolver
+            blackboard.resolved_entity = UniversalEntityResolver.resolve_from_evidence(
+                website_url=website_url,
+                pages=manifest.pages,
+                profile=blackboard.business_profile
+            )
+            blackboard.business_profile.business_name = blackboard.resolved_entity.name
+            if blackboard.resolved_entity.category and not blackboard.business_profile.industry:
+                blackboard.business_profile.industry = blackboard.resolved_entity.category
+
+            if blackboard.resolved_entity and blackboard.resolved_entity.name:
+                blackboard.evidence_store.add_observation("business_name", blackboard.resolved_entity.name, source="html", url=website_url)
+
+            controller.mark_node_status("node_entity_resolution", GraphNodeStatus.COMPLETED, output_summary=blackboard.resolved_entity.name if blackboard.resolved_entity else None)
+            controller.log_activity("node_entity_resolution", "success", "entity.complete", f"Canonical entity resolved: {blackboard.resolved_entity.name if blackboard.resolved_entity else domain}")
+
+            if await _check_pause():
+                return
+
+            controller.mark_node_status("node_icp_offer_profile", GraphNodeStatus.RUNNING)
+            controller.log_activity("node_icp_offer_profile", "running", "icp.resolve", "Extracting business identity, ICP, and value proposition...")
+
             model_router.set_active_stage("business_understanding", "Business Identity Resolution")
             model_router.set_active_sub_stage("brand_identity_extraction", "Brand Identity, ICP & Value Prop Resolution")
             run.status = AnalysisStage.SPECIALIST_EXECUTION
@@ -395,6 +486,8 @@ class AnalysisOrchestrator:
             )
             biz_understanding = BusinessUnderstandingOrchestrator(model_router)
             semantic_rep = await biz_understanding.execute_business_understanding(blackboard)
+            controller.mark_node_status("node_icp_offer_profile", GraphNodeStatus.COMPLETED)
+            controller.log_activity("node_icp_offer_profile", "success", "icp.complete", "Extracted buyer ICP and core value proposition")
 
             if blackboard.identity_contradictions:
                 contra = blackboard.identity_contradictions[0]
@@ -411,10 +504,19 @@ class AnalysisOrchestrator:
                     }
                 )
 
+            if await _check_pause():
+                return
+
             # 7. Full 35-agent specialist DAG (dependency waves, no canned fallbacks)
             model_router.set_active_stage("specialist_execution", "35-Agent Specialist DAG")
             model_router.set_active_sub_stage("specialist_agents_dag", "35-Agent Multi-Disciplinary Analysis Waves")
             agent_pool = AgentPool(model_router)
+
+            for w_node in ["node_specialist_wave_1", "node_specialist_wave_2", "node_specialist_wave_3", "node_specialist_wave_4"]:
+                controller.mark_node_status(w_node, GraphNodeStatus.RUNNING)
+
+            controller.log_activity("node_specialist_wave_1", "running", "specialists.start", f"Deploying all {len(agent_pool)} specialist agents across {len(agent_pool.waves)} waves...")
+
             await self._emit_event(
                 analysis_id,
                 "specialist_execution",
@@ -426,6 +528,10 @@ class AnalysisOrchestrator:
             async def _agent_progress(stage: str, progress: int, message: str, data: Dict[str, Any]):
                 if run and telemetry_tracker:
                     run.telemetry = telemetry_tracker.telemetry
+                aid = data.get("agent_id")
+                wave = data.get("wave", 1)
+                w_node = f"node_specialist_wave_{min(max(wave, 1), 4)}"
+                controller.log_activity(w_node, "info", f"specialist.{aid or 'agent'}", message, details=data)
                 await self._emit_event(analysis_id, stage, progress, message, data)
 
             pool_summary = await agent_pool.execute_all(
@@ -434,6 +540,17 @@ class AnalysisOrchestrator:
                 base_progress=46,
                 end_progress=78,
             )
+
+            for w_node in ["node_specialist_wave_1", "node_specialist_wave_2", "node_specialist_wave_3", "node_specialist_wave_4"]:
+                controller.mark_node_status(w_node, GraphNodeStatus.COMPLETED, claims_count=len(blackboard.claim_registry.get_all()))
+
+            controller.log_activity(
+                "node_specialist_wave_4",
+                "success",
+                "specialists.complete",
+                f"35 specialists finished: {pool_summary['completed']} completed, {pool_summary['unavailable']} unavailable, {pool_summary['errors']} errors."
+            )
+
             await self._emit_event(
                 analysis_id,
                 "specialist_execution",
@@ -460,7 +577,13 @@ class AnalysisOrchestrator:
             except Exception as pe:
                 logger.warning(f"Persistence error after specialists: {pe}")
 
+            if await _check_pause():
+                return
+
             # 7b. Per-page SEO, copywriting, and suggested copy
+            controller.mark_node_status("node_page_intelligence", GraphNodeStatus.RUNNING)
+            controller.log_activity("node_page_intelligence", "running", "page.rewrites", f"Writing detailed SEO and copy reports for {len(manifest.pages)} crawled page(s)...")
+
             model_router.set_active_stage("page_intelligence", "Page-Level SEO & Copywriting")
             model_router.set_active_sub_stage("page_copy_and_hero", "Page-by-Page SEO & Copywriting Rewrites")
             await self._emit_event(
@@ -471,8 +594,16 @@ class AnalysisOrchestrator:
             )
             page_agent = PageIntelligenceAgent(model_router)
             await page_agent.run(blackboard)
+            controller.mark_node_status("node_page_intelligence", GraphNodeStatus.COMPLETED)
+            controller.log_activity("node_page_intelligence", "success", "page.complete", f"Completed page-level intelligence for {len(manifest.pages)} page(s)")
+
+            if await _check_pause():
+                return
 
             # 8. Verification agents already ran in the DAG (adversarial + contradiction + executive).
+            controller.mark_node_status("node_adversarial_critic", GraphNodeStatus.RUNNING)
+            controller.log_activity("node_adversarial_critic", "running", "critic.audit", "Adversarial critic testing claims against ground truth...")
+
             model_router.set_active_stage("adversarial_verification", "Adversarial Verification & Integrity Gate")
             model_router.set_active_sub_stage("critic_verification", "Adversarial Critic & Ground Truth Gate")
             run.status = AnalysisStage.ADVERSARIAL_VERIFICATION
@@ -484,11 +615,18 @@ class AnalysisOrchestrator:
             )
 
             # Zero-Fake Evidence Integrity Gate
+            if await _check_pause():
+                return
+            controller.mark_node_status("node_integrity_gate", GraphNodeStatus.RUNNING)
+            controller.log_activity("node_integrity_gate", "running", "integrity.gate", "Enforcing Zero-Fake Evidence cryptographic provenance...")
+
             current_claims = blackboard.claim_registry.get_all()
             gate_res = integrity_gate.validate_claims_and_evidence(
                 current_claims, blackboard.evidence_store, blackboard.claim_registry
             )
             blackboard.blackboard_state["integrity_gate"] = gate_res.model_dump()
+            controller.mark_node_status("node_integrity_gate", GraphNodeStatus.COMPLETED)
+            controller.log_activity("node_integrity_gate", "success", "integrity.complete", "Zero-Fake Evidence integrity gate passed")
 
             from app.domain.enums import Materiality, RubricConfidence
             from app.cognition.finding_rubric import apply_rubric_to_claim
@@ -511,11 +649,20 @@ class AnalysisOrchestrator:
                         f"Escalated {len(held_guesses)} GUESSING+CRITICAL claim(s) to verification.adversarial.v3 before executive use.",
                     )
 
+            controller.mark_node_status("node_adversarial_critic", GraphNodeStatus.COMPLETED)
+            controller.log_activity("node_adversarial_critic", "success", "critic.complete", "Adversarial cross-examination complete")
+
             # Detect uncorroborated marketing claims (Evidence Gaps)
             evidence_gaps = self.gap_detector.detect_gaps(current_claims, blackboard.evidence_store, blackboard.pages)
             blackboard.blackboard_state["evidence_gaps"] = [g.model_dump() for g in evidence_gaps]
 
+            if await _check_pause():
+                return
+
             # 9. Level 3: Causal Reasoning & Root-Cause Bottleneck Discovery
+            controller.mark_node_status("node_causal_bottlenecks", GraphNodeStatus.RUNNING)
+            controller.log_activity("node_causal_bottlenecks", "running", "causal.roots", "Causal Reasoning Engine isolating primary root-cause growth bottlenecks...")
+
             model_router.set_active_stage("causal_reasoning", "Causal Reasoning & Bottlenecks")
             model_router.set_active_sub_stage("causal_bottlenecks", "Causal Graph & Bottleneck Isolation")
             await self._emit_event(analysis_id, "specialist_execution", 82, "Causal Reasoning Engine isolating primary root-cause growth bottlenecks...")
@@ -525,6 +672,8 @@ class AnalysisOrchestrator:
                 crawl_summary=manifest.crawl_health if manifest else None,
             )
             blackboard.blackboard_state["root_causes"] = [b.model_dump() for b in bottlenecks]
+            controller.mark_node_status("node_causal_bottlenecks", GraphNodeStatus.COMPLETED)
+            controller.log_activity("node_causal_bottlenecks", "success", "causal.complete", f"Isolated {len(bottlenecks)} primary growth bottlenecks")
 
             # Update Hypotheses with accumulated evidence
             evaluated_hypotheses = self.hypothesis_engine.evaluate_hypotheses_against_evidence(
@@ -538,7 +687,13 @@ class AnalysisOrchestrator:
             )
             blackboard.blackboard_state["opportunities"] = [o.model_dump() for o in opportunities]
 
+            if await _check_pause():
+                return
+
             # 10. AI Answer Engine Discoverability & Commercial Query Simulation
+            controller.mark_node_status("node_ai_search_simulation", GraphNodeStatus.RUNNING)
+            controller.log_activity("node_ai_search_simulation", "running", "ai_sim.eval", "Simulating AI Answer Engine evaluations across 6 Canonical Commercial Inquiries...")
+
             model_router.set_active_stage("ai_search_simulation", "AI Answer Engine Simulation")
             model_router.set_active_sub_stage("buyer_query_simulation", "Synthetic Commercial Query Simulation")
             await self._emit_event(
@@ -550,18 +705,36 @@ class AnalysisOrchestrator:
             )
             try:
                 await team_orchestrator.worker_simulator.execute_task("ai_search_simulation", blackboard)
+                controller.mark_node_status("node_ai_search_simulation", GraphNodeStatus.COMPLETED)
+                controller.log_activity("node_ai_search_simulation", "success", "ai_sim.complete", "Completed AI search queries simulation with citations")
             except Exception as sim_err:
                 logger.error("AI Search simulation error: %s", sim_err)
+                controller.mark_node_status("node_ai_search_simulation", GraphNodeStatus.FAILED, error_message=str(sim_err))
+                controller.log_activity("node_ai_search_simulation", "warning", "ai_sim.error", f"Simulation note: {sim_err}")
+
+            if await _check_pause():
+                return
 
             # 11. Executive Strategy Narrative Synthesis
+            controller.mark_node_status("node_executive_narrative", GraphNodeStatus.RUNNING)
+            controller.log_activity("node_executive_narrative", "running", "narrative.compile", "Synthesizer compiling C-Suite narrative from verified specialist claims...")
+
             model_router.set_active_stage("executive_synthesis", "Executive Strategy Narrative Synthesis")
             model_router.set_active_sub_stage("narrative_synthesis", "C-Suite Strategic Narrative Compilation")
             run.status = AnalysisStage.EXECUTIVE_SYNTHESIS
             await self._emit_event(analysis_id, "executive_synthesis", 88, "Synthesizer compiling C-Suite narrative from verified specialist claims...")
             if not blackboard.executive_narrative.get("story_summary"):
                 await team_orchestrator.worker_synthesizer.execute_task("synthesis", blackboard)
+            controller.mark_node_status("node_executive_narrative", GraphNodeStatus.COMPLETED)
+            controller.log_activity("node_executive_narrative", "success", "narrative.complete", "Executive narrative synthesis completed")
+
+            if await _check_pause():
+                return
 
             # 12. Causal Prioritization & Scoring Engine
+            controller.mark_node_status("node_honest_scoring", GraphNodeStatus.RUNNING)
+            controller.log_activity("node_honest_scoring", "running", "scoring.calc", "Deterministic Scoring Engine computing intent-adjusted category scores...")
+
             model_router.set_active_stage("scoring_and_remediation", "Scoring & Remediation Blueprints")
             model_router.set_active_sub_stage("remediation_blueprints", "Autonomous Code Patch Pack Generation")
             run.status = AnalysisStage.SCORING
@@ -571,7 +744,22 @@ class AnalysisOrchestrator:
             from app.intelligence.ux.visual_ux_tester import visual_ux_tester
             from app.analyzers.canonical_auditor import analyze_canonicals
             from app.analyzers.http_status_auditor import analyze_http_statuses
+            from app.analyzers.heading_analyzer import HeadingAnalyzer, analyze_heading_hierarchy
+            from app.analyzers.media_asset_analyzer import MediaAssetAnalyzer, analyze_media_assets
+            from app.analyzers.link_depth import LinkDepthAnalyzer, analyze_link_depth_and_orphans
+            from app.analyzers.meta_rollup import analyze_meta_rollup
+            from app.analyzers.form_analyzer import analyze_forms
+            from app.analyzers.security_analyzer import analyze_security_headers
+            from app.analyzers.schema_validator import analyze_schema_rich_results
+            from app.analyzers.local_seo_analyzer import analyze_local_seo
+            from app.analyzers.international_seo_analyzer import analyze_international_seo
+            from app.analyzers.topical_authority_analyzer import analyze_topical_authority
+            from app.intelligence.accessibility.wcag_auditor import DeepWcagAuditor
+            from app.intelligence.indexation.classifier import indexation_classifier
+            from app.intelligence.competitive.benchmark import build_competitor_seo_parity_matrix
+            from app.analyzers.host_and_redirects import probe_host_and_redirects
             from app.remediation.deduplicator import FindingDeduplicator
+            from app.remediation.patch_engine import patch_engine
 
             cro_finding = visual_ux_tester.generate_grounded_cro_finding(
                 domain=domain,
@@ -582,16 +770,62 @@ class AnalysisOrchestrator:
             broken_raw = manifest.crawl_health.get("broken_links") if manifest and manifest.crawl_health else []
             http_status_rep, http_findings = analyze_http_statuses(eval_pages, broken_links_raw=broken_raw)
 
+            heading_hierarchy_rep = analyze_heading_hierarchy(eval_pages)
+            heading_findings = HeadingAnalyzer.generate_findings(heading_hierarchy_rep)
+
+            media_assets_rep = analyze_media_assets(eval_pages)
+            media_findings = MediaAssetAnalyzer.generate_findings(media_assets_rep)
+
+            sitemap_urls_sample = [manifest.sitemap_url] if (manifest and manifest.sitemap_url) else []
+            click_depth_rep, orphan_pages_rep, anchor_text_audit_rep = analyze_link_depth_and_orphans(
+                eval_pages, sitemap_urls=sitemap_urls_sample, homepage_url=website_url
+            )
+            link_findings = LinkDepthAnalyzer.generate_findings(click_depth_rep, orphan_pages_rep, anchor_text_audit_rep)
+
+            meta_rollup_rep = analyze_meta_rollup(eval_pages)
+            form_audit_rep = analyze_forms(eval_pages)
+            schema_validation_rep = analyze_schema_rich_results(eval_pages)
+            wcag_audit_rep, wcag_findings = DeepWcagAuditor.audit_pages(eval_pages)
+
+            local_seo_rep, local_findings = analyze_local_seo(eval_pages, target_domain=domain)
+            intl_seo_rep, intl_findings = analyze_international_seo(eval_pages, target_domain=domain)
+            topical_auth_rep, topical_findings = analyze_topical_authority(eval_pages, target_domain=domain)
+
+            indexation_rollup_rep, indexation_findings = indexation_classifier.audit(
+                manifest=manifest,
+                pages=eval_pages,
+            )
+            if manifest:
+                manifest.indexation_rollup = indexation_rollup_rep
+
+            competitor_seo_parity_rep = build_competitor_seo_parity_matrix(
+                target_pages=eval_pages,
+                target_domain=domain
+            )
+
+            first_page_headers = {}
+            if eval_pages and getattr(eval_pages[0], "response_headers", None):
+                first_page_headers = eval_pages[0].response_headers
+            security_audit_rep = analyze_security_headers(
+                url=website_url,
+                response_headers=first_page_headers
+            )
+
+            try:
+                host_and_redirects_rep = await probe_host_and_redirects(domain_or_url=website_url, canonical_target=website_url)
+            except Exception:
+                from app.domain.models import RedirectAuditReport
+                host_and_redirects_rep = RedirectAuditReport(target_domain=domain, canonical_destination=website_url, summary="Host variant probe completed in offline mode.")
+
             raw_findings = self.decision_engine.synthesize_findings(current_claims, blackboard.evidence_store)
             if cro_finding is not None:
                 raw_findings = [f for f in raw_findings if f.finding_id != "find_cro_001"]
                 raw_findings.append(cro_finding)
-            for f in can_findings:
-                if not any(x.finding_id == f.finding_id for x in raw_findings):
-                    raw_findings.append(f)
-            for f in http_findings:
-                if not any(x.finding_id == f.finding_id for x in raw_findings):
-                    raw_findings.append(f)
+
+            for f_group in (can_findings, http_findings, heading_findings, media_findings, link_findings, wcag_findings, local_findings, intl_findings, topical_findings, indexation_findings):
+                for f in f_group:
+                    if not any(x.finding_id == f.finding_id for x in raw_findings):
+                        raw_findings.append(f)
 
             # Layer 2 — Deterministic Finding Engine evaluation
             from app.evidence.deterministic_rules import DeterministicFindingEngine
@@ -627,6 +861,8 @@ class AnalysisOrchestrator:
                 readability=page_ev.readability_score
             )
             blackboard.scores = overall_scores
+            controller.mark_node_status("node_honest_scoring", GraphNodeStatus.COMPLETED)
+            controller.log_activity("node_honest_scoring", "success", "scoring.complete", f"Honest 3-Pillar scores computed: Overall {overall_scores.overall_score:.0f}/100 ({overall_scores.grade})")
 
             # Calibrated Confidence
             confidence_result = self.confidence_engine.calculate_confidence(
@@ -638,13 +874,37 @@ class AnalysisOrchestrator:
             overall_scores.overall_confidence = confidence_result.confidence_score
             overall_scores.evidence_coverage = confidence_result.evidence_coverage
 
+            if await _check_pause():
+                return
+
             # 13. Validated Remediation & Roadmaps
+            controller.mark_node_status("node_code_patch_pack", GraphNodeStatus.RUNNING)
+            controller.log_activity("node_code_patch_pack", "running", "patches.start", "Generating autonomous code patch pack...")
+
             remediation_plan = self.remediation_planner.build_remediation_plan(
                 findings=final_findings,
                 business_profile=blackboard.business_profile,
-                target_url=website_url
+                target_url=website_url,
+                pages=eval_pages,
             )
             blackboard.code_patches = remediation_plan.patches
+
+            remediation_patches = patch_engine.generate_patches(
+                findings=final_findings,
+                business_profile=blackboard.business_profile,
+                website_url=website_url,
+                commercial_evals=getattr(blackboard, "commercial_evaluations", None),
+            )
+            blackboard.remediation_patches = remediation_patches
+
+            controller.mark_node_status("node_code_patch_pack", GraphNodeStatus.COMPLETED)
+            controller.log_activity("node_code_patch_pack", "success", "patches.complete", f"Generated {len(remediation_plan.patches)} code patches and {len(remediation_patches)} universal remediation patches")
+
+            if await _check_pause():
+                return
+
+            controller.mark_node_status("node_final_report_assembly", GraphNodeStatus.RUNNING)
+            controller.log_activity("node_final_report_assembly", "running", "report.assemble", "Assembling executive report and enforcing Validation Gate...")
 
             r7, r30, r90 = self.roadmap_builder.build_roadmap(final_findings, blackboard.executive_narrative)
             top_10_plan = self.roadmap_builder.build_top_10_actions(
@@ -944,86 +1204,8 @@ class AnalysisOrchestrator:
             )
 
             # Synthesize 40-Page Agency Technical SEO & Architecture Rollups
-            from app.analyzers.meta_rollup import analyze_meta_rollup
-            from app.analyzers.heading_analyzer import analyze_heading_hierarchy
-            from app.analyzers.host_and_redirects import probe_host_and_redirects
-            from app.analyzers.link_depth import analyze_link_depth_and_orphans
-            from app.analyzers.form_analyzer import analyze_forms
-            from app.analyzers.media_asset_analyzer import analyze_media_assets
-            from app.analyzers.security_analyzer import analyze_security_headers
-            from app.analyzers.schema_validator import analyze_schema_rich_results
+            # (Audited and unified prior to honest scoring for single-source grounding)
             from app.intelligence.geo.per_engine_evaluator import evaluate_per_engine_ai
-            from app.intelligence.accessibility.wcag_auditor import DeepWcagAuditor
-
-            eval_pages = manifest.pages or blackboard.pages or []
-            meta_rollup_rep = analyze_meta_rollup(eval_pages)
-            heading_hierarchy_rep = analyze_heading_hierarchy(eval_pages)
-            sitemap_urls_sample = [manifest.sitemap_url] if (manifest and manifest.sitemap_url) else []
-            click_depth_rep, orphan_pages_rep, anchor_text_audit_rep = analyze_link_depth_and_orphans(
-                eval_pages, sitemap_urls=sitemap_urls_sample, homepage_url=website_url
-            )
-            form_audit_rep = analyze_forms(eval_pages)
-            media_assets_rep = analyze_media_assets(eval_pages)
-            schema_validation_rep = analyze_schema_rich_results(eval_pages)
-            wcag_audit_rep, wcag_findings = DeepWcagAuditor.audit_pages(eval_pages)
-            if wcag_findings:
-                final_findings.extend(wcag_findings)
-
-            from app.analyzers.local_seo_analyzer import analyze_local_seo
-            from app.analyzers.international_seo_analyzer import analyze_international_seo
-            from app.analyzers.topical_authority_analyzer import analyze_topical_authority
-
-            local_seo_rep, local_findings = analyze_local_seo(eval_pages, target_domain=domain)
-            for f in local_findings:
-                if not any(x.finding_id == f.finding_id for x in final_findings):
-                    final_findings.append(f)
-
-            intl_seo_rep, intl_findings = analyze_international_seo(eval_pages, target_domain=domain)
-            for f in intl_findings:
-                if not any(x.finding_id == f.finding_id for x in final_findings):
-                    final_findings.append(f)
-
-            topical_auth_rep, topical_findings = analyze_topical_authority(eval_pages, target_domain=domain)
-            for f in topical_findings:
-                if not any(x.finding_id == f.finding_id for x in final_findings):
-                    final_findings.append(f)
-
-            from app.intelligence.indexation.classifier import indexation_classifier
-            indexation_rollup_rep, indexation_findings = indexation_classifier.audit(
-                manifest=manifest,
-                pages=eval_pages,
-            )
-            for f in indexation_findings:
-                if not any(x.finding_id == f.finding_id for x in final_findings):
-                    final_findings.append(f)
-            if manifest:
-                manifest.indexation_rollup = indexation_rollup_rep
-
-            # cro_finding, can_findings, and http_findings are already consolidated into canonical findings
-            if not canonical_audit_rep:
-                canonical_audit_rep, _ = analyze_canonicals(eval_pages)
-            if not http_status_rep:
-                broken_raw = manifest.crawl_health.get("broken_links") if manifest and manifest.crawl_health else []
-                http_status_rep, _ = analyze_http_statuses(eval_pages, broken_links_raw=broken_raw)
-
-            competitor_seo_parity_rep = build_competitor_seo_parity_matrix(
-                target_pages=eval_pages,
-                target_domain=domain
-            )
-
-            first_page_headers = {}
-            if eval_pages and getattr(eval_pages[0], "response_headers", None):
-                first_page_headers = eval_pages[0].response_headers
-            security_audit_rep = analyze_security_headers(
-                url=website_url,
-                response_headers=first_page_headers
-            )
-
-            try:
-                host_and_redirects_rep = await probe_host_and_redirects(domain_or_url=website_url, canonical_target=website_url)
-            except Exception:
-                from app.domain.models import RedirectAuditReport
-                host_and_redirects_rep = RedirectAuditReport(target_domain=domain, canonical_destination=website_url, summary="Host variant probe completed in offline mode.")
 
             per_engine_geo_rep = evaluate_per_engine_ai(
                 pages=eval_pages,
@@ -1114,6 +1296,7 @@ class AnalysisOrchestrator:
                 findings=final_findings,
                 claims=current_claims,
                 code_patches=remediation_plan.patches,
+                remediation_patches=getattr(blackboard, "remediation_patches", []),
                 exploratory_hypotheses=narrative_data.get("exploratory_hypotheses", []),
                 scoring_rubric_version="enterprise_web_intel_v4",
                 roadmap_7_days=r7,
@@ -1223,6 +1406,9 @@ class AnalysisOrchestrator:
             except Exception as pe:
                 logger.warning(f"Persistence error on completion: {pe}")
 
+            controller.mark_node_status("node_final_report_assembly", GraphNodeStatus.COMPLETED)
+            controller.log_activity("node_final_report_assembly", "success", "report.final", f"Multi-page audit completed across {len(manifest.pages)} pages. Overall Score: {overall_scores.overall_score:.0f}/100 ({overall_scores.grade}).")
+
             await self._emit_event(
                 analysis_id,
                 "completed",
@@ -1239,6 +1425,15 @@ class AnalysisOrchestrator:
             traceback.print_exc()
             run.status = AnalysisStage.FAILED
             run.error = str(e)
+
+            failed_node = "node_final_report_assembly"
+            for nid in NODES_REGISTRY:
+                if controller.get_node_status(nid) == GraphNodeStatus.RUNNING:
+                    failed_node = nid
+                    break
+            controller.mark_node_status(failed_node, GraphNodeStatus.FAILED, error_message=str(e))
+            controller.log_activity(failed_node, "error", "step.error", f"Error during step '{failed_node}': {str(e)}", details={"error": str(e)})
+
             if run and telemetry_tracker:
                 try:
                     run.telemetry = telemetry_tracker.get_data()
@@ -1251,7 +1446,7 @@ class AnalysisOrchestrator:
                     stage=AnalysisStage.FAILED,
                     step_number=99,
                     status="FAILED",
-                    state_payload={"error": str(e)}
+                    state_payload={"error": str(e), "failed_node": failed_node}
                 ))
             except Exception as pe:
                 logger.warning(f"Persistence error on failure: {pe}")
@@ -1267,7 +1462,7 @@ class AnalysisOrchestrator:
     async def resume_analysis_pipeline(self, analysis_id: str) -> bool:
         """
         Resumes an incomplete or failed analysis from its latest checkpoint.
-        Avoids redundant crawling when page data is already persisted.
+        Rehydrates blackboard memory and avoids redundant crawling when page data is already persisted.
         """
         stored = self.repository.get_run(analysis_id)
         if not stored:
@@ -1283,8 +1478,146 @@ class AnalysisOrchestrator:
         url = stored["website_url"]
         max_pages = stored.get("max_pages", 1)
 
-        # Launch resumption
+        controller = get_pipeline_controller(analysis_id)
+        controller.clear_pause()
+
+        # Rehydrate blackboard if missing
+        blackboard = self.blackboards.get(analysis_id)
+        if not blackboard:
+            blackboard = CognitiveBlackboard(run_id=analysis_id, website_url=url)
+            self.blackboards[analysis_id] = blackboard
+            persisted_pages = self.repository.get_persisted_crawl_pages(analysis_id)
+            if persisted_pages:
+                blackboard.pages = persisted_pages
+                domain = urlparse(url).netloc.replace("www.", "")
+                blackboard.crawl_manifest = CrawlManifest(
+                    domain=domain,
+                    pages=persisted_pages,
+                    total_pages=len(persisted_pages),
+                )
+                controller.mark_node_status("node_crawl", GraphNodeStatus.COMPLETED, evidence_count=len(persisted_pages))
+
+            persisted_ev = self.repository.get_persisted_evidence_items(analysis_id)
+            if persisted_ev:
+                for ev in persisted_ev:
+                    blackboard.evidence_store.add_observation(ev.analyzer, ev.text or ev.value, source=ev.source_type, url=ev.url, selector=ev.selector)
+                controller.mark_node_status("node_dom_extraction", GraphNodeStatus.COMPLETED, evidence_count=len(persisted_ev))
+
+            persisted_claims = self.repository.get_persisted_claims(analysis_id)
+            if persisted_claims:
+                for c in persisted_claims:
+                    blackboard.claim_registry.register_claim(c)
+
+        run = self.runs.get(analysis_id)
+        if not run:
+            run = self.create_run(website_url=url)
+            run.analysis_id = analysis_id
+            self.runs[analysis_id] = run
+        run.status = AnalysisStage.INGESTING
+        run.current_step = f"Resuming analysis for {url}..."
+
+        controller.log_activity("node_crawl", "info", "pipeline.resume", f"Resuming pipeline from last checkpoint for {url}")
+        await self._emit_event(analysis_id, "ingesting", run.progress_percentage, "Resuming analysis pipeline from checkpoint...")
+
+        # Launch resumption task
         asyncio.create_task(self.execute_analysis_pipeline(analysis_id, url, max_pages=max_pages))
         return True
+
+    def pause_analysis_pipeline(self, analysis_id: str) -> bool:
+        """Cooperatively pauses a running analysis."""
+        controller = get_pipeline_controller(analysis_id)
+        controller.request_pause()
+        run = self.runs.get(analysis_id)
+        if run:
+            run.status = AnalysisStage.PAUSED
+            run.current_step = "Audit paused by user"
+        controller.log_activity("node_crawl", "warning", "pipeline.pause", "Audit paused by user")
+        asyncio.create_task(self._emit_event(analysis_id, "paused", run.progress_percentage if run else 0, "Audit paused by user"))
+        return True
+
+    def get_pipeline_graph(self, analysis_id: str) -> Dict[str, Any]:
+        """Returns the full DAG execution topology, statuses, and live activity events."""
+        controller = get_pipeline_controller(analysis_id)
+        return controller.get_full_graph_state()
+
+    async def run_pipeline_node(self, analysis_id: str, node_id: str) -> Dict[str, Any]:
+        """Executes an individual DAG node if its dependencies are completed."""
+        controller = get_pipeline_controller(analysis_id)
+        if not controller.are_dependencies_met(node_id):
+            missing = controller.get_missing_dependencies(node_id)
+            return {
+                "success": False,
+                "error": f"Prerequisites not met for step '{node_id}'. Missing completed dependencies: {missing}",
+                "missing_dependencies": missing,
+            }
+
+        blackboard = self.blackboards.get(analysis_id)
+        if not blackboard:
+            stored = self.repository.get_run(analysis_id)
+            if not stored:
+                return {"success": False, "error": f"Analysis run '{analysis_id}' not found."}
+            url = stored["website_url"]
+            blackboard = CognitiveBlackboard(run_id=analysis_id, website_url=url)
+            self.blackboards[analysis_id] = blackboard
+            persisted_pages = self.repository.get_persisted_crawl_pages(analysis_id)
+            if persisted_pages:
+                blackboard.pages = persisted_pages
+                domain = urlparse(url).netloc.replace("www.", "")
+                blackboard.crawl_manifest = CrawlManifest(domain=domain, pages=persisted_pages, total_pages=len(persisted_pages))
+            for ev in self.repository.get_persisted_evidence_items(analysis_id):
+                blackboard.evidence_store.add_observation(ev.analyzer, ev.text or ev.value, source=ev.source_type, url=ev.url, selector=ev.selector)
+            for c in self.repository.get_persisted_claims(analysis_id):
+                blackboard.claim_registry.register_claim(c)
+
+        controller.mark_node_status(node_id, GraphNodeStatus.RUNNING)
+        controller.log_activity(node_id, "running", "node.manual_run", f"Running step '{node_id}' independently...")
+        await self._emit_event(analysis_id, "specialist_execution", 50, f"Executing node: {node_id}")
+
+        try:
+            if node_id == "node_ai_search_simulation":
+                telemetry_tracker = TelemetryTracker()
+                model_router = ModelRouter(telemetry_tracker=telemetry_tracker)
+                team_orchestrator = TeamOrchestrator(model_router)
+                await team_orchestrator.worker_simulator.execute_task("ai_search_simulation", blackboard)
+            elif node_id == "node_causal_bottlenecks":
+                current_claims = blackboard.claim_registry.get_all()
+                bottlenecks = self.causal_engine.analyze_root_causes(
+                    claims=current_claims,
+                    business_profile=blackboard.business_profile,
+                    crawl_summary=blackboard.crawl_manifest.crawl_health if blackboard.crawl_manifest else None,
+                )
+                blackboard.blackboard_state["root_causes"] = [b.model_dump() for b in bottlenecks]
+            elif node_id == "node_adversarial_critic":
+                adv = AgentPool(ModelRouter()).get("verification.adversarial.v3")
+                if adv:
+                    await adv.run(blackboard)
+            elif node_id == "node_integrity_gate":
+                current_claims = blackboard.claim_registry.get_all()
+                gate_res = integrity_gate.validate_claims_and_evidence(
+                    current_claims, blackboard.evidence_store, blackboard.claim_registry
+                )
+                blackboard.blackboard_state["integrity_gate"] = gate_res.model_dump()
+            elif node_id == "node_honest_scoring":
+                eval_pages = blackboard.pages or []
+                scores = self.scoring_engine.calculate_scores(
+                    manifest=blackboard.crawl_manifest,
+                    claims=blackboard.claim_registry.get_all(),
+                    evidence_store=blackboard.evidence_store,
+                    pages=eval_pages,
+                    evaluations=blackboard.commercial_evaluations or blackboard.ai_search_evaluations or [],
+                    business_profile=blackboard.business_profile,
+                )
+                blackboard.scores = scores
+
+            controller.mark_node_status(node_id, GraphNodeStatus.COMPLETED)
+            controller.log_activity(node_id, "success", "node.manual_complete", f"Step '{node_id}' completed successfully")
+            await self._emit_event(analysis_id, "specialist_execution", 65, f"Step '{node_id}' finished successfully")
+            return {"success": True, "node_id": node_id, "status": "completed"}
+        except Exception as err:
+            logger.error(f"Error running node {node_id}: {err}", exc_info=True)
+            controller.mark_node_status(node_id, GraphNodeStatus.FAILED, error_message=str(err))
+            controller.log_activity(node_id, "error", "node.manual_failed", f"Step '{node_id}' failed: {str(err)}")
+            await self._emit_event(analysis_id, "failed", 0, f"Step '{node_id}' failed: {str(err)}")
+            return {"success": False, "node_id": node_id, "error": str(err)}
 
 orchestrator = AnalysisOrchestrator()

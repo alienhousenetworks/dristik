@@ -9,7 +9,8 @@ Parses all <img> elements and page subresources to evaluate:
 from typing import List, Dict, Any, Optional
 from urllib.parse import urlparse
 from bs4 import BeautifulSoup
-from app.domain.models import PageEvidence, MediaAssetItem, MediaAssetAuditReport
+from app.domain.models import PageEvidence, MediaAssetItem, MediaAssetAuditReport, Finding, FindingEvidence
+from app.domain.enums import Category, Severity
 
 _MODERN_FORMATS = {"webp", "avif", "svg"}
 _LEGACY_FORMATS = {"png", "jpeg", "jpg", "gif", "bmp", "tiff"}
@@ -142,6 +143,98 @@ class MediaAssetAnalyzer:
             cls_risk_images=cls_risks,
             summary=summary
         )
+
+    @staticmethod
+    def generate_findings(report: MediaAssetAuditReport) -> List[Finding]:
+        findings: List[Finding] = []
+
+        if report.missing_alt_count > 0:
+            findings.append(Finding(
+                finding_id="finding_missing_image_alt",
+                category=Category.ON_PAGE_SEO,
+                severity=Severity.MEDIUM,
+                title=f"{report.missing_alt_count} Image Asset(s) Missing Alternative Text",
+                description=(
+                    f"Observed {report.missing_alt_count} informative image(s) lacking an alt attribute. "
+                    "Images without alt text cannot be indexed by Google Image Search and violate WCAG 2.2 accessibility."
+                ),
+                recommendation="Add descriptive, keyword-rich alternative text to all content images. Mark decorative icons with alt=''.",
+                why_it_matters="Google relies on alt text to understand image context. Screen readers require alt text for accessibility compliance.",
+                validation_criteria="Every non-decorative <img> tag must include a non-empty alt attribute.",
+                evidence=[
+                    FindingEvidence(
+                        url=item.get("page_url") or "",
+                        element="img",
+                        value=item.get("img_src") or "",
+                        snippet=item.get("reason"),
+                        source="crawl"
+                    )
+                    for item in [it for it in report.cls_risk_images if isinstance(it, dict) and "img_src" in it][:5]
+                ] if report.cls_risk_images else [],
+                evidence_refs=["media_audit"],
+                impact=5,
+                effort=2,
+                priority=5
+            ))
+
+        if report.missing_dimensions_count > 0:
+            findings.append(Finding(
+                finding_id="finding_image_cls_risk",
+                category=Category.TECHNICAL_SEO,
+                severity=Severity.HIGH if report.missing_dimensions_count > 3 else Severity.MEDIUM,
+                title=f"{report.missing_dimensions_count} Image(s) Missing Explicit Dimensions (CLS Risk)",
+                description=(
+                    f"Discovered {report.missing_dimensions_count} image asset(s) lacking explicit width and height attributes. "
+                    "This prevents the browser layout engine from reserving image aspect ratio before download, causing layout shifts."
+                ),
+                recommendation="Declare explicit width and height attributes or CSS aspect-ratio on all <img> elements.",
+                why_it_matters="Cumulative Layout Shift (CLS) is a Core Web Vital. Layout instability drops mobile ranking signals and irritates visitors.",
+                validation_criteria="All <img> tags must declare intrinsic width and height attributes.",
+                evidence=[
+                    FindingEvidence(
+                        url=item.get("page_url") or "",
+                        element="img",
+                        value=item.get("img_src") or "",
+                        snippet=item.get("reason"),
+                        source="crawl"
+                    )
+                    for item in report.cls_risk_images[:5]
+                ],
+                evidence_refs=["media_audit"],
+                impact=6,
+                effort=2,
+                priority=6
+            ))
+
+        if report.mixed_content_count > 0:
+            findings.append(Finding(
+                finding_id="finding_mixed_content_assets",
+                category=Category.TECHNICAL_SEO,
+                severity=Severity.HIGH,
+                title=f"{report.mixed_content_count} Insecure HTTP Subresource(s) on HTTPS Pages",
+                description=(
+                    f"Identified {report.mixed_content_count} image or script asset(s) requested over insecure HTTP on HTTPS pages. "
+                    "Modern browsers block active mixed content and display security warnings for passive mixed content."
+                ),
+                recommendation="Update all image, script, and stylesheet URLs to use HTTPS protocol.",
+                why_it_matters="Mixed content degrades browser padlock security status and causes asset loading failures.",
+                validation_criteria="All subresources on HTTPS pages must load over HTTPS.",
+                evidence=[
+                    FindingEvidence(
+                        url="",
+                        element="mixed_content",
+                        value=u,
+                        source="crawl"
+                    )
+                    for u in report.mixed_content_urls[:5]
+                ],
+                evidence_refs=["media_audit"],
+                impact=7,
+                effort=1,
+                priority=7
+            ))
+
+        return findings
 
 
 def analyze_media_assets(pages: List[PageEvidence], raw_html_map: Optional[Dict[str, str]] = None) -> MediaAssetAuditReport:

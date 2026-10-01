@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { AnalysisRun } from '../types';
 import { formatMs } from '../lib/format';
+import { LiveExecutionConsole } from './LiveExecutionConsole';
 
 const STAGES = [
   { key: 'ingesting', label: 'Crawl' },
@@ -14,9 +15,10 @@ const STAGES = [
 
 interface PipelineProps {
   run: AnalysisRun;
+  onRefreshRun?: () => void;
 }
 
-export function Pipeline({ run }: PipelineProps) {
+export function Pipeline({ run, onRefreshRun }: PipelineProps) {
   const [showStages, setShowStages] = useState(false);
   const order = STAGES.map((s) => s.key);
   const currentIndex = order.findIndex((key) => key === run.status);
@@ -30,41 +32,28 @@ export function Pipeline({ run }: PipelineProps) {
   const isActualBilled = (telemetry?.has_actual_costs ?? false) && actualCost > 0;
 
   return (
-    <section className="card p-5 sm:p-6 space-y-4">
-      <div className="flex items-end justify-between gap-4">
-        <div>
-          <p className="label">Progress</p>
-          <p className="mt-1 text-ink-700">{run.current_step || 'Queued'}</p>
-        </div>
-        <div className="text-right">
-          <p className="font-serif text-3xl text-ink leading-none">{run.progress_percentage}%</p>
-          <p className="text-[11px] font-mono text-ink-500 mt-1">
-            Cost: <span className="font-bold text-pine">${totalCost.toFixed(4)}</span>
-          </p>
-        </div>
-      </div>
+    <div className="space-y-4">
+      {/* Live Interactive Terminal & DAG Execution Console */}
+      <LiveExecutionConsole run={run} onRefreshRun={onRefreshRun} />
 
-      <div className="h-1.5 bg-ink-300/40 rounded-full overflow-hidden">
-        <div
-          className={`h-full rounded-full ${failed ? 'bg-bad' : 'bg-pine'} transition-all duration-500`}
-          style={{ width: `${Math.max(4, run.progress_percentage)}%` }}
-        />
-      </div>
-
-      <ol className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
-        {STAGES.map((stage, index) => {
-          const passed = done || (currentIndex >= 0 && index < currentIndex);
-          const current = !done && !failed && stage.key === run.status;
-          return (
-            <li
-              key={stage.key}
-              className={passed ? 'text-good' : current ? 'text-ink font-medium' : 'text-ink-300'}
-            >
-              {stage.label}
-            </li>
-          );
-        })}
-      </ol>
+      {/* Pipeline Summary & Live Cost Meter */}
+      <section className="card p-4 sm:p-5 space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-3 text-xs">
+          <ol className="flex flex-wrap gap-x-4 gap-y-1">
+            {STAGES.map((stage, index) => {
+              const passed = done || (currentIndex >= 0 && index < currentIndex);
+              const current = !done && !failed && stage.key === run.status;
+              return (
+                <li
+                  key={stage.key}
+                  className={passed ? 'text-good font-medium' : current ? 'text-ink font-bold' : 'text-ink-300'}
+                >
+                  {stage.label}
+                </li>
+              );
+            })}
+          </ol>
+        </div>
 
       {/* Live Stage Cost Meter */}
       {telemetry && (
@@ -151,6 +140,7 @@ export function Pipeline({ run }: PipelineProps) {
           )}
         </div>
       )}
-    </section>
+      </section>
+    </div>
   );
 }

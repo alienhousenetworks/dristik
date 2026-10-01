@@ -251,6 +251,7 @@ export function App() {
           setRun((prev) => {
             if (!prev) return prev;
             const liveTelemetry = payload.telemetry ?? payload.data?.telemetry ?? prev.telemetry;
+            const liveGraph = payload.graph ?? payload.data?.graph ?? prev.graph;
             return {
               ...prev,
               progress_percentage: payload.progress ?? prev.progress_percentage,
@@ -258,6 +259,7 @@ export function App() {
               status: payload.stage ?? prev.status,
               report: payload.data?.report ?? prev.report,
               telemetry: liveTelemetry,
+              graph: liveGraph,
             };
           });
 
@@ -268,6 +270,8 @@ export function App() {
             setLoading(false);
             setError(payload.message || 'The audit failed.');
             stream.close();
+          } else if (payload.stage === 'paused') {
+            setLoading(false);
           }
         } catch {
           /* ignore malformed events */
@@ -378,7 +382,7 @@ export function App() {
                     title={workspaceRun.website_url.replace(/^https?:\/\//, '')}
                     description="Crawl, evidence, specialists, and scoring run in sequence. Stay on this page until the report is ready."
                   />
-                  <Pipeline run={workspaceRun} />
+                  <Pipeline run={workspaceRun} onRefreshRun={() => loadAudit(workspaceRun.analysis_id)} />
                   {workspaceRun.telemetry && (
                     <Telemetry
                       telemetry={workspaceRun.telemetry}

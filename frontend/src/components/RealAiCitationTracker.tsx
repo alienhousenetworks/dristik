@@ -17,6 +17,10 @@ interface EngineQueryResult {
   source_domains_used: string[];
   synthesized_snippet: string;
   extractability_health: string;
+  word_count_impression_pct?: number | null;
+  position_adjusted_impression_pct?: number | null;
+  dristik_adjusted_impression_pct?: number | null;
+  unlinked_brand_mentions?: number;
   failure_reason?: string | null;
   failure_code?: string | null;
 }
@@ -36,6 +40,13 @@ interface AiCitationData {
   target_domain: string;
   total_queries_tracked: number;
   overall_ai_citation_score: number | null;
+  mention_rate_ci?: [number, number] | null;
+  citation_rate_ci?: [number, number] | null;
+  word_count_impression_pct?: number | null;
+  word_count_impression_ci?: [number, number] | null;
+  position_adjusted_impression_pct?: number | null;
+  dristik_adjusted_impression_pct?: number | null;
+  total_cost_usd?: number | null;
   engines_breakdown: Record<string, number>;
   tracked_queries: BuyerQueryEvaluation[];
   critical_ai_blindspots: string[];
@@ -289,21 +300,71 @@ export function RealAiCitationTracker({
             </p>
           </div>
 
-          <div className="flex items-center gap-4 bg-paper-50 border border-line rounded-md p-4 shrink-0">
-            <div className="text-right">
-              <span className="label block text-[10px]">Overall AI Citation Score</span>
-              <div className="flex items-baseline justify-end gap-1 mt-0.5">
-                <span className="text-3xl font-serif font-bold text-good">
-                  {data.overall_ai_citation_score != null ? data.overall_ai_citation_score : '—'}
-                </span>
-                <span className="text-xs text-ink-500 font-mono">/ 100</span>
+          <div className="flex flex-col sm:flex-row items-end sm:items-center gap-3">
+            <div className="flex items-center gap-4 bg-paper-50 dark:bg-ink-900 border border-line rounded-md p-4 shrink-0">
+              <div className="text-right">
+                <span className="label block text-[10px]">Overall AI Citation Score</span>
+                <div className="flex items-baseline justify-end gap-1 mt-0.5">
+                  <span className="text-3xl font-serif font-bold text-good">
+                    {data.overall_ai_citation_score != null ? data.overall_ai_citation_score : '—'}
+                  </span>
+                  <span className="text-xs text-ink-500 font-mono">/ 100</span>
+                </div>
+                {data.citation_rate_ci && (
+                  <span className="text-[10px] font-mono text-ink-400 block mt-0.5" title="95% Wilson Score Confidence Interval">
+                    95% CI: [{data.citation_rate_ci[0]}% – {data.citation_rate_ci[1]}%]
+                  </span>
+                )}
               </div>
-            </div>
-            <div className="w-12 h-12 rounded-full border-2 border-line bg-paper-100 flex items-center justify-center font-bold text-sm text-ink font-mono">
-              {data.total_queries_tracked}Q
+              <div className="w-12 h-12 rounded-full border-2 border-line bg-paper-100 dark:bg-ink-800 flex items-center justify-center font-bold text-sm text-ink font-mono">
+                {data.total_queries_tracked}Q
+              </div>
             </div>
           </div>
         </div>
+
+        {/* CONTINUOUS IMPRESSION METRICS STRIP (AGGARWAL ET AL., KDD 2024) */}
+        {(data.word_count_impression_pct != null || data.position_adjusted_impression_pct != null) && (
+          <div className="mt-4 pt-4 border-t border-line grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="bg-paper-100/60 dark:bg-ink-900/60 p-3 rounded-md border border-line space-y-1">
+              <div className="flex items-center justify-between">
+                <span className="label text-[10px] text-ink-500">Paper Imp_wc (Word-Count)</span>
+                <span className="text-[9px] font-mono bg-paper-200 dark:bg-ink-800 text-ink-600 px-1.5 py-0.5 rounded">Continuous</span>
+              </div>
+              <div className="flex items-baseline gap-1">
+                <span className="text-xl font-bold font-mono text-ink">{data.word_count_impression_pct}%</span>
+                {data.word_count_impression_ci && (
+                  <span className="text-[10px] font-mono text-ink-400">
+                    [{data.word_count_impression_ci[0]}%–{data.word_count_impression_ci[1]}%]
+                  </span>
+                )}
+              </div>
+              <p className="text-[10px] text-ink-500 leading-tight">Words in sentences citing target domain</p>
+            </div>
+
+            <div className="bg-paper-100/60 dark:bg-ink-900/60 p-3 rounded-md border border-line space-y-1">
+              <div className="flex items-center justify-between">
+                <span className="label text-[10px] text-ink-500">Paper Imp_pwc (Pos-Weighted)</span>
+                <span className="text-[9px] font-mono bg-paper-200 dark:bg-ink-800 text-ink-600 px-1.5 py-0.5 rounded">Exp Decay</span>
+              </div>
+              <div className="flex items-baseline gap-1">
+                <span className="text-xl font-bold font-mono text-ink">{data.position_adjusted_impression_pct}%</span>
+              </div>
+              <p className="text-[10px] text-ink-500 leading-tight">Discounted by position exp(-pos/total)</p>
+            </div>
+
+            <div className="bg-paper-100/60 dark:bg-ink-900/60 p-3 rounded-md border border-line space-y-1">
+              <div className="flex items-center justify-between">
+                <span className="label text-[10px] text-ink-500">Dristik-Adjusted Imp</span>
+                <span className="text-[9px] font-mono bg-paper-200 dark:bg-ink-800 text-ink-600 px-1.5 py-0.5 rounded">Credit-Split</span>
+              </div>
+              <div className="flex items-baseline gap-1">
+                <span className="text-xl font-bold font-mono text-ink">{data.dristik_adjusted_impression_pct}%</span>
+              </div>
+              <p className="text-[10px] text-ink-500 leading-tight">Sentence credit split by cited sources |C_s|</p>
+            </div>
+          </div>
+        )}
 
         {data.engine_errors && data.engine_errors.length > 0 && (
           <div className="mt-4 bg-amber-50 border border-amber-200 rounded-md p-3 text-xs text-ink-800">

@@ -7,7 +7,8 @@ Dristik AI Click-Depth Histogram, Orphan Page Detector & Anchor Equity Analyzer
 from typing import List, Dict, Set, Optional, Tuple
 from collections import deque, defaultdict
 from urllib.parse import urlparse
-from app.domain.models import PageEvidence, ClickDepthReport, OrphanPageReport, AnchorTextAudit
+from app.domain.models import PageEvidence, ClickDepthReport, OrphanPageReport, AnchorTextAudit, Finding, FindingEvidence
+from app.domain.enums import Category, Severity
 
 
 _GENERIC_ANCHOR_PATTERNS = [
@@ -241,6 +242,100 @@ class LinkDepthAnalyzer:
             flagged_anchor_instances=generic_hits,
             summary=summary
         )
+
+    @staticmethod
+    def generate_findings(
+        cd: ClickDepthReport,
+        orphans: OrphanPageReport,
+        anchors: AnchorTextAudit
+    ) -> List[Finding]:
+        findings: List[Finding] = []
+
+        if cd.depth_4_plus_count > 0:
+            findings.append(Finding(
+                finding_id="finding_excessive_click_depth",
+                category=Category.TECHNICAL_SEO,
+                severity=Severity.HIGH if cd.depth_4_plus_count > 3 else Severity.MEDIUM,
+                title=f"{cd.depth_4_plus_count} Page(s) Buried at Click Depth 4+",
+                description=(
+                    f"Discovered {cd.depth_4_plus_count} page(s) requiring 4 or more clicks from the homepage to reach. "
+                    "Googlebot prioritizes shallow pages; deeply nested pages receive minimal PageRank and suffer lower crawl frequency."
+                ),
+                recommendation="Link high-priority subpages from secondary navigation, category hubs, or internal contextual links to keep click depth <= 3.",
+                why_it_matters="Pages deeper than 3 clicks suffer significant crawl budget starvation and indexation delays.",
+                validation_criteria="All core commercial pages should be accessible within 3 clicks of the homepage.",
+                evidence=[
+                    FindingEvidence(
+                        url=u,
+                        element="link_graph",
+                        value="Click depth >= 4 (deep internal chain)",
+                        source="crawl"
+                    )
+                    for u in (cd.pages_by_depth.get("depth_4_plus") or [])[:5]
+                ] if isinstance(cd.pages_by_depth.get("depth_4_plus"), list) else [],
+                evidence_refs=["link_depth_audit"],
+                impact=6,
+                effort=3,
+                priority=6
+            ))
+
+        if orphans.orphan_count > 0:
+            findings.append(Finding(
+                finding_id="finding_orphan_sitemap_pages",
+                category=Category.TECHNICAL_SEO,
+                severity=Severity.HIGH,
+                title=f"{orphans.orphan_count} Orphan Page(s) in Sitemap with Zero Inbound Internal Links",
+                description=(
+                    f"Found {orphans.orphan_count} URL(s) listed in the sitemap that have zero inbound HTML links from other crawled site pages."
+                ),
+                recommendation="Integrate orphan pages into site navigation or remove legacy/dead pages from the sitemap.",
+                why_it_matters="Search engines may devalue or drop orphan pages that lack internal links.",
+                validation_criteria="All indexable sitemap URLs must be linked internally from site navigation or content.",
+                evidence=[
+                    FindingEvidence(
+                        url=item,
+                        element="sitemap.xml",
+                        value="0 inbound links",
+                        source="crawl"
+                    )
+                    for item in orphans.orphan_urls[:5]
+                ],
+                evidence_refs=["link_depth_audit"],
+                impact=7,
+                effort=2,
+                priority=7
+            ))
+
+        if anchors.generic_anchor_count > 3:
+            findings.append(Finding(
+                finding_id="finding_generic_anchor_text",
+                category=Category.ON_PAGE_SEO,
+                severity=Severity.LOW,
+                title=f"{anchors.generic_anchor_count} Low-Equity Generic Internal Anchor(s) Detected",
+                description=(
+                    f"Identified {anchors.generic_anchor_count} link anchors using generic text (e.g. 'click here', 'read more', or naked URLs). "
+                    "Descriptive anchor text passes topical keyword relevance to destination pages."
+                ),
+                recommendation="Replace generic phrases with keyword-specific anchor text describing the target destination page.",
+                why_it_matters="Internal anchor text directly influences Google's understanding of target page topical authority.",
+                validation_criteria="Internal links must use descriptive anchor text rather than generic placeholders.",
+                evidence=[
+                    FindingEvidence(
+                        url=item.get("url") or "",
+                        element="a",
+                        value=item.get("anchor") or "",
+                        snippet=item.get("reason"),
+                        source="crawl"
+                    )
+                    for item in anchors.flagged_anchor_instances[:5]
+                ],
+                evidence_refs=["link_depth_audit"],
+                impact=4,
+                effort=2,
+                priority=4
+            ))
+
+        return findings
 
 
 def analyze_link_depth_and_orphans(

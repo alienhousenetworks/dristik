@@ -5,7 +5,7 @@ sandboxed code patches, and human approval gates.
 """
 from typing import List, Dict, Any, Optional
 from pydantic import BaseModel, Field
-from app.domain.models import Finding, CodePatch, BusinessProfile
+from app.domain.models import Finding, CodePatch, BusinessProfile, PageEvidence
 from app.domain.enums import ReleaseStatus
 from app.remediation.patch_generator import RemediationPatcher
 from app.remediation.validator import PatchValidator, PatchValidationResult
@@ -33,9 +33,10 @@ class RemediationPlanner:
         self,
         findings: List[Finding],
         business_profile: BusinessProfile,
-        target_url: str
+        target_url: str,
+        pages: Optional[List[PageEvidence]] = None,
     ) -> RemediationPlan:
-        raw_patches = self.patcher.generate_patches(findings, business_profile, target_url)
+        raw_patches = self.patcher.generate_patches(findings, business_profile, target_url, pages=pages)
         validated_patches: List[CodePatch] = []
         val_results: Dict[str, PatchValidationResult] = {}
         all_ok = True

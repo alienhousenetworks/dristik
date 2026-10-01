@@ -401,15 +401,162 @@ class UniversalPatchEngine:
     ) -> Optional[RemediationPatch]:
         cat = finding.category
         title_lower = finding.title.lower()
-        desc_lower = finding.description.lower()
+        desc_lower = (finding.description or getattr(finding, "finding", "") or "").lower()
+        rule_id = getattr(finding, "rule_id", "") or ""
+
+        # Extract target URL from finding evidence if available
+        ev_url = website_url
+        ev_snippet = None
+        if finding.evidence and len(finding.evidence) > 0:
+            for ev in finding.evidence:
+                if ev.url and "://" in ev.url:
+                    ev_url = ev.url
+                    break
+            ev_snippet = finding.evidence[0].snippet or finding.evidence[0].value
+
+        from urllib.parse import urlparse
+        p_path = urlparse(ev_url).path if "://" in ev_url else ev_url
+        if not p_path.startswith("/"):
+            p_path = "/" + p_path
 
         common_kw = dict(
             patch_id=f"PATCH-{idx:03d}",
             finding_id=finding.finding_id,
-            target_url=website_url,
+            target_url=ev_url,
         )
 
-        # Schema finding → Level 1 Safe Auto
+        # 1. Canonical tag finding
+        if "canonical" in title_lower or "canonical" in rule_id.lower():
+            clean_origin = f"{urlparse(website_url).scheme or 'https'}://{urlparse(website_url).netloc.lower() or 'example.com'}"
+            canonical_target = f"{clean_origin}{p_path if p_path != '/' else ''}"
+            return RemediationPatch(
+                **common_kw,
+                title=f"Canonical Directive: {finding.title[:50]}",
+                category=Category.TECHNICAL_SEO,
+                risk_level=PatchRiskLevel.SAFE_AUTO,
+                target_file="index.html (<head> section)",
+                operation=PatchOperation.INSERT_HEAD,
+                before_snippet=str(ev_snippet) if ev_snippet else "<!-- Missing or relative canonical tag -->",
+                after_snippet=f'<link rel="canonical" href="{canonical_target}" />',
+                explanation=finding.recommendation or f"Declares authoritative self-referencing canonical URL for '{canonical_target}'.",
+                confidence=0.98,
+                approval_status=PatchApprovalStatus.APPROVED,
+                metadata_payload={"finding_ref": finding.finding_id, "canonical_url": canonical_target},
+            )
+
+        # 2. Meta description finding
+        if "meta_desc" in rule_id.lower() or "meta description" in title_lower:
+            is_blocked = profile_blocked
+            clean_vp = val_prop.rstrip(".").strip() if val_prop else "Enterprise software solutions and web acceleration"
+            meta_copy = f"{biz_name} delivers {clean_vp}. Engineered for {niche} with verified enterprise reliability and immediate time-to-value."
+            if len(meta_copy) < 140:
+                meta_copy = f"{meta_copy} Discover how our platform accelerates growth."
+            if len(meta_copy) > 160:
+                meta_copy = meta_copy[:157].rstrip() + "..."
+            meta_copy = meta_copy[:160]
+
+            return RemediationPatch(
+                **common_kw,
+                title=f"Meta Description: {finding.title[:50]}",
+                category=Category.ON_PAGE_SEO,
+                risk_level=PatchRiskLevel.HUMAN_APPROVAL,
+                target_file="index.html (<head> section)",
+                operation=PatchOperation.REPLACE,
+                before_snippet=str(ev_snippet) if ev_snippet else "<!-- Missing meta description tag -->",
+                after_snippet=f'<meta name="description" content="{meta_copy}">',
+                explanation=finding.recommendation or f"Supplies a {len(meta_copy)}-character meta description within the optimal 140-160 window.",
+                confidence=0.94 if not is_blocked else 0.0,
+                approval_status=PatchApprovalStatus.PENDING,
+                is_blocked=is_blocked,
+                blocked_reason=profile_block_reason if is_blocked else None,
+                metadata_payload={"finding_ref": finding.finding_id, "meta_length": len(meta_copy)},
+            )
+
+        # 3. Document Title tag finding
+        if "title" in rule_id.lower() or ("title" in title_lower and "pixel" not in title_lower and "h1" not in title_lower):
+            is_blocked = profile_blocked
+            if p_path == "/" or not p_path.strip("/"):
+                opt_title = f"{biz_name} — Enterprise {niche} Platform"
+            elif "pricing" in p_path:
+                opt_title = f"{biz_name} Pricing — Transparent Plans for {niche}"
+            elif "about" in p_path:
+                opt_title = f"About {biz_name} — High-Performance {niche}"
+            else:
+                opt_title = f"{p_path.strip('/').replace('-', ' ').title()} | {biz_name} — {niche}"
+            if len(opt_title) < 50:
+                opt_title = f"{opt_title} & Solutions"
+            if len(opt_title) > 60:
+                opt_title = opt_title[:57].rstrip() + "..."
+            opt_title = opt_title[:60]
+
+            return RemediationPatch(
+                **common_kw,
+                title=f"Title Tag Fix: {finding.title[:50]}",
+                category=Category.ON_PAGE_SEO,
+                risk_level=PatchRiskLevel.HUMAN_APPROVAL,
+                target_file="index.html (<head> section)",
+                operation=PatchOperation.REPLACE,
+                before_snippet=str(ev_snippet) if ev_snippet else "<title>Unoptimized Title</title>",
+                after_snippet=f"<title>{opt_title}</title>",
+                explanation=finding.recommendation or f"Optimizes title character density to {len(opt_title)} chars to satisfy Google SERP pixel boundaries (<= 580px).",
+                confidence=0.95 if not is_blocked else 0.0,
+                approval_status=PatchApprovalStatus.PENDING,
+                is_blocked=is_blocked,
+                blocked_reason=profile_block_reason if is_blocked else None,
+                metadata_payload={"finding_ref": finding.finding_id, "title_length": len(opt_title)},
+            )
+
+        # 4. Heading / H1 Hierarchy finding
+        if "h1" in rule_id.lower() or "h1" in title_lower or "heading" in title_lower:
+            is_blocked = profile_blocked
+            headline = f"{biz_name} — {niche} Built for Scale"
+            return RemediationPatch(
+                **common_kw,
+                title=f"Heading Fix: {finding.title[:50]}",
+                category=Category.ON_PAGE_SEO,
+                risk_level=PatchRiskLevel.HUMAN_APPROVAL,
+                target_file="src/components/Hero.tsx or index.html",
+                operation=PatchOperation.REPLACE,
+                before_snippet=str(ev_snippet) if ev_snippet else "<!-- Missing or fragmented <h1> heading -->",
+                after_snippet=f'<h1 class="hero-title text-4xl font-bold tracking-tight text-ink-900">\n  {headline}\n</h1>',
+                explanation=finding.recommendation or "Establishes a single semantic top-level <h1> heading declaring the page's core topic.",
+                confidence=0.93 if not is_blocked else 0.0,
+                approval_status=PatchApprovalStatus.PENDING,
+                is_blocked=is_blocked,
+                blocked_reason=profile_block_reason if is_blocked else None,
+                metadata_payload={"finding_ref": finding.finding_id},
+            )
+
+        # 5. Broken link / HTTP status error finding
+        if "status" in rule_id.lower() or "4xx" in title_lower or "broken link" in title_lower or "5xx" in title_lower:
+            redirect_snippet = (
+                f"// next.config.js\n"
+                f"module.exports = {{\n"
+                f"  async redirects() {{\n"
+                f"    return [\n"
+                f"      {{ source: '{p_path}', destination: '/', permanent: true }}\n"
+                f"    ];\n"
+                f"  }}\n"
+                f"}};\n\n"
+                f"# Nginx (nginx.conf)\n"
+                f"location = {p_path} {{ return 301 /; }}"
+            )
+            return RemediationPatch(
+                **common_kw,
+                title=f"301 Redirect: {finding.title[:50]}",
+                category=Category.TECHNICAL_SEO,
+                risk_level=PatchRiskLevel.DEVELOPER_REQUIRED,
+                target_file="next.config.js or nginx.conf",
+                operation=PatchOperation.UPDATE_FILE,
+                before_snippet="// Server returns HTTP 404 / 500 error",
+                after_snippet=redirect_snippet,
+                explanation=finding.recommendation or f"Configures a permanent 301 redirect for broken route '{p_path}' to stop 404 crawl errors.",
+                confidence=0.96,
+                approval_status=PatchApprovalStatus.APPROVED,
+                metadata_payload={"finding_ref": finding.finding_id, "broken_path": p_path},
+            )
+
+        # 6. Schema finding → Level 1 Safe Auto
         if cat == Category.SCHEMA or "schema" in title_lower or "json-ld" in desc_lower:
             schema_sample = {
                 "@context": "https://schema.org",
@@ -428,9 +575,9 @@ class UniversalPatchEngine:
                 title=f"Resolve Schema Issue: {finding.title[:50]}",
                 category=Category.SCHEMA,
                 risk_level=PatchRiskLevel.SAFE_AUTO,
-                target_file="index.html",
+                target_file="index.html (<head> section)",
                 operation=PatchOperation.UPDATE_JSONLD,
-                before_snippet=finding.evidence[0].snippet if finding.evidence else "<!-- Invalid or missing schema -->",
+                before_snippet=str(ev_snippet) if ev_snippet else "<!-- Invalid or missing schema -->",
                 after_snippet=(
                     f'<script type="application/ld+json">\n{json.dumps(schema_sample, indent=2)}\n</script>'
                     if not is_blocked else ""
@@ -444,47 +591,7 @@ class UniversalPatchEngine:
                 metadata_payload={"finding_ref": finding.finding_id},
             )
 
-        # Meta / Technical → Level 1 or 2
-        if cat in (Category.TECHNICAL_SEO, Category.ON_PAGE_SEO):
-            if "title" in title_lower or "h1" in title_lower:
-                is_blocked = profile_blocked
-                return RemediationPatch(
-                    **common_kw,
-                    title=f"Copy Fix: {finding.title[:50]}",
-                    category=cat,
-                    risk_level=PatchRiskLevel.HUMAN_APPROVAL,
-                    target_file="index.html",
-                    operation=PatchOperation.REPLACE,
-                    before_snippet=finding.evidence[0].snippet if finding.evidence else "<title>Unoptimized Title</title>",
-                    after_snippet=(
-                        f"<title>{biz_name} — {niche}</title>"
-                        if not is_blocked else ""
-                    ),
-                    explanation=finding.recommendation or "Optimizes page title character density to 50-60 compliant length.",
-                    confidence=0.93 if not is_blocked else 0.0,
-                    approval_status=PatchApprovalStatus.PENDING,
-                    is_blocked=is_blocked,
-                    blocked_reason=profile_block_reason if is_blocked else None,
-                    required_evidence="Complete business_name and niche in Business Profile." if is_blocked else None,
-                    metadata_payload={"finding_ref": finding.finding_id},
-                )
-            else:
-                return RemediationPatch(
-                    **common_kw,
-                    title=f"Technical Fix: {finding.title[:50]}",
-                    category=cat,
-                    risk_level=PatchRiskLevel.SAFE_AUTO,
-                    target_file="index.html",
-                    operation=PatchOperation.INSERT_HEAD,
-                    before_snippet=finding.evidence[0].snippet if finding.evidence else "<!-- Missing technical tag -->",
-                    after_snippet='<meta name="robots" content="index, follow, max-image-preview:large" />',
-                    explanation=finding.recommendation or "Ensures indexability and crawler compliance.",
-                    confidence=0.96,
-                    approval_status=PatchApprovalStatus.APPROVED,
-                    metadata_payload={"finding_ref": finding.finding_id},
-                )
-
-        # UX / Copywriting → Level 2
+        # 7. UX / Copywriting → Level 2
         if cat in (Category.CONTENT, Category.UX_CONVERSION):
             is_blocked = profile_blocked
             return RemediationPatch(
@@ -494,7 +601,7 @@ class UniversalPatchEngine:
                 risk_level=PatchRiskLevel.HUMAN_APPROVAL,
                 target_file="index.html",
                 operation=PatchOperation.REPLACE,
-                before_snippet=finding.evidence[0].snippet if finding.evidence else "<!-- Vague copy -->",
+                before_snippet=str(ev_snippet) if ev_snippet else "<!-- Vague copy -->",
                 after_snippet=(
                     f'<p class="value-prop">{val_prop}</p>'
                     if not is_blocked else ""

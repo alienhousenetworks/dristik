@@ -40,6 +40,10 @@ class EngineQueryResult(BaseModel):
     claim_accuracy: str = "ACCURATE"
     sentiment_framing: str = "NEUTRAL"
     competitor_displacement_reason: Optional[str] = None
+    word_count_impression_pct: Optional[float] = None
+    position_adjusted_impression_pct: Optional[float] = None
+    dristik_adjusted_impression_pct: Optional[float] = None
+    unlinked_brand_mentions: int = 0
     failure_reason: Optional[str] = None
     failure_code: Optional[str] = None
 
@@ -73,6 +77,13 @@ class AiCitationTrackingDashboard(BaseModel):
     target_domain: str
     total_queries_tracked: int
     overall_ai_citation_score: Optional[int] = None
+    citation_rate_ci: Optional[Tuple[float, float]] = None
+    mention_rate_ci: Optional[Tuple[float, float]] = None
+    word_count_impression_pct: Optional[float] = None
+    word_count_impression_ci: Optional[Tuple[float, float]] = None
+    position_adjusted_impression_pct: Optional[float] = None
+    dristik_adjusted_impression_pct: Optional[float] = None
+    total_cost_usd: float = 0.0
     engines_breakdown: Dict[str, float] = Field(default_factory=dict)
     tracked_queries: List[RealBuyerQueryEvaluation] = Field(default_factory=list)
     observatory_snapshots: List[ObservatorySnapshot] = Field(default_factory=list)
