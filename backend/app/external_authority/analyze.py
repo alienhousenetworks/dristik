@@ -339,6 +339,28 @@ def _analytics_findings(project_id, domain, period_days, records) -> List[Extern
             "The URL is visible in search and the organic sessions on it engage below 0.4.",
             data_state="INFERRED",
         ))
+    total_revenue = 0.0
+    revenue_pages = []
+    for row in pages:
+        rev = float(row.metadata.get("totalRevenue") or row.metadata.get("purchaseRevenue") or 0.0)
+        if rev > 0:
+            total_revenue += rev
+            revenue_pages.append((row.url or row.metadata.get("page") or "Landing Page", rev))
+
+    if total_revenue > 0:
+        revenue_pages.sort(key=lambda x: x[1], reverse=True)
+        top_page, top_rev = revenue_pages[0]
+        share = top_rev / total_revenue
+        findings.append(_finding(
+            project_id, domain, "search_authority", "INFO", "google_analytics_4", "DIRECT_PROVIDER_EVIDENCE",
+            "organic_revenue_impact", total_revenue, None, period, "PROVIDER_VERIFIED",
+            f"Organic search generated an attributed {total_revenue:,.2f} in revenue across {len(revenue_pages)} landing page(s).",
+            f"Top landing page '{top_page}' accounted for {share:.1%} ({top_rev:,.2f}) of all attributed organic search revenue. {GA4_NOTE}",
+            "Sum stored landing-page revenue metrics from GA4.",
+            "Prioritize technical SEO health and ranking protection for top revenue-generating landing pages.",
+            f"Measured organic revenue impact is {total_revenue:,.2f}.",
+            data_state="MEASURED",
+        ))
     return findings
 
 

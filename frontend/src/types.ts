@@ -275,6 +275,7 @@ export interface BusinessProfile {
   secondary_cta?: string;
   primary_intent: string;
   confidence: number;
+  competitors?: string[];
 }
 
 export interface ThreeWayComparison {
@@ -1073,6 +1074,7 @@ export interface OutcomeRecord {
 export interface ExecutiveReport {
   report_id: string;
   analysis_id?: string;
+  project_id?: string;
   manifest_id?: string;
   sealed_evidence_snapshot_id?: string;
   website_url: string;

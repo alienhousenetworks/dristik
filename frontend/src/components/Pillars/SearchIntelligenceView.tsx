@@ -3,6 +3,7 @@ import { ExecutiveReport, Finding } from '../../types';
 import { Pages } from '../Pages';
 import { SearchConsoleAttributionView } from '../SearchConsoleAttributionView';
 import { IndexationIntelligenceView } from '../IndexationIntelligenceView';
+import { KeywordTrackingView } from '../KeywordTrackingView';
 import { PillarShell } from '../ui';
 
 interface SearchIntelligenceViewProps {
@@ -12,7 +13,7 @@ interface SearchIntelligenceViewProps {
   onOpenConnectors?: (tabId?: string) => void;
 }
 
-type SearchSubTab = 'overview' | 'indexation' | 'technical' | 'onpage' | 'content' | 'links' | 'gsc' | 'pages';
+type SearchSubTab = 'overview' | 'keywords' | 'indexation' | 'technical' | 'onpage' | 'content' | 'links' | 'gsc' | 'pages';
 
 export function SearchIntelligenceView({
   report,
@@ -43,6 +44,7 @@ export function SearchIntelligenceView({
       meta={`${findings.length}`}
       tabs={[
         { id: 'overview', label: 'Overview' },
+        { id: 'keywords', label: 'Keywords & SERP' },
         { id: 'indexation', label: 'Indexation' },
         { id: 'technical', label: 'Technical' },
         { id: 'onpage', label: 'On-page' },
@@ -54,6 +56,15 @@ export function SearchIntelligenceView({
       activeTab={activeSubTab}
       onTab={(id) => setActiveSubTab(id as SearchSubTab)}
     >
+
+      {/* SUB-VIEW: KEYWORDS & SERP TRACKING */}
+      {activeSubTab === 'keywords' && (
+        <KeywordTrackingView
+          projectId={report.project_id || 'default_project'}
+          domain={report.domain}
+          competitors={report.business_profile?.competitors || []}
+        />
+      )}
 
       {/* SUB-VIEW 1: OVERVIEW & HIGH-LEVEL DIAGNOSTICS */}
       {activeSubTab === 'overview' && (

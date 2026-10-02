@@ -1999,3 +1999,100 @@ class AnalysisRun(BaseModel):
     manifest_id: Optional[str] = None
     report_id: Optional[str] = None
 
+
+class TrackedKeyword(BaseModel):
+    keyword_id: str
+    project_id: str
+    domain: str
+    keyword: str
+    target_url: Optional[str] = None
+    intent: str = "Commercial"
+    search_volume: int = 0
+    cpc_usd: float = 0.0
+    competition: float = 0.0
+    keyword_difficulty: Optional[int] = None
+    current_position: Optional[int] = None
+    previous_position: Optional[int] = None
+    best_position: Optional[int] = None
+    position_delta: int = 0
+    serp_features: List[str] = Field(default_factory=list)
+    has_ai_overview: bool = False
+    has_featured_snippet: bool = False
+    is_active: bool = True
+    tags: List[str] = Field(default_factory=list)
+    created_at: Optional[str] = None
+    updated_at: Optional[str] = None
+
+
+class TrackedKeywordCreate(BaseModel):
+    project_id: str
+    domain: str
+    keyword: str
+    target_url: Optional[str] = None
+    intent: Optional[str] = "Commercial"
+    tags: List[str] = Field(default_factory=list)
+
+
+class KeywordSerpSnapshot(BaseModel):
+    history_id: str
+    keyword_id: str
+    project_id: str
+    domain: str
+    position: Optional[int] = None
+    previous_position: Optional[int] = None
+    position_delta: int = 0
+    ranking_url: Optional[str] = None
+    serp_features: List[str] = Field(default_factory=list)
+    has_ai_overview: bool = False
+    has_featured_snippet: bool = False
+    has_local_pack: bool = False
+    snapshot_date: str
+    raw_serp_ref: Optional[str] = None
+
+
+class KeywordCompetitorSnapshot(BaseModel):
+    comp_history_id: str
+    keyword_id: str
+    project_id: str
+    competitor_domain: str
+    position: Optional[int] = None
+    ranking_url: Optional[str] = None
+    snapshot_date: str
+
+
+class KeywordMovementSummary(BaseModel):
+    total_tracked: int = 0
+    improved_count: int = 0
+    declined_count: int = 0
+    stable_count: int = 0
+    top_3_count: int = 0
+    top_10_count: int = 0
+    page_1_breakouts: List[TrackedKeyword] = Field(default_factory=list)
+    significant_drops: List[TrackedKeyword] = Field(default_factory=list)
+    ai_overview_count: int = 0
+
+
+class KeywordGapItem(BaseModel):
+    keyword: str
+    search_volume: int = 0
+    keyword_difficulty: Optional[int] = None
+    cpc_usd: float = 0.0
+    competitor_domain: str
+    competitor_rank: int
+    target_rank: Optional[int] = None
+    gap_type: str = "MISSING_OPPORTUNITY"  # MISSING_OPPORTUNITY, WEAK_PAGE_2, SHARED_BEHIND
+    estimated_monthly_visits_opportunity: int = 0
+    recommended_action: str
+    recommended_page_slug: str
+
+
+class KeywordGapReport(BaseModel):
+    target_domain: str
+    competitor_domains: List[str]
+    total_missing_keywords: int = 0
+    total_weak_keywords: int = 0
+    total_opportunity_traffic: int = 0
+    opportunities: List[KeywordGapItem] = Field(default_factory=list)
+    summary: str = ""
+
+

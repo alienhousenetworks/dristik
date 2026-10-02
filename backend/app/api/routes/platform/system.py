@@ -161,3 +161,19 @@ def cleanup(user: UserIdentity = Admin):
         "cleared_resets": resets,
         "database": store.db_stats(),
     }
+
+
+@router.get("/scheduler/status")
+def scheduler_status(user: UserIdentity = Admin):
+    _admin_guard(user)
+    from app.workers.scheduler import scheduler
+    return scheduler.status()
+
+
+@router.post("/scheduler/trigger")
+async def trigger_scheduler_tick(user: UserIdentity = Admin):
+    _admin_guard(user)
+    from app.workers.scheduler import scheduler
+    result = await scheduler.tick()
+    return {"ok": True, "result": result}
+

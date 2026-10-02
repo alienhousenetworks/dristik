@@ -34,13 +34,21 @@ class ExternalStore:
         return conn
 
     def ensure_schema(self) -> None:
-        script = _SCHEMA.read_text(encoding="utf-8")
+        migrations_dir = Path(__file__).resolve().parent / "migrations"
+        migration_files = sorted(migrations_dir.glob("*.sql"))
         with self._lock, self._connect() as conn:
-            conn.executescript(script)
-            conn.execute(
-                "INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES (1, ?)",
-                (isoformat(utcnow()),),
-            )
+            for m_file in migration_files:
+                version_str = m_file.stem.split("_")[0]
+                try:
+                    version = int(version_str)
+                except ValueError:
+                    version = 1
+                script = m_file.read_text(encoding="utf-8")
+                conn.executescript(script)
+                conn.execute(
+                    "INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES (?, ?)",
+                    (version, isoformat(utcnow())),
+                )
 
     def upsert_connection(self, row: Dict[str, Any], secret: Optional[Dict[str, Any]] = None) -> str:
         now = isoformat(utcnow())
@@ -536,6 +544,190 @@ class ExternalStore:
             ).fetchone()
         return row["token_ciphertext"] if row else None
 
+    def upsert_project_keyword(self, row: Dict[str, Any]) -> str:
+        keyword_id = row.get("keyword_id") or stable_id("kw_", row["project_id"], row["keyword"])
+        now = isoformat(utcnow())
+        with self._lock, self._connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO project_keywords (
+                    keyword_id, project_id, domain, keyword, target_url, intent,
+                    search_volume, cpc_usd, competition, keyword_difficulty,
+                    current_position, previous_position, best_position,
+                    serp_features_json, is_active, tags_json, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(project_id, keyword) DO UPDATE SET
+                    domain=excluded.domain,
+                    target_url=COALESCE(excluded.target_url, project_keywords.target_url),
+                    intent=excluded.intent,
+                    search_volume=COALESCE(excluded.search_volume, project_keywords.search_volume),
+                    cpc_usd=COALESCE(excluded.cpc_usd, project_keywords.cpc_usd),
+                    competition=COALESCE(excluded.competition, project_keywords.competition),
+                    keyword_difficulty=COALESCE(excluded.keyword_difficulty, project_keywords.keyword_difficulty),
+                    current_position=COALESCE(excluded.current_position, project_keywords.current_position),
+                    previous_position=COALESCE(excluded.previous_position, project_keywords.previous_position),
+                    best_position=CASE 
+                        WHEN excluded.current_position IS NOT NULL AND (project_keywords.best_position IS NULL OR excluded.current_position < project_keywords.best_position)
+                        THEN excluded.current_position 
+                        ELSE project_keywords.best_position 
+                    END,
+                    serp_features_json=COALESCE(excluded.serp_features_json, project_keywords.serp_features_json),
+                    is_active=excluded.is_active,
+                    tags_json=COALESCE(excluded.tags_json, project_keywords.tags_json),
+                    updated_at=excluded.updated_at
+                """,
+                (
+                    keyword_id,
+                    row["project_id"],
+                    row.get("domain", ""),
+                    row["keyword"].strip(),
+                    row.get("target_url"),
+                    row.get("intent", "Commercial"),
+                    int(row.get("search_volume") or 0),
+                    float(row.get("cpc_usd") or 0.0),
+                    float(row.get("competition") or 0.0),
+                    row.get("keyword_difficulty"),
+                    row.get("current_position"),
+                    row.get("previous_position"),
+                    row.get("best_position") or row.get("current_position"),
+                    json.dumps(row.get("serp_features") or []),
+                    int(row.get("is_active", 1)),
+                    json.dumps(row.get("tags") or []),
+                    row.get("created_at") or now,
+                    now,
+                ),
+            )
+        return keyword_id
+
+    def list_project_keywords(self, project_id: str, active_only: bool = True) -> List[Dict[str, Any]]:
+        query = "SELECT * FROM project_keywords WHERE project_id=?"
+        params: List[Any] = [project_id]
+        if active_only:
+            query += " AND is_active=1"
+        query += " ORDER BY search_volume DESC, created_at DESC"
+        with self._lock, self._connect() as conn:
+            rows = conn.execute(query, params).fetchall()
+        return [_keyword_dict(r) for r in rows]
+
+    def get_project_keyword(self, keyword_id: str) -> Optional[Dict[str, Any]]:
+        with self._lock, self._connect() as conn:
+            row = conn.execute("SELECT * FROM project_keywords WHERE keyword_id=?", (keyword_id,)).fetchone()
+        return _keyword_dict(row) if row else None
+
+    def delete_project_keyword(self, project_id: str, keyword_id: str) -> bool:
+        with self._lock, self._connect() as conn:
+            cur = conn.execute("DELETE FROM project_keywords WHERE project_id=? AND keyword_id=?", (project_id, keyword_id))
+        return cur.rowcount > 0
+
+    def record_keyword_serp_history(self, row: Dict[str, Any]) -> str:
+        history_id = row.get("history_id") or stable_id("ksh_", row["keyword_id"], row["snapshot_date"])
+        now = isoformat(utcnow())
+        with self._lock, self._connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO keyword_serp_history (
+                    history_id, keyword_id, project_id, domain, position, previous_position,
+                    position_delta, ranking_url, serp_features_json, has_ai_overview,
+                    has_featured_snippet, has_local_pack, snapshot_date, raw_serp_ref, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(history_id) DO UPDATE SET
+                    position=excluded.position,
+                    previous_position=excluded.previous_position,
+                    position_delta=excluded.position_delta,
+                    ranking_url=excluded.ranking_url,
+                    serp_features_json=excluded.serp_features_json,
+                    has_ai_overview=excluded.has_ai_overview,
+                    has_featured_snippet=excluded.has_featured_snippet,
+                    has_local_pack=excluded.has_local_pack
+                """,
+                (
+                    history_id,
+                    row["keyword_id"],
+                    row["project_id"],
+                    row["domain"],
+                    row.get("position"),
+                    row.get("previous_position"),
+                    int(row.get("position_delta") or 0),
+                    row.get("ranking_url"),
+                    json.dumps(row.get("serp_features") or []),
+                    int(bool(row.get("has_ai_overview"))),
+                    int(bool(row.get("has_featured_snippet"))),
+                    int(bool(row.get("has_local_pack"))),
+                    row["snapshot_date"],
+                    row.get("raw_serp_ref"),
+                    now,
+                ),
+            )
+            conn.execute(
+                """
+                UPDATE project_keywords SET
+                    previous_position=COALESCE(?, current_position),
+                    current_position=?,
+                    best_position=CASE 
+                        WHEN ? IS NOT NULL AND (best_position IS NULL OR ? < best_position) THEN ?
+                        ELSE best_position
+                    END,
+                    serp_features_json=?,
+                    updated_at=?
+                WHERE keyword_id=?
+                """,
+                (
+                    row.get("previous_position"),
+                    row.get("position"),
+                    row.get("position"),
+                    row.get("position"),
+                    row.get("position"),
+                    json.dumps(row.get("serp_features") or []),
+                    now,
+                    row["keyword_id"],
+                ),
+            )
+        return history_id
+
+    def get_keyword_serp_history(self, keyword_id: str, limit: int = 30) -> List[Dict[str, Any]]:
+        with self._lock, self._connect() as conn:
+            rows = conn.execute(
+                "SELECT * FROM keyword_serp_history WHERE keyword_id=? ORDER BY snapshot_date DESC LIMIT ?",
+                (keyword_id, limit),
+            ).fetchall()
+        return [_history_dict(r) for r in rows]
+
+    def record_keyword_competitors(self, rows: List[Dict[str, Any]]) -> int:
+        count = 0
+        with self._lock, self._connect() as conn:
+            for r in rows:
+                comp_id = r.get("comp_history_id") or stable_id("kc_", r["keyword_id"], r["competitor_domain"], r["snapshot_date"])
+                conn.execute(
+                    """
+                    INSERT OR REPLACE INTO keyword_competitors (
+                        comp_history_id, keyword_id, project_id, competitor_domain,
+                        position, ranking_url, snapshot_date
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        comp_id,
+                        r["keyword_id"],
+                        r["project_id"],
+                        r["competitor_domain"],
+                        r.get("position"),
+                        r.get("ranking_url"),
+                        r["snapshot_date"],
+                    ),
+                )
+                count += 1
+        return count
+
+    def get_keyword_competitors(self, keyword_id: str, snapshot_date: Optional[str] = None) -> List[Dict[str, Any]]:
+        query = "SELECT * FROM keyword_competitors WHERE keyword_id=?"
+        params = [keyword_id]
+        if snapshot_date:
+            query += " AND snapshot_date=?"
+            params.append(snapshot_date)
+        query += " ORDER BY position ASC"
+        with self._lock, self._connect() as conn:
+            rows = conn.execute(query, params).fetchall()
+        return [dict(r) for r in rows]
+
 
 def datetime_from_iso(value: str):
     text = value.replace("Z", "+00:00")
@@ -601,3 +793,25 @@ def _job_dict(row: sqlite3.Row) -> Dict[str, Any]:
     data["result"] = json.loads(raw) if raw else None
     data.pop("result_json", None)
     return data
+
+
+def _keyword_dict(row: sqlite3.Row) -> Dict[str, Any]:
+    data = dict(row)
+    data["serp_features"] = json.loads(data.pop("serp_features_json") or "[]")
+    data["tags"] = json.loads(data.pop("tags_json") or "[]")
+    curr = data.get("current_position")
+    prev = data.get("previous_position")
+    data["position_delta"] = (prev - curr) if (prev is not None and curr is not None) else 0
+    data["has_ai_overview"] = "ai_overview" in data["serp_features"]
+    data["has_featured_snippet"] = "featured_snippet" in data["serp_features"]
+    return data
+
+
+def _history_dict(row: sqlite3.Row) -> Dict[str, Any]:
+    data = dict(row)
+    data["serp_features"] = json.loads(data.pop("serp_features_json") or "[]")
+    data["has_ai_overview"] = bool(data.get("has_ai_overview"))
+    data["has_featured_snippet"] = bool(data.get("has_featured_snippet"))
+    data["has_local_pack"] = bool(data.get("has_local_pack"))
+    return data
+

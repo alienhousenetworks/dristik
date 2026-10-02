@@ -3,6 +3,7 @@ import { ExecutiveReport } from '../../types';
 import { CommercialBakeoffView } from '../CommercialBakeoffView';
 import { CompetitorSideBySideBenchmark } from '../CompetitorSideBySideBenchmark';
 import { CompetitorDiscoveryView } from '../CompetitorDiscoveryView';
+import { CompetitorKeywordGapView } from '../CompetitorKeywordGapView';
 import { Perspectives } from '../Perspectives';
 import { PillarShell, Card } from '../ui';
 import { Swords, BarChart3, Compass, GitCompare, ArrowRight } from 'lucide-react';
@@ -13,7 +14,7 @@ interface CompetitorWorkspaceViewProps {
   websiteUrl?: string;
 }
 
-type CompSubTab = 'bakeoff' | 'benchmark' | 'discovery' | 'perspectives';
+type CompSubTab = 'bakeoff' | 'benchmark' | 'discovery' | 'keyword_gap' | 'perspectives';
 
 export function CompetitorWorkspaceView({
   report,
@@ -39,6 +40,7 @@ export function CompetitorWorkspaceView({
       tabs={[
         { id: 'bakeoff', label: 'Commercial Query Bake-off' },
         { id: 'benchmark', label: 'Side-by-Side Benchmark' },
+        { id: 'keyword_gap', label: 'Keyword Gap Analysis' },
         { id: 'discovery', label: 'Market Gap Discovery' },
         { id: 'perspectives', label: 'Three-Way Perspective' },
       ]}
@@ -68,7 +70,18 @@ export function CompetitorWorkspaceView({
       )}
 
       {/* ─────────────────────────────────────────────────────────────
-          SUB-TAB 3: MARKET GAP DISCOVERY
+          SUB-TAB 3: KEYWORD GAP ANALYSIS
+          ───────────────────────────────────────────────────────────── */}
+      {activeSubTab === 'keyword_gap' && (
+        <CompetitorKeywordGapView
+          targetDomain={report.domain}
+          initialCompetitors={report.business_profile?.competitors || []}
+          projectId={report.project_id || 'default_project'}
+        />
+      )}
+
+      {/* ─────────────────────────────────────────────────────────────
+          SUB-TAB 4: MARKET GAP DISCOVERY
           ───────────────────────────────────────────────────────────── */}
       {activeSubTab === 'discovery' && (
         <CompetitorDiscoveryView

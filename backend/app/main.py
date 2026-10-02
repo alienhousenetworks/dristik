@@ -28,7 +28,18 @@ async def lifespan(_app: FastAPI):
         ExternalStore().ensure_schema()
     except Exception as exc:
         logging.getLogger(__name__).info("external authority schema init skipped: %s", type(exc).__name__)
+    try:
+        from app.workers.scheduler import scheduler
+        await scheduler.start()
+    except Exception as exc:
+        logging.getLogger(__name__).warning("Autonomous scheduler startup skipped: %s", exc)
     yield
+    try:
+        from app.workers.scheduler import scheduler
+        await scheduler.stop()
+    except Exception as exc:
+        logging.getLogger(__name__).warning("Autonomous scheduler shutdown skipped: %s", exc)
+
 
 
 app = FastAPI(
