@@ -21,25 +21,26 @@ import { ConfirmDialog, EmptyState, ErrorState, LoadingBlock, PageHeader, notify
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { AppShell } from './layouts/AppShell';
 import { parseNavigation, syncAnalysisQuery } from './routes/navigation';
+import { lazyWithRetry } from './utils/lazyWithRetry';
 
-const Overview = lazy(() => import('./components/Overview').then((m) => ({ default: m.Overview })));
-const Findings = lazy(() => import('./components/Findings').then((m) => ({ default: m.Findings })));
-const Roadmap = lazy(() => import('./components/Roadmap').then((m) => ({ default: m.Roadmap })));
-const Report = lazy(() => import('./components/Report').then((m) => ({ default: m.Report })));
-const Big4AuditReport = lazy(() => import('./components/Big4AuditReport').then((m) => ({ default: m.Big4AuditReport })));
-const AuditPdfReport = lazy(() => import('./components/AuditPdfReport').then((m) => ({ default: m.AuditPdfReport })));
-const Pricing = lazy(() => import('./components/Pricing').then((m) => ({ default: m.Pricing })));
-const SystemPanel = lazy(() => import('./components/SystemPanel').then((m) => ({ default: m.SystemPanel })));
-const ExternalAuthorityView = lazy(() => import('./components/ExternalAuthorityView').then((m) => ({ default: m.ExternalAuthorityView })));
-const SeoWorkspaceView = lazy(() => import('./components/Pillars/SeoWorkspaceView').then((m) => ({ default: m.SeoWorkspaceView })));
-const GeoWorkspaceView = lazy(() => import('./components/Pillars/GeoWorkspaceView').then((m) => ({ default: m.GeoWorkspaceView })));
-const AeoWorkspaceView = lazy(() => import('./components/Pillars/AeoWorkspaceView').then((m) => ({ default: m.AeoWorkspaceView })));
-const CroWorkspaceView = lazy(() => import('./components/Pillars/CroWorkspaceView').then((m) => ({ default: m.CroWorkspaceView })));
-const CompetitorWorkspaceView = lazy(() => import('./components/Pillars/CompetitorWorkspaceView').then((m) => ({ default: m.CompetitorWorkspaceView })));
-const DevPatchPackView = lazy(() => import('./components/DevPatchPackView').then((m) => ({ default: m.DevPatchPackView })));
-const VerificationWorkspaceView = lazy(() => import('./components/VerificationWorkspaceView').then((m) => ({ default: m.VerificationWorkspaceView })));
-const Pages = lazy(() => import('./components/Pages').then((m) => ({ default: m.Pages })));
-const CostLedgerView = lazy(() => import('./components/CostLedgerView').then((m) => ({ default: m.CostLedgerView })));
+const Overview = lazyWithRetry(() => import('./components/Overview').then((m) => ({ default: m.Overview })));
+const Findings = lazyWithRetry(() => import('./components/Findings').then((m) => ({ default: m.Findings })));
+const Roadmap = lazyWithRetry(() => import('./components/Roadmap').then((m) => ({ default: m.Roadmap })));
+const Report = lazyWithRetry(() => import('./components/Report').then((m) => ({ default: m.Report })));
+const Big4AuditReport = lazyWithRetry(() => import('./components/Big4AuditReport').then((m) => ({ default: m.Big4AuditReport })));
+const AuditPdfReport = lazyWithRetry(() => import('./components/AuditPdfReport').then((m) => ({ default: m.AuditPdfReport })));
+const Pricing = lazyWithRetry(() => import('./components/Pricing').then((m) => ({ default: m.Pricing })));
+const SystemPanel = lazyWithRetry(() => import('./components/SystemPanel').then((m) => ({ default: m.SystemPanel })));
+const ExternalAuthorityView = lazyWithRetry(() => import('./components/ExternalAuthorityView').then((m) => ({ default: m.ExternalAuthorityView })));
+const SeoWorkspaceView = lazyWithRetry(() => import('./components/Pillars/SeoWorkspaceView').then((m) => ({ default: m.SeoWorkspaceView })));
+const GeoWorkspaceView = lazyWithRetry(() => import('./components/Pillars/GeoWorkspaceView').then((m) => ({ default: m.GeoWorkspaceView })));
+const AeoWorkspaceView = lazyWithRetry(() => import('./components/Pillars/AeoWorkspaceView').then((m) => ({ default: m.AeoWorkspaceView })));
+const CroWorkspaceView = lazyWithRetry(() => import('./components/Pillars/CroWorkspaceView').then((m) => ({ default: m.CroWorkspaceView })));
+const CompetitorWorkspaceView = lazyWithRetry(() => import('./components/Pillars/CompetitorWorkspaceView').then((m) => ({ default: m.CompetitorWorkspaceView })));
+const DevPatchPackView = lazyWithRetry(() => import('./components/DevPatchPackView').then((m) => ({ default: m.DevPatchPackView })));
+const VerificationWorkspaceView = lazyWithRetry(() => import('./components/VerificationWorkspaceView').then((m) => ({ default: m.VerificationWorkspaceView })));
+const Pages = lazyWithRetry(() => import('./components/Pages').then((m) => ({ default: m.Pages })));
+const CostLedgerView = lazyWithRetry(() => import('./components/CostLedgerView').then((m) => ({ default: m.CostLedgerView })));
 
 export function App() {
   const initial = parseNavigation();

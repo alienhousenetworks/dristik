@@ -4,12 +4,15 @@ Queries Anthropic's Messages API to evaluate brand retrieval and technical synth
 """
 from __future__ import annotations
 
+import logging
 import re
 import time
 from typing import Any, Dict, List, Optional
 import httpx
 
 from app.intelligence.geo.adapters.base import BaseGeoEngineAdapter, EngineRawResponse
+
+logger = logging.getLogger(__name__)
 
 ANTHROPIC_API_URL = "https://api.anthropic.com/v1/messages"
 DEFAULT_TIMEOUT_SECONDS = 14.0
@@ -40,7 +43,7 @@ class ClaudeAdapter(BaseGeoEngineAdapter):
             )
 
         headers = {
-            "x-api-key": self.api_key,
+            "x-api-key": self.api_key.strip(),
             "anthropic-version": "2023-06-01",
             "content-type": "application/json",
         }
@@ -75,6 +78,9 @@ class ClaudeAdapter(BaseGeoEngineAdapter):
                         latency_ms=latency,
                     )
                 else:
+                    logger.warning(
+                        f"[ClaudeAdapter] HTTP {res.status_code} from Anthropic API (model: {self.model}): {res.text[:300]}"
+                    )
                     return EngineRawResponse(
                         engine_id=self.engine_id,
                         engine_name=self.display_name,

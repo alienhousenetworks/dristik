@@ -4,12 +4,15 @@ Queries high-speed Llama 3.3 models via Groq's API.
 """
 from __future__ import annotations
 
+import logging
 import re
 import time
 from typing import Any, Dict, List, Optional
 import httpx
 
 from app.intelligence.geo.adapters.base import BaseGeoEngineAdapter, EngineRawResponse
+
+logger = logging.getLogger(__name__)
 
 GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
 DEFAULT_TIMEOUT_SECONDS = 10.0
@@ -40,7 +43,7 @@ class GroqAdapter(BaseGeoEngineAdapter):
             )
 
         headers = {
-            "Authorization": f"Bearer {self.api_key}",
+            "Authorization": f"Bearer {self.api_key.strip()}",
             "Content-Type": "application/json",
         }
         payload = {
@@ -77,6 +80,9 @@ class GroqAdapter(BaseGeoEngineAdapter):
                         latency_ms=latency,
                     )
                 else:
+                    logger.warning(
+                        f"[GroqAdapter] HTTP {res.status_code} from Groq API (model: {self.model}): {res.text[:300]}"
+                    )
                     return EngineRawResponse(
                         engine_id=self.engine_id,
                         engine_name=self.display_name,

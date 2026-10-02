@@ -284,6 +284,7 @@ class GeoBenchmarkRunner:
 
         # 3. Concurrently Dispatch Queries
         sem = asyncio.Semaphore(5)  # Max 5 concurrent external engine calls
+        disabled_engines: Dict[str, EngineRawResponse] = {}
 
         async def _run_single(
             ad: BaseGeoEngineAdapter,
@@ -291,60 +292,73 @@ class GeoBenchmarkRunner:
             client: httpx.AsyncClient,
             run_index: int,
         ) -> EvaluatedQueryRun:
-            async with sem:
-                resp = await ad.execute_query(q.query_text, locale=locale, client=client)
-                has_mention, pos = self._detect_mention_and_position(resp.raw_content, brand, clean_domain)
-                sources, quality, is_1p = self._classify_sources(resp.citations, resp.raw_content, clean_domain)
+            if ad.engine_id in disabled_engines:
+                resp = disabled_engines[ad.engine_id]
+            else:
+                async with sem:
+                    if ad.engine_id in disabled_engines:
+                        resp = disabled_engines[ad.engine_id]
+                    else:
+                        resp = await ad.execute_query(q.query_text, locale=locale, client=client)
+                        if resp.status_code in (400, 401, 403, 404):
+                            logger.warning(
+                                f"[GEO Benchmark] Engine '{ad.engine_id}' failed with HTTP {resp.status_code} ({resp.error}). "
+                                f"Short-circuiting remaining queries for this engine to avoid repeated errors."
+                            )
+                            disabled_engines[ad.engine_id] = resp
 
-                # Compute Aggarwal et al. continuous impression metrics & sentence breakdown
-                imp_res = calculate_response_impressions(
-                    raw_response=resp.raw_content or "",
-                    citations=resp.citations or [],
-                    target_domain=clean_domain,
-                    brand_name=brand,
-                )
+            has_mention, pos = self._detect_mention_and_position(resp.raw_content, brand, clean_domain)
+            sources, quality, is_1p = self._classify_sources(resp.citations, resp.raw_content, clean_domain)
 
-                # Cost estimation (~$0.003/1k input words, ~$0.015/1k output words)
-                in_words = len((q.query_text or "").split())
-                out_words = len((resp.raw_content or "").split())
-                run_cost = round((in_words * 0.000003) + (out_words * 0.000015), 6)
+            # Compute Aggarwal et al. continuous impression metrics & sentence breakdown
+            imp_res = calculate_response_impressions(
+                raw_response=resp.raw_content or "",
+                citations=resp.citations or [],
+                target_domain=clean_domain,
+                brand_name=brand,
+            )
 
-                status = "SUCCESS"
-                if resp.status_code == 401 or "Missing" in (resp.error or ""):
-                    status = "KEY_MISSING"
-                elif resp.status_code == 504:
-                    status = "TIMEOUT"
-                elif resp.error:
-                    status = "ERROR"
+            # Cost estimation (~$0.003/1k input words, ~$0.015/1k output words)
+            in_words = len((q.query_text or "").split())
+            out_words = len((resp.raw_content or "").split())
+            run_cost = round((in_words * 0.000003) + (out_words * 0.000015), 6)
 
-                return EvaluatedQueryRun(
-                    query_id=q.query_id,
-                    category=q.category,
-                    query_text=q.query_text,
-                    engine_id=ad.engine_id,
-                    engine_name=ad.display_name,
-                    model_version=ad.model,
-                    timestamp=resp.queried_at,
-                    locale=locale,
-                    latency_ms=resp.latency_ms,
-                    raw_response=resp.raw_content,
-                    citations=resp.citations,
-                    was_mentioned=has_mention,
-                    mention_position=pos,
-                    was_first_party_cited=is_1p,
-                    word_count_impression_pct=imp_res.word_count_impression_pct,
-                    position_adjusted_impression_pct=imp_res.position_adjusted_impression_pct,
-                    dristik_adjusted_impression_pct=imp_res.dristik_adjusted_impression_pct,
-                    unlinked_brand_mentions=imp_res.unlinked_brand_sentences,
-                    sentence_count=imp_res.total_sentences,
-                    total_words=imp_res.total_words,
-                    cost_usd=run_cost,
-                    source_domains=sources,
-                    source_quality=quality,
-                    status=status,
-                    error_message=resp.error,
-                    run_index=run_index,
-                )
+            status = "SUCCESS"
+            if resp.status_code == 401 or "Missing" in (resp.error or ""):
+                status = "KEY_MISSING"
+            elif resp.status_code == 504:
+                status = "TIMEOUT"
+            elif resp.error:
+                status = "ERROR"
+
+            return EvaluatedQueryRun(
+                query_id=q.query_id,
+                category=q.category,
+                query_text=q.query_text,
+                engine_id=ad.engine_id,
+                engine_name=ad.display_name,
+                model_version=ad.model,
+                timestamp=resp.queried_at,
+                locale=locale,
+                latency_ms=resp.latency_ms,
+                raw_response=resp.raw_content,
+                citations=resp.citations,
+                was_mentioned=has_mention,
+                mention_position=pos,
+                was_first_party_cited=is_1p,
+                word_count_impression_pct=imp_res.word_count_impression_pct,
+                position_adjusted_impression_pct=imp_res.position_adjusted_impression_pct,
+                dristik_adjusted_impression_pct=imp_res.dristik_adjusted_impression_pct,
+                unlinked_brand_mentions=imp_res.unlinked_brand_sentences,
+                sentence_count=imp_res.total_sentences,
+                total_words=imp_res.total_words,
+                cost_usd=run_cost,
+                source_domains=sources,
+                source_quality=quality,
+                status=status,
+                error_message=resp.error,
+                run_index=run_index,
+            )
 
         tasks = []
         async with httpx.AsyncClient(timeout=18.0) as client:
