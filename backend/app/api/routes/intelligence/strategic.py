@@ -13,6 +13,8 @@ from app.intelligence.competitive.benchmark import (
     CompetitiveBenchmarkResult,
     CompetitorPillarScores,
 )
+from app.intelligence.competitive.engine import competitive_intelligence_engine
+from app.intelligence.competitive.models import DristikCompetitiveReport
 from app.intelligence.business.search_console import search_console_engine, SearchConsoleAttributionReport
 from app.intelligence.citations.tracker import ai_citation_tracker, AiCitationTrackingDashboard
 from app.intelligence.geo.benchmark_runner import benchmark_runner, GeoBenchmarkReport
@@ -55,6 +57,51 @@ async def get_competitor_benchmark(
         url,
         competitor_urls=competitor_urls,
         honest_scores=honest_scores
+    )
+
+@router.get("/competitors/report", response_model=DristikCompetitiveReport)
+async def get_unified_competitive_report(
+    analysis_id: Optional[str] = None,
+    domain: Optional[str] = None,
+    competitors: Optional[List[str]] = Query(None)
+):
+    """
+    Returns the evidence-backed Dristik Competitive Intelligence Report.
+    Includes dynamic (X, Y) landscape coordinates, multi-type competitor classification,
+    dimensional gaps, causal explainability proofs, and empirical evidence table.
+    """
+    bp = None
+    pages = []
+    evals = []
+    obs = []
+    resolved_domain = domain or ""
+
+    if analysis_id:
+        run = orchestrator.get_run(analysis_id)
+        if run and run.report:
+            # Check cached report first
+            if getattr(run.report, "competitive_report", None):
+                try:
+                    return DristikCompetitiveReport(**run.report.competitive_report)
+                except Exception:
+                    pass
+            bp = run.report.business_profile
+            resolved_domain = run.report.domain or resolved_domain
+            pages = (run.report.crawl_manifest.pages if run.report.crawl_manifest else [])
+            evals = run.report.commercial_evaluations or []
+            obs = getattr(run.report, "observatory_records", []) or []
+
+    if not resolved_domain:
+        raise HTTPException(status_code=400, detail="Either domain or a valid analysis_id is required.")
+
+    return competitive_intelligence_engine.build_competitive_report(
+        target_domain=resolved_domain,
+        business_profile=bp,
+        target_pages=pages,
+        competitor_domains=competitors,
+        commercial_evaluations=evals,
+        observatory_records=obs,
+        audit_id=analysis_id,
     )
 
 class CompetitiveBenchmarkRequest(BaseModel):

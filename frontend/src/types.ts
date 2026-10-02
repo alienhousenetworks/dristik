@@ -1202,9 +1202,105 @@ export interface ExecutiveReport {
   scoring_explanation?: string;
   observatory_records?: ObservatoryRecord[];
   competitive_evidence_graph?: CompetitiveEvidenceGraphResult;
+  competitive_report?: DristikCompetitiveReport;
   local_seo?: LocalSeoAuditReport;
   international_seo?: InternationalSeoAuditReport;
   topical_authority?: TopicalAuthorityAuditReport;
+}
+
+export type CompetitorType =
+  | 'DIRECT'
+  | 'SEARCH'
+  | 'GEO'
+  | 'CONTENT'
+  | 'COMMERCIAL'
+  | 'LOCAL'
+  | 'INDIRECT'
+  | 'EMERGING';
+
+export type EvidenceConfidence = 'HIGH' | 'MEDIUM' | 'LOW' | 'UNMEASURED';
+
+export interface CompetitorEvidenceItem {
+  id: string;
+  competitor_id: string;
+  evidence_type: string;
+  metric: string;
+  value?: any;
+  unit: string;
+  source_url?: string;
+  source_type: string;
+  observed_at: string;
+  confidence: EvidenceConfidence;
+  audit_id?: string;
+  query?: string;
+  notes?: string;
+}
+
+export interface CompetitorProfile {
+  id: string;
+  canonical_domain: string;
+  company_name: string;
+  competitor_types: CompetitorType[];
+  industry?: string;
+  geography?: string;
+  discovery_sources: string[];
+  discovery_confidence: number;
+  evidence: CompetitorEvidenceItem[];
+}
+
+export interface DimensionScore {
+  dimension: string;
+  score?: number | null;
+  confidence: EvidenceConfidence;
+  status: string;
+  evidence_count: number;
+  key_metrics?: Record<string, any>;
+}
+
+export interface LandscapeCoordinates {
+  x: number;
+  y: number;
+  x_confidence: EvidenceConfidence;
+  y_confidence: EvidenceConfidence;
+  weights_used?: Record<string, any>;
+}
+
+export interface CompetitiveGapDimension {
+  dimension_name: string;
+  dimension_key: string;
+  target_score?: number | null;
+  competitor_scores: Record<string, number | null>;
+  deltas: Record<string, number | null>;
+  verdict: string;
+}
+
+export interface CausalAdvantageExplanation {
+  competitor_domain: string;
+  competitor_name: string;
+  reasons_they_outperform: string[];
+  areas_target_wins: string[];
+}
+
+export interface CompetitiveEvidenceTableRow {
+  dimension: string;
+  dimension_key: string;
+  target_value?: string | null;
+  competitor_values: Record<string, string | null>;
+  provenance_note: string;
+  is_measured: boolean;
+}
+
+export interface DristikCompetitiveReport {
+  target_domain: string;
+  target_brand: string;
+  market_niche: string;
+  competitors: CompetitorProfile[];
+  dimension_scores: Record<string, Record<string, DimensionScore>>;
+  landscape_coordinates: Record<string, LandscapeCoordinates>;
+  gap_matrix: CompetitiveGapDimension[];
+  causal_explanations: CausalAdvantageExplanation[];
+  evidence_table: CompetitiveEvidenceTableRow[];
+  generated_at: string;
 }
 
 export interface NapRecord {

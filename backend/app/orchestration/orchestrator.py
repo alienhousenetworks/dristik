@@ -1243,6 +1243,17 @@ class AnalysisOrchestrator:
                 observatory_records=(ai_visibility_scorecard.observatory_records if ai_visibility_scorecard else []),
             )
 
+            from app.intelligence.competitive.engine import competitive_intelligence_engine
+            comp_report_obj = competitive_intelligence_engine.build_competitive_report(
+                target_domain=domain,
+                business_profile=blackboard.business_profile,
+                target_pages=eval_pages,
+                competitor_domains=getattr(blackboard.business_profile, "competitors", []) if blackboard.business_profile else [],
+                commercial_evaluations=blackboard.commercial_evaluations,
+                observatory_records=(ai_visibility_scorecard.observatory_records if ai_visibility_scorecard else []),
+                audit_id=analysis_id,
+            )
+
             # Synthesize final Causal Diagnostic Chains with multi-source evidence
             causal_diagnostic_chains = self.causal_engine.analyze_root_causes(
                 claims=current_claims,
@@ -1351,6 +1362,7 @@ class AnalysisOrchestrator:
                 causal_diagnostic_chains=causal_diagnostic_chains,
                 observatory_records=(ai_visibility_scorecard.observatory_records if ai_visibility_scorecard else []),
                 competitive_evidence_graph=comp_graph_res.model_dump(),
+                competitive_report=comp_report_obj.model_dump(),
                 indexation_intelligence=indexation_rollup_rep,
                 local_seo=local_seo_rep,
                 international_seo=intl_seo_rep,

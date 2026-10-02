@@ -118,6 +118,10 @@ cd "${ROOT_DIR}"
 # Ensure backend/.env is synchronized with root .env
 cp "${ENV_FILE}" "${ROOT_DIR}/backend/.env" 2>/dev/null || true
 
+# Enable Docker BuildKit for parallel, cached, high-speed builds
+export DOCKER_BUILDKIT=1
+export COMPOSE_DOCKER_CLI_BUILD=1
+
 # Shut down any previous containers cleanly
 $COMPOSE_CMD down --remove-orphans 2>/dev/null || true
 

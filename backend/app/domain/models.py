@@ -1958,6 +1958,7 @@ class ExecutiveReport(BaseModel):
     scoring_explanation: Optional[str] = None
     observatory_records: List[Dict[str, Any]] = Field(default_factory=list)
     competitive_evidence_graph: Optional[Dict[str, Any]] = None
+    competitive_report: Optional[Dict[str, Any]] = None
     indexation_intelligence: Optional[IndexationAuditRollup] = None
     local_seo: Optional[LocalSeoAuditReport] = None
     international_seo: Optional[InternationalSeoAuditReport] = None
