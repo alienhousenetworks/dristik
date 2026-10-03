@@ -348,21 +348,25 @@ code {
     color-scheme: light;
     --paper: 255 255 255;
     --paper-50: 255 255 255;
-    --paper-100: 247 247 247;
-    --paper-200: 238 238 238;
-    --paper-300: 226 226 226;
-    --ink: 17 17 17;
-    --ink-500: 51 51 51;
-    --ink-700: 34 34 34;
-    --line: 210 210 210;
-    --pine: 17 17 17;
-    --pine-solid: 17 17 17;
+    --paper-100: 248 250 252;
+    --paper-200: 241 245 249;
+    --paper-300: 226 232 240;
+    --ink: 15 23 42;
+    --ink-500: 51 65 85;
+    --ink-700: 30 41 59;
+    --line: 226 232 240;
+    --pine: 15 23 42;
+    --pine-solid: 15 23 42;
     --on-solid: 255 255 255;
   }
 
   @page {
     size: A4 portrait;
-    margin: 10mm 10mm 12mm 10mm;
+    margin: 12mm 14mm 14mm 14mm;
+  }
+
+  @page :first {
+    margin: 0;
   }
 
   * {
@@ -374,8 +378,9 @@ code {
   body {
     background: #ffffff !important;
     color: #0f172a !important;
-    font-size: 11pt;
-    line-height: 1.45;
+    font-size: 9.5pt;
+    line-height: 1.5;
+    font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, sans-serif;
   }
 
   .no-print,
@@ -396,172 +401,71 @@ code {
     padding: 0 !important;
   }
 
+  /* Page Break Hygiene */
+  .report-page-break,
   .big4-page-break {
+    break-before: page !important;
+    page-break-before: always !important;
     break-inside: auto !important;
     page-break-inside: auto !important;
   }
 
-  .audit-pdf-section {
-    break-inside: auto;
-    page-break-inside: auto;
-    overflow: visible !important;
-  }
-
+  .report-avoid-break,
   .big4-avoid-break {
     break-inside: avoid !important;
     page-break-inside: avoid !important;
   }
 
-  .audit-pdf {
-    color: #111111;
-    font-family: 'Source Sans 3', Georgia, serif;
-    font-size: 10.5pt;
-    line-height: 1.4;
+  .report-keep-with-next {
+    break-after: avoid !important;
+    page-break-after: avoid !important;
   }
 
-  .audit-pdf h1 {
-    font-family: Georgia, 'Times New Roman', serif;
-    font-size: 22pt;
-    font-weight: 400;
-    margin: 0 0 4px;
-    color: #111111;
+  /* Dristik Editorial Publication Styles */
+  .dristik-editorial-report {
+    color: #0f172a;
+    font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, sans-serif;
+    font-size: 9pt;
+    line-height: 1.5;
+    background: #ffffff;
   }
 
-  .audit-pdf h2 {
-    font-family: Georgia, 'Times New Roman', serif;
-    font-size: 13pt;
-    font-weight: 400;
-    margin: 18px 0 8px;
-    padding-top: 8px;
-    border-top: 1px solid #111111;
-    color: #111111;
+  .dristik-editorial-report h1,
+  .dristik-editorial-report h2,
+  .dristik-editorial-report h3 {
+    font-family: "Playfair Display", "Newsreader", "Georgia", "Merriweather", serif;
+    color: #020617;
     break-after: avoid;
     page-break-after: avoid;
   }
 
-  .audit-pdf h3 {
-    font-family: Georgia, 'Times New Roman', serif;
-    font-size: 11pt;
-    font-weight: 400;
-    margin: 10px 0 4px;
-    color: #111111;
-  }
-
-  .audit-pdf p,
-  .audit-pdf li {
-    margin: 0 0 6px;
-    color: #111111;
-  }
-
-  .audit-pdf ul {
-    margin: 0 0 8px 18px;
-    padding: 0;
-  }
-
-  .audit-pdf-kicker,
-  .audit-pdf-meta,
-  .audit-pdf-note,
-  .audit-pdf-footer {
-    font-family: 'IBM Plex Mono', ui-monospace, monospace;
-    font-size: 8pt;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
-    color: #333333;
-  }
-
-  .audit-pdf-url {
-    margin: 0 0 8px;
-    font-size: 10pt;
-  }
-
-  .audit-pdf-table {
+  .dristik-editorial-report table {
     width: 100%;
     border-collapse: collapse;
-    margin: 0 0 10px;
-    font-size: 9pt;
+    page-break-inside: auto;
+    font-variant-numeric: tabular-nums;
   }
 
-  .audit-pdf-table th,
-  .audit-pdf-table td {
-    border: 1px solid #222222;
-    padding: 4px 6px;
-    vertical-align: top;
-    text-align: left;
-    color: #111111;
-    background: #ffffff;
+  .dristik-editorial-report thead {
+    display: table-header-group;
+    break-after: avoid;
+    page-break-after: avoid;
   }
 
-  .audit-pdf-table thead th,
-  .audit-pdf-scores th {
-    font-weight: 600;
-    background: #f2f2f2;
+  .dristik-editorial-report tr {
+    break-inside: avoid;
+    page-break-inside: avoid;
   }
 
-  .audit-pdf-block,
-  .audit-pdf-section {
-    break-inside: auto;
-  }
-
-  .audit-pdf-block {
-    margin: 0 0 8px;
-    padding-bottom: 6px;
-    border-bottom: 1px solid #dddddd;
-  }
-
-  .audit-pdf-finding-title {
-    font-weight: 700;
-    margin-bottom: 2px;
-  }
-
-  .audit-pdf-pre {
-    white-space: pre-wrap;
-    font-family: 'IBM Plex Mono', ui-monospace, monospace;
-    font-size: 8pt;
-    border: 1px solid #222222;
-    padding: 6px;
-    margin: 4px 0 8px;
-  }
-
-  .audit-pdf-empty {
-    color: #333333;
-    font-style: italic;
-  }
-
-  .audit-pdf-bar {
-    display: grid;
-    grid-template-columns: 140px 1fr 32px;
-    gap: 8px;
-    align-items: center;
-    margin: 3px 0;
-    font-size: 9pt;
-  }
-
-  .audit-pdf-bar-track {
-    display: block;
-    height: 7px;
-    background: #eeeeee;
-    border: 1px solid #222222;
-  }
-
-  .audit-pdf-bar-track span {
-    display: block;
-    height: 100%;
-    background: #222222;
-  }
-
-  .big4-break-before {
-    break-before: page !important;
-    page-break-before: always !important;
-  }
-
-  .audit-pdf svg {
+  .dristik-editorial-report svg {
     overflow: visible !important;
     max-width: 100% !important;
   }
 
-  .audit-pdf pre {
+  .dristik-editorial-report pre {
     white-space: pre-wrap !important;
     word-break: break-word !important;
+    font-family: "IBM Plex Mono", "SFMono-Regular", Consolas, monospace;
   }
 
   table {

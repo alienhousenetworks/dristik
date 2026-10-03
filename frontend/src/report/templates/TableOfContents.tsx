@@ -1,0 +1,153 @@
+import React from 'react';
+import { ReportTheme } from '../brandTheme';
+import { PageHeader, PageFooter } from './PageHeaderFooter';
+
+interface TableOfContentsProps {
+  theme: ReportTheme;
+  domain: string;
+  brandName: string;
+  analysisId: string;
+  dateStr: string;
+}
+
+export const CHAPTER_DIRECTORY = [
+  {
+    num: '00',
+    title: 'Executive Brief & Audit Snapshot',
+    desc: 'High-level synthesis, 4 core signals, 5-Pillar Scorecard, Tri-Perspective cognitive diagnosis, and visual diagnostic matrix.',
+    pageEst: 3,
+  },
+  {
+    num: '01',
+    title: 'Discoverability & Technical SEO',
+    desc: 'Crawl architecture, canonical host routing, 301 consolidation, TTFB latency curves, robots.txt directives, and XML sitemaps.',
+    pageEst: 5,
+  },
+  {
+    num: '02',
+    title: 'Generative Engine Optimization (GEO)',
+    desc: 'Layer 1 first-party DOM extractability, 8-dimension breakdown, /llms.txt AI-bot permissions, and entity attribution rewrites.',
+    pageEst: 8,
+  },
+  {
+    num: '03',
+    title: 'Answer Engine Visibility (AEO)',
+    desc: 'Layer 2 live visibility across ChatGPT, Perplexity, Google AIO, Claude & Gemini. 100-Question dynamic sandbox digest & Re-Query uplift delta.',
+    pageEst: 11,
+  },
+  {
+    num: '04',
+    title: 'Competitive Intelligence & Knowledge Graph',
+    desc: 'Head-to-head commercial query bake-off against verified competitors, Schema.org entity verification, and Social Graph attributes.',
+    pageEst: 14,
+  },
+  {
+    num: '05',
+    title: 'Conversion Ergonomics & Production Copy',
+    desc: '5-second value proposition hook, form friction, WCAG accessibility, character-safe copy suite, and multi-surface contradiction register.',
+    pageEst: 16,
+  },
+  {
+    num: '06',
+    title: 'Page-by-Page Audit Review',
+    desc: 'Exhaustive inventory of sampled URLs: SERP metadata pairs, H1 outlines, copy rewrites, and AI citation snippet targets.',
+    pageEst: 18,
+  },
+  {
+    num: '07',
+    title: 'Strategic Priorities & 90-Day Roadmap',
+    desc: 'Executive Top-10 Action Plan with effort/impact calculations, NOW / NEXT / ONGOING roadmap, and commercial financial model.',
+    pageEst: 20,
+  },
+  {
+    num: '08',
+    title: 'Research Methodology & Sampling Parameters',
+    desc: 'Audit scope, crawl depth boundaries, multi-engine testing protocol, confidence algorithms, and known operational limitations.',
+    pageEst: 22,
+  },
+  {
+    num: '09',
+    title: 'Institutional Findings Register & Evidence Ledger',
+    desc: 'Exhaustive verified defect register, production code patches with file paths, cryptographic verification proofs, and SHA-256 AST ledger.',
+    pageEst: 23,
+  },
+];
+
+export function TableOfContents({
+  theme,
+  domain,
+  brandName,
+  analysisId,
+  dateStr,
+}: TableOfContentsProps) {
+  return (
+    <section className="report-page-break p-8 md:p-14 min-h-[960px] flex flex-col justify-between bg-white border-b-2 border-slate-200">
+      <PageHeader theme={theme} domain={domain} chapterTitle="TABLE OF CONTENTS // DOCUMENT ARCHITECTURE" />
+
+      <div className="space-y-6">
+        <div>
+          <span className="font-mono text-[8pt] font-bold uppercase tracking-[0.2em] text-slate-500 block mb-1">
+            Publication Index &amp; Information Architecture
+          </span>
+          <h2 className="font-serif text-[24pt] md:text-[28pt] font-normal tracking-tight text-slate-950">
+            Table of Contents
+          </h2>
+          <div className="w-16 h-[2.5px] mt-2" style={{ backgroundColor: theme.accent }}></div>
+        </div>
+
+        {/* Chapter Table */}
+        <div className="divide-y divide-slate-200 border-t border-b border-slate-200">
+          {CHAPTER_DIRECTORY.map((ch) => (
+            <div key={ch.num} className="py-2.5 flex items-start justify-between gap-4 text-[8.5pt]">
+              <div className="flex items-start gap-3 flex-1">
+                <span className="font-mono font-bold text-slate-400 w-6 pt-0.5">
+                  {ch.num}
+                </span>
+                <div>
+                  <h3 className="font-serif font-bold text-slate-900 text-[10pt] leading-tight">
+                    {ch.title}
+                  </h3>
+                  <p className="text-slate-600 font-sans text-[8pt] leading-relaxed mt-0.5">
+                    {ch.desc}
+                  </p>
+                </div>
+              </div>
+              <div className="font-mono text-[8.5pt] text-slate-400 pt-0.5">
+                p. {ch.pageEst}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* "How to Read This Report" - Dual Layer Architecture */}
+        <div className="p-4 rounded bg-slate-50 border border-slate-200 mt-6 text-[8.5pt]">
+          <h4 className="font-mono text-[8pt] font-bold uppercase tracking-wider text-slate-700 mb-2">
+            HOW TO READ THIS PUBLICATION: DUAL-LAYER GOVERNANCE
+          </h4>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-slate-700 leading-relaxed font-sans">
+            <div>
+              <strong className="text-slate-900 block font-serif text-[9pt] mb-0.5">
+                1. Executive Narrative Layer (Pages 3 – 21)
+              </strong>
+              Designed for board and executive leadership. Synthesizes macro performance signals, competitive standing, conversion ergonomics, and the 90-day commercial impact roadmap.
+            </div>
+            <div>
+              <strong className="text-slate-900 block font-serif text-[9pt] mb-0.5">
+                2. Technical Evidence &amp; Proof Layer (Pages 22+)
+              </strong>
+              Designed for engineering and search teams. Provides deterministic AST proof, exact code patch diffs, file paths, and cryptographic SHA-256 evidence IDs for every single claim.
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <PageFooter
+        theme={theme}
+        domain={domain}
+        pageNumber={2}
+        reportId={analysisId}
+        dateStr={dateStr}
+      />
+    </section>
+  );
+}
