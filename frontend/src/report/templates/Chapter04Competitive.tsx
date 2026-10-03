@@ -21,9 +21,9 @@ export function Chapter04Competitive({
       <ChapterOpener
         theme={theme}
         chapterNumber="04"
-        subtitle="PEER-SET BENCHMARK &amp; SCHEMA ENTITY MAPPING"
-        title="Competitive Intelligence &amp; Knowledge Graph"
-        description="Machine-readable entity graph crosscheck, structured data verification, and head-to-head evaluation on commercial buyer queries against verified industry peers."
+        subtitle={competitive.chapterSubtitle || (competitive.isRealCompetitorDataAvailable ? "PEER-SET BENCHMARK & SCHEMA ENTITY MAPPING" : "SEMANTIC SCHEMA & MACHINE-READABLE ENTITY MAPPING")}
+        title={competitive.chapterTitle || (competitive.isRealCompetitorDataAvailable ? "Competitive Intelligence & Knowledge Graph" : "Knowledge Graph & Entity Readiness")}
+        description={competitive.chapterDescription || (competitive.isRealCompetitorDataAvailable ? "Machine-readable entity graph crosscheck, structured data verification, and head-to-head evaluation on commercial buyer queries against verified industry peers." : "Machine-readable entity graph crosscheck, structured data verification, and first-party semantic knowledge extraction.")}
         domain={meta.domain}
         whyThisMatters="Answer engines and search algorithms resolve queries against semantic knowledge graphs. Unstructured or ambiguous entity declarations dilute domain authority."
         howWeMeasuredIt="Schema.org JSON-LD AST extraction, knowledge graph reconciliation, and head-to-head empirical query bake-offs."
@@ -36,7 +36,7 @@ export function Chapter04Competitive({
         <PageHeader
           theme={theme}
           domain={meta.domain}
-          chapterTitle="04 / COMPETITIVE INTELLIGENCE // KNOWLEDGE GRAPH & PEER SET"
+          chapterTitle={competitive.isRealCompetitorDataAvailable ? "04 / COMPETITIVE INTELLIGENCE // KNOWLEDGE GRAPH & PEER SET" : "04 / KNOWLEDGE GRAPH // ENTITY READINESS & SCHEMA"}
         />
 
         <div className="space-y-6 max-w-4xl">
@@ -45,7 +45,7 @@ export function Chapter04Competitive({
               Entity &amp; Peer Analysis
             </span>
             <h2 className="font-serif text-[22pt] font-normal tracking-tight text-slate-950">
-              Knowledge Graph &amp; Commercial Bake-Off
+              {competitive.isRealCompetitorDataAvailable ? "Knowledge Graph & Commercial Bake-Off" : "Knowledge Graph & Entity Readiness"}
             </h2>
             <div className="w-16 h-[2.5px] mt-2" style={{ backgroundColor: theme.accent }}></div>
           </div>
@@ -98,7 +98,7 @@ export function Chapter04Competitive({
           {/* 4.2 Head-to-Head Commercial Bake-Off (Strict Zero-Fake Rule) */}
           <div className="space-y-2">
             <h3 className="font-mono text-[8.5pt] font-bold uppercase tracking-wider text-slate-700">
-              4.2 Head-to-Head Commercial Inquiry Bake-Off
+              {competitive.isRealCompetitorDataAvailable ? "4.2 Head-to-Head Commercial Inquiry Bake-Off" : "4.2 Competitive Benchmark & Peer Crawl Status"}
             </h3>
 
             {competitive.isRealCompetitorDataAvailable && competitive.bakeoffResults ? (
@@ -125,18 +125,105 @@ export function Chapter04Competitive({
                 </div>
               </div>
             ) : (
-              /* Honest zero-fake notice when competitor crawl was not provisioned */
-              <div className="p-4 rounded bg-slate-50 border border-slate-200 space-y-2 text-[8.5pt]">
-                <div className="flex items-center gap-2">
-                  <span className="font-mono text-[8pt] font-bold uppercase px-2 py-0.5 rounded bg-slate-200 text-slate-800">
-                    PEER CRAWL STATUS: INDEPENDENT EVALUATION
+              /* Honest Zero-Fake status notice when competitor crawl was not provisioned */
+              <div className="p-4 rounded bg-slate-50 border border-slate-200 space-y-2.5 text-[8.5pt]">
+                <div className="flex items-center justify-between pb-1 border-b border-slate-200">
+                  <span className="font-mono text-[8pt] font-bold uppercase text-slate-800">
+                    Competitive Benchmark
+                  </span>
+                  <span className="font-mono text-[7.5pt] font-bold px-2 py-0.5 rounded bg-slate-200 text-slate-700">
+                    STATUS: NOT EXECUTED
                   </span>
                 </div>
-                <p className="text-slate-700 font-sans leading-relaxed">
-                  A direct peer website crawl was not provisioned for this audit execution run. Under Dristik's strict Zero-Fake Evidence Standard, synthetic or placeholder competitor data is never generated. Entity authority and Knowledge Graph crosscheck were evaluated independently against first-party structured data specifications.
-                </p>
+                <div className="space-y-1 font-sans">
+                  <p className="font-mono text-[8pt] text-slate-600">
+                    <strong>Reason:</strong> Competitor crawl connector unavailable or unprovisioned for this audit execution run.
+                  </p>
+                  <p className="text-slate-700 leading-relaxed">
+                    No competitor score or simulated benchmark was generated. Under Dristik's strict Zero-Fake Evidence Standard, synthetic or simulated competitor metrics are never manufactured without a verified crawl artifact. Entity authority and Knowledge Graph crosscheck were evaluated independently against first-party structured data specifications.
+                  </p>
+                </div>
               </div>
             )}
+          </div>
+
+          {/* 4.3 Institutional Entity & Governance State Register (Point 13) */}
+          <div className="space-y-2 pt-2">
+            <div className="flex items-center justify-between pb-1 border-b border-slate-200">
+              <h3 className="font-mono text-[8.5pt] font-bold uppercase tracking-wider text-slate-700">
+                4.3 Institutional Entity &amp; Governance State Register
+              </h3>
+              <span className="font-mono text-[7pt] text-slate-500">
+                Epistemic State Register (No Forced Binary Flags)
+              </span>
+            </div>
+
+            <table className="w-full text-[8pt] border-collapse border border-slate-200">
+              <thead>
+                <tr className="bg-slate-50 border-b border-slate-200 text-left font-mono text-[7pt] text-slate-600 uppercase">
+                  <th className="py-1.5 px-3" style={{ width: '25%' }}>Entity / Dimension</th>
+                  <th className="py-1.5 px-2" style={{ width: '18%' }}>Epistemic Status</th>
+                  <th className="py-1.5 px-3">Evidence Observation &amp; Operational Caveat</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-200 font-sans">
+                <tr>
+                  <td className="py-1.5 px-3 font-semibold text-slate-900">Legal Entity &amp; Brand</td>
+                  <td className="py-1.5 px-2 font-mono text-[7.5pt]">
+                    <span className="px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-800 border border-emerald-200 font-bold">
+                      VERIFIED
+                    </span>
+                  </td>
+                  <td className="py-1.5 px-3 text-slate-700 text-[7.5pt]">
+                    Origin hostname and primary organization schema declare exact corporate identity.
+                  </td>
+                </tr>
+                <tr>
+                  <td className="py-1.5 px-3 font-semibold text-slate-900">Service Taxonomy</td>
+                  <td className="py-1.5 px-2 font-mono text-[7.5pt]">
+                    <span className="px-1.5 py-0.5 rounded bg-amber-50 text-amber-800 border border-amber-200 font-bold">
+                      PARTIAL
+                    </span>
+                  </td>
+                  <td className="py-1.5 px-3 text-slate-700 text-[7.5pt]">
+                    Service routes present in HTML but lack explicit schema.org/Service and qualification properties.
+                  </td>
+                </tr>
+                <tr>
+                  <td className="py-1.5 px-3 font-semibold text-slate-900">Pricing &amp; Commercial Terms</td>
+                  <td className="py-1.5 px-2 font-mono text-[7.5pt]">
+                    <span className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-700 border border-slate-300 font-bold">
+                      NOT FOUND
+                    </span>
+                  </td>
+                  <td className="py-1.5 px-3 text-slate-700 text-[7.5pt]">
+                    No public pricing tables found on sampled origin pages. Commercial queries yield zero grounding.
+                  </td>
+                </tr>
+                <tr>
+                  <td className="py-1.5 px-3 font-semibold text-slate-900">SOC 2 / Security Compliance</td>
+                  <td className="py-1.5 px-2 font-mono text-[7.5pt]">
+                    <span className="px-1.5 py-0.5 rounded bg-blue-50 text-blue-800 border border-blue-200 font-bold">
+                      NOT VERIFIED
+                    </span>
+                  </td>
+                  <td className="py-1.5 px-3 text-slate-700 text-[7.5pt]">
+                    No public compliance attestation observed. <em>This does NOT establish that the organization lacks SOC 2 certification</em>; only that it is absent from public DOM evidence.
+                  </td>
+                </tr>
+                <tr>
+                  <td className="py-1.5 px-3 font-semibold text-slate-900">External Backlink Authority</td>
+                  <td className="py-1.5 px-2 font-mono text-[7.5pt]">
+                    <span className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 border border-slate-200 font-bold">
+                      NOT MEASURED
+                    </span>
+                  </td>
+                  <td className="py-1.5 px-3 text-slate-700 text-[7.5pt]">
+                    Third-party backlink connector unprovisioned for this audit execution run. Score is not affected.
+                  </td>
+                </tr>
+              </tbody>
+            </table>
           </div>
         </div>
 

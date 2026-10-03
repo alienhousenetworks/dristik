@@ -454,6 +454,8 @@ export interface DynamicSandboxQuestionEvaluation {
   answer_risk?: KieAnswerRisk | null;        // HIGH | MEDIUM | LOW
   claim_decomposition?: KieClaimGroundingResult[] | null;
   retrieval_evidence_count?: number | null;
+  missing_aspects?: string[] | null;
+  evaluation_trace?: Record<string, any> | null;
 }
 
 export interface CompetitorBakeoffItem {
@@ -485,6 +487,8 @@ export interface HonestScores {
   ai_visibility_score?: number | null;
   ai_visibility_status?: string;
   ai_citation_score?: number | null;
+  live_ai_citation_score?: number | null;
+  on_page_proxy_score?: number | null;
   overall_score: number;
   score_band: string;
   human_summary: string;

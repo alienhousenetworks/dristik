@@ -137,6 +137,7 @@ export function AuditPdfReport({
         brandName={normalized.meta.brandName}
         analysisId={normalized.meta.analysisId}
         dateStr={normalized.meta.generatedAt}
+        isRealCompetitorDataAvailable={normalized.competitive.isRealCompetitorDataAvailable}
       />
 
       {/* ========================================================================= */}

@@ -591,6 +591,8 @@ class DynamicSandboxQuestionEvaluation(BaseModel):
     answer_risk: Optional[str] = None                # HIGH | MEDIUM | LOW
     claim_decomposition: Optional[List[Dict[str, Any]]] = None  # per-claim verification
     retrieval_evidence_count: Optional[int] = None   # how many evidence chunks were retrieved
+    missing_aspects: Optional[List[str]] = None      # unanswered question aspects for partials
+    evaluation_trace: Optional[Dict[str, Any]] = None  # transparent evaluation debug trace
 
 
 class CompetitorBakeoffItem(BaseModel):

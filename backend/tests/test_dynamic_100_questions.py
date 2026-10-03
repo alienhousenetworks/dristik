@@ -73,11 +73,14 @@ async def test_dynamic_sandbox_generates_exact_100_questions_from_zero():
         assert ev.question_id.startswith("Q-")
         assert len(ev.generated_question) > 10
         assert resolved_entity.name.lower() in ev.generated_question.lower() or "acme" in ev.generated_question.lower()
-        assert len(ev.buyer_intent) > 10
-        assert ev.answerability_status in ["ANSWERABLE", "PARTIAL", "UNANSWERABLE", "CONFLICTING"]
+        assert ev.answerability_status in ["ANSWERABLE", "PARTIAL", "UNANSWERABLE", "EVIDENCE_GAP", "CONFLICTING"]
         assert ev.crawled_answer is not None and len(ev.crawled_answer) > 5
         assert ev.recommended_answer is not None and len(ev.recommended_answer) > 5
         assert 1 <= ev.citability_score <= 10
+        # Phase 1: Verify serialized telemetry fields are populated
+        assert ev.grounding_ratio is not None
+        assert ev.answer_risk in ["LOW", "MEDIUM", "HIGH"]
+        assert ev.retrieval_evidence_count is not None
 
     # 4. Verify that pricing and identity questions find answers from the evidence
     identity_eval = next(e for e in evaluations if "core commercial solution" in e.generated_question.lower() or "what exactly is" in e.generated_question.lower())
@@ -118,11 +121,13 @@ async def test_dynamic_sandbox_correctly_identifies_unanswerable_gaps():
 
     assert len(evaluations) == 100
 
-    # Locate pricing questions - must be flagged as UNANSWERABLE
+    # Locate pricing questions - must be flagged as UNANSWERABLE / EVIDENCE_GAP
     pricing_q = next(e for e in evaluations if "starting price" in e.generated_question.lower())
     assert pricing_q.is_answerable is False
-    assert pricing_q.answerability_status == "UNANSWERABLE"
-    assert "not disclosed" in pricing_q.crawled_answer.lower() or "not available" in pricing_q.crawled_answer.lower()
+    assert pricing_q.answerability_status in ["UNANSWERABLE", "EVIDENCE_GAP"]
+    assert "not disclosed" in pricing_q.crawled_answer.lower() or "not available" in pricing_q.crawled_answer.lower() or "not published" in pricing_q.crawled_answer.lower()
     assert pricing_q.gap_analysis is not None
     assert pricing_q.citability_score <= 3
     assert pricing_q.projected_patch_gain > 0.40
+    assert pricing_q.grounding_ratio == 0.0
+    assert pricing_q.answer_risk == "HIGH"

@@ -156,6 +156,60 @@ export function AuditSnapshot({
             ))}
           </div>
         </div>
+
+        {/* 4. Score Calculation Ledger (Deterministic Composite Derivation) */}
+        {scorecard.ledger && scorecard.ledger.length > 0 && (
+          <div className="space-y-2 pt-2">
+            <div className="flex items-center justify-between pb-1 border-b border-slate-200">
+              <h3 className="font-mono text-[8.5pt] font-bold uppercase tracking-wider text-slate-700">
+                Score Calculation Ledger (Deterministic Mathematical Traceability)
+              </h3>
+              <span className="font-mono text-[7.5pt] text-slate-500">
+                Composite = Σ (Raw Score × Assigned Weight)
+              </span>
+            </div>
+
+            <table className="w-full text-[8.5pt] border-collapse border border-slate-200">
+              <thead>
+                <tr className="bg-slate-50 border-b border-slate-200 text-left font-mono text-[7.5pt] text-slate-600 uppercase">
+                  <th className="py-2 px-3">Audit Pillar / Category</th>
+                  <th className="py-2 px-3">Status</th>
+                  <th className="py-2 px-3">Raw Score</th>
+                  <th className="py-2 px-3">Weight (%)</th>
+                  <th className="py-2 px-3 text-right">Contribution</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-200 bg-white font-mono">
+                {scorecard.ledger.map((row) => (
+                  <tr key={row.categoryKey} className="hover:bg-slate-50/50">
+                    <td className="py-2 px-3 font-sans font-semibold text-slate-900">{row.pillar}</td>
+                    <td className="py-2 px-3 text-[7.5pt]">
+                      <span className="px-1.5 py-0.2 rounded bg-slate-100 text-slate-700 font-bold">
+                        {row.status}
+                      </span>
+                    </td>
+                    <td className="py-2 px-3 font-bold">{row.rawScore != null ? `${row.rawScore}` : '—'}</td>
+                    <td className="py-2 px-3 text-slate-600">{row.weightPct}%</td>
+                    <td className="py-2 px-3 text-right font-bold text-slate-900">
+                      +{row.contribution.toFixed(2)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr className="bg-slate-100/90 border-t-2 border-slate-300 font-mono text-[8.5pt]">
+                  <td colSpan={3} className="py-2 px-3 font-bold font-sans text-slate-900">
+                    Total Deterministic Composite Score
+                  </td>
+                  <td className="py-2 px-3 text-slate-600 font-bold">100.0%</td>
+                  <td className="py-2 px-3 text-right font-bold text-slate-950 text-[10pt]">
+                    {scorecard.calculatedComposite ?? scorecard.overallScore} / 100
+                  </td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        )}
       </div>
 
       <PageFooter

@@ -109,7 +109,7 @@ def test_executive_deck_report():
     res_html = client.get(f"/api/v1/reports/{analysis_id}/executive-deck")
     assert res_html.status_code == 200
     assert "text/html" in res_html.headers["content-type"]
-    assert "DRISTIK AI // ENTERPRISE INTELLIGENCE" in res_html.text
+    assert "DRISTIK // DIGITAL INTELLIGENCE PUBLICATION" in res_html.text or "DRISTIK AI // ENTERPRISE INTELLIGENCE" in res_html.text
 
     # 2. JSON deck metadata
     res_json = client.get(f"/api/v1/reports/{analysis_id}/executive-deck?format=json")

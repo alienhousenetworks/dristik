@@ -289,24 +289,29 @@ export function DynamicQuestionSandboxView({
     ];
   }, [evaluations]);
 
+  const isGap = (e: DynamicSandboxQuestionEvaluation) =>
+    e.answerability_status === 'EVIDENCE_GAP' ||
+    e.answerability_status === 'UNANSWERABLE' ||
+    (!e.is_answerable && e.answerability_status !== 'PARTIAL');
+
   const totalCount = evaluations.length;
-  const answerableCount = evaluations.filter((e) => e.answerability_status === 'ANSWERABLE' || e.is_answerable).length;
+  const answerableCount = evaluations.filter((e) => e.answerability_status === 'ANSWERABLE' || (e.is_answerable && e.answerability_status !== 'PARTIAL')).length;
   const partialCount = evaluations.filter((e) => e.answerability_status === 'PARTIAL').length;
-  const unanswerableCount = evaluations.filter(
-    (e) => e.answerability_status === 'UNANSWERABLE' || (!e.is_answerable && e.answerability_status !== 'PARTIAL')
-  ).length;
+  const unanswerableCount = evaluations.filter(isGap).length;
+
+  const validGroundings = evaluations.filter((e) => e.grounding_ratio != null);
   const avgGrounding =
-    totalCount > 0
-      ? Math.round((evaluations.reduce((acc, e) => acc + (e.grounding_ratio ?? 0), 0) / totalCount) * 100)
-      : 0;
+    validGroundings.length > 0
+      ? Math.round((validGroundings.reduce((acc, e) => acc + (e.grounding_ratio ?? 0), 0) / validGroundings.length) * 100)
+      : null;
   const highRiskCount = evaluations.filter((e) => e.answer_risk === 'HIGH').length;
 
   const filteredEvaluations = useMemo(() => {
     return evaluations.filter((item) => {
       if (selectedFacet !== 'all' && item.facet !== selectedFacet) return false;
-      if (statusFilter === 'answerable' && item.answerability_status !== 'ANSWERABLE') return false;
+      if (statusFilter === 'answerable' && item.answerability_status !== 'ANSWERABLE' && !item.is_answerable) return false;
       if (statusFilter === 'partial' && item.answerability_status !== 'PARTIAL') return false;
-      if (statusFilter === 'unanswerable' && item.answerability_status !== 'UNANSWERABLE') return false;
+      if (statusFilter === 'unanswerable' && !isGap(item)) return false;
       if (statusFilter === 'high_risk' && item.answer_risk !== 'HIGH') return false;
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
@@ -358,6 +363,12 @@ export function DynamicQuestionSandboxView({
         return (
           <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-800 border border-amber-300">
             <AlertTriangle className="w-3 h-3 text-amber-600" /> Partial Evidence
+          </span>
+        );
+      case 'CONFLICTING':
+        return (
+          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800 border border-purple-300">
+            <AlertTriangle className="w-3 h-3 text-purple-600" /> Conflicting Evidence
           </span>
         );
       default:
@@ -454,7 +465,7 @@ export function DynamicQuestionSandboxView({
           <div className="p-3 bg-indigo-50/60 border border-indigo-200 rounded-md text-center col-span-2 md:col-span-1">
             <span className="label text-[10px] text-indigo-800 block">Avg Grounding</span>
             <span className="text-xl font-bold font-mono text-indigo-700">
-              {avgGrounding}%
+              {avgGrounding !== null ? `${avgGrounding}%` : '—'}
             </span>
           </div>
         </div>
@@ -606,6 +617,21 @@ export function DynamicQuestionSandboxView({
                         {item.crawled_answer || 'No sufficient first-party evidence found.'}
                       </div>
                     </div>
+
+                    {/* Missing Inquiry Aspects for Partials or Gaps */}
+                    {item.missing_aspects && item.missing_aspects.length > 0 && (
+                      <div className="p-3 bg-amber-50/70 border border-amber-200 rounded-md space-y-1.5">
+                        <div className="text-[11px] font-semibold text-amber-900 flex items-center gap-1.5">
+                          <AlertTriangle className="w-3.5 h-3.5 text-amber-700" />
+                          <span>Missing Inquiry Aspects (Unsubstantiated by Crawled Copy)</span>
+                        </div>
+                        <ul className="list-disc list-inside text-[11px] text-amber-800 space-y-0.5">
+                          {item.missing_aspects.map((asp, idx) => (
+                            <li key={idx} className="font-mono text-[10px]">{asp}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
 
                     {/* Evidence Source */}
                     {item.evidence_snippet && (

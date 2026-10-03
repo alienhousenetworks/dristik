@@ -124,6 +124,13 @@ def _verify_claim_against_evidence(
         )
 
 
+from app.intelligence.knowledge.evidence_sufficiency import (
+    EvidenceAssessment,
+    EvidenceSufficiencyEvaluator,
+)
+from app.intelligence.retrieval.hybrid_retriever import QueryIntent
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Answer Synthesizer (from Evidence)
 # ─────────────────────────────────────────────────────────────────────────────
@@ -131,26 +138,50 @@ def _verify_claim_against_evidence(
 def _synthesize_from_evidence(
     question: str,
     brand: str,
+    plan: Any,
     evidence_chunks: List[RetrievedEvidenceChunk],
+    assessment: EvidenceAssessment,
 ) -> str:
     """
-    Synthesizes a candidate answer strictly from retrieved evidence sentences.
-    No LLM call in Phase 1 — assembles answer from highest-scored evidence sentences.
-    When an LLM model_router is available, replace this with a prompt-constrained call.
+    Synthesizes an authoritative candidate answer strictly from relevance-gated evidence.
+    If evidence is missing or insufficient, produces an explicit gap statement rather
+    than concatenating irrelevant marketing paragraphs.
     """
-    if not evidence_chunks:
-        return (
-            f"No sufficient first-party evidence found on {brand}'s website to answer "
-            f"this inquiry from crawled content."
-        )
-    parts = []
-    for chunk in evidence_chunks[:3]:
-        ev = chunk.claim.evidence
-        sentence = ev.exact_sentence if ev else f"{chunk.claim.predicate} {chunk.claim.object}"
-        parts.append(sentence.strip())
+    if not evidence_chunks or assessment.status == "INSUFFICIENT":
+        if plan.intent == QueryIntent.COMMERCIAL:
+            return f"Pricing information, tier rates, and commercial packages for {brand} are not published on crawled website pages."
+        elif plan.intent == QueryIntent.COMPLIANCE:
+            return f"Security compliance certifications (such as SOC 2, ISO 27001, or HIPAA) are not published on crawled pages for {brand}."
+        elif plan.intent == QueryIntent.PROOF:
+            return f"Customer logos, verified client case studies, and quantified ROI results are not published on crawled pages for {brand}."
+        elif plan.intent == QueryIntent.ONBOARDING:
+            return f"Support SLAs, guaranteed ticket response times, and onboarding procedures for {brand} are not disclosed on crawled pages."
+        elif plan.intent == QueryIntent.COMPETITIVE:
+            return f"Competitive comparisons, alternative benchmarking, and explicit moat claims are not published on crawled pages for {brand}."
+        elif plan.intent == QueryIntent.ICP:
+            return f"Explicit buyer criteria and target audience personas for {brand} are not declared on crawled pages."
+        return f"Information regarding this inquiry was not discovered in crawled website evidence for {brand}."
 
-    answer = " ".join(parts)
-    return answer[:600] if answer else f"Insufficient evidence found to answer: {question}"
+    # Substantive synthesis from qualified evidence
+    sentences: List[str] = []
+    seen = set()
+    for chunk in evidence_chunks[:2]:
+        ev = chunk.claim.evidence
+        sentence = ev.exact_sentence.strip() if ev and ev.exact_sentence else f"{chunk.claim.predicate} {chunk.claim.object}"
+        sentence = sentence.rstrip(".")
+        if sentence and sentence.lower() not in seen:
+            seen.add(sentence.lower())
+            sentences.append(sentence)
+
+    primary = ". ".join(sentences) + "."
+    if not primary.strip("."):
+        return f"Insufficient evidence found to answer: {question}"
+
+    base_answer = f"According to {brand}'s crawled pages: \"{primary}\""
+    if assessment.status == "PARTIAL" and assessment.missing_aspects:
+        base_answer += f" However, crawled evidence does not provide details for: {', '.join(assessment.missing_aspects)}."
+
+    return base_answer[:500]
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -162,7 +193,7 @@ class GroundedAnswerSimulator:
     Phase 5 KIE component.
 
     For each question:
-      Question → Query Planner → Hybrid Retriever → Synthesize → Decompose → Verify → Grade
+      Question → Query Planner → Hybrid Retriever → Evidence Sufficiency → Synthesize → Decompose → Verify → Grade
 
     Returns a GroundedAnswerSimulation with per-claim verification and grounding ratio.
     """
@@ -181,32 +212,45 @@ class GroundedAnswerSimulator:
     ) -> GroundedAnswerSimulation:
         plan = QueryPlanner.plan(question)
         evidence_chunks = self.retriever.retrieve(question, plan)
+        assessment = EvidenceSufficiencyEvaluator.evaluate(
+            question=question,
+            evidence_chunks=evidence_chunks,
+            brand=self.graph.brand,
+        )
 
         candidate_answer = _synthesize_from_evidence(
             question=question,
             brand=self.graph.brand,
-            evidence_chunks=evidence_chunks,
-        )
-
-        raw_claims = _decompose_into_claims(candidate_answer)
-        grounding_results = [
-            _verify_claim_against_evidence(rc, evidence_chunks)
-            for rc in raw_claims
-        ] if raw_claims else []
-
-        total = len(grounding_results)
-        supported = sum(1 for r in grounding_results if r.status == "SUPPORTED")
-        partial = sum(1 for r in grounding_results if r.status == "PARTIALLY_SUPPORTED")
-
-        grounding_ratio = round(
-            (supported + 0.5 * partial) / max(1, total), 3
-        )
-
-        answer_risk = self._compute_answer_risk(
             plan=plan,
             evidence_chunks=evidence_chunks,
-            grounding_ratio=grounding_ratio,
+            assessment=assessment,
         )
+
+        if assessment.status == "INSUFFICIENT" or not evidence_chunks:
+            grounding_ratio = 0.0
+            grounding_results = []
+            answer_risk = KieAnswerRisk.HIGH
+        else:
+            raw_claims = _decompose_into_claims(candidate_answer)
+            grounding_results = [
+                _verify_claim_against_evidence(rc, evidence_chunks)
+                for rc in raw_claims
+            ] if raw_claims else []
+
+            total = len(grounding_results)
+            supported = sum(1 for r in grounding_results if r.status == "SUPPORTED")
+            partial = sum(1 for r in grounding_results if r.status == "PARTIALLY_SUPPORTED")
+
+            base_ratio = round((supported + 0.5 * partial) / max(1, total), 3)
+            # Factor in question aspect coverage so partial questions don't claim 1.0 grounding
+            grounding_ratio = round(base_ratio * assessment.coverage_ratio, 3)
+
+            answer_risk = self._compute_answer_risk(
+                plan=plan,
+                evidence_chunks=evidence_chunks,
+                grounding_ratio=grounding_ratio,
+                assessment=assessment,
+            )
 
         return GroundedAnswerSimulation(
             question_id=question_id,
@@ -215,6 +259,9 @@ class GroundedAnswerSimulator:
             grounding_ratio=grounding_ratio,
             retrieval_evidence_count=len(evidence_chunks),
             answer_risk=answer_risk,
+            assessment_status=assessment.status,
+            missing_aspects=assessment.missing_aspects,
+            supported_aspects=assessment.supported_aspects,
         )
 
     def _compute_answer_risk(
@@ -222,22 +269,23 @@ class GroundedAnswerSimulator:
         plan,
         evidence_chunks: List[RetrievedEvidenceChunk],
         grounding_ratio: float,
+        assessment: Optional[EvidenceAssessment] = None,
     ) -> KieAnswerRisk:
         """
-        Risk is HIGH when high-intent commercial/compliance query has no or weak evidence.
+        Risk is HIGH when high-intent commercial/compliance query has no or weak evidence,
+        or when contradictory evidence is discovered.
         Risk is MEDIUM for partial evidence or technical gaps.
         Risk is LOW for queries with strong first-party support.
         """
-        from app.intelligence.retrieval.hybrid_retriever import QueryIntent
-        high_intent_intents = {QueryIntent.COMMERCIAL, QueryIntent.COMPLIANCE, QueryIntent.PURCHASE}
+        if assessment and assessment.status == "CONFLICTING":
+            return KieAnswerRisk.HIGH
 
-        if not evidence_chunks:
-            return KieAnswerRisk.HIGH if plan.intent in high_intent_intents else KieAnswerRisk.MEDIUM
+        if not evidence_chunks or (assessment and assessment.status == "INSUFFICIENT") or grounding_ratio < 0.25:
+            return KieAnswerRisk.HIGH
 
-        if grounding_ratio < 0.35:
-            return KieAnswerRisk.HIGH if plan.intent in high_intent_intents else KieAnswerRisk.MEDIUM
-        if grounding_ratio < 0.65:
+        if grounding_ratio < 0.65 or (assessment and assessment.status == "PARTIAL"):
             return KieAnswerRisk.MEDIUM
+
         return KieAnswerRisk.LOW
 
 

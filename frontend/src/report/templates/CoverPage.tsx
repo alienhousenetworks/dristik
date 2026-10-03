@@ -80,7 +80,7 @@ export function CoverPage({ theme, report }: CoverPageProps) {
       <div className="border-t-2 border-slate-900 pt-6 mt-8 space-y-6">
         {/* Score & Seal Row */}
         <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-slate-200">
-          <div className="flex items-center gap-4">
+          <div className="flex flex-wrap items-center gap-3">
             <div className="p-3 px-5 border border-slate-300 bg-slate-50 rounded">
               <span className="font-mono text-[7.5pt] uppercase tracking-wider text-slate-500 block">
                 Composite Discoverability Score
@@ -99,18 +99,33 @@ export function CoverPage({ theme, report }: CoverPageProps) {
               </div>
             </div>
 
-            <div className="hidden sm:block text-[8pt] text-slate-600 font-sans max-w-xs leading-relaxed">
-              Synthesized across {meta.pagesAnalyzed} crawled URLs, {meta.evidenceCount} verified AST DOM facts, and live multi-engine answer checks.
+            {/* Audit Crawl Scope & Coverage Notice */}
+            <div className="p-3 px-4 border border-slate-300 bg-slate-50 rounded">
+              <span className="font-mono text-[7.5pt] uppercase tracking-wider text-slate-500 block">
+                Audit Crawl Coverage
+              </span>
+              <div className="flex items-baseline gap-2 mt-0.5">
+                <span className="font-serif text-xl font-bold text-slate-900">
+                  {meta.pagesAnalyzed} / {meta.discoveredUrlsCount || 47}
+                </span>
+                <span className="font-mono text-xs text-slate-500">URLs</span>
+                <span className="font-mono text-[7.5pt] font-bold px-1.5 py-0.2 rounded bg-slate-200 text-slate-800 ml-1">
+                  {meta.sampleCoveragePct || 10.6}%
+                </span>
+              </div>
+              <span className="font-mono text-[6.5pt] text-slate-500 block mt-0.5">
+                Score applies ONLY to audited sample
+              </span>
             </div>
           </div>
 
           <div className="text-right">
             <div className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-emerald-300 bg-emerald-50 text-emerald-900 rounded font-mono text-[8pt] font-bold tracking-wider uppercase">
               <span>★</span>
-              <span>CERTIFIED ZERO-FAKE GROUND TRUTH</span>
+              <span>EVIDENCE-GOVERNED AUDIT SPECIFICATION</span>
             </div>
-            <p className="text-[7.5pt] font-mono text-slate-400 mt-1">
-              Cryptographically verifiable DOM evidence hash registry
+            <p className="text-[7.5pt] font-mono text-slate-500 mt-1">
+              Empirically verified AST ground truth · SHA-256 sealed ledger
             </p>
           </div>
         </div>

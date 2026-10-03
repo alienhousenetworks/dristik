@@ -266,12 +266,12 @@ export function synthesizeVisualIntelligenceFallback(report: ExecutiveReport): V
   spotlightMetrics.push(
     {
       id: 'metric_blocker_density',
-      label: 'Critical and high findings',
-      value: sevCounts.CRITICAL + sevCounts.HIGH,
-      unit: 'findings',
-      change_indicator: 'From this audit',
-      status: (sevCounts.CRITICAL + sevCounts.HIGH) > 3 ? 'bad' : ((sevCounts.CRITICAL + sevCounts.HIGH) > 0 ? 'warning' : 'good'),
-      significance: 'Count of critical and high findings in this report.',
+      label: 'Critical Blockers',
+      value: sevCounts.CRITICAL,
+      unit: 'defects',
+      change_indicator: 'Zero-tolerance goal',
+      status: sevCounts.CRITICAL > 0 ? 'bad' : 'good',
+      significance: sevCounts.CRITICAL > 0 ? 'Urgent blocker issues requiring immediate fix.' : 'No critical blocker defects identified.',
       category: 'OVERALL',
     },
     {

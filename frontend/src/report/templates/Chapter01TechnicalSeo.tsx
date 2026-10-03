@@ -133,11 +133,11 @@ export function Chapter01TechnicalSeo({
                   1.2 Server Time-to-First-Byte (TTFB) Response Distribution
                 </span>
                 <span className="font-mono text-[7.5pt] text-slate-500">
-                  Target: &lt; 200ms Fast · Warning: &gt; 800ms
+                  Dristik target threshold: &lt; 400ms · CWV good boundary: &lt; 800ms
                 </span>
               </div>
               <p className="text-[7.5pt] text-slate-500 font-sans">
-                Continuous network latency histogram across audited sample nodes.
+                Continuous network latency histogram across audited sample nodes. The &lt;400ms boundary represents Dristik's internal benchmark for high-velocity answer engine bot responsiveness, distinguished from universal web standards.
               </p>
               <div className="py-2">
                 <LatencyCurveChart chart={latencyChart} />

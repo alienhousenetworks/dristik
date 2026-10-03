@@ -8,39 +8,45 @@ interface TableOfContentsProps {
   brandName: string;
   analysisId: string;
   dateStr: string;
+  isRealCompetitorDataAvailable?: boolean;
 }
 
-export const CHAPTER_DIRECTORY = [
-  {
-    num: '00',
-    title: 'Executive Brief & Audit Snapshot',
-    desc: 'High-level synthesis, 4 core signals, 5-Pillar Scorecard, Tri-Perspective cognitive diagnosis, and visual diagnostic matrix.',
-    pageEst: 3,
-  },
-  {
-    num: '01',
-    title: 'Discoverability & Technical SEO',
-    desc: 'Crawl architecture, canonical host routing, 301 consolidation, TTFB latency curves, robots.txt directives, and XML sitemaps.',
-    pageEst: 5,
-  },
-  {
-    num: '02',
-    title: 'Generative Engine Optimization (GEO)',
-    desc: 'Layer 1 first-party DOM extractability, 8-dimension breakdown, /llms.txt AI-bot permissions, and entity attribution rewrites.',
-    pageEst: 8,
-  },
-  {
-    num: '03',
-    title: 'Answer Engine Visibility (AEO)',
-    desc: 'Layer 2 live visibility across ChatGPT, Perplexity, Google AIO, Claude & Gemini. 100-Question dynamic sandbox digest & Re-Query uplift delta.',
-    pageEst: 11,
-  },
-  {
-    num: '04',
-    title: 'Competitive Intelligence & Knowledge Graph',
-    desc: 'Head-to-head commercial query bake-off against verified competitors, Schema.org entity verification, and Social Graph attributes.',
-    pageEst: 14,
-  },
+export function getChapterDirectory(isRealCompetitorDataAvailable: boolean = false) {
+  return [
+    {
+      num: '00',
+      title: 'Executive Brief & Audit Snapshot',
+      desc: 'High-level synthesis, 4 core signals, 5-Pillar Scorecard, Tri-Perspective cognitive diagnosis, and visual diagnostic matrix.',
+      pageEst: 3,
+    },
+    {
+      num: '01',
+      title: 'Discoverability & Technical SEO',
+      desc: 'Crawl architecture, canonical host routing, 301 consolidation, TTFB latency curves, robots.txt directives, and XML sitemaps.',
+      pageEst: 5,
+    },
+    {
+      num: '02',
+      title: 'Generative Engine Optimization (GEO)',
+      desc: 'Layer 1 first-party DOM extractability, 8-dimension breakdown, /llms.txt AI-bot permissions, and entity attribution rewrites.',
+      pageEst: 8,
+    },
+    {
+      num: '03',
+      title: 'Answer Engine Visibility (AEO)',
+      desc: 'Layer 2 live visibility across ChatGPT, Perplexity, Google AIO, Claude & Gemini. 100-Question dynamic sandbox digest & Re-Query uplift delta.',
+      pageEst: 11,
+    },
+    {
+      num: '04',
+      title: isRealCompetitorDataAvailable
+        ? 'Competitive Intelligence & Knowledge Graph'
+        : 'Knowledge Graph & Entity Readiness',
+      desc: isRealCompetitorDataAvailable
+        ? 'Head-to-head commercial query bake-off against verified competitors, Schema.org entity verification, and Social Graph attributes.'
+        : 'Schema.org JSON-LD structured entity verification, Social Graph attributes, and unprovisioned competitor benchmark status (Zero-Fake standard).',
+      pageEst: 14,
+    },
   {
     num: '05',
     title: 'Conversion Ergonomics & Production Copy',
@@ -72,6 +78,9 @@ export const CHAPTER_DIRECTORY = [
     pageEst: 23,
   },
 ];
+}
+
+export const CHAPTER_DIRECTORY = getChapterDirectory(false);
 
 export function TableOfContents({
   theme,
@@ -79,7 +88,10 @@ export function TableOfContents({
   brandName,
   analysisId,
   dateStr,
+  isRealCompetitorDataAvailable = false,
 }: TableOfContentsProps) {
+  const chapters = getChapterDirectory(isRealCompetitorDataAvailable);
+
   return (
     <section className="report-page-break p-8 md:p-14 min-h-[960px] flex flex-col justify-between bg-white border-b-2 border-slate-200">
       <PageHeader theme={theme} domain={domain} chapterTitle="TABLE OF CONTENTS // DOCUMENT ARCHITECTURE" />
@@ -97,7 +109,7 @@ export function TableOfContents({
 
         {/* Chapter Table */}
         <div className="divide-y divide-slate-200 border-t border-b border-slate-200">
-          {CHAPTER_DIRECTORY.map((ch) => (
+          {chapters.map((ch) => (
             <div key={ch.num} className="py-2.5 flex items-start justify-between gap-4 text-[8.5pt]">
               <div className="flex items-start gap-3 flex-1">
                 <span className="font-mono font-bold text-slate-400 w-6 pt-0.5">

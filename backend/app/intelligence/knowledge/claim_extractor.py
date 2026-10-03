@@ -94,23 +94,44 @@ _HIGH_STRENGTH_PATTERNS = [
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Sentence Boundary Tokenizer
+# Sentence Boundary Tokenizer & DOM Sanitizer
 # ─────────────────────────────────────────────────────────────────────────────
+
+def _sanitize_sentence(text: str) -> str:
+    """
+    Sanitizes raw scraped sentences by stripping UI delimiters (//, >>, ::),
+    breadcrumb tags, icon labels, and standalone button microcopy.
+    """
+    # 1. Replace UI breadcrumb/module separators with sentence boundaries
+    cleaned = re.sub(r"\s*(?://|>>|<<|::|»|›|►)\s*", ". ", text)
+    # 2. Strip common leading UI module badges and icons (e.g. "System Module", "megaphone Marketing")
+    cleaned = re.sub(r"^(?:System\s*Module|megaphone\s+[A-Za-z]+|System_Overview|Overview|Menu|Home|Breadcrumbs?)\b[\s.:-]*", "", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r"\b(?:System_Overview|System\s*Module)\b[\s.:-]*", "", cleaned, flags=re.IGNORECASE)
+    # 3. Strip common trailing button microcopy / CTA fragments
+    cleaned = re.sub(r"\b(?:Explore With The Game|Request Custom Build|Get Started|Learn More|Contact Us|Read More|Book a Demo)\b[\s./]*$", "", cleaned, flags=re.IGNORECASE)
+    # 4. Clean leading/trailing punctuation and multiple spaces
+    cleaned = re.sub(r"^[\s.:;,-]+|[\s.:;,-]+$", "", cleaned)
+    cleaned = re.sub(r"\s+", " ", cleaned).strip()
+    return cleaned
+
 
 def _split_sentences(text: str) -> List[str]:
     """
-    Split body text into sentence-bounded units.
-    Avoids mid-word truncation that caused inaccurate evidence snippets in the old engine.
+    Split body text into sentence-bounded units with UI noise sanitization.
+    Avoids mid-word truncation and strips navigation/button artifacts.
     """
     # Protect common abbreviations before splitting
     protected = re.sub(r"\b(e\.g|i\.e|vs|etc|fig|dr|mr|ms|prof|no|vol|jan|feb|mar|apr|jun|jul|aug|sep|oct|nov|dec)\.", r"\1<PROT>", text, flags=re.IGNORECASE)
-    sentences = re.split(r"(?<=[.!?])\s+(?=[A-Z\"])", protected)
-    # Restore, strip, and filter short noise
-    return [
-        s.replace("<PROT>", ".").strip()
-        for s in sentences
-        if len(s.strip()) > 20
-    ]
+    # Split on sentence boundaries and UI delimiter boundaries
+    sentences = re.split(r"(?<=[.!?])\s+(?=[A-Z\"])|\s*(?://|>>|<<)\s*", protected)
+    results: List[str] = []
+    for s in sentences:
+        restored = s.replace("<PROT>", ".").strip()
+        cleaned = _sanitize_sentence(restored)
+        # Must be substantive content (length > 25, has words and letters)
+        if len(cleaned) > 25 and re.search(r"[a-zA-Z]{3,}", cleaned):
+            results.append(cleaned)
+    return results
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -121,8 +142,8 @@ class AtomicClaimExtractor:
     """
     Phase 1 KIE component.
     Deconstructs crawled pages into structured AtomicClaim records.
-    Uses sentence-boundary splitting (no arbitrary character windows)
-    and signal-based claim type classification.
+    Uses sentence-boundary splitting (no arbitrary character windows),
+    DOM sanitization, deduplication, and signal-based claim type classification.
     """
 
     def __init__(self, brand: str, crawl_timestamp: Optional[str] = None):
@@ -133,30 +154,42 @@ class AtomicClaimExtractor:
         claims: List[AtomicClaim] = []
         classifications = PageKnowledgeClassifier.classify_all(pages)
         class_map = {c.url: c for c in classifications}
+        seen_claim_texts: set = set()
 
         for page in pages:
             classification = class_map.get(page.url)
             page_role = classification.page_role if classification else PageRole.UNKNOWN
-            new_claims = self._extract_from_page(page, page_role)
+            new_claims = self._extract_from_page(page, page_role, seen_claim_texts)
             claims.extend(new_claims)
 
         return claims
 
     def _extract_from_page(
-        self, page: PageEvidence, page_role: PageRole
+        self,
+        page: PageEvidence,
+        page_role: PageRole,
+        seen_claim_texts: Optional[set] = None,
     ) -> List[AtomicClaim]:
+        if seen_claim_texts is None:
+            seen_claim_texts = set()
         claims: List[AtomicClaim] = []
         text_body = page.body_text or ""
         sentences = _split_sentences(text_body)
 
         # Also treat each h1/h2 heading as a standalone sentence
         for heading in (page.h1 or []) + (page.h2 or []):
-            if heading and heading.strip() not in [s[:len(heading)] for s in sentences]:
-                sentences.insert(0, heading.strip())
+            cleaned_h = _sanitize_sentence(heading)
+            if cleaned_h and len(cleaned_h) > 15 and cleaned_h not in sentences:
+                sentences.insert(0, cleaned_h)
 
         for sentence in sentences:
-            if len(sentence.strip()) < 20:
+            if len(sentence.strip()) < 25:
                 continue
+            norm = sentence.lower().strip()
+            if norm in seen_claim_texts:
+                continue
+            seen_claim_texts.add(norm)
+
             claim = self._sentence_to_claim(sentence, page, page_role)
             if claim:
                 claims.append(claim)

@@ -103,7 +103,7 @@ class CausalReasoningEngine:
                 primary_category=Category.GEO,
                 observed_symptoms=symptoms,
                 inferred_root_cause="The site's entity, ICP targeting, category taxonomy, and buyer question answers are insufficiently explicit for commercial search and LLM retrieval engines.",
-                business_consequence="Generative answer engines (Perplexity, ChatGPT, Gemini) default to competitors who publish explicit structured solutions and comparative definitions, suppressing inbound pipeline.",
+                business_consequence="Generative answer engines (Perplexity, ChatGPT, Gemini) default to competitors who publish explicit structured solutions and comparative definitions, creating potential commercial discovery suppression (actual revenue impact not directly measured).",
                 prescribed_remediation="Deploy dedicated `/solutions/...` and comparison pages with Schema.org Organization + SoftwareApplication markup and direct Q&A blocks.",
                 expected_mechanism="Provides dense, citation-ready definitional passages that answer buyer questions directly with structured entity grounding.",
                 verification_step="Targeted re-crawl verifies buyer questions are answered with >85% semantic answerability in rendered HTML.",

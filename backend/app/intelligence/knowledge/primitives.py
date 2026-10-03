@@ -242,6 +242,9 @@ class GroundedAnswerSimulation(BaseModel):
     grounding_ratio: float = 0.0    # Supported Claims / Total Claims
     retrieval_evidence_count: int = 0
     answer_risk: KieAnswerRisk = KieAnswerRisk.LOW
+    assessment_status: str = "INSUFFICIENT"  # SUFFICIENT | PARTIAL | INSUFFICIENT | CONFLICTING
+    missing_aspects: List[str] = Field(default_factory=list)
+    supported_aspects: List[str] = Field(default_factory=list)
 
 
 # ─────────────────────────────────────────────────────────────────────────────

@@ -1,0 +1,126 @@
+{
+  "domain": "alienhousenetworks.com",
+  "brand": "AlienHouse Networks",
+  "questions": [
+    {
+      "id": "GT-001",
+      "question": "What services does AlienHouse Networks provide?",
+      "expected_status": "ANSWERABLE",
+      "facet": "capabilities"
+    },
+    {
+      "id": "GT-002",
+      "question": "Does AlienHouse Networks offer digital marketing solutions?",
+      "expected_status": "ANSWERABLE",
+      "facet": "capabilities"
+    },
+    {
+      "id": "GT-003",
+      "question": "What is AlienHouse Networks' foundational company mission?",
+      "expected_status": "ANSWERABLE",
+      "facet": "identity"
+    },
+    {
+      "id": "GT-004",
+      "question": "Does AlienHouse Networks provide custom software or AI engineering?",
+      "expected_status": "ANSWERABLE",
+      "facet": "capabilities"
+    },
+    {
+      "id": "GT-005",
+      "question": "What is the primary call to action for prospective buyers on AlienHouse Networks?",
+      "expected_status": "EVIDENCE_GAP",
+      "facet": "purchase_flow"
+    },
+    {
+      "id": "GT-006",
+      "question": "What are AlienHouse Networks' exact pricing tiers and monthly subscription rates?",
+      "expected_status": "EVIDENCE_GAP",
+      "facet": "pricing"
+    },
+    {
+      "id": "GT-007",
+      "question": "What is the starting price for AlienHouse Networks' custom development?",
+      "expected_status": "EVIDENCE_GAP",
+      "facet": "pricing"
+    },
+    {
+      "id": "GT-008",
+      "question": "What is AlienHouse Networks' commercial refund and cancellation policy?",
+      "expected_status": "EVIDENCE_GAP",
+      "facet": "pricing"
+    },
+    {
+      "id": "GT-009",
+      "question": "Is AlienHouse Networks SOC 2 Type II or ISO 27001 certified?",
+      "expected_status": "EVIDENCE_GAP",
+      "facet": "trust_security"
+    },
+    {
+      "id": "GT-010",
+      "question": "What is the guaranteed support response SLA for AlienHouse Networks clients?",
+      "expected_status": "EVIDENCE_GAP",
+      "facet": "onboarding"
+    },
+    {
+      "id": "GT-011",
+      "question": "What verified customer logos and quantified case studies are published by AlienHouse Networks?",
+      "expected_status": "EVIDENCE_GAP",
+      "facet": "customer_proof"
+    },
+    {
+      "id": "GT-012",
+      "question": "How does AlienHouse Networks compare directly against competing digital agencies?",
+      "expected_status": "EVIDENCE_GAP",
+      "facet": "differentiation"
+    },
+    {
+      "id": "GT-013",
+      "question": "Can prospective buyers self-serve checkout with credit card on AlienHouse Networks?",
+      "expected_status": "EVIDENCE_GAP",
+      "facet": "purchase_flow"
+    },
+    {
+      "id": "GT-014",
+      "question": "What are AlienHouse Networks' annual revenue numbers and employee headcount?",
+      "expected_status": "EVIDENCE_GAP",
+      "facet": "trust_security"
+    },
+    {
+      "id": "GT-015",
+      "question": "What digital marketing services does AlienHouse Networks provide and what do they cost?",
+      "expected_status": "PARTIAL",
+      "facet": "pricing"
+    },
+    {
+      "id": "GT-016",
+      "question": "What engineering capabilities does AlienHouse Networks offer and what is the exact onboarding SLA?",
+      "expected_status": "PARTIAL",
+      "facet": "onboarding"
+    },
+    {
+      "id": "GT-017",
+      "question": "Does AlienHouse Networks offer digital marketing solutions and what customer logos endorse them?",
+      "expected_status": "PARTIAL",
+      "facet": "customer_proof"
+    },
+    {
+      "id": "GT-018",
+      "question": "What is AlienHouse Networks' core offering and what specific buyer persona is it restricted to?",
+      "expected_status": "EVIDENCE_GAP",
+      "facet": "icp"
+    },
+    {
+      "id": "GT-019",
+      "question": "What technical systems and digital solutions does AlienHouse Networks deliver for enterprises?",
+      "expected_status": "ANSWERABLE",
+      "facet": "capabilities"
+    },
+    {
+      "id": "GT-020",
+      "question": "How can a company initiate an engagement or request a build with AlienHouse Networks?",
+      "expected_status": "ANSWERABLE",
+      "facet": "purchase_flow"
+    }
+  ]
+}

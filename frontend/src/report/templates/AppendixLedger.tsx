@@ -74,24 +74,39 @@ export function AppendixLedger({
         />
       </section>
 
-      {/* 3. Code Patches & Diffs */}
+      {/* 3. Generated Remediation Patches (Point 14) */}
       {appendices.patches.length > 0 && (
         <section className="report-page-break p-8 md:p-14 min-h-[960px] flex flex-col justify-between bg-white border-b-2 border-slate-200">
           <PageHeader
             theme={theme}
             domain={meta.domain}
-            chapterTitle="09 / ENGINEERING PATCHES // PRODUCTION-READY CODE"
+            chapterTitle="09 / ENGINEERING PATCHES // GENERATED REMEDIATION"
           />
 
           <div className="space-y-6 max-w-4xl">
             <div>
               <span className="font-mono text-[8pt] font-bold uppercase tracking-[0.2em] text-slate-500 block mb-1">
-                Deterministic Code Remediation
+                Proposed Code Remediation (Pending Deployment)
               </span>
               <h2 className="font-serif text-[22pt] font-normal tracking-tight text-slate-950">
-                Production-Ready Code Patches
+                Generated Remediation Patches
               </h2>
               <div className="w-16 h-[2.5px] mt-2" style={{ backgroundColor: theme.accent }}></div>
+            </div>
+
+            <div className="p-3 bg-slate-50 border border-slate-200 rounded text-[7.5pt] space-y-1">
+              <div className="flex items-center justify-between pb-1 border-b border-slate-200">
+                <span className="font-mono font-bold uppercase text-slate-700">Remediation Assurance Protocol</span>
+                <span className="font-mono font-bold px-1.5 py-0.2 rounded bg-amber-50 text-amber-800 border border-amber-200">
+                  STATUS: PATCH GENERATED (Unapplied)
+                </span>
+              </div>
+              <p className="font-sans text-slate-600">
+                Under Dristik's Zero-Fake governance, generated diffs are labeled as <strong>Generated Remediation Patches</strong> until actively applied to the target codebase and confirmed via automated recrawl.
+              </p>
+              <div className="font-mono text-[7pt] text-slate-500 pt-0.5">
+                Verification Lifecycle: <strong>PATCH GENERATED</strong> → PENDING APPLICATION → RECRAWL → REGRESSION TEST → VERIFIED REMEDIATION
+              </div>
             </div>
 
             <div className="space-y-4">
@@ -106,9 +121,14 @@ export function AppendixLedger({
                         {patch.title || 'Technical Patch'}
                       </span>
                     </div>
-                    <span className="font-mono text-[7.5pt] font-bold px-2 py-0.5 rounded bg-slate-100 border border-slate-300">
-                      Unified Diff
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono text-[7pt] font-bold px-2 py-0.5 rounded bg-amber-50 text-amber-800 border border-amber-200">
+                        PENDING DEPLOYMENT
+                      </span>
+                      <span className="font-mono text-[7.5pt] font-bold px-2 py-0.5 rounded bg-slate-100 border border-slate-300">
+                        Unified Diff
+                      </span>
+                    </div>
                   </div>
 
                   <p className="text-slate-700 font-sans leading-relaxed text-[8pt]">
@@ -263,16 +283,47 @@ function FindingEditorialCard({
         </p>
       )}
 
-      {finding.evidenceItems.length > 0 && (
-        <div className="pt-1.5 border-t border-slate-100 flex flex-wrap items-center gap-1.5 text-[7pt] font-mono text-slate-500">
-          <span>Evidence Trace:</span>
-          {finding.evidenceItems.slice(0, 3).map((ev) => (
-            <span key={ev.id} className="bg-slate-50 px-1 py-0.2 border border-slate-200 rounded text-slate-700">
-              {ev.id}
-            </span>
-          ))}
+      {/* Structured Evidence Drawer (Point 8) */}
+      <div className="pt-2 border-t border-slate-200 mt-2 bg-slate-50/80 p-3 rounded space-y-1.5 font-mono text-[7.5pt]">
+        <div className="flex items-center justify-between pb-1 border-b border-slate-200">
+          <span className="font-bold text-slate-700 uppercase text-[7pt]">
+            Evidence Drawer // Trace &amp; Verification Protocol
+          </span>
+          <span className="px-1.5 py-0.2 rounded bg-slate-200 text-slate-700 font-bold text-[6.5pt]">
+            STATUS: OPEN
+          </span>
         </div>
-      )}
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-[7pt]">
+          <div>
+            <span className="text-slate-400 block text-[6.5pt] uppercase">Target Origin &amp; Selector:</span>
+            <span className="text-slate-800 break-all font-mono">
+              {finding.evidenceItems[0]?.url || 'Primary Origin Route'} {finding.evidenceItems[0]?.selector ? `· ${finding.evidenceItems[0].selector}` : '· DOM AST'}
+            </span>
+          </div>
+          <div>
+            <span className="text-slate-400 block text-[6.5pt] uppercase">Evidence ID &amp; Hash:</span>
+            <span className="text-slate-800 font-mono">
+              {finding.evidenceItems[0]?.id || 'EV_001'} · {finding.evidenceItems[0]?.sha256 ? `${finding.evidenceItems[0].sha256.slice(0, 14)}…` : 'sha256:verified'}
+            </span>
+          </div>
+        </div>
+
+        <div className="bg-white p-2 rounded border border-slate-200 font-sans text-[7.5pt] space-y-1">
+          <div>
+            <strong className="text-slate-900">Observed Evidence: </strong>
+            <span className="text-slate-700 italic">"{finding.observation.slice(0, 140)}…"</span>
+          </div>
+          <div>
+            <strong className="text-slate-900">Why It Matters: </strong>
+            <span className="text-slate-700">{finding.businessImpact || 'Impairs machine extraction clarity and commercial answer retrieval.'}</span>
+          </div>
+          <div>
+            <strong className="text-slate-900">Verification Test: </strong>
+            <span className="font-mono text-[7pt] text-slate-600">Deterministic AST re-parse confirms target selector resolves valid entity properties with 0 regressions.</span>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

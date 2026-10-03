@@ -180,23 +180,49 @@ class DynamicQuestionSandboxEngine:
                             evidence_snippet = r.evidence_snippet
                             break
 
-                    is_answerable = sim.grounding_ratio >= 0.30
-                    if sim.grounding_ratio >= 0.60:
-                        answerability_status = "ANSWERABLE"
-                    elif sim.grounding_ratio >= 0.25:
+                    # Map granular assessment status to answerability
+                    if sim.assessment_status == "CONFLICTING":
+                        answerability_status = "CONFLICTING"
+                        is_answerable = False
+                    elif sim.assessment_status == "INSUFFICIENT" or sim.grounding_ratio < 0.20 or sim.retrieval_evidence_count == 0:
+                        answerability_status = "EVIDENCE_GAP"
+                        is_answerable = False
+                    elif sim.assessment_status == "PARTIAL" or sim.grounding_ratio < 0.60:
                         answerability_status = "PARTIAL"
+                        is_answerable = True
                     else:
-                        answerability_status = "UNANSWERABLE"
+                        answerability_status = "ANSWERABLE"
+                        is_answerable = True
 
                     # Citability score: grounding_ratio mapped to 1-10
-                    citability_score = max(1, min(10, round(sim.grounding_ratio * 10)))
-                    if citability_score < 2:
-                        citability_score = 2  # minimum floor
+                    if is_answerable and sim.grounding_ratio >= 0.60:
+                        citability_score = max(6, min(10, round(sim.grounding_ratio * 10)))
+                    elif is_answerable and sim.grounding_ratio >= 0.25:
+                        citability_score = max(3, min(5, round(sim.grounding_ratio * 10)))
+                    else:
+                        citability_score = 1 if sim.grounding_ratio == 0 else 2
 
-                    crawled_answer = sim.candidate_answer[:400]
+                    crawled_answer = sim.candidate_answer[:450]
                     gap_analysis = self._build_gap_analysis(sim, brand, facet_id)
                     recommended_answer = self._build_recommended_answer(brand, val_prop, q_text, sim)
                     projected_patch_gain = self._compute_projected_gain(sim.answer_risk, sim.grounding_ratio)
+
+                    grounding_ratio = sim.grounding_ratio
+                    answer_risk = sim.answer_risk.value if hasattr(sim.answer_risk, "value") else str(sim.answer_risk)
+                    claim_decomposition = [
+                        r.model_dump() if hasattr(r, "model_dump") else r
+                        for r in sim.claim_decomposition
+                    ]
+                    retrieval_evidence_count = sim.retrieval_evidence_count
+                    missing_aspects = sim.missing_aspects
+                    eval_trace = {
+                        "retrieval_evidence_count": sim.retrieval_evidence_count,
+                        "assessment_status": sim.assessment_status,
+                        "grounding_ratio": sim.grounding_ratio,
+                        "answer_risk": answer_risk,
+                        "missing_aspects": sim.missing_aspects,
+                        "supported_aspects": sim.supported_aspects,
+                    }
 
                 else:
                     # ── Fallback: legacy string-window evaluator ──────────────────
@@ -205,7 +231,8 @@ class DynamicQuestionSandboxEngine:
                         brand=brand, niche=niche, val_prop=val_prop,
                     )
                     is_answerable = eval_res["is_answerable"]
-                    answerability_status = eval_res["answerability_status"]
+                    raw_status = eval_res["answerability_status"]
+                    answerability_status = "EVIDENCE_GAP" if raw_status == "UNANSWERABLE" else raw_status
                     crawled_answer = eval_res["crawled_answer"]
                     evidence_url = eval_res["evidence_url"]
                     evidence_snippet = eval_res["evidence_snippet"]
@@ -213,6 +240,16 @@ class DynamicQuestionSandboxEngine:
                     recommended_answer = eval_res["recommended_answer"]
                     citability_score = eval_res["citability_score"]
                     projected_patch_gain = eval_res["projected_patch_gain"]
+                    grounding_ratio = 0.85 if answerability_status == "ANSWERABLE" else (0.45 if answerability_status == "PARTIAL" else 0.0)
+                    answer_risk = "LOW" if answerability_status == "ANSWERABLE" else ("MEDIUM" if answerability_status == "PARTIAL" else "HIGH")
+                    claim_decomposition = []
+                    retrieval_evidence_count = 1 if is_answerable else 0
+                    missing_aspects = [] if is_answerable else [q_text]
+                    eval_trace = {
+                        "mode": "legacy_fallback",
+                        "answerability_status": answerability_status,
+                        "grounding_ratio": grounding_ratio,
+                    }
 
                 eval_obj = DynamicSandboxQuestionEvaluation(
                     question_id=q_id,
@@ -228,6 +265,12 @@ class DynamicQuestionSandboxEngine:
                     recommended_answer=recommended_answer,
                     citability_score=citability_score,
                     projected_patch_gain=projected_patch_gain,
+                    grounding_ratio=grounding_ratio,
+                    answer_risk=answer_risk,
+                    claim_decomposition=claim_decomposition,
+                    retrieval_evidence_count=retrieval_evidence_count,
+                    missing_aspects=missing_aspects,
+                    evaluation_trace=eval_trace,
                 )
                 all_evaluations.append(eval_obj)
 

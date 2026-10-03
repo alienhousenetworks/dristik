@@ -47,10 +47,10 @@ _INTENT_SIGNALS: List[Tuple[QueryIntent, List[str]]] = [
     (QueryIntent.COMMERCIAL,  ["cost", "price", "pricing", "plan", "subscription", "billing", "fee", "rate", "charge", "tier", "package"]),
     (QueryIntent.COMPLIANCE,  ["soc 2", "iso 27001", "hipaa", "gdpr", "ccpa", "compliant", "certified", "security", "privacy", "encryption", "pci"]),
     (QueryIntent.COMPETITIVE, ["compare", "versus", "vs ", "alternative", "competitor", "better than", "differ", "unlike"]),
-    (QueryIntent.PURCHASE,    ["demo", "trial", "get started", "sign up", "buy", "purchase", "schedule", "book", "contact sales", "start"]),
+    (QueryIntent.PURCHASE,    ["demo", "trial", "get started", "sign up", "buy", "purchase", "schedule", "book", "contact sales", "start", "contact", "call to action", "cta", "request"]),
     (QueryIntent.PROOF,       ["case study", "customer", "roi", "result", "outcome", "testimonial", "logo", "review", "evidence", "success"]),
     (QueryIntent.TECHNICAL,   ["api", "sdk", "webhook", "integration", "stack", "architecture", "framework", "deploy", "rest", "graphql"]),
-    (QueryIntent.ICP,         ["who is", "who should", "company size", "headcount", "enterprise", "smb", "startup", "industry", "sector", "for"]),
+    (QueryIntent.ICP,         ["who is", "who should", "company size", "headcount", "enterprise", "smb", "startup", "industry", "sector", "for", "persona", "audience", "restricted", "target"]),
     (QueryIntent.ONBOARDING,  ["onboard", "implement", "setup", "support", "sla", "response time", "customer success", "training", "migrate"]),
     (QueryIntent.CAPABILITY,  ["does", "can", "feature", "capability", "support", "allow", "enable", "workflow", "automat", "dashboard"]),
     (QueryIntent.IDENTITY,    ["what is", "what does", "who is", "where is", "when was", "founded", "mission", "headquarters", "about"]),
@@ -114,8 +114,9 @@ class QueryPlanner:
             QueryIntent.COMMERCIAL:  ["$", "€", "£", "₹", "/mo", "pricing", "plan", "tier", "cost"],
             QueryIntent.COMPLIANCE:  ["soc", "iso", "hipaa", "gdpr", "certified", "compliant", "aes", "tls"],
             QueryIntent.TECHNICAL:   ["api", "sdk", "webhook", "graphql", "rest", "kubernetes", "docker"],
-            QueryIntent.ICP:         ["enterprise", "startup", "smb", "employees", "headcount", "team size"],
+            QueryIntent.ICP:         ["enterprise", "startup", "smb", "employees", "headcount", "team size", "persona", "target", "industry"],
             QueryIntent.PROOF:       ["customer", "case study", "roi", "reduced", "increased", "results"],
+            QueryIntent.PURCHASE:    ["contact", "demo", "request", "build", "trial", "sign up", "schedule", "call to action"],
         }.get(intent, [])
 
 
@@ -146,9 +147,27 @@ _STOPWORDS = frozenset({
     "does", "which",
 })
 
+def _stem(token: str) -> str:
+    t = token.lower()
+    if len(t) > 4:
+        if t.endswith("ies") and len(t) > 5:
+            return t[:-3] + "y"
+        if t.endswith("ing") and len(t) > 5:
+            return t[:-3].rstrip("e")
+        if t.endswith("es") and len(t) > 4:
+            return t[:-2].rstrip("e")
+        if t.endswith("ed") and len(t) > 4:
+            return t[:-2].rstrip("e")
+        if t.endswith("s") and not t.endswith("ss"):
+            return t[:-1].rstrip("e")
+        if t.endswith("e") and len(t) > 4:
+            return t[:-1]
+    return t
+
+
 def _tokenize(text: str) -> List[str]:
     return [
-        t for t in re.sub(r"[^\w\s]", " ", text.lower()).split()
+        _stem(t) for t in re.sub(r"[^\w\s]", " ", text.lower()).split()
         if t not in _STOPWORDS and len(t) > 2
     ]
 
@@ -216,49 +235,70 @@ class HybridRetriever:
             return []
 
         query_tokens = _tokenize(question)
+        brand_tokens = set(_tokenize(self.graph.brand))
+        # Exclude brand name tokens so queries about "AlienHouse pricing" don't match every claim merely by company name
+        topic_tokens = [t for t in query_tokens if t not in brand_tokens]
+        if not topic_tokens:
+            topic_tokens = query_tokens
+
         chunks: List[RetrievedEvidenceChunk] = []
 
         for claim in self.graph.claims:
             chunk = RetrievedEvidenceChunk(claim)
-
-            # 1. BM25
             doc_tokens = self._doc_tokens.get(claim.claim_id, [])
-            chunk.bm25_score = _bm25_score(query_tokens, doc_tokens, avg_len=self._avg_doc_len)
+            if not doc_tokens:
+                continue
 
-            # 2. Semantic: token overlap ratio (Jaccard-style, lightweight)
-            q_set = set(query_tokens)
+            # 1. Base Lexical BM25 on topic tokens
+            chunk.bm25_score = _bm25_score(topic_tokens, doc_tokens, avg_len=self._avg_doc_len)
+
+            # 2. Semantic: topic token overlap ratio (Jaccard-style, lightweight)
+            q_set = set(topic_tokens)
             d_set = set(doc_tokens)
             intersection = q_set & d_set
             union = q_set | d_set
             chunk.semantic_score = len(intersection) / max(1, len(union))
 
-            # 3. Page role boost
-            if claim.evidence and claim.evidence.page_role in plan.priority_page_roles:
-                idx = plan.priority_page_roles.index(claim.evidence.page_role)
-                chunk.page_role_boost = max(0.0, 1.0 - idx * 0.15)
-
-            # 4. Claim type boost
-            if claim.claim_type in plan.priority_claim_types:
-                chunk.claim_type_boost = 0.25
-
-            # 5. Lexical signal boost (exact high-value tokens)
+            # 3. Lexical signal boost (exact high-value tokens like $, soc, api)
             combined_lower = f"{claim.predicate} {claim.object}".lower()
             if plan.lexical_priority_signals:
                 hits = sum(1 for s in plan.lexical_priority_signals if s in combined_lower)
                 chunk.lexical_signal_boost = hits * 0.30
 
-            # RRF-inspired final score
+            # ── Relevance Gate ──────────────────────────────────────────
+            # Calculate base topic relevance before any category or page role boosts.
+            # Boosts are re-rankers ONLY and must never promote an off-topic chunk.
+            base_relevance = (chunk.bm25_score * 0.60) + (chunk.semantic_score * 0.40)
+            has_topic_match = len(intersection) > 0
+            has_lexical_signal = chunk.lexical_signal_boost > 0.0
+
+            passes_relevance_gate = (
+                (has_topic_match and base_relevance >= 0.10) or
+                (has_lexical_signal and (has_topic_match or base_relevance >= 0.04))
+            )
+            if not passes_relevance_gate:
+                continue
+
+            # 4. Page role boost (only for gate-passed candidates)
+            if claim.evidence and claim.evidence.page_role in plan.priority_page_roles:
+                idx = plan.priority_page_roles.index(claim.evidence.page_role)
+                chunk.page_role_boost = max(0.0, 1.0 - idx * 0.15)
+
+            # 5. Claim type boost (only for gate-passed candidates)
+            if claim.claim_type in plan.priority_claim_types:
+                chunk.claim_type_boost = 0.25
+
+            # Final RRF-weighted score
             chunk.final_score = (
-                chunk.bm25_score * 0.40 +
-                chunk.semantic_score * 0.30 +
+                base_relevance * 0.65 +
                 chunk.page_role_boost * 0.15 +
                 chunk.claim_type_boost * 0.10 +
-                chunk.lexical_signal_boost * 0.05
+                min(0.30, chunk.lexical_signal_boost) * 0.10
             )
 
-            if chunk.final_score > 0.0:
+            if chunk.final_score >= 0.12:
                 chunks.append(chunk)
 
-        # Sort descending by final_score, return top-K
+        # Sort descending by final_score, return top-K (or empty list if no evidence passed the gate)
         chunks.sort(key=lambda c: c.final_score, reverse=True)
         return chunks[: self.TOP_K]

@@ -371,11 +371,11 @@ class VisualIntelligenceEngine:
             SpotlightMetric(
                 id="metric_blocker_density",
                 label="Critical Blockers",
-                value=sev_counts["CRITICAL"] + sev_counts["HIGH"],
+                value=sev_counts["CRITICAL"],
                 unit="defects",
                 change_indicator="Zero-tolerance goal",
-                status="bad" if (sev_counts["CRITICAL"] + sev_counts["HIGH"]) > 3 else ("warning" if (sev_counts["CRITICAL"] + sev_counts["HIGH"]) > 0 else "good"),
-                significance="High-severity structural issues in canonicals, schema, or indexing that directly suppress revenue.",
+                status="bad" if sev_counts["CRITICAL"] > 0 else "good",
+                significance="High-severity blocker defects requiring immediate remediation." if sev_counts["CRITICAL"] > 0 else "Zero critical blocker defects detected across sampled pages.",
                 category="OVERALL",
             ),
             SpotlightMetric(
