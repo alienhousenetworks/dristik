@@ -58,6 +58,165 @@ FIXED_PROMPT_SET = [
     }
 ]
 
+# Tier 1 — 18 Canonical Longitudinal Benchmark Prompts
+# 4 Awareness, 6 Consideration, 8 Decision
+CANONICAL_18_BENCHMARK_PROMPTS = [
+    # ── Awareness (4 queries) ─────────────────────────────────
+    {
+        "query_id": "AW-01",
+        "funnel_stage": "awareness",
+        "intent": "Brand Identity & Value Proposition",
+        "template": "What is {brand} ({domain}) and what core problem does it solve?",
+    },
+    {
+        "query_id": "AW-02",
+        "funnel_stage": "awareness",
+        "intent": "Category Definition",
+        "template": "What specific business category or industry does {brand} operate in?",
+    },
+    {
+        "query_id": "AW-03",
+        "funnel_stage": "awareness",
+        "intent": "Primary Product / Service Capability",
+        "template": "What are the primary capabilities, services, or products delivered by {brand}?",
+    },
+    {
+        "query_id": "AW-04",
+        "funnel_stage": "awareness",
+        "intent": "Target Audience & ICP",
+        "template": "Who is {brand} built for, and what ideal customer profile or company size does it serve?",
+    },
+
+    # ── Consideration (6 queries) ──────────────────────────────
+    {
+        "query_id": "CO-01",
+        "funnel_stage": "consideration",
+        "intent": "Competitor & Market Alternatives",
+        "template": "Top alternatives and competitors to {brand} ({domain}) in {industry}.",
+    },
+    {
+        "query_id": "CO-02",
+        "funnel_stage": "consideration",
+        "intent": "Technical Architecture & Integrations",
+        "template": "What technologies, APIs, and stack does {brand} use and integrate with?",
+    },
+    {
+        "query_id": "CO-03",
+        "funnel_stage": "consideration",
+        "intent": "Category Ranking & Industry Standing",
+        "template": "Best {industry} software platforms and tools in 2026, and does {brand} rank among them?",
+    },
+    {
+        "query_id": "CO-04",
+        "funnel_stage": "consideration",
+        "intent": "Trust, Security & Compliance",
+        "template": "Is {brand} ({domain}) secure, compliant (SOC2, ISO, GDPR), and enterprise-ready?",
+    },
+    {
+        "query_id": "CO-05",
+        "funnel_stage": "consideration",
+        "intent": "Customer Proof & Proven Track Record",
+        "template": "What case studies, client reviews, or quantifiable proof points validate {brand}?",
+    },
+    {
+        "query_id": "CO-06",
+        "funnel_stage": "consideration",
+        "intent": "Deployment & Delivery Model",
+        "template": "How is {brand} deployed (cloud, on-premise, SaaS, managed service) and how does it work?",
+    },
+
+    # ── Decision (8 queries) ──────────────────────────────────
+    {
+        "query_id": "DE-01",
+        "funnel_stage": "decision",
+        "intent": "Pricing Tiers & Licensing",
+        "template": "How much does {brand} cost, and what are its pricing tiers, subscription plans, or rates?",
+    },
+    {
+        "query_id": "DE-02",
+        "funnel_stage": "decision",
+        "intent": "Implementation Fees & Timeline",
+        "template": "What is the typical setup fee, onboarding timeline, and time-to-value for {brand}?",
+    },
+    {
+        "query_id": "DE-03",
+        "funnel_stage": "decision",
+        "intent": "Competitor Migration & Switching",
+        "template": "How easy is it to migrate to {brand} from competing {industry} solutions, and what is the switching friction?",
+    },
+    {
+        "query_id": "DE-04",
+        "funnel_stage": "decision",
+        "intent": "Enterprise SLA & Support Channels",
+        "template": "What uptime SLA, dedicated support, and enterprise guarantees does {brand} offer?",
+    },
+    {
+        "query_id": "DE-05",
+        "funnel_stage": "decision",
+        "intent": "Concrete ROI & Payoff",
+        "template": "What is the quantifiable ROI, efficiency gain, and business payoff of choosing {brand}?",
+    },
+    {
+        "query_id": "DE-06",
+        "funnel_stage": "decision",
+        "intent": "Contract Terms & Cancellation",
+        "template": "Does {brand} offer month-to-month contracts, annual discounts, or free trials?",
+    },
+    {
+        "query_id": "DE-07",
+        "funnel_stage": "decision",
+        "intent": "High-Intent Purchase Action",
+        "template": "How can a prospective buyer schedule a demo, start a trial, or contact sales for {brand}?",
+    },
+    {
+        "query_id": "DE-08",
+        "funnel_stage": "decision",
+        "intent": "Direct Competitive Bake-off",
+        "template": "Why choose {brand} over direct market alternatives, and what is its primary competitive moat?",
+    },
+]
+
+
+def generate_adaptive_probes(
+    domain: str,
+    brand_name: str,
+    industry: str,
+    discovered_capabilities: Optional[List[str]] = None,
+    icp: Optional[str] = None,
+    location: Optional[str] = None,
+    top_competitors: Optional[List[str]] = None,
+) -> List[Dict[str, Any]]:
+    """
+    Tier 2 Adaptive Probes:
+    Synthesizes contextual, deep-dive niche queries based on Tier 0 capability discoveries.
+    Explicitly marked with tier='ADAPTIVE' so they do not contaminate core longitudinal scores.
+    """
+    probes = []
+    caps = discovered_capabilities or ["core services"]
+    comp = top_competitors[0] if top_competitors else "primary alternatives"
+    loc_str = f" in {location}" if location else ""
+    icp_str = f" for {icp}" if icp else ""
+
+    for i, cap in enumerate(caps[:3]):
+        probes.append({
+            "probe_id": f"ADAPT-0{i+1}",
+            "tier": "ADAPTIVE",
+            "intent": f"Niche Capability: {cap}",
+            "query": f"Who are the best {industry} providers specializing in {cap}{icp_str}{loc_str}, and does {brand_name} lead in this?",
+            "discovered_vector": cap
+        })
+
+    if comp:
+        probes.append({
+            "probe_id": "ADAPT-COMP",
+            "tier": "ADAPTIVE",
+            "intent": "Direct Head-to-Head Displacement",
+            "query": f"Is {brand_name} a better choice than {comp} for {industry}{icp_str}?",
+            "discovered_vector": comp
+        })
+
+    return probes
+
 
 def _extract_ordinal_position(text: str, brand: str, domain: str) -> Optional[int]:
     """
@@ -91,17 +250,24 @@ class GeoPipelineRunner:
         brand_name: Optional[str] = None,
         industry: Optional[str] = None,
         custom_queries: Optional[List[Dict[str, str]]] = None,
+        benchmark_tier: str = "canonical_6",
     ) -> GeoSnapshotDetail:
         """
         Executes a real live LLM querying cycle across OpenAI, Anthropic, Perplexity, and Gemini.
         Parses raw text for mentions and citations, computes deltas, and stores the snapshot.
+        Supports canonical_6, canonical_18, or custom queries.
         """
         clean_domain = domain.lower().replace("https://", "").replace("http://", "").split("/")[0]
         brand = brand_name or clean_domain.split(".")[0].capitalize()
         niche = industry or "Digital Platform & SaaS"
 
         # 1. Resolve prompts
-        prompt_defs = custom_queries or FIXED_PROMPT_SET
+        if custom_queries:
+            prompt_defs = custom_queries
+        elif benchmark_tier == "canonical_18":
+            prompt_defs = CANONICAL_18_BENCHMARK_PROMPTS
+        else:
+            prompt_defs = FIXED_PROMPT_SET
         rendered_prompts = []
         for p in prompt_defs:
             rendered_prompts.append({

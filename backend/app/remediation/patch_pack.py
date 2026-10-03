@@ -24,23 +24,24 @@ def generate_character_safe_copy(bp: Optional[BusinessProfile], website_url: str
     val_prop = (
         bp.value_proposition
         if bp and bp.value_proposition
-        else "Enterprise web intelligence, cybersecurity, and performance acceleration."
+        else f"High-performance {niche.lower()} and scalable enterprise solutions."
     )
-    audience = bp.target_audience if bp and bp.target_audience else "engineering leaders and growth teams"
+    audience = bp.target_audience if bp and bp.target_audience else "growth teams and industry leaders"
 
-    # 1. Title: Strictly enforce 50 - 60 characters
+    # 1. Title: Strictly enforce 50 - 60 characters without ellipsis
     raw_title = f"{biz_name} — {niche} Platform"
     if len(raw_title) < 50:
         raw_title = f"{biz_name} — Enterprise {niche} & Solutions"
     if len(raw_title) < 50:
         raw_title = f"{biz_name} — High-Performance {niche} Platform"
     if len(raw_title) > 60:
-        raw_title = raw_title[:57].rstrip() + "..."
-    title = raw_title[:60]
+        truncated = raw_title[:60].rsplit(" ", 1)[0]
+        raw_title = truncated if len(truncated) >= 40 else raw_title[:60].strip()
+    title = raw_title[:60].strip()
     t_len = len(title)
     t_status = "compliant" if 50 <= t_len <= 60 else "too_short" if t_len < 50 else "too_long"
 
-    # 2. Meta Description: Strictly enforce 140 - 160 characters
+    # 2. Meta Description: Strictly enforce 140 - 160 characters without ellipsis
     base_desc = f"{biz_name} delivers {val_prop.strip('.')}."
     if len(base_desc) < 140:
         base_desc = (
@@ -49,8 +50,11 @@ def generate_character_safe_copy(bp: Optional[BusinessProfile], website_url: str
             f"Discover how {biz_name} accelerates enterprise outcomes today."
         )
     if len(base_desc) > 160:
-        base_desc = base_desc[:157].rstrip() + "..."
-    meta_desc = base_desc[:160]
+        truncated = base_desc[:160].rsplit(" ", 1)[0]
+        base_desc = (truncated + ".") if not truncated.endswith((".", "!", "?")) else truncated
+        if len(base_desc) > 160:
+            base_desc = base_desc[:160].strip()
+    meta_desc = base_desc[:160].strip()
     m_len = len(meta_desc)
     m_status = "compliant" if 140 <= m_len <= 160 else "too_short" if m_len < 140 else "too_long"
 
@@ -242,17 +246,7 @@ def build_patch_pack_files(
                 "publisher": {
                     "@id": f"{clean_url}/#organization"
                 },
-                "inLanguage": "en-US",
-                "potentialAction": [
-                    {
-                        "@type": "SearchAction",
-                        "target": {
-                            "@type": "EntryPoint",
-                            "urlTemplate": f"{clean_url}/search?q={{search_term_string}}"
-                        },
-                        "query-input": "required name=search_term_string"
-                    }
-                ]
+                "inLanguage": "en-US"
             },
             {
                 "@type": "SoftwareApplication",
@@ -720,7 +714,7 @@ Execute these 3 checks immediately following deployment:
 # Prevents clickjacking, MIME-sniffing, XSS, and enforces modern HTTPS transport security
 # =================================================================
 
-add_header Strict-Transport-Security "max-age=63072000; includeSubDomains; preload" always;
+add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
 add_header X-Content-Type-Options "nosniff" always;
 add_header X-Frame-Options "SAMEORIGIN" always;
 add_header Referrer-Policy "strict-origin-when-cross-origin" always;

@@ -800,7 +800,8 @@ class AnalysisOrchestrator:
 
             competitor_seo_parity_rep = build_competitor_seo_parity_matrix(
                 target_pages=eval_pages,
-                target_domain=domain
+                target_domain=domain,
+                manifest=manifest,
             )
 
             first_page_headers = {}
@@ -858,7 +859,8 @@ class AnalysisOrchestrator:
                 business_profile=blackboard.business_profile,
                 has_schema=any(len(p.schema_types) > 0 for p in blackboard.pages),
                 is_https=website_url.startswith("https://"),
-                readability=page_ev.readability_score
+                readability=page_ev.readability_score,
+                manifest=manifest,
             )
             blackboard.scores = overall_scores
             controller.mark_node_status("node_honest_scoring", GraphNodeStatus.COMPLETED)
@@ -1030,6 +1032,14 @@ class AnalysisOrchestrator:
             except Exception:
                 agent_readiness = None
 
+            live_bench = None
+            if snap and (snap.engines_measured_count or 0) > 0 and snap.overall_score is not None:
+                live_bench = {
+                    "overall_mention_rate_pct": float(snap.overall_score),
+                    "overall_first_party_citation_rate_pct": float(snap.overall_score),
+                    "total_queries": snap.total_queries or 18,
+                }
+
             # Human, Google, and on-page AI readiness. Live citation stays null unless a snapshot exists.
             honest_scores = self.scoring_engine.calculate_honest_scores(
                 findings=final_findings,
@@ -1040,6 +1050,7 @@ class AnalysisOrchestrator:
                 readability=page_ev.readability_score,
                 geo_readiness=geo_readiness,
                 live_citation_score=live_citation_score,
+                live_benchmark_data=live_bench,
             )
             blackboard.honest_scores = honest_scores
 

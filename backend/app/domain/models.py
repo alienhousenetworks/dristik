@@ -573,19 +573,24 @@ class CommercialQueryEvaluation(BaseModel):
 
 
 class DynamicSandboxQuestionEvaluation(BaseModel):
-    question_id: str # e.g. "Q-001" to "Q-100"
-    facet: str # e.g. "Identity & Category", "Pricing & Commercial Model", "Technical Architecture"
-    generated_question: str # bespoke AI generated inquiry from understanding the business
-    buyer_intent: str # intent / rationale why buyers or AI engines ask this
-    is_answerable: bool # whether crawled pages provide enough evidence to answer
-    answerability_status: str = "ANSWERABLE" # "ANSWERABLE" | "PARTIAL" | "UNANSWERABLE" | "CONFLICTING"
-    crawled_answer: str # concrete synthesized answer from raw DOM, or explanation of why missing
+    question_id: str                    # e.g. "Q-001" to "Q-100"
+    facet: str                          # e.g. "Pricing, Packaging & Commercial Model"
+    generated_question: str             # bespoke AI-generated inquiry from crawled business context
+    buyer_intent: str                   # rationale why buyers or AI engines ask this
+    is_answerable: bool                 # whether crawled pages supply enough evidence
+    answerability_status: str = "ANSWERABLE"  # ANSWERABLE | PARTIAL | UNANSWERABLE | CONFLICTING
+    crawled_answer: str                 # synthesized answer from KIE retrieval
     evidence_url: Optional[str] = None
     evidence_snippet: Optional[str] = None
-    gap_analysis: Optional[str] = None # obstacle / citation gap on raw site
-    recommended_answer: Optional[str] = None # authoritative post-remediation answer
-    citability_score: int = 5 # 1 to 10
-    projected_patch_gain: float = 0.30 # expected citation gain
+    gap_analysis: Optional[str] = None  # KIE-generated gap explanation with answer risk label
+    recommended_answer: Optional[str] = None  # authoritative post-remediation answer
+    citability_score: int = 5           # 1–10 (= grounding_ratio × 10, floor 2)
+    projected_patch_gain: float = 0.30  # expected citation coverage gain post-remediation
+    # KIE Phase 6 fields
+    grounding_ratio: Optional[float] = None          # 0.0–1.0 from GroundedAnswerSimulator
+    answer_risk: Optional[str] = None                # HIGH | MEDIUM | LOW
+    claim_decomposition: Optional[List[Dict[str, Any]]] = None  # per-claim verification
+    retrieval_evidence_count: Optional[int] = None   # how many evidence chunks were retrieved
 
 
 class CompetitorBakeoffItem(BaseModel):
@@ -612,6 +617,41 @@ class CompetitorBakeoffResult(BaseModel):
     ties: int = 0
     executive_takeaway: str = ""
 
+class EvidenceItem(BaseModel):
+    url: Optional[str] = None
+    selector: Optional[str] = None
+    text: str
+    evidence_type: str = "body_text"  # service_specification, heading, schema_declaration, case_study, pricing_table
+    location_weight: float = 1.0       # main/article/heading: 0.9-1.0; nav/footer: 0.05-0.1
+    strength: float = 1.0              # 0.0-1.0 quality of match
+
+
+class CanonicalEntityFact(BaseModel):
+    entity_type: str                  # Company, Service, Product, Pricing, Security, Leadership
+    attribute: str
+    value: str
+    source_type: str = "DOM"          # DOM, SCHEMA, EXTERNAL
+    source_url: Optional[str] = None
+    verified: bool = True
+    contradictions: List[str] = Field(default_factory=list)
+
+
+class AiClaimRecord(BaseModel):
+    prompt_id: str
+    engine: str
+    raw_claim: str
+    claim_status: str = "UNVERIFIED"  # VERIFIED | UNVERIFIED | CONTRADICTION
+    evidence_match: Optional[str] = None
+
+
+class BenchmarkPromptDefinition(BaseModel):
+    prompt_id: str
+    tier: str = "CANONICAL"           # CANONICAL | ADAPTIVE
+    funnel_stage: str = "decision"     # awareness | consideration | decision
+    intent: str
+    template: str
+
+
 class GeoQuestionEvidence(BaseModel):
     question_key: str
     question: str
@@ -623,6 +663,9 @@ class GeoQuestionEvidence(BaseModel):
     evidence_snippet: Optional[str] = None
     why: str = ""
     recommended_answer: Optional[str] = None
+    confidence: float = 0.8
+    evidence_set: List[EvidenceItem] = Field(default_factory=list)
+    remediation_type: Optional[str] = None  # ANSWER_BLOCK | INTERNAL_LINK | CONTENT_REQUIRED | NO_REMEDIATION_NEEDED
 
 
 class GeoDimension(BaseModel):
@@ -1123,6 +1166,17 @@ class LabPerformanceMetrics(BaseModel):
     server: str = "unspecified"
     font_display_strategy: Optional[str] = None
     images_missing_dimensions: int = 0
+    # Google Lighthouse & Core Web Vitals Suite
+    lighthouse_performance_score: Optional[float] = None
+    lighthouse_accessibility_score: Optional[float] = None
+    lighthouse_best_practices_score: Optional[float] = None
+    lighthouse_seo_score: Optional[float] = None
+    lcp_ms: Optional[float] = None
+    cls_score: Optional[float] = None
+    tbt_ms: Optional[float] = None
+    speed_index_ms: Optional[float] = None
+    raw_vs_rendered_diff: Optional[Dict[str, Any]] = None
+    lighthouse_audit_version: Optional[str] = None
 
 
 class FieldPerformanceMetrics(BaseModel):
@@ -1920,6 +1974,9 @@ class ExecutiveReport(BaseModel):
     honest_scores: Optional[HonestScores] = None
     commercial_evaluations: List[CommercialQueryEvaluation] = Field(default_factory=list)
     dynamic_sandbox_evaluations: List[DynamicSandboxQuestionEvaluation] = Field(default_factory=list)
+    # KIE Phase 6: Knowledge graph summary and 5-dimension AI visibility scorecard
+    kie_graph_summary: Optional[Dict[str, Any]] = None
+    five_dimension_ai_visibility: Optional[Dict[str, Any]] = None
     competitor_bakeoff: Optional[CompetitorBakeoffResult] = None
     character_safe_copy: Optional[CharacterSafeCopy] = None
     whatsapp_summary: Optional[str] = None

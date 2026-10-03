@@ -218,6 +218,9 @@ def analyze_international_seo(
     elif issues:
         status = "WARNING"
         summary = f"International SEO warnings: {len(issues)} code syntax or x-default warnings detected."
+    elif not is_multilingual and pages_with_hreflang == 0:
+        status = "NOT_APPLICABLE"
+        summary = "Single-language site; international hreflang alternate annotations are not applicable."
     else:
         status = "PASS"
         summary = f"Fully validated multilingual architecture across {len(all_locales)} locale(s) with reciprocal return tags."

@@ -490,7 +490,12 @@ class CompetitorBenchmarkEngine:
 competitor_benchmark_engine = CompetitorBenchmarkEngine()
 
 
-def _compute_profile_metrics(pages: List[PageEvidence], domain: str, is_target: bool = False) -> CompetitorSeoParityProfile:
+def _compute_profile_metrics(
+    pages: List[PageEvidence],
+    domain: str,
+    is_target: bool = False,
+    manifest: Optional[Any] = None
+) -> CompetitorSeoParityProfile:
     if not pages:
         return CompetitorSeoParityProfile(
             domain=domain,
@@ -542,7 +547,13 @@ def _compute_profile_metrics(pages: List[PageEvidence], domain: str, is_target: 
                 modern_imgs += 1
     modern_img_pct = round((modern_imgs / max(1, total_imgs)) * 100, 1) if total_imgs > 0 else 0.0
 
-    tech_score = int(round(max(20, min(100, (http_200_pct * 0.6) + (40 if avg_ttfb < 600 else 20)))))
+    tech_base = (http_200_pct * 0.6) + (40 if avg_ttfb < 600 else 20)
+    if is_target and manifest is not None:
+        if not getattr(manifest, "robots_txt_found", True):
+            tech_base -= 20.0  # -20 for missing robots.txt
+        if not getattr(manifest, "sitemap_found", True):
+            tech_base -= 15.0  # -15 for missing XML sitemap
+    tech_score = int(round(max(20, min(100, tech_base))))
     onpage_score = int(round(max(20, min(100, (title_opt_pct * 0.35) + (meta_opt_pct * 0.35) + (h1_health_pct * 0.30)))))
     depth_score = int(round(max(20, min(100, min(100.0, (avg_words / 600.0) * 100.0)))))
     schema_score = int(round(max(20, min(100, min(80.0, len(unique_schemas) * 20.0) + (20 if has_bc else 0)))))
@@ -575,10 +586,11 @@ def build_competitor_seo_parity_matrix(
     target_pages: List[PageEvidence],
     target_domain: str,
     competitors: Optional[List[str]] = None,
-    competitor_pages_map: Optional[Dict[str, List[PageEvidence]]] = None
+    competitor_pages_map: Optional[Dict[str, List[PageEvidence]]] = None,
+    manifest: Optional[Any] = None,
 ) -> CompetitorSeoParityMatrix:
     clean_target = _clean_domain(target_domain)
-    target_profile = _compute_profile_metrics(target_pages, clean_target, is_target=True)
+    target_profile = _compute_profile_metrics(target_pages, clean_target, is_target=True, manifest=manifest)
 
     profiles: List[CompetitorSeoParityProfile] = [target_profile]
     comp_map = competitor_pages_map or {}

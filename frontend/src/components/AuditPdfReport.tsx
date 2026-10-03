@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import {
   ExecutiveReport,
   Finding,
@@ -132,9 +132,40 @@ export function AuditPdfReport({ report }: { report: ExecutiveReport }) {
   // Charts
   const charts = visual?.selected_visualizations || [];
   const radarChart = charts.find((c) => c.chart_type === 'radar');
-  const donutChart = charts.find((c) => c.chart_type === 'defect_donut');
   const engineChart = charts.find((c) => c.chart_type === 'engine_comparison_bar');
   const latencyChart = charts.find((c) => c.chart_type === 'latency_curve');
+
+  // Synchronized Donut Chart: Always guarantee 100% numerical match with findings
+  const donutChart = useMemo<ChartSpecification | null>(() => {
+    const rawDonut = charts.find((c) => c.chart_type === 'defect_donut');
+    if (rawDonut && rawDonut.data?.total === findings.length) {
+      return rawDonut;
+    }
+    if (findings.length === 0) return rawDonut || null;
+    const counts: Record<string, number> = { CRITICAL: 0, HIGH: 0, MEDIUM: 0, LOW: 0, INFO: 0 };
+    findings.forEach((f) => {
+      const sev = String(f.severity || '').toUpperCase();
+      if (counts[sev] !== undefined) counts[sev]++;
+    });
+    return {
+      id: 'defect_donut',
+      chart_type: 'defect_donut' as const,
+      title: 'Empirical Defect Severity Distribution',
+      subtitle: `${findings.length} findings categorized by business risk tier`,
+      ai_insight: 'Categorization of findings by business risk tier',
+      category: 'EXECUTIVE',
+      data: {
+        total: findings.length,
+        segments: [
+          { label: 'Critical', count: counts.CRITICAL, color: '#dc2626' },
+          { label: 'High', count: counts.HIGH, color: '#f97316' },
+          { label: 'Medium', count: counts.MEDIUM, color: '#eab308' },
+          { label: 'Low', count: counts.LOW, color: '#3b82f6' },
+          { label: 'Info', count: counts.INFO, color: '#94a3b8' },
+        ],
+      },
+    };
+  }, [charts, findings]);
 
   // Rollup analyzers
   const metaRollup = report.meta_rollup;
@@ -693,10 +724,10 @@ export function AuditPdfReport({ report }: { report: ExecutiveReport }) {
           <thead>
             <tr className="bg-canvas-subtle border-b border-line text-left">
               <th className="py-2 px-3">Answer Engine Profile</th>
-              <th className="py-2 px-3">Score</th>
-              <th className="py-2 px-3">Mentioned</th>
-              <th className="py-2 px-3">Cited</th>
-              <th className="py-2 px-3">Accuracy</th>
+              <th className="py-2 px-3">Readiness Score</th>
+              <th className="py-2 px-3">Live Mention</th>
+              <th className="py-2 px-3">Citation Readiness</th>
+              <th className="py-2 px-3">Grounding</th>
               <th className="py-2 px-3">Primary Retrieval Source</th>
             </tr>
           </thead>
@@ -726,18 +757,29 @@ export function AuditPdfReport({ report }: { report: ExecutiveReport }) {
                 status: perEngine?.claude_gemini?.readiness_band ?? (perEngine?.claude_gemini?.score != null ? 'Partial' : 'Unmeasured'),
                 source: 'Pre-training + web retrieval',
               },
-            ].map((eng) => (
-              <tr key={eng.name} className="border-b border-line">
-                <td className="py-1.5 px-3 font-semibold">{eng.name}</td>
-                <td className="py-1.5 px-3 font-mono font-bold text-pine">
-                  {eng.score != null ? `${score(eng.score)} / 100` : '—'}
-                </td>
-                <td className="py-1.5 px-3 font-bold text-good">{eng.score != null ? 'Yes' : 'Unmeasured'}</td>
-                <td className="py-1.5 px-3 font-semibold">{eng.status}</td>
-                <td className="py-1.5 px-3 text-good font-mono font-semibold">{eng.score != null ? 'Verified' : '—'}</td>
-                <td className="py-1.5 px-3 text-ink-600">{eng.source}</td>
-              </tr>
-            ))}
+            ].map((eng) => {
+              const hasLiveSearch = Boolean(
+                (report.ai_visibility_scorecard && (report.ai_visibility_scorecard.successful_runs || 0) > 0) ||
+                ((report as any).ai_search_benchmark?.live_search_executed) ||
+                (((report as any).live_benchmark_data)?.total_queries > 0)
+              );
+              return (
+                <tr key={eng.name} className="border-b border-line">
+                  <td className="py-1.5 px-3 font-semibold">{eng.name}</td>
+                  <td className="py-1.5 px-3 font-mono font-bold text-pine">
+                    {eng.score != null ? `${score(eng.score)} / 100` : '—'}
+                  </td>
+                  <td className="py-1.5 px-3 font-medium text-ink-700">
+                    {hasLiveSearch ? 'Yes' : 'Unmeasured (Simulated)'}
+                  </td>
+                  <td className="py-1.5 px-3 font-semibold capitalize">{eng.status}</td>
+                  <td className="py-1.5 px-3 text-ink-600 font-mono text-[11px]">
+                    {hasLiveSearch ? 'Verified Live' : 'Modeled Heuristic'}
+                  </td>
+                  <td className="py-1.5 px-3 text-ink-600">{eng.source}</td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
 

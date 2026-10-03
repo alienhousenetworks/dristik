@@ -28,10 +28,12 @@ def _clean_path(url_or_path: str) -> str:
 
 
 def _format_title_copy(page_path: str, biz_name: str, niche: str) -> str:
-    """Constructs character-safe (50-60 characters) title copy based on page path."""
+    """Constructs character-safe (50-60 characters) title copy without ellipses."""
     p = page_path.strip("/").lower()
     if not p or p in ("", "index.html", "home"):
-        raw = f"{biz_name} — Enterprise {niche}"
+        raw = f"{biz_name} — {niche}"
+        if len(raw) < 50:
+            raw = f"{biz_name} — Enterprise {niche}"
         if len(raw) < 50:
             raw = f"{biz_name} — {niche} Platform & Solutions"
     elif "pricing" in p:
@@ -47,35 +49,47 @@ def _format_title_copy(page_path: str, biz_name: str, niche: str) -> str:
     elif "solutions" in p or "features" in p or "product" in p:
         raw = f"{biz_name} Solutions — Next-Gen {niche} Capabilities"
     else:
-        capitalized = p.replace("-", " ").replace("_", " ").title()
-        raw = f"{capitalized} | {biz_name} — {niche}"
+        # Reconstruct path as readable title
+        subparts = [sp.replace("-", " ").replace("_", " ").title() for sp in p.split("/") if sp]
+        subparts.reverse()
+        sub_title = " - ".join(subparts)
+        raw = f"{sub_title} | {biz_name}"
+        if len(raw) < 50:
+            raw = f"{sub_title} | {biz_name} — {niche}"
 
     if len(raw) < 50:
         raw = f"{raw} Platform"
     if len(raw) > 60:
-        raw = raw[:57].rstrip() + "..."
-    return raw[:60]
+        truncated = raw[:60].rsplit(" ", 1)[0]
+        raw = truncated if len(truncated) >= 40 else raw[:60].strip()
+    return raw[:60].strip()
 
 
-def _format_meta_description(page_path: str, biz_name: str, val_prop: str, audience: str) -> str:
-    """Constructs character-safe (140-160 characters) meta description copy."""
+def _format_meta_description(page_path: str, biz_name: str, val_prop: str, audience: str, page_title: Optional[str] = None) -> str:
+    """Constructs character-safe (140-160 characters) page-specific meta description copy."""
     clean_vp = val_prop.rstrip(".").strip()
     p = page_path.strip("/").lower()
 
     if "pricing" in p:
         desc = f"Explore transparent pricing plans for {biz_name}. Engineered for {audience}, delivering {clean_vp.lower()} with zero lock-in."
     elif "about" in p:
-        desc = f"Learn how {biz_name} accelerates outcomes for {audience}. Our platform delivers {clean_vp.lower()} with proven enterprise reliability."
+        desc = f"Learn how {biz_name} accelerates outcomes for {audience}. Our team delivers {clean_vp.lower()} with proven reliability and measurable impact."
     elif "contact" in p:
-        desc = f"Connect with the {biz_name} engineering team. Discover how our solutions deliver {clean_vp.lower()} for {audience}."
+        desc = f"Connect with the {biz_name} team. Discover how our {clean_vp.lower()} solutions empower {audience} to scale efficiently."
+    elif p:
+        topic = p.replace("-", " ").replace("_", " ").replace("/", " — ").title()
+        desc = f"Discover {topic} from {biz_name}. Purpose-built for {audience} seeking proven results, high reliability, and clear technical value."
     else:
-        desc = f"{biz_name} delivers {clean_vp}. Engineered specifically for {audience} with guaranteed enterprise precision and immediate time-to-value."
+        desc = f"{biz_name} delivers {clean_vp}. Engineered specifically for {audience} with guaranteed precision, high performance, and rapid time-to-value."
 
     if len(desc) < 140:
-        desc = f"{desc} Discover our verified platform today."
+        desc = f"{desc} Learn more and get started today."
     if len(desc) > 160:
-        desc = desc[:157].rstrip() + "..."
-    return desc[:160]
+        truncated = desc[:160].rsplit(" ", 1)[0]
+        desc = (truncated + ".") if not truncated.endswith((".", "!", "?")) else truncated
+        if len(desc) > 160:
+            desc = desc[:160].strip()
+    return desc[:160].strip()
 
 
 class RemediationPatcher:
@@ -96,9 +110,9 @@ class RemediationPatcher:
 
         bp = business_profile
         biz_name = bp.business_name if (bp and bp.business_name and bp.business_name not in ["Unknown", "Unknown Business"]) else "Target Platform"
-        niche = bp.niche if (bp and bp.niche) else "Enterprise Infrastructure"
-        val_prop = bp.value_proposition if (bp and bp.value_proposition) else "Enterprise web intelligence and performance acceleration."
-        audience = bp.target_audience if (bp and bp.target_audience) else "engineering leaders and growth teams"
+        niche = bp.niche if (bp and bp.niche) else "Digital Solutions & Infrastructure"
+        val_prop = bp.value_proposition if (bp and bp.value_proposition) else f"High-performance {niche.lower()} and scalable systems"
+        audience = bp.target_audience if (bp and bp.target_audience) else "growth teams and industry leaders"
         base_domain = urlparse(website_url).netloc.lower() or "example.com"
         clean_origin = f"{urlparse(website_url).scheme or 'https'}://{base_domain}"
 
@@ -170,7 +184,7 @@ class RemediationPatcher:
                     seen_patch_keys.add(patch_key)
 
                     p_idx += 1
-                    opt_desc = _format_meta_description(path, biz_name, val_prop, audience)
+                    opt_desc = _format_meta_description(path, biz_name, val_prop, audience, page_title=(pe.title if pe else None))
                     pe = page_map.get(tgt_url.rstrip("/")) or page_map.get(path)
                     cur_desc = (pe.meta_description if pe else None) or (ev_snippets[0] if ev_snippets else None)
                     before_snip = f'<meta name="description" content="{cur_desc}">' if cur_desc and cur_desc != "MISSING" else "<!-- Missing meta description tag in <head> -->"
@@ -239,6 +253,13 @@ class RemediationPatcher:
                         after_snip = f'<h2 class="section-title">{sec_h1}</h2>'
                         patch_title = f"Demote Secondary <h1> to <h2> on '{path}'"
                         patch_expl = "Restores strict heading hierarchy by ensuring exactly one top-level <h1> exists per page."
+                    elif len(h1_list) == 1:
+                        # 1 H1 exists: optimize or clarify the existing heading rather than inserting duplicate
+                        existing_h1 = h1_list[0]
+                        before_snip = f'<h1 class="hero-title">{existing_h1}</h1>'
+                        after_snip = f'<h1 class="hero-title text-4xl font-bold tracking-tight text-ink-900">\n  {headline}\n</h1>'
+                        patch_title = f"Optimize Non-Descriptive <h1> Heading on '{path}'"
+                        patch_expl = f"Replaces vague or non-descriptive heading '{existing_h1}' with an entity-grounded headline without creating duplicate <h1> tags."
                     else:
                         before_snip = "<!-- Missing primary <h1> heading tag in hero section -->"
                         after_snip = f'<h1 class="hero-title text-4xl font-bold tracking-tight text-ink-900">\n  {headline}\n</h1>'
@@ -306,9 +327,34 @@ class RemediationPatcher:
                     seen_patch_keys.add(patch_key)
                     p_idx += 1
 
-                    sample_img = ev_snippets[0] if ev_snippets else "/assets/hero-banner.png"
+                    # Sanitize image source - discard IP addresses or non-image strings
+                    sample_img = None
+                    for snip in ev_snippets:
+                        s = str(snip).strip()
+                        if s.startswith("<img") and 'src="' in s:
+                            m = re.search(r'src=["\']([^"\']+)["\']', s)
+                            if m:
+                                s = m.group(1)
+                        if any(ext in s.lower() for ext in [".png", ".jpg", ".jpeg", ".webp", ".svg", ".gif", ".avif"]) or any(k in s.lower() for k in ["/media/", "/images/", "/assets/", "/img/"]):
+                            if not re.search(r"\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b", s):
+                                sample_img = s
+                                break
+
+                    if not sample_img and pages:
+                        for p in pages:
+                            assets = getattr(p, "image_assets", None) or []
+                            for a in assets:
+                                src = a.get("src") or a.get("url")
+                                if src and not a.get("alt") and not re.search(r"\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b", str(src)):
+                                    sample_img = src
+                                    break
+                            if sample_img:
+                                break
+
+                    sample_img = sample_img or "/assets/hero-banner.png"
                     if "http" in sample_img:
-                        sample_img = urlparse(sample_img).path
+                        sample_img = urlparse(sample_img).path or sample_img
+
                     clean_alt = f"{biz_name} — {niche} Platform Overview"
 
                     patches.append(CodePatch(
@@ -337,8 +383,7 @@ class RemediationPatcher:
                 "User-agent: *\n"
                 "Allow: /\n"
                 "Disallow: /api/\n"
-                "Disallow: /admin/\n"
-                "Disallow: /_next/\n\n"
+                "Disallow: /admin/\n\n"
                 "# AI Search & Retrieval Crawlers\n"
                 "User-agent: GPTBot\n"
                 "Allow: /\n\n"
@@ -386,12 +431,7 @@ class RemediationPatcher:
                         "@id": f"{clean_origin}/#website",
                         "url": clean_origin,
                         "name": biz_name,
-                        "publisher": {"@id": f"{clean_origin}/#organization"},
-                        "potentialAction": {
-                            "@type": "SearchAction",
-                            "target": f"{clean_origin}/search?q={{search_term_string}}",
-                            "query-input": "required name=search_term_string"
-                        }
+                        "publisher": {"@id": f"{clean_origin}/#organization"}
                     }
                 ]
             }
@@ -415,14 +455,14 @@ class RemediationPatcher:
             sec_patch_snippet = (
                 "// Next.js (next.config.js)\n"
                 "const securityHeaders = [\n"
-                "  { key: 'Strict-Transport-Security', value: 'max-age=31536000; includeSubDomains; preload' },\n"
+                "  { key: 'Strict-Transport-Security', value: 'max-age=31536000; includeSubDomains' },\n"
                 "  { key: 'X-Content-Type-Options', value: 'nosniff' },\n"
                 "  { key: 'X-Frame-Options', value: 'DENY' },\n"
                 "  { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },\n"
                 "  { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=()' }\n"
                 "];\n\n"
                 "// Nginx (nginx.conf)\n"
-                "add_header Strict-Transport-Security 'max-age=31536000; includeSubDomains; preload' always;\n"
+                "add_header Strict-Transport-Security 'max-age=31536000; includeSubDomains' always;\n"
                 "add_header X-Content-Type-Options 'nosniff' always;\n"
                 "add_header X-Frame-Options 'DENY' always;\n"
                 "add_header Referrer-Policy 'strict-origin-when-cross-origin' always;"

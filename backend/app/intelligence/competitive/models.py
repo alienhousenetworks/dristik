@@ -14,6 +14,7 @@ from pydantic import BaseModel, Field
 
 class CompetitorType(str, Enum):
     DIRECT = "DIRECT"
+    ASPIRATIONAL = "ASPIRATIONAL"
     SEARCH = "SEARCH"
     GEO = "GEO"
     CONTENT = "CONTENT"
@@ -21,6 +22,7 @@ class CompetitorType(str, Enum):
     LOCAL = "LOCAL"
     INDIRECT = "INDIRECT"
     EMERGING = "EMERGING"
+    SEARCH_ONLY = "SEARCH_ONLY"
 
 
 class EvidenceConfidence(str, Enum):
@@ -54,10 +56,17 @@ class CompetitorProfile(BaseModel):
     canonical_domain: str
     company_name: str
     competitor_types: List[CompetitorType] = Field(default_factory=list)
+    competitor_class: CompetitorType = CompetitorType.DIRECT
     industry: Optional[str] = None
     geography: Optional[str] = "Global"
+    scale_score: Optional[float] = None
+    scale_tier: Optional[str] = None
+    source: str = "auto_discovered"  # "user_specified" | "auto_discovered" | "serp_overlap" | "directory"
     discovery_sources: List[str] = Field(default_factory=list)
     discovery_confidence: float = 0.5
+    similarity_score: Optional[float] = None
+    similarity_breakdown: Dict[str, float] = Field(default_factory=dict)
+    rejection_status: Optional[str] = None
     evidence: List[CompetitorEvidenceItem] = Field(default_factory=list)
 
 

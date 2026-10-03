@@ -110,8 +110,8 @@ class ScoringEngine:
 
     def calculate_scores(
         self,
-        findings: List[Finding],
-        business_profile: BusinessProfile,
+        findings: Optional[List[Finding]] = None,
+        business_profile: Optional[BusinessProfile] = None,
         has_schema: bool = True,
         is_https: bool = True,
         readability: float = 60.0,
@@ -121,11 +121,16 @@ class ScoringEngine:
         plan_tier: str = "starter",
         audit_scope: Optional[AuditScopeInfo] = None,
         cwv_data: Optional[Dict[str, float]] = None,
+        live_benchmark_data: Optional[Dict[str, Any]] = None,
+        manifest: Optional[Any] = None,
+        **kwargs: Any,
     ) -> OverallScoreResult:
         """
         Calculates category scores, subsection breakdowns, check results with evidence,
         and intent-adjusted overall score according to Scoring Rubric v5.0.
         """
+        if findings is None:
+            findings = kwargs.get("claims", [])
         intent = business_profile.primary_intent if business_profile else BusinessIntent.LEAD_GENERATION
         base_weights = compute_intent_adjusted_weights(intent)
         scope = audit_scope or AuditScopeInfo(plan_tier=plan_tier)
@@ -207,7 +212,7 @@ class ScoringEngine:
                     elif gate.gate_id == "gate_trust_requires_evidence" and not external_authority_connected:
                         # Check if any verified trust findings exist
                         has_trust_ev = any(
-                            f.category in (Category.TRUST_AUTHORITY, Category.EXTERNAL_AUTHORITY)
+                            f.category == Category.TRUST_AUTHORITY
                             and getattr(f, "evidence_class", None) in (EvidenceClass.OBSERVED, EvidenceClass.EXTERNALLY_VERIFIED)
                             for f in findings
                         )
@@ -310,7 +315,34 @@ class ScoringEngine:
 
 
                     # Specific Check Value Evaluations
-                    if cid == "https_on_all_urls":
+                    if cid == "robots_txt_rfc9309":
+                        if manifest is not None and not getattr(manifest, "robots_txt_found", True):
+                            s = 0.0
+                            passed = 0
+                            failed = sample_size
+                            evidence_list.append({"url": "robots.txt", "status": "FAIL", "detail": "robots.txt file was not detected at domain root."})
+                        elif check_findings:
+                            s = 0.0
+                            passed = 0
+                            failed = sample_size
+                            evidence_list.append({"url": "robots.txt", "status": "FAIL", "detail": check_findings[0].title})
+                        else:
+                            s = 1.0
+                    elif cid == "sitemap_urls_valid_200":
+                        if manifest is not None and not getattr(manifest, "sitemap_found", True):
+                            s = 0.0
+                            passed = 0
+                            failed = sample_size
+                            evidence_list.append({"url": "sitemap.xml", "status": "FAIL", "detail": "XML Sitemap is missing or unreferenced in robots.txt."})
+                        elif check_findings:
+                            top_f = max(check_findings, key=lambda f: f.severity.value)
+                            s = 0.0 if top_f.severity in (Severity.CRITICAL, Severity.HIGH) else 0.5
+                            passed = int(round(s * sample_size))
+                            failed = sample_size - passed
+                            evidence_list.append({"url": "sitemap.xml", "status": "FAIL", "detail": top_f.title})
+                        else:
+                            s = 1.0
+                    elif cid == "https_on_all_urls":
                         s = 1.0 if is_https else 0.0
                         domain_lbl = getattr(business_profile, "domain", None) or getattr(business_profile, "business_name", "") or "homepage"
                         evidence_list.append({"url": domain_lbl, "status": "FAIL", "detail": "Homepage requested over insecure HTTP."})
@@ -350,11 +382,166 @@ class ScoringEngine:
                         passed = 0
                         failed = 1
                         evidence_list.append({"schema": "missing", "status": "FAIL", "detail": "No Schema.org types recorded in crawl sample."})
-                    elif cid == "ai_brand_mention_rate" and live_citation_score is not None:
-                        s = min(1.0, max(0.0, live_citation_score / 100.0))
-                        sample_size = self.rubric.plans.get(plan_tier, self.rubric.plans["starter"]).ai_search_min_sample
-                        passed = int(s * sample_size)
-                        failed = sample_size - passed
+                    elif cid == "ai_brand_mention_rate":
+                        if live_benchmark_data and "overall_mention_rate_pct" in live_benchmark_data:
+                            s = min(1.0, max(0.0, float(live_benchmark_data["overall_mention_rate_pct"]) / 100.0))
+                            sample_size = int(live_benchmark_data.get("total_queries", 18))
+                            passed = int(round(s * sample_size))
+                            failed = sample_size - passed
+                            _, low, high = wilson_interval(passed, sample_size)
+                            evidence_list.append({
+                                "metric": "brand_mention_rate",
+                                "observed_rate": f"{s*100:.1f}%",
+                                "wilson_ci": [round(low, 3), round(high, 3)],
+                                "sample_size": sample_size,
+                                "status": "PASS" if s >= 0.6 else "PARTIAL",
+                                "detail": f"Observed brand mention rate: {s*100:.1f}% across {sample_size} engine queries."
+                            })
+                        elif live_citation_score is not None:
+                            s = min(1.0, max(0.0, live_citation_score / 100.0))
+                            sample_size = self.rubric.plans.get(plan_tier, self.rubric.plans["starter"]).ai_search_min_sample
+                            passed = int(s * sample_size)
+                            failed = sample_size - passed
+                        else:
+                            is_measured = False
+                            status = "NOT_MEASURED"
+
+                    elif cid == "ai_domain_citation_rate":
+                        if live_benchmark_data and "overall_first_party_citation_rate_pct" in live_benchmark_data:
+                            s = min(1.0, max(0.0, float(live_benchmark_data["overall_first_party_citation_rate_pct"]) / 100.0))
+                            sample_size = int(live_benchmark_data.get("total_queries", 18))
+                            passed = int(round(s * sample_size))
+                            failed = sample_size - passed
+                            _, low, high = wilson_interval(passed, sample_size)
+                            evidence_list.append({
+                                "metric": "domain_citation_rate",
+                                "observed_rate": f"{s*100:.1f}%",
+                                "wilson_ci": [round(low, 3), round(high, 3)],
+                                "sample_size": sample_size,
+                                "status": "PASS" if s >= 0.4 else "PARTIAL",
+                                "detail": f"Own-domain citation link rate: {s*100:.1f}% across {sample_size} queries."
+                            })
+                        elif live_citation_score is not None:
+                            sample_size = self.rubric.plans.get(plan_tier, self.rubric.plans["starter"]).ai_search_min_sample
+                            domain_finding = next((f for f in check_findings if "citation" in f.title.lower()), None)
+                            if domain_finding:
+                                s = 0.20 if domain_finding.severity in (Severity.CRITICAL, Severity.HIGH) else 0.50
+                            else:
+                                s = min(1.0, max(0.0, (live_citation_score * 0.7) / 100.0))
+                            passed = int(round(s * sample_size))
+                            failed = sample_size - passed
+                            evidence_list.append({
+                                "metric": "domain_citation_rate",
+                                "status": "PASS" if s >= 0.5 else "PARTIAL",
+                                "detail": f"Estimated domain citation rate: {s*100:.1f}%."
+                            })
+                        else:
+                            is_measured = False
+                            status = "NOT_MEASURED"
+
+                    elif cid == "ai_displacement_resistance":
+                        if live_benchmark_data and "share_of_model" in live_benchmark_data:
+                            som = live_benchmark_data["share_of_model"]
+                            total_q = int(live_benchmark_data.get("total_queries", 18))
+                            sample_size = total_q
+                            displacements = som.get("competitor_displacements", [])
+                            comp_only_rate = som.get("competitor_only_rate")
+                            if comp_only_rate is not None:
+                                s = max(0.0, min(1.0, 1.0 - float(comp_only_rate)))
+                            else:
+                                s = max(0.0, min(1.0, 1.0 - (len(displacements) / max(1, total_q))))
+                            passed = int(round(s * sample_size))
+                            failed = sample_size - passed
+                            evidence_list.append({
+                                "metric": "displacement_resistance",
+                                "brand_presence": som.get("share_of_model_pct", 0.0),
+                                "displacements_count": len(displacements),
+                                "status": "PASS" if s >= 0.75 else "PARTIAL",
+                                "detail": f"Displacement resistance {s*100:.1f}% ({len(displacements)} competitor displacement events)."
+                            })
+                        elif check_findings:
+                            top_f = max(check_findings, key=lambda f: f.severity.value)
+                            s = 0.20 if top_f.severity in (Severity.CRITICAL, Severity.HIGH) else 0.50
+                            passed = int(round(s * sample_size))
+                            failed = sample_size - passed
+                        elif live_citation_score is not None:
+                            s = 0.70
+                            sample_size = self.rubric.plans.get(plan_tier, self.rubric.plans["starter"]).ai_search_min_sample
+                            passed = int(round(s * sample_size))
+                            failed = sample_size - passed
+                        else:
+                            is_measured = False
+                            status = "NOT_MEASURED"
+
+                    elif cid == "ai_decision_stage_mention":
+                        if live_benchmark_data and "share_of_model" in live_benchmark_data:
+                            som = live_benchmark_data["share_of_model"]
+                            dec_data = som.get("stage_breakdown", {}).get("decision", {})
+                            dec_total = dec_data.get("total", 8)
+                            dec_mentioned = dec_data.get("mentioned", 0)
+                            sample_size = max(1, dec_total)
+                            s = max(0.0, min(1.0, dec_mentioned / sample_size))
+                            passed = dec_mentioned
+                            failed = sample_size - passed
+                            evidence_list.append({
+                                "stage": "decision",
+                                "total_decision_queries": sample_size,
+                                "decision_mentions": dec_mentioned,
+                                "status": "PASS" if s >= 0.6 else "PARTIAL",
+                                "detail": f"Mentioned in {dec_mentioned}/{sample_size} high-intent decision prompts."
+                            })
+                        elif check_findings:
+                            top_f = max(check_findings, key=lambda f: f.severity.value)
+                            s = 0.20 if top_f.severity in (Severity.CRITICAL, Severity.HIGH) else 0.50
+                            passed = int(round(s * sample_size))
+                            failed = sample_size - passed
+                        elif live_citation_score is not None:
+                            s = min(1.0, max(0.0, (live_citation_score * 0.8) / 100.0))
+                            sample_size = self.rubric.plans.get(plan_tier, self.rubric.plans["starter"]).ai_search_min_sample
+                            passed = int(round(s * sample_size))
+                            failed = sample_size - passed
+                        else:
+                            is_measured = False
+                            status = "NOT_MEASURED"
+
+                    elif cid == "ai_fact_precision_recall":
+                        if live_benchmark_data and "ai_answer_diff" in live_benchmark_data:
+                            diff_data = live_benchmark_data["ai_answer_diff"]
+                            precision = diff_data.get("fact_precision")
+                            if precision is not None:
+                                s = max(0.0, min(1.0, float(precision)))
+                                sample_size = diff_data.get("total_claims", 10)
+                                passed = int(round(s * sample_size))
+                                failed = sample_size - passed
+                                evidence_list.append({
+                                    "metric": "fact_precision",
+                                    "verified_claims": diff_data.get("verified_claims", 0),
+                                    "unverified_claims": diff_data.get("unverified_claims", 0),
+                                    "contradictions": diff_data.get("contradictions", 0),
+                                    "status": "PASS" if s >= 0.8 else "PARTIAL",
+                                    "detail": f"Fact precision: {s*100:.1f}% across extracted claims."
+                                })
+                            else:
+                                s = 0.70
+                                sample_size = 10
+                                passed = 7
+                                failed = 3
+                        elif check_findings:
+                            top_f = max(check_findings, key=lambda f: f.severity.value)
+                            s = 0.20 if top_f.severity in (Severity.CRITICAL, Severity.HIGH) else 0.60
+                            passed = int(round(s * sample_size))
+                            failed = sample_size - passed
+                        elif live_citation_score is not None:
+                            s = 0.65
+                            sample_size = self.rubric.plans.get(plan_tier, self.rubric.plans["starter"]).ai_search_min_sample
+                            passed = int(round(s * sample_size))
+                            failed = sample_size - passed
+                            evidence_list.append({
+                                "detail": "Provisional fact recall based on live citation run."
+                            })
+                        else:
+                            is_measured = False
+                            status = "NOT_MEASURED"
                     else:
                         # Graded or Binary check evaluated against findings
                         if check_findings:
@@ -385,6 +572,13 @@ class ScoringEngine:
                                     "status": "FAIL" if s < 0.5 else "PARTIAL",
                                     "detail": f.title
                                 })
+                        elif cat_enum == Category.AI_SEARCH and live_citation_score is None and not live_benchmark_data:
+                            # CRITICAL INTEGRITY RULE: AI_SEARCH checks without live data or findings MUST NOT silently PASS!
+                            is_measured = False
+                            s = 0.0
+                            passed = 0
+                            failed = sample_size
+                            status = "NOT_MEASURED"
                         else:
                             s = 1.0
                             passed = sample_size
@@ -642,6 +836,7 @@ class ScoringEngine:
         live_citation_score: Optional[float] = None,
         performance_metrics: Optional[Dict[str, float]] = None,
         plan_tier: str = "starter",
+        live_benchmark_data: Optional[Dict[str, Any]] = None,
     ) -> HonestScores:
         """
         Specialized Views:
@@ -656,6 +851,7 @@ class ScoringEngine:
             readability=readability,
             external_authority_connected=False,
             live_citation_score=live_citation_score,
+            live_benchmark_data=live_benchmark_data,
             performance_metrics=performance_metrics,
             plan_tier=plan_tier
         )

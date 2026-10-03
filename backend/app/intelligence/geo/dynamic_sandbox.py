@@ -1,9 +1,13 @@
 """
-Dristik Dynamic 100-Question AI Sandbox Engine
-Generates 100 bespoke business & buyer questions dynamically from scratch (zero hardcoded templates)
-based on deep cognitive comprehension of the target company's crawled content.
-For every question, evaluates whether an answer is possible from crawled evidence,
-synthesizes the actual extracted answer, highlights citability gaps, and provides post-remediation answers.
+Dristik KIE-Powered Dynamic Question Sandbox Engine
+
+Phase 4 + Phase 5: Consumes the Website Knowledge Graph, Query Planner, and
+Grounded Answer Simulator to generate and evaluate bespoke inquiries from
+first-party knowledge — not raw DOM string matching.
+
+Question Budget is configurable via QuestionBudgetTier (default = STANDARD: 100).
+Each question records its Question Provenance (why it was generated).
+Each evaluation uses claim-level grounding instead of sentence-window search.
 """
 import re
 from typing import List, Dict, Any, Optional
@@ -14,6 +18,18 @@ from app.domain.models import (
     ResolvedEntity,
     DynamicSandboxQuestionEvaluation,
 )
+from app.intelligence.knowledge.primitives import (
+    KieAnswerRisk,
+    KieEvidenceState,
+    QuestionBudgetTier,
+)
+from app.intelligence.knowledge.website_knowledge_graph import WebsiteKnowledgeGraph
+from app.intelligence.knowledge.grounded_simulator import (
+    GroundedAnswerSimulator,
+    AiVisibilityIndexCalculator,
+    SIMULATION_DISCLAIMER,
+)
+from app.intelligence.retrieval.hybrid_retriever import QueryPlanner
 
 # 10 Core Strategic Facets for Comprehensive Website & Business Intelligence
 SANDBOX_FACETS = [
@@ -72,8 +88,17 @@ SANDBOX_FACETS = [
 
 class DynamicQuestionSandboxEngine:
     """
-    Introspects crawled web content and business profile to synthesize 100
-    bespoke questions from zero and evaluate their answerability against first-party DOM evidence.
+    KIE-Powered Question Sandbox Engine (Phase 4 + 5).
+
+    Generates bespoke inquiries from the Website Knowledge Graph and evaluates
+    each question using the Grounded Answer Simulator with Hybrid Retrieval.
+
+    Question budget is configurable via QuestionBudgetTier:
+      STARTER=50, STANDARD=100, ENTERPRISE=250, DEEP_AUDIT=500
+
+    Falls back to the original question-builder catalog when the KIE graph is
+    unavailable (e.g. bare-minimum pages with no extractable claims), ensuring
+    full backward compatibility.
     """
 
     def __init__(self, model_router=None):
@@ -85,36 +110,47 @@ class DynamicQuestionSandboxEngine:
         website_url: str,
         resolved_entity: ResolvedEntity,
         profile: Optional[BusinessProfile] = None,
+        budget: QuestionBudgetTier = QuestionBudgetTier.STANDARD,
     ) -> List[DynamicSandboxQuestionEvaluation]:
         """
-        Executes generation and evaluation across 10 facets (10 questions per facet = 100 questions).
+        KIE Pipeline:
+          1. Build WebsiteKnowledgeGraph from crawled pages
+          2. Synthesize questions per facet (budget-controlled)
+          3. For each question: QueryPlanner → HybridRetriever → GroundedAnswerSimulator
+          4. Map simulation results to DynamicSandboxQuestionEvaluation
         """
-        all_evaluations: List[DynamicSandboxQuestionEvaluation] = []
         brand = resolved_entity.name
         niche = resolved_entity.niche or (profile.niche if profile else "Platform Solutions")
         val_prop = resolved_entity.value_proposition or (profile.value_proposition if profile else "Core digital services")
-        
-        # Build search corpus with page references
+
+        # ── Phase 1+2: Build Knowledge Graph ────────────────────────────────
+        domain = website_url.split("//")[-1].split("/")[0].replace("www.", "") if website_url else brand
+        kg = WebsiteKnowledgeGraph(brand=brand, domain=domain)
+        try:
+            kg.build_from_pages(pages)
+        except Exception:
+            pass  # Graph build failure is non-fatal; falls back to legacy evaluator
+
+        # ── Phase 3: Query Planner + Grounded Simulator ─────────────────────
+        simulator = GroundedAnswerSimulator(graph=kg, model_router=self.model_router)
+
+        # Legacy corpus for fallback question builder only
         corpus_pages = []
         for p in pages:
             text = f"{p.title or ''} {' '.join(p.h1 or [])} {' '.join(p.h2 or [])} {(p.body_text or '')[:4000]}"
-            corpus_pages.append({
-                "url": p.url,
-                "title": p.title or "",
-                "text": text,
-                "lower": text.lower()
-            })
-
-        # Deeply extract website-specific offerings, headings, and genre topics
+            corpus_pages.append({"url": p.url, "title": p.title or "", "text": text, "lower": text.lower()})
         site_context = self._extract_site_context(corpus_pages, brand, niche, val_prop)
 
-        # Generate 10 tailored questions for each of the 10 facets (total = 100)
+        questions_per_facet = budget.questions_per_facet()
+        all_evaluations: List[DynamicSandboxQuestionEvaluation] = []
         q_counter = 1
+
         for facet in SANDBOX_FACETS:
             facet_id = facet["id"]
             facet_title = facet["title"]
-            
-            # Generate 10 bespoke inquiries for this facet based on the business & genre
+            facet_intent = facet["intent"]
+
+            # Generate questions (LLM if available, else catalog)
             facet_questions = await self._synthesize_facet_questions(
                 facet_id=facet_id,
                 brand=brand,
@@ -122,8 +158,10 @@ class DynamicQuestionSandboxEngine:
                 val_prop=val_prop,
                 corpus_pages=corpus_pages,
                 site_context=site_context,
-                profile=profile
+                profile=profile,
             )
+            # Trim to budget
+            facet_questions = facet_questions[:questions_per_facet]
 
             for item in facet_questions:
                 q_id = f"Q-{q_counter:03d}"
@@ -131,34 +169,107 @@ class DynamicQuestionSandboxEngine:
                 q_text = item["question"]
                 b_intent = item["intent"]
 
-                # Evaluate answerability against crawled corpus (The Answer Check)
-                eval_res = self._evaluate_question_answerability(
-                    question=q_text,
-                    facet_id=facet_id,
-                    corpus_pages=corpus_pages,
-                    brand=brand,
-                    niche=niche,
-                    val_prop=val_prop
-                )
+                # ── KIE: Grounded Answer Simulation (replaces string-window search) ──
+                if kg.claims:
+                    sim = simulator.simulate(question_id=q_id, question=q_text)
+                    evidence_url = None
+                    evidence_snippet = None
+                    for r in sim.claim_decomposition:
+                        if r.status in ("SUPPORTED", "PARTIALLY_SUPPORTED") and r.evidence_url:
+                            evidence_url = r.evidence_url
+                            evidence_snippet = r.evidence_snippet
+                            break
+
+                    is_answerable = sim.grounding_ratio >= 0.30
+                    if sim.grounding_ratio >= 0.60:
+                        answerability_status = "ANSWERABLE"
+                    elif sim.grounding_ratio >= 0.25:
+                        answerability_status = "PARTIAL"
+                    else:
+                        answerability_status = "UNANSWERABLE"
+
+                    # Citability score: grounding_ratio mapped to 1-10
+                    citability_score = max(1, min(10, round(sim.grounding_ratio * 10)))
+                    if citability_score < 2:
+                        citability_score = 2  # minimum floor
+
+                    crawled_answer = sim.candidate_answer[:400]
+                    gap_analysis = self._build_gap_analysis(sim, brand, facet_id)
+                    recommended_answer = self._build_recommended_answer(brand, val_prop, q_text, sim)
+                    projected_patch_gain = self._compute_projected_gain(sim.answer_risk, sim.grounding_ratio)
+
+                else:
+                    # ── Fallback: legacy string-window evaluator ──────────────────
+                    eval_res = self._evaluate_question_answerability(
+                        question=q_text, facet_id=facet_id, corpus_pages=corpus_pages,
+                        brand=brand, niche=niche, val_prop=val_prop,
+                    )
+                    is_answerable = eval_res["is_answerable"]
+                    answerability_status = eval_res["answerability_status"]
+                    crawled_answer = eval_res["crawled_answer"]
+                    evidence_url = eval_res["evidence_url"]
+                    evidence_snippet = eval_res["evidence_snippet"]
+                    gap_analysis = eval_res["gap_analysis"]
+                    recommended_answer = eval_res["recommended_answer"]
+                    citability_score = eval_res["citability_score"]
+                    projected_patch_gain = eval_res["projected_patch_gain"]
 
                 eval_obj = DynamicSandboxQuestionEvaluation(
                     question_id=q_id,
                     facet=facet_title,
                     generated_question=q_text,
                     buyer_intent=b_intent,
-                    is_answerable=eval_res["is_answerable"],
-                    answerability_status=eval_res["answerability_status"],
-                    crawled_answer=eval_res["crawled_answer"],
-                    evidence_url=eval_res["evidence_url"],
-                    evidence_snippet=eval_res["evidence_snippet"],
-                    gap_analysis=eval_res["gap_analysis"],
-                    recommended_answer=eval_res["recommended_answer"],
-                    citability_score=eval_res["citability_score"],
-                    projected_patch_gain=eval_res["projected_patch_gain"],
+                    is_answerable=is_answerable,
+                    answerability_status=answerability_status,
+                    crawled_answer=crawled_answer,
+                    evidence_url=evidence_url,
+                    evidence_snippet=evidence_snippet,
+                    gap_analysis=gap_analysis,
+                    recommended_answer=recommended_answer,
+                    citability_score=citability_score,
+                    projected_patch_gain=projected_patch_gain,
                 )
                 all_evaluations.append(eval_obj)
 
         return all_evaluations
+
+    def _build_gap_analysis(self, sim, brand: str, facet_id: str) -> str:
+        unsupported = [r for r in sim.claim_decomposition if r.status == "UNSUPPORTED"]
+        if not unsupported:
+            if sim.grounding_ratio >= 0.7:
+                return (
+                    f"Strong first-party evidence found for {brand}. "
+                    f"Adding structured JSON-LD Schema.org markup will further elevate extractability."
+                )
+            return f"Partial evidence present for {brand}. Expanding dedicated page copy will improve retrievability."
+        risk_label = {
+            KieAnswerRisk.HIGH: "HIGH ANSWER RISK",
+            KieAnswerRisk.MEDIUM: "MODERATE ANSWER RISK",
+            KieAnswerRisk.LOW: "Low answer risk",
+        }.get(sim.answer_risk, "")
+        return (
+            f"[{risk_label}] {len(unsupported)} claim(s) in the simulated answer are unsupported by "
+            f"first-party evidence for {brand}. AI answer engines may hallucinate or cite competitors "
+            f"to fill these gaps."
+        )
+
+    def _build_recommended_answer(self, brand: str, val_prop: str, question: str, sim) -> str:
+        if sim.grounding_ratio >= 0.65:
+            return f"{brand} is well-positioned to answer this inquiry with existing content. Schema markup will improve structured citation."
+        return (
+            f"{brand} should publish a dedicated, authoritative section addressing this question. "
+            f"Current value proposition: {val_prop[:120]}. "
+            f"Publish as a standalone FAQ, dedicated landing page, or structured JSON-LD entity."
+        )
+
+    def _compute_projected_gain(self, risk: KieAnswerRisk, grounding_ratio: float) -> float:
+        base_gain = {
+            KieAnswerRisk.HIGH: 0.65,
+            KieAnswerRisk.MEDIUM: 0.40,
+            KieAnswerRisk.LOW: 0.20,
+        }.get(risk, 0.30)
+        # Reduce gain proportionally if already partially grounded
+        return round(base_gain * (1.0 - grounding_ratio * 0.5), 2)
 
     def _extract_site_context(
         self,

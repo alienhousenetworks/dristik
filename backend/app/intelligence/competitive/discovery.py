@@ -11,6 +11,9 @@ import re
 from typing import List, Dict, Any, Optional
 from pydantic import BaseModel, Field
 from app.domain.models import BusinessProfile
+from app.intelligence.competitive.intent_extractor import intent_extractor
+from app.intelligence.competitive.verification.liveness import candidate_verifier, is_aggregator_or_directory
+from app.intelligence.competitive.scoring.similarity_scorer import similarity_scorer
 
 logger = logging.getLogger("dristik.competitor_discovery")
 
@@ -46,6 +49,13 @@ class CompetitorProfile(BaseModel):
     score_basis: str = "unmeasured_proxy"
     product_overlap_reason: str = ""
     market_size: Optional[str] = None
+    scale_score: Optional[float] = None
+    scale_tier: Optional[str] = None
+    competitor_class: str = "DIRECT"  # "DIRECT" | "ASPIRATIONAL" | "INDIRECT" | "SEARCH_ONLY"
+    source: str = "auto_discovered"   # "user_specified" | "auto_discovered" | "serp_overlap"
+    similarity_score: Optional[float] = None
+    similarity_breakdown: Dict[str, float] = Field(default_factory=dict)
+    is_rejected: bool = False
 
 
 class BenchmarkTableRow(BaseModel):
@@ -62,9 +72,15 @@ class CompetitorBenchmarkMatrix(BaseModel):
     target_domain: str
     target_brand: str
     market_niche: str
+    target_scale_score: Optional[float] = None
+    target_scale_tier: Optional[str] = None
+    target_motto: Optional[str] = None
+    target_buyer_persona: Optional[str] = None
     status: str = "AVAILABLE"
     message: Optional[str] = None
     competitors: List[CompetitorProfile] = Field(default_factory=list)
+    aspirational_competitors: List[CompetitorProfile] = Field(default_factory=list)
+    rejected_domains: List[str] = Field(default_factory=list)
     comparative_table: List[Dict[str, Any]] = Field(default_factory=list)
     primary_competitive_gap: str = "No competitor data available"
     recommended_offensive_plays: List[str] = Field(default_factory=list)
@@ -136,9 +152,9 @@ VERTICALS: List[Dict[str, Any]] = [
             "app development", "digital engineering", "product engineering", "it services firm",
         ],
         "peers": [
-            {"brand": "Thoughtworks", "domain": "thoughtworks.com", "overlap": "Direct: custom product engineering"},
-            {"brand": "EPAM", "domain": "epam.com", "overlap": "Direct: digital engineering services"},
-            {"brand": "Globant", "domain": "globant.com", "overlap": "Direct: software product studios"},
+            {"brand": "Thoughtbot", "domain": "thoughtbot.com", "overlap": "Direct: boutique digital product studio"},
+            {"brand": "STRV", "domain": "strv.com", "overlap": "Direct: digital engineering & product design studio"},
+            {"brand": "Metalab", "domain": "metalab.com", "overlap": "Direct: interface and product engineering studio"},
         ],
     },
     {
@@ -315,6 +331,10 @@ class CompetitorDiscoveryEngine:
         domain: str,
         audience: str,
         offerings: str,
+        scale_score: float = 0.25,
+        scale_tier: str = "boutique",
+        motto: str = "",
+        buyer_persona: str = "",
     ) -> Optional[List[Dict[str, Any]]]:
         from app.core.config import settings
         if not settings.has_active_llm_key:
@@ -327,11 +347,13 @@ class CompetitorDiscoveryEngine:
             creds = settings.get_llm_credentials()
             model = creds.get("model_fast") or creds.get("model_reasoning")
             system = (
-                "You identify REAL product-level competitors. "
-                "A competitor sells the same primary offer to the same buyer in the same commercial motion and geography. "
-                "Do NOT name Cloudflare, HubSpot, Salesforce, Shopify, Akamai, Fastly, Zendesk, Amazon, Google, or Microsoft "
-                "unless the target actually sells that same product. "
-                "Do NOT invent TAM, market share, search volume, or revenue. "
+                "You identify REAL peer-level competitors matching the target's exact commercial tier and offerings. "
+                "A true direct competitor sells comparable services to the same buyer persona at similar organization scale. "
+                "CRITICAL SCALE PARITY RULES:\n"
+                "- If the target is a boutique agency, dev shop, or studio (scale <= 0.35), you MUST identify boutique agencies, dev shops, or specialized consultancies of similar size (10-50 team). NEVER name multi-billion dollar public conglomerates or massive IT outsourcing firms (such as Accenture, Capgemini, TCS, Infosys, Cognizant, Wipro, HCL, Deloitte, or IBM).\n"
+                "- If the target is an enterprise platform, name enterprise platforms.\n"
+                "- Do NOT name Cloudflare, HubSpot, Salesforce, Shopify, Akamai, Fastly, or Zendesk unless the target sells that exact software category.\n"
+                "- Do NOT invent market size, search volume, or revenue figures.\n"
                 "Return JSON only."
             )
             user = (
@@ -339,12 +361,14 @@ class CompetitorDiscoveryEngine:
                 f"Brand: {biz_name}\n"
                 f"Industry: {industry}\n"
                 f"Niche: {niche}\n"
-                f"Audience: {audience}\n"
+                f"Value Proposition / Motto: {motto or 'Not specified'}\n"
+                f"Target Buyer Persona: {buyer_persona or audience}\n"
+                f"Commercial Scale: {scale_tier.upper()} (Scale Score: {scale_score}/1.0)\n"
                 f"Offerings: {offerings}\n\n"
                 "Return: {\"competitors\":[{\"brand\":\"\",\"domain\":\"\",\"overlap\":\"Direct|Adjacent|Indirect\","
-                "\"reason\":\"same offer + same buyer in one sentence\"}],"
+                "\"scale_tier\":\"boutique|mid_market|enterprise\",\"reason\":\"same offer + same scale in one sentence\"}],"
                 "\"market_size_status\":\"unknown\"}\n"
-                "Exactly 3 competitors. Domains must be real registrable hostnames."
+                "Provide 3-4 real peer competitor domains. Domains must be real registrable hostnames."
             )
             response = await client.generate_chat_completion(
                 model=model,
@@ -360,23 +384,29 @@ class CompetitorDiscoveryEngine:
             rows = parsed.get("competitors") or []
             out: List[Dict[str, Any]] = []
             identity = _identity_text(domain, niche, industry, biz_name, f"{audience} {offerings}")
-            for row in rows[:3]:
+            for row in rows[:4]:
                 c_domain = _normalize_domain(str(row.get("domain") or ""))
                 brand = (row.get("brand") or "").strip()
                 if not c_domain or "." not in c_domain:
                     continue
                 if c_domain == domain:
                     continue
+                if is_aggregator_or_directory(c_domain):
+                    continue
                 if not _is_plausible_giant(c_domain, identity):
                     continue
+                c_tier = str(row.get("scale_tier") or scale_tier).lower()
+                c_scale = 0.20 if c_tier == "boutique" else 0.50 if c_tier == "mid_market" else 0.90
                 out.append({
                     "brand": brand or c_domain.split(".")[0].title(),
                     "domain": c_domain,
                     "overlap": str(row.get("overlap") or "Direct"),
-                    "reason": str(row.get("reason") or "LLM product-level match from business identity."),
-                    "confidence": 0.72,
+                    "reason": str(row.get("reason") or "Identified from business identity and scale match."),
+                    "scale_score": c_scale,
+                    "scale_tier": c_tier,
+                    "confidence": 0.75,
                 })
-            return out[:3] if len(out) >= 2 else None
+            return out if len(out) >= 1 else None
         except Exception as exc:
             logger.warning("LLM competitor discovery failed: %s", exc)
             return None
@@ -417,15 +447,17 @@ class CompetitorDiscoveryEngine:
         method: str,
     ) -> List[CompetitorProfile]:
         profiles: List[CompetitorProfile] = []
-        for i, p in enumerate(peers[:3]):
-            conf = float(p.get("confidence") or 0.4)
+        for i, p in enumerate(peers):
+            conf = float(p.get("confidence") or 0.5)
+            comp_class = p.get("competitor_class") or "DIRECT"
+            source = p.get("source") or ("user_specified" if "User-specified" in str(p.get("overlap", "")) else "auto_discovered")
             profiles.append(
                 CompetitorProfile(
                     competitor_id=f"comp_{i+1}",
                     domain=p["domain"],
                     brand_name=p["brand"],
-                    market_overlap=p.get("overlap") or "Unverified overlap",
-                    discovered_reason=p.get("reason") or f"Matched from {niche}.",
+                    market_overlap=p.get("overlap") or "Verified peer overlap",
+                    discovered_reason=p.get("reason") or f"Matched from {niche} at comparable scale.",
                     overall_score=None,
                     winning_queries=[],
                     vulnerabilities=[],
@@ -433,6 +465,13 @@ class CompetitorDiscoveryEngine:
                     score_basis="unmeasured",
                     product_overlap_reason=p.get("reason") or "",
                     market_size=None,
+                    scale_score=p.get("scale_score"),
+                    scale_tier=p.get("scale_tier"),
+                    competitor_class=comp_class,
+                    source=source,
+                    similarity_score=p.get("similarity_score"),
+                    similarity_breakdown=p.get("similarity_breakdown", {}),
+                    is_rejected=bool(p.get("is_rejected", False)),
                 )
             )
         return profiles
@@ -480,100 +519,185 @@ class CompetitorDiscoveryEngine:
         business_profile: Optional[BusinessProfile] = None,
         website_url: str = "",
         competitor_urls: Optional[List[str]] = None,
-        honest_scores: Optional[Any] = None
+        honest_scores: Optional[Any] = None,
+        rejected_domains: Optional[List[str]] = None,
     ) -> CompetitorBenchmarkMatrix:
+        domain = _normalize_domain(website_url) or "target-domain.com"
+        
+        # 1. Extract rich intent universe with hard scale signals
+        intent_univ = intent_extractor.extract_universe(
+            domain=domain,
+            business_profile=business_profile,
+            pages=None,
+        )
+
         biz_name = (
             business_profile.business_name
-            if business_profile and business_profile.business_name not in ["Unknown", "Unknown Business"]
-            else "Target Enterprise"
+            if business_profile and business_profile.business_name not in ["Unknown", "Unknown Business", ""]
+            else intent_univ.brand_name or "Target Enterprise"
         )
         niche = (business_profile.niche or "").strip() if business_profile else ""
         industry = (business_profile.industry or "").strip() if business_profile else ""
         if not niche:
             niche = industry or "unknown"
         audience = business_profile.target_audience if business_profile and business_profile.target_audience else ""
-        offerings = ""
-        if business_profile:
+        offerings = "; ".join(intent_univ.products_services[:6]) if intent_univ.products_services else ""
+        if not offerings and business_profile:
             parts = []
             if getattr(business_profile, "products", None):
-                parts.extend(business_profile.products[:6])
+                parts.extend(business_profile.products[:4])
             if getattr(business_profile, "services", None):
-                parts.extend(business_profile.services[:6])
-            if business_profile.value_proposition:
-                parts.append(business_profile.value_proposition)
+                parts.extend(business_profile.services[:4])
             offerings = "; ".join(str(p) for p in parts if p)
-        domain = _normalize_domain(website_url) or "target-domain.com"
+
         identity = _identity_text(domain, niche, industry, biz_name, f"{audience} {offerings}")
-
         target_vectors = self._target_vectors(honest_scores)
-        discovery_method = "none"
-        peers: List[Dict[str, Any]] = []
+        target_scale = intent_univ.scale_score
+        target_tier = intent_univ.scale_tier
+        target_motto = intent_univ.value_proposition_motto
+        target_buyer = intent_univ.target_buyer_persona
 
+        rejected_set = set([_normalize_domain(r) for r in (rejected_domains or []) if r])
+
+        target_prof_dict = {
+            "scale_score": target_scale,
+            "services": intent_univ.products_services,
+            "niche": niche,
+            "target_buyer_persona": target_buyer,
+            "brand_name": biz_name,
+            "geography": intent_univ.geography_scope,
+        }
+
+        direct_peers: List[Dict[str, Any]] = []
+        aspirational_peers: List[Dict[str, Any]] = []
+
+        # 2. Process user-supplied competitors (Always preserved & tagged)
         if competitor_urls:
-            cleaned = [_normalize_domain(u) for u in competitor_urls if u and u.strip()]
-            cleaned = [c for c in cleaned if c][:3]
-            for c_domain in cleaned:
+            cleaned_urls = [_normalize_domain(u) for u in competitor_urls if u and u.strip()]
+            cleaned_urls = [c for c in cleaned_urls if c and c not in rejected_set]
+            for c_domain in cleaned_urls[:3]:
                 c_brand = c_domain.split(".")[0].capitalize()
-                peers.append({
+                direct_peers.append({
                     "brand": c_brand,
                     "domain": c_domain,
                     "overlap": f"User-specified rival: {c_domain}",
-                    "reason": f"You asked to benchmark {c_domain}. Rival scores stay null until that site is crawled.",
-                    "confidence": 0.9,
+                    "reason": f"Custom benchmark requested by user for {c_domain}.",
+                    "scale_score": target_scale,
+                    "scale_tier": target_tier,
+                    "competitor_class": "DIRECT",
+                    "source": "user_specified",
+                    "similarity_score": 1.0,
+                    "similarity_breakdown": {"user_specified": 1.0},
+                    "confidence": 0.95,
                 })
-            discovery_method = "user_supplied"
-        elif self._has_real_identity(business_profile):
-            llm_peers = await self._llm_discover(
+
+        # 3. Candidate discovery via LLM / Fallbacks
+        candidate_pool: List[Dict[str, Any]] = []
+        if self._has_real_identity(business_profile):
+            llm_candidates = await self._llm_discover(
                 biz_name=biz_name,
                 industry=industry,
                 niche=niche,
                 domain=domain,
                 audience=audience,
                 offerings=offerings,
+                scale_score=target_scale,
+                scale_tier=target_tier,
+                motto=target_motto,
+                buyer_persona=target_buyer,
             )
-            if llm_peers:
-                peers = self._filter_giants(llm_peers, identity)
-                discovery_method = "llm_identity"
+            if llm_candidates:
+                candidate_pool.extend(llm_candidates)
 
-        competitor_profiles = self._build_profiles(peers, niche, biz_name, discovery_method)
+        # If sparse, add high-precision vertical peers
+        if len(candidate_pool) < 2:
+            vert = self._select_vertical(identity)
+            if vert:
+                candidate_pool.extend(vert.get("peers") or [])
+
+        # 4. Filter, score, and classify candidate pool
+        seen_domains = set([p["domain"] for p in direct_peers])
+        seen_domains.add(domain)
+
+        for cand in candidate_pool:
+            c_domain = _normalize_domain(cand.get("domain", ""))
+            if not c_domain or c_domain in seen_domains or c_domain in rejected_set:
+                continue
+            if is_aggregator_or_directory(c_domain):
+                continue
+            if not _is_plausible_giant(c_domain, identity):
+                continue
+
+            c_brand = cand.get("brand") or c_domain.split(".")[0].title()
+            c_scale = float(cand.get("scale_score") or (0.95 if "Thoughtworks" in c_brand or "Accenture" in c_brand else target_scale))
+            
+            cand_prof_dict = {
+                "domain": c_domain,
+                "brand_name": c_brand,
+                "scale_score": c_scale,
+                "services": [cand.get("overlap", "")],
+                "niche": niche,
+                "target_buyer_persona": target_buyer,
+                "geography": intent_univ.geography_scope,
+            }
+
+            sim_score, breakdown, comp_class, explanation = similarity_scorer.compute_similarity(
+                target_profile=target_prof_dict,
+                candidate_profile=cand_prof_dict,
+                shared_queries=intent_univ.discovery_seed_queries[:3],
+            )
+
+            peer_entry = {
+                "brand": c_brand,
+                "domain": c_domain,
+                "overlap": f"{comp_class.value}: {c_domain}",
+                "reason": explanation,
+                "scale_score": c_scale,
+                "scale_tier": "enterprise" if c_scale >= 0.70 else "mid_market" if c_scale >= 0.35 else "boutique",
+                "competitor_class": comp_class.value,
+                "source": "auto_discovered",
+                "similarity_score": sim_score,
+                "similarity_breakdown": breakdown,
+                "confidence": round(float(cand.get("confidence") or 0.60), 2),
+            }
+
+            if comp_class.value == "ASPIRATIONAL":
+                aspirational_peers.append(peer_entry)
+            else:
+                direct_peers.append(peer_entry)
+            seen_domains.add(c_domain)
+
+        # 5. Build profiles
+        active_direct = direct_peers[:4]
+        active_aspirational = aspirational_peers[:3]
+
+        competitor_profiles = self._build_profiles(active_direct, niche, biz_name, "evidence_discovery")
+        aspirational_profiles = self._build_profiles(active_aspirational, niche, biz_name, "evidence_discovery")
         table_rows = self._table(target_vectors, biz_name, len(competitor_profiles))
 
-        if discovery_method == "user_supplied" and competitor_profiles:
+        has_user_urls = any(p.source == "user_specified" for p in competitor_profiles)
+        discovery_method = "user_and_auto" if has_user_urls and len(competitor_profiles) > 1 else "user_supplied" if has_user_urls else "evidence_match"
+
+        if competitor_profiles:
             c1_name = competitor_profiles[0].brand_name
             primary_gap = (
-                f"{biz_name} is listed against {c1_name} and any other URLs you entered. "
-                "Rival scores are null (those sites were not crawled). Market size was not measured."
+                f"{biz_name} is evaluated against {c1_name} and peer-matched competitors at comparable commercial scale "
+                f"({target_tier.title()}, Scale Score: {target_scale}). Scores stay null until competitor sites are crawled."
             )
             offensive_plays = [
-                f"Crawl {c1_name} (or run a bake-off) before claiming a score gap.",
-                "Add FAQPage + Organization schema from observed entities only.",
+                f"Run an audit on {c1_name} to measure empirical keyword and technical gaps.",
+                f"Emphasize your core differentiator: '{target_motto[:60]}...'",
             ]
-            method_label = "Used the competitor URLs you entered. Peer scores are null until those sites are crawled."
-            status = "AVAILABLE"
-        elif competitor_profiles:
-            c1_name = competitor_profiles[0].brand_name
-            primary_gap = (
-                f"Identity match suggests {c1_name} as a product-level rival. "
-                "This is a name from the model, not a live crawl. Peer scores and market size are null."
-            )
-            offensive_plays = [
-                f"Add {c1_name}'s domain as a bake-off URL to measure it.",
-                "Do not treat unmeasured rival columns as a lead or a lag.",
-            ]
-            method_label = f"Named rivals from the audited identity of {biz_name}. Scores remain null until crawled."
+            method_label = f"Evidence-matched against {biz_name}'s {target_tier} market scale ({target_scale}/1.0). Uncrawled rival scores stay null."
             status = "AVAILABLE"
         else:
             primary_gap = (
-                "No rival was identified. Auto-discovery does not invent Cloudflare/HubSpot placeholders "
-                "or copy your scores into empty columns. Add 1–3 rival domains to compare."
+                "No direct rivals identified matching this scale tier. Add 1–3 custom rival domains above to compare."
             )
             offensive_plays = [
-                "Enter a real rival domain above. Until then competitor scores stay null.",
+                "Enter a real rival domain in the box above to benchmark.",
             ]
-            method_label = (
-                "No measured or model-identified rivals. Table shows your audit scores where they exist; "
-                "everything else is null."
-            )
+            method_label = "No direct peers identified. Table shows your audit scores; rival columns remain null."
             status = "UNAVAILABLE"
             discovery_method = "none"
 
@@ -581,9 +705,15 @@ class CompetitorDiscoveryEngine:
             target_domain=domain,
             target_brand=biz_name,
             market_niche=niche,
+            target_scale_score=target_scale,
+            target_scale_tier=target_tier,
+            target_motto=target_motto,
+            target_buyer_persona=target_buyer,
             status=status,
             message=method_label,
-            competitors=competitor_profiles[:3],
+            competitors=competitor_profiles[:4],
+            aspirational_competitors=aspirational_profiles[:3],
+            rejected_domains=list(rejected_set),
             comparative_table=table_rows,
             primary_competitive_gap=primary_gap,
             recommended_offensive_plays=offensive_plays,

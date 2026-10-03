@@ -10,6 +10,9 @@ from app.evidence.store import EvidenceStore
 from app.domain.models import LabPerformanceMetrics
 
 
+from app.crawl.analyzers.lighthouse import LighthouseRunner
+
+
 def analyze_performance_metrics(
     url: str,
     ttfb_ms: float,
@@ -19,6 +22,8 @@ def analyze_performance_metrics(
     soup: Optional[BeautifulSoup] = None,
     timing_data: Optional[Dict[str, Any]] = None,
     dom_data: Optional[Dict[str, Any]] = None,
+    raw_html: Optional[str] = None,
+    rendered_html: Optional[str] = None,
 ) -> Dict[str, Any]:
     # 1. Content Encoding & Server Info
     headers_lower = {k.lower(): v for k, v in headers.items()}
@@ -147,12 +152,22 @@ def analyze_performance_metrics(
     images_missing_dims = sum(1 for img in image_assets if not img.get("has_dimensions"))
     cls_risk_score = min(round(images_missing_dims * 0.05, 2), 0.5)
 
+    # Google Lighthouse & Core Web Vitals Evaluation
+    lh_results = LighthouseRunner.evaluate_lighthouse_metrics(
+        url=url,
+        ttfb_ms=effective_ttfb,
+        dom_timing=timing,
+        soup=soup,
+        rendered_html=rendered_html,
+        raw_html=raw_html,
+    )
+
     lab_perf = LabPerformanceMetrics(
         ttfb_ms=effective_ttfb,
-        fcp_ms=fcp_ms,
-        lcp_indicator_ms=round(effective_ttfb + fcp_ms + 400, 1) if (effective_ttfb > 0 and fcp_ms is not None) else None,
-        cls_risk_score=cls_risk_score,
-        tbt_proxy_ms=round(js_payload_kb * 0.5, 1) if js_payload_kb > 200 else 0.0,
+        fcp_ms=lh_results.get("fcp_ms") or fcp_ms,
+        lcp_indicator_ms=lh_results.get("lcp_ms"),
+        cls_risk_score=lh_results.get("cls_score") or cls_risk_score,
+        tbt_proxy_ms=lh_results.get("tbt_ms") or (round(js_payload_kb * 0.5, 1) if js_payload_kb > 200 else 0.0),
         dns_ms=dns_ms,
         tcp_ms=tcp_ms,
         tls_ms=tls_ms,
@@ -177,6 +192,16 @@ def analyze_performance_metrics(
         server=server,
         font_display_strategy=font_display_strategy,
         images_missing_dimensions=images_missing_dims,
+        lighthouse_performance_score=lh_results.get("lighthouse_performance_score"),
+        lighthouse_accessibility_score=lh_results.get("lighthouse_accessibility_score"),
+        lighthouse_best_practices_score=lh_results.get("lighthouse_best_practices_score"),
+        lighthouse_seo_score=lh_results.get("lighthouse_seo_score"),
+        lcp_ms=lh_results.get("lcp_ms"),
+        cls_score=lh_results.get("cls_score"),
+        tbt_ms=lh_results.get("tbt_ms"),
+        speed_index_ms=lh_results.get("speed_index_ms"),
+        raw_vs_rendered_diff=lh_results.get("raw_vs_rendered_diff"),
+        lighthouse_audit_version=lh_results.get("lighthouse_audit_version"),
     )
 
     evidence_store.add_evidence(

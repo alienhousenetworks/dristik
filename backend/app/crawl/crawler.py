@@ -608,6 +608,8 @@ class CrawlerService:
                         soup=soup,
                         timing_data=timing_data,
                         dom_data=dom_res,
+                        raw_html=html_content,
+                        rendered_html=html_content,
                     )
                     sec_res = analyze_security_headers(page_url, resp_headers, evidence_store)
 

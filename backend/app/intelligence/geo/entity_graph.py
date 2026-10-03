@@ -17,7 +17,7 @@ from urllib.parse import urlparse
 from pydantic import BaseModel, Field
 
 from app.domain.enums import Category, EvidenceClass, RubricConfidence, Severity
-from app.domain.models import ContradictionReport, Finding, FindingEvidence, PageEvidence
+from app.domain.models import ContradictionReport, Finding, FindingEvidence, PageEvidence, CanonicalEntityFact
 from app.intelligence.business.entity_resolver import BANNED_NAMES
 from app.intelligence.geo.schema_crosscheck import (
     SchemaCrosscheckResult,
@@ -140,6 +140,7 @@ class EntityGraphReport(BaseModel):
     summary: str = ""
     conflicts: List[IdentityConflict] = Field(default_factory=list)
     properties: List[GraphProperty] = Field(default_factory=list)
+    canonical_facts: List[CanonicalEntityFact] = Field(default_factory=list)
     not_applicable: List[str] = Field(default_factory=list)
     type_assessments: List[TypeAssessment] = Field(default_factory=list)
     sample_page_count: int = 0
@@ -1072,6 +1073,22 @@ def evaluate_entity_graph(pages: Sequence[PageEvidence], brand_name: str = "") -
         if not (faq_na and "FAQPage" in item)
     ]
     absent_types = [item.schema_type for item in assessments if item.status == "ABSENT"]
+    canonical_facts: List[CanonicalEntityFact] = []
+    conflict_fields = {c.field for c in conflicts}
+    for p in props:
+        if p.status in ("PRESENT", "PARTIAL") and p.schema_value:
+            has_conf = p.property_name in conflict_fields
+            contra = [c.explanation for c in conflicts if c.field == p.property_name]
+            canonical_facts.append(CanonicalEntityFact(
+                entity_type=p.schema_type,
+                attribute=p.property_name,
+                value=p.schema_value,
+                source_type="SCHEMA",
+                source_url=p.page_url,
+                verified=not has_conf,
+                contradictions=contra
+            ))
+
     report = EntityGraphReport(
         quality_score=quality,
         completeness_score=completeness if has_jsonld else 0.0,
@@ -1093,6 +1110,7 @@ def evaluate_entity_graph(pages: Sequence[PageEvidence], brand_name: str = "") -
         summary=summary,
         conflicts=conflicts,
         properties=props,
+        canonical_facts=canonical_facts,
         not_applicable=not_applicable,
         type_assessments=assessments,
         sample_page_count=len(pages),

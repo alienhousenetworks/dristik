@@ -530,11 +530,49 @@ async def generate_audit_dynamic_sandbox(
         profile=run.report.business_profile
     )
 
+    # ── KIE Phase 6: Rebuild graph, store summary & 5-dimension scorecard ────
+    from app.intelligence.knowledge.website_knowledge_graph import WebsiteKnowledgeGraph
+    from app.intelligence.knowledge.grounded_simulator import AiVisibilityIndexCalculator
+
+    domain = run.report.website_url.split("//")[-1].split("/")[0].replace("www.", "") if run.report.website_url else run.report.domain
+    kg = WebsiteKnowledgeGraph(brand=resolved_entity.name, domain=domain)
+    try:
+        kg.build_from_pages(pages)
+        run.report.kie_graph_summary = kg.summary()
+
+        # Build simulations from the evaluations we just produced
+        from app.intelligence.knowledge.primitives import GroundedAnswerSimulation, KieAnswerRisk
+        from app.intelligence.knowledge.primitives import ClaimGroundingResult
+        sim_list = []
+        for ev in evaluations:
+            grounding = ev.grounding_ratio or 0.0
+            risk = ev.answer_risk or "LOW"
+            if isinstance(risk, str):
+                try:
+                    risk = KieAnswerRisk(risk)
+                except Exception:
+                    risk = KieAnswerRisk.LOW
+            from app.intelligence.knowledge.primitives import GroundedAnswerSimulation
+            sim_obj = GroundedAnswerSimulation(
+                question_id=ev.question_id,
+                candidate_answer=ev.crawled_answer or "",
+                grounding_ratio=grounding,
+                retrieval_evidence_count=ev.retrieval_evidence_count or 0,
+                answer_risk=risk,
+            )
+            sim_list.append(sim_obj)
+
+        dims = AiVisibilityIndexCalculator().compute(kg, sim_list)
+        run.report.five_dimension_ai_visibility = dims.model_dump()
+    except Exception:
+        pass  # Non-fatal; KIE data is enhancement not hard requirement
+
     run.report.dynamic_sandbox_evaluations = evaluations
 
     answerable = sum(1 for e in evaluations if e.is_answerable)
     unanswerable = sum(1 for e in evaluations if not e.is_answerable)
     avg_score = round(sum(e.citability_score for e in evaluations) / max(1, len(evaluations)), 1)
+    avg_grounding = round(sum((e.grounding_ratio or 0.0) for e in evaluations) / max(1, len(evaluations)), 3)
 
     return {
         "status": "AVAILABLE",
@@ -542,8 +580,123 @@ async def generate_audit_dynamic_sandbox(
         "answerable_count": answerable,
         "unanswerable_count": unanswerable,
         "average_citability_score": avg_score,
+        "average_grounding_ratio": avg_grounding,
+        "kie_graph_summary": run.report.kie_graph_summary,
+        "five_dimension_ai_visibility": run.report.five_dimension_ai_visibility,
         "evaluations": [e.model_dump() for e in evaluations]
     }
+
+@router.get("/{analysis_id}/ki-graph")
+async def get_ki_graph(
+    analysis_id: str,
+    user: Optional[UserIdentity] = Depends(get_current_user_optional)
+):
+    """
+    Returns the Knowledge Intelligence Engine (KIE) graph for a completed audit.
+    Provides:
+      - Knowledge Graph Summary (entity count, claim count, relationship count, contradictions)
+      - 5-Dimension AI Visibility Scorecard (knowledge_coverage, retrieval_coverage,
+        evidence_quality, answer_grounding, citation_quality)
+      - Contradiction list (cross-page knowledge conflicts: ICP, pricing, headcount)
+
+    Cached on report if already computed. Re-builds from page evidence if not.
+    """
+    from app.intelligence.knowledge.website_knowledge_graph import WebsiteKnowledgeGraph
+    from app.intelligence.knowledge.grounded_simulator import (
+        GroundedAnswerSimulator, AiVisibilityIndexCalculator
+    )
+    from app.intelligence.knowledge.primitives import GroundedAnswerSimulation, KieAnswerRisk
+
+    run = _get_org_run(analysis_id, user)
+    if not run.report:
+        raise HTTPException(status_code=404, detail="Analysis report not ready yet.")
+
+    # Return cached if available and both fields present
+    if run.report.kie_graph_summary and run.report.five_dimension_ai_visibility:
+        return {
+            "status": "CACHED",
+            "kie_graph_summary": run.report.kie_graph_summary,
+            "five_dimension_ai_visibility": run.report.five_dimension_ai_visibility,
+            "contradictions": [],  # not re-derived from cache
+        }
+
+    # Rebuild from page evidence
+    pages = []
+    if run.report.page_reports:
+        for p in run.report.page_reports:
+            pages.append(PageEvidence(
+                url=p.url,
+                title=p.title,
+                meta_description=p.meta_description,
+                h1=[p.h1] if isinstance(p.h1, str) else (p.h1 or []),
+                h2=p.h2 or [],
+                body_text=p.body_text or "",
+                word_count=p.word_count or 0
+            ))
+    elif run.report.crawl_manifest and run.report.crawl_manifest.crawled_urls:
+        for u in run.report.crawl_manifest.crawled_urls:
+            pages.append(PageEvidence(
+                url=u,
+                title=run.report.domain,
+                body_text=run.report.story_summary or "",
+                word_count=100
+            ))
+    else:
+        pages.append(PageEvidence(
+            url=run.report.website_url,
+            title=f"{run.report.domain} Official",
+            body_text=run.report.story_summary or "Digital platform offering commercial services.",
+            word_count=100
+        ))
+
+    biz_name = (
+        run.report.business_profile.business_name
+        if run.report.business_profile else run.report.domain
+    )
+    domain = run.report.website_url.split("//")[-1].split("/")[0].replace("www.", "") if run.report.website_url else run.report.domain
+
+    kg = WebsiteKnowledgeGraph(brand=biz_name, domain=domain)
+    try:
+        kg.build_from_pages(pages)
+        summary = kg.summary()
+        run.report.kie_graph_summary = summary
+
+        # Build simulations from existing sandbox evaluations if available
+        sim_list = []
+        for ev in (run.report.dynamic_sandbox_evaluations or []):
+            risk = ev.answer_risk or "LOW"
+            try:
+                risk_enum = KieAnswerRisk(risk)
+            except Exception:
+                risk_enum = KieAnswerRisk.LOW
+            sim_list.append(GroundedAnswerSimulation(
+                question_id=ev.question_id,
+                candidate_answer=ev.crawled_answer or "",
+                grounding_ratio=ev.grounding_ratio or 0.0,
+                retrieval_evidence_count=ev.retrieval_evidence_count or 0,
+                answer_risk=risk_enum,
+            ))
+
+        dims = AiVisibilityIndexCalculator().compute(kg, sim_list)
+        run.report.five_dimension_ai_visibility = dims.model_dump()
+
+        contradictions = [c.model_dump() for c in kg.contradictions]
+    except Exception as exc:
+        return {
+            "status": "ERROR",
+            "message": str(exc),
+            "kie_graph_summary": None,
+            "five_dimension_ai_visibility": None,
+            "contradictions": [],
+        }
+
+    return {
+        "status": "OK",
+        "kie_graph_summary": run.report.kie_graph_summary,
+        "five_dimension_ai_visibility": run.report.five_dimension_ai_visibility,
+        "contradictions": contradictions,
+    }
+
 
 @router.post("/{analysis_id}/re-query")
 async def run_patch_requery(

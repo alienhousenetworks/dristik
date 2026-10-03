@@ -365,12 +365,59 @@ export interface EvidenceLedgerItem {
   metadata?: Record<string, any>;
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// KIE Grounding Primitives
+// ─────────────────────────────────────────────────────────────────────────────
+
+export type KieAnswerRisk = 'HIGH' | 'MEDIUM' | 'LOW';
+
+export interface KieClaimGroundingResult {
+  claim_text: string;
+  /** SUPPORTED | PARTIALLY_SUPPORTED | UNSUPPORTED */
+  status: 'SUPPORTED' | 'PARTIALLY_SUPPORTED' | 'UNSUPPORTED' | string;
+  evidence_snippet?: string | null;
+  evidence_url?: string | null;
+  confidence: number; // 0.0–1.0
+}
+
+export interface FiveDimensionAiVisibility {
+  /** % of 10-facet taxonomy questions with ≥2 supporting claims */
+  knowledge_coverage: number;
+  /** % of sandbox questions where retrieval found evidence */
+  retrieval_coverage: number;
+  /** % of claims with HIGH-strength FACT/CAPABILITY evidence */
+  evidence_quality: number;
+  /** Average grounding ratio across all simulated answers */
+  answer_grounding: number;
+  /** % of supported claims with a canonical source URL */
+  citation_quality: number;
+  /** Optional documented aggregate — never hardcoded */
+  aggregate_index?: number | null;
+  weighting_profile: string;
+}
+
+export interface KieGraphSummary {
+  brand: string;
+  domain: string;
+  total_pages_classified: number;
+  total_claims_extracted: number;
+  total_entities: number;
+  total_relationships: number;
+  total_contradictions: number;
+  entity_categories: Record<string, number>;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Commercial Query Evaluation (Re-Query Before → After)
+// ─────────────────────────────────────────────────────────────────────────────
+
 export interface CommercialQueryEvaluation {
   question_key: string;
   question_title: string;
   buyer_query: string;
   before_score: number;
   before_answer: string;
+  /** VERIFIED | AMBIGUOUS | MISSING */
   before_evidence_status: string;
   after_score?: number;
   after_answer?: string;
@@ -378,7 +425,15 @@ export interface CommercialQueryEvaluation {
   patch_citation_gain?: number;
   evidence_snippet?: string;
   gap_analysis?: string;
+  // KIE fields added in Phase 6
+  before_grounding_ratio?: number | null;
+  after_grounding_ratio?: number | null;
+  answer_risk?: KieAnswerRisk | null;
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Dynamic Sandbox Question Evaluation (KIE-powered)
+// ─────────────────────────────────────────────────────────────────────────────
 
 export interface DynamicSandboxQuestionEvaluation {
   question_id: string;
@@ -392,8 +447,13 @@ export interface DynamicSandboxQuestionEvaluation {
   evidence_snippet?: string | null;
   gap_analysis?: string | null;
   recommended_answer?: string | null;
-  citability_score: number;
+  citability_score: number; // 1–10 (= grounding_ratio × 10)
   projected_patch_gain: number;
+  // KIE Phase 6 fields
+  grounding_ratio?: number | null;          // 0.0–1.0
+  answer_risk?: KieAnswerRisk | null;        // HIGH | MEDIUM | LOW
+  claim_decomposition?: KieClaimGroundingResult[] | null;
+  retrieval_evidence_count?: number | null;
 }
 
 export interface CompetitorBakeoffItem {
@@ -1160,6 +1220,16 @@ export interface ExecutiveReport {
       evidence_snippet?: string | null;
       why: string;
       recommended_answer?: string | null;
+      confidence?: number;
+      evidence_set?: Array<{
+        url?: string;
+        selector?: string;
+        text: string;
+        evidence_type?: string;
+        location_weight?: number;
+        strength?: number;
+      }>;
+      remediation_type?: string;
     }>;
     dimensions: Array<{ key: string; label: string; band: string; summary: string }>;
     schema_types: string[];

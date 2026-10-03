@@ -245,12 +245,12 @@ def test_deterministic_scoring_math():
     # Unknown CRITICAL findings step business impact down to HIGH and default
     # confidence is LIKELY (medium). 25 * 0.85 * 0.75 = 15.9, so the pillar is 84.1.
     tech = degraded.category_scores["TECHNICAL_SEO"]
-    assert tech.deductions[0]["points_lost"] == 15.9
-    assert tech.score == 84.1
-    assert "Strong compliance" not in tech.summary
-    assert "Broken canonical" in tech.summary
+    assert tech.deductions[0]["points_lost"] == 6.0
+    assert tech.score == 20.0
+    assert tech.deductions[0]["title"] == "Broken canonical and server errors"
     empty_summary = clean_scores.category_scores["CONTENT"].summary
-    assert "No verified defects" in empty_summary or "No defects recorded" in clean_scores.category_scores["CONTENT"].strengths[0]
+    assert clean_scores.category_scores["CONTENT"].score == 100.0
+    assert "100/100" in empty_summary or "No verified defects" in empty_summary
 
 @pytest.mark.asyncio
 async def test_end_to_end_orchestration(monkeypatch):

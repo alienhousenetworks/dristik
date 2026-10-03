@@ -546,6 +546,75 @@ class ValidationGate:
             f"Unsupported factual claims detected in current website facts: {'; '.join(unsupported_facts[:3])}"
         )
 
+        # -------------------------------------------------------------
+        # 10. PRE-RENDER REPORT INTEGRITY LINTER & DEFECT DONUT HARMONIZATION
+        # -------------------------------------------------------------
+        # 10.1: Donut severity breakdown equals post-gate findings length exactly
+        donut_mismatch = False
+        donut_reason = ""
+        if report.visual_intelligence and getattr(report.visual_intelligence, "selected_visualizations", None):
+            for c in report.visual_intelligence.selected_visualizations:
+                if c.chart_type == "defect_donut" and isinstance(c.data, dict):
+                    donut_total = c.data.get("total", 0)
+                    seg_sum = sum(seg.get("count", 0) for seg in c.data.get("segments", []))
+                    findings_len = len(report.findings)
+                    if donut_total != findings_len or seg_sum != findings_len:
+                        donut_mismatch = True
+                        donut_reason = f"Donut chart total ({donut_total}) / segment sum ({seg_sum}) contradicts findings register count ({findings_len})."
+                        break
+        record(
+            "donut_findings_count_exact_match",
+            not donut_mismatch,
+            donut_reason
+        )
+
+        # 10.2: Patch safety hygiene (no literal '...', no 'Disallow: /_next/', no SearchAction, no IP src)
+        unsafe_patches = []
+        for patch in (report.code_patches or []):
+            snip = patch.after_snippet or ""
+            if "..." in snip and ("<title>" in snip or '<meta name="description"' in snip):
+                unsafe_patches.append(f"{patch.patch_id}: literal '...' in HTML tag")
+            if "Disallow: /_next/" in snip:
+                unsafe_patches.append(f"{patch.patch_id}: blocks Next.js assets with /_next/")
+            if "SearchAction" in snip:
+                unsafe_patches.append(f"{patch.patch_id}: references deprecated SearchAction")
+            if re.search(r'src=["\']https?://\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}', snip):
+                unsafe_patches.append(f"{patch.patch_id}: raw IP address in image src")
+        record(
+            "safe_code_patches_hygiene",
+            len(unsafe_patches) == 0,
+            f"Unsafe code patches detected: {'; '.join(unsafe_patches[:3])}"
+        )
+
+        # 10.3: No self-contradictory H1 or Meta claims
+        contradictory_findings = []
+        pages_dict = {}
+        if manifest and getattr(manifest, "pages", None):
+            for p in manifest.pages:
+                pages_dict[p.url] = p
+        elif getattr(report, "crawl_manifest", None) and getattr(report.crawl_manifest, "pages", None):
+            for p in report.crawl_manifest.pages:
+                pages_dict[p.url] = p
+
+        for f in report.findings:
+            title_low = f.title.lower()
+            for ev in (f.evidence or []):
+                p_obj = pages_dict.get(ev.url)
+                if p_obj:
+                    # If page has H1 >= 1, cannot claim missing H1
+                    if "missing" in title_low and "h1" in title_low and len(p_obj.h1 or []) >= 1:
+                        contradictory_findings.append(f"{f.finding_id}: claims missing H1 but page has {len(p_obj.h1)} H1(s): '{p_obj.h1[0]}'")
+                    # If page title length is 50-60 chars, cannot claim title is too long or too short
+                    t_len = len(p_obj.title or "")
+                    if 50 <= t_len <= 60 and ("too long" in title_low or "too short" in title_low) and "title" in title_low:
+                        contradictory_findings.append(f"{f.finding_id}: claims title is too long/short ({t_len} chars) but 50-60 is optimal")
+
+        record(
+            "no_self_contradictory_findings",
+            len(contradictory_findings) == 0,
+            f"Contradictory findings against crawl ground truth: {'; '.join(contradictory_findings[:2])}"
+        )
+
         is_valid = len(failed) == 0
         return ValidationResult(
             is_valid=is_valid,
@@ -795,6 +864,71 @@ class ValidationGate:
             else:
                 clean_ev_findings.append(f)
         report.findings = clean_ev_findings
+
+        # 10. Clean code patches (remove Disallow /_next/, SearchAction, preload, ellipses)
+        for patch in (report.code_patches or []):
+            if patch.after_snippet:
+                snip = patch.after_snippet
+                if "Disallow: /_next/" in snip:
+                    snip = snip.replace("Disallow: /_next/\n\n", "").replace("Disallow: /_next/\n", "")
+                    repairs_made.append(f"Removed Disallow: /_next/ from patch {patch.patch_id} to prevent asset rendering blockage.")
+                if "SearchAction" in snip:
+                    snip = re.sub(r'{\s*"@type":\s*"SearchAction"[^}]*},\s*', '', snip)
+                    repairs_made.append(f"Removed deprecated SearchAction from patch {patch.patch_id}.")
+                if "; preload" in snip:
+                    snip = snip.replace("; preload", "")
+                    repairs_made.append(f"Removed premature HSTS preload from patch {patch.patch_id}.")
+                if "..." in snip and "<title>" in snip:
+                    snip = re.sub(r'\.\.\.</title>', '</title>', snip)
+                    repairs_made.append(f"Removed literal ellipsis from <title> in patch {patch.patch_id}.")
+                patch.after_snippet = snip
+
+        # 11. Remove contradictory findings against crawl ground truth
+        pages_dict = {}
+        if manifest and getattr(manifest, "pages", None):
+            for p in manifest.pages:
+                pages_dict[p.url] = p
+        elif getattr(report, "crawl_manifest", None) and getattr(report.crawl_manifest, "pages", None):
+            for p in report.crawl_manifest.pages:
+                pages_dict[p.url] = p
+
+        if pages_dict:
+            non_contradictory_findings = []
+            for f in report.findings:
+                title_low = f.title.lower()
+                is_contradiction = False
+                for ev in (f.evidence or []):
+                    p_obj = pages_dict.get(ev.url)
+                    if p_obj:
+                        if "missing" in title_low and "h1" in title_low and len(p_obj.h1 or []) >= 1:
+                            is_contradiction = True
+                            repairs_made.append(f"Quarantined finding {f.finding_id} claiming missing H1 because page has {len(p_obj.h1)} verified H1(s).")
+                            break
+                        t_len = len(p_obj.title or "")
+                        if 50 <= t_len <= 60 and ("too long" in title_low or "too short" in title_low) and "title" in title_low:
+                            is_contradiction = True
+                            repairs_made.append(f"Quarantined finding {f.finding_id} claiming title is too long/short ({t_len} chars) because 50-60 is optimal.")
+                            break
+                if not is_contradiction:
+                    non_contradictory_findings.append(f)
+            report.findings = non_contradictory_findings
+
+        # 12. Pre-Render Donut & Visual Intelligence Re-synchronization
+        # Re-synthesize visual intelligence using post-gate finalized findings
+        try:
+            from app.intelligence.monitoring.visual_intelligence import visual_intelligence_engine
+            report.visual_intelligence = visual_intelligence_engine.synthesize_visual_intelligence(
+                domain=report.domain,
+                business_profile=report.business_profile,
+                scores=report.scores,
+                honest_scores=report.honest_scores,
+                manifest=report.crawl_manifest or manifest,
+                findings=report.findings,
+                ai_search_matrix=report.ai_search_matrix,
+            )
+            repairs_made.append("Re-synchronized visual intelligence and defect donut with finalized post-gate findings ledger.")
+        except Exception:
+            pass
 
         return report, repairs_made
 

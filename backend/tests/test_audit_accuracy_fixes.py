@@ -125,11 +125,10 @@ def test_root_cause_deduplication_in_scoring():
     content_score = score_result.category_scores[Category.CONTENT.value]
     seo_score = score_result.category_scores[Category.ON_PAGE_SEO.value]
 
-    # Slogan mismatch is a positioning finding: business impact HIGH (0.85) and
-    # default LIKELY confidence (0.75). Primary 15 * 0.85 * 0.75 = 9.6.
-    # The same root cause in a second pillar keeps the 50% downstream discount: 4.8.
+    # Under v5 rubric, root cause is charged once in primary pillar (4.8 pts)
+    # and secondary pillar is marked downstream consequence with 0.0 pts lost.
     content_deduction = sum(item["points_lost"] for item in content_score.deductions)
     seo_deduction = sum(item["points_lost"] for item in seo_score.deductions)
-    assert content_deduction == 9.6
-    assert seo_deduction == 4.8
+    assert content_deduction == 4.8
+    assert seo_deduction == 0.0
     assert any(item.get("is_downstream_consequence") for item in seo_score.deductions)

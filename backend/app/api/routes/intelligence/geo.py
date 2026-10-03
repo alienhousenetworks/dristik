@@ -58,6 +58,10 @@ from app.intelligence.geo.attribution_engine import (
     geo_attribution_engine,
     GeoAttributionReport,
 )
+from app.intelligence.geo.remediation_classifier import (
+    build_evidence_grounded_aeo_remediations,
+    AeoRemediationPack,
+)
 
 router = APIRouter(prefix="/geo-pipeline", tags=["GEO/AEO Pipeline"])
 
@@ -414,5 +418,36 @@ async def verify_attribution_endpoint(req: AttributionVerificationRequest):
         return report
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Failed to verify attribution deltas: {str(exc)}")
+
+
+class AeoRemediationRequest(BaseModel):
+    domain: str
+    brand_name: Optional[str] = None
+    website_url: Optional[str] = None
+    questions: Optional[List[Dict[str, Any]]] = None
+
+
+@router.post("/remediation-pack", response_model=AeoRemediationPack)
+async def generate_remediation_pack_endpoint(req: AeoRemediationRequest):
+    """
+    Synthesizes evidence-grounded AEO remediation patches:
+    1. Verified 40-60 word definition answer blocks.
+    2. Validated Schema.org FAQPage JSON-LD snippet (only for verified questions).
+    3. CONTENT_REQUIRED advisories for unstated business policies.
+    """
+    try:
+        from app.domain.models import GeoQuestionEvidence
+        raw_qs = req.questions or []
+        qs = [GeoQuestionEvidence(**q) for q in raw_qs] if raw_qs else []
+        url = req.website_url or f"https://{req.domain}"
+        brand = req.brand_name or req.domain.split(".")[0].capitalize()
+
+        return build_evidence_grounded_aeo_remediations(
+            questions=qs,
+            brand_name=brand,
+            website_url=url,
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Failed to synthesize AEO remediation pack: {str(exc)}")
 
 

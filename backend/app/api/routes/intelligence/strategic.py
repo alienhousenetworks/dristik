@@ -8,6 +8,7 @@ from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from app.intelligence.competitive.discovery import competitor_discovery_engine, CompetitorBenchmarkMatrix
+from app.intelligence.competitive.resolution.rejection_store import rejection_store
 from app.intelligence.competitive.benchmark import (
     competitor_benchmark_engine,
     CompetitiveBenchmarkResult,
@@ -28,6 +29,10 @@ class AddAgencyClientRequest(BaseModel):
     client_name: str = Field(..., description="Legal or display name of the client")
     domain: str = Field(..., description="Target domain to manage")
 
+class CompetitorRejectionRequest(BaseModel):
+    target_domain: str = Field(..., description="Target website domain")
+    rejected_domain: str = Field(..., description="Competitor domain to reject and remember")
+
 @router.get("/competitors", response_model=CompetitorBenchmarkMatrix)
 async def get_competitor_benchmark(
     analysis_id: Optional[str] = None,
@@ -36,8 +41,8 @@ async def get_competitor_benchmark(
 ):
     """
     Automated Competitor Discovery & 7-Vector Benchmark Matrix.
-    Identifies competitors without requiring manual entry and compares across:
-    SEO Visibility, Content Authority, AI Citation, Commercial Clarity, Trust, Tech Health, CRO.
+    Identifies peer-level competitors matching commercial scale and specialization,
+    coexisting with user-supplied benchmarks and respecting domain rejections.
     """
     bp = None
     honest_scores = None
@@ -52,12 +57,26 @@ async def get_competitor_benchmark(
     if not url:
         raise HTTPException(status_code=400, detail="Either website_url or a valid analysis_id is required.")
 
+    rejected = rejection_store.get_rejected_domains(url)
+
     return await competitor_discovery_engine.discover_and_benchmark(
         bp,
         url,
         competitor_urls=competitor_urls,
-        honest_scores=honest_scores
+        honest_scores=honest_scores,
+        rejected_domains=rejected,
     )
+
+@router.post("/competitors/reject")
+async def record_competitor_rejection(req: CompetitorRejectionRequest):
+    """Stores rejected competitor domain so it is permanently excluded from future suggestions."""
+    rejection_store.record_rejection(req.target_domain, req.rejected_domain)
+    return {
+        "status": "ok",
+        "target_domain": req.target_domain,
+        "rejected_domain": req.rejected_domain,
+        "message": f"Recorded rejection of {req.rejected_domain} for {req.target_domain}"
+    }
 
 @router.get("/competitors/report", response_model=DristikCompetitiveReport)
 async def get_unified_competitive_report(
@@ -94,11 +113,23 @@ async def get_unified_competitive_report(
     if not resolved_domain:
         raise HTTPException(status_code=400, detail="Either domain or a valid analysis_id is required.")
 
+    # If competitors not supplied and business_profile has none, auto-discover direct peers
+    active_competitors = competitors
+    if not active_competitors and (not bp or not getattr(bp, "competitors", None)):
+        rejected = rejection_store.get_rejected_domains(resolved_domain)
+        disc = await competitor_discovery_engine.discover_and_benchmark(
+            business_profile=bp,
+            website_url=resolved_domain,
+            rejected_domains=rejected,
+        )
+        if disc and disc.competitors:
+            active_competitors = [c.domain for c in disc.competitors if c.domain != resolved_domain][:3]
+
     return competitive_intelligence_engine.build_competitive_report(
         target_domain=resolved_domain,
         business_profile=bp,
         target_pages=pages,
-        competitor_domains=competitors,
+        competitor_domains=active_competitors,
         commercial_evaluations=evals,
         observatory_records=obs,
         audit_id=analysis_id,
@@ -138,45 +169,56 @@ async def run_live_competitor_benchmark(req: CompetitiveBenchmarkRequest):
 @router.get("/competitors/suggestions")
 async def get_competitor_suggestions(
     domain: str = Query(..., description="Target domain"),
-    niche: Optional[str] = Query(None, description="Industry niche")
+    niche: Optional[str] = Query(None, description="Industry niche"),
+    analysis_id: Optional[str] = Query(None, description="Optional active audit run ID")
 ):
-    """Suggests 2-3 direct competitor peers based on domain and niche."""
+    """Suggests 2-3 direct competitor peers based on domain, business profile, and scale parity."""
     clean = domain.lower().replace("https://", "").replace("http://", "").split("/")[0]
-    n = (niche or "").lower()
+    bp = None
+    if analysis_id:
+        run = orchestrator.get_run(analysis_id)
+        if run and run.report:
+            bp = run.report.business_profile
 
-    if any(k in n or k in clean for k in ["cloud", "network", "mesh", "hosting", "infra", "cdn", "vpn"]):
-        return {
-            "target": clean,
-            "suggestions": [
-                {"domain": "tailscale.com", "brand": "Tailscale", "category": "Secure Network Mesh"},
-                {"domain": "cloudflare.com", "brand": "Cloudflare Zero Trust", "category": "Edge & Zero Trust"}
-            ]
-        }
-    elif any(k in n or k in clean for k in ["crm", "sales", "lead", "marketing"]):
-        return {
-            "target": clean,
-            "suggestions": [
-                {"domain": "hubspot.com", "brand": "HubSpot", "category": "Inbound Marketing & CRM"},
-                {"domain": "pipedrive.com", "brand": "Pipedrive", "category": "Pipeline Sales CRM"}
-            ]
-        }
-    elif any(k in n or k in clean for k in ["shop", "store", "commerce", "cart", "retail"]):
-        return {
-            "target": clean,
-            "suggestions": [
-                {"domain": "shopify.com", "brand": "Shopify", "category": "Hosted Commerce"},
-                {"domain": "bigcommerce.com", "brand": "BigCommerce", "category": "Open Enterprise Commerce"}
-            ]
-        }
-    else:
-        # Generic direct tech peers
-        return {
-            "target": clean,
-            "suggestions": [
-                {"domain": "vercel.com", "brand": "Vercel", "category": "Web Experience & Edge Platform"},
-                {"domain": "webflow.com", "brand": "Webflow", "category": "Visual Web Development"}
-            ]
-        }
+    rejected = rejection_store.get_rejected_domains(clean)
+    disc = await competitor_discovery_engine.discover_and_benchmark(
+        business_profile=bp,
+        website_url=clean,
+        rejected_domains=rejected,
+    )
+
+    suggestions = []
+    if disc and disc.competitors:
+        for c in disc.competitors:
+            if c.domain != clean:
+                tier_label = c.scale_tier.title() if c.scale_tier else "Direct"
+                suggestions.append({
+                    "domain": c.domain,
+                    "brand": c.brand_name,
+                    "category": f"{tier_label} Peer Studio" if c.scale_tier == "boutique" else f"{tier_label} Peer",
+                    "scale_score": c.scale_score,
+                })
+
+    if len(suggestions) < 2 and disc and disc.aspirational_competitors:
+        for a in disc.aspirational_competitors:
+            if a.domain != clean:
+                suggestions.append({
+                    "domain": a.domain,
+                    "brand": a.brand_name,
+                    "category": "Aspirational Leader",
+                    "scale_score": a.scale_score,
+                })
+
+    if len(suggestions) < 2:
+        suggestions = [
+            {"domain": "thoughtbot.com", "brand": "Thoughtbot", "category": "Product & Engineering Studio", "scale_score": 0.25},
+            {"domain": "strv.com", "brand": "STRV", "category": "Digital Engineering Studio", "scale_score": 0.25}
+        ]
+
+    return {
+        "target": clean,
+        "suggestions": suggestions[:3]
+    }
 
 @router.get("/search-console", response_model=SearchConsoleAttributionReport)
 async def get_search_console_attribution(

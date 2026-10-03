@@ -563,11 +563,6 @@ class UniversalPatchEngine:
                 "@type": "WebSite",
                 "name": biz_name,
                 "url": website_url,
-                "potentialAction": {
-                    "@type": "SearchAction",
-                    "target": f"{website_url.rstrip('/')}/search?q={{search_term_string}}",
-                    "query-input": "required name=search_term_string",
-                },
             }
             is_blocked = profile_blocked and _is_unknown(biz_name)
             return RemediationPatch(

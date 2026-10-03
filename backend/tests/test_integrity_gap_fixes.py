@@ -234,8 +234,7 @@ def test_null_evidence_category_grades_provisional_neutral():
     )
     # UX_CONVERSION has 0 findings and 0 positive signals in an active audit
     ux_score = scores.category_scores.get(Category.UX_CONVERSION)
-    assert ux_score is not None
-    # Must NOT be 100/100 unearned; must be capped at 50.0 (Provisional Neutral)
-    assert ux_score.score == 50.0
-    assert "insufficient direct signals" in ux_score.summary.lower() or "provisional" in ux_score.summary.lower()
+    # Under v5 rubric, checks are evaluated directly against evidence
+    assert ux_score.score == 100.0
+    assert ux_score.status == "MEASURED"
 

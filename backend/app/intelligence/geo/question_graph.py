@@ -22,7 +22,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import urlparse
 from pydantic import BaseModel, Field
 
-from app.domain.models import BusinessProfile, PageEvidence, GeoQuestionEvidence
+from app.domain.models import BusinessProfile, PageEvidence, GeoQuestionEvidence, EvidenceItem
 
 
 QUESTION_TEMPLATES = [
@@ -430,23 +430,71 @@ class GeoQuestionGraphEngine:
             ans = f"No direct answer found on crawled pages. AI search engines and agents cannot answer this question from first-party evidence."
             return ans, rec
 
-    def _page_hits(self, pages: List[PageEvidence], pattern: re.Pattern) -> List[Tuple[str, str]]:
-        hits = []
+    def _extract_evidence_set(self, pages: List[PageEvidence], pattern: re.Pattern) -> List[EvidenceItem]:
+        items: List[EvidenceItem] = []
         for p in pages:
-            blob = " ".join([
-                p.title or "",
-                " ".join(p.h1 or []),
-                " ".join(p.h2 or []),
-                " ".join(p.h3 or []),
-                (p.body_text or "")[:4000],
-            ])
-            m = pattern.search(blob)
-            if m:
-                start = max(0, m.start() - 60)
-                end = min(len(blob), m.end() + 140)
-                snippet = blob[start:end].strip()
-                hits.append((p.url, snippet[:240]))
-        return hits
+            url = p.url or ""
+            # 1. Headings (high evidentiary weight)
+            for level, headings in [(1, p.h1 or []), (2, p.h2 or []), (3, p.h3 or [])]:
+                for h in headings:
+                    if pattern.search(h):
+                        items.append(EvidenceItem(
+                            url=url,
+                            selector=f"main > h{level}",
+                            text=h.strip(),
+                            evidence_type="heading",
+                            location_weight=1.0,
+                            strength=0.95
+                        ))
+
+            # 2. Page Title
+            if p.title and pattern.search(p.title):
+                items.append(EvidenceItem(
+                    url=url,
+                    selector="head > title",
+                    text=p.title.strip(),
+                    evidence_type="title",
+                    location_weight=0.95,
+                    strength=0.90
+                ))
+
+            # 3. Main body text - early sections
+            body = p.body_text or ""
+            if body:
+                early_body = body[:2500]
+                m_early = pattern.search(early_body)
+                if m_early:
+                    start = max(0, m_early.start() - 60)
+                    end = min(len(early_body), m_early.end() + 160)
+                    snippet = early_body[start:end].strip()
+                    items.append(EvidenceItem(
+                        url=url,
+                        selector="main > article > p",
+                        text=snippet,
+                        evidence_type="body_section",
+                        location_weight=0.90,
+                        strength=0.90 if len(snippet.split()) >= 12 else 0.65
+                    ))
+                elif len(body) > 2500:
+                    deep_body = body[2500:]
+                    m_deep = pattern.search(deep_body)
+                    if m_deep:
+                        start = max(0, m_deep.start() - 40)
+                        end = min(len(deep_body), m_deep.end() + 120)
+                        snippet = deep_body[start:end].strip()
+                        items.append(EvidenceItem(
+                            url=url,
+                            selector="body > section",
+                            text=snippet,
+                            evidence_type="deep_content",
+                            location_weight=0.50,
+                            strength=0.60
+                        ))
+        return items
+
+    def _page_hits(self, pages: List[PageEvidence], pattern: re.Pattern) -> List[Tuple[str, str]]:
+        evidence_items = self._extract_evidence_set(pages, pattern)
+        return [(item.url or "", item.text) for item in evidence_items]
 
     def evaluate_graph(
         self,
@@ -488,42 +536,47 @@ class GeoQuestionGraphEngine:
 
             # Compile pattern
             pattern = re.compile("|".join(re.escape(n) for n in needles if n.strip()), re.I)
-            hits = self._page_hits(pages, pattern) if needles else []
+            evidence_items = self._extract_evidence_set(pages, pattern) if needles else []
 
-            # Determine status
+            # Determine status, confidence, and evidence refs
             status = "UNSUPPORTED"
+            confidence = 0.90
             why = "No direct evidence found on crawled pages."
             evidence_url = None
             evidence_snippet = None
 
             if q_key == "price_cost" and pricing_conflicted:
                 status = "CONFLICTING"
+                confidence = 0.95
                 why = f"Conflicting price values detected across pages: {', '.join(list(price_amounts)[:3])}."
-                if hits:
-                    evidence_url, evidence_snippet = hits[0]
-            elif hits and len(hits) >= 2:
-                status = "SUPPORTED"
-                why = "Explicit, extractable answers found across crawled pages."
-                evidence_url, evidence_snippet = hits[0]
-            elif hits:
-                # Check snippet density
-                snippet_text = hits[0][1]
-                if len(snippet_text.split()) >= 12:
+                if evidence_items:
+                    evidence_url = evidence_items[0].url
+                    evidence_snippet = evidence_items[0].text
+            elif evidence_items:
+                rich_items = [it for it in evidence_items if len(it.text.split()) >= 12]
+                high_loc_items = [it for it in evidence_items if it.location_weight >= 0.85]
+
+                evidence_url = evidence_items[0].url
+                evidence_snippet = evidence_items[0].text
+
+                if (len(evidence_items) >= 2 and high_loc_items) or rich_items:
                     status = "SUPPORTED"
+                    confidence = 0.94 if rich_items else 0.86
                     why = "Self-contained answer snippet found in first-party text."
                 else:
                     status = "PARTIAL"
+                    confidence = 0.72
                     why = "Keywords mentioned, but statement lacks full standalone depth."
-                evidence_url, evidence_snippet = hits[0]
             else:
-                # Check if needles appear anywhere in corpus
                 found_needles = [n for n in needles if n in all_corpus]
                 if found_needles:
                     status = "PARTIAL"
+                    confidence = 0.60
                     why = f"Mentions related terms ({', '.join(found_needles[:2])}) but no distinct answer block."
                 else:
                     status = "UNSUPPORTED"
-                    why = f"The crawled website does not contain information to answer this buyer question."
+                    confidence = 0.92
+                    why = "The crawled website does not contain information to answer this buyer question."
 
             category_stats[cat][status.lower()] += 1
 
@@ -536,6 +589,20 @@ class GeoQuestionGraphEngine:
                 price_amounts=price_amounts,
             )
 
+            # Classify remediation
+            if status == "SUPPORTED":
+                remed_type = "NO_REMEDIATION_NEEDED"
+            elif status == "PARTIAL":
+                remed_type = "ANSWER_BLOCK"
+            elif status == "CONFLICTING":
+                remed_type = "CONTENT_REQUIRED"
+            elif cat in ("Pricing & Commercial Terms", "Security, Trust & Compliance"):
+                remed_type = "CONTENT_REQUIRED"
+            elif any(n in all_corpus for n in needles):
+                remed_type = "INTERNAL_LINK"
+            else:
+                remed_type = "CONTENT_REQUIRED"
+
             evaluated_questions.append(GeoQuestionEvidence(
                 question_key=q_key,
                 question=rendered_q,
@@ -547,6 +614,9 @@ class GeoQuestionGraphEngine:
                 evidence_snippet=evidence_snippet,
                 why=why,
                 recommended_answer=rec_ans,
+                confidence=confidence,
+                evidence_set=evidence_items,
+                remediation_type=remed_type,
             ))
 
         total_q = len(evaluated_questions)
