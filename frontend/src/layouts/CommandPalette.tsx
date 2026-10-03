@@ -84,12 +84,12 @@ export function CommandPalette({
             lastGroup = action.group;
             return (
               <React.Fragment key={action.id}>
-                {showGroup && <p className="px-3 pt-3 pb-1 text-[10px] uppercase tracking-[0.14em] text-ink-400 font-semibold">{action.group}</p>}
+                {showGroup && <p className="px-3 pt-3 pb-1 text-[10px] uppercase tracking-[0.04em] text-ink-400 font-semibold">{action.group}</p>}
                 <button
                   type="button"
                   role="option"
                   aria-selected={index === active}
-                  className={`w-full text-left px-3 py-2 text-sm ${index === active ? 'bg-pine/10 text-ink' : 'text-ink-700 hover:bg-paper-100'}`}
+                  className={`w-full text-left px-3 py-2 text-sm ${index === active ? 'bg-paper-200 text-ink' : 'text-ink-700 hover:bg-paper-100'}`}
                   onMouseEnter={() => setActive(index)}
                   onClick={() => {
                     action.onSelect();

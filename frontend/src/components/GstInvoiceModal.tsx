@@ -67,7 +67,7 @@ export function GstInvoiceModal({
             <span className="label text-[10px] text-good">
               Direct Business Gateway
             </span>
-            <h2 className="text-base font-serif font-bold text-ink">
+            <h2 className="text-base font-sans font-bold text-ink">
               Commercial Purchase Receipt & UPI Checkout
             </h2>
           </div>
@@ -87,7 +87,7 @@ export function GstInvoiceModal({
             onClick={() => setPaymentMode('invoice')}
             className={`flex-1 py-2.5 text-center font-bold border-b-2 transition-colors ${
               paymentMode === 'invoice'
-                ? 'border-pine text-pine bg-paper-50'
+                ? 'border-line text-ink-700 bg-paper-50'
                 : 'border-transparent text-ink-500 hover:text-ink'
             }`}
           >
@@ -98,7 +98,7 @@ export function GstInvoiceModal({
             onClick={() => setPaymentMode('upi')}
             className={`flex-1 py-2.5 text-center font-bold border-b-2 transition-colors ${
               paymentMode === 'upi'
-                ? 'border-pine text-pine bg-paper-50'
+                ? 'border-line text-ink-700 bg-paper-50'
                 : 'border-transparent text-ink-500 hover:text-ink'
             }`}
           >
@@ -113,7 +113,7 @@ export function GstInvoiceModal({
               <div className="border border-line rounded-lg p-5 space-y-4 bg-paper-50 text-ink printable-invoice">
                 <div className="flex justify-between items-start border-b border-line pb-3">
                   <div>
-                    <h3 className="font-serif font-bold text-base text-ink">COMMERCIAL EXPENSE RECEIPT</h3>
+                    <h3 className="font-sans font-bold text-base text-ink">COMMERCIAL EXPENSE RECEIPT</h3>
                     <p className="text-[11px] text-ink-500">Business Expense Voucher · Original for Recipient</p>
                     <p className="font-mono text-xs font-semibold mt-1">{invoice.invoice_number}</p>
                     <p className="text-[11px] text-ink-500">Date: {invoice.invoice_date}</p>
@@ -162,7 +162,7 @@ export function GstInvoiceModal({
 
                 <div className="border-t border-line pt-3 flex justify-between items-center text-xs">
                   <span className="italic text-ink-500">{invoice.total_in_words}</span>
-                  <span className="text-base font-serif font-bold text-ink">
+                  <span className="text-base font-sans font-bold text-ink">
                     Total: ₹{invoice.total_amount_inr?.toLocaleString('en-IN')}
                   </span>
                 </div>
@@ -233,7 +233,7 @@ export function GstInvoiceModal({
                   <span>
                     Flat Plan Price: ₹{amountInr.toLocaleString('en-IN')} (0% Added Tax)
                   </span>
-                  <span className="font-bold text-sm text-ink font-serif">
+                  <span className="font-bold text-sm text-ink font-sans">
                     Total: ₹{totalAmount.toLocaleString('en-IN')}
                   </span>
                 </div>
@@ -251,7 +251,7 @@ export function GstInvoiceModal({
           ) : (
             <div className="text-center space-y-4 py-4">
               <div className="p-4 bg-paper-50 rounded-lg inline-block border border-line">
-                <div className="w-40 h-40 bg-white border-2 border-line mx-auto flex items-center justify-center p-2 rounded shadow-2xs">
+                <div className="w-40 h-40 bg-paper-50 border-2 border-line mx-auto flex items-center justify-center p-2 rounded shadow-2xs">
                   {/* Simulated UPI QR Graphic */}
                   <div className="text-center space-y-1">
                     <span className="text-2xl">📱</span>
@@ -262,7 +262,7 @@ export function GstInvoiceModal({
               </div>
 
               <div className="space-y-1 max-w-sm mx-auto">
-                <p className="font-serif font-bold text-base text-ink">Amount: ₹{totalAmount.toLocaleString('en-IN')}</p>
+                <p className="font-sans font-bold text-base text-ink">Amount: ₹{totalAmount.toLocaleString('en-IN')}</p>
                 <p className="text-xs text-ink-500">Flat price · 0% added tax · Instant confirmation</p>
               </div>
 

@@ -38,7 +38,7 @@ export function Intro() {
         {STEPS.map((step) => (
           <Card key={step.n}>
             <p className="label mb-2">Step {step.n}</p>
-            <h3 className="font-serif text-2xl text-ink">{step.title}</h3>
+            <h3 className="font-sans text-2xl text-ink">{step.title}</h3>
             <p className="mt-2 text-sm text-ink-700 leading-relaxed">{step.body}</p>
           </Card>
         ))}
@@ -48,7 +48,7 @@ export function Intro() {
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           {SCORES.map((score) => (
             <Card key={score.title}>
-              <h3 className="font-serif text-xl text-ink">{score.title}</h3>
+              <h3 className="font-sans text-xl text-ink">{score.title}</h3>
               <p className="mt-2 text-sm text-ink-700 leading-relaxed">{score.body}</p>
             </Card>
           ))}
@@ -59,7 +59,7 @@ export function Intro() {
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           {FITS.map((item) => (
             <Card key={item.title}>
-              <h3 className="font-serif text-xl text-ink">{item.title}</h3>
+              <h3 className="font-sans text-xl text-ink">{item.title}</h3>
               <p className="mt-2 text-sm text-ink-700 leading-relaxed">{item.body}</p>
             </Card>
           ))}

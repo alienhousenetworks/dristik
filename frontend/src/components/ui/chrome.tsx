@@ -18,7 +18,7 @@ export function PageHeader({
     <header className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between mb-6">
       <div className="min-w-0 max-w-2xl space-y-2">
         {kicker && <p className="label">{kicker}</p>}
-        <h1 className="font-serif text-[1.85rem] sm:text-4xl leading-[1.12] text-ink tracking-tight">{title}</h1>
+        <h1 className="text-2xl sm:text-[1.75rem] font-semibold leading-tight text-ink tracking-tight">{title}</h1>
         {description && <p className="text-body text-ink-500 leading-relaxed">{description}</p>}
         {children}
       </div>
@@ -65,7 +65,7 @@ export function Card({
   className?: string;
   padding?: boolean;
 }) {
-  return <div className={cn('card', padding && 'p-5 sm:p-6', className)}>{children}</div>;
+  return <div className={cn('card', padding && 'p-4', className)}>{children}</div>;
 }
 
 export function SubNav<T extends string>({
@@ -186,7 +186,7 @@ export function MenuItem({
 }
 
 export function MenuLabel({ children }: { children: React.ReactNode }) {
-  return <p className="px-3.5 pt-2 pb-1 text-[10px] uppercase tracking-[0.14em] text-ink-400 font-semibold">{children}</p>;
+  return <p className="px-3.5 pt-2 pb-1 text-xs font-medium text-ink-500">{children}</p>;
 }
 
 export function PillarShell({
@@ -219,13 +219,13 @@ export function PillarShell({
       <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-5">
         <div className="max-w-2xl space-y-1.5">
           <p className="label">{kicker}</p>
-          <h2 className="font-serif text-3xl text-ink tracking-tight">{title}</h2>
+          <h2 className="text-2xl font-semibold text-ink tracking-tight">{title}</h2>
           <p className="text-sm text-ink-500 leading-relaxed">{description}</p>
         </div>
         <div className="flex items-stretch card overflow-hidden shrink-0 self-start">
           <div className="px-4 py-3 min-w-[112px]">
             <p className="label">{scoreLabel}</p>
-            <p className="font-serif text-3xl text-ink leading-none mt-1">{score}</p>
+            <p className="font-mono text-2xl font-semibold text-ink leading-none mt-1">{score}</p>
           </div>
           {metaLabel && (
             <div className="px-4 py-3 border-l border-line min-w-[128px]">

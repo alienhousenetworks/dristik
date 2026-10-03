@@ -107,7 +107,7 @@ export function Pricing({ onSelectPlan }: PricingProps) {
       {/* Header & Market Value Anchor */}
       <section className="max-w-2xl space-y-3 pt-2">
         <p className="label">Pricing</p>
-        <h1 className="font-serif text-4xl sm:text-5xl text-ink tracking-tight">
+        <h1 className="font-sans text-4xl sm:text-5xl text-ink tracking-tight">
           One-time sprints and monthly monitoring.
         </h1>
         <p className="text-ink-500 leading-relaxed">
@@ -180,13 +180,13 @@ export function Pricing({ onSelectPlan }: PricingProps) {
               {/* Card 0: Free Scan */}
               <article className="p-6 bg-paper-50 rounded-xl border border-line flex flex-col justify-between space-y-5 hover:border-ink-300 transition">
                 <div className="space-y-3">
-                  <span className="label text-pine font-mono">100% Free · 1-Page Teaser</span>
-                  <h2 className="font-serif text-2xl text-ink">Free Diagnostic</h2>
+                  <span className="label text-ink-700 font-mono">100% Free · 1-Page Teaser</span>
+                  <h2 className="font-sans text-2xl text-ink">Free Diagnostic</h2>
                   <p className="text-xs text-ink-700 leading-relaxed">
                     Instant single-page audit showing your Honest 3-Scores and top bottlenecks.
                   </p>
                   <div>
-                    <p className="font-serif text-3xl text-ink">₹0</p>
+                    <p className="font-sans text-3xl text-ink">₹0</p>
                     <p className="text-[11px] text-ink-400 font-mono">Zero commitment</p>
                   </div>
                   <ul className="space-y-1.5 text-xs text-ink-700 border-t border-line pt-3">
@@ -210,12 +210,12 @@ export function Pricing({ onSelectPlan }: PricingProps) {
               <article className="p-6 bg-paper-100 rounded-xl border border-line flex flex-col justify-between space-y-5 hover:border-ink-300 transition">
                 <div className="space-y-3">
                   <span className="label text-ink-500 font-mono">Early-Stage Sites</span>
-                  <h2 className="font-serif text-2xl text-ink">Dristik Starter</h2>
+                  <h2 className="font-sans text-2xl text-ink">Dristik Starter</h2>
                   <p className="text-xs text-ink-700 leading-relaxed">
                     Essential crawl & technical DOM hygiene check for landing pages.
                   </p>
                   <div>
-                    <p className="font-serif text-3xl text-ink">
+                    <p className="font-sans text-3xl text-ink">
                       {currency === 'INR' ? '₹1,499' : '$19'}
                     </p>
                     <p className="text-[11px] text-ink-400 font-mono">Flat one-time · 0% tax</p>
@@ -241,12 +241,12 @@ export function Pricing({ onSelectPlan }: PricingProps) {
               <article className="p-6 bg-paper-100 rounded-xl border border-line flex flex-col justify-between space-y-5 hover:border-ink-300 transition">
                 <div className="space-y-3">
                   <span className="label text-ink-500 font-mono">Growing Startups</span>
-                  <h2 className="font-serif text-2xl text-ink">Professional</h2>
+                  <h2 className="font-sans text-2xl text-ink">Professional</h2>
                   <p className="text-xs text-ink-700 leading-relaxed">
                     10-page crawl with verified DOM evidence and 7/30/90-day roadmap.
                   </p>
                   <div>
-                    <p className="font-serif text-3xl text-ink">
+                    <p className="font-sans text-3xl text-ink">
                       {currency === 'INR' ? '₹3,499' : '$49'}
                     </p>
                     <p className="text-[11px] text-ink-400 font-mono">Flat one-time · 0% tax</p>
@@ -269,18 +269,18 @@ export function Pricing({ onSelectPlan }: PricingProps) {
               </article>
 
               {/* Card 3: Diagnostic Sprint (Flagship Highlight) */}
-              <article className="p-6 bg-paper-50 rounded-xl border-2 border-pine shadow-md flex flex-col justify-between space-y-5 relative">
-                <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-pine text-paper-50 text-[10px] px-3 py-0.5 rounded-full font-bold uppercase tracking-wider">
+              <article className="p-6 bg-paper-50 rounded-xl border-2 border-line shadow-md flex flex-col justify-between space-y-5 relative">
+                <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-pine text-paper-50 text-[10px] px-3 py-0.5 rounded-md font-bold uppercase tracking-[0.04em]">
                   Recommended Flagship
                 </div>
                 <div className="space-y-3 pt-1">
-                  <span className="label text-pine font-mono">Flagship Sprint</span>
-                  <h2 className="font-serif text-2xl text-ink">Diagnostic Sprint</h2>
+                  <span className="label text-ink-700 font-mono">Flagship Sprint</span>
+                  <h2 className="font-sans text-2xl text-ink">Diagnostic Sprint</h2>
                   <p className="text-xs text-ink-700 leading-relaxed">
                     The complete proof-and-patch engagement: full diagnosis, developer ZIP pack, and re-query citation proof.
                   </p>
                   <div>
-                    <p className="font-serif text-3xl text-pine">
+                    <p className="font-sans text-3xl text-ink-700">
                       {currency === 'INR' ? '₹4,999' : '$69'}
                     </p>
                     <p className="text-[11px] text-ink-500 font-mono">Flat price · 0% Added Tax</p>
@@ -288,8 +288,8 @@ export function Pricing({ onSelectPlan }: PricingProps) {
                   <ul className="space-y-1.5 text-xs text-ink-700 border-t border-line pt-3">
                     <li className="flex items-center gap-1.5 font-medium text-ink">✓ Up to 15 primary strategic pages</li>
                     <li className="flex items-center gap-1.5 font-medium text-ink">✓ The 6 Commercial Buyer Inquiries</li>
-                    <li className="flex items-center gap-1.5 font-semibold text-pine">✓ Developer Patch Pack (.ZIP download)</li>
-                    <li className="flex items-center gap-1.5 font-semibold text-pine">✓ Re-Query Citation Proof Matrix</li>
+                    <li className="flex items-center gap-1.5 font-semibold text-ink-700">✓ Developer Patch Pack (.ZIP download)</li>
+                    <li className="flex items-center gap-1.5 font-semibold text-ink-700">✓ Re-Query Citation Proof Matrix</li>
                     <li className="flex items-center gap-1.5">✓ WhatsApp C-Suite 1-Pager & PDF</li>
                   </ul>
                 </div>
@@ -315,12 +315,12 @@ export function Pricing({ onSelectPlan }: PricingProps) {
               <article className="p-6 bg-paper-100 rounded-xl border border-line flex flex-col justify-between space-y-5 hover:border-ink-300 transition">
                 <div className="space-y-3">
                   <span className="label text-ink-500 font-mono">Scaleups & B2B</span>
-                  <h2 className="font-serif text-2xl text-ink">Business Intelligence</h2>
+                  <h2 className="font-sans text-2xl text-ink">Business Intelligence</h2>
                   <p className="text-xs text-ink-700 leading-relaxed">
                     35-page deep crawl, 3-way competitor positioning, and cross-page contradiction detection.
                   </p>
                   <div>
-                    <p className="font-serif text-3xl text-ink">
+                    <p className="font-sans text-3xl text-ink">
                       {currency === 'INR' ? '₹9,999' : '$129'}
                     </p>
                     <p className="text-[11px] text-ink-400 font-mono">Flat one-time · 0% tax</p>
@@ -329,7 +329,7 @@ export function Pricing({ onSelectPlan }: PricingProps) {
                     <li className="flex items-center gap-1.5 font-medium text-ink">✓ Up to 35 strategic pages</li>
                     <li className="flex items-center gap-1.5">✓ 3-Way Competitor Positioning Matrix</li>
                     <li className="flex items-center gap-1.5">✓ Cross-Page Claim & Pricing Contradictions</li>
-                    <li className="flex items-center gap-1.5 font-semibold text-pine">✓ Universal Patches (WordPress + GitHub PR ready)</li>
+                    <li className="flex items-center gap-1.5 font-semibold text-ink-700">✓ Universal Patches (WordPress + GitHub PR ready)</li>
                     <li className="flex items-center gap-1.5">✓ Consultant-Grade Presentation Deck</li>
                   </ul>
                 </div>
@@ -345,21 +345,21 @@ export function Pricing({ onSelectPlan }: PricingProps) {
               {/* Competitor Bake-Off */}
               <article className="p-6 bg-paper-100 rounded-xl border border-line flex flex-col justify-between space-y-5 hover:border-ink-300 transition">
                 <div className="space-y-3">
-                  <span className="label text-blue-600 font-mono">Sales Battlecard</span>
-                  <h2 className="font-serif text-2xl text-ink">Competitor Bake-Off</h2>
+                  <span className="label text-ink-700 font-mono">Sales Battlecard</span>
+                  <h2 className="font-sans text-2xl text-ink">Competitor Bake-Off</h2>
                   <p className="text-xs text-ink-700 leading-relaxed">
                     Everything in Diagnostic Sprint + Head-to-Head 3-Competitor Bake-Off on commercial queries.
                   </p>
                   <div>
-                    <p className="font-serif text-3xl text-ink">
+                    <p className="font-sans text-3xl text-ink">
                       {currency === 'INR' ? '₹14,999' : '$189'}
                     </p>
                     <p className="text-[11px] text-ink-400 font-mono">Sprint + 3-Competitor Battlecard</p>
                   </div>
                   <ul className="space-y-1.5 text-xs text-ink-700 border-t border-line pt-3">
                     <li className="flex items-center gap-1.5 font-medium text-ink">✓ Up to 50 strategic pages</li>
-                    <li className="flex items-center gap-1.5 font-semibold text-pine">✓ Head-to-Head 3-Competitor Bake-Off</li>
-                    <li className="flex items-center gap-1.5 font-semibold text-pine">✓ Side-by-side sales battlecard table</li>
+                    <li className="flex items-center gap-1.5 font-semibold text-ink-700">✓ Head-to-Head 3-Competitor Bake-Off</li>
+                    <li className="flex items-center gap-1.5 font-semibold text-ink-700">✓ Side-by-side sales battlecard table</li>
                     <li className="flex items-center gap-1.5">✓ Agency White-Label licensing rights</li>
                     <li className="flex items-center gap-1.5">✓ 14-Day Post-Patch Re-Query verification</li>
                   </ul>
@@ -376,13 +376,13 @@ export function Pricing({ onSelectPlan }: PricingProps) {
               {/* Growth Intelligence */}
               <article className="p-6 bg-paper-50 rounded-xl border border-line flex flex-col justify-between space-y-5 hover:border-ink-300 transition">
                 <div className="space-y-3">
-                  <span className="label text-indigo-600 font-mono">Mid-Market Platform</span>
-                  <h2 className="font-serif text-2xl text-ink">Growth Intelligence</h2>
+                  <span className="label text-ink-700 font-mono">Mid-Market Platform</span>
+                  <h2 className="font-sans text-2xl text-ink">Growth Intelligence</h2>
                   <p className="text-xs text-ink-700 leading-relaxed">
                     100-page deep crawl, automated competitor discovery, developer remediation PR pack, and historical delta.
                   </p>
                   <div>
-                    <p className="font-serif text-3xl text-ink">
+                    <p className="font-sans text-3xl text-ink">
                       {currency === 'INR' ? '₹24,999' : '$319'}
                     </p>
                     <p className="text-[11px] text-ink-400 font-mono">Comprehensive mid-market audit</p>
@@ -409,10 +409,10 @@ export function Pricing({ onSelectPlan }: PricingProps) {
           {/* Segment 3: Enterprise Custom Tier */}
           <div className="p-6 rounded-2xl bg-paper-100 border border-line flex flex-col md:flex-row items-center justify-between gap-6">
             <div className="space-y-2 max-w-2xl">
-              <span className="text-xs font-mono uppercase tracking-wider px-2 py-0.5 rounded bg-purple-500/10 text-purple-700 font-bold border border-purple-500/20">
+              <span className="text-xs font-mono uppercase tracking-[0.04em] px-2 py-0.5 rounded bg-paper-100 text-ink-700 font-bold border border-line">
                 Tier 3: Enterprise Custom Engagement
               </span>
-              <h3 className="font-serif text-2xl text-ink">Enterprise Custom Platforms & Portfolios</h3>
+              <h3 className="font-sans text-2xl text-ink">Enterprise Custom Platforms & Portfolios</h3>
               <p className="text-xs text-ink-700 leading-relaxed">
                 200+ pages across multi-domains, automated webhook feeds, custom AI buyer query benchmarking, dedicated Slack channels, and enterprise SLAs. Starting at ₹49,999 to ₹1,50,000+ depending on scope.
               </p>
@@ -435,12 +435,12 @@ export function Pricing({ onSelectPlan }: PricingProps) {
           <article className="p-6 bg-paper-100 rounded-xl border border-line flex flex-col justify-between space-y-5">
             <div className="space-y-3">
               <span className="label text-ink-500 font-mono">Bi-Weekly Radar</span>
-              <h2 className="font-serif text-2xl text-ink">Sentinel Radar</h2>
+              <h2 className="font-sans text-2xl text-ink">Sentinel Radar</h2>
               <p className="text-xs text-ink-700 leading-relaxed">
                 Continuous bi-weekly audits, SEO/GEO regression alerts, and email digests.
               </p>
               <div>
-                <p className="font-serif text-3xl text-ink">
+                <p className="font-sans text-3xl text-ink">
                   {currency === 'INR' ? '₹1,499' : '$19'}
                   <span className="text-xs font-normal text-ink-500"> / mo</span>
                 </p>
@@ -462,18 +462,18 @@ export function Pricing({ onSelectPlan }: PricingProps) {
           </article>
 
           {/* Card 2: AI Citation Monitoring */}
-          <article className="p-6 bg-paper-50 rounded-xl border-2 border-pine shadow-md flex flex-col justify-between space-y-5 relative">
-            <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-pine text-paper-50 text-[10px] px-3 py-0.5 rounded-full font-bold uppercase tracking-wider">
+          <article className="p-6 bg-paper-50 rounded-xl border-2 border-line shadow-md flex flex-col justify-between space-y-5 relative">
+            <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-pine text-paper-50 text-[10px] px-3 py-0.5 rounded-md font-bold uppercase tracking-[0.04em]">
               Hero Retainer
             </div>
             <div className="space-y-3 pt-1">
-              <span className="label text-pine font-mono">Citation Defense</span>
-              <h2 className="font-serif text-2xl text-ink">AI Citation Pulse</h2>
+              <span className="label text-ink-700 font-mono">Citation Defense</span>
+              <h2 className="font-sans text-2xl text-ink">AI Citation Pulse</h2>
               <p className="text-xs text-ink-700 leading-relaxed">
                 20–40 saved commercial buyer prompts tracked continuously on ChatGPT Search & Perplexity.
               </p>
               <div>
-                <p className="font-serif text-3xl text-pine">
+                <p className="font-sans text-3xl text-ink-700">
                   {currency === 'INR' ? '₹3,999' : '$49'}
                   <span className="text-xs font-normal text-ink-500"> / mo</span>
                 </p>
@@ -481,7 +481,7 @@ export function Pricing({ onSelectPlan }: PricingProps) {
               <ul className="space-y-1.5 text-xs text-ink-700 border-t border-line pt-3">
                 <li className="flex items-center gap-1.5 font-medium text-ink">✓ 20–40 saved buyer prompts tracked</li>
                 <li className="flex items-center gap-1.5 font-medium text-ink">✓ ChatGPT & Perplexity citation monitoring</li>
-                <li className="flex items-center gap-1.5 font-semibold text-pine">✓ Monthly crawl change-log diff</li>
+                <li className="flex items-center gap-1.5 font-semibold text-ink-700">✓ Monthly crawl change-log diff</li>
                 <li className="flex items-center gap-1.5">✓ WhatsApp executive regression alerts</li>
               </ul>
             </div>
@@ -497,13 +497,13 @@ export function Pricing({ onSelectPlan }: PricingProps) {
           {/* Card 3: Agency Multi-Guard */}
           <article className="p-6 bg-paper-100 rounded-xl border border-line flex flex-col justify-between space-y-5">
             <div className="space-y-3">
-              <span className="label text-blue-600 font-mono">Agencies & Portfolios</span>
-              <h2 className="font-serif text-2xl text-ink">Agency Multi-Guard</h2>
+              <span className="label text-ink-700 font-mono">Agencies & Portfolios</span>
+              <h2 className="font-sans text-2xl text-ink">Agency Multi-Guard</h2>
               <p className="text-xs text-ink-700 leading-relaxed">
                 Up to 5 client domains monitored with white-label client PDF exports.
               </p>
               <div>
-                <p className="font-serif text-3xl text-ink">
+                <p className="font-sans text-3xl text-ink">
                   {currency === 'INR' ? '₹14,999' : '$189'}
                   <span className="text-xs font-normal text-ink-500"> / mo</span>
                 </p>
@@ -511,7 +511,7 @@ export function Pricing({ onSelectPlan }: PricingProps) {
               <ul className="space-y-1.5 text-xs text-ink-700 border-t border-line pt-3">
                 <li className="flex items-center gap-1.5 font-medium text-ink">✓ Up to 5 client domains monitored</li>
                 <li className="flex items-center gap-1.5">✓ Automated PR-ready remediation patches</li>
-                <li className="flex items-center gap-1.5 font-semibold text-pine">✓ 100% White-Label client PDF decks</li>
+                <li className="flex items-center gap-1.5 font-semibold text-ink-700">✓ 100% White-Label client PDF decks</li>
                 <li className="flex items-center gap-1.5">✓ Dedicated Slack channel with specialists</li>
               </ul>
             </div>
@@ -527,10 +527,10 @@ export function Pricing({ onSelectPlan }: PricingProps) {
       )}
 
       {/* Interactive Business Impact & ROI Calculator */}
-      <section className="p-8 rounded-2xl bg-paper-50 border-2 border-pine/40 shadow-sm space-y-6">
+      <section className="p-8 rounded-2xl bg-paper-50 border-2 border-line shadow-sm space-y-6">
         <div className="text-center max-w-2xl mx-auto space-y-2">
-          <span className="label text-pine">Revenue & Commercial Upside Modeling</span>
-          <h2 className="font-serif text-3xl text-ink">Estimate Your Business ROI from Dristik</h2>
+          <span className="label text-ink-700">Revenue & Commercial Upside Modeling</span>
+          <h2 className="font-sans text-3xl text-ink">Estimate Your Business ROI from Dristik</h2>
           <p className="text-xs text-ink-700 leading-relaxed">
             See how fixing AI search extractability and conversion bottlenecks connects directly to business revenue.
           </p>
@@ -550,7 +550,7 @@ export function Pricing({ onSelectPlan }: PricingProps) {
             <div>
               <div className="flex justify-between text-xs text-ink-700 font-medium mb-1">
                 <span>Average Deal Size / Customer LTV</span>
-                <span className="font-mono font-bold text-pine">₹1,50,000</span>
+                <span className="font-mono font-bold text-ink-700">₹1,50,000</span>
               </div>
               <input type="range" min="10000" max="1000000" step="25000" defaultValue="150000" className="w-full accent-pine" />
             </div>
@@ -570,21 +570,21 @@ export function Pricing({ onSelectPlan }: PricingProps) {
 
           {/* Output Metric Cards */}
           <div className="md:col-span-6 space-y-4">
-            <div className="p-6 rounded-xl bg-pine text-paper-50 space-y-2 shadow-lg">
-              <span className="text-xs uppercase font-mono tracking-wider opacity-90">Projected Annual Pipeline Upside</span>
-              <p className="font-serif text-4xl sm:text-5xl font-bold tracking-tight">₹39,37,500</p>
-              <p className="text-xs opacity-80">Estimated net new revenue unlocked across Google Search and ChatGPT/Perplexity citations.</p>
+            <div className="p-4 rounded-md bg-paper-50 border border-line text-ink space-y-2">
+              <span className="text-xs font-medium text-ink-500">Projected annual pipeline upside</span>
+              <p className="font-mono text-3xl font-semibold tracking-tight">₹39,37,500</p>
+              <p className="text-xs text-ink-500">Estimated net new revenue unlocked across Google Search and ChatGPT/Perplexity citations.</p>
             </div>
 
             <div className="grid grid-cols-2 gap-4">
               <div className="p-4 rounded-xl bg-paper-100 border border-line text-center">
                 <span className="text-[11px] text-ink-500 font-mono block">Estimated ROI Multiple</span>
-                <span className="text-2xl font-serif font-bold text-pine">78.8x</span>
+                <span className="text-2xl font-sans font-bold text-ink-700">78.8x</span>
                 <span className="text-[10px] text-ink-400 block mt-0.5">vs ₹4,999 Diagnostic</span>
               </div>
               <div className="p-4 rounded-xl bg-paper-100 border border-line text-center">
                 <span className="text-[11px] text-ink-500 font-mono block">New Qualified Leads / Mo</span>
-                <span className="text-2xl font-serif font-bold text-ink">+16 Leads</span>
+                <span className="text-2xl font-sans font-bold text-ink">+16 Leads</span>
                 <span className="text-[10px] text-ink-400 block mt-0.5">From captured buyer queries</span>
               </div>
             </div>
@@ -595,8 +595,8 @@ export function Pricing({ onSelectPlan }: PricingProps) {
       {/* Comprehensive Feature Comparison Matrix */}
       <section className="border-t border-line pt-12">
         <div className="mb-8">
-          <span className="label text-pine">Exhaustive Deliverables Matrix</span>
-          <h2 className="font-serif text-3xl text-ink mt-1">
+          <span className="label text-ink-700">Exhaustive Deliverables Matrix</span>
+          <h2 className="font-sans text-3xl text-ink mt-1">
             Compare all features across tiers
           </h2>
           <p className="text-ink-700 text-sm mt-1">
@@ -606,11 +606,11 @@ export function Pricing({ onSelectPlan }: PricingProps) {
 
         <div className="overflow-x-auto border border-line rounded">
           <table className="w-full text-left text-xs sm:text-sm">
-            <thead className="bg-paper-100 border-b border-line text-xs uppercase tracking-wider text-ink-500 font-semibold">
+            <thead className="bg-paper-100 border-b border-line text-xs uppercase tracking-[0.04em] text-ink-500 font-semibold">
               <tr>
                 <th className="py-3.5 px-4 w-1/3">Feature / Deliverable</th>
                 <th className="py-3.5 px-3">Starter (₹1,499)</th>
-                <th className="py-3.5 px-3 bg-paper-300/40 text-pine font-bold">Diagnostic (₹4,999)</th>
+                <th className="py-3.5 px-3 bg-paper-300/40 text-ink-700 font-bold">Diagnostic (₹4,999)</th>
                 <th className="py-3.5 px-3">Bake-Off (₹11,999)</th>
                 <th className="py-3.5 px-3">Pulse (₹1,999/mo)</th>
               </tr>
@@ -619,7 +619,7 @@ export function Pricing({ onSelectPlan }: PricingProps) {
               {COMPARISON_FEATURES.map((section) => (
                 <React.Fragment key={section.category}>
                   <tr className="bg-paper-100/70">
-                    <td colSpan={5} className="py-2.5 px-4 font-bold text-xs uppercase tracking-wider text-ink font-mono">
+                    <td colSpan={5} className="py-2.5 px-4 font-bold text-xs uppercase tracking-[0.04em] text-ink font-mono">
                       {section.category}
                     </td>
                   </tr>
@@ -627,7 +627,7 @@ export function Pricing({ onSelectPlan }: PricingProps) {
                     <tr key={item.name} className="hover:bg-paper-100/40 transition-colors">
                       <td className="py-3 px-4 font-medium text-ink">{item.name}</td>
                       <td className="py-3 px-3 text-ink-600">{item.starter}</td>
-                      <td className="py-3 px-3 bg-paper-300/20 font-semibold text-pine">{item.diagnostic}</td>
+                      <td className="py-3 px-3 bg-paper-300/20 font-semibold text-ink-700">{item.diagnostic}</td>
                       <td className="py-3 px-3 font-medium text-ink">{item.bakeoff}</td>
                       <td className="py-3 px-3 text-ink-600">{item.pulse}</td>
                     </tr>
@@ -642,8 +642,8 @@ export function Pricing({ onSelectPlan }: PricingProps) {
       {/* Indian Market Context & FAQ */}
       <section className="border-t border-line pt-12 space-y-8">
         <div>
-          <span className="label text-pine">India Commercial FAQ</span>
-          <h2 className="font-serif text-3xl text-ink mt-1">
+          <span className="label text-ink-700">India Commercial FAQ</span>
+          <h2 className="font-sans text-3xl text-ink mt-1">
             Frequently asked questions for Indian businesses & agencies
           </h2>
         </div>
@@ -654,10 +654,10 @@ export function Pricing({ onSelectPlan }: PricingProps) {
               <button
                 type="button"
                 onClick={() => setOpenFaq(openFaq === index ? null : index)}
-                className="w-full text-left flex items-center justify-between gap-4 font-serif text-xl text-ink focus:outline-none"
+                className="w-full text-left flex items-center justify-between gap-4 font-sans text-xl text-ink focus:outline-none"
               >
                 <span>{faq.q}</span>
-                <span className="font-mono text-sm text-pine shrink-0">
+                <span className="font-mono text-sm text-ink-700 shrink-0">
                   {openFaq === index ? '−' : '+'}
                 </span>
               </button>
@@ -673,7 +673,7 @@ export function Pricing({ onSelectPlan }: PricingProps) {
 
       {/* Direct Contact & Custom Scoping */}
       <section className="p-8 bg-paper-100 rounded border border-line text-center space-y-4">
-        <h3 className="font-serif text-2xl text-ink">
+        <h3 className="font-sans text-2xl text-ink">
           Need a multi-domain enterprise audit or custom RAG ingestion pipeline?
         </h3>
         <p className="text-sm text-ink-700 max-w-2xl mx-auto leading-relaxed">

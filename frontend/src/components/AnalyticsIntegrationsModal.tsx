@@ -96,12 +96,12 @@ export function AnalyticsIntegrationsModal({
         <div className="p-6 border-b border-line flex items-center justify-between bg-paper-100/50 dark:bg-ink-900/50">
           <div>
             <div className="flex items-center gap-2">
-              <span className="font-mono text-xs px-2 py-0.5 rounded bg-pine/10 text-pine font-bold border border-pine/30">
+              <span className="font-mono text-xs px-2 py-0.5 rounded bg-paper-200 text-ink-700 font-bold border border-line">
                 FIRST-PARTY GROUND TRUTH
               </span>
               <span className="font-mono text-xs text-ink-500">Domain: {domain}</span>
             </div>
-            <h2 className="font-serif text-2xl text-ink font-bold mt-1">
+            <h2 className="font-sans text-2xl text-ink font-bold mt-1">
               Analytics &amp; Authority Connectors
             </h2>
             <p className="text-xs text-ink-500 mt-0.5">
@@ -132,7 +132,7 @@ export function AnalyticsIntegrationsModal({
               onClick={() => setActiveTab(tab.id as any)}
               className={`py-3 px-2 text-xs font-semibold whitespace-nowrap border-b-2 transition-colors ${
                 activeTab === tab.id
-                  ? 'border-pine text-pine'
+                  ? 'border-line text-ink-700'
                   : 'border-transparent text-ink-500 hover:text-ink'
               }`}
             >
@@ -147,7 +147,7 @@ export function AnalyticsIntegrationsModal({
             <div className="space-y-6">
               {/* Category 1: Search Console & Traffic */}
               <div className="space-y-3">
-                <h4 className="text-xs font-mono font-bold tracking-wider text-ink-500 uppercase">
+                <h4 className="text-xs font-mono font-bold tracking-[0.04em] text-ink-500 uppercase">
                   Search Telemetry &amp; Traffic (First-Party)
                 </h4>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -155,12 +155,12 @@ export function AnalyticsIntegrationsModal({
                   <div className="p-4 rounded-xl border border-line bg-paper-50 dark:bg-ink-900/40 flex flex-col justify-between">
                     <div className="space-y-1">
                       <div className="flex items-center justify-between">
-                        <span className="font-serif font-bold text-ink text-sm">Google Search Console</span>
+                        <span className="font-sans font-bold text-ink text-sm">Google Search Console</span>
                         <span
                           className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded border ${
                             status?.google_search_console.connected
                               ? 'bg-good/10 text-good border-good/30'
-                              : 'bg-amber-500/10 text-amber-600 border-amber-500/30'
+                              : 'bg-warn/10 text-warn border-warn/30'
                           }`}
                         >
                           {status?.google_search_console.connected ? '● CONNECTED' : '○ UNCONNECTED'}
@@ -173,7 +173,7 @@ export function AnalyticsIntegrationsModal({
                     <button
                       type="button"
                       onClick={() => setActiveTab('gsc')}
-                      className="mt-3 text-xs font-semibold text-pine underline hover:text-ink self-start"
+                      className="mt-3 text-xs font-semibold text-ink-700 underline hover:text-ink self-start"
                     >
                       Configure →
                     </button>
@@ -183,12 +183,12 @@ export function AnalyticsIntegrationsModal({
                   <div className="p-4 rounded-xl border border-line bg-paper-50 dark:bg-ink-900/40 flex flex-col justify-between">
                     <div className="space-y-1">
                       <div className="flex items-center justify-between">
-                        <span className="font-serif font-bold text-ink text-sm">Google Analytics 4 (GA4)</span>
+                        <span className="font-sans font-bold text-ink text-sm">Google Analytics 4 (GA4)</span>
                         <span
                           className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded border ${
                             status?.google_analytics_4.connected
                               ? 'bg-good/10 text-good border-good/30'
-                              : 'bg-amber-500/10 text-amber-600 border-amber-500/30'
+                              : 'bg-warn/10 text-warn border-warn/30'
                           }`}
                         >
                           {status?.google_analytics_4.connected ? '● CONNECTED' : '○ UNCONNECTED'}
@@ -201,7 +201,7 @@ export function AnalyticsIntegrationsModal({
                     <button
                       type="button"
                       onClick={() => setActiveTab('ga4')}
-                      className="mt-3 text-xs font-semibold text-pine underline hover:text-ink self-start"
+                      className="mt-3 text-xs font-semibold text-ink-700 underline hover:text-ink self-start"
                     >
                       Configure →
                     </button>
@@ -211,7 +211,7 @@ export function AnalyticsIntegrationsModal({
 
               {/* Category 2: Authority & Backlink Graph */}
               <div className="space-y-3">
-                <h4 className="text-xs font-mono font-bold tracking-wider text-ink-500 uppercase">
+                <h4 className="text-xs font-mono font-bold tracking-[0.04em] text-ink-500 uppercase">
                   Backlink Graph &amp; Off-Page Authority
                 </h4>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -219,7 +219,7 @@ export function AnalyticsIntegrationsModal({
                   <div className="p-4 rounded-xl border border-line bg-paper-50 dark:bg-ink-900/40 flex flex-col justify-between">
                     <div className="space-y-1">
                       <div className="flex items-center justify-between">
-                        <span className="font-serif font-bold text-ink text-sm">DataForSEO Backlinks API</span>
+                        <span className="font-sans font-bold text-ink text-sm">DataForSEO Backlinks API</span>
                         <span
                           className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded border ${
                             status?.dataforseo_keyword_index.connected
@@ -237,7 +237,7 @@ export function AnalyticsIntegrationsModal({
                     <button
                       type="button"
                       onClick={() => setActiveTab('backlinks')}
-                      className="mt-3 text-xs font-semibold text-pine underline hover:text-ink self-start"
+                      className="mt-3 text-xs font-semibold text-ink-700 underline hover:text-ink self-start"
                     >
                       Details →
                     </button>
@@ -247,7 +247,7 @@ export function AnalyticsIntegrationsModal({
                   <div className="p-4 rounded-xl border border-line bg-paper-50 dark:bg-ink-900/40 flex flex-col justify-between">
                     <div className="space-y-1">
                       <div className="flex items-center justify-between">
-                        <span className="font-serif font-bold text-ink text-sm">Ahrefs / Semrush / Majestic</span>
+                        <span className="font-sans font-bold text-ink text-sm">Ahrefs / Semrush / Majestic</span>
                         <span
                           className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded border ${
                             status?.ahrefs?.connected || status?.semrush?.connected || status?.majestic?.connected
@@ -267,7 +267,7 @@ export function AnalyticsIntegrationsModal({
                     <button
                       type="button"
                       onClick={() => setActiveTab('backlinks')}
-                      className="mt-3 text-xs font-semibold text-pine underline hover:text-ink self-start"
+                      className="mt-3 text-xs font-semibold text-ink-700 underline hover:text-ink self-start"
                     >
                       Configure →
                     </button>
@@ -277,7 +277,7 @@ export function AnalyticsIntegrationsModal({
 
               {/* Category 3: Local Entity & Brand Reputation */}
               <div className="space-y-3">
-                <h4 className="text-xs font-mono font-bold tracking-wider text-ink-500 uppercase">
+                <h4 className="text-xs font-mono font-bold tracking-[0.04em] text-ink-500 uppercase">
                   Entity Graph &amp; Brand Reputation
                 </h4>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -285,7 +285,7 @@ export function AnalyticsIntegrationsModal({
                   <div className="p-4 rounded-xl border border-line bg-paper-50 dark:bg-ink-900/40 flex flex-col justify-between">
                     <div className="space-y-1">
                       <div className="flex items-center justify-between">
-                        <span className="font-serif font-bold text-ink text-sm">Google Business Profile (GBP)</span>
+                        <span className="font-sans font-bold text-ink text-sm">Google Business Profile (GBP)</span>
                         <span
                           className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded border ${
                             status?.google_business_profile?.connected
@@ -303,7 +303,7 @@ export function AnalyticsIntegrationsModal({
                     <button
                       type="button"
                       onClick={() => setActiveTab('entity')}
-                      className="mt-3 text-xs font-semibold text-pine underline hover:text-ink self-start"
+                      className="mt-3 text-xs font-semibold text-ink-700 underline hover:text-ink self-start"
                     >
                       Details →
                     </button>
@@ -313,7 +313,7 @@ export function AnalyticsIntegrationsModal({
                   <div className="p-4 rounded-xl border border-line bg-paper-50 dark:bg-ink-900/40 flex flex-col justify-between">
                     <div className="space-y-1">
                       <div className="flex items-center justify-between">
-                        <span className="font-serif font-bold text-ink text-sm">Review Platforms &amp; Citations</span>
+                        <span className="font-sans font-bold text-ink text-sm">Review Platforms &amp; Citations</span>
                         <span
                           className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded border ${
                             status?.citations_directories?.connected || status?.brand_mentions?.connected
@@ -333,7 +333,7 @@ export function AnalyticsIntegrationsModal({
                     <button
                       type="button"
                       onClick={() => setActiveTab('entity')}
-                      className="mt-3 text-xs font-semibold text-pine underline hover:text-ink self-start"
+                      className="mt-3 text-xs font-semibold text-ink-700 underline hover:text-ink self-start"
                     >
                       Details →
                     </button>
@@ -346,7 +346,7 @@ export function AnalyticsIntegrationsModal({
           {activeTab === 'gsc' && (
             <div className="space-y-4">
               <div className="p-4 rounded-xl bg-paper-100/60 dark:bg-ink-900/60 border border-line space-y-2">
-                <h3 className="font-serif font-bold text-ink text-base">Google Search Console Integration</h3>
+                <h3 className="font-sans font-bold text-ink text-base">Google Search Console Integration</h3>
                 <p className="text-xs text-ink-600 dark:text-ink-400 leading-relaxed">
                   Connect via Google Service Account JSON credentials or OAuth. Dristik will query the Search Console Search Analytics API to extract your actual 90-day search queries, clicks, impressions, and Googlebot indexing exclusions.
                 </p>
@@ -360,7 +360,7 @@ export function AnalyticsIntegrationsModal({
           {activeTab === 'ga4' && (
             <form onSubmit={handleSaveGa4} className="space-y-4">
               <div className="p-4 rounded-xl bg-paper-100/60 dark:bg-ink-900/60 border border-line space-y-2">
-                <h3 className="font-serif font-bold text-ink text-base">Google Analytics 4 Property Connector</h3>
+                <h3 className="font-sans font-bold text-ink text-base">Google Analytics 4 Property Connector</h3>
                 <p className="text-xs text-ink-600 dark:text-ink-400 leading-relaxed">
                   A numeric property ID is not a connection. Dristik probes the GA4 Data API with the server service account and only then marks the property measured. Set GOOGLE_APPLICATION_CREDENTIALS to a service-account JSON first.
                 </p>
@@ -393,9 +393,9 @@ export function AnalyticsIntegrationsModal({
           {activeTab === 'backlinks' && (
             <div className="space-y-4">
               <div className="p-4 rounded-xl bg-paper-100/60 dark:bg-ink-900/60 border border-line space-y-3">
-                <h3 className="font-serif font-bold text-ink text-base">Backlink Graph &amp; Off-Page Authority Providers</h3>
+                <h3 className="font-sans font-bold text-ink text-base">Backlink Graph &amp; Off-Page Authority Providers</h3>
                 <p className="text-xs text-ink-600 dark:text-ink-400 leading-relaxed">
-                  Unlike legacy SEO tools that fabricate synthetic domain scores, Dristik never reports backlink authority without a live verified link graph provider. When unconnected, Dristik labels trust authority as <span className="font-semibold text-amber-600">Not measured — connector unavailable</span> and renormalizes the audit score strictly across measured categories.
+                  Unlike legacy SEO tools that fabricate synthetic domain scores, Dristik never reports backlink authority without a live verified link graph provider. When unconnected, Dristik labels trust authority as <span className="font-semibold text-warn">Not measured — connector unavailable</span> and renormalizes the audit score strictly across measured categories.
                 </p>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-2">
                   <div className="p-3 bg-paper-50 dark:bg-ink-950 rounded border border-line space-y-1">
@@ -429,7 +429,7 @@ export function AnalyticsIntegrationsModal({
           {activeTab === 'entity' && (
             <div className="space-y-4">
               <div className="p-4 rounded-xl bg-paper-100/60 dark:bg-ink-900/60 border border-line space-y-3">
-                <h3 className="font-serif font-bold text-ink text-base">Local Business, Reviews &amp; Directory Citations</h3>
+                <h3 className="font-sans font-bold text-ink text-base">Local Business, Reviews &amp; Directory Citations</h3>
                 <p className="text-xs text-ink-600 dark:text-ink-400 leading-relaxed">
                   Real reputation signals feed into local pack visibility and Knowledge Graph entity verification.
                 </p>

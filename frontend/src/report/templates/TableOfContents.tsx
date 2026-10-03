@@ -93,38 +93,38 @@ export function TableOfContents({
   const chapters = getChapterDirectory(isRealCompetitorDataAvailable);
 
   return (
-    <section className="report-page-break p-8 md:p-14 min-h-[960px] flex flex-col justify-between bg-white border-b-2 border-slate-200">
+    <section className="report-page-break p-8 md:p-14 min-h-[960px] flex flex-col justify-between bg-paper-50 border-b-2 border-line">
       <PageHeader theme={theme} domain={domain} chapterTitle="TABLE OF CONTENTS // DOCUMENT ARCHITECTURE" />
 
       <div className="space-y-6">
         <div>
-          <span className="font-mono text-[8pt] font-bold uppercase tracking-[0.2em] text-slate-500 block mb-1">
+          <span className="font-mono text-[8pt] font-bold uppercase tracking-[0.04em] text-ink-500 block mb-1">
             Publication Index &amp; Information Architecture
           </span>
-          <h2 className="font-serif text-[24pt] md:text-[28pt] font-normal tracking-tight text-slate-950">
+          <h2 className="font-serif text-[24pt] md:text-[28pt] font-normal tracking-tight text-ink">
             Table of Contents
           </h2>
-          <div className="w-16 h-[2.5px] mt-2" style={{ backgroundColor: theme.accent }}></div>
+          <div className="bg-ink w-10 h-px mt-2" />
         </div>
 
         {/* Chapter Table */}
-        <div className="divide-y divide-slate-200 border-t border-b border-slate-200">
+        <div className="divide-y divide-line border-t border-b border-line">
           {chapters.map((ch) => (
             <div key={ch.num} className="py-2.5 flex items-start justify-between gap-4 text-[8.5pt]">
               <div className="flex items-start gap-3 flex-1">
-                <span className="font-mono font-bold text-slate-400 w-6 pt-0.5">
+                <span className="font-mono font-bold text-ink-400 w-6 pt-0.5">
                   {ch.num}
                 </span>
                 <div>
-                  <h3 className="font-serif font-bold text-slate-900 text-[10pt] leading-tight">
+                  <h3 className="font-sans font-bold text-ink text-[10pt] leading-tight">
                     {ch.title}
                   </h3>
-                  <p className="text-slate-600 font-sans text-[8pt] leading-relaxed mt-0.5">
+                  <p className="text-ink-600 font-sans text-[8pt] leading-relaxed mt-0.5">
                     {ch.desc}
                   </p>
                 </div>
               </div>
-              <div className="font-mono text-[8.5pt] text-slate-400 pt-0.5">
+              <div className="font-mono text-[8.5pt] text-ink-400 pt-0.5">
                 p. {ch.pageEst}
               </div>
             </div>
@@ -132,19 +132,19 @@ export function TableOfContents({
         </div>
 
         {/* "How to Read This Report" - Dual Layer Architecture */}
-        <div className="p-4 rounded bg-slate-50 border border-slate-200 mt-6 text-[8.5pt]">
-          <h4 className="font-mono text-[8pt] font-bold uppercase tracking-wider text-slate-700 mb-2">
+        <div className="p-4 rounded bg-paper-100 border border-line mt-6 text-[8.5pt]">
+          <h4 className="font-mono text-[8pt] font-bold uppercase tracking-[0.04em] text-ink-700 mb-2">
             HOW TO READ THIS PUBLICATION: DUAL-LAYER GOVERNANCE
           </h4>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-slate-700 leading-relaxed font-sans">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-ink-700 leading-relaxed font-sans">
             <div>
-              <strong className="text-slate-900 block font-serif text-[9pt] mb-0.5">
+              <strong className="text-ink block font-sans text-[9pt] mb-0.5">
                 1. Executive Narrative Layer (Pages 3 – 21)
               </strong>
               Designed for board and executive leadership. Synthesizes macro performance signals, competitive standing, conversion ergonomics, and the 90-day commercial impact roadmap.
             </div>
             <div>
-              <strong className="text-slate-900 block font-serif text-[9pt] mb-0.5">
+              <strong className="text-ink block font-sans text-[9pt] mb-0.5">
                 2. Technical Evidence &amp; Proof Layer (Pages 22+)
               </strong>
               Designed for engineering and search teams. Provides deterministic AST proof, exact code patch diffs, file paths, and cryptographic SHA-256 evidence IDs for every single claim.

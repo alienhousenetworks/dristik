@@ -216,13 +216,13 @@ export function CostLedgerView({ report, telemetry: propTelemetry, onNavigateToT
       {/* 1. Header Banner */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-6 border-b border-line">
         <div>
-          <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-pine mb-1">
-            <Coins className="w-4 h-4 text-pine" />
+          <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.04em] text-ink-700 mb-1">
+            <Coins className="w-4 h-4 text-ink-700" />
             <span>Unit Economics & Cost Accounting</span>
             <span className="text-ink-400">·</span>
             <span className="text-ink-500 font-mono">Zero-Fake Telemetry</span>
           </div>
-          <h1 className="text-2xl font-serif font-bold text-ink">
+          <h1 className="text-2xl font-sans font-bold text-ink">
             Pipeline Cost Ledger & Model Economics
           </h1>
           <p className="text-sm text-ink-500 mt-1 max-w-3xl">
@@ -235,17 +235,17 @@ export function CostLedgerView({ report, telemetry: propTelemetry, onNavigateToT
           <button
             type="button"
             onClick={() => setShowRateCard(!showRateCard)}
-            className="text-xs px-3 py-1.5 rounded-md border border-line bg-surface hover:bg-sand-50 font-medium text-ink-700 flex items-center gap-1.5 transition-colors cursor-pointer"
+            className="text-xs px-3 py-1.5 rounded-md border border-line bg-surface hover:bg-paper-50 font-medium text-ink-700 flex items-center gap-1.5 transition-colors cursor-pointer"
           >
-            <Calculator className="w-3.5 h-3.5 text-pine" />
+            <Calculator className="w-3.5 h-3.5 text-ink-700" />
             {showRateCard ? 'Hide Price Table' : 'Official Rate Cards'}
           </button>
           <button
             type="button"
             onClick={handleCopyLedger}
-            className="text-xs px-3 py-1.5 rounded-md border border-line bg-surface hover:bg-sand-50 font-medium text-ink-700 flex items-center gap-1.5 transition-colors cursor-pointer"
+            className="text-xs px-3 py-1.5 rounded-md border border-line bg-surface hover:bg-paper-50 font-medium text-ink-700 flex items-center gap-1.5 transition-colors cursor-pointer"
           >
-            {copiedLedger ? <Check className="w-3.5 h-3.5 text-pine" /> : <Copy className="w-3.5 h-3.5 text-ink-500" />}
+            {copiedLedger ? <Check className="w-3.5 h-3.5 text-ink-700" /> : <Copy className="w-3.5 h-3.5 text-ink-500" />}
             {copiedLedger ? 'Copied Ledger JSON' : 'Copy JSON'}
           </button>
           <button
@@ -262,14 +262,14 @@ export function CostLedgerView({ report, telemetry: propTelemetry, onNavigateToT
       {/* 2. Top-Level Metric Summary Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Total Cost */}
-        <div className="p-4 rounded-xl border border-pine/30 bg-pine/5 shadow-sm relative overflow-hidden">
-          <div className="text-[11px] font-bold uppercase tracking-wider text-pine flex items-center justify-between">
+        <div className="p-4 rounded-xl border border-line bg-paper-100 shadow-sm relative overflow-hidden">
+          <div className="text-[11px] font-bold uppercase tracking-[0.04em] text-ink-700 flex items-center justify-between">
             <span>Total AI Audit Cost</span>
-            <span className="px-1.5 py-0.5 rounded text-[10px] font-mono bg-pine/15 text-pine font-semibold">
+            <span className="px-1.5 py-0.5 rounded text-[10px] font-mono bg-paper-200 text-ink-700 font-semibold">
               {hasActual ? 'Provider Billed' : 'Calculated Token Math'}
             </span>
           </div>
-          <div className="text-3xl font-mono font-bold text-pine mt-2">
+          <div className="text-3xl font-mono font-bold text-ink-700 mt-2">
             ${totalCost.toFixed(4)}
           </div>
           <div className="text-[11px] text-ink-500 mt-1 flex items-center justify-between font-mono">
@@ -280,7 +280,7 @@ export function CostLedgerView({ report, telemetry: propTelemetry, onNavigateToT
 
         {/* Total Tokens */}
         <div className="p-4 rounded-xl border border-line bg-surface shadow-sm">
-          <div className="text-[11px] font-bold uppercase tracking-wider text-ink-500 flex items-center justify-between">
+          <div className="text-[11px] font-bold uppercase tracking-[0.04em] text-ink-500 flex items-center justify-between">
             <span>Total Tokens Processed</span>
             <Cpu className="w-3.5 h-3.5 text-ink-400" />
           </div>
@@ -296,9 +296,9 @@ export function CostLedgerView({ report, telemetry: propTelemetry, onNavigateToT
 
         {/* Model Calls */}
         <div className="p-4 rounded-xl border border-line bg-surface shadow-sm">
-          <div className="text-[11px] font-bold uppercase tracking-wider text-ink-500 flex items-center justify-between">
+          <div className="text-[11px] font-bold uppercase tracking-[0.04em] text-ink-500 flex items-center justify-between">
             <span>Total Model Dispatches</span>
-            <Zap className="w-3.5 h-3.5 text-amber-500" />
+            <Zap className="w-3.5 h-3.5 text-warn" />
           </div>
           <div className="text-2xl font-mono font-bold text-ink mt-2">
             {totalCalls}
@@ -310,9 +310,9 @@ export function CostLedgerView({ report, telemetry: propTelemetry, onNavigateToT
 
         {/* Latency */}
         <div className="p-4 rounded-xl border border-line bg-surface shadow-sm">
-          <div className="text-[11px] font-bold uppercase tracking-wider text-ink-500 flex items-center justify-between">
+          <div className="text-[11px] font-bold uppercase tracking-[0.04em] text-ink-500 flex items-center justify-between">
             <span>Inference Latency</span>
-            <Clock className="w-3.5 h-3.5 text-sky-500" />
+            <Clock className="w-3.5 h-3.5 text-ink-700" />
           </div>
           <div className="text-2xl font-mono font-bold text-ink mt-2">
             {formatMs(totalLatency)}
@@ -324,26 +324,26 @@ export function CostLedgerView({ report, telemetry: propTelemetry, onNavigateToT
       </div>
 
       {/* 3. Mathematical Formula Guarantee Note */}
-      <div className="p-3.5 rounded-lg border border-line bg-sand-50/70 text-xs text-ink-600 flex items-start gap-3">
-        <Info className="w-4 h-4 text-pine shrink-0 mt-0.5" />
+      <div className="p-3.5 rounded-lg border border-line bg-paper-50/70 text-xs text-ink-600 flex items-start gap-3">
+        <Info className="w-4 h-4 text-ink-700 shrink-0 mt-0.5" />
         <div className="space-y-1">
-          <div className="font-semibold text-ink-800">
+          <div className="font-semibold text-ink-700">
             Zero-Fake Real Pricing Guarantee
           </div>
           <p className="text-ink-500 leading-relaxed">
             Local steps (Chromium page crawling, DOM parsing, schema verification, and rule scoring) consume <strong className="text-ink-700">$0.00 compute</strong>.
-            For each model invocation, cost is computed via <code className="bg-sand-200/60 px-1 py-0.5 rounded text-[11px] font-mono text-ink-800">(Input Tokens / 1M × Rate) + (Output Tokens / 1M × Rate)</code> using official published list cards, or exact dollar amounts billed by OpenRouter.
+            For each model invocation, cost is computed via <code className="bg-paper-200/60 px-1 py-0.5 rounded text-[11px] font-mono text-ink-700">(Input Tokens / 1M × Rate) + (Output Tokens / 1M × Rate)</code> using official published list cards, or exact dollar amounts billed by OpenRouter.
           </p>
         </div>
       </div>
 
       {/* 4. Official Model Rate Card Modal/Drawer (Toggled) */}
       {showRateCard && (
-        <div className="p-4 rounded-xl border border-line bg-sand-50 shadow-sm space-y-3">
+        <div className="p-4 rounded-xl border border-line bg-paper-50 shadow-sm space-y-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <Calculator className="w-4 h-4 text-pine" />
-              <h3 className="text-xs font-bold uppercase tracking-wider text-ink-800">
+              <Calculator className="w-4 h-4 text-ink-700" />
+              <h3 className="text-xs font-bold uppercase tracking-[0.04em] text-ink-700">
                 Official Price Card Rates (Per 1 Million Tokens)
               </h3>
             </div>
@@ -352,7 +352,7 @@ export function CostLedgerView({ report, telemetry: propTelemetry, onNavigateToT
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs">
               <thead>
-                <tr className="border-b border-line text-[10px] uppercase tracking-wider text-ink-500 font-semibold">
+                <tr className="border-b border-line text-[10px] uppercase tracking-[0.04em] text-ink-500 font-semibold">
                   <th className="py-2 px-2">Provider</th>
                   <th className="py-2 px-2">Model</th>
                   <th className="py-2 px-2">Tier</th>
@@ -362,14 +362,14 @@ export function CostLedgerView({ report, telemetry: propTelemetry, onNavigateToT
               </thead>
               <tbody className="divide-y divide-line/40 font-mono text-[11px]">
                 {OFFICIAL_RATE_CARD.map((r) => (
-                  <tr key={`${r.provider}-${r.model}`} className="hover:bg-sand-100/60">
-                    <td className="py-1.5 px-2 font-sans font-medium text-ink-800">{r.provider}</td>
+                  <tr key={`${r.provider}-${r.model}`} className="hover:bg-paper-100/60">
+                    <td className="py-1.5 px-2 font-sans font-medium text-ink-700">{r.provider}</td>
                     <td className="py-1.5 px-2 font-semibold text-ink-700">{r.model}</td>
                     <td className="py-1.5 px-2 font-sans text-ink-500">
                       <span className={`px-1.5 py-0.5 rounded text-[10px] ${
-                        r.tier === 'High Reasoning' ? 'bg-purple-100 text-purple-800' :
-                        r.tier === 'Fast / Balanced' ? 'bg-blue-100 text-blue-800' :
-                        'bg-emerald-100 text-emerald-800'
+                        r.tier === 'High Reasoning' ? 'bg-paper-100 text-ink-700' :
+                        r.tier === 'Fast / Balanced' ? 'bg-paper-100 text-ink-700' :
+                        'bg-good/10 text-good'
                       }`}>
                         {r.tier}
                       </span>
@@ -386,20 +386,20 @@ export function CostLedgerView({ report, telemetry: propTelemetry, onNavigateToT
 
       {/* 5. Provider & Model Spend Distribution */}
       <div className="p-4 rounded-xl border border-line bg-surface shadow-sm space-y-3">
-        <h3 className="text-xs font-bold uppercase tracking-wider text-ink-700 flex items-center gap-2">
-          <Layers className="w-3.5 h-3.5 text-pine" />
+        <h3 className="text-xs font-bold uppercase tracking-[0.04em] text-ink-700 flex items-center gap-2">
+          <Layers className="w-3.5 h-3.5 text-ink-700" />
           Spend Distribution by Provider & Engine Family
         </h3>
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 pt-1">
           {Object.entries(providerBreakdown).map(([prov, stat]) => {
             const pct = totalCost > 0 ? (stat.cost / totalCost * 100) : 0;
             return (
-              <div key={prov} className="p-3 rounded-lg border border-line bg-sand-50/50">
+              <div key={prov} className="p-3 rounded-lg border border-line bg-paper-50/50">
                 <div className="flex items-center justify-between text-xs mb-1">
-                  <span className="font-semibold capitalize text-ink-800">{prov}</span>
+                  <span className="font-semibold capitalize text-ink-700">{prov}</span>
                   <span className="font-mono text-ink-500">{pct.toFixed(1)}%</span>
                 </div>
-                <div className="text-lg font-mono font-bold text-pine">
+                <div className="text-lg font-mono font-bold text-ink-700">
                   ${stat.cost.toFixed(4)}
                 </div>
                 <div className="text-[10px] text-ink-400 font-mono mt-0.5 flex justify-between">
@@ -407,7 +407,7 @@ export function CostLedgerView({ report, telemetry: propTelemetry, onNavigateToT
                   <span>{stat.tokens.toLocaleString()} tokens</span>
                 </div>
                 <div className="w-full h-1 bg-line/60 rounded-full mt-2 overflow-hidden">
-                  <div className="h-full bg-pine rounded-full" style={{ width: `${Math.min(100, Math.max(2, pct))}%` }} />
+                  <div className="h-full bg-ink" style={{ width: `${Math.min(100, Math.max(2, pct))}%` }} />
                 </div>
               </div>
             );
@@ -417,9 +417,9 @@ export function CostLedgerView({ report, telemetry: propTelemetry, onNavigateToT
 
       {/* 6. Comprehensive Stage and Sub-Step Tree Table */}
       <div className="rounded-xl border border-line bg-surface shadow-sm overflow-hidden space-y-0">
-        <div className="p-4 border-b border-line bg-sand-50/70 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="p-4 border-b border-line bg-paper-50/70 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="flex items-center gap-2">
-            <FileSpreadsheet className="w-4 h-4 text-pine" />
+            <FileSpreadsheet className="w-4 h-4 text-ink-700" />
             <h3 className="text-sm font-bold text-ink">
               Step & Sub-Step Cost Ledger
             </h3>
@@ -430,14 +430,14 @@ export function CostLedgerView({ report, telemetry: propTelemetry, onNavigateToT
             <button
               type="button"
               onClick={expandAll}
-              className="text-xs text-ink-600 hover:text-pine px-2 py-1 rounded border border-line bg-surface hover:bg-sand-50 transition-colors"
+              className="text-xs text-ink-600 hover:text-ink px-2 py-1 rounded border border-line bg-surface hover:bg-paper-50 transition-colors"
             >
               Expand All
             </button>
             <button
               type="button"
               onClick={collapseAll}
-              className="text-xs text-ink-600 hover:text-pine px-2 py-1 rounded border border-line bg-surface hover:bg-sand-50 transition-colors"
+              className="text-xs text-ink-600 hover:text-ink px-2 py-1 rounded border border-line bg-surface hover:bg-paper-50 transition-colors"
             >
               Collapse All
             </button>
@@ -447,7 +447,7 @@ export function CostLedgerView({ report, telemetry: propTelemetry, onNavigateToT
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs">
             <thead>
-              <tr className="border-b border-line text-[10px] uppercase tracking-wider text-ink-500 font-semibold bg-sand-100/50">
+              <tr className="border-b border-line text-[10px] uppercase tracking-[0.04em] text-ink-500 font-semibold bg-paper-100/50">
                 <th className="py-2.5 px-3">Pipeline Stage / Sub-Step</th>
                 <th className="py-2.5 px-3">Engine / Model</th>
                 <th className="py-2.5 px-3 text-right">Calls</th>
@@ -469,11 +469,11 @@ export function CostLedgerView({ report, telemetry: propTelemetry, onNavigateToT
                     {/* Stage Header Row */}
                     <tr
                       onClick={() => toggleStage(stage.stage)}
-                      className="bg-sand-50/70 hover:bg-sand-100/70 transition-colors cursor-pointer font-semibold text-ink-900 border-t border-line"
+                      className="bg-paper-50/70 hover:bg-paper-100/70 transition-colors cursor-pointer font-semibold text-ink-900 border-t border-line"
                     >
                       <td className="py-2.5 px-3 font-sans flex items-center gap-2">
                         {isExpanded ? (
-                          <ChevronDown className="w-4 h-4 text-pine shrink-0" />
+                          <ChevronDown className="w-4 h-4 text-ink-700 shrink-0" />
                         ) : (
                           <ChevronRight className="w-4 h-4 text-ink-400 shrink-0" />
                         )}
@@ -499,11 +499,11 @@ export function CostLedgerView({ report, telemetry: propTelemetry, onNavigateToT
                         {formatMs(stage.latency_ms)}
                       </td>
                       <td className="py-2.5 px-3 text-right font-sans">
-                        <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-sand-200/60 text-ink-700">
+                        <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-paper-200/60 text-ink-700">
                           {stagePct.toFixed(1)}% of audit
                         </span>
                       </td>
-                      <td className="py-2.5 px-3 text-right font-bold text-pine text-sm">
+                      <td className="py-2.5 px-3 text-right font-bold text-ink-700 text-sm">
                         ${stageCost.toFixed(4)}
                       </td>
                     </tr>
@@ -512,10 +512,10 @@ export function CostLedgerView({ report, telemetry: propTelemetry, onNavigateToT
                     {isExpanded && subSteps.length > 0 && subSteps.map((sub) => (
                       <tr
                         key={`${stage.stage}-${sub.sub_step}`}
-                        className="bg-surface hover:bg-sand-50/60 transition-colors text-[11px] border-b border-line/30"
+                        className="bg-surface hover:bg-paper-50/60 transition-colors text-[11px] border-b border-line/30"
                       >
                         <td className="py-2 px-3 pl-9 font-sans text-ink-700">
-                          <div className="font-medium text-ink-800">{sub.display_name || sub.sub_step}</div>
+                          <div className="font-medium text-ink-700">{sub.display_name || sub.sub_step}</div>
                           {sub.capability && (
                             <div className="text-[10px] text-ink-400 font-mono">capability: {sub.capability}</div>
                           )}
@@ -534,16 +534,16 @@ export function CostLedgerView({ report, telemetry: propTelemetry, onNavigateToT
                         </td>
                         <td className="py-2 px-3 text-right font-sans">
                           {sub.is_actual ? (
-                            <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
+                            <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-good/10 text-good border border-good/30">
                               Actual Billed
                             </span>
                           ) : (
-                            <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-sky-50 text-sky-700 border border-sky-200" title={sub.formula_rate}>
+                            <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-paper-100 text-ink-700 border border-line" title={sub.formula_rate}>
                               Calculated Math
                             </span>
                           )}
                         </td>
-                        <td className="py-2 px-3 text-right font-semibold text-pine">
+                        <td className="py-2 px-3 text-right font-semibold text-ink-700">
                           ${sub.cost_usd.toFixed(4)}
                         </td>
                       </tr>
@@ -563,7 +563,7 @@ export function CostLedgerView({ report, telemetry: propTelemetry, onNavigateToT
             </tbody>
             {/* Grand Total Footer */}
             <tfoot>
-              <tr className="border-t-2 border-line font-bold text-ink-900 bg-sand-100/90 text-xs">
+              <tr className="border-t-2 border-line font-bold text-ink-900 bg-paper-100/90 text-xs">
                 <td className="py-3 px-3 font-sans">
                   <div className="font-bold text-sm text-ink-950">Grand Total Audit Cost</div>
                   <div className="text-[10px] text-ink-500 font-mono font-normal">
@@ -581,11 +581,11 @@ export function CostLedgerView({ report, telemetry: propTelemetry, onNavigateToT
                 </td>
                 <td className="py-3 px-3 text-right font-mono">{formatMs(totalLatency)}</td>
                 <td className="py-3 px-3 text-right font-sans">
-                  <span className="px-2 py-0.5 rounded text-[11px] font-semibold bg-pine/15 text-pine">
+                  <span className="px-2 py-0.5 rounded text-[11px] font-semibold bg-paper-200 text-ink-700">
                     {hasActual ? 'Provider Billed Receipts' : 'Calculated List Rate'}
                   </span>
                 </td>
-                <td className="py-3 px-3 text-right font-mono text-pine text-base font-bold">
+                <td className="py-3 px-3 text-right font-mono text-ink-700 text-base font-bold">
                   ${totalCost.toFixed(4)}
                 </td>
               </tr>
@@ -598,8 +598,8 @@ export function CostLedgerView({ report, telemetry: propTelemetry, onNavigateToT
       <div className="p-4 rounded-xl border border-line bg-surface shadow-sm space-y-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <Cpu className="w-4 h-4 text-pine" />
-            <h3 className="text-xs font-bold uppercase tracking-wider text-ink-700">
+            <Cpu className="w-4 h-4 text-ink-700" />
+            <h3 className="text-xs font-bold uppercase tracking-[0.04em] text-ink-700">
               Verbatim Model Invocation Records
             </h3>
             <span className="text-xs text-ink-400 font-mono">({telemetry.agent_calls?.length || 0} total calls)</span>
@@ -608,7 +608,7 @@ export function CostLedgerView({ report, telemetry: propTelemetry, onNavigateToT
           <button
             type="button"
             onClick={() => setShowCallRecords(!showCallRecords)}
-            className="text-xs text-pine hover:underline font-semibold cursor-pointer"
+            className="text-xs text-ink-700 hover:underline font-semibold cursor-pointer"
           >
             {showCallRecords ? 'Hide Verbatim Logs' : 'View Verbatim Call Logs'}
           </button>
@@ -618,7 +618,7 @@ export function CostLedgerView({ report, telemetry: propTelemetry, onNavigateToT
           <div className="overflow-x-auto pt-2">
             <table className="w-full text-left text-xs">
               <thead>
-                <tr className="border-b border-line text-[10px] uppercase tracking-wider text-ink-500 font-semibold bg-sand-50">
+                <tr className="border-b border-line text-[10px] uppercase tracking-[0.04em] text-ink-500 font-semibold bg-paper-50">
                   <th className="py-2 px-2">Call ID / Capability</th>
                   <th className="py-2 px-2">Provider & Model</th>
                   <th className="py-2 px-2 text-right">In Tokens</th>
@@ -630,9 +630,9 @@ export function CostLedgerView({ report, telemetry: propTelemetry, onNavigateToT
               </thead>
               <tbody className="divide-y divide-line/40 font-mono text-[11px]">
                 {(telemetry.agent_calls || []).map((call: AgentCallRecord) => (
-                  <tr key={call.call_id} className="hover:bg-sand-50/60">
+                  <tr key={call.call_id} className="hover:bg-paper-50/60">
                     <td className="py-1.5 px-2">
-                      <div className="font-sans font-semibold text-ink-800">{call.capability}</div>
+                      <div className="font-sans font-semibold text-ink-700">{call.capability}</div>
                       <div className="text-[10px] text-ink-400">{call.call_id}</div>
                     </td>
                     <td className="py-1.5 px-2 text-ink-700">
@@ -645,12 +645,12 @@ export function CostLedgerView({ report, telemetry: propTelemetry, onNavigateToT
                     <td className="py-1.5 px-2 text-right text-ink-600">{formatMs(call.latency_ms)}</td>
                     <td className="py-1.5 px-2 text-right">
                       <span className={`px-1.5 py-0.5 rounded text-[10px] ${
-                        call.is_actual ? 'bg-emerald-100 text-emerald-800' : 'bg-sand-200 text-ink-700'
+                        call.is_actual ? 'bg-good/10 text-good' : 'bg-paper-200 text-ink-700'
                       }`}>
                         {call.cost_basis}
                       </span>
                     </td>
-                    <td className="py-1.5 px-2 text-right font-bold text-pine">
+                    <td className="py-1.5 px-2 text-right font-bold text-ink-700">
                       ${(call.cost_usd || 0).toFixed(6)}
                     </td>
                   </tr>

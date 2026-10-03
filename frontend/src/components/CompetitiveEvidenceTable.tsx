@@ -56,8 +56,8 @@ export function CompetitiveEvidenceTable({
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
             <div className="flex items-center gap-2">
-              <Table className="w-5 h-5 text-indigo-500" />
-              <h3 className="font-serif text-lg font-semibold text-ink">
+              <Table className="w-5 h-5 text-ink-700" />
+              <h3 className="font-sans text-lg font-semibold text-ink">
                 Competitive Evidence Matrix
               </h3>
               <Badge tone="pine" className="text-xs">
@@ -72,10 +72,10 @@ export function CompetitiveEvidenceTable({
 
         <div className="overflow-x-auto rounded-lg border border-border">
           <table className="w-full text-left text-sm divide-y divide-border">
-            <thead className="bg-muted/50 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+            <thead className="bg-muted/50 text-xs font-semibold text-muted-foreground uppercase tracking-[0.04em]">
               <tr>
                 <th className="py-3 px-4">Audit Dimension</th>
-                <th className="py-3 px-4 text-emerald-700 dark:text-emerald-400 bg-emerald-50/40 dark:bg-emerald-950/20">
+                <th className="py-3 px-4 text-good dark:text-good bg-good/10 dark:bg-good/10">
                   {targetBrand} (Target)
                 </th>
                 {competitors.map((c) => (
@@ -86,7 +86,7 @@ export function CompetitiveEvidenceTable({
                         {c.competitor_types.slice(0, 2).map((t) => (
                           <span
                             key={t}
-                            className="text-[9px] px-1 py-0.2 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-mono"
+                            className="text-[9px] px-1 py-0.2 rounded bg-paper-200 dark:bg-ink-800 text-ink-600 dark:text-ink-300 font-mono"
                           >
                             {t}
                           </span>
@@ -105,7 +105,7 @@ export function CompetitiveEvidenceTable({
                     <Layers className="w-3.5 h-3.5 text-muted-foreground" />
                     {row.dimension}
                   </td>
-                  <td className="py-3 px-4 font-semibold text-emerald-700 dark:text-emerald-300 bg-emerald-50/20 dark:bg-emerald-950/10">
+                  <td className="py-3 px-4 font-semibold text-good dark:text-good bg-good/10 dark:bg-good/10">
                     {row.target_value || 'Unmeasured'}
                   </td>
                   {competitors.map((c) => {
@@ -115,7 +115,7 @@ export function CompetitiveEvidenceTable({
                     return (
                       <td key={c.id} className="py-3 px-4">
                         {isUnmeasured ? (
-                          <span className="inline-flex items-center gap-1 text-slate-400 dark:text-slate-500 italic text-[11px]">
+                          <span className="inline-flex items-center gap-1 text-ink-400 dark:text-ink-500 italic text-[11px]">
                             <HelpCircle className="w-3 h-3" /> Unmeasured
                           </span>
                         ) : (
@@ -142,8 +142,8 @@ export function CompetitiveEvidenceTable({
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
               <div className="flex items-center gap-2">
-                <Sparkles className="w-5 h-5 text-amber-500" />
-                <h3 className="font-serif text-lg font-semibold text-ink">
+                <Sparkles className="w-5 h-5 text-warn" />
+                <h3 className="font-sans text-lg font-semibold text-ink">
                   Causal Explainability: Why Rivals Outperform
                 </h3>
               </div>
@@ -162,7 +162,7 @@ export function CompetitiveEvidenceTable({
                     onClick={() => setSelectedCompDomain(c.canonical_domain)}
                     className={`px-3 py-1.5 text-xs rounded-lg font-medium transition-all ${
                       selectedCompDomain === c.canonical_domain
-                        ? 'bg-indigo-600 text-white shadow-xs'
+                        ? 'bg-paper-100 text-white shadow-xs'
                         : 'bg-muted text-muted-foreground hover:bg-muted/80'
                     }`}
                   >
@@ -176,15 +176,15 @@ export function CompetitiveEvidenceTable({
           {selectedCausal && (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
               {/* Advantages / Why They Outperform */}
-              <div className="p-4 rounded-xl bg-amber-500/5 border border-amber-500/20 space-y-2.5">
-                <div className="flex items-center gap-2 text-amber-700 dark:text-amber-400 font-semibold text-xs uppercase tracking-wide">
+              <div className="p-4 rounded-xl bg-warn/10 border border-warn/30 space-y-2.5">
+                <div className="flex items-center gap-2 text-warn dark:text-warn font-semibold text-xs uppercase tracking-wide">
                   <TrendingUp className="w-4 h-4" />
                   Why {selectedCausal.competitor_name} Outperforms {targetBrand}
                 </div>
                 <ul className="space-y-2 text-xs text-ink/90">
                   {selectedCausal.reasons_they_outperform.map((reason, idx) => (
                     <li key={idx} className="flex items-start gap-2">
-                      <span className="w-1.5 h-1.5 rounded-full bg-amber-500 mt-1.5 shrink-0" />
+                      <span className="w-1.5 h-1.5 rounded-full bg-warn/10 mt-1.5 shrink-0" />
                       <span>{reason}</span>
                     </li>
                   ))}
@@ -192,15 +192,15 @@ export function CompetitiveEvidenceTable({
               </div>
 
               {/* Where Target Wins / Moats */}
-              <div className="p-4 rounded-xl bg-emerald-500/5 border border-emerald-500/20 space-y-2.5">
-                <div className="flex items-center gap-2 text-emerald-700 dark:text-emerald-400 font-semibold text-xs uppercase tracking-wide">
+              <div className="p-4 rounded-xl bg-good/10 border border-good/30 space-y-2.5">
+                <div className="flex items-center gap-2 text-good dark:text-good font-semibold text-xs uppercase tracking-wide">
                   <CheckCircle2 className="w-4 h-4" />
                   Where {targetBrand} Holds Competitive Advantage
                 </div>
                 <ul className="space-y-2 text-xs text-ink/90">
                   {selectedCausal.areas_target_wins.map((win, idx) => (
                     <li key={idx} className="flex items-start gap-2">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 mt-1.5 shrink-0" />
+                      <span className="w-1.5 h-1.5 rounded-full bg-good/10 mt-1.5 shrink-0" />
                       <span>{win}</span>
                     </li>
                   ))}

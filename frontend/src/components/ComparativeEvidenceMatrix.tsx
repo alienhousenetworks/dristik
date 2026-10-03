@@ -393,26 +393,26 @@ export function ComparativeEvidenceMatrix({
   };
 
   return (
-    <div className="p-5 bg-white border border-slate-300 rounded-lg shadow-xs font-sans">
+    <div className="p-5 bg-paper-50 border border-line rounded-lg shadow-xs font-sans">
       {/* Header & Controls */}
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 pb-4">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line pb-4">
         <div>
           <div className="flex items-center gap-2">
-            <span className={`font-mono text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 border rounded ${
+            <span className={`font-mono text-[10px] font-bold uppercase tracking-[0.04em] px-2 py-0.5 border rounded ${
               anyCompetitorMeasured
-                ? 'text-emerald-900 bg-emerald-50 border-emerald-200'
-                : 'text-amber-900 bg-amber-50 border-amber-200'
+                ? 'text-good bg-good/10 border-good/30'
+                : 'text-warn bg-warn/10 border-warn/30'
             }`}>
               {statusBadge}
             </span>
-            <span className="text-xs text-slate-500 font-mono">
+            <span className="text-xs text-ink-500 font-mono">
               14 Core Intelligence Vectors
             </span>
           </div>
-          <h3 className="text-base font-bold text-slate-900 mt-1">
+          <h3 className="text-base font-bold text-ink mt-1">
             {sectionTitle}
           </h3>
-          <p className="text-xs text-slate-600 mt-0.5 max-w-3xl leading-relaxed">
+          <p className="text-xs text-ink-600 mt-0.5 max-w-3xl leading-relaxed">
             Side-by-side benchmark comparing observed DOM &amp; audit facts across 14 competitive dimensions. In adherence to Dristik&apos;s Zero-Fake philosophy, uncrawled competitors explicitly report &quot;Not measured: Uncrawled domain&quot; without invented scores.
           </p>
         </div>
@@ -422,7 +422,7 @@ export function ComparativeEvidenceMatrix({
             <button
               type="button"
               onClick={onInitiateCompetitorCrawl}
-              className="px-3 py-1.5 text-xs font-mono font-bold bg-blue-900 hover:bg-blue-800 text-white rounded shadow-xs transition-colors flex items-center gap-1.5"
+              className="px-3 py-1.5 text-xs font-mono font-bold bg-paper-100 hover:bg-paper-100 text-white rounded shadow-xs transition-colors flex items-center gap-1.5"
             >
               <span>🚀 Run Competitor Crawl</span>
             </button>
@@ -430,7 +430,7 @@ export function ComparativeEvidenceMatrix({
           <button
             type="button"
             onClick={handleDownloadCsv}
-            className="px-3 py-1.5 text-xs font-mono font-bold bg-white hover:bg-slate-50 text-slate-800 border border-slate-300 rounded shadow-xs transition-colors flex items-center gap-1.5"
+            className="px-3 py-1.5 text-xs font-mono font-bold bg-paper-50 hover:bg-paper-100 text-ink-700 border border-line rounded shadow-xs transition-colors flex items-center gap-1.5"
           >
             <span>📥 Export Matrix (CSV)</span>
           </button>
@@ -438,8 +438,8 @@ export function ComparativeEvidenceMatrix({
       </div>
 
       {/* Filter Tabs */}
-      <div className="flex flex-wrap items-center gap-1.5 mt-3 pt-1 border-b border-slate-200 pb-3 text-xs font-mono">
-        <span className="text-slate-400 text-[11px] mr-1">Filter Vector:</span>
+      <div className="flex flex-wrap items-center gap-1.5 mt-3 pt-1 border-b border-line pb-3 text-xs font-mono">
+        <span className="text-ink-400 text-[11px] mr-1">Filter Vector:</span>
         {[
           { id: 'ALL', label: 'All 14 Vectors' },
           { id: 'TECHNICAL', label: 'Technical SEO' },
@@ -455,8 +455,8 @@ export function ComparativeEvidenceMatrix({
             onClick={() => setActiveFilter(tab.id)}
             className={`px-2.5 py-1 rounded text-[11px] font-bold transition-colors ${
               activeFilter === tab.id
-                ? 'bg-blue-950 text-white shadow-xs'
-                : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+                ? 'bg-paper-100 text-white shadow-xs'
+                : 'bg-paper-200 hover:bg-paper-200 text-ink-700'
             }`}
           >
             {tab.label}
@@ -468,45 +468,45 @@ export function ComparativeEvidenceMatrix({
       <div className="overflow-x-auto mt-4">
         <table className="w-full text-left text-xs border-collapse font-sans">
           <thead>
-            <tr className="bg-slate-100 border-b border-slate-300 text-slate-700 font-mono text-[11px]">
+            <tr className="bg-paper-200 border-b border-line text-ink-700 font-mono text-[11px]">
               <th className="py-2.5 px-3 font-bold w-1/4">Competitive Vector</th>
-              <th className="py-2.5 px-3 font-bold text-blue-950 bg-blue-50/60 border-l border-r border-blue-200 w-1/4">
-                🎯 {targetClean} (Target)
+              <th className="py-2.5 px-3 font-bold text-ink-700 bg-paper-100 border-l border-r border-line w-1/4">
+                 {targetClean} (Target)
               </th>
               {competitors.map((comp) => (
-                <th key={comp} className="py-2.5 px-3 font-bold text-slate-800 w-1/4">
+                <th key={comp} className="py-2.5 px-3 font-bold text-ink-700 w-1/4">
                   🏢 {comp}
                 </th>
               ))}
-              <th className="py-2.5 px-3 font-bold text-slate-500 w-1/4">Technical Rationale</th>
+              <th className="py-2.5 px-3 font-bold text-ink-500 w-1/4">Technical Rationale</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-200">
+          <tbody className="divide-y divide-line">
             {filteredRows.map((row, idx) => (
-              <tr key={idx} className="hover:bg-slate-50/80 transition-colors">
+              <tr key={idx} className="hover:bg-paper-100 transition-colors">
                 {/* Dimension Name */}
                 <td className="py-3 px-3">
-                  <p className="font-bold text-slate-900 text-xs">{row.dimension}</p>
-                  <span className="font-mono text-[9px] text-slate-400 uppercase tracking-wider">
+                  <p className="font-bold text-ink text-xs">{row.dimension}</p>
+                  <span className="font-mono text-[9px] text-ink-400 uppercase tracking-[0.04em]">
                     {row.pillar.replace('_', ' ')}
                   </span>
                 </td>
 
                 {/* Target Value */}
-                <td className="py-3 px-3 bg-blue-50/30 border-l border-r border-blue-200">
+                <td className="py-3 px-3 bg-paper-100 border-l border-r border-line">
                   <div className="flex items-start gap-1.5">
                     <span className="font-bold text-xs mt-0.5">
-                      {row.targetStatus === 'GOOD' ? '✓' : row.targetStatus === 'WARN' ? '⚠' : row.targetStatus === 'UNMEASURED' ? '—' : '✕'}
+                      {row.targetStatus === 'GOOD' ? '✓' : row.targetStatus === 'WARN' ? '' : row.targetStatus === 'UNMEASURED' ? '—' : '✕'}
                     </span>
                     <span
                       className={`text-xs font-semibold ${
                         row.targetStatus === 'GOOD'
-                          ? 'text-emerald-900'
+                          ? 'text-good'
                           : row.targetStatus === 'WARN'
-                          ? 'text-amber-900'
+                          ? 'text-warn'
                           : row.targetStatus === 'UNMEASURED'
-                          ? 'text-slate-600'
-                          : 'text-red-900'
+                          ? 'text-ink-600'
+                          : 'text-bad'
                       }`}
                     >
                       {row.targetValue}
@@ -521,15 +521,15 @@ export function ComparativeEvidenceMatrix({
                     <td key={comp} className="py-3 px-3">
                       {compVal.status === 'UNMEASURED' ? (
                         <div className="flex flex-col gap-1 items-start">
-                          <span className="inline-block text-[10px] font-mono text-amber-900 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
+                          <span className="inline-block text-[10px] font-mono text-warn bg-warn/10 px-2 py-0.5 rounded border border-warn/30">
                             {compVal.value}
                           </span>
-                          <span className="text-[9px] font-mono text-slate-400">
+                          <span className="text-[9px] font-mono text-ink-400">
                             [Pending Crawl]
                           </span>
                         </div>
                       ) : (
-                        <span className="text-xs text-slate-800 font-medium">
+                        <span className="text-xs text-ink-700 font-medium">
                           {compVal.value}
                         </span>
                       )}
@@ -538,7 +538,7 @@ export function ComparativeEvidenceMatrix({
                 })}
 
                 {/* Why It Matters */}
-                <td className="py-3 px-3 text-[11px] text-slate-600 leading-relaxed">
+                <td className="py-3 px-3 text-[11px] text-ink-600 leading-relaxed">
                   {row.whyItMatters}
                 </td>
               </tr>
@@ -548,11 +548,11 @@ export function ComparativeEvidenceMatrix({
       </div>
 
       {/* Zero-Fake Notice Footer */}
-      <div className="mt-4 pt-3 border-t border-slate-200 flex flex-wrap items-center justify-between gap-2 text-[10px] font-mono text-slate-500">
+      <div className="mt-4 pt-3 border-t border-line flex flex-wrap items-center justify-between gap-2 text-[10px] font-mono text-ink-500">
         <span>
-          Compliance: <strong className="text-slate-800">Dristik Zero-Fake Evidence Standard</strong> (Empirical DOM &amp; audit evidence; uninspected domains remain unmeasured)
+          Compliance: <strong className="text-ink-700">Dristik Zero-Fake Evidence Standard</strong> (Empirical DOM &amp; audit evidence; uninspected domains remain unmeasured)
         </span>
-        <span className="text-amber-800">
+        <span className="text-warn">
           To measure competitor facts across all 14 dimensions: Run a targeted crawl on competitor URLs.
         </span>
       </div>

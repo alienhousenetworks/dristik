@@ -75,7 +75,7 @@ export function LeadGenOpportunitiesView({
   if (loading) {
     return (
       <div className="p-8 sheet border border-line rounded-lg flex items-center justify-center gap-3 text-ink-500">
-        <div className="w-5 h-5 border-2 border-pine border-t-transparent rounded-full animate-spin"></div>
+        <div className="w-5 h-5 border-2 border-line border-t-transparent rounded-full animate-spin"></div>
         <span>Detecting commercial voids & lead generation opportunities...</span>
       </div>
     );
@@ -85,7 +85,7 @@ export function LeadGenOpportunitiesView({
     return (
       <div className="p-6 sheet border border-line rounded-lg space-y-2">
         <span className="label text-ink">Lead gen: no crawl-backed voids</span>
-        <p className="text-sm text-ink-800">
+        <p className="text-sm text-ink-700">
           No landing-page blueprints were invented. Lead gen only reports URL gaps from a completed crawl
           (missing /pricing, /compare, or /solutions). Re-run the audit, then open this tab with that analysis id.
         </p>
@@ -108,11 +108,11 @@ export function LeadGenOpportunitiesView({
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
             <div className="flex items-center gap-2 mb-1">
-              <span className="label text-pine">
+              <span className="label text-ink-700">
                 Commercial Void Detection & 1-Click Page Generation
               </span>
             </div>
-            <h3 className="font-serif text-2xl md:text-3xl text-ink font-normal">
+            <h3 className="font-sans text-2xl md:text-3xl text-ink font-normal">
               High-Intent Lead Opportunities Captured by Competitors
             </h3>
             <p className="text-xs text-ink-500 mt-1 max-w-xl">
@@ -124,7 +124,7 @@ export function LeadGenOpportunitiesView({
           {hasPipelineEstimates && (
             <div className="bg-paper-50 border border-line rounded-md p-3 text-right shrink-0">
               <span className="label block text-[10px]">Total Pipeline In Jeopardy</span>
-              <span className="text-2xl font-serif font-bold text-good">
+              <span className="text-2xl font-sans font-bold text-good">
                 {formatINR(totalPipeline)}
               </span>
             </div>
@@ -148,8 +148,8 @@ export function LeadGenOpportunitiesView({
               <div className="flex items-center gap-2.5">
                 <span className={`text-[10px] font-bold px-2 py-0.5 rounded border ${
                   opp.impact_level === 'CRITICAL'
-                    ? 'bg-red-100 text-bad border-red-200'
-                    : 'bg-amber-100 text-warn border-amber-200'
+                    ? 'bg-bad/10 text-bad border-bad/30'
+                    : 'bg-warn/10 text-warn border-warn/30'
                 }`}>
                   {opp.impact_level} IMPACT
                 </span>
@@ -200,10 +200,10 @@ export function LeadGenOpportunitiesView({
           <div className="sheet border border-line rounded-lg max-w-3xl w-full p-6 space-y-5 max-h-[90vh] overflow-y-auto shadow-xl">
             <div className="flex items-center justify-between border-b border-line pb-3">
               <div>
-                <span className="label text-pine">
+                <span className="label text-ink-700">
                   Ready-to-Deploy Landing Page Blueprint
                 </span>
-                <h3 className="text-lg font-serif text-ink mt-0.5">{activeSpecModal.title}</h3>
+                <h3 className="text-lg font-sans text-ink mt-0.5">{activeSpecModal.title}</h3>
               </div>
               <button
                 type="button"
@@ -233,11 +233,11 @@ export function LeadGenOpportunitiesView({
               </div>
 
               <div className="border border-line bg-paper-50 p-4 rounded-md space-y-2">
-                <span className="label text-pine text-[10px] block">Hero Section Architecture</span>
-                <h4 className="text-base font-bold text-ink font-serif">{activeSpecModal.generated_spec.h1_headline}</h4>
+                <span className="label text-ink-700 text-[10px] block">Hero Section Architecture</span>
+                <h4 className="text-base font-bold text-ink font-sans">{activeSpecModal.generated_spec.h1_headline}</h4>
                 <p className="text-ink-700 leading-relaxed">{activeSpecModal.generated_spec.hero_subhead}</p>
                 <div className="pt-2">
-                  <span className="inline-block bg-pine-100 text-pine border border-pine/20 px-3 py-1 rounded text-xs font-bold">
+                  <span className="inline-block bg-paper-200 text-ink-700 border border-line px-3 py-1 rounded text-xs font-bold">
                     CTA: {activeSpecModal.generated_spec.primary_cta}
                   </span>
                 </div>
@@ -264,7 +264,7 @@ export function LeadGenOpportunitiesView({
                       setCopied(true);
                       setTimeout(() => setCopied(false), 2000);
                     }}
-                    className="text-[10px] text-pine hover:underline font-mono font-semibold"
+                    className="text-[10px] text-ink-700 hover:underline font-mono font-semibold"
                   >
                     {copied ? '✓ Copied!' : 'Copy JSON-LD'}
                   </button>

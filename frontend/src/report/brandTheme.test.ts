@@ -51,7 +51,7 @@ describe('BrandTheme Pipeline', () => {
     expect(ratio).toBeGreaterThanOrEqual(4.5);
   });
 
-  it('falls back to Dristik signature teal for invalid or washed-out input without failing', () => {
+  it('falls back to the Dristik accent for invalid or washed-out input without failing', () => {
     const pureWhite = '#ffffff';
     const washedGray = '#888888';
 

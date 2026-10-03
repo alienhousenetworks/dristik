@@ -111,7 +111,7 @@ export function Overview({
       grade: rollup.seo.grade,
       summary: 'Robots.txt, XML sitemap, redirects, click depth, headings, meta tags, and internal link equity.',
       issuesCount: rollup.seo.findingsCount,
-      color: 'text-pine',
+      color: 'text-ink-700',
     },
     {
       id: 'geo' as TabId,
@@ -122,7 +122,7 @@ export function Overview({
       grade: rollup.geo.grade,
       summary: 'GEO Readiness is on-page extractability. Live AI citation visibility is a separate measurement.',
       issuesCount: rollup.geo.findingsCount,
-      color: 'text-emerald-700',
+      color: 'text-good',
     },
     {
       id: 'aeo' as TabId,
@@ -133,7 +133,7 @@ export function Overview({
       grade: rollup.aeo.grade,
       summary: 'Schema.org JSON-LD graphs, AI crawler directives, llms.txt, and 50-question deterministic extractability.',
       issuesCount: rollup.aeo.findingsCount,
-      color: 'text-cyan-700',
+      color: 'text-ink-700',
     },
     {
       id: 'cro' as TabId,
@@ -144,7 +144,7 @@ export function Overview({
       grade: rollup.cro.grade,
       summary: 'Form friction diagnostics, 5-second value proposition clarity, CTAs, and visual UX inspection.',
       issuesCount: rollup.cro.findingsCount,
-      color: 'text-amber-700',
+      color: 'text-warn',
     },
     {
       id: 'competitors' as TabId,
@@ -155,7 +155,7 @@ export function Overview({
       grade: rollup.competitors.grade,
       summary: 'Head-to-head intent bake-offs, side-by-side metric benchmarks, and market gap discovery.',
       issuesCount: rollup.competitors.findingsCount,
-      color: 'text-rose-700',
+      color: 'text-bad',
     },
   ];
 
@@ -168,21 +168,21 @@ export function Overview({
         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6 relative z-10">
           <div className="space-y-2 max-w-2xl">
             <div className="flex items-center gap-2">
-              <span className="text-[10px] font-mono uppercase tracking-widest text-pine font-bold">
+              <span className="text-[10px] font-mono uppercase tracking-[0.04em] text-ink-700 font-bold">
                 Enterprise Executive Scorecard
               </span>
               <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-good/10 text-good font-semibold">
                 Certified
               </span>
             </div>
-            <h1 className="font-serif text-3xl sm:text-4xl text-ink font-semibold tracking-tight">
+            <h1 className="font-sans text-3xl sm:text-4xl text-ink font-semibold tracking-tight">
               {report?.domain || profile?.business_name || 'Website Audit Intelligence'}
             </h1>
             <p className="text-xs text-ink-600 leading-relaxed">
               Overall Website Readiness from the crawled sample. GEO Readiness is separate from live AI citation visibility.
             </p>
             {typeof report?.crawl_manifest?.crawl_health?.sampling_note === 'string' && (
-              <p className="text-xs text-ink-700 leading-relaxed border-l-2 border-pine/40 pl-3">
+              <p className="text-xs text-ink-700 leading-relaxed border-l-2 border-line pl-3">
                 {String(report.crawl_manifest.crawl_health.sampling_note)}
               </p>
             )}
@@ -191,7 +191,7 @@ export function Overview({
           <div className="flex items-center gap-4 shrink-0 bg-paper-50 p-4 rounded-xl border border-line">
             <div className="text-right">
               <span className="label text-[10px] text-ink-500 block">Overall Score</span>
-              <span className={`font-serif text-4xl sm:text-5xl font-bold leading-none ${scoreTone(overallScore ?? 0)}`}>
+              <span className={`font-sans text-4xl sm:text-5xl font-bold leading-none ${scoreTone(overallScore ?? 0)}`}>
                 {overallScore != null ? overallScore : '—'}
               </span>
               <span className="text-xs text-ink-400 block mt-0.5">/ 100</span>
@@ -219,8 +219,8 @@ export function Overview({
           1b. SCORING PERSPECTIVE & HARMONY BRIDGE
           ───────────────────────────────────────────────────────────── */}
       {report?.scoring_explanation && (
-        <Card className="p-4 bg-paper-50 border-l-4 border-pine rounded-l-none text-xs space-y-1.5">
-          <div className="flex items-center gap-1.5 font-mono text-[11px] font-bold text-pine uppercase tracking-wider">
+        <Card className="p-4 bg-paper-50 border-l-2 border-line rounded-l-none text-xs space-y-1.5">
+          <div className="flex items-center gap-1.5 font-mono text-[11px] font-bold text-ink-700 uppercase tracking-[0.04em]">
             <Activity className="w-3.5 h-3.5" /> Multi-Perspective Scoring Harmony
           </div>
           <p className="text-ink-700 leading-relaxed">
@@ -240,13 +240,13 @@ export function Overview({
             </p>
             <div className="grid grid-cols-1 gap-4">
               {report.causal_diagnostic_chains.map((chain, idx) => (
-                <div key={chain.bottleneck_id || idx} className="card p-5 border border-line hover:border-pine/60 transition-all space-y-4 bg-paper-50/60">
+                <div key={chain.bottleneck_id || idx} className="card p-5 border border-line hover:border-ink transition-all space-y-4 bg-paper-50/60">
                   <div className="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-line">
                     <div className="flex items-center gap-2">
-                      <span className="font-mono text-[10px] font-bold px-2 py-0.5 rounded bg-pine/10 text-pine uppercase">
+                      <span className="font-mono text-[10px] font-bold px-2 py-0.5 rounded bg-paper-200 text-ink-700 uppercase">
                         {chain.primary_category}
                       </span>
-                      <h3 className="font-serif text-base font-semibold text-ink">
+                      <h3 className="font-sans text-base font-semibold text-ink">
                         {chain.title}
                       </h3>
                     </div>
@@ -272,7 +272,7 @@ export function Overview({
 
                     <div className="space-y-2 p-3 rounded-lg bg-paper-100 border border-line/60">
                       <span className="label text-ink-500 block font-mono text-[10px]">2. Inferred Root Cause</span>
-                      <p className="text-ink-800 font-medium leading-relaxed">
+                      <p className="text-ink-700 font-medium leading-relaxed">
                         {chain.inferred_root_cause}
                       </p>
                       <div className="pt-2 border-t border-line/40">
@@ -283,9 +283,9 @@ export function Overview({
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs pt-1">
-                    <div className="p-3 rounded-lg bg-pine/5 border border-pine/20 space-y-1">
-                      <span className="label text-pine block font-mono text-[10px]">3. Prescribed Remediation</span>
-                      <p className="text-ink-800 font-medium">{chain.prescribed_remediation}</p>
+                    <div className="p-3 rounded-lg bg-paper-100 border border-line space-y-1">
+                      <span className="label text-ink-700 block font-mono text-[10px]">3. Prescribed Remediation</span>
+                      <p className="text-ink-700 font-medium">{chain.prescribed_remediation}</p>
                       <p className="text-[11px] text-ink-500 mt-1 italic">{chain.expected_mechanism}</p>
                     </div>
 
@@ -299,7 +299,7 @@ export function Overview({
 
                     <div className="p-3 rounded-lg bg-good/5 border border-good/20 space-y-1">
                       <span className="label text-good block font-mono text-[10px]">5. Target Outcome Shift</span>
-                      <p className="text-ink-800 font-bold">{chain.projected_outcome}</p>
+                      <p className="text-ink-700 font-bold">{chain.projected_outcome}</p>
                     </div>
                   </div>
                 </div>
@@ -314,7 +314,7 @@ export function Overview({
           ───────────────────────────────────────────────────────────── */}
       <div>
         <div className="flex items-center justify-between mb-3 px-1">
-          <p className="text-xs font-mono font-bold uppercase tracking-wider text-ink-500">
+          <p className="text-xs font-mono font-bold uppercase tracking-[0.04em] text-ink-500">
             Core Disciplines (Separated)
           </p>
           <span className="text-xs text-ink-400">Click card to open dedicated workspace</span>
@@ -327,7 +327,7 @@ export function Overview({
               <div
                 key={disc.id}
                 onClick={() => onNavigate?.(disc.id)}
-                className="card p-5 hover:border-pine hover:shadow-md transition-all cursor-pointer space-y-3 flex flex-col justify-between group"
+                className="card p-5 hover:border-ink hover:shadow-md transition-all cursor-pointer space-y-3 flex flex-col justify-between group"
               >
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
@@ -344,7 +344,7 @@ export function Overview({
                       </span>
                     </div>
                   </div>
-                  <h3 className="font-serif text-base font-semibold text-ink group-hover:text-pine transition-colors">
+                  <h3 className="font-sans text-base font-semibold text-ink group-hover:text-ink transition-colors">
                     {disc.name}
                   </h3>
                   <p className="text-xs text-ink-500 line-clamp-2 leading-relaxed">
@@ -356,7 +356,7 @@ export function Overview({
                   <span className="font-mono text-ink-400 text-[11px]">
                     {disc.issuesCount} findings logged
                   </span>
-                  <span className="text-pine font-medium flex items-center gap-1 group-hover:translate-x-0.5 transition-transform">
+                  <span className="text-ink-700 font-medium flex items-center gap-1 group-hover:translate-x-0.5 transition-transform">
                     Inspect <ArrowRight className="w-3.5 h-3.5" />
                   </span>
                 </div>
@@ -370,7 +370,7 @@ export function Overview({
           3. IDENTITY CONFLICTS (If Any)
           ───────────────────────────────────────────────────────────── */}
       {activeContradictions.length > 0 && (
-        <Card className="border-l-4 border-warn rounded-l-none">
+        <Card className="border-l-2 border-warn rounded-l-none">
           <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
             <p className="label text-warn flex items-center gap-1.5">
               <AlertTriangle className="w-3.5 h-3.5" /> Identity & Categorization Conflict
@@ -398,16 +398,16 @@ export function Overview({
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           <Card className="lg:col-span-2 space-y-2 p-5">
             <p className="label text-ink-500">Executive Narrative</p>
-            <p className="text-sm text-ink-700 leading-relaxed font-serif text-[15px]">
+            <p className="text-sm text-ink-700 leading-relaxed font-sans text-[15px]">
               {display(story)}
             </p>
             <CalibrationLeaders findings={report?.findings || []} />
           </Card>
-          <Card className="space-y-2 p-5 bg-pine/5 border-pine/20">
-            <p className="label text-pine flex items-center gap-1">
+          <Card className="space-y-2 p-5 bg-paper-100 border-line">
+            <p className="label text-ink-700 flex items-center gap-1">
               <Lightbulb className="w-3.5 h-3.5" /> Primary Strategic Opportunity
             </p>
-            <p className="text-xs text-ink-800 leading-relaxed font-medium">
+            <p className="text-xs text-ink-700 leading-relaxed font-medium">
               {display(opportunity)}
             </p>
           </Card>

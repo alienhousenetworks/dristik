@@ -81,22 +81,22 @@ export function RemediationVerificationLoop({
   const isFailed = verificationReport && !isResolved;
 
   return (
-    <div className={`space-y-4 font-sans ${inline ? 'p-3 bg-slate-50 border border-slate-200 rounded' : 'p-5 bg-white border border-slate-300 rounded shadow-xs'}`}>
+    <div className={`space-y-4 font-sans ${inline ? 'p-3 bg-paper-100 border border-line rounded' : 'p-5 bg-paper-50 border border-line rounded shadow-xs'}`}>
       {/* Top Header */}
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 pb-3">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line pb-3">
         <div>
           <div className="flex items-center gap-2">
-            <span className="font-mono text-[10px] font-bold uppercase tracking-wider text-blue-900 bg-blue-50 px-2 py-0.5 border border-blue-200 rounded">
+            <span className="font-mono text-[10px] font-bold uppercase tracking-[0.04em] text-ink-700 bg-paper-100 px-2 py-0.5 border border-line rounded">
               Continuous Website Assurance
             </span>
-            <span className="font-mono text-xs text-slate-500">
-              Finding ID: <strong className="text-slate-900">{finding.finding_id}</strong>
+            <span className="font-mono text-xs text-ink-500">
+              Finding ID: <strong className="text-ink">{finding.finding_id}</strong>
             </span>
           </div>
-          <h4 className="text-base font-bold text-slate-900 mt-1">
+          <h4 className="text-base font-bold text-ink mt-1">
             Automatic Remediation Verification Loop
           </h4>
-          <p className="text-xs text-slate-600 mt-0.5">
+          <p className="text-xs text-ink-600 mt-0.5">
             Fix &rarr; Recrawl &rarr; Recheck &rarr; Compare &rarr; Certify · <em>Real live HTTP &amp; DOM assertion test</em>
           </p>
         </div>
@@ -107,17 +107,17 @@ export function RemediationVerificationLoop({
           onClick={handleRunLoop}
           className={`px-3 py-1.5 rounded text-xs font-mono font-bold transition-all shadow-xs flex items-center gap-2 cursor-pointer ${
             isRunning
-              ? 'bg-slate-200 text-slate-500 cursor-not-allowed'
+              ? 'bg-paper-200 text-ink-500 cursor-not-allowed'
               : isResolved
-              ? 'bg-emerald-700 hover:bg-emerald-800 text-white'
+              ? 'bg-good/10 hover:bg-good/10 text-white'
               : isFailed
-              ? 'bg-amber-700 hover:bg-amber-800 text-white'
-              : 'bg-blue-950 hover:bg-blue-900 text-white'
+              ? 'bg-warn/10 hover:bg-warn/10 text-white'
+              : 'bg-paper-100 hover:bg-paper-100 text-white'
           }`}
         >
           {isRunning ? (
             <>
-              <span className="w-2 h-2 rounded-full bg-blue-600 animate-ping" />
+              <span className="w-2 h-2 rounded-full bg-paper-100 animate-ping" />
               <span>Recrawling &amp; Testing Live Host...</span>
             </>
           ) : isResolved ? (
@@ -126,11 +126,11 @@ export function RemediationVerificationLoop({
             </>
           ) : isFailed ? (
             <>
-              <span>⚠️ Unresolved (Retry Live Verification)</span>
+              <span> Unresolved (Retry Live Verification)</span>
             </>
           ) : (
             <>
-              <span>⚡ Trigger Live Verification</span>
+              <span> Trigger Live Verification</span>
             </>
           )}
         </button>
@@ -152,19 +152,19 @@ export function RemediationVerificationLoop({
               key={st.key}
               className={`p-2 rounded border transition-colors ${
                 isCurrent
-                  ? 'bg-blue-100 border-blue-400 text-blue-950 font-bold shadow-xs'
+                  ? 'bg-paper-100 border-line text-ink-700 font-bold shadow-xs'
                   : isPassed
-                  ? 'bg-emerald-50 border-emerald-300 text-emerald-900'
+                  ? 'bg-good/10 border-good/30 text-good'
                   : isFailed && isCurrent
-                  ? 'bg-red-50 border-red-300 text-red-900'
-                  : 'bg-slate-50 border-slate-200 text-slate-400'
+                  ? 'bg-bad/10 border-bad/30 text-bad'
+                  : 'bg-paper-100 border-line text-ink-400'
               }`}
             >
               <div className="flex items-center justify-between">
                 <span>{st.label}</span>
-                {isPassed && <span className="text-emerald-700 font-bold">✓</span>}
+                {isPassed && <span className="text-good font-bold">✓</span>}
               </div>
-              <span className="text-[9px] text-slate-500 hidden sm:block truncate mt-0.5">
+              <span className="text-[9px] text-ink-500 hidden sm:block truncate mt-0.5">
                 {st.desc}
               </span>
             </div>
@@ -173,7 +173,7 @@ export function RemediationVerificationLoop({
       </div>
 
       {error && (
-        <div className="p-3 bg-red-50 border border-red-200 text-xs text-red-700 rounded font-mono">
+        <div className="p-3 bg-bad/10 border border-bad/30 text-xs text-bad rounded font-mono">
           ✕ {error}
         </div>
       )}
@@ -183,19 +183,19 @@ export function RemediationVerificationLoop({
         <div className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* Before Box */}
-            <div className="p-3.5 bg-red-50/40 border border-red-200 rounded space-y-2">
+            <div className="p-3.5 bg-bad/10 border border-bad/30 rounded space-y-2">
               <div className="flex items-center justify-between">
-                <span className="font-mono text-[10px] font-bold uppercase tracking-wider text-red-900">
+                <span className="font-mono text-[10px] font-bold uppercase tracking-[0.04em] text-bad">
                   Before (Audit Baseline)
                 </span>
-                <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-red-100 text-red-800 font-bold border border-red-200">
+                <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-bad/10 text-bad font-bold border border-bad/30">
                   FAILS COMPLIANCE
                 </span>
               </div>
-              <p className="text-xs text-red-950 font-medium whitespace-pre-line leading-relaxed">
+              <p className="text-xs text-bad font-medium whitespace-pre-line leading-relaxed">
                 {verificationReport.before_state}
               </p>
-              <div className="pt-2 border-t border-red-100 text-[11px] text-red-700 font-mono">
+              <div className="pt-2 border-t border-bad/30 text-[11px] text-bad font-mono">
                 Initial Detection: Recorded during primary crawl
               </div>
             </div>
@@ -203,19 +203,19 @@ export function RemediationVerificationLoop({
             {/* After Box */}
             <div className={`p-3.5 rounded space-y-2 border ${
               isResolved
-                ? 'bg-emerald-50/50 border-emerald-300'
-                : 'bg-amber-50/50 border-amber-300'
+                ? 'bg-good/10 border-good/30'
+                : 'bg-warn/10 border-warn/30'
             }`}>
               <div className="flex items-center justify-between">
-                <span className={`font-mono text-[10px] font-bold uppercase tracking-wider ${
-                  isResolved ? 'text-emerald-900' : 'text-amber-900'
+                <span className={`font-mono text-[10px] font-bold uppercase tracking-[0.04em] ${
+                  isResolved ? 'text-good' : 'text-warn'
                 }`}>
                   After (Live Verification)
                 </span>
                 <span className={`text-[10px] font-mono px-2 py-0.5 rounded font-bold border ${
                   isResolved
-                    ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
-                    : 'bg-amber-100 text-amber-900 border-amber-300'
+                    ? 'bg-good/10 text-good border-good/30'
+                    : 'bg-warn/10 text-warn border-warn/30'
                 }`}>
                   {verificationReport.status}
                 </span>
@@ -223,15 +223,15 @@ export function RemediationVerificationLoop({
 
               {/* Real Recrawl Telemetry Strip */}
               {(verificationReport.recrawl_status_code != null || verificationReport.recrawl_ttfb_ms != null) && (
-                <div className="flex flex-wrap gap-2 text-[10px] font-mono p-1.5 bg-white/70 rounded border border-slate-200 text-slate-700">
+                <div className="flex flex-wrap gap-2 text-[10px] font-mono p-1.5 bg-paper-50/70 rounded border border-line text-ink-700">
                   {verificationReport.recrawl_status_code != null && (
-                    <span>HTTP Status: <strong className={verificationReport.recrawl_status_code === 200 ? 'text-emerald-700' : 'text-red-700'}>{verificationReport.recrawl_status_code}</strong></span>
+                    <span>HTTP Status: <strong className={verificationReport.recrawl_status_code === 200 ? 'text-good' : 'text-bad'}>{verificationReport.recrawl_status_code}</strong></span>
                   )}
                   {verificationReport.recrawl_ttfb_ms != null && (
                     <span>· TTFB: <strong>{verificationReport.recrawl_ttfb_ms}ms</strong></span>
                   )}
                   {verificationReport.recrawl_content_type && (
-                    <span>· Type: <span className="text-slate-500">{verificationReport.recrawl_content_type.split(';')[0]}</span></span>
+                    <span>· Type: <span className="text-ink-500">{verificationReport.recrawl_content_type.split(';')[0]}</span></span>
                   )}
                 </div>
               )}
@@ -241,15 +241,15 @@ export function RemediationVerificationLoop({
                 {verificationReport.checks.map((c, i) => (
                   <div key={i} className="flex items-start gap-2 text-xs">
                     {c.passed ? (
-                      <span className="text-emerald-700 font-bold text-sm leading-none">✓</span>
+                      <span className="text-good font-bold text-sm leading-none">✓</span>
                     ) : (
-                      <span className="text-red-600 font-bold text-sm leading-none">✕</span>
+                      <span className="text-bad font-bold text-sm leading-none">✕</span>
                     )}
                     <div>
-                      <span className={`font-semibold ${c.passed ? 'text-slate-900' : 'text-red-900'}`}>
+                      <span className={`font-semibold ${c.passed ? 'text-ink' : 'text-bad'}`}>
                         {c.name}
                       </span>
-                      <p className={`text-[11px] font-mono ${c.passed ? 'text-slate-600' : 'text-red-700'}`}>
+                      <p className={`text-[11px] font-mono ${c.passed ? 'text-ink-600' : 'text-bad'}`}>
                         {c.detail}
                       </p>
                     </div>
@@ -260,25 +260,25 @@ export function RemediationVerificationLoop({
           </div>
 
           {/* Certificate / Verification Summary Badge */}
-          <div className="p-3 bg-slate-900 text-white rounded flex flex-wrap items-center justify-between gap-3 text-xs font-mono">
+          <div className="p-3 bg-ink text-white rounded flex flex-wrap items-center justify-between gap-3 text-xs font-mono">
             <div className="flex items-center gap-3">
-              <span className="text-base text-emerald-400">
-                {isResolved ? '🛡️' : '⚠️'}
+              <span className="text-base text-good">
+                {isResolved ? '' : ''}
               </span>
               <div>
-                <span className="text-[10px] text-slate-400 uppercase tracking-wider block">
+                <span className="text-[10px] text-ink-400 uppercase tracking-[0.04em] block">
                   Verification Verdict &amp; Impact
                 </span>
                 <div className="flex items-center gap-2">
-                  <span className={`font-bold text-sm ${isResolved ? 'text-emerald-400' : 'text-amber-400'}`}>
+                  <span className={`font-bold text-sm ${isResolved ? 'text-good' : 'text-warn'}`}>
                     {verificationReport.status}
                   </span>
                   {isResolved && verificationReport.score_delta ? (
-                    <span className="text-emerald-300 text-[11px] font-bold">
+                    <span className="text-good text-[11px] font-bold">
                       (+{verificationReport.score_delta} pts recovered)
                     </span>
                   ) : (
-                    <span className="text-slate-400 text-[11px]">
+                    <span className="text-ink-400 text-[11px]">
                       ({verificationReport.passed_checks_count ?? 0}/{verificationReport.total_checks_count ?? 0} assertions met)
                     </span>
                   )}
@@ -286,23 +286,23 @@ export function RemediationVerificationLoop({
               </div>
             </div>
 
-            <div className="text-right text-[11px] text-slate-300">
+            <div className="text-right text-[11px] text-ink-300">
               <div>
                 Evidence Seal:{' '}
-                <strong className="text-amber-300">{verificationReport.evidence_seal}</strong>
+                <strong className="text-warn">{verificationReport.evidence_seal}</strong>
               </div>
-              <div className="text-[10px] text-slate-400">
+              <div className="text-[10px] text-ink-400">
                 Tested against {websiteUrl} · {verificationReport.certified_by || 'Dristik Continuous Assurance'}
               </div>
             </div>
           </div>
         </div>
       ) : (
-        <div className="p-6 border border-dashed border-slate-300 rounded text-center space-y-2 bg-slate-50/50">
-          <p className="text-xs font-mono text-slate-600">
+        <div className="p-6 border border-dashed border-line rounded text-center space-y-2 bg-paper-100">
+          <p className="text-xs font-mono text-ink-600">
             Remediation verification has not yet been executed for this finding.
           </p>
-          <p className="text-[11px] text-slate-500 max-w-md mx-auto">
+          <p className="text-[11px] text-ink-500 max-w-md mx-auto">
             Once a developer deploys the fix, click <strong>"Trigger Live Verification"</strong> above to recrawl the live target URL and verify assertions in real time.
           </p>
         </div>

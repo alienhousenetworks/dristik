@@ -151,14 +151,14 @@ export const RemediationFlowModal: React.FC<RemediationFlowModalProps> = ({
         <div className="px-6 py-4 border-b border-line bg-paper-50 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-lg bg-paper-200 border border-line flex items-center justify-center text-ink">
-              <span className="font-mono font-bold text-sm text-pine">⚡</span>
+              <span className="font-mono font-bold text-sm text-ink-700"></span>
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h2 className="text-lg font-serif text-ink tracking-tight">
+                <h2 className="text-lg font-sans text-ink tracking-tight">
                   Universal Remediation Engine
                 </h2>
-                <span className="text-[11px] px-2 py-0.5 rounded bg-pine/10 border border-pine/30 text-pine font-mono">
+                <span className="text-[11px] px-2 py-0.5 rounded bg-paper-200 border border-line text-ink-700 font-mono">
                   Detect → Explain → Fix → Deploy → Verify
                 </span>
               </div>
@@ -256,17 +256,17 @@ export const RemediationFlowModal: React.FC<RemediationFlowModalProps> = ({
                       </span>
                       <div className="flex items-center gap-1.5">
                         {patch.risk_level === 'SAFE_AUTO' && (
-                          <span className="text-[10px] px-2 py-0.5 rounded-full bg-good/10 border border-good/30 text-good font-mono">
+                          <span className="text-[10px] px-2 py-0.5 rounded-md bg-good/10 border border-good/30 text-good font-mono">
                             Safe Auto
                           </span>
                         )}
                         {patch.risk_level === 'HUMAN_APPROVAL' && (
-                          <span className="text-[10px] px-2 py-0.5 rounded-full bg-warn/10 border border-warn/30 text-warn font-mono">
+                          <span className="text-[10px] px-2 py-0.5 rounded-md bg-warn/10 border border-warn/30 text-warn font-mono">
                             Review Required
                           </span>
                         )}
                         {patch.risk_level === 'DEVELOPER_REQUIRED' && (
-                          <span className="text-[10px] px-2 py-0.5 rounded-full bg-paper-200 border border-line text-ink-700 font-mono">
+                          <span className="text-[10px] px-2 py-0.5 rounded-md bg-paper-200 border border-line text-ink-700 font-mono">
                             Developer PR
                           </span>
                         )}
@@ -289,7 +289,7 @@ export const RemediationFlowModal: React.FC<RemediationFlowModalProps> = ({
                             isVerified
                               ? 'text-good'
                               : isApplied
-                              ? 'text-pine'
+                              ? 'text-ink-700'
                               : patch.approval_status === 'APPROVED'
                               ? 'text-good'
                               : 'text-warn'
@@ -316,14 +316,14 @@ export const RemediationFlowModal: React.FC<RemediationFlowModalProps> = ({
               <>
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
-                    <span className="text-xs font-mono text-pine font-semibold">
+                    <span className="text-xs font-mono text-ink-700 font-semibold">
                       {selectedPatch.patch_id} • Finding Ref: {selectedPatch.finding_id}
                     </span>
                     <span className="text-xs text-ink-500 font-mono">
                       Confidence: {(selectedPatch.confidence * 100).toFixed(0)}%
                     </span>
                   </div>
-                  <h3 className="text-base font-serif text-ink">{selectedPatch.title}</h3>
+                  <h3 className="text-base font-sans text-ink">{selectedPatch.title}</h3>
                   <p className="text-xs text-ink-700 leading-relaxed bg-paper-50 p-3 rounded-lg border border-line">
                     {selectedPatch.explanation}
                   </p>
@@ -396,7 +396,7 @@ export const RemediationFlowModal: React.FC<RemediationFlowModalProps> = ({
                         ? 'Deploying...'
                         : selectedPatch.risk_level === 'DEVELOPER_REQUIRED'
                         ? '🚀 Create GitHub Pull Request'
-                        : '⚡ Deploy to Connected Site'}
+                        : ' Deploy to Connected Site'}
                     </button>
                   </div>
 

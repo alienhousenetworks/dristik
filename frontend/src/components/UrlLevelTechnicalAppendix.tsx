@@ -138,22 +138,22 @@ export function UrlLevelTechnicalAppendix({
   };
 
   return (
-    <div className="p-5 bg-white border border-slate-300 rounded-lg shadow-xs font-sans">
+    <div className="p-5 bg-paper-50 border border-line rounded-lg shadow-xs font-sans">
       {/* Header & Controls */}
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 pb-4">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line pb-4">
         <div>
           <div className="flex items-center gap-2">
-            <span className="font-mono text-[10px] font-bold uppercase tracking-wider text-blue-900 bg-blue-50 px-2 py-0.5 border border-blue-200 rounded">
+            <span className="font-mono text-[10px] font-bold uppercase tracking-[0.04em] text-ink-700 bg-paper-100 px-2 py-0.5 border border-line rounded">
               Diagnostic Appendix
             </span>
-            <span className="text-xs text-slate-500 font-mono">
+            <span className="text-xs text-ink-500 font-mono">
               Enterprise Crawl &amp; Indexability Ledger
             </span>
           </div>
-          <h3 className="text-base font-bold text-slate-900 mt-1">
+          <h3 className="text-base font-bold text-ink mt-1">
             URL-Level Technical Appendix
           </h3>
-          <p className="text-xs text-slate-600 mt-0.5">
+          <p className="text-xs text-ink-600 mt-0.5">
             Full tabular audit inventory of all {totalUrls} crawled URLs with HTTP codes, internal inlinks, SERP pixel widths, canonical status, schema, and heading structures.
           </p>
         </div>
@@ -161,7 +161,7 @@ export function UrlLevelTechnicalAppendix({
         <button
           type="button"
           onClick={handleExportCsv}
-          className="px-3 py-1.5 text-xs font-mono font-bold bg-white hover:bg-slate-50 text-slate-800 border border-slate-300 rounded shadow-xs transition-colors flex items-center gap-1.5"
+          className="px-3 py-1.5 text-xs font-mono font-bold bg-paper-50 hover:bg-paper-100 text-ink-700 border border-line rounded shadow-xs transition-colors flex items-center gap-1.5"
         >
           <span>📥 Export Full Inventory (CSV)</span>
         </button>
@@ -169,40 +169,40 @@ export function UrlLevelTechnicalAppendix({
 
       {/* Metric Scorecards Ribbon */}
       <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-7 gap-2 mt-4 font-mono text-xs">
-        <div className="p-2 bg-slate-50 border border-slate-200 rounded">
-          <span className="text-[9px] text-slate-500 uppercase">Total Crawled</span>
-          <p className="text-sm font-bold text-slate-900 mt-0.5">{totalUrls}</p>
+        <div className="p-2 bg-paper-100 border border-line rounded">
+          <span className="text-[9px] text-ink-500 uppercase">Total Crawled</span>
+          <p className="text-sm font-bold text-ink mt-0.5">{totalUrls}</p>
         </div>
-        <div className="p-2 bg-emerald-50 border border-emerald-200 rounded">
-          <span className="text-[9px] text-emerald-800 uppercase">200 OK</span>
-          <p className="text-sm font-bold text-emerald-950 mt-0.5">{okCount}</p>
+        <div className="p-2 bg-good/10 border border-good/30 rounded">
+          <span className="text-[9px] text-good uppercase">200 OK</span>
+          <p className="text-sm font-bold text-good mt-0.5">{okCount}</p>
         </div>
-        <div className="p-2 bg-blue-50 border border-blue-200 rounded">
-          <span className="text-[9px] text-blue-800 uppercase">Redirects (3xx)</span>
-          <p className="text-sm font-bold text-blue-950 mt-0.5">{redirectCount}</p>
+        <div className="p-2 bg-paper-100 border border-line rounded">
+          <span className="text-[9px] text-ink-700 uppercase">Redirects (3xx)</span>
+          <p className="text-sm font-bold text-ink-700 mt-0.5">{redirectCount}</p>
         </div>
-        <div className="p-2 bg-red-50 border border-red-200 rounded">
-          <span className="text-[9px] text-red-800 uppercase">Errors (4xx/5xx)</span>
-          <p className="text-sm font-bold text-red-950 mt-0.5">{errorCount}</p>
+        <div className="p-2 bg-bad/10 border border-bad/30 rounded">
+          <span className="text-[9px] text-bad uppercase">Errors (4xx/5xx)</span>
+          <p className="text-sm font-bold text-bad mt-0.5">{errorCount}</p>
         </div>
-        <div className="p-2 bg-amber-50 border border-amber-200 rounded">
-          <span className="text-[9px] text-amber-800 uppercase">Canonical Issues</span>
-          <p className="text-sm font-bold text-amber-950 mt-0.5">{canonicalIssueCount}</p>
+        <div className="p-2 bg-warn/10 border border-warn/30 rounded">
+          <span className="text-[9px] text-warn uppercase">Canonical Issues</span>
+          <p className="text-sm font-bold text-warn mt-0.5">{canonicalIssueCount}</p>
         </div>
-        <div className="p-2 bg-purple-50 border border-purple-200 rounded">
-          <span className="text-[9px] text-purple-800 uppercase">Thin Content</span>
-          <p className="text-sm font-bold text-purple-950 mt-0.5">{thinContentCount}</p>
+        <div className="p-2 bg-paper-100 border border-line rounded">
+          <span className="text-[9px] text-ink-700 uppercase">Thin Content</span>
+          <p className="text-sm font-bold text-ink-700 mt-0.5">{thinContentCount}</p>
         </div>
-        <div className="p-2 bg-orange-50 border border-orange-200 rounded">
-          <span className="text-[9px] text-orange-800 uppercase">SERP Truncated</span>
-          <p className="text-sm font-bold text-orange-950 mt-0.5">{pixelTruncatedCount}</p>
+        <div className="p-2 bg-warn/10 border border-warn/30 rounded">
+          <span className="text-[9px] text-warn uppercase">SERP Truncated</span>
+          <p className="text-sm font-bold text-warn mt-0.5">{pixelTruncatedCount}</p>
         </div>
       </div>
 
       {/* Filter and Search Bar */}
-      <div className="flex flex-wrap items-center justify-between gap-2 mt-4 pt-2 border-t border-slate-200 text-xs font-mono">
+      <div className="flex flex-wrap items-center justify-between gap-2 mt-4 pt-2 border-t border-line text-xs font-mono">
         <div className="flex flex-wrap items-center gap-1.5">
-          <span className="text-slate-400 text-[11px] mr-1">Filter:</span>
+          <span className="text-ink-400 text-[11px] mr-1">Filter:</span>
           {[
             { key: 'ALL', label: `All (${totalUrls})` },
             { key: '200', label: `200 OK (${okCount})` },
@@ -219,8 +219,8 @@ export function UrlLevelTechnicalAppendix({
               onClick={() => setStatusFilter(item.key as any)}
               className={`px-2 py-0.5 rounded text-[11px] font-bold transition-colors ${
                 statusFilter === item.key
-                  ? 'bg-blue-950 text-white shadow-xs'
-                  : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+                  ? 'bg-paper-100 text-white shadow-xs'
+                  : 'bg-paper-200 hover:bg-paper-200 text-ink-700'
               }`}
             >
               <span>{item.label}</span>
@@ -234,7 +234,7 @@ export function UrlLevelTechnicalAppendix({
             placeholder="Search URL, title, or H1..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full px-2.5 py-1 text-xs border border-slate-300 rounded font-sans focus:outline-hidden focus:border-blue-900"
+            className="w-full px-2.5 py-1 text-xs border border-line rounded font-sans focus:outline-hidden focus:border-line"
           />
         </div>
       </div>
@@ -243,7 +243,7 @@ export function UrlLevelTechnicalAppendix({
       <div className="overflow-x-auto mt-3">
         <table className="w-full text-left text-xs border-collapse font-sans">
           <thead>
-            <tr className="bg-slate-100 border-b border-slate-300 text-slate-700 font-mono text-[11px]">
+            <tr className="bg-paper-200 border-b border-line text-ink-700 font-mono text-[11px]">
               <th className="py-2 px-2.5 font-bold w-1/4">URL &amp; Path</th>
               <th className="py-2 px-2.5 font-bold text-center">Status</th>
               <th className="py-2 px-2.5 font-bold text-center">Indexable</th>
@@ -256,10 +256,10 @@ export function UrlLevelTechnicalAppendix({
               <th className="py-2 px-2.5 font-bold text-right">Words</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-200 font-mono text-[11px]">
+          <tbody className="divide-y divide-line font-mono text-[11px]">
             {filteredPages.length === 0 ? (
               <tr>
-                <td colSpan={10} className="py-6 text-center text-slate-400 font-sans italic">
+                <td colSpan={10} className="py-6 text-center text-ink-400 font-sans italic">
                   No URLs match the selected filter criteria.
                 </td>
               </tr>
@@ -275,17 +275,17 @@ export function UrlLevelTechnicalAppendix({
 
                 const statusColor =
                   p.status_code >= 200 && p.status_code < 300
-                    ? 'bg-emerald-100 text-emerald-900 border-emerald-300'
+                    ? 'bg-good/10 text-good border-good/30'
                     : p.status_code >= 300 && p.status_code < 400
-                    ? 'bg-blue-100 text-blue-900 border-blue-300'
-                    : 'bg-red-100 text-red-900 border-red-300';
+                    ? 'bg-paper-100 text-ink-700 border-line'
+                    : 'bg-bad/10 text-bad border-bad/30';
 
                 const ttfbColor =
                   (p.ttfb_ms || 0) < 500
-                    ? 'text-emerald-800'
+                    ? 'text-good'
                     : (p.ttfb_ms || 0) < 1000
-                    ? 'text-amber-800 font-bold'
-                    : 'text-red-800 font-bold';
+                    ? 'text-warn font-bold'
+                    : 'text-bad font-bold';
 
                 const pathDisplay = p.url.replace(/^https?:\/\/[^/]+/, '') || '/';
                 const pixelWidth = p.title_pixel_width || (p.title ? Math.round(p.title.length * 9.5) : 0);
@@ -293,19 +293,19 @@ export function UrlLevelTechnicalAppendix({
                 const isThin = (p.word_count || 0) < 250;
 
                 return (
-                  <tr key={idx} className="hover:bg-slate-50 transition-colors">
+                  <tr key={idx} className="hover:bg-paper-100 transition-colors">
                     {/* URL Path */}
                     <td className="py-2 px-2.5 max-w-[220px]">
                       <a
                         href={p.url}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="font-bold text-blue-900 hover:underline truncate block"
+                        className="font-bold text-ink-700 hover:underline truncate block"
                         title={p.url}
                       >
                         {pathDisplay}
                       </a>
-                      <span className="text-[9px] text-slate-400 truncate block">
+                      <span className="text-[9px] text-ink-400 truncate block">
                         {p.url}
                       </span>
                     </td>
@@ -322,8 +322,8 @@ export function UrlLevelTechnicalAppendix({
                       <span
                         className={`text-[9px] px-1 py-0.5 rounded font-bold ${
                           p.is_indexable !== false
-                            ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
-                            : 'bg-red-50 text-red-800 border border-red-200'
+                            ? 'bg-good/10 text-good border border-good/30'
+                            : 'bg-bad/10 text-bad border border-bad/30'
                         }`}
                       >
                         {p.is_indexable !== false ? 'Indexable' : 'Blocked'}
@@ -331,7 +331,7 @@ export function UrlLevelTechnicalAppendix({
                     </td>
 
                     {/* Inlinks */}
-                    <td className="py-2 px-2.5 text-center font-bold text-slate-700">
+                    <td className="py-2 px-2.5 text-center font-bold text-ink-700">
                       {p.inlinks_count ?? 0}
                     </td>
 
@@ -343,20 +343,20 @@ export function UrlLevelTechnicalAppendix({
                     {/* Canonical Status */}
                     <td className="py-2 px-2.5">
                       {canonStatus === 'SELF' ? (
-                        <span className="text-[10px] text-emerald-800 font-semibold">
+                        <span className="text-[10px] text-good font-semibold">
                           ✓ Self
                         </span>
                       ) : canonStatus === 'MISSING' ? (
-                        <span className="text-[10px] text-amber-800 font-semibold bg-amber-50 px-1 py-0.5 rounded border border-amber-200">
+                        <span className="text-[10px] text-warn font-semibold bg-warn/10 px-1 py-0.5 rounded border border-warn/30">
                           Missing
                         </span>
                       ) : (
                         <div className="max-w-[140px]">
-                          <span className="text-[9px] font-bold text-amber-900 bg-amber-50 px-1 py-0.5 rounded border border-amber-300 block mb-0.5">
+                          <span className="text-[9px] font-bold text-warn bg-warn/10 px-1 py-0.5 rounded border border-warn/30 block mb-0.5">
                             Points to:
                           </span>
                           <span
-                            className="text-[9px] text-slate-500 font-mono truncate block"
+                            className="text-[9px] text-ink-500 font-mono truncate block"
                             title={p.canonical_url}
                           >
                             {p.canonical_url?.replace(/^https?:\/\/[^/]+/, '') || p.canonical_url}
@@ -367,20 +367,20 @@ export function UrlLevelTechnicalAppendix({
 
                     {/* Title & SERP Pixel Width */}
                     <td className="py-2 px-2.5 font-sans max-w-[220px]">
-                      <p className="font-bold text-slate-900 text-[11px] truncate" title={p.title || 'No Title'}>
-                        {p.title || <span className="text-red-600 italic">Missing Title</span>}
+                      <p className="font-bold text-ink text-[11px] truncate" title={p.title || 'No Title'}>
+                        {p.title || <span className="text-bad italic">Missing Title</span>}
                       </p>
                       <div className="flex items-center gap-1.5 mt-0.5">
                         <span
                           className={`font-mono text-[9px] px-1 py-0.2 rounded font-semibold ${
                             isPixelTruncated
-                              ? 'bg-red-50 text-red-700 border border-red-200'
-                              : 'bg-slate-100 text-slate-600'
+                              ? 'bg-bad/10 text-bad border border-bad/30'
+                              : 'bg-paper-200 text-ink-600'
                           }`}
                         >
-                          {pixelWidth}px {isPixelTruncated ? '⚠️ Truncated' : '✓'}
+                          {pixelWidth}px {isPixelTruncated ? ' Truncated' : '✓'}
                         </span>
-                        <span className="text-[9px] text-slate-400 font-mono">
+                        <span className="text-[9px] text-ink-400 font-mono">
                           ({(p.title || '').length}ch)
                         </span>
                       </div>
@@ -388,8 +388,8 @@ export function UrlLevelTechnicalAppendix({
 
                     {/* Primary H1 */}
                     <td className="py-2 px-2.5 font-sans max-w-[160px]">
-                      <p className="text-slate-700 text-[10px] truncate" title={(p.h1 && p.h1[0]) || 'No H1'}>
-                        {(p.h1 && p.h1[0]) || <span className="text-amber-700 italic font-mono text-[9px]">✕ Missing H1</span>}
+                      <p className="text-ink-700 text-[10px] truncate" title={(p.h1 && p.h1[0]) || 'No H1'}>
+                        {(p.h1 && p.h1[0]) || <span className="text-warn italic font-mono text-[9px]">✕ Missing H1</span>}
                       </p>
                     </td>
 
@@ -400,25 +400,25 @@ export function UrlLevelTechnicalAppendix({
                           {p.schema_types.slice(0, 2).map((s, sIdx) => (
                             <span
                               key={sIdx}
-                              className="px-1 py-0.2 rounded bg-blue-50 border border-blue-200 text-blue-900 text-[8px] font-mono"
+                              className="px-1 py-0.2 rounded bg-paper-100 border border-line text-ink-700 text-[8px] font-mono"
                             >
                               {s}
                             </span>
                           ))}
                           {p.schema_types.length > 2 && (
-                            <span className="text-[8px] text-slate-400 font-mono">
+                            <span className="text-[8px] text-ink-400 font-mono">
                               +{p.schema_types.length - 2}
                             </span>
                           )}
                         </div>
                       ) : (
-                        <span className="text-[10px] text-slate-400 italic">None</span>
+                        <span className="text-[10px] text-ink-400 italic">None</span>
                       )}
                     </td>
 
                     {/* Words */}
                     <td className="py-2 px-2.5 text-right font-mono text-[10px]">
-                      <span className={isThin ? 'text-amber-700 font-bold bg-amber-50 px-1 py-0.5 rounded border border-amber-200' : 'text-slate-700'}>
+                      <span className={isThin ? 'text-warn font-bold bg-warn/10 px-1 py-0.5 rounded border border-warn/30' : 'text-ink-700'}>
                         {p.word_count || 0}
                       </span>
                     </td>
@@ -431,12 +431,12 @@ export function UrlLevelTechnicalAppendix({
       </div>
 
       {/* Footer Details */}
-      <div className="mt-4 pt-3 border-t border-slate-200 flex flex-wrap items-center justify-between gap-2 text-[10px] font-mono text-slate-500">
+      <div className="mt-4 pt-3 border-t border-line flex flex-wrap items-center justify-between gap-2 text-[10px] font-mono text-ink-500">
         <span>
           Showing {filteredPages.length} of {totalUrls} URLs
         </span>
         <span>
-          Audited against Screaming Frog &amp; Ahrefs parity · <strong className="text-slate-800">Dristik Methodology v2.2</strong>
+          Audited against Screaming Frog &amp; Ahrefs parity · <strong className="text-ink-700">Dristik Methodology v2.2</strong>
         </span>
       </div>
     </div>

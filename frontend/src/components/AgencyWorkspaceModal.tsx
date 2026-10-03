@@ -114,14 +114,14 @@ export function AgencyWorkspaceModal({ isOpen, onClose, onSelectClientDomain }: 
         <div className="flex items-center justify-between border-b border-line pb-4">
           <div>
             <div className="flex items-center gap-2 mb-1">
-              <span className="text-[10px] font-bold uppercase tracking-widest px-2 py-0.5 rounded bg-pine/10 text-pine border border-pine/30 font-mono">
+              <span className="text-[10px] font-bold uppercase tracking-[0.04em] px-2 py-0.5 rounded bg-paper-200 text-ink-700 border border-line font-mono">
                 Agency Mode Workspace
               </span>
               <span className="text-xs text-ink-500 font-mono">
                 {data?.plan_tier || 'Plan not loaded'}
               </span>
             </div>
-            <h3 className="text-xl font-serif text-ink tracking-tight">
+            <h3 className="text-xl font-sans text-ink tracking-tight">
               {data?.agency_name || 'Agency workspace'}
             </h3>
           </div>
@@ -151,7 +151,7 @@ export function AgencyWorkspaceModal({ isOpen, onClose, onSelectClientDomain }: 
             </div>
             <div>
               <span className="text-[10px] uppercase font-bold text-ink-500 block">White-Label Branding</span>
-              <span className="text-xs font-bold text-pine mt-1 block">
+              <span className="text-xs font-bold text-ink-700 mt-1 block">
                 {data.branding.hide_dristik_branding ? '✓ Active (100% Unbranded)' : 'Inactive'}
               </span>
             </div>
@@ -166,7 +166,7 @@ export function AgencyWorkspaceModal({ isOpen, onClose, onSelectClientDomain }: 
 
         {/* Add Client Toggle / Form */}
         <div className="flex items-center justify-between">
-          <span className="text-xs font-bold uppercase tracking-wider text-ink-500">
+          <span className="text-xs font-bold uppercase tracking-[0.04em] text-ink-500">
             Client Accounts (Client A, B, C, D, E)
           </span>
           <button
@@ -221,19 +221,19 @@ export function AgencyWorkspaceModal({ isOpen, onClose, onSelectClientDomain }: 
         {/* Client Roster Table or Empty State */}
         {(!data?.clients || data.clients.length === 0) ? (
           <div className="bg-paper-50 border border-line rounded-lg p-10 text-center space-y-3">
-            <div className="w-12 h-12 rounded-full bg-paper-100 border border-line text-pine flex items-center justify-center mx-auto text-xl font-bold">
+            <div className="w-12 h-12 rounded-full bg-paper-100 border border-line text-ink-700 flex items-center justify-center mx-auto text-xl font-bold">
               🏢
             </div>
-            <h4 className="text-base font-serif text-ink">No Managed Clients Yet</h4>
+            <h4 className="text-base font-sans text-ink">No Managed Clients Yet</h4>
             <p className="text-xs text-ink-500 max-w-md mx-auto">
-              Your Agency Workspace is clean. Click <span className="text-pine font-semibold">+ Add Client Domain</span> above to provision and monitor Client A, B, C, D, or E.
+              Your Agency Workspace is clean. Click <span className="text-ink-700 font-semibold">+ Add Client Domain</span> above to provision and monitor Client A, B, C, D, or E.
             </p>
           </div>
         ) : (
           <div className="border border-line rounded-lg overflow-hidden bg-sheet">
             <table className="w-full text-left text-xs border-collapse">
               <thead>
-                <tr className="bg-paper-100 text-ink-500 border-b border-line font-semibold uppercase tracking-wider text-[10px]">
+                <tr className="bg-paper-100 text-ink-500 border-b border-line font-semibold uppercase tracking-[0.04em] text-[10px]">
                   <th className="p-3">Client Account</th>
                   <th className="p-3">Domain</th>
                   <th className="p-3">Status</th>
@@ -248,7 +248,7 @@ export function AgencyWorkspaceModal({ isOpen, onClose, onSelectClientDomain }: 
                 {data.clients.map((c) => (
                   <tr key={c.client_id} className="hover:bg-paper-50 transition-colors">
                     <td className="p-3 font-sans font-bold text-ink">{c.client_name}</td>
-                    <td className="p-3 text-pine font-medium">{c.domain}</td>
+                    <td className="p-3 text-ink-700 font-medium">{c.domain}</td>
                     <td className="p-3 font-sans">
                       <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-good/10 text-good border border-good/30">
                         {c.status}
@@ -268,7 +268,7 @@ export function AgencyWorkspaceModal({ isOpen, onClose, onSelectClientDomain }: 
                               onClose();
                             }
                           }}
-                          className="text-xs text-pine font-semibold hover:underline"
+                          className="text-xs text-ink-700 font-semibold hover:underline"
                         >
                           Audit →
                         </button>

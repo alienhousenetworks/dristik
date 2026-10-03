@@ -65,7 +65,7 @@ export function WebsiteExperienceView({
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="bg-paper-50 dark:bg-ink-900/40 border border-line p-5 rounded-lg space-y-2">
               <span className="label text-[10px] block">3-Second Hook Test</span>
-              <span className="font-serif text-2xl font-bold text-ink">
+              <span className="font-sans text-2xl font-bold text-ink">
                 {homePage?.title ? 'Title present' : 'No title'}
               </span>
               <p className="text-xs text-ink-500 leading-relaxed">
@@ -75,7 +75,7 @@ export function WebsiteExperienceView({
 
             <div className="bg-paper-50 dark:bg-ink-900/40 border border-line p-5 rounded-lg space-y-2">
               <span className="label text-[10px] block">Bounce Risk Mitigation</span>
-              <span className="font-serif text-2xl font-bold text-ink">
+              <span className="font-sans text-2xl font-bold text-ink">
                 Not measured
               </span>
               <p className="text-xs text-ink-500 leading-relaxed">
@@ -85,7 +85,7 @@ export function WebsiteExperienceView({
 
             <div className="bg-paper-50 dark:bg-ink-900/40 border border-line p-5 rounded-lg space-y-2">
               <span className="label text-[10px] block">Intent Resolution</span>
-              <span className="font-serif text-2xl font-bold text-ink">
+              <span className="font-sans text-2xl font-bold text-ink">
                 {report.business_profile?.primary_intent || '—'}
               </span>
               <p className="text-xs text-ink-500 leading-relaxed">
@@ -96,7 +96,7 @@ export function WebsiteExperienceView({
 
           {/* UX & SXO Findings */}
           <div className="sheet border border-line rounded-lg p-6 space-y-4">
-            <h3 className="font-serif text-xl text-ink font-bold">
+            <h3 className="font-sans text-xl text-ink font-bold">
               User Experience & Intent Obstacles ({findings.length})
             </h3>
             {findings.length === 0 ? (
@@ -107,7 +107,7 @@ export function WebsiteExperienceView({
                   <div
                     key={f.finding_id}
                     onClick={() => onSelectFinding?.(f)}
-                    className="p-3.5 bg-paper-50 dark:bg-ink-900/40 border border-line rounded-md hover:border-pine cursor-pointer transition-colors flex items-start justify-between gap-4"
+                    className="p-3.5 bg-paper-50 dark:bg-ink-900/40 border border-line rounded-md hover:border-ink cursor-pointer transition-colors flex items-start justify-between gap-4"
                   >
                     <div className="space-y-1">
                       <div className="flex items-center gap-2">
@@ -118,7 +118,7 @@ export function WebsiteExperienceView({
                       </div>
                       <p className="text-xs text-ink-600 line-clamp-1">{f.description}</p>
                     </div>
-                    <span className="text-xs text-pine font-mono font-bold shrink-0 self-center">
+                    <span className="text-xs text-ink-700 font-mono font-bold shrink-0 self-center">
                       Inspect →
                     </span>
                   </div>
@@ -145,10 +145,10 @@ export function WebsiteExperienceView({
 
         const ttfbColor =
           ttfbGrade === 'OPTIMAL'
-            ? 'text-emerald-700 bg-emerald-50 dark:bg-emerald-950/40 border-emerald-300'
+            ? 'text-good bg-good/10 dark:bg-good/10 border-good/30'
             : ttfbGrade === 'MODERATE'
-            ? 'text-amber-700 bg-amber-50 dark:bg-amber-950/40 border-amber-300'
-            : 'text-rose-700 bg-rose-50 dark:bg-rose-950/40 border-rose-300';
+            ? 'text-warn bg-warn/10 dark:bg-warn/10 border-warn/30'
+            : 'text-bad bg-bad/10 dark:bg-bad/10 border-bad/30';
 
         return (
           <div className="space-y-8">
@@ -157,12 +157,12 @@ export function WebsiteExperienceView({
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-line pb-4">
                 <div>
                   <div className="flex items-center gap-2">
-                    <span className="text-[10px] font-mono uppercase tracking-wider px-2 py-0.5 rounded bg-blue-100 dark:bg-blue-900/40 text-blue-800 dark:text-blue-200 font-bold">
+                    <span className="text-[10px] font-mono uppercase tracking-[0.04em] px-2 py-0.5 rounded bg-paper-100 dark:bg-paper-100 text-ink-700 dark:text-ink-700 font-bold">
                       Tier 1: Lab Diagnostics
                     </span>
                     <span className="text-xs text-ink-500">Audit Fetch Benchmark</span>
                   </div>
-                  <h3 className="font-serif text-2xl text-ink font-bold mt-1">
+                  <h3 className="font-sans text-2xl text-ink font-bold mt-1">
                     Origin Latency &amp; Critical Rendering Path
                   </h3>
                 </div>
@@ -182,7 +182,7 @@ export function WebsiteExperienceView({
                       {ttfbGrade}
                     </span>
                   </div>
-                  <span className="font-serif text-3xl font-bold text-ink">
+                  <span className="font-sans text-3xl font-bold text-ink">
                     {effectiveTtfb == null ? '—' : `${Math.round(effectiveTtfb)} ms`}
                   </span>
                   <span className="text-[11px] text-ink-500 block">
@@ -199,7 +199,7 @@ export function WebsiteExperienceView({
                 {/* First Contentful Paint (Lab) */}
                 <div className="border border-line p-4 rounded-lg bg-paper-100/60 dark:bg-ink-900/40 space-y-1">
                   <span className="label text-[10px] block">First Contentful Paint (FCP)</span>
-                  <span className="font-serif text-3xl font-bold text-ink">
+                  <span className="font-sans text-3xl font-bold text-ink">
                     {lab?.fcp_ms ? `${Math.round(lab.fcp_ms)} ms` : effectiveTtfb ? `~${Math.round(effectiveTtfb + 250)} ms` : '—'}
                   </span>
                   <span className="text-[11px] text-ink-500 block">
@@ -213,13 +213,13 @@ export function WebsiteExperienceView({
                     <span className="label text-[10px] block">Render-Blocking Assets</span>
                     <span className={`text-[9px] font-mono uppercase font-bold px-1.5 py-0.5 rounded border ${
                       (lab?.render_blocking_count ?? 0) === 0
-                        ? 'text-emerald-700 bg-emerald-50 border-emerald-300'
-                        : 'text-amber-700 bg-amber-50 border-amber-300'
+                        ? 'text-good bg-good/10 border-good/30'
+                        : 'text-warn bg-warn/10 border-warn/30'
                     }`}>
                       {(lab?.render_blocking_count ?? 0) === 0 ? 'CLEAN' : `${lab?.render_blocking_count} BLOCKING`}
                     </span>
                   </div>
-                  <span className="font-serif text-3xl font-bold text-ink">
+                  <span className="font-sans text-3xl font-bold text-ink">
                     {lab?.render_blocking_count ?? 0}
                   </span>
                   <span className="text-[11px] text-ink-500 block">
@@ -231,11 +231,11 @@ export function WebsiteExperienceView({
                 <div className="border border-line p-4 rounded-lg bg-paper-100/60 dark:bg-ink-900/40 space-y-1">
                   <div className="flex items-center justify-between">
                     <span className="label text-[10px] block">Transferred Payload</span>
-                    <span className="text-[9px] font-mono uppercase font-bold px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-300 dark:border-slate-700">
+                    <span className="text-[9px] font-mono uppercase font-bold px-1.5 py-0.5 rounded bg-paper-200 dark:bg-ink-800 text-ink-700 dark:text-ink-300 border border-line dark:border-line">
                       {lab?.content_encoding && lab.content_encoding !== 'none' ? lab.content_encoding.toUpperCase() : 'NO GZIP'}
                     </span>
                   </div>
-                  <span className="font-serif text-3xl font-bold text-ink">
+                  <span className="font-sans text-3xl font-bold text-ink">
                     {lab?.total_transferred_kb ? `${lab.total_transferred_kb} KB` : '—'}
                   </span>
                   <span className="text-[11px] text-ink-500 block">
@@ -246,7 +246,7 @@ export function WebsiteExperienceView({
 
               {/* Asset Weight Distribution Breakdown */}
               <div className="border border-line rounded-lg p-4 bg-paper-100/40 dark:bg-ink-900/20 space-y-3">
-                <span className="text-xs font-semibold text-ink uppercase tracking-wider block">
+                <span className="text-xs font-semibold text-ink uppercase tracking-[0.04em] block">
                   Page Payload Footprint by Asset Category
                 </span>
                 <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 text-xs">
@@ -285,13 +285,13 @@ export function WebsiteExperienceView({
                 {/* Render Blocking Assets List if present */}
                 {lab?.render_blocking_resources && lab.render_blocking_resources.length > 0 && (
                   <div className="mt-3 pt-3 border-t border-line">
-                    <span className="text-[11px] font-semibold text-amber-800 dark:text-amber-400 block mb-1">
+                    <span className="text-[11px] font-semibold text-warn dark:text-warn block mb-1">
                       Identified Render-Blocking Assets in &lt;head&gt;:
                     </span>
                     <ul className="space-y-1 font-mono text-[10px] text-ink-600 dark:text-ink-400">
                       {lab.render_blocking_resources.slice(0, 4).map((res, idx) => (
                         <li key={idx} className="truncate">
-                          • <span className="font-bold uppercase text-amber-700 dark:text-amber-300">[{res.initiator || 'asset'}]</span> {res.url}
+                          • <span className="font-bold uppercase text-warn dark:text-warn">[{res.initiator || 'asset'}]</span> {res.url}
                         </li>
                       ))}
                     </ul>
@@ -305,20 +305,20 @@ export function WebsiteExperienceView({
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-line pb-4">
                 <div>
                   <div className="flex items-center gap-2">
-                    <span className="text-[10px] font-mono uppercase tracking-wider px-2 py-0.5 rounded bg-purple-100 dark:bg-purple-900/40 text-purple-800 dark:text-purple-200 font-bold">
+                    <span className="text-[10px] font-mono uppercase tracking-[0.04em] px-2 py-0.5 rounded bg-paper-100 dark:bg-paper-100 text-ink-700 dark:text-ink-700 font-bold">
                       Tier 2: Real-User Field Monitoring
                     </span>
                     <span className="text-xs text-ink-500">Google Chrome UX Report (CrUX)</span>
                   </div>
-                  <h3 className="font-serif text-2xl text-ink font-bold mt-1">
+                  <h3 className="font-sans text-2xl text-ink font-bold mt-1">
                     Core Web Vitals (CWV) Field Telemetry
                   </h3>
                 </div>
                 <div>
                   <span className={`text-[10px] font-mono uppercase font-bold px-2 py-1 rounded border ${
                     field?.has_field_data
-                      ? 'text-emerald-800 bg-emerald-50 border-emerald-300'
-                      : 'text-slate-600 bg-slate-100 dark:bg-slate-800 border-slate-300 dark:border-slate-700'
+                      ? 'text-good bg-good/10 border-good/30'
+                      : 'text-ink-600 bg-paper-200 dark:bg-ink-800 border-line dark:border-line'
                   }`}>
                     {field?.has_field_data ? '✓ 28-Day Field Data Active' : 'Unmeasured on Field'}
                   </span>
@@ -330,28 +330,28 @@ export function WebsiteExperienceView({
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                     <div className="border border-line p-4 rounded-lg bg-paper-50 space-y-1">
                       <span className="label text-[10px] block">Largest Contentful Paint (LCP p75)</span>
-                      <span className="font-serif text-3xl font-bold text-ink">
+                      <span className="font-sans text-3xl font-bold text-ink">
                         {field.p75_lcp_ms ? `${Math.round(field.p75_lcp_ms)} ms` : '—'}
                       </span>
                       <span className="text-[11px] text-ink-500 block">Target: &lt; 2500ms</span>
                     </div>
                     <div className="border border-line p-4 rounded-lg bg-paper-50 space-y-1">
                       <span className="label text-[10px] block">Interaction to Next Paint (INP p75)</span>
-                      <span className="font-serif text-3xl font-bold text-ink">
+                      <span className="font-sans text-3xl font-bold text-ink">
                         {field.p75_inp_ms ? `${Math.round(field.p75_inp_ms)} ms` : '—'}
                       </span>
                       <span className="text-[11px] text-ink-500 block">Target: &lt; 200ms</span>
                     </div>
                     <div className="border border-line p-4 rounded-lg bg-paper-50 space-y-1">
                       <span className="label text-[10px] block">Cumulative Layout Shift (CLS p75)</span>
-                      <span className="font-serif text-3xl font-bold text-ink">
+                      <span className="font-sans text-3xl font-bold text-ink">
                         {field.p75_cls ?? '—'}
                       </span>
                       <span className="text-[11px] text-ink-500 block">Target: &lt; 0.1</span>
                     </div>
                     <div className="border border-line p-4 rounded-lg bg-paper-50 space-y-1">
                       <span className="label text-[10px] block">First Contentful Paint (FCP p75)</span>
-                      <span className="font-serif text-3xl font-bold text-ink">
+                      <span className="font-sans text-3xl font-bold text-ink">
                         {field.p75_fcp_ms ? `${Math.round(field.p75_fcp_ms)} ms` : '—'}
                       </span>
                       <span className="text-[11px] text-ink-500 block">Target: &lt; 1800ms</span>
@@ -360,7 +360,7 @@ export function WebsiteExperienceView({
                 </div>
               ) : (
                 <div className="border border-line border-dashed rounded-lg p-5 bg-paper-50/80 dark:bg-ink-900/30 flex items-start gap-4">
-                  <div className="w-9 h-9 rounded-full bg-slate-200 dark:bg-slate-700 flex items-center justify-center font-bold text-slate-700 dark:text-slate-200 shrink-0 text-sm">
+                  <div className="w-9 h-9 rounded-full bg-paper-200 dark:bg-ink-800 flex items-center justify-center font-bold text-ink-700 dark:text-ink-300 shrink-0 text-sm">
                     ℹ
                   </div>
                   <div className="space-y-1 text-xs text-ink-600 dark:text-ink-400">
@@ -386,7 +386,7 @@ export function WebsiteExperienceView({
       {/* SUB-VIEW 3: MOBILE USABILITY */}
       {activeSubTab === 'mobile' && (
         <div className="sheet border border-line rounded-lg p-6 space-y-6">
-          <h3 className="font-serif text-2xl text-ink font-bold">Mobile Viewport & Responsiveness</h3>
+          <h3 className="font-sans text-2xl text-ink font-bold">Mobile Viewport & Responsiveness</h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="border border-line p-4 rounded-lg bg-paper-50 space-y-2">
               <span className="label text-[10px] block">Viewport Meta Tag</span>
@@ -400,7 +400,7 @@ export function WebsiteExperienceView({
               <span className="label text-[10px] block">Tap Target Safety (WCAG 2.2 SC 2.5.8)</span>
               {report.wcag_audit ? (
                 <>
-                  <p className="font-serif text-xl font-bold text-ink">
+                  <p className="font-sans text-xl font-bold text-ink">
                     {report.wcag_audit.violations.some((v) => v.rule_id === 'WCAG_2_5_8_TARGET_SIZE')
                       ? 'Violations Detected'
                       : '100% Pass'}
@@ -413,7 +413,7 @@ export function WebsiteExperienceView({
                 </>
               ) : (
                 <>
-                  <p className="font-serif text-xl font-bold text-ink">Not measured</p>
+                  <p className="font-sans text-xl font-bold text-ink">Not measured</p>
                   <span className="text-xs text-ink-500 block">Tap-target size was not rendered.</span>
                 </>
               )}
@@ -436,9 +436,9 @@ export function WebsiteExperienceView({
         const lowCount = violations.filter((v) => v.severity === 'LOW' || v.severity === 'INFO').length;
 
         const statusColors = {
-          PASS: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20',
-          NEEDS_ATTENTION: 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20',
-          NON_COMPLIANT: 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20',
+          PASS: 'bg-good/10 text-good dark:text-good border-good/30',
+          NEEDS_ATTENTION: 'bg-warn/10 text-warn dark:text-warn border-warn/30',
+          NON_COMPLIANT: 'bg-bad/10 text-bad dark:text-bad border-bad/30',
         };
 
         const statusLabels = {
@@ -457,10 +457,10 @@ export function WebsiteExperienceView({
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-line">
               <div className="space-y-1">
                 <div className="flex items-center gap-3">
-                  <h3 className="font-serif text-2xl text-ink font-bold">
+                  <h3 className="font-sans text-2xl text-ink font-bold">
                     Accessibility (WCAG 2.2 Level AA) Audit
                   </h3>
-                  <span className={`px-2.5 py-0.5 text-xs font-semibold rounded-full border ${statusClass}`}>
+                  <span className={`px-2.5 py-0.5 text-xs font-semibold rounded-md border ${statusClass}`}>
                     {statusLabel}
                   </span>
                 </div>
@@ -472,18 +472,18 @@ export function WebsiteExperienceView({
               <div className="flex items-center gap-6 self-start sm:self-auto shrink-0 bg-paper-50 dark:bg-paper-100 p-4 rounded-xl border border-line">
                 <div className="text-right">
                   <span className="label text-[10px] block text-ink-500">Compliance Score</span>
-                  <span className="font-serif text-3xl font-extrabold text-ink">
+                  <span className="font-sans text-3xl font-extrabold text-ink">
                     {wcag ? `${Math.round(wcag.compliance_score)}%` : '—'}
                   </span>
                 </div>
                 <div className="h-10 w-px bg-line" />
                 <div className="space-y-0.5 text-xs">
                   <div className="flex items-center gap-1.5 text-ink-700 dark:text-ink-300">
-                    <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                    <span className="w-2 h-2 rounded-full bg-good/10" />
                     <span>{wcag?.passed_checks_count ?? '—'} Passed</span>
                   </div>
                   <div className="flex items-center gap-1.5 text-ink-700 dark:text-ink-300">
-                    <span className="w-2 h-2 rounded-full bg-rose-500" />
+                    <span className="w-2 h-2 rounded-full bg-bad/10" />
                     <span>{wcag?.violations_count ?? violations.length} Issues</span>
                   </div>
                 </div>
@@ -493,7 +493,7 @@ export function WebsiteExperienceView({
             {/* 4 WCAG Principles Matrix */}
             <div className="space-y-3">
               <div className="flex items-center justify-between">
-                <span className="label text-[11px] font-bold uppercase tracking-wider text-ink-500">
+                <span className="label text-[11px] font-bold uppercase tracking-[0.04em] text-ink-500">
                   Four WCAG 2.2 Core Principles
                 </span>
                 <span className="text-xs text-ink-500">W3C Foundation Standards</span>
@@ -542,7 +542,7 @@ export function WebsiteExperienceView({
                         <Icon className="w-4 h-4 text-ink-500" />
                       </div>
                       <div className="flex items-baseline gap-2">
-                        <span className="font-serif text-2xl font-bold text-ink">
+                        <span className="font-sans text-2xl font-bold text-ink">
                           {p.score != null ? `${Math.round(p.score)}%` : '—'}
                         </span>
                         <span className="text-[10px] text-ink-500">
@@ -552,7 +552,7 @@ export function WebsiteExperienceView({
                       <div className="w-full h-1.5 bg-paper-200 dark:bg-paper-200/40 rounded-full overflow-hidden">
                         <div
                           className={`h-full rounded-full ${
-                            p.score == null ? 'bg-slate-300' : isGood ? 'bg-emerald-500' : isFair ? 'bg-amber-500' : 'bg-rose-500'
+                            p.score == null ? 'bg-paper-300' : isGood ? 'bg-good/10' : isFair ? 'bg-warn/10' : 'bg-bad/10'
                           }`}
                           style={{ width: `${p.score != null ? Math.min(100, Math.max(5, p.score)) : 0}%` }}
                         />
@@ -566,7 +566,7 @@ export function WebsiteExperienceView({
 
             {/* Core Verification Categories Breakdown */}
             <div className="space-y-3">
-              <span className="label text-[11px] font-bold uppercase tracking-wider text-ink-500">
+              <span className="label text-[11px] font-bold uppercase tracking-[0.04em] text-ink-500">
                 Detailed Accessibility Categories
               </span>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
@@ -629,11 +629,11 @@ export function WebsiteExperienceView({
                       <div className="flex items-center justify-between">
                         <span className="text-xs font-semibold text-ink">{cat.label}</span>
                         {hasViolation ? (
-                          <span className="flex items-center gap-1 text-[10px] text-rose-500 font-medium">
+                          <span className="flex items-center gap-1 text-[10px] text-bad font-medium">
                             <AlertCircle className="w-3.5 h-3.5" /> Defect
                           </span>
                         ) : (
-                          <span className="flex items-center gap-1 text-[10px] text-emerald-500 font-medium">
+                          <span className="flex items-center gap-1 text-[10px] text-good font-medium">
                             <CheckCircle2 className="w-3.5 h-3.5" /> Passed
                           </span>
                         )}
@@ -650,7 +650,7 @@ export function WebsiteExperienceView({
             <div className="space-y-4 pt-2">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div className="space-y-0.5">
-                  <h4 className="font-serif text-lg font-bold text-ink">
+                  <h4 className="font-sans text-lg font-bold text-ink">
                     Detected Accessibility Defects & Remediation Code
                   </h4>
                   <p className="text-xs text-ink-500">
@@ -685,7 +685,7 @@ export function WebsiteExperienceView({
 
               {filteredViolations.length === 0 ? (
                 <div className="border border-line rounded-lg p-8 text-center bg-paper-50 space-y-2">
-                  <CheckCircle2 className="w-8 h-8 text-emerald-500 mx-auto" />
+                  <CheckCircle2 className="w-8 h-8 text-good mx-auto" />
                   <p className="font-bold text-sm text-ink">Zero Defects Found for Selected Filter</p>
                   <p className="text-xs text-ink-500">
                     All evaluated DOM nodes satisfy WCAG 2.2 AA accessibility criteria under this severity.
@@ -710,12 +710,12 @@ export function WebsiteExperienceView({
                           <div className="space-y-1.5">
                             <div className="flex flex-wrap items-center gap-2">
                               <span
-                                className={`px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider rounded ${
+                                className={`px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.04em] rounded ${
                                   isHigh
-                                    ? 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20'
+                                    ? 'bg-bad/10 text-bad dark:text-bad border border-bad/30'
                                     : isMed
-                                    ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20'
-                                    : 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20'
+                                    ? 'bg-warn/10 text-warn dark:text-warn border border-warn/30'
+                                    : 'bg-paper-100 text-ink-700 dark:text-ink-700 border border-line'
                                 }`}
                               >
                                 {v.severity}
@@ -761,7 +761,7 @@ export function WebsiteExperienceView({
                             <div className="space-y-1">
                               <span className="label text-[10px] text-ink-500 block">Engineering Recommendation</span>
                               <p className="p-2.5 rounded bg-paper-200/40 border border-line text-ink leading-relaxed font-sans">
-                                💡 {v.recommendation}
+                                 {v.recommendation}
                               </p>
                             </div>
                           </div>
@@ -779,13 +779,13 @@ export function WebsiteExperienceView({
       {/* SUB-VIEW 5: INFORMATION ARCHITECTURE */}
       {activeSubTab === 'ia' && (
         <div className="sheet border border-line rounded-lg p-6 space-y-6">
-          <h3 className="font-serif text-2xl text-ink font-bold">Information Architecture & Navigation Flow</h3>
+          <h3 className="font-sans text-2xl text-ink font-bold">Information Architecture & Navigation Flow</h3>
           <div className="border border-line p-4 rounded-lg bg-paper-50 space-y-3">
             <span className="label text-[10px] block">Detected Calls to Action & Navigation Triggers</span>
             <div className="flex flex-wrap gap-2">
               {ctas.length > 0 ? (
                 ctas.map((cta, i) => (
-                  <span key={i} className="px-3 py-1 bg-paper-100 border border-line rounded-full text-xs font-medium text-ink">
+                  <span key={i} className="px-3 py-1 bg-paper-100 border border-line rounded-md text-xs font-medium text-ink">
                     🔘 {cta}
                   </span>
                 ))

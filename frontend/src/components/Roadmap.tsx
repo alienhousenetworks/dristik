@@ -13,7 +13,7 @@ function Column({ title, items }: { title: string; items: RoadmapItem[] }) {
   return (
     <Card>
       <div className="flex items-baseline justify-between mb-4">
-        <h3 className="font-serif text-2xl text-ink">{title}</h3>
+        <h3 className="font-sans text-2xl text-ink">{title}</h3>
         <span className="text-sm text-ink-400">{items.length}</span>
       </div>
       {items.length === 0 ? (
@@ -40,7 +40,7 @@ export function Roadmap({ days7, days30, days90 }: RoadmapProps) {
     <div className="space-y-6">
       <div>
         <p className="label">Actions</p>
-        <h2 className="font-serif text-3xl text-ink tracking-tight mt-1">Roadmap</h2>
+        <h2 className="font-sans text-3xl text-ink tracking-tight mt-1">Roadmap</h2>
         <p className="text-sm text-ink-500 mt-1">What to do in the next week, month, and quarter.</p>
       </div>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">

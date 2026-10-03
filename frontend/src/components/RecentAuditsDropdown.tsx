@@ -61,12 +61,12 @@ export function RecentAuditsDropdown({
 
   const getScoreBadge = (score: number | null | undefined, status: string) => {
     if (status === 'in_progress' || status === 'ingesting' || status === 'reasoning') {
-      return 'bg-sky-100 text-sky-800 dark:bg-sky-950/60 dark:text-sky-300 border-sky-300 animate-pulse';
+      return 'bg-paper-100 text-ink-700 dark:bg-paper-100 dark:text-ink-700 border-line animate-pulse';
     }
     if (score == null) return 'bg-paper-200 text-ink-500 border-line';
-    if (score >= 80) return 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border-emerald-300';
-    if (score >= 60) return 'bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border-amber-300';
-    return 'bg-red-100 text-red-800 dark:bg-red-950/60 dark:text-red-300 border-red-300';
+    if (score >= 80) return 'bg-good/10 text-good dark:bg-good/10 dark:text-good border-good/30';
+    if (score >= 60) return 'bg-warn/10 text-warn dark:bg-warn/10 dark:text-warn border-warn/30';
+    return 'bg-bad/10 text-bad dark:bg-bad/10 dark:text-bad border-bad/30';
   };
 
   return (
@@ -77,7 +77,7 @@ export function RecentAuditsDropdown({
           if (!isOpen) load();
           setIsOpen(!isOpen);
         }}
-        className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-line hover:border-pine bg-paper-50 dark:bg-ink-900 text-ink-700 dark:text-ink-200 text-xs font-medium transition-colors shadow-2xs"
+        className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border border-line hover:border-ink bg-paper-50 dark:bg-ink-900 text-ink-700 dark:text-ink-200 text-xs font-medium transition-colors shadow-2xs"
         title="Browse and revisit past website audits"
         aria-expanded={isOpen}
         aria-haspopup="dialog"
@@ -96,7 +96,7 @@ export function RecentAuditsDropdown({
           {/* Top action header */}
           <div className="p-3 border-b border-line bg-paper-100/70 dark:bg-ink-800/60 flex items-center justify-between gap-2">
             <div>
-              <span className="label text-[10px] text-pine block">Audit Archive &amp; Revisit</span>
+              <span className="label text-[10px] text-ink-700 block">Audit Archive &amp; Revisit</span>
               <span className="font-semibold text-ink text-xs">Previous Missions</span>
             </div>
             {onNewAudit && (
@@ -153,7 +153,7 @@ export function RecentAuditsDropdown({
                   <div
                     key={item.analysis_id}
                     className={`w-full text-left p-3 transition-colors flex items-center justify-between gap-2 hover:bg-paper-100 dark:hover:bg-ink-800/80 ${
-                      isSelected ? 'bg-pine/10 border-l-2 border-pine' : ''
+                      isSelected ? 'bg-paper-200 border-l-2 border-line' : ''
                     }`}
                   >
                     <button
@@ -169,7 +169,7 @@ export function RecentAuditsDropdown({
                           {item.domain}
                         </span>
                         {isSelected && (
-                          <span className="text-[9px] font-mono text-pine font-bold uppercase bg-pine/15 px-1.5 py-0.2 rounded">
+                          <span className="text-[9px] font-mono text-ink-700 font-bold uppercase bg-paper-200 px-1.5 py-0.2 rounded">
                             Active
                           </span>
                         )}

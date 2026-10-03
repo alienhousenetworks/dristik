@@ -98,8 +98,8 @@ export function PricingModal({
       <div className="sheet w-full max-w-3xl my-8 px-6 py-8 sm:px-10 rounded border border-line shadow-2xl" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-start justify-between gap-4 border-b border-line pb-4">
           <div>
-            <span className="label text-pine">Dristik AI Gateway · Direct Activation</span>
-            <h2 className="font-serif text-3xl mt-1 text-ink">
+            <span className="label text-ink-700">Dristik AI Gateway · Direct Activation</span>
+            <h2 className="font-sans text-3xl mt-1 text-ink">
               {voucher ? 'Diagnostic Sprint Unlocked' : checkout ? 'Complete Sprint Checkout' : 'Select an Intelligence Scope'}
             </h2>
           </div>
@@ -137,18 +137,18 @@ export function PricingModal({
           <form onSubmit={pay} className="mt-8 space-y-5 animate-fadeIn">
             <div className="flex items-baseline justify-between bg-paper-100 p-4 rounded border border-line">
               <div>
-                <span className="label text-pine">{selected.badge || selected.tier}</span>
-                <p className="font-serif text-2xl text-ink mt-0.5">{selected.name}</p>
+                <span className="label text-ink-700">{selected.badge || selected.tier}</span>
+                <p className="font-sans text-2xl text-ink mt-0.5">{selected.name}</p>
                 <p className="text-xs text-ink-600 mt-1">{selected.description}</p>
               </div>
               <div className="text-right shrink-0">
-                <p className="font-serif text-3xl text-ink">
+                <p className="font-sans text-3xl text-ink">
                   {currency === 'INR' ? selected.price_display : `$${selected.price_usd}`}
                 </p>
                 <button
                   type="button"
                   onClick={() => setCheckout(false)}
-                  className="text-xs text-pine underline mt-1 block"
+                  className="text-xs text-ink-700 underline mt-1 block"
                 >
                   Change plan
                 </button>
@@ -216,7 +216,7 @@ export function PricingModal({
             {/* Indian Payment Methods Banner */}
             <div className="p-3 bg-paper-100 rounded border border-line text-xs text-ink-700 flex items-center justify-between">
               <span>Payment Methods: Instant UPI QR, NetBanking, Credit/Debit Cards</span>
-              <span className="text-pine font-bold">0% Surcharge</span>
+              <span className="text-ink-700 font-bold">0% Surcharge</span>
             </div>
 
             {error && <p className="text-sm text-bad font-medium">{error}</p>}
@@ -258,9 +258,9 @@ export function PricingModal({
                 <li key={plan.id} className="py-4 flex items-start justify-between gap-4 hover:bg-paper-100/50 p-2 rounded transition-colors">
                   <div className="space-y-1">
                     <div className="flex items-center gap-2">
-                      <p className="font-serif text-xl text-ink">{plan.name}</p>
+                      <p className="font-sans text-xl text-ink">{plan.name}</p>
                       {plan.badge && (
-                        <span className={`text-[10px] px-2 py-0.5 rounded font-semibold uppercase tracking-wider ${
+                        <span className={`text-[10px] px-2 py-0.5 rounded font-semibold uppercase tracking-[0.04em] ${
                           plan.popular ? 'bg-pine text-paper-50' : 'bg-paper-300 text-ink-700'
                         }`}>
                           {plan.badge}
@@ -273,7 +273,7 @@ export function PricingModal({
                     </p>
                   </div>
                   <div className="text-right shrink-0">
-                    <p className="font-serif text-2xl text-ink">
+                    <p className="font-sans text-2xl text-ink">
                       {currency === 'INR' ? plan.price_display : `$${plan.price_usd}`}
                     </p>
                     <button

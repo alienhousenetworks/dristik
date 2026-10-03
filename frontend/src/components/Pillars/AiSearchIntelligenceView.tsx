@@ -177,7 +177,7 @@ export function AiSearchIntelligenceView({
             <Card className="p-4 space-y-2 border-line">
               <span className="text-[11px] font-mono text-ink-500 font-semibold uppercase block">1. Can AI Understand Us?</span>
               <div className="flex items-baseline gap-2">
-                <span className="font-serif text-3xl font-bold text-ink">
+                <span className="font-sans text-3xl font-bold text-ink">
                   {typeof schemaCrosscheck?.quality_score === 'number' ? Math.round(schemaCrosscheck.quality_score) : 85}
                   <span className="text-xs text-ink-400 font-sans font-normal"> / 100</span>
                 </span>
@@ -193,7 +193,7 @@ export function AiSearchIntelligenceView({
             <Card className="p-4 space-y-2 border-line">
               <span className="text-[11px] font-mono text-ink-500 font-semibold uppercase block">2. Can AI Find Evidence?</span>
               <div className="flex items-baseline gap-2">
-                <span className="font-serif text-3xl font-bold text-good">
+                <span className="font-sans text-3xl font-bold text-good">
                   {qGraph?.supported_count ?? questionsSupported ?? '—'}
                   <span className="text-xs text-ink-400 font-sans font-normal"> / {qGraph?.total_questions ?? questionsTotal ?? '50'}</span>
                 </span>
@@ -209,12 +209,12 @@ export function AiSearchIntelligenceView({
             <Card className="p-4 space-y-2 border-line">
               <span className="text-[11px] font-mono text-ink-500 font-semibold uppercase block">3. Does AI Actually Cite Us?</span>
               <div className="flex items-baseline gap-2">
-                <span className="font-serif text-3xl font-bold text-ink">
+                <span className="font-sans text-3xl font-bold text-ink">
                   {liveBenchReport?.share_of_model?.share_of_model_pct != null
                     ? `${Math.round(liveBenchReport.share_of_model.share_of_model_pct)}%`
                     : '68%'}
                 </span>
-                <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-pine/10 text-pine font-semibold">
+                <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-paper-200 text-ink-700 font-semibold">
                   Share of Model
                 </span>
               </div>
@@ -226,10 +226,10 @@ export function AiSearchIntelligenceView({
             <Card className="p-4 space-y-2 border-line">
               <span className="text-[11px] font-mono text-ink-500 font-semibold uppercase block">4. What Should We Fix?</span>
               <div className="flex items-baseline gap-2">
-                <span className="font-serif text-3xl font-bold text-amber-700 dark:text-amber-400">
+                <span className="font-sans text-3xl font-bold text-warn dark:text-warn">
                   {unsupportedQuestions.length + partialQuestions.length}
                 </span>
-                <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-amber-500/10 text-amber-700 dark:text-amber-400 font-semibold">
+                <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-warn/10 text-warn dark:text-warn font-semibold">
                   Patches Ready
                 </span>
               </div>
@@ -243,8 +243,8 @@ export function AiSearchIntelligenceView({
           <Card className="p-6 space-y-4 border-line bg-paper-50/70 dark:bg-ink-900/50">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-line pb-4">
               <div className="flex items-center gap-2">
-                <AlertCircle className="w-5 h-5 text-amber-600" />
-                <h3 className="font-serif text-xl font-bold text-ink">Diagnostic Correlation: Why Is Answerability At {extractabilityScore ?? 74}%?</h3>
+                <AlertCircle className="w-5 h-5 text-warn" />
+                <h3 className="font-sans text-xl font-bold text-ink">Diagnostic Correlation: Why Is Answerability At {extractabilityScore ?? 74}%?</h3>
               </div>
               <button
                 type="button"
@@ -357,7 +357,7 @@ export function AiSearchIntelligenceView({
                       key={cat}
                       type="button"
                       onClick={() => setSelectedQuestionCategory(cat)}
-                      className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${
+                      className={`text-xs px-2.5 py-1 rounded-md border transition-colors ${
                         selectedQuestionCategory === cat
                           ? 'bg-ink text-paper-50 dark:bg-paper-50 dark:text-ink border-transparent font-semibold'
                           : 'border-line text-ink-600 hover:border-ink-400 bg-paper-50 dark:bg-ink-900'
@@ -387,8 +387,8 @@ export function AiSearchIntelligenceView({
                           </span>
                           <span className={`text-[10px] font-mono px-2 py-0.5 rounded font-bold ${
                             q.status === 'SUPPORTED' ? 'bg-good/15 text-good' :
-                            q.status === 'PARTIAL' ? 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300' :
-                            q.status === 'CONFLICTING' ? 'bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300' :
+                            q.status === 'PARTIAL' ? 'bg-warn/10 text-warn dark:bg-warn/10 dark:text-warn' :
+                            q.status === 'CONFLICTING' ? 'bg-paper-100 text-ink-700 dark:bg-paper-100 dark:text-ink-700' :
                             'bg-bad/15 text-bad'
                           }`}>
                             {q.status}
@@ -397,8 +397,8 @@ export function AiSearchIntelligenceView({
                       </div>
                       <p className="font-semibold text-sm text-ink">{q.question}</p>
                       {q.answer && (
-                        <div className="text-xs text-ink-800 dark:text-paper-100 bg-paper-100/70 dark:bg-ink-950/60 p-2.5 rounded border border-line">
-                          <span className="font-bold text-pine block mb-0.5">Answer:</span>
+                        <div className="text-xs text-ink-700 dark:text-paper-100 bg-paper-100/70 dark:bg-ink-950/60 p-2.5 rounded border border-line">
+                          <span className="font-bold text-ink-700 block mb-0.5">Answer:</span>
                           {q.answer}
                         </div>
                       )}
@@ -413,12 +413,12 @@ export function AiSearchIntelligenceView({
                       )}
                       {q.remediation_type && (
                         <div className="text-[10px] font-mono text-ink-500 pt-1 flex items-center justify-between border-t border-line">
-                          <span>Remediation: <strong className="text-pine">{q.remediation_type.replace(/_/g, ' ')}</strong></span>
+                          <span>Remediation: <strong className="text-ink-700">{q.remediation_type.replace(/_/g, ' ')}</strong></span>
                           {q.status !== 'SUPPORTED' && (
                             <button
                               type="button"
                               onClick={() => setActiveSubTab('remediation')}
-                              className="text-pine hover:underline flex items-center gap-1"
+                              className="text-ink-700 hover:underline flex items-center gap-1"
                             >
                               <span>View Patch</span>
                               <ArrowRight className="w-2.5 h-2.5" />
@@ -437,10 +437,10 @@ export function AiSearchIntelligenceView({
           {answerSection === 'passages' && (
             <div className="space-y-4">
               <div className="flex items-center justify-between">
-                <h4 className="font-serif text-lg font-bold text-ink">
+                <h4 className="font-sans text-lg font-bold text-ink">
                   Citation-Ready Passage Detector & Drop-in Rewrites ({usefulRewrites.length})
                 </h4>
-                <span className="text-xs text-pine font-mono font-semibold">
+                <span className="text-xs text-ink-700 font-mono font-semibold">
                   Removes Ambiguous Pronouns for Direct Model Grounding
                 </span>
               </div>
@@ -458,14 +458,14 @@ export function AiSearchIntelligenceView({
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
                       <div className="space-y-1">
                         <span className="label text-[10px] text-bad block">Current on-page text (pronoun-heavy)</span>
-                        <div className="p-3 bg-paper-100 dark:bg-ink-950 rounded border border-line text-ink-600 font-serif leading-relaxed">
+                        <div className="p-3 bg-paper-100 dark:bg-ink-950 rounded border border-line text-ink-600 font-sans leading-relaxed">
                           "{rew.current_passage}"
                         </div>
                       </div>
 
                       <div className="space-y-1">
                         <span className="label text-[10px] text-good block">Recommended rewrite (explicit entity)</span>
-                        <div className="p-3 bg-good/5 dark:bg-good/10 rounded border border-good/30 text-ink font-serif leading-relaxed">
+                        <div className="p-3 bg-good/5 dark:bg-good/10 rounded border border-good/30 text-ink font-sans leading-relaxed">
                           "{rew.recommended_rewrite}"
                         </div>
                       </div>
@@ -504,7 +504,7 @@ export function AiSearchIntelligenceView({
 
                     <div className="bg-paper-100 dark:bg-ink-950 p-2.5 rounded border border-line space-y-1 text-xs font-mono">
                       <div className="text-ink-500">Subject: <span className="text-ink font-semibold">{c.subject}</span></div>
-                      <div className="text-ink-500">Predicate: <span className="text-pine font-semibold">{c.predicate}</span></div>
+                      <div className="text-ink-500">Predicate: <span className="text-ink-700 font-semibold">{c.predicate}</span></div>
                       <div className="text-ink-500">Object: <span className="text-ink font-semibold">{c.object}</span></div>
                     </div>
                     <p className="text-xs text-ink-700 italic">"{c.evidence_passage}"</p>
@@ -524,10 +524,10 @@ export function AiSearchIntelligenceView({
           <Card className="p-5 space-y-4">
             <div className="flex items-center justify-between border-b border-line pb-3">
               <div className="flex items-center gap-2">
-                <Network className="w-5 h-5 text-pine" />
-                <h3 className="font-serif text-lg font-bold text-ink">Observed AI Citation Authority Network</h3>
+                <Network className="w-5 h-5 text-ink-700" />
+                <h3 className="font-sans text-lg font-bold text-ink">Observed AI Citation Authority Network</h3>
               </div>
-              <span className="text-xs font-mono px-2 py-0.5 rounded bg-pine/10 text-pine font-semibold">
+              <span className="text-xs font-mono px-2 py-0.5 rounded bg-paper-200 text-ink-700 font-semibold">
                 Third-Party Authority Hubs
               </span>
             </div>
@@ -547,7 +547,7 @@ export function AiSearchIntelligenceView({
                         </span>
                         <span className={`text-[10px] font-mono px-2 py-0.5 rounded font-bold ${
                           hub.acquisition_priority === 'CRITICAL' ? 'bg-bad/15 text-bad' :
-                          hub.acquisition_priority === 'HIGH' ? 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300' :
+                          hub.acquisition_priority === 'HIGH' ? 'bg-warn/10 text-warn dark:bg-warn/10 dark:text-warn' :
                           'bg-good/15 text-good'
                         }`}>
                           {hub.acquisition_priority} PRIORITY
@@ -619,7 +619,7 @@ export function AiSearchIntelligenceView({
           {/* Header Summary */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-line pb-4">
             <div>
-              <h3 className="font-serif text-2xl font-bold text-ink">Evidence-Grounded AEO Remediation Pack</h3>
+              <h3 className="font-sans text-2xl font-bold text-ink">Evidence-Grounded AEO Remediation Pack</h3>
               <p className="text-xs text-ink-500 mt-0.5">
                 Drop-in answer blocks, verified FAQPage schema, and machine-readable directives synthesized strictly from verified evidence.
               </p>
@@ -639,12 +639,12 @@ export function AiSearchIntelligenceView({
           <Card className="p-5 space-y-4 border-line">
             <div className="flex items-center justify-between border-b border-line pb-3">
               <div className="flex items-center gap-2">
-                <FileCode className="w-5 h-5 text-pine" />
-                <h4 className="font-serif text-lg font-bold text-ink">
+                <FileCode className="w-5 h-5 text-ink-700" />
+                <h4 className="font-sans text-lg font-bold text-ink">
                   Direct Inverted-Pyramid Answer Blocks ({partialQuestions.length + supportedQuestions.length})
                 </h4>
               </div>
-              <span className="text-xs font-mono px-2 py-0.5 rounded bg-pine/10 text-pine font-semibold">
+              <span className="text-xs font-mono px-2 py-0.5 rounded bg-paper-200 text-ink-700 font-semibold">
                 40–60 Words • Zero Hallucination
               </span>
             </div>
@@ -687,7 +687,7 @@ export function AiSearchIntelligenceView({
               <div className="flex items-center justify-between border-b border-line pb-3">
                 <div className="flex items-center gap-2">
                   <ShieldCheck className="w-5 h-5 text-good" />
-                  <h4 className="font-serif text-lg font-bold text-ink">
+                  <h4 className="font-sans text-lg font-bold text-ink">
                     Verified Schema.org FAQPage JSON-LD ({verifiedFaqPairs.length} questions)
                   </h4>
                 </div>
@@ -704,7 +704,7 @@ export function AiSearchIntelligenceView({
                 Safe Schema Safeguard: Contains ONLY questions with verified first-party text. Excludes unverified commercial terms to guarantee search engine policy compliance.
               </p>
               <div className="bg-paper-100 dark:bg-ink-950 p-4 rounded-lg border border-line font-mono text-xs overflow-x-auto max-h-60">
-                <pre className="text-ink-800 dark:text-ink-200">{generatedFaqJsonLd}</pre>
+                <pre className="text-ink-700 dark:text-ink-200">{generatedFaqJsonLd}</pre>
               </div>
             </Card>
           )}
@@ -715,7 +715,7 @@ export function AiSearchIntelligenceView({
               <div className="flex items-center justify-between border-b border-line pb-3">
                 <div className="flex items-center gap-2">
                   <AlertCircle className="w-5 h-5 text-bad" />
-                  <h4 className="font-serif text-lg font-bold text-ink">
+                  <h4 className="font-sans text-lg font-bold text-ink">
                     Content Required Advisories ({unsupportedQuestions.length} Missing Policies)
                   </h4>
                 </div>
@@ -746,8 +746,8 @@ export function AiSearchIntelligenceView({
             <Card className="p-5 space-y-3 border-line">
               <div className="flex items-center justify-between border-b border-line pb-2">
                 <div className="flex items-center gap-2">
-                  <FileCode className="w-4 h-4 text-pine" />
-                  <h4 className="font-serif text-base font-bold text-ink">Autonomous Agent Directives (/llms.txt)</h4>
+                  <FileCode className="w-4 h-4 text-ink-700" />
+                  <h4 className="font-sans text-base font-bold text-ink">Autonomous Agent Directives (/llms.txt)</h4>
                 </div>
                 <button
                   type="button"
@@ -771,8 +771,8 @@ export function AiSearchIntelligenceView({
             <Card className="p-5 space-y-3 border-line">
               <div className="flex items-center justify-between border-b border-line pb-2">
                 <div className="flex items-center gap-2">
-                  <Bot className="w-4 h-4 text-pine" />
-                  <h4 className="font-serif text-base font-bold text-ink">AI Search Crawler Directives (robots.txt)</h4>
+                  <Bot className="w-4 h-4 text-ink-700" />
+                  <h4 className="font-sans text-base font-bold text-ink">AI Search Crawler Directives (robots.txt)</h4>
                 </div>
                 <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-good/10 text-good font-semibold">
                   RFC 9309 Compliant
@@ -801,8 +801,8 @@ Sitemap: ${report.website_url.replace(/\/$/, '')}/sitemap.xml`}</pre>
 
           {/* 5. Closed-Loop Verification Checklist */}
           <Card className="p-5 space-y-3 border-line bg-paper-50 dark:bg-ink-900/60">
-            <h4 className="font-serif text-base font-bold text-ink flex items-center gap-2">
-              <Zap className="w-4 h-4 text-pine" />
+            <h4 className="font-sans text-base font-bold text-ink flex items-center gap-2">
+              <Zap className="w-4 h-4 text-ink-700" />
               <span>Closed-Loop Verification Protocol</span>
             </h4>
             <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 text-xs">

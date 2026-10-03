@@ -75,10 +75,10 @@ export function SeverityDonutChart({ chart }: SeverityDonutChartProps) {
 
         {/* Center Metric */}
         <div className="absolute inset-0 flex flex-col items-center justify-center text-center pointer-events-none">
-          <span className="font-serif text-3xl font-bold text-ink leading-none">
+          <span className="font-sans text-3xl font-bold text-ink leading-none">
             {hoveredIdx !== null ? arcSegments[hoveredIdx].count : total}
           </span>
-          <span className="label text-[10px] text-ink-500 mt-1 uppercase tracking-wider">
+          <span className="label text-[10px] text-ink-500 mt-1 uppercase tracking-[0.04em]">
             {hoveredIdx !== null ? arcSegments[hoveredIdx].label : 'Total Defects'}
           </span>
           {hoveredIdx !== null && (

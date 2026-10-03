@@ -648,12 +648,12 @@ export function App() {
                     {recentAudits.slice(0, 5).map((item) => (
                       <span
                         key={item.analysis_id}
-                        className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-line/40 text-ink-700 border border-line/40"
+                        className="inline-flex items-center gap-1 px-2 py-1 rounded-md bg-line/40 text-ink-700 border border-line/40"
                       >
                         <button
                           type="button"
                           onClick={() => loadAudit(item.analysis_id)}
-                          className="inline-flex items-center gap-1.5 hover:text-pine font-medium cursor-pointer"
+                          className="inline-flex items-center gap-1.5 hover:text-ink font-medium cursor-pointer"
                           title={`Reopen audit for ${item.website_url}`}
                         >
                           <span className="truncate max-w-[140px]">{item.domain || item.website_url.replace(/^https?:\/\//, '')}</span>

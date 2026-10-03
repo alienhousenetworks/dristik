@@ -68,10 +68,10 @@ export function CroWorkspaceView({
           {/* Top Form Vitals */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <Card className="p-4 space-y-1.5">
-              <span className="text-[10px] font-mono uppercase tracking-wider text-ink-500 font-semibold block">
+              <span className="text-[10px] font-mono uppercase tracking-[0.04em] text-ink-500 font-semibold block">
                 Total Forms Detected
               </span>
-              <p className="font-serif text-3xl font-bold text-ink">
+              <p className="font-sans text-3xl font-bold text-ink">
                 {formAudit?.total_forms_detected ?? 0}
               </p>
               <p className="text-xs text-ink-500">
@@ -80,10 +80,10 @@ export function CroWorkspaceView({
             </Card>
 
             <Card className="p-4 space-y-1.5">
-              <span className="text-[10px] font-mono uppercase tracking-wider text-ink-500 font-semibold block">
+              <span className="text-[10px] font-mono uppercase tracking-[0.04em] text-ink-500 font-semibold block">
                 Friction Grade
               </span>
-              <p className="font-serif text-3xl font-bold text-pine">
+              <p className="font-sans text-3xl font-bold text-ink-700">
                 {formAudit?.cro_friction_grade || '—'}
               </p>
               <p className="text-xs text-ink-500">
@@ -92,10 +92,10 @@ export function CroWorkspaceView({
             </Card>
 
             <Card className="p-4 space-y-1.5">
-              <span className="text-[10px] font-mono uppercase tracking-wider text-ink-500 font-semibold block">
+              <span className="text-[10px] font-mono uppercase tracking-[0.04em] text-ink-500 font-semibold block">
                 Missing Input Labels
               </span>
-              <p className={`font-serif text-3xl font-bold ${
+              <p className={`font-sans text-3xl font-bold ${
                 (formAudit?.forms_with_missing_labels || 0) > 0 ? 'text-warn' : 'text-good'
               }`}>
                 {formAudit?.forms_with_missing_labels ?? 0}
@@ -106,7 +106,7 @@ export function CroWorkspaceView({
             </Card>
 
             <Card className="p-4 space-y-1.5">
-              <span className="text-[10px] font-mono uppercase tracking-wider text-ink-500 font-semibold block">
+              <span className="text-[10px] font-mono uppercase tracking-[0.04em] text-ink-500 font-semibold block">
                 Spam Protection & Bot Filter
               </span>
               <div className="flex items-center gap-1.5 pt-1">
@@ -129,13 +129,13 @@ export function CroWorkspaceView({
           {/* Form Breakdown List */}
           {formAudit?.forms && formAudit.forms.length > 0 ? (
             <Card className="p-5 space-y-4">
-              <h3 className="font-serif text-lg text-ink font-semibold">Detected Form Specifications</h3>
+              <h3 className="font-sans text-lg text-ink font-semibold">Detected Form Specifications</h3>
               <div className="space-y-3">
                 {formAudit.forms.map((f, idx) => (
                   <div key={idx} className="p-4 rounded-lg border border-line bg-paper-50 space-y-2 text-xs">
                     <div className="flex items-center justify-between">
                       <span className="font-mono font-bold text-ink-700">Form #{idx + 1} ({f.input_count} inputs)</span>
-                      <span className="font-mono text-[11px] px-2 py-0.5 rounded bg-pine/10 text-pine font-semibold">
+                      <span className="font-mono text-[11px] px-2 py-0.5 rounded bg-paper-200 text-ink-700 font-semibold">
                         Submit: &quot;{f.submit_button_text || 'Submit'}&quot;
                       </span>
                     </div>
@@ -153,7 +153,7 @@ export function CroWorkspaceView({
             </Card>
           ) : (
             <Card className="p-5 space-y-2">
-              <h3 className="font-serif text-lg text-ink font-semibold">Form Analysis Summary</h3>
+              <h3 className="font-sans text-lg text-ink font-semibold">Form Analysis Summary</h3>
               <p className="text-xs text-ink-600">
                 Primary conversion relies on direct links or modal triggers. Keep submission forms under 4 fields to maximize completion rate.
               </p>
@@ -162,8 +162,8 @@ export function CroWorkspaceView({
 
           {/* Actionable Remedies */}
           {formAudit?.actionable_remedies && formAudit.actionable_remedies.length > 0 && (
-            <Card className="p-5 space-y-3 border-l-4 border-l-pine">
-              <h4 className="text-xs font-bold text-pine uppercase tracking-wider">
+            <Card className="p-5 space-y-3 border-l-2 border-l-pine">
+              <h4 className="text-xs font-bold text-ink-700 uppercase tracking-[0.04em]">
                 Recommended CRO Form Remedies
               </h4>
               <ul className="text-xs text-ink-700 space-y-1.5 list-disc pl-5">
@@ -182,10 +182,10 @@ export function CroWorkspaceView({
       {activeSubTab === 'valueprop' && (
         <div className="space-y-6">
           <Card className="p-6 space-y-4">
-            <span className="text-[10px] font-mono uppercase tracking-widest text-pine font-bold block">
+            <span className="text-[10px] font-mono uppercase tracking-[0.04em] text-ink-700 font-bold block">
               5-Second Value Proposition Test
             </span>
-            <blockquote className="font-serif text-2xl text-ink leading-relaxed italic border-l-2 border-pine pl-4">
+            <blockquote className="font-sans text-2xl text-ink leading-relaxed italic border-l-2 border-line pl-4">
               &quot;{profile?.value_proposition || 'No explicit value proposition extracted from the homepage.'}&quot;
             </blockquote>
 
@@ -213,10 +213,10 @@ export function CroWorkspaceView({
       {activeSubTab === 'cta' && (
         <div className="space-y-6">
           <Card className="p-5 space-y-4">
-            <h3 className="font-serif text-lg text-ink font-semibold">Call to Action (CTA) Audit</h3>
+            <h3 className="font-sans text-lg text-ink font-semibold">Call to Action (CTA) Audit</h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
               <div className="p-4 rounded-lg bg-good/5 border border-good/20 space-y-2">
-                <span className="text-[10px] font-mono uppercase tracking-wider text-good font-bold block">
+                <span className="text-[10px] font-mono uppercase tracking-[0.04em] text-good font-bold block">
                   Primary Call to Action
                 </span>
                 <p className="font-mono text-base font-bold text-ink">
@@ -228,7 +228,7 @@ export function CroWorkspaceView({
               </div>
 
               <div className="p-4 rounded-lg bg-paper-50 border border-line space-y-2">
-                <span className="text-[10px] font-mono uppercase tracking-wider text-ink-500 font-bold block">
+                <span className="text-[10px] font-mono uppercase tracking-[0.04em] text-ink-500 font-bold block">
                   Secondary Call to Action
                 </span>
                 <p className="font-mono text-base font-bold text-ink">

@@ -116,7 +116,7 @@ export function SeoWorkspaceView({
           {/* Top Vitals */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <Card className="p-4 space-y-1.5">
-              <span className="text-[10px] font-mono uppercase tracking-wider text-ink-500 font-semibold block">
+              <span className="text-[10px] font-mono uppercase tracking-[0.04em] text-ink-500 font-semibold block">
                 HTTP Status Success Rate
               </span>
               <div className="flex items-center gap-1.5 text-ink font-semibold">
@@ -131,11 +131,11 @@ export function SeoWorkspaceView({
             </Card>
 
             <Card className="p-4 space-y-1.5">
-              <span className="text-[10px] font-mono uppercase tracking-wider text-ink-500 font-semibold block">
+              <span className="text-[10px] font-mono uppercase tracking-[0.04em] text-ink-500 font-semibold block">
                 Canonical Health Score
               </span>
               <div className="flex items-center gap-1.5 text-ink font-semibold">
-                <span className="font-mono text-base text-pine">
+                <span className="font-mono text-base text-ink-700">
                   {canonicalAudit?.canonical_health_score ? `${Math.round(canonicalAudit.canonical_health_score)}/100` : '100/100'}
                 </span>
                 <span className="text-xs font-mono text-good font-semibold">
@@ -148,7 +148,7 @@ export function SeoWorkspaceView({
             </Card>
 
             <Card className="p-4 space-y-1.5">
-              <span className="text-[10px] font-mono uppercase tracking-wider text-ink-500 font-semibold block">
+              <span className="text-[10px] font-mono uppercase tracking-[0.04em] text-ink-500 font-semibold block">
                 XML Sitemap Directives
               </span>
               <div className="flex items-center gap-1.5 text-ink font-semibold">
@@ -165,11 +165,11 @@ export function SeoWorkspaceView({
             </Card>
 
             <Card className="p-4 space-y-1.5">
-              <span className="text-[10px] font-mono uppercase tracking-wider text-ink-500 font-semibold block">
+              <span className="text-[10px] font-mono uppercase tracking-[0.04em] text-ink-500 font-semibold block">
                 Max Click Depth
               </span>
               <div className="flex items-center gap-1.5 text-ink font-semibold">
-                <Layers className="w-4 h-4 text-pine shrink-0" />
+                <Layers className="w-4 h-4 text-ink-700 shrink-0" />
                 <span className="font-mono text-base">{clickDepth?.max_click_depth != null ? `${clickDepth.max_click_depth} Clicks` : '—'}</span>
               </div>
               <p className="text-xs text-ink-500">
@@ -182,8 +182,8 @@ export function SeoWorkspaceView({
           <Card className="p-5 space-y-4">
             <div className="flex items-center justify-between border-b border-line pb-3">
               <div className="flex items-center gap-2">
-                <Globe className="w-4 h-4 text-pine" />
-                <h3 className="font-serif text-lg text-ink font-semibold">
+                <Globe className="w-4 h-4 text-ink-700" />
+                <h3 className="font-sans text-lg text-ink font-semibold">
                   HTTP Response Codes & Broken Link Inventory
                 </h3>
               </div>
@@ -200,7 +200,7 @@ export function SeoWorkspaceView({
                 <p className="text-[10px] text-ink-500">Indexable clean pages</p>
               </div>
               <div className="p-3 rounded border border-line bg-paper-50 space-y-1">
-                <span className="text-[10px] font-mono text-pine uppercase font-bold">3xx Redirects</span>
+                <span className="text-[10px] font-mono text-ink-700 uppercase font-bold">3xx Redirects</span>
                 <span className="text-xl font-mono font-bold text-ink block">
                   {httpStatus?.count_3xx ?? 0}
                 </span>
@@ -234,7 +234,7 @@ export function SeoWorkspaceView({
                 </span>
                 <div className="space-y-1 text-xs font-mono max-h-40 overflow-y-auto">
                   {httpStatus.broken_links.map((bl, idx) => (
-                    <div key={idx} className="p-2 rounded bg-bad/5 border border-bad/20 flex items-center justify-between gap-3 text-ink-800">
+                    <div key={idx} className="p-2 rounded bg-bad/5 border border-bad/20 flex items-center justify-between gap-3 text-ink-700">
                       <span className="truncate">Source: {bl.source_url} &rarr; Target: <strong>{bl.target_url}</strong></span>
                       <span className="text-bad font-bold shrink-0">{bl.status_code}</span>
                     </div>
@@ -248,8 +248,8 @@ export function SeoWorkspaceView({
           <Card className="p-5 space-y-4">
             <div className="flex items-center justify-between border-b border-line pb-3">
               <div className="flex items-center gap-2">
-                <Code2 className="w-4 h-4 text-pine" />
-                <h3 className="font-serif text-lg text-ink font-semibold">
+                <Code2 className="w-4 h-4 text-ink-700" />
+                <h3 className="font-sans text-lg text-ink font-semibold">
                   Canonical Tag Architecture Matrix
                 </h3>
               </div>
@@ -301,8 +301,8 @@ export function SeoWorkspaceView({
             <Card className="p-5 space-y-4">
               <div className="flex items-center justify-between border-b border-line pb-3">
                 <div className="flex items-center gap-2">
-                  <Globe className="w-4 h-4 text-pine" />
-                  <h3 className="font-serif text-lg text-ink font-semibold">
+                  <Globe className="w-4 h-4 text-ink-700" />
+                  <h3 className="font-sans text-lg text-ink font-semibold">
                     Host Variant & Canonical Redirect Consolidation
                   </h3>
                 </div>
@@ -343,8 +343,8 @@ export function SeoWorkspaceView({
             <Card className="p-5 space-y-3">
               <div className="flex items-center justify-between border-b border-line pb-2">
                 <div className="flex items-center gap-2">
-                  <Layers className="w-4 h-4 text-pine" />
-                  <h4 className="font-serif text-base text-ink font-semibold">Crawl Click Depth Distribution</h4>
+                  <Layers className="w-4 h-4 text-ink-700" />
+                  <h4 className="font-sans text-base text-ink font-semibold">Crawl Click Depth Distribution</h4>
                 </div>
                 <span className="text-xs text-ink-500 font-mono">
                   {clickDepth?.total_pages_analyzed || pages.length} pages
@@ -368,8 +368,8 @@ export function SeoWorkspaceView({
             <Card className="p-5 space-y-3">
               <div className="flex items-center justify-between border-b border-line pb-2">
                 <div className="flex items-center gap-2">
-                  <FileCode className="w-4 h-4 text-pine" />
-                  <h4 className="font-serif text-base text-ink font-semibold">Orphan Page Detection</h4>
+                  <FileCode className="w-4 h-4 text-ink-700" />
+                  <h4 className="font-sans text-base text-ink font-semibold">Orphan Page Detection</h4>
                 </div>
                 <span className={`text-xs font-mono px-2 py-0.5 rounded font-semibold ${
                   (orphanPages?.orphan_count || 0) === 0 ? 'bg-good/10 text-good' : 'bg-warn/10 text-warn'
@@ -383,8 +383,8 @@ export function SeoWorkspaceView({
               {orphanPages?.orphan_urls && orphanPages.orphan_urls.length > 0 ? (
                 <div className="space-y-1.5 max-h-48 overflow-y-auto pt-1">
                   {orphanPages.orphan_urls.map((u: string, idx: number) => (
-                    <div key={idx} className="text-xs font-mono p-2 rounded bg-warn/5 border border-warn/20 text-ink-800 truncate">
-                      ⚠️ {u}
+                    <div key={idx} className="text-xs font-mono p-2 rounded bg-warn/5 border border-warn/20 text-ink-700 truncate">
+                       {u}
                     </div>
                   ))}
                 </div>
@@ -407,8 +407,8 @@ export function SeoWorkspaceView({
           <Card className="p-5 space-y-4">
             <div className="flex flex-wrap items-center justify-between border-b border-line pb-3 gap-2">
               <div className="flex items-center gap-2">
-                <Search className="w-4 h-4 text-pine" />
-                <h3 className="font-serif text-lg text-ink font-semibold">
+                <Search className="w-4 h-4 text-ink-700" />
+                <h3 className="font-sans text-lg text-ink font-semibold">
                   Google SERP Snippet Preview & Pixel Meter
                 </h3>
               </div>
@@ -418,7 +418,7 @@ export function SeoWorkspaceView({
                     type="button"
                     onClick={() => setSerpDevice('desktop')}
                     className={`flex items-center gap-1 px-2.5 py-1 rounded transition-colors ${
-                      serpDevice === 'desktop' ? 'bg-white shadow-sm font-semibold text-ink' : 'text-ink-500'
+                      serpDevice === 'desktop' ? 'bg-paper-50 shadow-sm font-semibold text-ink' : 'text-ink-500'
                     }`}
                   >
                     <Monitor className="w-3.5 h-3.5" /> Desktop
@@ -427,7 +427,7 @@ export function SeoWorkspaceView({
                     type="button"
                     onClick={() => setSerpDevice('mobile')}
                     className={`flex items-center gap-1 px-2.5 py-1 rounded transition-colors ${
-                      serpDevice === 'mobile' ? 'bg-white shadow-sm font-semibold text-ink' : 'text-ink-500'
+                      serpDevice === 'mobile' ? 'bg-paper-50 shadow-sm font-semibold text-ink' : 'text-ink-500'
                     }`}
                   >
                     <Smartphone className="w-3.5 h-3.5" /> Mobile
@@ -435,7 +435,7 @@ export function SeoWorkspaceView({
                 </div>
                 {pages.length > 1 && (
                   <select
-                    className="text-xs border border-line rounded px-2 py-1 bg-white font-mono"
+                    className="text-xs border border-line rounded px-2 py-1 bg-paper-50 font-mono"
                     value={selectedSerpPageUrl}
                     onChange={(e) => setSelectedSerpPageUrl(e.target.value)}
                   >
@@ -450,11 +450,11 @@ export function SeoWorkspaceView({
             </div>
 
             {/* Google SERP Card Preview */}
-            <div className={`p-4 rounded-lg border border-line bg-white shadow-sm space-y-1.5 ${
+            <div className={`p-4 rounded-lg border border-line bg-paper-50 shadow-sm space-y-1.5 ${
               serpDevice === 'mobile' ? 'max-w-md' : 'max-w-2xl'
             }`}>
               <div className="flex items-center gap-2 text-xs text-[#202124]">
-                <div className="w-4 h-4 rounded-full bg-slate-100 flex items-center justify-center font-bold text-[9px] text-slate-600">
+                <div className="w-4 h-4 rounded-full bg-paper-200 flex items-center justify-center font-bold text-[9px] text-ink-600">
                   G
                 </div>
                 <div className="flex flex-col">
@@ -488,7 +488,7 @@ export function SeoWorkspaceView({
                   />
                 </div>
                 <p className="text-[10px] text-ink-500">
-                  {titlePx > 580 ? '⚠️ Exceeds 580px desktop width. Google will truncate with ellipsis.' : '✓ Optimal pixel length. Title will display in full on desktop SERP.'}
+                  {titlePx > 580 ? ' Exceeds 580px desktop width. Google will truncate with ellipsis.' : '✓ Optimal pixel length. Title will display in full on desktop SERP.'}
                 </p>
               </div>
 
@@ -508,7 +508,7 @@ export function SeoWorkspaceView({
                   />
                 </div>
                 <p className="text-[10px] text-ink-500">
-                  {metaPx > 960 ? '⚠️ Exceeds 960px snippet width. Truncation likely.' : '✓ Fits cleanly inside Google SERP preview boundaries.'}
+                  {metaPx > 960 ? ' Exceeds 960px snippet width. Truncation likely.' : '✓ Fits cleanly inside Google SERP preview boundaries.'}
                 </p>
               </div>
             </div>
@@ -518,14 +518,14 @@ export function SeoWorkspaceView({
           <Card className="p-5 space-y-4">
             <div className="flex items-center justify-between border-b border-line pb-3">
               <div className="flex items-center gap-2">
-                <FileCode className="w-4 h-4 text-pine" />
-                <h3 className="font-serif text-lg text-ink font-semibold">
+                <FileCode className="w-4 h-4 text-ink-700" />
+                <h3 className="font-sans text-lg text-ink font-semibold">
                   HTML5 Heading Hierarchy (H1 - H6)
                 </h3>
               </div>
               <div className="flex items-center gap-2">
                 <span className="text-xs text-ink-500 font-mono">H1 Health:</span>
-                <span className="text-xs font-mono font-bold px-2 py-0.5 rounded bg-pine/10 text-pine">
+                <span className="text-xs font-mono font-bold px-2 py-0.5 rounded bg-paper-200 text-ink-700">
                   {headings?.h1_health_score ? `${Math.round(headings.h1_health_score)}/100` : '100/100'}
                 </span>
               </div>
@@ -566,7 +566,7 @@ export function SeoWorkspaceView({
                 <div className="space-y-1 font-mono text-xs p-3 rounded bg-paper-100 border border-line">
                   {headings.outline_tree_sample.map((h: any, idx: number) => (
                     <div key={idx} className="flex items-center gap-2 text-ink-700">
-                      <span className="text-pine font-bold w-8">{h.tag || `H${h.level}`}</span>
+                      <span className="text-ink-700 font-bold w-8">{h.tag || `H${h.level}`}</span>
                       <span className="truncate">{h.text || h.content}</span>
                     </div>
                   ))}
@@ -579,7 +579,7 @@ export function SeoWorkspaceView({
           {metaRollup && (
             <Card className="p-5 space-y-4">
               <div className="flex items-center justify-between border-b border-line pb-3">
-                <h3 className="font-serif text-lg text-ink font-semibold">Title & Meta Description Distribution</h3>
+                <h3 className="font-sans text-lg text-ink font-semibold">Title & Meta Description Distribution</h3>
                 <span className="text-xs font-mono text-ink-500">
                   {metaRollup.total_pages_evaluated || pages.length} URLs
                 </span>
@@ -614,8 +614,8 @@ export function SeoWorkspaceView({
             <Card className="p-5 space-y-4">
               <div className="flex items-center justify-between border-b border-line pb-3">
                 <div className="flex items-center gap-2">
-                  <Code2 className="w-4 h-4 text-pine" />
-                  <h3 className="font-serif text-lg text-ink font-semibold">Schema.org & Google Rich Results Validator</h3>
+                  <Code2 className="w-4 h-4 text-ink-700" />
+                  <h3 className="font-sans text-lg text-ink font-semibold">Schema.org & Google Rich Results Validator</h3>
                 </div>
                 <span className={`text-xs font-mono px-2 py-0.5 rounded font-semibold ${
                   report.schema_validation.entities_with_errors_count === 0 ? 'bg-good/10 text-good' : 'bg-bad/10 text-bad'
@@ -666,8 +666,8 @@ export function SeoWorkspaceView({
           <Card className="p-5 space-y-4">
             <div className="flex items-center justify-between border-b border-line pb-3">
               <div className="flex items-center gap-2">
-                <ImageIcon className="w-4 h-4 text-pine" />
-                <h3 className="font-serif text-lg text-ink font-semibold">Image Assets & CLS Stability</h3>
+                <ImageIcon className="w-4 h-4 text-ink-700" />
+                <h3 className="font-sans text-lg text-ink font-semibold">Image Assets & CLS Stability</h3>
               </div>
               <span className="text-xs font-mono text-ink-500">
                 {media?.total_images_analyzed || 0} Images Analyzed
@@ -725,8 +725,8 @@ export function SeoWorkspaceView({
           <Card className="p-5 space-y-4">
             <div className="flex items-center justify-between border-b border-line pb-3">
               <div className="flex items-center gap-2">
-                <Link2 className="w-4 h-4 text-pine" />
-                <h3 className="font-serif text-lg text-ink font-semibold">Anchor Text Quality & Link Equity</h3>
+                <Link2 className="w-4 h-4 text-ink-700" />
+                <h3 className="font-sans text-lg text-ink font-semibold">Anchor Text Quality & Link Equity</h3>
               </div>
               <span className="text-xs font-mono text-ink-500">
                 {anchorAudit?.total_links_analyzed || 'Analyzed'} Links
@@ -764,15 +764,15 @@ export function SeoWorkspaceView({
           {/* Top Vitals */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <Card className="p-4 space-y-1.5">
-              <span className="text-[10px] font-mono uppercase tracking-wider text-ink-500 font-semibold block">
+              <span className="text-[10px] font-mono uppercase tracking-[0.04em] text-ink-500 font-semibold block">
                 NAP Consistency Score
               </span>
               <div className="flex items-baseline justify-between">
-                <span className="text-2xl font-bold font-serif text-ink">
+                <span className="text-2xl font-bold font-sans text-ink">
                   {localSeo ? `${localSeo.nap_consistency_score}%` : '100%'}
                 </span>
                 <span className={`text-xs font-mono font-bold px-1.5 py-0.5 rounded ${
-                  (localSeo?.nap_consistency_score ?? 100) >= 80 ? 'bg-good/10 text-good' : 'bg-red-500/10 text-red-600'
+                  (localSeo?.nap_consistency_score ?? 100) >= 80 ? 'bg-good/10 text-good' : 'bg-bad/10 text-bad'
                 }`}>
                   {(localSeo?.nap_consistency_score ?? 100) >= 80 ? 'Consistent' : 'Conflicts Detected'}
                 </span>
@@ -781,15 +781,15 @@ export function SeoWorkspaceView({
             </Card>
 
             <Card className="p-4 space-y-1.5">
-              <span className="text-[10px] font-mono uppercase tracking-wider text-ink-500 font-semibold block">
+              <span className="text-[10px] font-mono uppercase tracking-[0.04em] text-ink-500 font-semibold block">
                 Google Business Profile
               </span>
               <div className="flex items-baseline justify-between">
-                <span className="text-xl font-bold font-serif text-ink">
+                <span className="text-xl font-bold font-sans text-ink">
                   {localSeo?.has_google_business_profile ? 'Linked' : 'Not Linked'}
                 </span>
                 <span className={`text-xs font-mono font-bold px-1.5 py-0.5 rounded ${
-                  localSeo?.has_google_business_profile ? 'bg-good/10 text-good' : 'bg-amber-500/10 text-amber-600'
+                  localSeo?.has_google_business_profile ? 'bg-good/10 text-good' : 'bg-warn/10 text-warn'
                 }`}>
                   {localSeo?.has_google_business_profile ? 'Verified' : 'Missing Link'}
                 </span>
@@ -798,11 +798,11 @@ export function SeoWorkspaceView({
             </Card>
 
             <Card className="p-4 space-y-1.5">
-              <span className="text-[10px] font-mono uppercase tracking-wider text-ink-500 font-semibold block">
+              <span className="text-[10px] font-mono uppercase tracking-[0.04em] text-ink-500 font-semibold block">
                 Google Maps Embed
               </span>
               <div className="flex items-baseline justify-between">
-                <span className="text-xl font-bold font-serif text-ink">
+                <span className="text-xl font-bold font-sans text-ink">
                   {localSeo?.has_google_maps_embed ? 'Embedded' : 'Missing'}
                 </span>
                 <span className={`text-xs font-mono font-bold px-1.5 py-0.5 rounded ${
@@ -815,15 +815,15 @@ export function SeoWorkspaceView({
             </Card>
 
             <Card className="p-4 space-y-1.5">
-              <span className="text-[10px] font-mono uppercase tracking-wider text-ink-500 font-semibold block">
+              <span className="text-[10px] font-mono uppercase tracking-[0.04em] text-ink-500 font-semibold block">
                 LocalBusiness Schema
               </span>
               <div className="flex items-baseline justify-between">
-                <span className="text-xl font-bold font-serif text-ink">
+                <span className="text-xl font-bold font-sans text-ink">
                   {localSeo?.local_business_schema_found ? `${localSeo.local_schema_completeness_pct}%` : 'Absent'}
                 </span>
                 <span className={`text-xs font-mono font-bold px-1.5 py-0.5 rounded ${
-                  localSeo?.local_business_schema_found ? 'bg-good/10 text-good' : 'bg-red-500/10 text-red-600'
+                  localSeo?.local_business_schema_found ? 'bg-good/10 text-good' : 'bg-bad/10 text-bad'
                 }`}>
                   {localSeo?.local_business_schema_found ? 'JSON-LD' : 'Missing'}
                 </span>
@@ -836,8 +836,8 @@ export function SeoWorkspaceView({
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <Card className="p-5 space-y-4">
               <div className="flex items-center gap-2 border-b border-line pb-3">
-                <MapPin className="w-4 h-4 text-pine" />
-                <h3 className="font-serif text-lg text-ink font-semibold">
+                <MapPin className="w-4 h-4 text-ink-700" />
+                <h3 className="font-sans text-lg text-ink font-semibold">
                   NAP Consistency & Contact Footprint
                 </h3>
               </div>
@@ -855,11 +855,11 @@ export function SeoWorkspaceView({
                   </span>
                 </div>
                 {localSeo?.phone_conflicts && localSeo.phone_conflicts.length > 1 && (
-                  <div className="p-3 rounded border border-red-300 bg-red-50 dark:bg-red-950/20 space-y-2">
-                    <span className="text-[10px] font-bold text-red-700 uppercase">Conflicting Phone Numbers</span>
+                  <div className="p-3 rounded border border-bad/30 bg-bad/10 dark:bg-bad/10 space-y-2">
+                    <span className="text-[10px] font-bold text-bad uppercase">Conflicting Phone Numbers</span>
                     <div className="space-y-1 font-mono">
                       {localSeo.phone_conflicts.map((c, i) => (
-                        <div key={i} className="flex justify-between text-red-600">
+                        <div key={i} className="flex justify-between text-bad">
                           <span>{c.phone}</span>
                           <span>({c.occurrences} pages)</span>
                         </div>
@@ -868,9 +868,9 @@ export function SeoWorkspaceView({
                   </div>
                 )}
                 {localSeo?.schema_missing_fields && localSeo.schema_missing_fields.length > 0 && (
-                  <div className="p-3 rounded border border-amber-300 bg-amber-50 dark:bg-amber-950/20 space-y-1">
-                    <span className="text-[10px] font-bold text-amber-700 uppercase">Missing LocalBusiness Schema Fields</span>
-                    <span className="text-xs text-amber-800 dark:text-amber-300 block">
+                  <div className="p-3 rounded border border-warn/30 bg-warn/10 dark:bg-warn/10 space-y-1">
+                    <span className="text-[10px] font-bold text-warn uppercase">Missing LocalBusiness Schema Fields</span>
+                    <span className="text-xs text-warn dark:text-warn block">
                       {localSeo.schema_missing_fields.join(', ')}
                     </span>
                   </div>
@@ -880,8 +880,8 @@ export function SeoWorkspaceView({
 
             <Card className="p-5 space-y-4">
               <div className="flex items-center gap-2 border-b border-line pb-3">
-                <Globe className="w-4 h-4 text-pine" />
-                <h3 className="font-serif text-lg text-ink font-semibold">
+                <Globe className="w-4 h-4 text-ink-700" />
+                <h3 className="font-sans text-lg text-ink font-semibold">
                   Google Business Profile & Local Citations
                 </h3>
               </div>
@@ -891,7 +891,7 @@ export function SeoWorkspaceView({
                   {localSeo?.gbp_urls && localSeo.gbp_urls.length > 0 ? (
                     <div className="space-y-1 font-mono">
                       {localSeo.gbp_urls.map((u, i) => (
-                        <a key={i} href={u} target="_blank" rel="noopener noreferrer" className="text-pine flex items-center gap-1 hover:underline truncate">
+                        <a key={i} href={u} target="_blank" rel="noopener noreferrer" className="text-ink-700 flex items-center gap-1 hover:underline truncate">
                           <ExternalLink className="w-3 h-3 flex-shrink-0" />
                           <span className="truncate">{u}</span>
                         </a>
@@ -907,7 +907,7 @@ export function SeoWorkspaceView({
                   {localSeo?.local_citations_found && localSeo.local_citations_found.length > 0 ? (
                     <div className="space-y-1 font-mono">
                       {localSeo.local_citations_found.map((u, i) => (
-                        <a key={i} href={u} target="_blank" rel="noopener noreferrer" className="text-pine flex items-center gap-1 hover:underline truncate">
+                        <a key={i} href={u} target="_blank" rel="noopener noreferrer" className="text-ink-700 flex items-center gap-1 hover:underline truncate">
                           <ExternalLink className="w-3 h-3 flex-shrink-0" />
                           <span className="truncate">{u}</span>
                         </a>
@@ -932,7 +932,7 @@ export function SeoWorkspaceView({
           {localSeo?.local_landing_pages && localSeo.local_landing_pages.length > 0 && (
             <Card className="p-5 space-y-4">
               <div className="flex items-center justify-between border-b border-line pb-3">
-                <h3 className="font-serif text-lg text-ink font-semibold">
+                <h3 className="font-sans text-lg text-ink font-semibold">
                   Local Landing Pages Audit ({localSeo.local_landing_pages.length})
                 </h3>
               </div>
@@ -954,12 +954,12 @@ export function SeoWorkspaceView({
                       <tr key={i} className="hover:bg-paper-50 transition-colors">
                         <td className="p-2.5 border border-line font-mono truncate max-w-xs">{lp.url}</td>
                         <td className="p-2.5 border border-line font-semibold">{lp.target_location || '—'}</td>
-                        <td className="p-2.5 border border-line">{lp.has_unique_nap ? '✅ Yes' : '❌ No'}</td>
-                        <td className="p-2.5 border border-line">{lp.has_local_schema ? '✅ Yes' : '❌ No'}</td>
-                        <td className="p-2.5 border border-line">{lp.has_map ? '✅ Yes' : '❌ No'}</td>
+                        <td className="p-2.5 border border-line">{lp.has_unique_nap ? ' Yes' : ' No'}</td>
+                        <td className="p-2.5 border border-line">{lp.has_local_schema ? ' Yes' : ' No'}</td>
+                        <td className="p-2.5 border border-line">{lp.has_map ? ' Yes' : ' No'}</td>
                         <td className="p-2.5 border border-line">
                           <span className={`px-1.5 py-0.5 rounded font-mono font-bold text-[10px] ${
-                            lp.status === 'PASS' ? 'bg-good/10 text-good' : 'bg-red-500/10 text-red-600'
+                            lp.status === 'PASS' ? 'bg-good/10 text-good' : 'bg-bad/10 text-bad'
                           }`}>
                             {lp.status}
                           </span>
@@ -985,15 +985,15 @@ export function SeoWorkspaceView({
           {/* Top Vitals */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <Card className="p-4 space-y-1.5">
-              <span className="text-[10px] font-mono uppercase tracking-wider text-ink-500 font-semibold block">
+              <span className="text-[10px] font-mono uppercase tracking-[0.04em] text-ink-500 font-semibold block">
                 Targeting Architecture
               </span>
               <div className="flex items-baseline justify-between">
-                <span className="text-xl font-bold font-serif text-ink">
+                <span className="text-xl font-bold font-sans text-ink">
                   {intlSeo?.is_multilingual ? 'Multilingual' : 'Single Locale'}
                 </span>
                 <span className={`text-xs font-mono font-bold px-1.5 py-0.5 rounded ${
-                  intlSeo?.is_multilingual ? 'bg-pine/10 text-pine' : 'bg-paper-100 text-ink-600'
+                  intlSeo?.is_multilingual ? 'bg-paper-200 text-ink-700' : 'bg-paper-100 text-ink-600'
                 }`}>
                   {intlSeo?.locales_detected?.length || 1} Locales
                 </span>
@@ -1002,15 +1002,15 @@ export function SeoWorkspaceView({
             </Card>
 
             <Card className="p-4 space-y-1.5">
-              <span className="text-[10px] font-mono uppercase tracking-wider text-ink-500 font-semibold block">
+              <span className="text-[10px] font-mono uppercase tracking-[0.04em] text-ink-500 font-semibold block">
                 Hreflang Return Tags
               </span>
               <div className="flex items-baseline justify-between">
-                <span className="text-xl font-bold font-serif text-ink">
+                <span className="text-xl font-bold font-sans text-ink">
                   {intlSeo?.return_tags_healthy ? 'Reciprocal' : 'Broken'}
                 </span>
                 <span className={`text-xs font-mono font-bold px-1.5 py-0.5 rounded ${
-                  intlSeo?.return_tags_healthy ? 'bg-good/10 text-good' : 'bg-red-500/10 text-red-600'
+                  intlSeo?.return_tags_healthy ? 'bg-good/10 text-good' : 'bg-bad/10 text-bad'
                 }`}>
                   {intlSeo?.return_tags_healthy ? 'Valid' : 'Errors Flagged'}
                 </span>
@@ -1019,15 +1019,15 @@ export function SeoWorkspaceView({
             </Card>
 
             <Card className="p-4 space-y-1.5">
-              <span className="text-[10px] font-mono uppercase tracking-wider text-ink-500 font-semibold block">
+              <span className="text-[10px] font-mono uppercase tracking-[0.04em] text-ink-500 font-semibold block">
                 x-default Fallback
               </span>
               <div className="flex items-baseline justify-between">
-                <span className="text-xl font-bold font-serif text-ink">
+                <span className="text-xl font-bold font-sans text-ink">
                   {intlSeo?.has_x_default ? 'Present' : 'Absent'}
                 </span>
                 <span className={`text-xs font-mono font-bold px-1.5 py-0.5 rounded ${
-                  intlSeo?.has_x_default ? 'bg-good/10 text-good' : 'bg-amber-500/10 text-amber-600'
+                  intlSeo?.has_x_default ? 'bg-good/10 text-good' : 'bg-warn/10 text-warn'
                 }`}>
                   {intlSeo?.has_x_default ? 'Active' : 'Missing'}
                 </span>
@@ -1036,15 +1036,15 @@ export function SeoWorkspaceView({
             </Card>
 
             <Card className="p-4 space-y-1.5">
-              <span className="text-[10px] font-mono uppercase tracking-wider text-ink-500 font-semibold block">
+              <span className="text-[10px] font-mono uppercase tracking-[0.04em] text-ink-500 font-semibold block">
                 Localized Canonical Integrity
               </span>
               <div className="flex items-baseline justify-between">
-                <span className="text-xl font-bold font-serif text-ink">
+                <span className="text-xl font-bold font-sans text-ink">
                   {intlSeo?.issues?.some((i) => i.issue_type === 'canonical_conflict') ? 'Conflicts' : 'Aligned'}
                 </span>
                 <span className={`text-xs font-mono font-bold px-1.5 py-0.5 rounded ${
-                  intlSeo?.issues?.some((i) => i.issue_type === 'canonical_conflict') ? 'bg-red-500/10 text-red-600' : 'bg-good/10 text-good'
+                  intlSeo?.issues?.some((i) => i.issue_type === 'canonical_conflict') ? 'bg-bad/10 text-bad' : 'bg-good/10 text-good'
                 }`}>
                   {intlSeo?.issues?.some((i) => i.issue_type === 'canonical_conflict') ? 'De-index Risk' : 'Self-Referencing'}
                 </span>
@@ -1055,17 +1055,17 @@ export function SeoWorkspaceView({
 
           {/* International SEO Summary & Issues */}
           {intlSeo?.issues && intlSeo.issues.length > 0 && (
-            <Card className="p-5 space-y-3 border-red-200 dark:border-red-900/50 bg-red-50/40 dark:bg-red-950/20">
+            <Card className="p-5 space-y-3 border-bad/30 dark:border-bad/30 bg-bad/10 dark:bg-bad/10">
               <div className="flex items-center gap-2">
-                <AlertTriangle className="w-4 h-4 text-red-600" />
-                <h4 className="font-semibold text-sm text-red-900 dark:text-red-200">
+                <AlertTriangle className="w-4 h-4 text-bad" />
+                <h4 className="font-semibold text-sm text-bad dark:text-bad">
                   International SEO Deficiencies Detected ({intlSeo.issues.length})
                 </h4>
               </div>
               <div className="space-y-2 text-xs">
                 {intlSeo.issues.map((iss, i) => (
-                  <div key={i} className="p-2.5 rounded bg-white dark:bg-ink-900/60 border border-red-200 dark:border-red-900 flex items-start gap-2">
-                    <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-red-100 text-red-700">
+                  <div key={i} className="p-2.5 rounded bg-paper-50 dark:bg-ink-900/60 border border-bad/30 dark:border-bad/30 flex items-start gap-2">
+                    <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-bad/10 text-bad">
                       {iss.issue_type.toUpperCase()}
                     </span>
                     <span className="text-ink-700">{iss.message}</span>
@@ -1079,8 +1079,8 @@ export function SeoWorkspaceView({
           <Card className="p-5 space-y-4">
             <div className="flex items-center justify-between border-b border-line pb-3">
               <div className="flex items-center gap-2">
-                <Languages className="w-4 h-4 text-pine" />
-                <h3 className="font-serif text-lg text-ink font-semibold">
+                <Languages className="w-4 h-4 text-ink-700" />
+                <h3 className="font-sans text-lg text-ink font-semibold">
                   Hreflang & Regional Alternates Matrix
                 </h3>
               </div>
@@ -1114,19 +1114,19 @@ export function SeoWorkspaceView({
                             ? row.alternates.map((a) => a.hreflang).join(', ')
                             : 'None declared'}
                         </td>
-                        <td className="p-2.5 border border-line">{row.has_x_default ? '✅' : '—'}</td>
+                        <td className="p-2.5 border border-line">{row.has_x_default ? '' : '—'}</td>
                         <td className="p-2.5 border border-line">
                           {row.return_tags_valid ? (
-                            <span className="text-good font-semibold">✅ Valid</span>
+                            <span className="text-good font-semibold"> Valid</span>
                           ) : (
-                            <span className="text-red-600 font-semibold">❌ Missing return</span>
+                            <span className="text-bad font-semibold"> Missing return</span>
                           )}
                         </td>
                         <td className="p-2.5 border border-line">
                           {row.canonical_aligned ? (
                             <span className="text-good font-semibold">Self-Canonical</span>
                           ) : (
-                            <span className="text-amber-600 font-semibold">Cross-Target</span>
+                            <span className="text-warn font-semibold">Cross-Target</span>
                           )}
                         </td>
                       </tr>
@@ -1151,12 +1151,12 @@ export function SeoWorkspaceView({
           <Card className="p-5 space-y-4">
             <div className="flex items-center justify-between border-b border-line pb-3">
               <div className="flex items-center gap-2">
-                <Users className="w-4 h-4 text-pine" />
-                <h3 className="font-serif text-lg text-ink font-semibold">
+                <Users className="w-4 h-4 text-ink-700" />
+                <h3 className="font-sans text-lg text-ink font-semibold">
                   Competitor Technical SEO Parity Matrix
                 </h3>
               </div>
-              <span className="text-xs font-mono font-bold px-2 py-0.5 rounded bg-pine/10 text-pine">
+              <span className="text-xs font-mono font-bold px-2 py-0.5 rounded bg-paper-200 text-ink-700">
                 {compParity?.target_rank != null
                   ? `Rank #${compParity.target_rank} of ${compParity?.competitors?.length ?? 1}`
                   : 'Pending Competitor Crawl'}
@@ -1175,7 +1175,7 @@ export function SeoWorkspaceView({
                     <th className="p-2.5 font-semibold">Metric</th>
                     {compParity?.competitors.map((c, idx) => (
                       <th key={idx} className="p-2.5 font-semibold font-mono">
-                        {c.brand_name} {c.is_target && <span className="text-pine font-bold">(Target)</span>}
+                        {c.brand_name} {c.is_target && <span className="text-ink-700 font-bold">(Target)</span>}
                       </th>
                     ))}
                   </tr>
@@ -1246,7 +1246,7 @@ export function SeoWorkspaceView({
               <div className="p-3 rounded border border-good/20 bg-good/5 space-y-1">
                 <span className="font-semibold text-good block">Key Competitive Advantages</span>
                 {compParity?.top_advantages && compParity.top_advantages.length > 0 ? (
-                  <ul className="list-disc list-inside space-y-1 text-ink-800">
+                  <ul className="list-disc list-inside space-y-1 text-ink-700">
                     {compParity.top_advantages.map((adv, idx) => (
                       <li key={idx}>{adv}</li>
                     ))}
@@ -1259,7 +1259,7 @@ export function SeoWorkspaceView({
               <div className="p-3 rounded border border-bad/20 bg-bad/5 space-y-1">
                 <span className="font-semibold text-bad block">Competitive Deficits to Close</span>
                 {compParity?.critical_deficits && compParity.critical_deficits.length > 0 ? (
-                  <ul className="list-disc list-inside space-y-1 text-ink-800">
+                  <ul className="list-disc list-inside space-y-1 text-ink-700">
                     {compParity.critical_deficits.map((def, idx) => (
                       <li key={idx}>{def}</li>
                     ))}
@@ -1281,8 +1281,8 @@ export function SeoWorkspaceView({
           <Card className="p-5 space-y-4">
             <div className="flex items-center justify-between border-b border-line pb-3">
               <div className="flex items-center gap-2">
-                <Shield className="w-4 h-4 text-pine" />
-                <h3 className="font-serif text-lg text-ink font-semibold">SSL, HTTPS & HTTP Security Headers</h3>
+                <Shield className="w-4 h-4 text-ink-700" />
+                <h3 className="font-sans text-lg text-ink font-semibold">SSL, HTTPS & HTTP Security Headers</h3>
               </div>
               <span className="text-xs font-mono font-bold px-2 py-0.5 rounded bg-good/10 text-good">
                 Score: {security?.score ? Math.round(security.score) : 100}/100
@@ -1323,7 +1323,7 @@ export function SeoWorkspaceView({
       {activeSubTab === 'findings' && (
         <div className="space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line pb-3">
-            <h3 className="font-serif text-lg text-ink font-semibold">Technical & On-Page SEO Issues</h3>
+            <h3 className="font-sans text-lg text-ink font-semibold">Technical & On-Page SEO Issues</h3>
             <div className="flex items-center gap-1.5 text-xs">
               <span className="text-ink-500 flex items-center gap-1"><Filter className="w-3.5 h-3.5" /> Filter:</span>
               {(['ALL', 'CRITICAL', 'HIGH', 'MEDIUM'] as const).map((sev) => (
@@ -1360,7 +1360,7 @@ export function SeoWorkspaceView({
                     </span>
                     <span className="text-xs font-mono text-ink-400">{f.category}</span>
                   </div>
-                  <span className="text-xs text-pine font-medium hover:underline flex items-center gap-1">
+                  <span className="text-xs text-ink-700 font-medium hover:underline flex items-center gap-1">
                     Inspect Evidence <ArrowRight className="w-3 h-3" />
                   </span>
                 </div>

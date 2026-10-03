@@ -31,7 +31,7 @@ export function EmptyState({
 }) {
   return (
     <div className="card border-dashed px-6 py-10 text-center">
-      <h2 className="font-serif text-2xl text-ink">{title}</h2>
+      <h2 className="text-xl font-semibold text-ink">{title}</h2>
       {description && <p className="mt-2 text-sm text-ink-500 max-w-md mx-auto leading-relaxed">{description}</p>}
       {action && <div className="mt-4 flex justify-center">{action}</div>}
     </div>
@@ -49,7 +49,7 @@ export function ErrorState({
 }) {
   return (
     <div className="card border-bad/30 px-6 py-8" role="alert">
-      <h2 className="font-serif text-2xl text-ink">{title}</h2>
+      <h2 className="text-xl font-semibold text-ink">{title}</h2>
       {description && <p className="mt-2 text-sm text-ink-500 leading-relaxed">{description}</p>}
       {onRetry && (
         <Button variant="secondary" className="mt-4" onClick={onRetry}>
@@ -115,7 +115,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
           <div
             key={item.id}
             className={cn(
-              'card shadow-lg px-4 py-3 animate-slideIn border-l-4',
+              'card shadow-lg px-4 py-3 animate-slideIn border-l-2',
               item.tone === 'success' && 'border-l-good',
               item.tone === 'warning' && 'border-l-warn',
               item.tone === 'danger' && 'border-l-bad',

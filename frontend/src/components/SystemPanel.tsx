@@ -36,7 +36,7 @@ function Kpi({ label, value, hint }: { label: string; value: string | number; hi
   return (
     <div>
       <dt className="label">{label}</dt>
-      <dd className="mt-1 font-serif text-3xl text-ink">{value}</dd>
+      <dd className="mt-1 font-sans text-3xl text-ink">{value}</dd>
       {hint && <p className="text-xs text-ink-400 mt-1">{hint}</p>}
     </div>
   );
@@ -87,7 +87,7 @@ export function SystemPanel() {
     <div className="space-y-10 pt-2">
       <div className="space-y-2">
         <p className="label">Admin</p>
-        <h1 className="font-serif text-4xl leading-[1.12] text-ink tracking-tight">System console</h1>
+        <h1 className="font-sans text-4xl leading-[1.12] text-ink tracking-tight">System console</h1>
         <p className="text-ink-500 max-w-2xl leading-relaxed">
           Organizations, users, plans, audits, and database maintenance.
         </p>

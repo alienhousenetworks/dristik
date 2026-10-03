@@ -107,12 +107,12 @@ export function ScoringRubricModal({ isOpen, onClose }: ScoringRubricModalProps)
         <div className="p-6 border-b border-line flex items-center justify-between bg-paper-100/50 dark:bg-ink-900/50">
           <div>
             <div className="flex items-center gap-2">
-              <span className="font-mono text-xs px-2 py-0.5 rounded bg-pine/10 text-pine font-bold border border-pine/30">
+              <span className="font-mono text-xs px-2 py-0.5 rounded bg-paper-200 text-ink-700 font-bold border border-line">
                 METHODOLOGY SPECIFICATION
               </span>
               <span className="font-mono text-xs text-ink-500">v4.0 · September 2026</span>
             </div>
-            <h2 className="font-serif text-2xl text-ink font-bold mt-1">
+            <h2 className="font-sans text-2xl text-ink font-bold mt-1">
               Dristik Enterprise Web Intelligence & Scoring Rubric
             </h2>
             <p className="text-xs text-ink-500 mt-0.5">
@@ -142,7 +142,7 @@ export function ScoringRubricModal({ isOpen, onClose }: ScoringRubricModalProps)
               onClick={() => setActiveTab(tab.id as any)}
               className={`py-3 px-2 text-xs font-semibold border-b-2 transition-colors ${
                 activeTab === tab.id
-                  ? 'border-pine text-pine'
+                  ? 'border-line text-ink-700'
                   : 'border-transparent text-ink-500 hover:text-ink'
               }`}
             >
@@ -156,8 +156,8 @@ export function ScoringRubricModal({ isOpen, onClose }: ScoringRubricModalProps)
           {/* TAB 1: WEIGHTS */}
           {activeTab === 'weights' && (
             <div className="space-y-6">
-              <div className="p-4 rounded-xl bg-pine/5 border border-pine/20 space-y-1">
-                <span className="font-semibold text-pine text-xs uppercase tracking-wider block">
+              <div className="p-4 rounded-xl bg-paper-100 border border-line space-y-1">
+                <span className="font-semibold text-ink-700 text-xs uppercase tracking-[0.04em] block">
                   Core Philosophical Principle
                 </span>
                 <p className="text-xs text-ink-600 dark:text-ink-400">
@@ -172,8 +172,8 @@ export function ScoringRubricModal({ isOpen, onClose }: ScoringRubricModalProps)
                     className="p-4 rounded-xl border border-line bg-paper-50 dark:bg-ink-900/40 space-y-3"
                   >
                     <div className="flex items-center justify-between">
-                      <h3 className="font-serif font-bold text-ink text-base">{pillar.name}</h3>
-                      <span className="font-mono text-xs px-2.5 py-1 rounded-full bg-ink text-paper-50 dark:bg-paper-100 dark:text-ink font-bold">
+                      <h3 className="font-sans font-bold text-ink text-base">{pillar.name}</h3>
+                      <span className="font-mono text-xs px-2.5 py-1 rounded-md bg-ink text-paper-50 dark:bg-paper-100 dark:text-ink font-bold">
                         Weight: {pillar.weight_pct}%
                       </span>
                     </div>
@@ -189,7 +189,7 @@ export function ScoringRubricModal({ isOpen, onClose }: ScoringRubricModalProps)
 
                     <div className="pt-2 border-t border-line/60 flex items-center justify-between text-[11px] font-mono text-ink-500">
                       <span>Inspection Method:</span>
-                      <span className="text-pine font-semibold">{pillar.measurement_mode}</span>
+                      <span className="text-ink-700 font-semibold">{pillar.measurement_mode}</span>
                     </div>
                   </div>
                 ))}
@@ -201,11 +201,11 @@ export function ScoringRubricModal({ isOpen, onClose }: ScoringRubricModalProps)
           {activeTab === 'formula' && (
             <div className="space-y-6">
               <div className="sheet border border-line p-5 rounded-xl space-y-3 bg-paper-100/40 dark:bg-ink-900/40">
-                <h3 className="font-serif text-lg font-bold text-ink">Diminishing Returns Deduction Formula</h3>
+                <h3 className="font-sans text-lg font-bold text-ink">Diminishing Returns Deduction Formula</h3>
                 <p className="text-xs text-ink-600 dark:text-ink-400 leading-relaxed">
                   In enterprise auditing, scoring must reflect true systemic impact. The first occurrence of an issue hits hardest because it introduces a new failure vector. Repeating instances of the same error category erode score at a calibrated diminishing rate to avoid score collapse on single taxonomies.
                 </p>
-                <div className="p-3 bg-paper-50 dark:bg-ink-950 rounded-lg border border-line font-mono text-xs text-pine font-semibold">
+                <div className="p-3 bg-paper-50 dark:bg-ink-950 rounded-lg border border-line font-mono text-xs text-ink-700 font-semibold">
                   Deduction(Severity, Occurrence) = SeverityStepTable[OccurrenceIndex]
                 </div>
               </div>
@@ -230,14 +230,14 @@ export function ScoringRubricModal({ isOpen, onClose }: ScoringRubricModalProps)
                       <td className="p-3">-5.0 pts</td>
                     </tr>
                     <tr>
-                      <td className="p-3 font-bold text-amber-600 dark:text-amber-400">HIGH</td>
+                      <td className="p-3 font-bold text-warn dark:text-warn">HIGH</td>
                       <td className="p-3 font-semibold">-15.0 pts</td>
                       <td className="p-3">-9.0 pts</td>
                       <td className="p-3">-6.0 pts</td>
                       <td className="p-3">-4.0 pts</td>
                     </tr>
                     <tr>
-                      <td className="p-3 font-bold text-blue-600 dark:text-blue-400">MEDIUM</td>
+                      <td className="p-3 font-bold text-ink-700 dark:text-ink-700">MEDIUM</td>
                       <td className="p-3 font-semibold">-8.0 pts</td>
                       <td className="p-3">-5.0 pts</td>
                       <td className="p-3">-3.0 pts</td>
@@ -259,8 +259,8 @@ export function ScoringRubricModal({ isOpen, onClose }: ScoringRubricModalProps)
           {/* TAB 3: GATING */}
           {activeTab === 'gating' && (
             <div className="space-y-6">
-              <div className="p-4 rounded-xl bg-purple-500/10 border border-purple-500/30 space-y-2">
-                <span className="font-semibold text-purple-700 dark:text-purple-300 text-xs uppercase tracking-wider block">
+              <div className="p-4 rounded-xl bg-paper-100 border border-line space-y-2">
+                <span className="font-semibold text-ink-700 dark:text-ink-700 text-xs uppercase tracking-[0.04em] block">
                   Strict Confidence Gating Architecture
                 </span>
                 <p className="text-xs text-ink-600 dark:text-ink-400 leading-relaxed">
@@ -269,10 +269,10 @@ export function ScoringRubricModal({ isOpen, onClose }: ScoringRubricModalProps)
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="p-5 rounded-xl border-2 border-emerald-500/50 bg-emerald-50/20 dark:bg-emerald-950/20 space-y-3">
+                <div className="p-5 rounded-xl border-2 border-good/30 bg-good/10 dark:bg-good/10 space-y-3">
                   <div className="flex items-center gap-2">
-                    <span className="text-lg">🔬</span>
-                    <h4 className="font-serif font-bold text-ink">Verified Empirical DOM Facts</h4>
+                    <span className="text-lg"></span>
+                    <h4 className="font-sans font-bold text-ink">Verified Empirical DOM Facts</h4>
                   </div>
                   <ul className="text-xs space-y-2 text-ink-600 dark:text-ink-400">
                     <li>✓ <strong>Grounding:</strong> Direct DOM element selector, HTTP status, or AST syntax tree.</li>
@@ -282,16 +282,16 @@ export function ScoringRubricModal({ isOpen, onClose }: ScoringRubricModalProps)
                   </ul>
                 </div>
 
-                <div className="p-5 rounded-xl border-2 border-purple-500/50 bg-purple-50/20 dark:bg-purple-950/20 space-y-3">
+                <div className="p-5 rounded-xl border-2 border-line bg-paper-100 dark:bg-paper-100 space-y-3">
                   <div className="flex items-center gap-2">
-                    <span className="text-lg">💡</span>
-                    <h4 className="font-serif font-bold text-ink">Cognitive Model Inferences</h4>
+                    <span className="text-lg"></span>
+                    <h4 className="font-sans font-bold text-ink">Cognitive Model Inferences</h4>
                   </div>
                   <ul className="text-xs space-y-2 text-ink-600 dark:text-ink-400">
-                    <li>⚠ <strong>Grounding:</strong> Multi-agent narrative reasoning or buyer psychology deduction.</li>
+                    <li> <strong>Grounding:</strong> Multi-agent narrative reasoning or buyer psychology deduction.</li>
                     <li>✗ <strong>Executive Summary:</strong> Strictly barred from headlining executive blockers.</li>
-                    <li>⚠ <strong>Severity Capped:</strong> Automatically capped at MEDIUM (max -4.0 pts deduction).</li>
-                    <li>⚠ <strong>Isolation:</strong> Routed exclusively into dedicated "Exploratory Hypotheses".</li>
+                    <li> <strong>Severity Capped:</strong> Automatically capped at MEDIUM (max -4.0 pts deduction).</li>
+                    <li> <strong>Isolation:</strong> Routed exclusively into dedicated "Exploratory Hypotheses".</li>
                   </ul>
                 </div>
               </div>
@@ -311,13 +311,13 @@ export function ScoringRubricModal({ isOpen, onClose }: ScoringRubricModalProps)
                 {
                   range: '75 – 89',
                   band: 'Citation Ready',
-                  color: 'text-pine border-pine bg-pine/10',
+                  color: 'text-ink-700 border-line bg-paper-200',
                   desc: 'Strong discoverability with minor friction points. Capable of being cited by answer engines but has room for copy and CTA improvements.',
                 },
                 {
                   range: '50 – 74',
                   band: 'Fragile Presence',
-                  color: 'text-amber-600 border-amber-500 bg-amber-50 dark:bg-amber-950/20',
+                  color: 'text-warn border-warn/30 bg-warn/10 dark:bg-warn/10',
                   desc: 'Multiple technical or content bottlenecks at risk of being filtered by Googlebot or ignored by multi-engine LLMs.',
                 },
                 {
@@ -332,7 +332,7 @@ export function ScoringRubricModal({ isOpen, onClose }: ScoringRubricModalProps)
                   className={`p-4 rounded-xl border ${b.color} space-y-1.5`}
                 >
                   <div className="flex items-center justify-between">
-                    <span className="font-serif font-bold text-ink text-base">{b.band}</span>
+                    <span className="font-sans font-bold text-ink text-base">{b.band}</span>
                     <span className="font-mono text-xs font-bold px-2 py-0.5 rounded bg-paper-50 dark:bg-ink-900 border border-line">
                       Score: {b.range}
                     </span>
@@ -348,7 +348,7 @@ export function ScoringRubricModal({ isOpen, onClose }: ScoringRubricModalProps)
         <div className="p-4 border-t border-line flex items-center justify-between bg-paper-100/50 dark:bg-ink-900/50">
           <div className="flex items-center gap-3 text-xs text-ink-500">
             <span>External Providers:</span>
-            <span className="font-mono text-pine">GSC & GA4 First-Party Connectors</span>
+            <span className="font-mono text-ink-700">GSC & GA4 First-Party Connectors</span>
             <span>•</span>
             <span className="font-mono text-ink-600">Backlink Index: Majestic / DataForSEO (Optional)</span>
           </div>

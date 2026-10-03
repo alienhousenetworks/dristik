@@ -172,9 +172,9 @@ export function GeoAeoTrendTracker({ domain, brandName, industry }: GeoAeoTrendT
           <div>
             <div className="flex items-center gap-2">
               <span className="text-xl">📈</span>
-              <span className="label text-pine text-xs">Longitudinal AI Answer Engine Pipeline</span>
+              <span className="label text-ink-700 text-xs">Longitudinal AI Answer Engine Pipeline</span>
             </div>
-            <h3 className="font-serif text-2xl sm:text-3xl text-ink mt-1 font-normal">
+            <h3 className="font-sans text-2xl sm:text-3xl text-ink mt-1 font-normal">
               GEO / AEO Citation Trend & Historical Trajectory
             </h3>
             <p className="text-xs text-ink-500 mt-1 max-w-2xl">
@@ -196,7 +196,7 @@ export function GeoAeoTrendTracker({ domain, brandName, industry }: GeoAeoTrendT
                 </>
               ) : (
                 <>
-                  <span>⚡</span>
+                  <span></span>
                   <span>Run Live Pipeline Snapshot Now</span>
                 </>
               )}
@@ -205,7 +205,7 @@ export function GeoAeoTrendTracker({ domain, brandName, industry }: GeoAeoTrendT
         </div>
 
         {error && (
-          <div className="p-3 bg-red-50 dark:bg-red-950/30 border border-red-200 text-xs text-bad rounded">
+          <div className="p-3 bg-bad/10 dark:bg-bad/10 border border-bad/30 text-xs text-bad rounded">
             <strong>Pipeline Error:</strong> {error}
           </div>
         )}
@@ -216,7 +216,7 @@ export function GeoAeoTrendTracker({ domain, brandName, industry }: GeoAeoTrendT
             <div className="bg-paper-50 dark:bg-ink-900/40 border border-line p-3.5 rounded-lg space-y-1">
               <span className="label text-[10px] block">Current AI Citation Score</span>
               <div className="flex items-baseline gap-2">
-                <span className="font-serif text-3xl font-bold text-good">
+                <span className="font-sans text-3xl font-bold text-good">
                   {latestSnapshot.overall_score}
                 </span>
                 <span className="text-xs font-mono text-ink-500">/ 100</span>
@@ -238,7 +238,7 @@ export function GeoAeoTrendTracker({ domain, brandName, industry }: GeoAeoTrendT
 
             <div className="bg-paper-50 dark:bg-ink-900/40 border border-line p-3.5 rounded-lg space-y-1">
               <span className="label text-[10px] block">Snapshots Logged</span>
-              <span className="font-serif text-3xl font-bold text-ink">
+              <span className="font-sans text-3xl font-bold text-ink">
                 {data.total_snapshots}
               </span>
               <span className="text-[10px] text-ink-500 block">Time-series checkpoints</span>
@@ -254,7 +254,7 @@ export function GeoAeoTrendTracker({ domain, brandName, industry }: GeoAeoTrendT
 
             <div className="bg-paper-50 dark:bg-ink-900/40 border border-line p-3.5 rounded-lg space-y-1">
               <span className="label text-[10px] block">Last Pipeline Run</span>
-              <span className="font-mono text-sm font-semibold text-pine block pt-1">
+              <span className="font-mono text-sm font-semibold text-ink-700 block pt-1">
                 {formatDate(data.last_tracked)}
               </span>
               <span className="text-[10px] text-ink-500 block">Live model verified</span>
@@ -268,7 +268,7 @@ export function GeoAeoTrendTracker({ domain, brandName, industry }: GeoAeoTrendT
         <div className="sheet border border-dashed border-line rounded-xl p-10 text-center space-y-4">
           <div className="text-4xl">📡</div>
           <div className="max-w-md mx-auto space-y-1">
-            <h4 className="font-serif text-xl text-ink font-semibold">No Historical Snapshots Logged Yet</h4>
+            <h4 className="font-sans text-xl text-ink font-semibold">No Historical Snapshots Logged Yet</h4>
             <p className="text-xs text-ink-500">
               The autonomous GEO/AEO pipeline fires fixed commercial inquiries at OpenAI, Anthropic, and Perplexity, recording raw text and calculating score deltas across recurring runs.
             </p>
@@ -299,7 +299,7 @@ export function GeoAeoTrendTracker({ domain, brandName, industry }: GeoAeoTrendT
         <div className="sheet border border-line rounded-xl p-6 space-y-5">
           <div className="flex items-center justify-between border-b border-line pb-3">
             <div>
-              <h4 className="font-serif text-lg text-ink font-semibold">Longitudinal Citation Trajectory</h4>
+              <h4 className="font-sans text-lg text-ink font-semibold">Longitudinal Citation Trajectory</h4>
               <p className="text-xs text-ink-500">Click any checkpoint to inspect its full raw response ledger and query citations.</p>
             </div>
             <span className="text-xs font-mono text-ink-500">
@@ -338,7 +338,7 @@ export function GeoAeoTrendTracker({ domain, brandName, industry }: GeoAeoTrendT
                       </span>
                     )}
                   </div>
-                  <div className="font-serif text-2xl font-bold text-ink">{snap.overall_score}%</div>
+                  <div className="font-sans text-2xl font-bold text-ink">{snap.overall_score}%</div>
                   <div className="text-[10px] font-mono text-ink-500 truncate mt-0.5">
                     {formatDate(snap.timestamp)}
                   </div>
@@ -351,7 +351,7 @@ export function GeoAeoTrendTracker({ domain, brandName, industry }: GeoAeoTrendT
           {selectedDetail && (
             <div className="space-y-4 pt-4 border-t border-line">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                <span className="text-xs font-mono font-bold text-ink uppercase tracking-wider">
+                <span className="text-xs font-mono font-bold text-ink uppercase tracking-[0.04em]">
                   Active Engine Scores · Snapshot {selectedDetail.snapshot_id} ({formatDate(selectedDetail.timestamp)})
                 </span>
                 <span className="text-xs text-ink-500">
@@ -364,10 +364,10 @@ export function GeoAeoTrendTracker({ domain, brandName, industry }: GeoAeoTrendT
                   <div key={engName} className="bg-paper-50 dark:bg-ink-950 p-3 rounded-lg border border-line space-y-1">
                     <span className="text-xs font-semibold text-ink block truncate">{engName}</span>
                     <div className="flex items-baseline justify-between">
-                      <span className="font-serif text-2xl font-bold text-ink">{Math.round(score)}%</span>
+                      <span className="font-sans text-2xl font-bold text-ink">{Math.round(score)}%</span>
                       <span
                         className={`text-[9px] font-mono px-1.5 py-0.5 rounded font-bold ${
-                          score >= 70 ? 'bg-good/15 text-good' : score >= 40 ? 'bg-amber-100 text-amber-800' : 'bg-bad/15 text-bad'
+                          score >= 70 ? 'bg-good/15 text-good' : score >= 40 ? 'bg-warn/10 text-warn' : 'bg-bad/15 text-bad'
                         }`}
                       >
                         {score >= 70 ? 'STRONG' : score >= 40 ? 'MODERATE' : 'AT RISK'}
@@ -380,7 +380,7 @@ export function GeoAeoTrendTracker({ domain, brandName, industry }: GeoAeoTrendT
               {/* Query Results Matrix */}
               <div className="space-y-3 pt-2">
                 <div className="flex items-center justify-between">
-                  <h5 className="font-serif text-base text-ink font-semibold">Fixed Commercial Inquiry Ledger</h5>
+                  <h5 className="font-sans text-base text-ink font-semibold">Fixed Commercial Inquiry Ledger</h5>
                   <span className="text-[11px] font-mono text-ink-500">
                     {selectedDetail.query_results.length} query records
                   </span>
@@ -397,7 +397,7 @@ export function GeoAeoTrendTracker({ domain, brandName, industry }: GeoAeoTrendT
                           <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 bg-paper-200 dark:bg-ink-800 rounded">
                             {qr.query_id}
                           </span>
-                          <span className="text-xs font-semibold text-pine">{qr.commercial_intent}</span>
+                          <span className="text-xs font-semibold text-ink-700">{qr.commercial_intent}</span>
                           <span className="text-xs text-ink-500">· {qr.engine_name}</span>
                           {qr.delta_vs_previous && (
                             <span
@@ -429,7 +429,7 @@ export function GeoAeoTrendTracker({ domain, brandName, industry }: GeoAeoTrendT
                             </strong>
                           </span>
                           {qr.competitor_cited_instead && (
-                            <span className="text-amber-700 dark:text-amber-400">
+                            <span className="text-warn dark:text-warn">
                               Competitor: <strong>{qr.competitor_cited_instead}</strong>
                             </span>
                           )}
@@ -440,7 +440,7 @@ export function GeoAeoTrendTracker({ domain, brandName, industry }: GeoAeoTrendT
                         <button
                           type="button"
                           onClick={() => setInspectingQuery(qr)}
-                          className="px-3 py-1.5 bg-white dark:bg-ink-800 border border-line rounded text-xs font-medium text-ink hover:bg-paper-100 transition-colors shadow-2xs cursor-pointer flex items-center gap-1.5"
+                          className="px-3 py-1.5 bg-paper-50 dark:bg-ink-800 border border-line rounded text-xs font-medium text-ink hover:bg-paper-100 transition-colors shadow-2xs cursor-pointer flex items-center gap-1.5"
                         >
                           <span>🔍</span>
                           <span>Inspect Raw LLM Output</span>
@@ -461,8 +461,8 @@ export function GeoAeoTrendTracker({ domain, brandName, industry }: GeoAeoTrendT
           <div className="sheet border border-line rounded-xl max-w-2xl w-full max-h-[85vh] flex flex-col overflow-hidden shadow-2xl">
             <div className="p-4 sm:p-5 border-b border-line flex items-center justify-between">
               <div>
-                <span className="label text-[10px] text-pine">{inspectingQuery.engine_name} · RAW LLM RESPONSE</span>
-                <h4 className="font-serif text-lg text-ink font-semibold mt-0.5">{inspectingQuery.commercial_intent}</h4>
+                <span className="label text-[10px] text-ink-700">{inspectingQuery.engine_name} · RAW LLM RESPONSE</span>
+                <h4 className="font-sans text-lg text-ink font-semibold mt-0.5">{inspectingQuery.commercial_intent}</h4>
               </div>
               <button
                 type="button"
@@ -476,7 +476,7 @@ export function GeoAeoTrendTracker({ domain, brandName, industry }: GeoAeoTrendT
             <div className="p-4 sm:p-5 overflow-y-auto space-y-4 text-xs">
               <div className="space-y-1">
                 <span className="label text-[10px] block">Prompt Dispatched</span>
-                <div className="p-2.5 bg-paper-100 dark:bg-ink-950 font-mono text-ink-800 rounded border border-line">
+                <div className="p-2.5 bg-paper-100 dark:bg-ink-950 font-mono text-ink-700 rounded border border-line">
                   {inspectingQuery.buyer_query}
                 </div>
               </div>
@@ -506,7 +506,7 @@ export function GeoAeoTrendTracker({ domain, brandName, industry }: GeoAeoTrendT
               {inspectingQuery.cited_urls.length > 0 && (
                 <div className="space-y-1">
                   <span className="label text-[10px] block">Extracted Citation URLs</span>
-                  <ul className="space-y-1 font-mono text-[11px] text-pine break-all">
+                  <ul className="space-y-1 font-mono text-[11px] text-ink-700 break-all">
                     {inspectingQuery.cited_urls.map((url, i) => (
                       <li key={i} className="p-1.5 bg-paper-50 dark:bg-ink-950 rounded border border-line">
                         🔗 {url}

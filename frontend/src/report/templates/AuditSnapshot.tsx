@@ -22,7 +22,7 @@ export function AuditSnapshot({
   const { scorecard, meta, visual } = report;
 
   return (
-    <section className="report-page-break p-8 md:p-14 min-h-[960px] flex flex-col justify-between bg-white border-b-2 border-slate-200">
+    <section className="report-page-break p-8 md:p-14 min-h-[960px] flex flex-col justify-between bg-paper-50 border-b-2 border-line">
       <PageHeader
         theme={theme}
         domain={meta.domain}
@@ -32,57 +32,57 @@ export function AuditSnapshot({
       <div className="space-y-6 max-w-4xl">
         {/* Section Headline */}
         <div>
-          <span className="font-mono text-[8pt] font-bold uppercase tracking-[0.2em] text-slate-500 block mb-1">
+          <span className="font-mono text-[8pt] font-bold uppercase tracking-[0.04em] text-ink-500 block mb-1">
             Section 0.2 // Macro Diagnostics
           </span>
-          <h2 className="font-serif text-[24pt] md:text-[28pt] font-normal tracking-tight text-slate-950">
+          <h2 className="font-serif text-[24pt] md:text-[28pt] font-normal tracking-tight text-ink">
             Audit Snapshot &amp; Cognitive Matrix
           </h2>
-          <div className="w-16 h-[2.5px] mt-2" style={{ backgroundColor: theme.accent }}></div>
+          <div className="bg-ink w-10 h-px mt-2" />
         </div>
 
         {/* 1. Tri-Perspective Cognitive Diagnosis */}
         <div>
-          <h3 className="font-mono text-[8.5pt] font-bold uppercase tracking-wider text-slate-600 mb-2">
+          <h3 className="font-mono text-[8.5pt] font-bold uppercase tracking-[0.04em] text-ink-600 mb-2">
             Tri-Perspective Cognitive Diagnosis
           </h3>
-          <p className="text-[8.5pt] text-slate-600 mb-3 font-sans">
+          <p className="text-[8.5pt] text-ink-600 mb-3 font-sans">
             Independent evaluation of this web property across three distinct classes of automated and human consumers.
           </p>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-[8.5pt]">
-            <div className="p-3.5 border border-slate-200 rounded bg-slate-50 space-y-1">
-              <div className="flex items-center gap-1.5 pb-1 border-b border-slate-200">
-                <span className="w-2 h-2 rounded-full bg-amber-500"></span>
-                <span className="font-mono font-bold uppercase text-[8pt] text-slate-800">
+            <div className="p-3.5 border border-line rounded bg-paper-100 space-y-1">
+              <div className="flex items-center gap-1.5 pb-1 border-b border-line">
+                <span className="w-2 h-2 rounded-full bg-warn/10"></span>
+                <span className="font-mono font-bold uppercase text-[8pt] text-ink-700">
                   1. Human Visitor (CRO)
                 </span>
               </div>
-              <p className="text-slate-700 leading-relaxed font-sans pt-1">
+              <p className="text-ink-700 leading-relaxed font-sans pt-1">
                 {scorecard.perspectives.human}
               </p>
             </div>
 
-            <div className="p-3.5 border border-slate-200 rounded bg-slate-50 space-y-1">
-              <div className="flex items-center gap-1.5 pb-1 border-b border-slate-200">
-                <span className="w-2 h-2 rounded-full bg-blue-500"></span>
-                <span className="font-mono font-bold uppercase text-[8pt] text-slate-800">
+            <div className="p-3.5 border border-line rounded bg-paper-100 space-y-1">
+              <div className="flex items-center gap-1.5 pb-1 border-b border-line">
+                <span className="w-2 h-2 rounded-full bg-paper-100"></span>
+                <span className="font-mono font-bold uppercase text-[8pt] text-ink-700">
                   2. Search Spider (SEO)
                 </span>
               </div>
-              <p className="text-slate-700 leading-relaxed font-sans pt-1">
+              <p className="text-ink-700 leading-relaxed font-sans pt-1">
                 {scorecard.perspectives.searchSpider}
               </p>
             </div>
 
-            <div className="p-3.5 border border-slate-200 rounded bg-slate-50 space-y-1">
-              <div className="flex items-center gap-1.5 pb-1 border-b border-slate-200">
-                <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
-                <span className="font-mono font-bold uppercase text-[8pt] text-slate-800">
+            <div className="p-3.5 border border-line rounded bg-paper-100 space-y-1">
+              <div className="flex items-center gap-1.5 pb-1 border-b border-line">
+                <span className="w-2 h-2 rounded-full bg-good/10"></span>
+                <span className="font-mono font-bold uppercase text-[8pt] text-ink-700">
                   3. AI Answer Engines (GEO)
                 </span>
               </div>
-              <p className="text-slate-700 leading-relaxed font-sans pt-1">
+              <p className="text-ink-700 leading-relaxed font-sans pt-1">
                 {scorecard.perspectives.answerEngine}
               </p>
             </div>
@@ -91,16 +91,16 @@ export function AuditSnapshot({
 
         {/* 2. Visual Diagnostic Charts (Radar & Donut) */}
         <div>
-          <h3 className="font-mono text-[8.5pt] font-bold uppercase tracking-wider text-slate-600 mb-2">
+          <h3 className="font-mono text-[8.5pt] font-bold uppercase tracking-[0.04em] text-ink-600 mb-2">
             Visual Intelligence &amp; Defect Distribution
           </h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 border border-slate-200 rounded bg-slate-50/60">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 border border-line rounded bg-paper-100">
             {/* Radar Chart */}
-            <div className="flex flex-col items-center justify-center p-3 bg-white border border-slate-200 rounded">
-              <span className="font-mono text-[8pt] font-bold uppercase tracking-wider text-slate-700 mb-1">
+            <div className="flex flex-col items-center justify-center p-3 bg-paper-50 border border-line rounded">
+              <span className="font-mono text-[8pt] font-bold uppercase tracking-[0.04em] text-ink-700 mb-1">
                 5-Pillar Score Radar vs Baseline
               </span>
-              <p className="text-[7.5pt] text-slate-500 mb-2 text-center">
+              <p className="text-[7.5pt] text-ink-500 mb-2 text-center">
                 Target performance mapped against industry standard across core digital pillars
               </p>
               {radarChart ? (
@@ -108,18 +108,18 @@ export function AuditSnapshot({
                   <RadarChart chart={radarChart} />
                 </div>
               ) : (
-                <div className="py-12 text-center text-xs text-slate-400 font-mono italic">
+                <div className="py-12 text-center text-xs text-ink-400 font-mono italic">
                   Continuous multidimensional radar mapping active
                 </div>
               )}
             </div>
 
             {/* Donut Chart */}
-            <div className="flex flex-col items-center justify-center p-3 bg-white border border-slate-200 rounded">
-              <span className="font-mono text-[8pt] font-bold uppercase tracking-wider text-slate-700 mb-1">
+            <div className="flex flex-col items-center justify-center p-3 bg-paper-50 border border-line rounded">
+              <span className="font-mono text-[8pt] font-bold uppercase tracking-[0.04em] text-ink-700 mb-1">
                 Empirical Defect Severity Distribution
               </span>
-              <p className="text-[7.5pt] text-slate-500 mb-2 text-center">
+              <p className="text-[7.5pt] text-ink-500 mb-2 text-center">
                 Total {report.appendices.findings.length} findings categorized by business risk tier
               </p>
               {donutChart ? (
@@ -127,7 +127,7 @@ export function AuditSnapshot({
                   <SeverityDonutChart chart={donutChart} />
                 </div>
               ) : (
-                <div className="py-12 text-center text-xs text-slate-400 font-mono italic">
+                <div className="py-12 text-center text-xs text-ink-400 font-mono italic">
                   Defect distribution mapped across findings register
                 </div>
               )}
@@ -137,19 +137,19 @@ export function AuditSnapshot({
 
         {/* 3. Spotlight Empirical Metrics */}
         <div>
-          <h3 className="font-mono text-[8.5pt] font-bold uppercase tracking-wider text-slate-600 mb-2">
+          <h3 className="font-mono text-[8.5pt] font-bold uppercase tracking-[0.04em] text-ink-600 mb-2">
             Spotlight Empirical Metrics
           </h3>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-[8.5pt]">
             {visual.spotlightMetrics.map((metric, idx) => (
-              <div key={idx} className="p-3 border border-slate-200 rounded bg-slate-50">
-                <span className="font-mono text-[7.5pt] uppercase font-bold text-slate-500 block truncate">
+              <div key={idx} className="p-3 border border-line rounded bg-paper-100">
+                <span className="font-mono text-[7.5pt] uppercase font-bold text-ink-500 block truncate">
                   {metric.label}
                 </span>
-                <span className="text-xl font-serif font-bold text-slate-900 block mt-1">
+                <span className="text-xl font-sans font-bold text-ink block mt-1">
                   {metric.value}
                 </span>
-                <span className="text-[7.5pt] text-slate-600 block mt-0.5 font-sans leading-tight">
+                <span className="text-[7.5pt] text-ink-600 block mt-0.5 font-sans leading-tight">
                   {metric.significance}
                 </span>
               </div>
@@ -160,18 +160,18 @@ export function AuditSnapshot({
         {/* 4. Score Calculation Ledger (Deterministic Composite Derivation) */}
         {scorecard.ledger && scorecard.ledger.length > 0 && (
           <div className="space-y-2 pt-2">
-            <div className="flex items-center justify-between pb-1 border-b border-slate-200">
-              <h3 className="font-mono text-[8.5pt] font-bold uppercase tracking-wider text-slate-700">
+            <div className="flex items-center justify-between pb-1 border-b border-line">
+              <h3 className="font-mono text-[8.5pt] font-bold uppercase tracking-[0.04em] text-ink-700">
                 Score Calculation Ledger (Deterministic Mathematical Traceability)
               </h3>
-              <span className="font-mono text-[7.5pt] text-slate-500">
+              <span className="font-mono text-[7.5pt] text-ink-500">
                 Composite = Σ (Raw Score × Assigned Weight)
               </span>
             </div>
 
-            <table className="w-full text-[8.5pt] border-collapse border border-slate-200">
+            <table className="w-full text-[8.5pt] border-collapse border border-line">
               <thead>
-                <tr className="bg-slate-50 border-b border-slate-200 text-left font-mono text-[7.5pt] text-slate-600 uppercase">
+                <tr className="bg-paper-100 border-b border-line text-left font-mono text-[7.5pt] text-ink-600 uppercase">
                   <th className="py-2 px-3">Audit Pillar / Category</th>
                   <th className="py-2 px-3">Status</th>
                   <th className="py-2 px-3">Raw Score</th>
@@ -179,30 +179,30 @@ export function AuditSnapshot({
                   <th className="py-2 px-3 text-right">Contribution</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-200 bg-white font-mono">
+              <tbody className="divide-y divide-line bg-paper-50 font-mono">
                 {scorecard.ledger.map((row) => (
-                  <tr key={row.categoryKey} className="hover:bg-slate-50/50">
-                    <td className="py-2 px-3 font-sans font-semibold text-slate-900">{row.pillar}</td>
+                  <tr key={row.categoryKey} className="hover:bg-paper-100">
+                    <td className="py-2 px-3 font-sans font-semibold text-ink">{row.pillar}</td>
                     <td className="py-2 px-3 text-[7.5pt]">
-                      <span className="px-1.5 py-0.2 rounded bg-slate-100 text-slate-700 font-bold">
+                      <span className="px-1.5 py-0.2 rounded bg-paper-200 text-ink-700 font-bold">
                         {row.status}
                       </span>
                     </td>
                     <td className="py-2 px-3 font-bold">{row.rawScore != null ? `${row.rawScore}` : '—'}</td>
-                    <td className="py-2 px-3 text-slate-600">{row.weightPct}%</td>
-                    <td className="py-2 px-3 text-right font-bold text-slate-900">
+                    <td className="py-2 px-3 text-ink-600">{row.weightPct}%</td>
+                    <td className="py-2 px-3 text-right font-bold text-ink">
                       +{row.contribution.toFixed(2)}
                     </td>
                   </tr>
                 ))}
               </tbody>
               <tfoot>
-                <tr className="bg-slate-100/90 border-t-2 border-slate-300 font-mono text-[8.5pt]">
-                  <td colSpan={3} className="py-2 px-3 font-bold font-sans text-slate-900">
+                <tr className="bg-paper-200 border-t-2 border-line font-mono text-[8.5pt]">
+                  <td colSpan={3} className="py-2 px-3 font-bold font-sans text-ink">
                     Total Deterministic Composite Score
                   </td>
-                  <td className="py-2 px-3 text-slate-600 font-bold">100.0%</td>
-                  <td className="py-2 px-3 text-right font-bold text-slate-950 text-[10pt]">
+                  <td className="py-2 px-3 text-ink-600 font-bold">100.0%</td>
+                  <td className="py-2 px-3 text-right font-bold text-ink text-[10pt]">
                     {scorecard.calculatedComposite ?? scorecard.overallScore} / 100
                   </td>
                 </tr>

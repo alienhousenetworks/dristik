@@ -147,7 +147,7 @@ export function Textarea({
 
 const badgeTones = {
   neutral: 'bg-paper-200 text-ink-700 border-line',
-  pine: 'bg-pine/10 text-pine border-pine/25',
+  pine: 'bg-paper-200 text-ink-700 border-line',
   good: 'bg-good/10 text-good border-good/25',
   warn: 'bg-warn/10 text-warn border-warn/30',
   bad: 'bg-bad/10 text-bad border-bad/30',
@@ -165,7 +165,7 @@ export function Badge({
   return (
     <span
       className={cn(
-        'inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-semibold',
+        'inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[11px] font-medium',
         badgeTones[tone],
         className,
       )}
@@ -188,7 +188,7 @@ export function Avatar({ name, src, size = 'md' }: { name: string; src?: string;
   }
   return (
     <span
-      className={cn(dim, 'inline-flex items-center justify-center rounded-full bg-pine-100 text-pine font-semibold')}
+      className={cn(dim, 'inline-flex items-center justify-center rounded-full bg-paper-200 text-ink-700 font-semibold')}
       aria-hidden
     >
       {initials || 'D'}
@@ -221,7 +221,7 @@ export function Stat({
   return (
     <div className="card p-4">
       <p className="label mb-1.5">{label}</p>
-      <p className={cn('font-serif text-3xl leading-none', valueClass)}>{value}</p>
+      <p className={cn('font-mono text-2xl font-semibold leading-none', valueClass)}>{value}</p>
       {hint && <p className="mt-2 text-xs text-ink-500 leading-relaxed">{hint}</p>}
     </div>
   );

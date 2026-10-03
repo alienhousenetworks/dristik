@@ -66,49 +66,49 @@ const EXTRACTABILITY_PILLARS = [
   {
     name: '1. Entity Clarity',
     band: 'High',
-    color: 'text-emerald-700 bg-emerald-50 border-emerald-200',
+    color: 'text-good bg-good/10 border-good/30',
     desc: 'Unambiguous business name, commercial category, and brand identity declared in high-priority DOM nodes.',
   },
   {
     name: '2. Claim Clarity',
     band: 'Moderate',
-    color: 'text-amber-800 bg-amber-50 border-amber-200',
+    color: 'text-warn bg-warn/10 border-warn/30',
     desc: 'Specific verifiable capability statements vs unsubstantiated marketing buzzwords.',
   },
   {
     name: '3. Direct Answerability',
     band: 'Moderate',
-    color: 'text-amber-800 bg-amber-50 border-amber-200',
+    color: 'text-warn bg-warn/10 border-warn/30',
     desc: 'Can buyer questions be answered directly from on-page copy without requiring LLM extrapolation?',
   },
   {
     name: '4. Structured Data',
     band: 'Deficit',
-    color: 'text-red-700 bg-red-50 border-red-200',
+    color: 'text-bad bg-bad/10 border-bad/30',
     desc: 'Schema.org JSON-LD graph (Organization, WebSite, FAQPage, Service) verified in DOM nodes.',
   },
   {
     name: '5. Question Coverage',
     band: 'Moderate',
-    color: 'text-amber-800 bg-amber-50 border-amber-200',
+    color: 'text-warn bg-warn/10 border-warn/30',
     desc: 'On-page coverage across identity, ICP, pricing, alternatives, security compliance, and ROI.',
   },
   {
     name: '6. Citation-Ready Passages',
     band: 'Deficit',
-    color: 'text-red-700 bg-red-50 border-red-200',
+    color: 'text-bad bg-bad/10 border-bad/30',
     desc: 'Presence of self-contained 40–60 word quotable definition blocks designed for LLM context retrieval.',
   },
   {
     name: '7. Semantic Consistency',
     band: 'High',
-    color: 'text-emerald-700 bg-emerald-50 border-emerald-200',
+    color: 'text-good bg-good/10 border-good/30',
     desc: 'Absence of conflicting pricing, mismatched capability claims, or broken terminology across pages.',
   },
   {
     name: '8. Source Authority',
     band: 'Moderate',
-    color: 'text-amber-800 bg-amber-50 border-amber-200',
+    color: 'text-warn bg-warn/10 border-warn/30',
     desc: 'Crawler accessibility, canonical domain references, SSL latency, and sitemap completeness.',
   },
 ];
@@ -154,12 +154,12 @@ export function AiSearch({ evaluations, geoReadiness, analysisId, onOpenPatchPac
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
           <div>
             <div className="flex items-center gap-2 mb-1">
-              <span className="label text-pine">Generative Engine Optimization (GEO) &amp; AI Intelligence</span>
+              <span className="label text-ink-700">Generative Engine Optimization (GEO) &amp; AI Intelligence</span>
               <span className="text-[10px] font-mono font-semibold px-2 py-0.5 rounded bg-paper-100 border border-line text-ink-600">
                 Zero-Fake Architecture
               </span>
             </div>
-            <h3 className="font-serif text-2xl text-ink font-normal">
+            <h3 className="font-sans text-2xl text-ink font-normal">
               AI Extractability vs Live Retrieval Test
             </h3>
             <p className="text-xs text-ink-500 max-w-2xl leading-relaxed mt-0.5">
@@ -196,7 +196,7 @@ export function AiSearch({ evaluations, geoReadiness, analysisId, onOpenPatchPac
         </div>
 
         {error && (
-          <div className="p-2.5 bg-red-50 dark:bg-red-950/20 border border-red-200 text-xs text-bad rounded">
+          <div className="p-2.5 bg-bad/10 dark:bg-bad/10 border border-bad/30 text-xs text-bad rounded">
             {error}
           </div>
         )}
@@ -211,8 +211,8 @@ export function AiSearch({ evaluations, geoReadiness, analysisId, onOpenPatchPac
           <div className="sheet border border-line rounded-lg p-6 space-y-5">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-line pb-4">
               <div>
-                <span className="label text-pine">Mode A · First-Party Extraction Matrix</span>
-                <h4 className="font-serif text-xl text-ink font-normal mt-0.5">
+                <span className="label text-ink-700">Mode A · First-Party Extraction Matrix</span>
+                <h4 className="font-sans text-xl text-ink font-normal mt-0.5">
                   On-Page Content &amp; Entity Extractability Audit
                 </h4>
                 <p className="text-xs text-ink-500 mt-1">
@@ -224,13 +224,13 @@ export function AiSearch({ evaluations, geoReadiness, analysisId, onOpenPatchPac
                 <div className="text-right">
                   <span className="label block text-[10px]">Extractability Score</span>
                   <div className="flex items-baseline justify-end gap-1 mt-0.5">
-                    <span className="text-2xl font-serif font-bold text-ink">
+                    <span className="text-2xl font-sans font-bold text-ink">
                       {geoReadiness?.extractability_score ?? 68}
                     </span>
                     <span className="text-xs text-ink-500 font-mono">/ 100</span>
                   </div>
                 </div>
-                <div className="w-10 h-10 rounded-full bg-pine/10 border border-pine/20 flex items-center justify-center text-xs font-bold text-pine font-mono">
+                <div className="w-10 h-10 rounded-full bg-paper-200 border border-line flex items-center justify-center text-xs font-bold text-ink-700 font-mono">
                   {geoReadiness?.questions_supported ?? 3}/{geoReadiness?.questions_total ?? 6}
                 </div>
               </div>
@@ -241,7 +241,7 @@ export function AiSearch({ evaluations, geoReadiness, analysisId, onOpenPatchPac
               <span className="label text-ink">The 8 Core AI Extractability Vectors</span>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
                 {EXTRACTABILITY_PILLARS.map((pillar, i) => (
-                  <div key={i} className="p-3.5 bg-paper-50 border border-line rounded-md space-y-1.5 hover:border-pine/40 transition-colors">
+                  <div key={i} className="p-3.5 bg-paper-50 border border-line rounded-md space-y-1.5 hover:border-ink transition-colors">
                     <div className="flex items-center justify-between">
                       <span className="font-semibold text-ink text-[11px]">{pillar.name}</span>
                       <span className={`text-[9px] font-mono font-bold px-1.5 py-0.5 rounded border ${pillar.color}`}>
@@ -284,12 +284,12 @@ export function AiSearch({ evaluations, geoReadiness, analysisId, onOpenPatchPac
                           <span
                             className={`px-2 py-0.5 rounded text-[9px] font-mono font-bold uppercase inline-block ${
                               q.status === 'SUPPORTED'
-                                ? 'bg-emerald-100 text-good border border-emerald-200'
+                                ? 'bg-good/10 text-good border border-good/30'
                                 : q.status === 'PARTIAL'
-                                ? 'bg-amber-100 text-warn border border-amber-200'
+                                ? 'bg-warn/10 text-warn border border-warn/30'
                                 : q.status === 'CONFLICTING'
-                                ? 'bg-purple-100 text-purple-800 border border-purple-200'
-                                : 'bg-red-100 text-bad border border-red-200'
+                                ? 'bg-paper-100 text-ink-700 border border-line'
+                                : 'bg-bad/10 text-bad border border-bad/30'
                             }`}
                           >
                             {q.status}
@@ -335,12 +335,12 @@ export function AiSearch({ evaluations, geoReadiness, analysisId, onOpenPatchPac
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-line pb-4">
               <div>
                 <div className="flex items-center gap-2">
-                  <span className="label text-pine">Mode B · Empirical Engine Testing</span>
-                  <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-blue-100 text-blue-800 border border-blue-200">
+                  <span className="label text-ink-700">Mode B · Empirical Engine Testing</span>
+                  <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-paper-100 text-ink-700 border border-line">
                     Live Answer Engine Benchmark
                   </span>
                 </div>
-                <h4 className="font-serif text-xl text-ink font-normal mt-0.5">
+                <h4 className="font-sans text-xl text-ink font-normal mt-0.5">
                   Live Answer Engine Retrieval Benchmark Table
                 </h4>
                 <p className="text-xs text-ink-500 mt-1">
@@ -363,7 +363,7 @@ export function AiSearch({ evaluations, geoReadiness, analysisId, onOpenPatchPac
                       </>
                     ) : (
                       <>
-                        <span>✨</span>
+                        <span></span>
                         <span>Run Live Benchmark Evaluation</span>
                       </>
                     )}
@@ -384,7 +384,7 @@ export function AiSearch({ evaluations, geoReadiness, analysisId, onOpenPatchPac
 
             {/* Zero-Fake Disclosure */}
             <div className="p-3 bg-paper-50 border border-line rounded-md text-xs text-ink-700 flex items-start gap-2.5">
-              <span className="text-base leading-none">🛡️</span>
+              <span className="text-base leading-none"></span>
               <p className="text-[11px] leading-relaxed">
                 <strong>Zero-Fake Disclosure:</strong> Dristik strictly refuses to fabricate synthetic per-engine citation percentages (e.g. projecting "ChatGPT 57%", "Perplexity 53%") without querying live systems. Live retrieval results reflect actual API telemetry when connectors are enabled.
               </p>
@@ -394,7 +394,7 @@ export function AiSearch({ evaluations, geoReadiness, analysisId, onOpenPatchPac
             <div className="border border-line rounded-md overflow-x-auto">
               <table className="w-full text-left text-xs border-collapse">
                 <thead>
-                  <tr className="bg-paper-100 border-b border-line text-[10px] font-mono uppercase text-ink-700 tracking-wider">
+                  <tr className="bg-paper-100 border-b border-line text-[10px] font-mono uppercase text-ink-700 tracking-[0.04em]">
                     <th className="py-2.5 px-3 font-semibold">Benchmark Query</th>
                     <th className="py-2.5 px-2 font-semibold">Engine</th>
                     <th className="py-2.5 px-2 font-semibold text-center">Mentioned?</th>
@@ -414,26 +414,26 @@ export function AiSearch({ evaluations, geoReadiness, analysisId, onOpenPatchPac
                         <td className="py-2.5 px-3 font-medium text-ink max-w-[200px] truncate" title={item.query}>
                           "{item.query}"
                         </td>
-                        <td className="py-2.5 px-2 font-mono font-semibold text-ink-800">
+                        <td className="py-2.5 px-2 font-mono font-semibold text-ink-700">
                           {item.engine || '—'}
                         </td>
                         <td className="py-2.5 px-2 text-center">
                           <span className={`px-1.5 py-0.5 rounded text-[9px] font-mono font-bold ${
-                            item.was_mentioned !== false ? 'bg-emerald-100 text-good' : 'bg-paper-200 text-ink-500'
+                            item.was_mentioned !== false ? 'bg-good/10 text-good' : 'bg-paper-200 text-ink-500'
                           }`}>
                             {item.was_mentioned !== false ? 'Yes' : 'No'}
                           </span>
                         </td>
                         <td className="py-2.5 px-2 text-center">
                           <span className={`px-1.5 py-0.5 rounded text-[9px] font-mono font-bold ${
-                            item.was_cited ? 'bg-emerald-100 text-good' : 'bg-red-100 text-bad'
+                            item.was_cited ? 'bg-good/10 text-good' : 'bg-bad/10 text-bad'
                           }`}>
                             {item.was_cited ? 'Yes' : 'No'}
                           </span>
                         </td>
                         <td className="py-2.5 px-2 text-center">
                           <span className={`px-1.5 py-0.5 rounded text-[9px] font-mono font-bold ${
-                            item.is_factually_correct ? 'bg-emerald-100 text-good' : (item.is_factually_correct === false ? 'bg-red-100 text-bad' : 'bg-paper-200 text-ink-600')
+                            item.is_factually_correct ? 'bg-good/10 text-good' : (item.is_factually_correct === false ? 'bg-bad/10 text-bad' : 'bg-paper-200 text-ink-600')
                           }`}>
                             {item.is_factually_correct ? 'Yes' : (item.is_factually_correct === false ? 'No' : '—')}
                           </span>
@@ -527,26 +527,26 @@ export function AiSearch({ evaluations, geoReadiness, analysisId, onOpenPatchPac
                         <td className="py-2.5 px-3 font-medium text-ink max-w-[200px] truncate" title={row.query}>
                           "{row.query}"
                         </td>
-                        <td className="py-2.5 px-2 font-mono font-semibold text-ink-800">
+                        <td className="py-2.5 px-2 font-mono font-semibold text-ink-700">
                           {row.engine}
                         </td>
                         <td className="py-2.5 px-2 text-center">
                           <span className={`px-1.5 py-0.5 rounded text-[9px] font-mono font-bold ${
-                            row.mentioned === 'Yes' ? 'bg-emerald-100 text-good' : 'bg-paper-200 text-ink-500'
+                            row.mentioned === 'Yes' ? 'bg-good/10 text-good' : 'bg-paper-200 text-ink-500'
                           }`}>
                             {row.mentioned}
                           </span>
                         </td>
                         <td className="py-2.5 px-2 text-center">
                           <span className={`px-1.5 py-0.5 rounded text-[9px] font-mono font-bold ${
-                            row.cited === 'Yes' ? 'bg-emerald-100 text-good' : 'bg-red-100 text-bad'
+                            row.cited === 'Yes' ? 'bg-good/10 text-good' : 'bg-bad/10 text-bad'
                           }`}>
                             {row.cited}
                           </span>
                         </td>
                         <td className="py-2.5 px-2 text-center">
                           <span className={`px-1.5 py-0.5 rounded text-[9px] font-mono font-bold ${
-                            row.correct === 'Yes' ? 'bg-emerald-100 text-good' : (row.correct === 'No' ? 'bg-red-100 text-bad' : 'bg-paper-200 text-ink-600')
+                            row.correct === 'Yes' ? 'bg-good/10 text-good' : (row.correct === 'No' ? 'bg-bad/10 text-bad' : 'bg-paper-200 text-ink-600')
                           }`}>
                             {row.correct}
                           </span>
@@ -584,12 +584,12 @@ export function AiSearch({ evaluations, geoReadiness, analysisId, onOpenPatchPac
                 {evaluations.map((item, index) => (
                   <article key={`${item.query}-${index}`} className="py-4 space-y-2.5">
                     <div className="flex flex-wrap items-baseline justify-between gap-3">
-                      <span className="label text-pine font-semibold">{display(item.question_type)}</span>
+                      <span className="label text-ink-700 font-semibold">{display(item.question_type)}</span>
                       <span className="text-xs font-mono bg-paper-50 border border-line px-2.5 py-1 rounded text-ink-600">
                         Citability Score: <strong className="text-ink">{item.score}/10</strong> · Citation {formatPercent(item.citation_probability)} · {display(item.evidence_quality)}
                       </span>
                     </div>
-                    <h5 className="font-serif text-base text-ink font-medium">"{display(item.query)}"</h5>
+                    <h5 className="font-sans text-base text-ink font-medium">"{display(item.query)}"</h5>
                     <div className="bg-paper-50 border border-line p-3 rounded-md text-xs text-ink-700 leading-relaxed">
                       <span className="label text-[10px] text-ink-500 block mb-1">Synthesized Answer Engine Response:</span>
                       <p>{display(item.detected_answer)}</p>
@@ -600,7 +600,7 @@ export function AiSearch({ evaluations, geoReadiness, analysisId, onOpenPatchPac
                         "{item.evidence_snippet}"
                       </p>
                     )}
-                    <div className="text-xs text-ink-700 bg-amber-50/60 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900/50 p-2.5 rounded-md space-y-0.5">
+                    <div className="text-xs text-ink-700 bg-warn/10 dark:bg-warn/10 border border-warn/30 dark:border-warn/30 p-2.5 rounded-md space-y-0.5">
                       <span className="label text-[10px] text-warn block font-semibold">Strategic Citability Gap &amp; Remediation:</span>
                       <p className="text-ink leading-relaxed">{display(item.gap_analysis)}</p>
                     </div>

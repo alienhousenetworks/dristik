@@ -35,7 +35,7 @@ import {
 function GroundingBar({ ratio, size = 'sm' }: { ratio: number; size?: 'sm' | 'lg' }) {
   const pct = Math.round(ratio * 100);
   const color =
-    pct >= 60 ? 'bg-emerald-500' : pct >= 30 ? 'bg-amber-500' : 'bg-rose-500';
+    pct >= 60 ? 'bg-good/10' : pct >= 30 ? 'bg-warn/10' : 'bg-bad/10';
   const h = size === 'lg' ? 'h-2.5' : 'h-1.5';
   return (
     <div className={`flex items-center gap-2`}>
@@ -50,12 +50,12 @@ function GroundingBar({ ratio, size = 'sm' }: { ratio: number; size?: 'sm' | 'lg
 function AnswerRiskBadge({ risk }: { risk?: KieAnswerRisk | string | null }) {
   if (!risk) return null;
   const config = {
-    HIGH: 'bg-rose-100 text-rose-800 border-rose-300',
-    MEDIUM: 'bg-amber-100 text-amber-800 border-amber-300',
-    LOW: 'bg-emerald-100 text-emerald-800 border-emerald-300',
+    HIGH: 'bg-bad/10 text-bad border-bad/30',
+    MEDIUM: 'bg-warn/10 text-warn border-warn/30',
+    LOW: 'bg-good/10 text-good border-good/30',
   }[risk] ?? 'bg-paper-100 text-ink-600 border-line';
   return (
-    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold border ${config}`}>
+    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-semibold border ${config}`}>
       Answer Risk: {risk}
     </span>
   );
@@ -64,9 +64,9 @@ function AnswerRiskBadge({ risk }: { risk?: KieAnswerRisk | string | null }) {
 function ClaimDecompositionPanel({ claims }: { claims: KieClaimGroundingResult[] }) {
   if (!claims || claims.length === 0) return null;
   const statusConfig = {
-    SUPPORTED: { color: 'text-emerald-700 bg-emerald-50 border-emerald-200', icon: '✓' },
-    PARTIALLY_SUPPORTED: { color: 'text-amber-700 bg-amber-50 border-amber-200', icon: '◐' },
-    UNSUPPORTED: { color: 'text-rose-700 bg-rose-50 border-rose-200', icon: '✗' },
+    SUPPORTED: { color: 'text-good bg-good/10 border-good/30', icon: '✓' },
+    PARTIALLY_SUPPORTED: { color: 'text-warn bg-warn/10 border-warn/30', icon: '◐' },
+    UNSUPPORTED: { color: 'text-bad bg-bad/10 border-bad/30', icon: '✗' },
   } as Record<string, { color: string; icon: string }>;
   return (
     <div className="space-y-1.5">
@@ -153,17 +153,17 @@ function FiveDimensionPanel({ dims }: { dims: FiveDimensionAiVisibility }) {
   ] as const;
 
   return (
-    <div className="rounded-lg border border-indigo-200 bg-indigo-50/40 p-5 space-y-4">
+    <div className="rounded-lg border border-line bg-paper-100 p-5 space-y-4">
       <div className="flex items-center gap-2">
-        <BarChart3 className="w-4 h-4 text-indigo-600" />
-        <h4 className="font-semibold text-sm text-indigo-900">
+        <BarChart3 className="w-4 h-4 text-ink-700" />
+        <h4 className="font-semibold text-sm text-ink-700">
           5-Dimension AI Visibility Scorecard
         </h4>
-        <span className="ml-auto text-[10px] font-mono text-indigo-500 border border-indigo-200 rounded px-1.5 py-0.5">
+        <span className="ml-auto text-[10px] font-mono text-ink-700 border border-line rounded px-1.5 py-0.5">
           {dims.weighting_profile}
         </span>
       </div>
-      <p className="text-[11px] text-indigo-700/80">
+      <p className="text-[11px] text-ink-700">
         Each dimension is measured independently. No arbitrary equal-weighting or composite rollup is applied.
         An aggregate index, if shown, is explicitly labelled with its weighting profile.
       </p>
@@ -171,14 +171,14 @@ function FiveDimensionPanel({ dims }: { dims: FiveDimensionAiVisibility }) {
         {dimensions.map((d) => (
           <div key={d.key}>
             <div className="flex items-center justify-between mb-1">
-              <div className="flex items-center gap-1.5 text-[11px] font-semibold text-indigo-800">
+              <div className="flex items-center gap-1.5 text-[11px] font-semibold text-ink-700">
                 {d.icon}
                 {d.label}
               </div>
-              <span className="font-mono text-xs font-bold text-indigo-900">{d.value}%</span>
+              <span className="font-mono text-xs font-bold text-ink-700">{d.value}%</span>
             </div>
             <GroundingBar ratio={d.value / 100} size="lg" />
-            <p className="text-[10px] text-indigo-600/70 mt-0.5">{d.description}</p>
+            <p className="text-[10px] text-ink-700 mt-0.5">{d.description}</p>
           </div>
         ))}
       </div>
@@ -192,9 +192,9 @@ function FiveDimensionPanel({ dims }: { dims: FiveDimensionAiVisibility }) {
 
 function KieGraphSummaryPanel({ summary }: { summary: KieGraphSummary }) {
   return (
-    <div className="rounded-lg border border-pine/20 bg-paper-50 p-4 space-y-3">
+    <div className="rounded-lg border border-line bg-paper-50 p-4 space-y-3">
       <div className="flex items-center gap-2">
-        <Database className="w-4 h-4 text-pine" />
+        <Database className="w-4 h-4 text-ink-700" />
         <h4 className="font-semibold text-sm text-ink">Website Knowledge Graph</h4>
         <span className="text-[10px] text-ink-400 ml-1">— {summary.domain}</span>
       </div>
@@ -214,7 +214,7 @@ function KieGraphSummaryPanel({ summary }: { summary: KieGraphSummary }) {
             key={stat.label}
             className={`p-2 rounded border ${
               stat.alert
-                ? 'bg-rose-50 border-rose-200 text-rose-800'
+                ? 'bg-bad/10 border-bad/30 text-bad'
                 : 'bg-paper border-line text-ink'
             }`}
           >
@@ -230,7 +230,7 @@ function KieGraphSummaryPanel({ summary }: { summary: KieGraphSummary }) {
         ))}
       </div>
       {summary.total_contradictions > 0 && (
-        <div className="text-[11px] text-rose-700 bg-rose-50 border border-rose-200 rounded p-2 flex items-start gap-1.5">
+        <div className="text-[11px] text-bad bg-bad/10 border border-bad/30 rounded p-2 flex items-start gap-1.5">
           <AlertTriangle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
           <span>
             {summary.total_contradictions} cross-page knowledge conflict{summary.total_contradictions > 1 ? 's' : ''} detected
@@ -355,26 +355,26 @@ export function DynamicQuestionSandboxView({
     switch (status) {
       case 'ANSWERABLE':
         return (
-          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800 border border-emerald-300">
-            <CheckCircle2 className="w-3 h-3 text-emerald-600" /> Answerable
+          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-xs font-medium bg-good/10 text-good border border-good/30">
+            <CheckCircle2 className="w-3 h-3 text-good" /> Answerable
           </span>
         );
       case 'PARTIAL':
         return (
-          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-800 border border-amber-300">
-            <AlertTriangle className="w-3 h-3 text-amber-600" /> Partial Evidence
+          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-xs font-medium bg-warn/10 text-warn border border-warn/30">
+            <AlertTriangle className="w-3 h-3 text-warn" /> Partial Evidence
           </span>
         );
       case 'CONFLICTING':
         return (
-          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800 border border-purple-300">
-            <AlertTriangle className="w-3 h-3 text-purple-600" /> Conflicting Evidence
+          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-xs font-medium bg-paper-100 text-ink-700 border border-line">
+            <AlertTriangle className="w-3 h-3 text-ink-700" /> Conflicting Evidence
           </span>
         );
       default:
         return (
-          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-rose-100 text-rose-800 border border-rose-300">
-            <XCircle className="w-3 h-3 text-rose-600" /> Evidence Gap
+          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-xs font-medium bg-bad/10 text-bad border border-bad/30">
+            <XCircle className="w-3 h-3 text-bad" /> Evidence Gap
           </span>
         );
     }
@@ -386,8 +386,8 @@ export function DynamicQuestionSandboxView({
       <div className="flex flex-wrap items-start justify-between gap-4 border-b border-line pb-4">
         <div className="space-y-1">
           <div className="flex items-center gap-2">
-            <Sparkles className="w-5 h-5 text-pine" />
-            <h3 className="font-serif text-xl text-ink">
+            <Sparkles className="w-5 h-5 text-ink-700" />
+            <h3 className="font-sans text-xl text-ink">
               Dynamic AI Question Sandbox — KIE Grounded Answer Check
             </h3>
           </div>
@@ -406,13 +406,13 @@ export function DynamicQuestionSandboxView({
           disabled={isLoading}
           className="btn-secondary text-xs flex items-center gap-2 px-3 py-2 rounded-md transition-colors"
         >
-          <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin text-pine' : ''}`} />
+          <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin text-ink-700' : ''}`} />
           {isLoading ? 'Building Knowledge Graph...' : totalCount > 0 ? 'Re-Evaluate' : 'Generate Questions'}
         </button>
       </div>
 
       {error && (
-        <div className="p-3 bg-rose-50 border border-rose-200 text-rose-700 text-xs rounded-md">
+        <div className="p-3 bg-bad/10 border border-bad/30 text-bad text-xs rounded-md">
           {error}
         </div>
       )}
@@ -424,7 +424,7 @@ export function DynamicQuestionSandboxView({
       {fiveDimensions && (
         <div>
           <button
-            className="text-xs font-semibold text-indigo-700 hover:underline flex items-center gap-1.5 mb-2"
+            className="text-xs font-semibold text-ink-700 hover:underline flex items-center gap-1.5 mb-2"
             onClick={() => setShowDimensions(!showDimensions)}
           >
             <BarChart3 className="w-3.5 h-3.5" />
@@ -441,30 +441,30 @@ export function DynamicQuestionSandboxView({
             <span className="label text-[10px] text-ink-400 block">Total Questions</span>
             <span className="text-xl font-bold font-mono text-ink">{totalCount}</span>
           </div>
-          <div className="p-3 bg-emerald-50/60 border border-emerald-200 rounded-md text-center">
-            <span className="label text-[10px] text-emerald-800 block">Answerable</span>
-            <span className="text-xl font-bold font-mono text-emerald-700">
+          <div className="p-3 bg-good/10 border border-good/30 rounded-md text-center">
+            <span className="label text-[10px] text-good block">Answerable</span>
+            <span className="text-xl font-bold font-mono text-good">
               {answerableCount}{' '}
               <span className="text-xs font-normal">({Math.round((answerableCount / totalCount) * 100)}%)</span>
             </span>
           </div>
-          <div className="p-3 bg-amber-50/60 border border-amber-200 rounded-md text-center">
-            <span className="label text-[10px] text-amber-800 block">Partial Evidence</span>
-            <span className="text-xl font-bold font-mono text-amber-700">
+          <div className="p-3 bg-warn/10 border border-warn/30 rounded-md text-center">
+            <span className="label text-[10px] text-warn block">Partial Evidence</span>
+            <span className="text-xl font-bold font-mono text-warn">
               {partialCount}{' '}
               <span className="text-xs font-normal">({Math.round((partialCount / totalCount) * 100)}%)</span>
             </span>
           </div>
-          <div className="p-3 bg-rose-50/60 border border-rose-200 rounded-md text-center">
-            <span className="label text-[10px] text-rose-800 block">Evidence Gaps</span>
-            <span className="text-xl font-bold font-mono text-rose-700">
+          <div className="p-3 bg-bad/10 border border-bad/30 rounded-md text-center">
+            <span className="label text-[10px] text-bad block">Evidence Gaps</span>
+            <span className="text-xl font-bold font-mono text-bad">
               {unanswerableCount}{' '}
               <span className="text-xs font-normal">({Math.round((unanswerableCount / totalCount) * 100)}%)</span>
             </span>
           </div>
-          <div className="p-3 bg-indigo-50/60 border border-indigo-200 rounded-md text-center col-span-2 md:col-span-1">
-            <span className="label text-[10px] text-indigo-800 block">Avg Grounding</span>
-            <span className="text-xl font-bold font-mono text-indigo-700">
+          <div className="p-3 bg-paper-100 border border-line rounded-md text-center col-span-2 md:col-span-1">
+            <span className="label text-[10px] text-ink-700 block">Avg Grounding</span>
+            <span className="text-xl font-bold font-mono text-ink-700">
               {avgGrounding !== null ? `${avgGrounding}%` : '—'}
             </span>
           </div>
@@ -513,7 +513,7 @@ export function DynamicQuestionSandboxView({
           onClick={() => setSelectedFacet('all')}
           className={`px-3 py-1.5 whitespace-nowrap rounded-t-md font-medium transition-colors ${
             selectedFacet === 'all'
-              ? 'border-b-2 border-pine text-pine bg-paper-50 font-semibold'
+              ? 'border-b-2 border-line text-ink-700 bg-paper-50 font-semibold'
               : 'text-ink-500 hover:text-ink hover:bg-paper-50'
           }`}
         >
@@ -528,7 +528,7 @@ export function DynamicQuestionSandboxView({
               onClick={() => setSelectedFacet(facet)}
               className={`px-3 py-1.5 whitespace-nowrap rounded-t-md font-medium transition-colors ${
                 selectedFacet === facet
-                  ? 'border-b-2 border-pine text-pine bg-paper-50 font-semibold'
+                  ? 'border-b-2 border-line text-ink-700 bg-paper-50 font-semibold'
                   : 'text-ink-500 hover:text-ink hover:bg-paper-50'
               }`}
             >
@@ -559,7 +559,7 @@ export function DynamicQuestionSandboxView({
                 >
                   <div className="space-y-1.5 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="font-mono text-xs font-bold text-pine bg-pine/10 px-2 py-0.5 rounded">
+                      <span className="font-mono text-xs font-bold text-ink-700 bg-paper-200 px-2 py-0.5 rounded">
                         {item.question_id}
                       </span>
                       <span className="text-[11px] font-medium text-ink-500 bg-paper-100 px-2 py-0.5 rounded">
@@ -590,7 +590,7 @@ export function DynamicQuestionSandboxView({
                       <div className="p-3 bg-paper border border-line rounded-md space-y-2">
                         <div className="flex items-center justify-between text-[11px]">
                           <span className="font-semibold text-ink flex items-center gap-1.5">
-                            <Target className="w-3.5 h-3.5 text-pine" /> Grounding Ratio
+                            <Target className="w-3.5 h-3.5 text-ink-700" /> Grounding Ratio
                           </span>
                           <span className="font-mono font-bold text-ink">{Math.round(grounding * 100)}%</span>
                         </div>
@@ -605,7 +605,7 @@ export function DynamicQuestionSandboxView({
                     {/* Retrieved Answer */}
                     <div className="space-y-2">
                       <div className="flex items-center gap-1.5 text-ink font-semibold">
-                        <Quote className="w-3.5 h-3.5 text-pine" />
+                        <Quote className="w-3.5 h-3.5 text-ink-700" />
                         <span>KIE Retrieved Answer (from first-party evidence)</span>
                         {item.retrieval_evidence_count != null && (
                           <span className="ml-auto font-mono text-[10px] text-ink-500">
@@ -620,12 +620,12 @@ export function DynamicQuestionSandboxView({
 
                     {/* Missing Inquiry Aspects for Partials or Gaps */}
                     {item.missing_aspects && item.missing_aspects.length > 0 && (
-                      <div className="p-3 bg-amber-50/70 border border-amber-200 rounded-md space-y-1.5">
-                        <div className="text-[11px] font-semibold text-amber-900 flex items-center gap-1.5">
-                          <AlertTriangle className="w-3.5 h-3.5 text-amber-700" />
+                      <div className="p-3 bg-warn/10 border border-warn/30 rounded-md space-y-1.5">
+                        <div className="text-[11px] font-semibold text-warn flex items-center gap-1.5">
+                          <AlertTriangle className="w-3.5 h-3.5 text-warn" />
                           <span>Missing Inquiry Aspects (Unsubstantiated by Crawled Copy)</span>
                         </div>
-                        <ul className="list-disc list-inside text-[11px] text-amber-800 space-y-0.5">
+                        <ul className="list-disc list-inside text-[11px] text-warn space-y-0.5">
                           {item.missing_aspects.map((asp, idx) => (
                             <li key={idx} className="font-mono text-[10px]">{asp}</li>
                           ))}
@@ -640,12 +640,12 @@ export function DynamicQuestionSandboxView({
                           <span className="font-medium text-ink-600">Primary Evidence Snippet:</span>
                           {item.evidence_url && (
                             <a href={item.evidence_url} target="_blank" rel="noreferrer"
-                              className="text-pine hover:underline flex items-center gap-1 text-[11px]">
+                              className="text-ink-700 hover:underline flex items-center gap-1 text-[11px]">
                               View Source <ExternalLink className="w-3 h-3" />
                             </a>
                           )}
                         </div>
-                        <blockquote className="font-mono text-[11px] text-ink-600 border-l-2 border-pine pl-2.5 py-0.5">
+                        <blockquote className="font-mono text-[11px] text-ink-600 border-l-2 border-line pl-2.5 py-0.5">
                           "{item.evidence_snippet}"
                         </blockquote>
                       </div>
@@ -660,27 +660,27 @@ export function DynamicQuestionSandboxView({
                     {item.gap_analysis && (
                       <div className={`p-3 rounded-md border space-y-1 ${
                         item.answer_risk === 'HIGH'
-                          ? 'bg-rose-50/60 border-rose-200'
+                          ? 'bg-bad/10 border-bad/30'
                           : item.answer_risk === 'MEDIUM'
-                          ? 'bg-amber-50/60 border-amber-200'
-                          : 'bg-amber-50/40 border-amber-200/60'
+                          ? 'bg-warn/10 border-warn/30'
+                          : 'bg-warn/10 border-warn/30'
                       }`}>
-                        <div className="flex items-center gap-1.5 font-semibold text-[11px] text-amber-900">
-                          <AlertTriangle className="w-3.5 h-3.5 text-amber-700" />
+                        <div className="flex items-center gap-1.5 font-semibold text-[11px] text-warn">
+                          <AlertTriangle className="w-3.5 h-3.5 text-warn" />
                           <span>Evidence Gap & Answer Risk</span>
                         </div>
-                        <p className="text-amber-800/90 leading-relaxed">{item.gap_analysis}</p>
+                        <p className="text-warn leading-relaxed">{item.gap_analysis}</p>
                       </div>
                     )}
 
                     {/* Recommended Answer */}
                     {item.recommended_answer && (
-                      <div className="p-3 bg-emerald-50/50 border border-emerald-200/60 rounded-md space-y-1">
-                        <div className="flex items-center gap-1.5 font-semibold text-emerald-900 text-[11px]">
-                          <Zap className="w-3.5 h-3.5 text-emerald-700" />
+                      <div className="p-3 bg-good/10 border border-good/30 rounded-md space-y-1">
+                        <div className="flex items-center gap-1.5 font-semibold text-good text-[11px]">
+                          <Zap className="w-3.5 h-3.5 text-good" />
                           <span>Recommended Content Action (Post-Remediation)</span>
                         </div>
-                        <p className="text-emerald-800/90 leading-relaxed">{item.recommended_answer}</p>
+                        <p className="text-good leading-relaxed">{item.recommended_answer}</p>
                       </div>
                     )}
 
@@ -690,7 +690,7 @@ export function DynamicQuestionSandboxView({
                         <span className="font-medium text-ink">Citability Score:</span>
                         <div className="w-24 bg-paper-200 h-2 rounded-full overflow-hidden">
                           <div
-                            className={`h-full ${item.citability_score >= 7 ? 'bg-emerald-500' : item.citability_score >= 4 ? 'bg-amber-500' : 'bg-rose-500'}`}
+                            className={`h-full ${item.citability_score >= 7 ? 'bg-good/10' : item.citability_score >= 4 ? 'bg-warn/10' : 'bg-bad/10'}`}
                             style={{ width: `${item.citability_score * 10}%` }}
                           />
                         </div>

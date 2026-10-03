@@ -42,94 +42,94 @@ export function EvidenceModal({ evidenceId, ledger, findings, onClose }: Evidenc
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-ink backdrop-blur-xs"
       onClick={onClose}
     >
       <div
-        className="bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg shadow-2xl max-w-2xl w-full p-6 space-y-5 text-slate-800 dark:text-slate-100"
+        className="bg-paper-50 dark:bg-ink border border-line dark:border-line rounded-lg shadow-2xl max-w-2xl w-full p-6 space-y-5 text-ink-700 dark:text-ink-300"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-start justify-between border-b border-slate-200 dark:border-slate-800 pb-3">
+        <div className="flex items-start justify-between border-b border-line dark:border-ink pb-3">
           <div className="space-y-1">
             <div className="flex items-center gap-2">
-              <span className="px-2.5 py-0.5 rounded font-mono text-xs font-bold bg-blue-100 text-blue-900 dark:bg-blue-950 dark:text-blue-200 border border-blue-300 dark:border-blue-800">
+              <span className="px-2.5 py-0.5 rounded font-mono text-xs font-bold bg-paper-100 text-ink-700 dark:bg-paper-100 dark:text-ink-700 border border-line dark:border-line">
                 [{evidenceId}]
               </span>
-              <span className="px-2 py-0.5 rounded font-mono text-[10px] font-semibold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200 border border-emerald-300 dark:border-emerald-800 flex items-center gap-1">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+              <span className="px-2 py-0.5 rounded font-mono text-[10px] font-semibold bg-good/10 text-good dark:bg-good/10 dark:text-good border border-good/30 dark:border-good/30 flex items-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-good/10 animate-pulse" />
                 CRYPTOGRAPHICALLY SEALED
               </span>
-              <span className="text-xs font-mono text-slate-500 uppercase">
+              <span className="text-xs font-mono text-ink-500 uppercase">
                 {sourceType}
               </span>
             </div>
-            <h3 className="font-serif text-lg font-bold text-slate-900 dark:text-white">
+            <h3 className="font-sans text-lg font-bold text-ink dark:text-white">
               Deterministic Evidence Inspector
             </h3>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="p-1.5 text-slate-400 hover:text-slate-700 dark:hover:text-white rounded hover:bg-slate-100 dark:hover:bg-slate-800"
+            className="p-1.5 text-ink-400 hover:text-ink-700 dark:hover:text-white rounded hover:bg-paper-200 dark:hover:bg-ink-800"
           >
             ✕
           </button>
         </div>
 
         {/* Metadata Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs font-mono bg-slate-50 dark:bg-slate-800/50 p-3.5 rounded border border-slate-200 dark:border-slate-700">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs font-mono bg-paper-100 dark:bg-ink-800 p-3.5 rounded border border-line dark:border-line">
           <div>
-            <span className="text-slate-500 block text-[10px] uppercase font-bold">Target URL</span>
-            <span className="text-slate-900 dark:text-slate-200 truncate block mt-0.5" title={url}>
+            <span className="text-ink-500 block text-[10px] uppercase font-bold">Target URL</span>
+            <span className="text-ink dark:text-ink-300 truncate block mt-0.5" title={url}>
               {url}
             </span>
           </div>
           <div>
-            <span className="text-slate-500 block text-[10px] uppercase font-bold">DOM Selector / Key</span>
-            <span className="text-blue-700 dark:text-blue-300 font-bold truncate block mt-0.5" title={selector}>
+            <span className="text-ink-500 block text-[10px] uppercase font-bold">DOM Selector / Key</span>
+            <span className="text-ink-700 dark:text-ink-700 font-bold truncate block mt-0.5" title={selector}>
               {selector}
             </span>
           </div>
           <div>
-            <span className="text-slate-500 block text-[10px] uppercase font-bold">Extracting Agent</span>
-            <span className="text-slate-700 dark:text-slate-300 mt-0.5 block">{analyzer}</span>
+            <span className="text-ink-500 block text-[10px] uppercase font-bold">Extracting Agent</span>
+            <span className="text-ink-700 dark:text-ink-300 mt-0.5 block">{analyzer}</span>
           </div>
           <div>
-            <span className="text-slate-500 block text-[10px] uppercase font-bold">Captured Timestamp</span>
-            <span className="text-slate-700 dark:text-slate-300 mt-0.5 block">{fetchedAt.slice(0, 19).replace('T', ' ')} UTC</span>
+            <span className="text-ink-500 block text-[10px] uppercase font-bold">Captured Timestamp</span>
+            <span className="text-ink-700 dark:text-ink-300 mt-0.5 block">{fetchedAt.slice(0, 19).replace('T', ' ')} UTC</span>
           </div>
         </div>
 
         {/* Captured Raw Content / Snippet */}
         <div className="space-y-1.5">
           <div className="flex items-center justify-between text-xs">
-            <span className="font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider font-mono text-[10px]">
+            <span className="font-bold text-ink-700 dark:text-ink-300 uppercase tracking-[0.04em] font-mono text-[10px]">
               Captured DOM Snapshot / Value
             </span>
-            <span className="text-[10px] font-mono text-slate-400">
+            <span className="text-[10px] font-mono text-ink-400">
               Snapshot Ref: {rawSnapshotId}
             </span>
           </div>
-          <div className="p-3.5 bg-slate-900 text-slate-100 rounded text-xs font-mono overflow-x-auto max-h-48 border border-slate-800 whitespace-pre-wrap select-all">
+          <div className="p-3.5 bg-ink text-ink-300 rounded text-xs font-mono overflow-x-auto max-h-48 border border-ink whitespace-pre-wrap select-all">
             {typeof textContent === 'object' ? JSON.stringify(textContent, null, 2) : String(textContent)}
           </div>
         </div>
 
         {/* SHA-256 Proof Footer */}
-        <div className="p-3 bg-emerald-50/60 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 rounded flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+        <div className="p-3 bg-good/10 dark:bg-good/10 border border-good/30 dark:border-good/30 rounded flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
           <div className="space-y-0.5 overflow-hidden">
-            <span className="text-[10px] font-mono font-bold uppercase text-emerald-800 dark:text-emerald-300 block">
+            <span className="text-[10px] font-mono font-bold uppercase text-good dark:text-good block">
               SHA-256 Checksum Proof (Tamper-Sealed)
             </span>
-            <code className="text-[11px] font-mono text-slate-700 dark:text-slate-300 truncate block max-w-md">
+            <code className="text-[11px] font-mono text-ink-700 dark:text-ink-300 truncate block max-w-md">
               {hash}
             </code>
           </div>
           <button
             type="button"
             onClick={copyHash}
-            className="px-3 py-1.5 rounded text-xs font-mono font-bold bg-emerald-700 text-white hover:bg-emerald-800 transition-colors whitespace-nowrap self-start sm:self-center"
+            className="px-3 py-1.5 rounded text-xs font-mono font-bold bg-good/10 text-white hover:bg-good/10 transition-colors whitespace-nowrap self-start sm:self-center"
           >
             {copied ? '✓ Copied Hash' : 'Copy Hash'}
           </button>

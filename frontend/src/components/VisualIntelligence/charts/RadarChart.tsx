@@ -92,7 +92,7 @@ export function RadarChart({ chart }: RadarChartProps) {
           <polygon
             points={benchmarkPoints}
             fill="none"
-            stroke="#94a3b8"
+            stroke="#a8aeb6"
             strokeWidth="1.75"
             strokeDasharray="4 3"
             opacity="0.8"
@@ -101,15 +101,15 @@ export function RadarChart({ chart }: RadarChartProps) {
           {/* Target Site Polygon with Gradient Fill */}
           <defs>
             <linearGradient id="radarGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" stopColor="#2e6f5e" stopOpacity="0.45" />
-              <stop offset="100%" stopColor="#0284c7" stopOpacity="0.25" />
+              <stop offset="0%" stopColor="#171a20" stopOpacity="0.16" />
+              <stop offset="100%" stopColor="#171a20" stopOpacity="0.03" />
             </linearGradient>
           </defs>
           <polygon
             points={targetPoints}
             fill="url(#radarGrad)"
-            stroke="#2e6f5e"
-            strokeWidth="2.5"
+            stroke="#171a20"
+            strokeWidth="2"
             className="transition-all duration-300"
           />
 
@@ -124,7 +124,7 @@ export function RadarChart({ chart }: RadarChartProps) {
                   cy={y}
                   r={isHovered ? 6.5 : 4.5}
                   fill="#ffffff"
-                  stroke="#2e6f5e"
+                  stroke="#171a20"
                   strokeWidth={isHovered ? 3 : 2}
                   className="transition-all duration-150"
                 />
@@ -153,12 +153,12 @@ export function RadarChart({ chart }: RadarChartProps) {
                 textAnchor={textAnchor}
                 dominantBaseline="central"
                 className={`text-[11px] font-mono select-none transition-colors duration-150 ${
-                  isHovered ? 'fill-pine font-bold' : 'fill-ink-700 dark:fill-ink-300 font-medium'
+                  isHovered ? 'fill-ink font-bold' : 'fill-ink-700 dark:fill-ink-300 font-medium'
                 }`}
                 onMouseEnter={() => setHoveredIndex(i)}
                 onMouseLeave={() => setHoveredIndex(null)}
               >
-                {lbl} <tspan className="font-bold text-[10px] fill-pine">({score})</tspan>
+                {lbl} <tspan className="font-bold text-[10px] fill-ink">({score})</tspan>
               </text>
             );
           })}
@@ -169,7 +169,7 @@ export function RadarChart({ chart }: RadarChartProps) {
           <div className="absolute top-2 right-2 bg-paper-50 dark:bg-ink-900 border border-line p-2.5 rounded-lg shadow-md text-xs z-10 animate-fade-in pointer-events-none">
             <span className="font-bold text-ink block">{labels[hoveredIndex]}</span>
             <div className="flex items-center gap-2 mt-1">
-              <span className="text-pine font-semibold">{targetLabel}: {targetValues[hoveredIndex]}/100</span>
+              <span className="text-ink-700 font-semibold">{targetLabel}: {targetValues[hoveredIndex]}/100</span>
               <span className="text-ink-400">·</span>
               <span className="text-ink-500">Benchmark: {benchmarkValues[hoveredIndex]}/100</span>
             </div>
@@ -180,11 +180,11 @@ export function RadarChart({ chart }: RadarChartProps) {
       {/* Legend */}
       <div className="flex flex-wrap items-center justify-center gap-5 mt-4 pt-3 border-t border-line/60 w-full text-xs">
         <div className="flex items-center gap-2">
-          <span className="w-3.5 h-3.5 rounded-sm bg-pine/20 border border-pine" />
+          <span className="w-3.5 h-3.5 rounded-sm bg-paper-200 border border-line" />
           <span className="text-ink-700 font-medium">{targetLabel}</span>
         </div>
         <div className="flex items-center gap-2">
-          <span className="w-3.5 h-0.5 border-t-2 border-dashed border-slate-400" />
+          <span className="w-3.5 h-0.5 border-t-2 border-dashed border-line" />
           <span className="text-ink-500">{benchmarkLabel}</span>
         </div>
       </div>

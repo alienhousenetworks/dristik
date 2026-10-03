@@ -27,10 +27,10 @@ export function VisualUxInspectionView({ visualUx, domain }: VisualUxInspectionV
   return (
     <div className="bg-paper-50 dark:bg-ink-950 border border-line rounded-xl p-5 shadow-xs space-y-4">
       <div>
-        <span className="text-xs font-mono font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-slate-700 text-white">
+        <span className="text-xs font-mono font-bold uppercase tracking-[0.04em] px-2 py-0.5 rounded bg-ink-800 text-white">
           Visual check
         </span>
-        <h3 className="font-serif text-lg font-bold text-ink mt-2">
+        <h3 className="font-sans text-lg font-bold text-ink mt-2">
           Above-the-fold inspection
         </h3>
         <p className="text-xs text-ink-600 mt-1 max-w-2xl">
@@ -51,7 +51,7 @@ export function VisualUxInspectionView({ visualUx, domain }: VisualUxInspectionV
                 type="button"
                 onClick={() => setActiveDevice(device)}
                 className={`px-3 py-1.5 rounded-md font-mono text-xs font-bold border ${
-                  activeDevice === device ? 'bg-ink text-paper-50 border-ink' : 'bg-white text-ink-600 border-line'
+                  activeDevice === device ? 'bg-ink text-paper-50 border-ink' : 'bg-paper-50 text-ink-600 border-line'
                 }`}
               >
                 {device} ({measured.viewports[device].width}×{measured.viewports[device].height})
@@ -63,7 +63,7 @@ export function VisualUxInspectionView({ visualUx, domain }: VisualUxInspectionV
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs font-mono">
             {Object.entries(current.above_the_fold || {}).map(([dim, details]) => (
-              <div key={dim} className="p-2.5 rounded bg-white border border-line">
+              <div key={dim} className="p-2.5 rounded bg-paper-50 border border-line">
                 <span className="text-[10px] text-ink-400 uppercase">{dim.replace(/_/g, ' ')}</span>
                 <div className="text-ink">{details?.label || details?.text || details?.status || '—'}</div>
               </div>
@@ -74,7 +74,7 @@ export function VisualUxInspectionView({ visualUx, domain }: VisualUxInspectionV
           ) : (
             <ul className="space-y-2 text-xs">
               {measured.critical_visual_defects.map((defect, i) => (
-                <li key={i} className="p-3 bg-white border border-line rounded">
+                <li key={i} className="p-3 bg-paper-50 border border-line rounded">
                   <span className="font-bold">{defect.defect}</span> [{defect.device}] {defect.evidence}
                 </li>
               ))}

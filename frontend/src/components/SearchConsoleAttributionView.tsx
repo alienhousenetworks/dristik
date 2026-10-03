@@ -246,7 +246,7 @@ export function SearchConsoleAttributionView({ domain, analysisId, onOpenConnect
   if (loading) {
     return (
       <div className="p-8 sheet border border-line rounded-lg flex items-center justify-center gap-3 text-ink-500">
-        <div className="w-5 h-5 border-2 border-pine border-t-transparent rounded-full animate-spin"></div>
+        <div className="w-5 h-5 border-2 border-line border-t-transparent rounded-full animate-spin"></div>
         <span>Querying Google Search Console telemetry and causal chains...</span>
       </div>
     );
@@ -262,9 +262,9 @@ export function SearchConsoleAttributionView({ domain, analysisId, onOpenConnect
     <div className="space-y-6">
       {/* Connection Notice when Not Connected */}
       {!data.is_connected && (
-        <div className="p-5 rounded-xl border border-amber-300/60 bg-amber-50/60 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-2xs">
+        <div className="p-5 rounded-xl border border-warn/30 bg-warn/10 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-2xs">
           <div className="space-y-1">
-            <div className="flex items-center gap-2 text-warn font-semibold text-xs uppercase tracking-wider">
+            <div className="flex items-center gap-2 text-warn font-semibold text-xs uppercase tracking-[0.04em]">
               <span className="w-2 h-2 rounded-full bg-warn animate-pulse" />
               <span>Google Search Console Not Connected</span>
             </div>
@@ -292,24 +292,24 @@ export function SearchConsoleAttributionView({ domain, analysisId, onOpenConnect
           <div>
             <div className="flex items-center gap-2 mb-1">
               <span className={`w-2.5 h-2.5 rounded-full ${data.is_connected ? 'bg-good' : 'bg-warn'}`}></span>
-              <span className="label text-pine">
+              <span className="label text-ink-700">
                 {data.is_connected ? 'Google Search Console · Live Property' : 'Organic Traffic Attribution'}
               </span>
             </div>
-            <h3 className="font-serif text-2xl md:text-3xl text-ink font-normal">
+            <h3 className="font-sans text-2xl md:text-3xl text-ink font-normal">
               Search Traffic & Revenue Attribution
             </h3>
             <p className="text-xs text-ink-500 mt-1 max-w-xl leading-relaxed">
               Connecting: <span className="text-bad font-semibold">Technical Problem</span> →{' '}
               <span className="text-warn font-semibold">Search Visibility</span> →{' '}
-              <span className="text-pine font-semibold">Traffic</span> →{' '}
+              <span className="text-ink-700 font-semibold">Traffic</span> →{' '}
               <span className="text-good font-semibold">Conversion Opportunity</span>.
             </p>
           </div>
 
           <div className="bg-paper-50 border border-line rounded-md p-3 text-right shrink-0">
             <span className="label block text-[10px]">Estimated Traffic Leakage</span>
-            <span className="text-2xl font-serif font-bold text-bad">
+            <span className="text-2xl font-sans font-bold text-bad">
               {data.is_connected ? formatINR(data.estimated_traffic_leakage_inr) : '—'}
             </span>
           </div>
@@ -337,7 +337,7 @@ export function SearchConsoleAttributionView({ domain, analysisId, onOpenConnect
           </div>
           <div className="bg-paper-50 p-2.5 rounded-md border border-line">
             <span className="label block text-[10px]">Average Position</span>
-            <span className="text-base font-bold font-mono text-pine mt-0.5 block">
+            <span className="text-base font-bold font-mono text-ink-700 mt-0.5 block">
               {data.is_connected ? `#${data.average_position}` : '—'}
             </span>
           </div>
@@ -419,15 +419,15 @@ export function SearchConsoleAttributionView({ domain, analysisId, onOpenConnect
       {pillarTab === 'overview' && (
         <div className="space-y-6">
           {/* 2026 Dedicated AI Overviews Reporting Card */}
-          <div className="sheet border-2 border-pine/30 bg-paper-50 rounded-xl p-6 space-y-4">
+          <div className="sheet border-2 border-line bg-paper-50 rounded-xl p-6 space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
               <div className="flex items-center gap-2">
-                <span className="px-2 py-0.5 rounded bg-pine/15 text-pine text-[10px] font-bold uppercase tracking-wider">
+                <span className="px-2 py-0.5 rounded bg-paper-200 text-ink-700 text-[10px] font-bold uppercase tracking-[0.04em]">
                   2026 Generative AI Visibility
                 </span>
-                <span className="font-serif font-bold text-ink text-lg">Google AI Overviews & AI Mode</span>
+                <span className="font-sans font-bold text-ink text-lg">Google AI Overviews & AI Mode</span>
               </div>
-              <span className={`text-xs font-mono px-2.5 py-1 rounded-full border ${
+              <span className={`text-xs font-mono px-2.5 py-1 rounded-md border ${
                 data.ai_overviews?.status === 'MEASURED'
                   ? 'bg-good/15 text-good border-good/30 font-bold'
                   : 'bg-paper-100 text-ink-500 border-line'
@@ -452,7 +452,7 @@ export function SearchConsoleAttributionView({ domain, analysisId, onOpenConnect
 
               <div className="bg-paper-100/70 p-3 rounded-lg border border-line">
                 <span className="label block text-[10px] text-ink-500">AI Overview Clicks</span>
-                <span className="text-xl font-bold font-mono text-pine block mt-0.5">
+                <span className="text-xl font-bold font-mono text-ink-700 block mt-0.5">
                   {data.ai_overviews?.clicks ? data.ai_overviews.clicks.toLocaleString('en-IN') : '—'}
                 </span>
                 <span className="text-[10px] text-ink-500 block">Direct user clicks from summary</span>
@@ -478,7 +478,7 @@ export function SearchConsoleAttributionView({ domain, analysisId, onOpenConnect
 
           {/* Causal Chains */}
           <div className="sheet border border-line rounded-lg p-6">
-            <h4 className="label mb-4 text-pine">Causal Attribution Chains (Audited Deficiencies → Revenue Impact)</h4>
+            <h4 className="label mb-4 text-ink-700">Causal Attribution Chains (Audited Deficiencies → Revenue Impact)</h4>
             {data.causal_chains.length === 0 ? (
               <div className="p-8 text-center text-xs text-ink-500 bg-paper-50 rounded-lg border border-line">
                 No causal attribution chains available yet. Run a website audit to identify technical bottlenecks, or connect Google Search Console to attribute real organic traffic consequences.
@@ -502,9 +502,9 @@ export function SearchConsoleAttributionView({ domain, analysisId, onOpenConnect
                       </div>
                     </div>
                     <div className="flex items-start gap-2">
-                      <span className="w-5 h-5 rounded-full bg-pine/10 text-pine flex items-center justify-center text-xs shrink-0 font-bold">3</span>
+                      <span className="w-5 h-5 rounded-full bg-paper-200 text-ink-700 flex items-center justify-center text-xs shrink-0 font-bold">3</span>
                       <div>
-                        <span className="label block text-[10px] text-pine">Traffic Consequence</span>
+                        <span className="label block text-[10px] text-ink-700">Traffic Consequence</span>
                         <p className="text-xs text-ink-700">{chain.traffic_consequence}</p>
                       </div>
                     </div>
@@ -530,7 +530,7 @@ export function SearchConsoleAttributionView({ domain, analysisId, onOpenConnect
           <div className="sheet border border-line rounded-lg overflow-hidden">
             <div className="p-4 border-b border-line bg-paper-100 flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <h4 className="label text-pine">Top Tracked Search Queries</h4>
+                <h4 className="label text-ink-700">Top Tracked Search Queries</h4>
                 <span className="text-[10px] bg-paper-200 text-ink-700 font-mono px-2 py-0.5 rounded border border-line">
                   {data.top_ranking_keywords.length} queries
                 </span>
@@ -592,7 +592,7 @@ export function SearchConsoleAttributionView({ domain, analysisId, onOpenConnect
           <div className="sheet border border-line rounded-lg overflow-hidden">
             <div className="p-4 border-b border-line bg-paper-100 flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <h4 className="label text-pine">Competitor Search Gaps</h4>
+                <h4 className="label text-ink-700">Competitor Search Gaps</h4>
                 <span className="text-[10px] bg-paper-200 text-ink-700 font-mono px-2 py-0.5 rounded border border-line">
                   {data.competitor_keyword_gaps.length} gaps
                 </span>
@@ -650,7 +650,7 @@ export function SearchConsoleAttributionView({ domain, analysisId, onOpenConnect
       {pillarTab === 'indexing' && (
         <div className="sheet border border-line rounded-lg p-6 space-y-5 text-xs">
           <div className="flex items-center justify-between">
-            <h4 className="font-serif font-bold text-ink text-base">Google Search Console Indexing & Coverage</h4>
+            <h4 className="font-sans font-bold text-ink text-base">Google Search Console Indexing & Coverage</h4>
             <span className="font-mono text-ink-500 text-[11px]">Direct Coverage Telemetry</span>
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -689,7 +689,7 @@ export function SearchConsoleAttributionView({ domain, analysisId, onOpenConnect
       {pillarTab === 'sitemaps' && (
         <div className="sheet border border-line rounded-lg p-6 space-y-5 text-xs">
           <div className="flex items-center justify-between">
-            <h4 className="font-serif font-bold text-ink text-base">Submitted XML Sitemaps</h4>
+            <h4 className="font-sans font-bold text-ink text-base">Submitted XML Sitemaps</h4>
             <span className="font-mono text-ink-500 text-[11px]">Search Console Sitemaps API</span>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -733,7 +733,7 @@ export function SearchConsoleAttributionView({ domain, analysisId, onOpenConnect
       {pillarTab === 'cwv' && (
         <div className="sheet border border-line rounded-lg p-6 space-y-5 text-xs">
           <div className="flex items-center justify-between">
-            <h4 className="font-serif font-bold text-ink text-base">Core Web Vitals & Structured Data Validation</h4>
+            <h4 className="font-sans font-bold text-ink text-base">Core Web Vitals & Structured Data Validation</h4>
             <span className="font-mono text-ink-500 text-[11px]">CrUX & Rich Results Telemetry</span>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -780,19 +780,19 @@ export function SearchConsoleAttributionView({ domain, analysisId, onOpenConnect
       {pillarTab === 'security' && (
         <div className="sheet border border-line rounded-lg p-6 space-y-5 text-xs">
           <div className="flex items-center justify-between">
-            <h4 className="font-serif font-bold text-ink text-base">Google Security & Manual Actions Audit</h4>
+            <h4 className="font-sans font-bold text-ink text-base">Google Security & Manual Actions Audit</h4>
             <span className="font-mono text-ink-500 text-[11px]">Penalty & Malware Telemetry</span>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="border border-line rounded-lg p-4 bg-paper-50 space-y-2">
               <div className="flex items-center gap-2">
-                <span className="text-base">🛡️</span>
+                <span className="text-base"></span>
                 <span className="font-semibold text-ink">Manual Actions State</span>
               </div>
               <p className="text-ink-600 text-[11px] leading-relaxed">
                 {data.security_and_actions?.manual_actions_status === 'PENALIZED'
-                  ? '⚠️ Google has applied a manual penalty to this domain. Immediate remediation is required.'
-                  : '✅ No manual actions detected. Site complies with Google Webmaster Search Essentials.'}
+                  ? ' Google has applied a manual penalty to this domain. Immediate remediation is required.'
+                  : ' No manual actions detected. Site complies with Google Webmaster Search Essentials.'}
               </p>
             </div>
 
@@ -803,8 +803,8 @@ export function SearchConsoleAttributionView({ domain, analysisId, onOpenConnect
               </div>
               <p className="text-ink-600 text-[11px] leading-relaxed">
                 {data.security_and_actions?.has_security_issues
-                  ? '⚠️ Security hazards (malware, phishing, or deceptive pages) detected on the domain.'
-                  : '✅ No security issues detected. No deceptive software or malware flags found.'}
+                  ? ' Security hazards (malware, phishing, or deceptive pages) detected on the domain.'
+                  : ' No security issues detected. No deceptive software or malware flags found.'}
               </p>
             </div>
           </div>
@@ -815,7 +815,7 @@ export function SearchConsoleAttributionView({ domain, analysisId, onOpenConnect
       <div className="sheet border border-line rounded-lg overflow-hidden">
         <div className="p-4 border-b border-line bg-paper-100 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <h4 className="label text-pine">Competitor Search Gaps</h4>
+            <h4 className="label text-ink-700">Competitor Search Gaps</h4>
             <span className="text-[10px] bg-paper-200 text-ink-700 font-mono px-2 py-0.5 rounded border border-line">
               {data.competitor_keyword_gaps.length} gaps
             </span>
@@ -876,7 +876,7 @@ export function SearchConsoleAttributionView({ domain, analysisId, onOpenConnect
               <div className="flex items-center gap-2.5">
                 <GoogleIcon />
                 <div>
-                  <h3 className="font-serif text-lg text-ink font-semibold leading-none">
+                  <h3 className="font-sans text-lg text-ink font-semibold leading-none">
                     Authorize Google Search Console
                   </h3>
                   <span className="text-[11px] text-ink-500 font-sans mt-0.5 block">
@@ -912,7 +912,7 @@ export function SearchConsoleAttributionView({ domain, analysisId, onOpenConnect
               {/* PRIMARY METHOD: 1-Click Google OAuth */}
               <div className="bg-paper-50 border border-line rounded-xl p-5 space-y-3.5 shadow-2xs">
                 <div className="flex items-start gap-3">
-                  <div className="w-8 h-8 rounded-full bg-white border border-line flex items-center justify-center shrink-0 shadow-2xs">
+                  <div className="w-8 h-8 rounded-full bg-paper-50 border border-line flex items-center justify-center shrink-0 shadow-2xs">
                     <GoogleIcon />
                   </div>
                   <div>

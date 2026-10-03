@@ -88,7 +88,7 @@ function FailurePanel({
       <div className="flex items-start justify-between gap-3">
         <div>
           <span className="label text-bad block mb-1">AI citation tracker failed</span>
-          <h3 className="font-serif text-xl text-ink font-normal">{title}</h3>
+          <h3 className="font-sans text-xl text-ink font-normal">{title}</h3>
         </div>
         {code && (
           <span className="text-[10px] font-mono px-2 py-1 rounded border border-line bg-paper-50 text-ink-700 whitespace-nowrap">
@@ -96,7 +96,7 @@ function FailurePanel({
           </span>
         )}
       </div>
-      <p className="text-sm text-ink-800 leading-relaxed">{reason}</p>
+      <p className="text-sm text-ink-700 leading-relaxed">{reason}</p>
       {engineErrors && engineErrors.length > 0 && (
         <div className="bg-paper-50 border border-line rounded-md p-3 space-y-1">
           <span className="label text-[10px] block">Exact engine errors</span>
@@ -109,8 +109,8 @@ function FailurePanel({
       )}
       {nextSteps && nextSteps.length > 0 && (
         <div className="space-y-1.5">
-          <span className="label text-[10px] text-pine block">What to do</span>
-          <ol className="list-decimal list-inside text-sm text-ink-800 space-y-1">
+          <span className="label text-[10px] text-ink-700 block">What to do</span>
+          <ol className="list-decimal list-inside text-sm text-ink-700 space-y-1">
             {nextSteps.map((step, i) => (
               <li key={i}>{step}</li>
             ))}
@@ -212,7 +212,7 @@ export function RealAiCitationTracker({
     return (
       <div className="p-8 sheet border border-line rounded-lg flex flex-col items-center justify-center gap-2 text-ink-500">
         <div className="flex items-center gap-3">
-          <div className="w-5 h-5 border-2 border-pine border-t-transparent rounded-full animate-spin"></div>
+          <div className="w-5 h-5 border-2 border-line border-t-transparent rounded-full animate-spin"></div>
           <span>Querying live answer engines (up to ~45s)…</span>
         </div>
         <p className="text-xs text-ink-500 max-w-xl text-center">
@@ -277,7 +277,7 @@ export function RealAiCitationTracker({
           <div>
             <div className="flex items-center gap-2 mb-1.5">
               <span className={`w-2.5 h-2.5 rounded-full ${data.is_live ? 'bg-good animate-pulse' : 'bg-warn'}`}></span>
-              <span className="label text-pine">
+              <span className="label text-ink-700">
                 {data.is_live ? `Live Citations · ${data.provider_used || 'Active Search'}` : 'Target Domain Evaluation'}
               </span>
               {data.is_live && (
@@ -288,14 +288,14 @@ export function RealAiCitationTracker({
                 </span>
               )}
             </div>
-            <h3 className="font-serif text-2xl md:text-3xl text-ink font-normal">
+            <h3 className="font-sans text-2xl md:text-3xl text-ink font-normal">
               AI Answer Engine Citation Graph
             </h3>
             <p className="text-xs text-ink-500 mt-1 max-w-xl leading-relaxed">
               {data.status_message || (
                 data.is_live
-                  ? "Real-time evaluation across the top 8 AI engines. Inspects citations, rankings, and competitor displacement."
-                  : "Evaluates high-intent commercial queries across Gemini, ChatGPT, Perplexity, Claude, DeepSeek, Kimi, Grok, and Llama."
+                  ? "Real-time evaluation across top frontier AI engines. Inspects citations, rankings, and competitor displacement."
+                  : "Evaluates high-intent commercial queries across Gemini, ChatGPT, Claude, Qwen, DeepSeek, Perplexity, Grok, and Llama."
               )}
             </p>
           </div>
@@ -305,7 +305,7 @@ export function RealAiCitationTracker({
               <div className="text-right">
                 <span className="label block text-[10px]">Overall AI Citation Score</span>
                 <div className="flex items-baseline justify-end gap-1 mt-0.5">
-                  <span className="text-3xl font-serif font-bold text-good">
+                  <span className="text-3xl font-sans font-bold text-good">
                     {data.overall_ai_citation_score != null ? data.overall_ai_citation_score : '—'}
                   </span>
                   <span className="text-xs text-ink-500 font-mono">/ 100</span>
@@ -367,7 +367,7 @@ export function RealAiCitationTracker({
         )}
 
         {data.engine_errors && data.engine_errors.length > 0 && (
-          <div className="mt-4 bg-amber-50 border border-amber-200 rounded-md p-3 text-xs text-ink-800">
+          <div className="mt-4 bg-warn/10 border border-warn/30 rounded-md p-3 text-xs text-ink-700">
             <span className="label text-warn block mb-1">Partial engine failures</span>
             <ul className="space-y-0.5 font-mono">
               {data.engine_errors.map((err, i) => (
@@ -379,7 +379,7 @@ export function RealAiCitationTracker({
 
         <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2.5 mt-6 pt-5 border-t border-line text-xs">
           {Object.entries(data.engines_breakdown || {}).map(([engine, pct]) => (
-            <div key={engine} className="bg-paper-50 border border-line p-2.5 rounded-md hover:border-pine transition-colors">
+            <div key={engine} className="bg-paper-50 border border-line p-2.5 rounded-md hover:border-ink transition-colors">
               <span className="text-[11px] font-medium text-ink-700 block truncate" title={engine}>{engine}</span>
               <div className="flex items-baseline justify-between mt-1">
                 <span className="font-mono font-bold text-ink">{pct}%</span>
@@ -421,7 +421,7 @@ export function RealAiCitationTracker({
                 onClick={() => setSelectedQuery(q)}
                 className={`text-left p-3.5 rounded-lg border transition-all ${
                   isSelected
-                    ? 'sheet border-2 border-pine shadow-xs'
+                    ? 'sheet border-2 border-line shadow-xs'
                     : 'bg-paper-50 border-line hover:border-ink-400'
                 }`}
               >
@@ -431,10 +431,10 @@ export function RealAiCitationTracker({
                   </span>
                   <span className={`text-[10px] font-semibold px-2 py-0.5 rounded border ${
                     q.overall_citation_status === 'Dominant'
-                      ? 'bg-emerald-100 text-good border-emerald-200'
+                      ? 'bg-good/10 text-good border-good/30'
                       : q.overall_citation_status === 'At Risk'
-                      ? 'bg-amber-100 text-warn border-amber-200'
-                      : 'bg-red-100 text-bad border-red-200'
+                      ? 'bg-warn/10 text-warn border-warn/30'
+                      : 'bg-bad/10 text-bad border-bad/30'
                   }`}>
                     {q.overall_citation_status}
                   </span>
@@ -457,13 +457,13 @@ export function RealAiCitationTracker({
       {data.tracked_queries.length > 0 && (
         <div className="sheet border border-line rounded-lg p-5 space-y-3">
           <div className="flex items-center justify-between">
-            <span className="label text-pine">Mode B · Live Answer Engine Retrieval Benchmark</span>
+            <span className="label text-ink-700">Mode B · Live Answer Engine Retrieval Benchmark</span>
             <span className="text-xs font-mono text-ink-500">Zero-Fake Empirical Telemetry</span>
           </div>
           <div className="border border-line rounded-md overflow-x-auto">
             <table className="w-full text-left text-xs border-collapse">
               <thead>
-                <tr className="bg-paper-100 border-b border-line text-[10px] font-mono uppercase text-ink-700 tracking-wider">
+                <tr className="bg-paper-100 border-b border-line text-[10px] font-mono uppercase text-ink-700 tracking-[0.04em]">
                   <th className="py-2.5 px-3 font-semibold">Buyer Query</th>
                   <th className="py-2.5 px-2 font-semibold">Engine</th>
                   <th className="py-2.5 px-2 font-semibold text-center">Mentioned?</th>
@@ -483,26 +483,26 @@ export function RealAiCitationTracker({
                       <td className="py-2 px-3 font-medium text-ink max-w-[200px] truncate" title={q.buyer_query}>
                         "{q.buyer_query}"
                       </td>
-                      <td className="py-2 px-2 font-mono font-semibold text-ink-800">
+                      <td className="py-2 px-2 font-mono font-semibold text-ink-700">
                         {eng.engine}
                       </td>
                       <td className="py-2 px-2 text-center">
                         <span className={`px-1.5 py-0.5 rounded text-[9px] font-mono font-bold ${
-                          eng.was_mentioned ? 'bg-emerald-100 text-good' : 'bg-paper-200 text-ink-500'
+                          eng.was_mentioned ? 'bg-good/10 text-good' : 'bg-paper-200 text-ink-500'
                         }`}>
                           {eng.was_mentioned ? 'Yes' : 'No'}
                         </span>
                       </td>
                       <td className="py-2 px-2 text-center">
                         <span className={`px-1.5 py-0.5 rounded text-[9px] font-mono font-bold ${
-                          eng.was_cited ? 'bg-emerald-100 text-good' : 'bg-red-100 text-bad'
+                          eng.was_cited ? 'bg-good/10 text-good' : 'bg-bad/10 text-bad'
                         }`}>
                           {eng.was_cited ? 'Yes' : 'No'}
                         </span>
                       </td>
                       <td className="py-2 px-2 text-center">
                         <span className={`px-1.5 py-0.5 rounded text-[9px] font-mono font-bold ${
-                          eng.is_factually_correct ? 'bg-emerald-100 text-good' : (eng.is_factually_correct === false ? 'bg-red-100 text-bad' : 'bg-paper-200 text-ink-600')
+                          eng.is_factually_correct ? 'bg-good/10 text-good' : (eng.is_factually_correct === false ? 'bg-bad/10 text-bad' : 'bg-paper-200 text-ink-600')
                         }`}>
                           {eng.is_factually_correct ? 'Yes' : (eng.is_factually_correct === false ? 'No' : '—')}
                         </span>
@@ -540,7 +540,7 @@ export function RealAiCitationTracker({
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-line pb-3">
             <div>
               <span className="label text-[10px]">Target Query</span>
-              <h4 className="text-base font-serif text-ink mt-0.5">"{selectedQuery.buyer_query}"</h4>
+              <h4 className="text-base font-sans text-ink mt-0.5">"{selectedQuery.buyer_query}"</h4>
             </div>
             <div className="bg-paper-50 px-3 py-1.5 rounded-md border border-line text-xs">
               <span className="text-ink-500">Remediation Action: </span>
@@ -561,18 +561,18 @@ export function RealAiCitationTracker({
                   </div>
                   <div className="flex items-center gap-2">
                     {eng.extractability_health === 'UNAVAILABLE' ? (
-                      <span className="text-[10px] font-bold px-2 py-0.5 rounded border bg-amber-100 text-warn border-amber-200">
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded border bg-warn/10 text-warn border-warn/30">
                         Unmeasured
                       </span>
                     ) : (
                       <>
                         <span className={`text-[10px] font-bold px-2 py-0.5 rounded border ${
-                          eng.was_mentioned ? 'bg-emerald-100 text-good border-emerald-200' : 'bg-paper-200 text-ink-500 border-line'
+                          eng.was_mentioned ? 'bg-good/10 text-good border-good/30' : 'bg-paper-200 text-ink-500 border-line'
                         }`}>
                           {eng.was_mentioned ? (eng.position ? `Mentioned (#${eng.position})` : 'Mentioned') : 'Omitted'}
                         </span>
                         <span className={`text-[10px] font-bold px-2 py-0.5 rounded border ${
-                          eng.was_cited ? 'bg-pine-100 text-pine border-pine/20' : 'bg-red-100 text-bad border-red-200'
+                          eng.was_cited ? 'bg-paper-200 text-ink-700 border-line' : 'bg-bad/10 text-bad border-bad/30'
                         }`}>
                           {eng.was_cited ? 'URL Cited' : 'No Link'}
                         </span>
@@ -595,7 +595,7 @@ export function RealAiCitationTracker({
                 <div className="text-xs space-y-1.5 pt-1">
                   {eng.competitor_cited_instead && (
                     <div className="flex items-start gap-1.5 text-warn">
-                      <span className="font-bold">⚠️ Competitor Cited Instead:</span>
+                      <span className="font-bold"> Competitor Cited Instead:</span>
                       <span className="font-medium text-ink">{eng.competitor_cited_instead}</span>
                     </div>
                   )}
@@ -619,7 +619,7 @@ export function RealAiCitationTracker({
       )}
 
       {data.critical_ai_blindspots?.length > 0 && (
-        <div className="bg-red-50/70 border border-red-200 rounded-lg p-4 space-y-2">
+        <div className="bg-bad/10 border border-bad/30 rounded-lg p-4 space-y-2">
           <div className="flex items-center gap-2 label text-bad">
             <span>Identified AI Citation Blindspots</span>
           </div>

@@ -9,7 +9,8 @@ Older maps in `AI_ARCHITECTURE_AND_AGENTS.md`, `README.md`, and `DRISTIK_PRODUCT
 
 ## 1. What Dristik is
 
-Dristik is a FastAPI + React website-intelligence auditor. A run crawls a public site, stores hashed observations, runs deterministic analyzers and a 35-specialist agent pool, then seals an executive report with findings, scores, a 7/30/90 roadmap, and a developer patch pack.
+Dristik is a FastAPI + React website-intelligence auditor. A run crawls a public site, stores hashed observations, runs deterministic analyzers and a 35-specialist agent pool, then seals an executive repor
+t with findings, scores, a 7/30/90 roadmap, and a developer patch pack.
 
 The product rule is evidence. An LLM may interpret stored observations. It may not invent Core Web Vitals, backlinks, Search Console clicks, live ChatGPT citations, or a universal authority score. Unmeasured pillars stay unmeasured. Trust is omitted and the other category weights are renormalized when no external-authority evidence is connected. AI visibility stays blank unless a live engine measurement exists.
 

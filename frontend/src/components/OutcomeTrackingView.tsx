@@ -33,7 +33,7 @@ export function OutcomeTrackingView({ analysisId }: OutcomeTrackingViewProps) {
     <section className="border border-line rounded-lg p-5 space-y-3">
       <div>
         <p className="label">Outcome tracking (30 / 60 / 90 days)</p>
-        <h3 className="font-serif text-2xl text-ink mt-1">Did the fix move a real metric?</h3>
+        <h3 className="font-sans text-2xl text-ink mt-1">Did the fix move a real metric?</h3>
         <p className="text-sm text-ink-600 mt-1">
           Rechecks original findings against a later crawl. A metric change after a fix is correlation, not proof of causation.
         </p>

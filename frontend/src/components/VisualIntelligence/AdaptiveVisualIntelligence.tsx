@@ -59,11 +59,11 @@ export function AdaptiveVisualIntelligence({ report, compact = false }: Adaptive
   const getMetricStatusStyle = (status: string) => {
     switch (status) {
       case 'good':
-        return 'text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200';
+        return 'text-good dark:text-good bg-good/10 dark:bg-good/10 border-good/30';
       case 'warning':
-        return 'text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 border-amber-200';
+        return 'text-warn dark:text-warn bg-warn/10 dark:bg-warn/10 border-warn/30';
       case 'bad':
-        return 'text-red-700 dark:text-red-300 bg-red-50 dark:bg-red-950/40 border-red-200';
+        return 'text-bad dark:text-bad bg-bad/10 dark:bg-bad/10 border-bad/30';
       default:
         return 'text-ink-700 dark:text-ink-300 bg-paper-100 dark:bg-ink-900 border-line';
     }
@@ -94,7 +94,7 @@ export function AdaptiveVisualIntelligence({ report, compact = false }: Adaptive
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
             <p className="label">Charts</p>
-            <h3 className="font-serif text-2xl text-ink mt-1">Visual summary</h3>
+            <h3 className="font-sans text-2xl text-ink mt-1">Visual summary</h3>
           </div>
           <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
             <span className="score-pill">{visualPayload.audit_case_profile}</span>
@@ -115,7 +115,7 @@ export function AdaptiveVisualIntelligence({ report, compact = false }: Adaptive
         {showCustomizer && (
           <div className="bg-paper-100/80 dark:bg-ink-800/80 border border-line p-4 rounded-lg space-y-3 animate-fade-in text-xs">
             <div className="flex items-center justify-between">
-              <span className="font-bold text-ink uppercase tracking-wider text-[11px]">
+              <span className="font-bold text-ink uppercase tracking-[0.04em] text-[11px]">
                 Toggle Active Visualizations for this Audit
               </span>
               <span className="text-ink-400 font-mono text-[10px]">
@@ -132,7 +132,7 @@ export function AdaptiveVisualIntelligence({ report, compact = false }: Adaptive
                     onClick={() => toggleChart(c.id)}
                     className={`px-3 py-1.5 rounded-md font-medium text-xs border transition-all flex items-center gap-1.5 ${
                       isActive
-                        ? 'bg-pine text-white border-pine shadow-xs'
+                        ? 'bg-pine text-white border-line shadow-xs'
                         : 'bg-paper-50 dark:bg-ink-900 text-ink-500 border-line hover:border-ink-400'
                     }`}
                   >
@@ -153,7 +153,7 @@ export function AdaptiveVisualIntelligence({ report, compact = false }: Adaptive
                   onClick={() => setCategoryFilter(cat)}
                   className={`px-2.5 py-0.5 rounded text-[11px] font-mono ${
                     categoryFilter === cat
-                      ? 'bg-pine/15 text-pine font-bold'
+                      ? 'bg-paper-200 text-ink-700 font-bold'
                       : 'text-ink-500 hover:text-ink'
                   }`}
                 >
@@ -178,13 +178,13 @@ export function AdaptiveVisualIntelligence({ report, compact = false }: Adaptive
           {visualPayload.spotlight_metrics.map((metric: SpotlightMetric) => (
             <div
               key={metric.id}
-              className="bg-paper-50 dark:bg-ink-900/60 border border-line rounded-lg p-3.5 flex flex-col justify-between hover:border-pine/50 transition-all group"
+              className="bg-paper-50 dark:bg-ink-900/60 border border-line rounded-lg p-3.5 flex flex-col justify-between hover:border-ink transition-all group"
               title={metric.significance}
             >
               <div>
                 <span className="label text-[10px] block truncate text-ink-500">{metric.label}</span>
                 <div className="flex items-baseline gap-1 mt-1">
-                  <span className="font-serif text-2xl sm:text-3xl font-bold text-ink leading-tight">
+                  <span className="font-sans text-2xl sm:text-3xl font-bold text-ink leading-tight">
                     {metric.value}
                   </span>
                   {metric.unit && (
@@ -201,8 +201,8 @@ export function AdaptiveVisualIntelligence({ report, compact = false }: Adaptive
                 >
                   {metric.change_indicator || '—'}
                 </span>
-                <span className="text-[10px] text-ink-400 group-hover:text-pine transition-colors cursor-help">
-                  ℹ️
+                <span className="text-[10px] text-ink-400 group-hover:text-ink transition-colors cursor-help">
+                  ℹ
                 </span>
               </div>
             </div>
@@ -215,7 +215,7 @@ export function AdaptiveVisualIntelligence({ report, compact = false }: Adaptive
       {/* ------------------------------------------------------------- */}
       <div className="space-y-4">
         <div className="flex items-center justify-between">
-          <span className="label text-pine text-xs">AI-Selected Visual Diagnostics</span>
+          <span className="label text-ink-700 text-xs">AI-Selected Visual Diagnostics</span>
           <span className="text-[11px] font-mono text-ink-400">{displayedCharts.length} Visualizations Rendered</span>
         </div>
 
@@ -242,7 +242,7 @@ export function AdaptiveVisualIntelligence({ report, compact = false }: Adaptive
                       <div>
                         <div className="flex items-center gap-2">
                           <span className="w-2 h-2 rounded-full bg-pine" />
-                          <h4 className="font-serif text-lg sm:text-xl font-bold text-ink">
+                          <h4 className="font-sans text-lg sm:text-xl font-bold text-ink">
                             {chart.title}
                           </h4>
                         </div>
@@ -255,8 +255,8 @@ export function AdaptiveVisualIntelligence({ report, compact = false }: Adaptive
 
                     {/* AI Strategic Takeaway Insight */}
                     <div className="mt-3.5 bg-paper-100/90 dark:bg-ink-800/60 p-3 rounded-md border border-line/80 text-xs text-ink-700 dark:text-ink-300 leading-relaxed">
-                      <span className="font-bold text-pine font-mono block text-[10px] uppercase tracking-wider mb-0.5">
-                        💡 AI Strategic Takeaway
+                      <span className="font-bold text-ink-700 font-mono block text-[10px] uppercase tracking-[0.04em] mb-0.5">
+                         AI Strategic Takeaway
                       </span>
                       {chart.ai_insight}
                     </div>

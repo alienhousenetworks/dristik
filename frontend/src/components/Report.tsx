@@ -49,7 +49,7 @@ export function Report({
       <header className="flex flex-wrap items-start justify-between gap-4 border-b border-line pb-6">
         <div className="space-y-1">
           <p className="label">Report</p>
-          <h2 className="font-serif text-3xl md:text-4xl text-ink tracking-tight">
+          <h2 className="font-sans text-3xl md:text-4xl text-ink tracking-tight">
             {display(report.domain)}
           </h2>
           <p className="text-sm text-ink-500">
@@ -117,7 +117,7 @@ export function Report({
       {/* ========================================================================= */}
       {/* FEATURE 7 (PINNED PAGE-1): WHAT TO IGNORE THIS MONTH                      */}
       {/* ========================================================================= */}
-      <section className="card p-5 border-l-4 border-warn rounded-l-none">
+      <section className="card p-5 border-l-2 border-warn rounded-l-none">
         <h3 className="label text-warn mb-2">Ignore for now</h3>
         <p className="text-sm text-ink leading-relaxed">
           {display(report.consultant_advice_what_to_ignore)}
@@ -146,7 +146,7 @@ export function Report({
               <span className="text-xs font-semibold text-ink-400">5-Sec Clarity + CTA</span>
             </div>
             <div className="flex items-baseline gap-2">
-              <span className="text-4xl font-serif font-bold text-ink">{humanScore != null ? Math.round(humanScore) : '—'}</span>
+              <span className="text-4xl font-sans font-bold text-ink">{humanScore != null ? Math.round(humanScore) : '—'}</span>
               <span className="text-xs text-ink-400">/ 100</span>
             </div>
             <p className="text-xs text-ink-700 leading-relaxed">
@@ -163,7 +163,7 @@ export function Report({
               <span className="text-xs font-semibold text-ink-400">Technical & Schema</span>
             </div>
             <div className="flex items-baseline gap-2">
-              <span className="text-4xl font-serif font-bold text-ink">{googleScore != null ? Math.round(googleScore) : '—'}</span>
+              <span className="text-4xl font-sans font-bold text-ink">{googleScore != null ? Math.round(googleScore) : '—'}</span>
               <span className="text-xs text-ink-400">/ 100</span>
             </div>
             <p className="text-xs text-ink-700 leading-relaxed">
@@ -172,7 +172,7 @@ export function Report({
           </div>
 
           {/* Score 3: AI Citation */}
-          <div className="p-4 bg-emerald-50/40 border border-emerald-200 rounded-lg shadow-2xs space-y-2">
+          <div className="p-4 bg-good/10 border border-good/30 rounded-lg shadow-2xs space-y-2">
             <div className="flex items-center justify-between">
               <span className="label text-good">
                 3. AI Citation Score
@@ -180,7 +180,7 @@ export function Report({
               <span className="text-xs font-semibold text-good">ChatGPT & Perplexity</span>
             </div>
             <div className="flex items-baseline gap-2">
-              <span className="text-4xl font-serif font-bold text-good">{aiScore != null ? Math.round(aiScore) : '—'}</span>
+              <span className="text-4xl font-sans font-bold text-good">{aiScore != null ? Math.round(aiScore) : '—'}</span>
               <span className="text-xs text-good/70">/ 100</span>
             </div>
             <p className="text-xs text-ink-700 leading-relaxed">
@@ -250,7 +250,7 @@ export function Report({
       <section className="sheet border border-line rounded-lg p-6 space-y-4">
         <div>
           <span className="label text-ink-500">Executive Narrative</span>
-          <p className="text-base leading-relaxed text-ink font-serif mt-1">
+          <p className="text-base leading-relaxed text-ink font-sans mt-1">
             {display(report.story_summary)}
           </p>
           <div className="mt-4">
@@ -280,7 +280,7 @@ export function Report({
 
       {/* Strengths vs Bottlenecks */}
       <section className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div className="border border-emerald-200 bg-emerald-50/40 p-5 rounded-lg space-y-2">
+        <div className="border border-good/30 bg-good/10 p-5 rounded-lg space-y-2">
           <span className="label text-good flex items-center gap-1.5">
             <span className="w-2 h-2 rounded-full bg-good"></span>
             What The Site Gets Right
@@ -295,14 +295,14 @@ export function Report({
           </ul>
         </div>
 
-        <div className="border border-red-200 bg-red-50/40 p-5 rounded-lg space-y-2">
+        <div className="border border-bad/30 bg-bad/10 p-5 rounded-lg space-y-2">
           <div className="flex items-center justify-between">
             <span className="label text-bad flex items-center gap-1.5">
               <span className="w-2 h-2 rounded-full bg-bad"></span>
               What Is Holding It Back
             </span>
-            <span className="font-mono text-[9px] px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800 border border-emerald-300">
-              🔬 Verified DOM Evidence
+            <span className="font-mono text-[9px] px-1.5 py-0.5 rounded bg-good/10 text-good border border-good/30">
+               Verified DOM Evidence
             </span>
           </div>
           <ul className="space-y-1.5 text-xs text-ink-700">
@@ -318,23 +318,23 @@ export function Report({
 
       {/* Exploratory Hypotheses (Segregated unverified inferences) */}
       {report.exploratory_hypotheses && report.exploratory_hypotheses.length > 0 && (
-        <section className="border border-purple-300 bg-purple-50/40 p-5 rounded-lg space-y-2">
+        <section className="border border-line bg-paper-100 p-5 rounded-lg space-y-2">
           <div className="flex items-center justify-between">
-            <span className="label text-purple-900 flex items-center gap-1.5 font-bold">
-              <span>💡</span>
+            <span className="label text-ink-700 flex items-center gap-1.5 font-bold">
+              <span></span>
               Exploratory Hypotheses (Single-Source Cognitive Deductions)
             </span>
-            <span className="font-mono text-[9px] px-2 py-0.5 rounded bg-purple-100 text-purple-800 border border-purple-300">
+            <span className="font-mono text-[9px] px-2 py-0.5 rounded bg-paper-100 text-ink-700 border border-line">
               Gated From Executive Blockers · Max Medium Severity
             </span>
           </div>
-          <p className="text-xs text-purple-700">
+          <p className="text-xs text-ink-700">
             These deductions are advisory hypotheses based on copy positioning and buyer psychology. They require empirical user research or first-party analytics (GA4) before being elevated to verified engineering constraints.
           </p>
           <ul className="space-y-1.5 text-xs text-ink-700">
             {report.exploratory_hypotheses.slice(0, 4).map((h, i) => (
               <li key={i} className="flex items-start gap-1.5">
-                <span className="text-purple-600 font-bold">~</span>
+                <span className="text-ink-700 font-bold">~</span>
                 <span className="font-medium">{h.title}</span>
               </li>
             ))}

@@ -74,7 +74,7 @@ export function LifecycleRevenueIntelligenceView({
     <div className="bg-paper-50 border border-line rounded-xl p-5 space-y-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h3 className="font-serif text-lg font-bold text-ink">Search, visitors, leads, revenue</h3>
+          <h3 className="font-sans text-lg font-bold text-ink">Search, visitors, leads, revenue</h3>
           <p className="text-xs text-ink-600 mt-1 max-w-2xl">
             {lifecycleData?.summary || 'These numbers stay blank until Google Search Console, GA4, or a CRM returns them.'}
           </p>
@@ -83,7 +83,7 @@ export function LifecycleRevenueIntelligenceView({
           <button
             type="button"
             onClick={() => onOpenConnectors('google_search_console')}
-            className="text-xs font-mono text-pine underline"
+            className="text-xs font-mono text-ink-700 underline"
           >
             Open connectors
           </button>
@@ -91,7 +91,7 @@ export function LifecycleRevenueIntelligenceView({
       </div>
       <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
         {cards.map((card) => (
-          <div key={card.title} className="p-3 rounded-lg border border-line bg-white space-y-2">
+          <div key={card.title} className="p-3 rounded-lg border border-line bg-paper-50 space-y-2">
             <div className="flex items-center justify-between text-[10px] font-mono uppercase text-ink-500">
               <span>{card.title}</span>
               <span>{card.status}</span>

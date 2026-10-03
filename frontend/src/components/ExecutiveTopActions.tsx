@@ -212,35 +212,35 @@ export function ExecutiveTopActions({
   const getPriorityBadge = (priority: string) => {
     switch (priority) {
       case 'P0':
-        return 'bg-red-100 text-red-800 border-red-300';
+        return 'bg-bad/10 text-bad border-bad/30';
       case 'P1':
-        return 'bg-amber-100 text-amber-900 border-amber-300';
+        return 'bg-warn/10 text-warn border-warn/30';
       default:
-        return 'bg-slate-100 text-slate-700 border-slate-300';
+        return 'bg-paper-200 text-ink-700 border-line';
     }
   };
 
   const getImpactBadge = (impact: string) => {
     switch (impact) {
       case 'Very High':
-        return 'text-purple-700 font-bold';
+        return 'text-ink-700 font-bold';
       case 'High':
-        return 'text-emerald-700 font-semibold';
+        return 'text-good font-semibold';
       case 'Medium':
-        return 'text-blue-700';
+        return 'text-ink-700';
       default:
-        return 'text-slate-600';
+        return 'text-ink-600';
     }
   };
 
   const getEffortBadge = (effort: string) => {
     switch (effort) {
       case 'Low':
-        return 'bg-emerald-50 text-emerald-700 border-emerald-200';
+        return 'bg-good/10 text-good border-good/30';
       case 'Medium':
-        return 'bg-amber-50 text-amber-700 border-amber-200';
+        return 'bg-warn/10 text-warn border-warn/30';
       default:
-        return 'bg-red-50 text-red-700 border-red-200';
+        return 'bg-bad/10 text-bad border-bad/30';
     }
   };
 
@@ -248,7 +248,7 @@ export function ExecutiveTopActions({
     <div
       className={
         isReportVariant
-          ? 'space-y-4 font-sans text-slate-900'
+          ? 'space-y-4 font-sans text-ink'
           : 'space-y-4'
       }
     >
@@ -256,24 +256,24 @@ export function ExecutiveTopActions({
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2">
-            <span className="font-mono text-xs font-bold uppercase tracking-wider text-blue-900 bg-blue-50 px-2 py-0.5 border border-blue-200 rounded">
+            <span className="font-mono text-xs font-bold uppercase tracking-[0.04em] text-ink-700 bg-paper-100 px-2 py-0.5 border border-line rounded">
               Leadership Execution Matrix
             </span>
-            <span className="text-xs font-mono text-slate-500">
+            <span className="text-xs font-mono text-ink-500">
               Top 10 High-ROI Actions
             </span>
           </div>
-          <h3 className="text-xl font-serif font-bold text-slate-900 mt-1">
+          <h3 className="text-xl font-sans font-bold text-ink mt-1">
             Top 10 Actions Plan
           </h3>
-          <p className="text-xs text-slate-600 mt-0.5">
+          <p className="text-xs text-ink-600 mt-0.5">
             Prioritized by commercial impact and implementation velocity. Every action includes automated retest criteria.
           </p>
         </div>
 
         {/* Priority Filter Chips */}
         <div className="flex items-center gap-1.5 font-mono text-xs">
-          <span className="text-slate-400 text-[11px] mr-1">Filter:</span>
+          <span className="text-ink-400 text-[11px] mr-1">Filter:</span>
           {(['ALL', 'P0', 'P1', 'P2'] as const).map((p) => (
             <button
               key={p}
@@ -281,8 +281,8 @@ export function ExecutiveTopActions({
               onClick={() => setPriorityFilter(p)}
               className={`px-2.5 py-1 rounded text-xs transition-colors ${
                 priorityFilter === p
-                  ? 'bg-blue-950 text-white font-bold shadow-xs'
-                  : 'bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-300'
+                  ? 'bg-paper-100 text-white font-bold shadow-xs'
+                  : 'bg-paper-200 text-ink-700 hover:bg-paper-200 border border-line'
               }`}
             >
               {p}
@@ -293,42 +293,42 @@ export function ExecutiveTopActions({
       </div>
 
       {/* Implementation Summary Banner */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 p-3.5 bg-slate-50 border border-slate-300 rounded text-xs font-mono">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 p-3.5 bg-paper-100 border border-line rounded text-xs font-mono">
         <div className="flex items-center gap-2.5">
-          <span className="text-blue-900 text-base">⏱</span>
+          <span className="text-ink-700 text-base">⏱</span>
           <div>
-            <span className="text-[10px] text-slate-500 uppercase block font-semibold">
+            <span className="text-[10px] text-ink-500 uppercase block font-semibold">
               Estimated Implementation
             </span>
-            <span className="font-bold text-slate-900 text-sm">
+            <span className="font-bold text-ink text-sm">
               {plan.total_engineer_hours} engineer-hours
             </span>
-            <span className="text-slate-500 text-[11px] ml-1">
+            <span className="text-ink-500 text-[11px] ml-1">
               (~{(plan.total_engineer_hours / 40).toFixed(1)} dev-weeks)
             </span>
           </div>
         </div>
 
-        <div className="flex items-center gap-2.5 md:border-l md:border-slate-200 md:pl-3">
-          <span className="text-emerald-700 text-base">🔗</span>
+        <div className="flex items-center gap-2.5 md:border-l md:border-line md:pl-3">
+          <span className="text-good text-base">🔗</span>
           <div>
-            <span className="text-[10px] text-slate-500 uppercase block font-semibold">
+            <span className="text-[10px] text-ink-500 uppercase block font-semibold">
               Critical Path Dependencies
             </span>
-            <span className="text-[11px] text-slate-800 font-sans leading-tight block">
+            <span className="text-[11px] text-ink-700 font-sans leading-tight block">
               {plan.dependencies_flow || 'No dependency path was stored.'}
             </span>
           </div>
         </div>
 
-        <div className="flex items-center gap-2.5 md:border-l md:border-slate-200 md:pl-3">
-          <span className="text-blue-700 text-base">✓</span>
+        <div className="flex items-center gap-2.5 md:border-l md:border-line md:pl-3">
+          <span className="text-ink-700 text-base">✓</span>
           <div>
-            <span className="text-[10px] text-slate-500 uppercase block font-semibold">
+            <span className="text-[10px] text-ink-500 uppercase block font-semibold">
               Validation Mechanism
             </span>
-            <span className="font-bold text-emerald-800 text-[11px] flex items-center gap-1">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 inline-block animate-pulse" />
+            <span className="font-bold text-good text-[11px] flex items-center gap-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-good/10 inline-block animate-pulse" />
               Automated Retest Engine Ready
             </span>
           </div>
@@ -336,10 +336,10 @@ export function ExecutiveTopActions({
       </div>
 
       {/* Top 10 Actions Table */}
-      <div className="border border-slate-300 rounded overflow-hidden shadow-xs bg-white">
+      <div className="border border-line rounded overflow-hidden shadow-xs bg-paper-50">
         <table className="w-full text-left text-xs border-collapse">
           <thead>
-            <tr className="bg-slate-100/90 text-slate-700 border-b border-slate-300 text-[10px] uppercase font-mono tracking-wider font-semibold">
+            <tr className="bg-paper-200 text-ink-700 border-b border-line text-[10px] uppercase font-mono tracking-[0.04em] font-semibold">
               <th className="p-3 text-center w-12">#</th>
               <th className="p-3 text-center w-16">Priority</th>
               <th className="p-3">Action &amp; Target Category</th>
@@ -350,7 +350,7 @@ export function ExecutiveTopActions({
               <th className="p-3 text-right">Validation</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-200">
+          <tbody className="divide-y divide-line">
             {filteredActions.map((item) => {
               const isSelected = selectedActionRank === item.rank;
 
@@ -360,13 +360,13 @@ export function ExecutiveTopActions({
                     onClick={() => setSelectedActionRank(isSelected ? null : item.rank)}
                     className={`cursor-pointer transition-colors ${
                       isSelected
-                        ? 'bg-blue-50/90 font-medium'
+                        ? 'bg-paper-100 font-medium'
                         : item.priority === 'P0'
-                        ? 'bg-red-50/20 hover:bg-slate-50'
-                        : 'hover:bg-slate-50'
+                        ? 'bg-bad/10 hover:bg-paper-100'
+                        : 'hover:bg-paper-100'
                     }`}
                   >
-                    <td className="p-3 text-center font-mono font-bold text-slate-400">
+                    <td className="p-3 text-center font-mono font-bold text-ink-400">
                       {item.rank}
                     </td>
                     <td className="p-3 text-center">
@@ -380,17 +380,17 @@ export function ExecutiveTopActions({
                     </td>
                     <td className="p-3">
                       <div className="flex items-center gap-2">
-                        <span className="font-semibold text-slate-900 text-sm">
+                        <span className="font-semibold text-ink text-sm">
                           {item.action}
                         </span>
                         {item.category && (
-                          <span className="text-[10px] font-mono px-1.5 py-0.2 bg-slate-100 text-slate-600 rounded border border-slate-200">
+                          <span className="text-[10px] font-mono px-1.5 py-0.2 bg-paper-200 text-ink-600 rounded border border-line">
                             {categoryLabel(item.category)}
                           </span>
                         )}
                       </div>
                       {item.dependencies && item.dependencies.length > 0 && (
-                        <p className="text-[10px] text-slate-500 font-mono mt-0.5">
+                        <p className="text-[10px] text-ink-500 font-mono mt-0.5">
                           Prerequisite: {item.dependencies.join(', ')}
                         </p>
                       )}
@@ -407,15 +407,15 @@ export function ExecutiveTopActions({
                         {item.effort}
                       </span>
                     </td>
-                    <td className="p-3 text-slate-700 font-sans text-xs max-w-xs">
+                    <td className="p-3 text-ink-700 font-sans text-xs max-w-xs">
                       {item.expected_outcome}
                     </td>
-                    <td className="p-3 text-center font-mono font-bold text-slate-800">
+                    <td className="p-3 text-center font-mono font-bold text-ink-700">
                       {item.estimated_engineer_hours}h
                     </td>
                     <td className="p-3 text-right font-sans">
-                      <span className="inline-flex items-center gap-1 text-[11px] font-mono px-2 py-0.5 rounded bg-emerald-50 text-emerald-800 border border-emerald-200">
-                        <span className="text-emerald-600">✓</span>
+                      <span className="inline-flex items-center gap-1 text-[11px] font-mono px-2 py-0.5 rounded bg-good/10 text-good border border-good/30">
+                        <span className="text-good">✓</span>
                         <span>retest ready</span>
                       </span>
                     </td>
@@ -423,32 +423,32 @@ export function ExecutiveTopActions({
 
                   {/* Expanded Detail Panel */}
                   {isSelected && (
-                    <tr className="bg-slate-50/95 border-b border-blue-200">
+                    <tr className="bg-paper-100 border-b border-line">
                       <td colSpan={8} className="p-4 space-y-3 font-sans">
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
-                          <div className="space-y-2 border-r border-slate-200 pr-4">
-                            <span className="font-mono font-bold uppercase tracking-wider text-slate-600 text-[10px] block">
+                          <div className="space-y-2 border-r border-line pr-4">
+                            <span className="font-mono font-bold uppercase tracking-[0.04em] text-ink-600 text-[10px] block">
                               Automated Retest &amp; Verification Condition
                             </span>
-                            <div className="p-2.5 bg-white border border-slate-300 rounded font-mono text-slate-800 text-[11px] leading-relaxed">
+                            <div className="p-2.5 bg-paper-50 border border-line rounded font-mono text-ink-700 text-[11px] leading-relaxed">
                               {item.validation}
                             </div>
-                            <div className="flex items-center gap-2 text-slate-500 text-[11px]">
+                            <div className="flex items-center gap-2 text-ink-500 text-[11px]">
                               <span>Status:</span>
-                              <span className="text-amber-700 font-semibold font-mono">
+                              <span className="text-warn font-semibold font-mono">
                                 Pending Execution
                               </span>
                             </div>
                           </div>
 
                           <div className="space-y-2">
-                            <span className="font-mono font-bold uppercase tracking-wider text-slate-600 text-[10px] block">
+                            <span className="font-mono font-bold uppercase tracking-[0.04em] text-ink-600 text-[10px] block">
                               Prerequisites &amp; Traceability
                             </span>
-                            <div className="text-xs text-slate-700 space-y-1.5">
+                            <div className="text-xs text-ink-700 space-y-1.5">
                               <div>
-                                <span className="font-medium text-slate-900">Dependencies: </span>
-                                <span className="font-mono text-slate-600">
+                                <span className="font-medium text-ink">Dependencies: </span>
+                                <span className="font-mono text-ink-600">
                                   {item.dependencies && item.dependencies.length > 0
                                     ? item.dependencies.join(' → ')
                                     : 'None (Immediate standalone execution)'}
@@ -456,15 +456,15 @@ export function ExecutiveTopActions({
                               </div>
                               {item.related_finding_id && (
                                 <div className="flex items-center gap-2 pt-1">
-                                  <span className="font-medium text-slate-900">Associated Finding:</span>
-                                  <span className="font-mono text-[11px] bg-blue-100 text-blue-900 px-1.5 py-0.5 rounded border border-blue-200">
+                                  <span className="font-medium text-ink">Associated Finding:</span>
+                                  <span className="font-mono text-[11px] bg-paper-100 text-ink-700 px-1.5 py-0.5 rounded border border-line">
                                     {item.related_finding_id}
                                   </span>
                                   {onNavigateFinding && (
                                     <button
                                       type="button"
                                       onClick={() => onNavigateFinding(item.related_finding_id!)}
-                                      className="text-blue-700 hover:underline font-mono text-[11px]"
+                                      className="text-ink-700 hover:underline font-mono text-[11px]"
                                     >
                                       Inspect Finding Evidence →
                                     </button>

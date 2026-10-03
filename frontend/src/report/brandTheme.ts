@@ -39,25 +39,25 @@ export interface ReportTheme {
   };
 }
 
-export const DRISTIK_DEFAULT_ACCENT = '#0d9488'; // Dristik signature teal
+export const DRISTIK_DEFAULT_ACCENT = '#105c4c'; // Dristik pine, used only when a client brand is missing
 
 export const FIXED_DRISTIK_TOKENS = {
   dristik: {
-    publisherNavy: '#0f172a',
-    publisherSlate: '#334155',
-    publisherInk: '#0b0f19',
-    publisherPaper: '#f8fafc',
-    publisherLine: '#e2e8f0',
+    publisherNavy: '#111418',
+    publisherSlate: '#475058',
+    publisherInk: '#111418',
+    publisherPaper: '#f4f5f7',
+    publisherLine: '#dadee4',
   },
   semantic: {
-    critical: '#dc2626',
-    criticalBg: '#fef2f2',
-    warning: '#d97706',
-    warningBg: '#fffbeb',
-    positive: '#059669',
-    positiveBg: '#ecfdf5',
-    neutral: '#64748b',
-    neutralBg: '#f1f5f9',
+    critical: '#a82620',
+    criticalBg: '#f8e8e6',
+    warning: '#925a08',
+    warningBg: '#f8f1e4',
+    positive: '#0f7a48',
+    positiveBg: '#e8f6ee',
+    neutral: '#5c6570',
+    neutralBg: '#f4f5f7',
   },
 };
 
@@ -263,7 +263,7 @@ export function buildReportTheme(candidateHex?: string | null): ReportTheme {
   const calibratedHsl = validateAndCalibrateColor(candidateHex);
 
   if (!calibratedHsl) {
-    // Graceful fallback: Dristik signature teal
+    // Graceful fallback: Dristik pine
     const fallbackHsl = rgbToHsl(parseHexToRgb(DRISTIK_DEFAULT_ACCENT)!);
     const aaHsl = enforceWcagContrast(fallbackHsl, 4.5);
     const accentHex = rgbToHex(hslToRgb(aaHsl));

@@ -154,11 +154,11 @@ function SectionHighlights({
   const statusBadge = (status: string) => {
     switch (status) {
       case 'NEEDS_REWRITE':
-        return 'bg-red-100 text-bad border-red-200';
+        return 'bg-bad/10 text-bad border-bad/30';
       case 'UPDATE_RECOMMENDED':
-        return 'bg-amber-100 text-warn border-amber-200';
+        return 'bg-warn/10 text-warn border-warn/30';
       case 'OPTIMIZED':
-        return 'bg-emerald-100 text-good border-emerald-200';
+        return 'bg-good/10 text-good border-good/30';
       default:
         return 'bg-paper-200 text-ink-700 border-line';
     }
@@ -181,7 +181,7 @@ function SectionHighlights({
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line pb-2">
         <div>
-          <p className="label text-pine">Page Sections — Needs to be Updated</p>
+          <p className="label text-ink-700">Page Sections — Needs to be Updated</p>
           <p className="text-xs text-ink-500 mt-0.5">
             Production-grade, high-converting copy rewrites optimized for SEO search intent and GEO answer engine citation.
           </p>
@@ -200,7 +200,7 @@ function SectionHighlights({
             <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line pb-2">
               <div className="flex items-center gap-2">
                 <span
-                  className={`text-[10px] font-bold px-2 py-0.5 rounded border uppercase tracking-wider ${statusBadge(
+                  className={`text-[10px] font-bold px-2 py-0.5 rounded border uppercase tracking-[0.04em] ${statusBadge(
                     sec.status
                   )}`}
                 >
@@ -225,7 +225,7 @@ function SectionHighlights({
                   <p className="text-ink-700 whitespace-pre-wrap leading-relaxed">{sec.current_preview}</p>
                 </div>
               )}
-              <div className="p-3 bg-emerald-50/40 rounded border border-emerald-200 space-y-1">
+              <div className="p-3 bg-good/10 rounded border border-good/30 space-y-1">
                 <p className="label text-[10px] text-good">Suggested Production Copy</p>
                 <p className="text-ink-700 whitespace-pre-wrap leading-relaxed font-sans font-medium">
                   {sec.suggested_copy}
@@ -235,7 +235,7 @@ function SectionHighlights({
 
             {sec.seo_geo_notes && (
               <div className="flex flex-wrap items-center justify-between gap-2 pt-1 text-[11px] text-ink-500">
-                <span>⚡ {sec.seo_geo_notes}</span>
+                <span> {sec.seo_geo_notes}</span>
                 {sec.keywords && sec.keywords.length > 0 && (
                   <span className="font-mono text-[10px]">
                     Keywords: {sec.keywords.join(', ')}
@@ -257,32 +257,32 @@ function SpecialistInsightsBar({ insights }: { insights?: Record<string, string>
       <p className="label text-xs">5-Specialist Copywriting Workforce Analysis</p>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
         {insights.seo && (
-          <div className="p-2.5 bg-white rounded border border-line space-y-1">
-            <span className="label text-[10px] text-pine block">1. Semantic SEO</span>
+          <div className="p-2.5 bg-paper-50 rounded border border-line space-y-1">
+            <span className="label text-[10px] text-ink-700 block">1. Semantic SEO</span>
             <p className="text-ink-700 text-[11px] leading-snug">{insights.seo}</p>
           </div>
         )}
         {insights.geo && (
-          <div className="p-2.5 bg-white rounded border border-line space-y-1">
-            <span className="label text-[10px] text-pine block">2. Answer Engine (GEO)</span>
+          <div className="p-2.5 bg-paper-50 rounded border border-line space-y-1">
+            <span className="label text-[10px] text-ink-700 block">2. Answer Engine (GEO)</span>
             <p className="text-ink-700 text-[11px] leading-snug">{insights.geo}</p>
           </div>
         )}
         {insights.cro && (
-          <div className="p-2.5 bg-white rounded border border-line space-y-1">
-            <span className="label text-[10px] text-pine block">3. Conversion (CRO)</span>
+          <div className="p-2.5 bg-paper-50 rounded border border-line space-y-1">
+            <span className="label text-[10px] text-ink-700 block">3. Conversion (CRO)</span>
             <p className="text-ink-700 text-[11px] leading-snug">{insights.cro}</p>
           </div>
         )}
         {insights.clarity && (
-          <div className="p-2.5 bg-white rounded border border-line space-y-1">
-            <span className="label text-[10px] text-pine block">4. Brand & Clarity</span>
+          <div className="p-2.5 bg-paper-50 rounded border border-line space-y-1">
+            <span className="label text-[10px] text-ink-700 block">4. Brand & Clarity</span>
             <p className="text-ink-700 text-[11px] leading-snug">{insights.clarity}</p>
           </div>
         )}
         {insights.sections && (
-          <div className="p-2.5 bg-white rounded border border-line space-y-1">
-            <span className="label text-[10px] text-pine block">5. Modular Architecture</span>
+          <div className="p-2.5 bg-paper-50 rounded border border-line space-y-1">
+            <span className="label text-[10px] text-ink-700 block">5. Modular Architecture</span>
             <p className="text-ink-700 text-[11px] leading-snug">{insights.sections}</p>
           </div>
         )}
@@ -297,7 +297,7 @@ function FaqBlock({ faqs }: { faqs?: CopyFaqItem[] }) {
     <div className="sheet border border-line rounded-lg p-4 space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line pb-2">
         <div>
-          <p className="label text-pine">Generative Engine Optimization (GEO) FAQs</p>
+          <p className="label text-ink-700">Generative Engine Optimization (GEO) FAQs</p>
           <p className="text-xs text-ink-500">
             Structured Q&A pairs formatted for direct citation by ChatGPT, Perplexity, and Google AI Overviews.
           </p>
@@ -316,7 +316,7 @@ function FaqBlock({ faqs }: { faqs?: CopyFaqItem[] }) {
             </div>
             <p className="text-ink-700 leading-relaxed">A: {faq.answer}</p>
             {faq.target_engine && (
-              <p className="text-[10px] text-pine font-mono pt-0.5">Engine Target: {faq.target_engine}</p>
+              <p className="text-[10px] text-ink-700 font-mono pt-0.5">Engine Target: {faq.target_engine}</p>
             )}
           </div>
         ))}
@@ -337,17 +337,17 @@ function PageDetail({ page, report }: { page: PageEvidence; report?: PageReport 
       <dl className="grid grid-cols-2 sm:grid-cols-4 gap-5">
         <div>
           <dt className="label">Overall Score</dt>
-          <dd className={`font-serif text-3xl ${scoreTone(report?.overall_score ?? 0)}`}>
+          <dd className={`font-sans text-3xl ${scoreTone(report?.overall_score ?? 0)}`}>
             {report ? Math.round(report.overall_score) : '—'}
           </dd>
         </div>
         <div>
           <dt className="label">SEO Score</dt>
-          <dd className="font-serif text-3xl">{seo ? Math.round(seo.score) : '—'}</dd>
+          <dd className="font-sans text-3xl">{seo ? Math.round(seo.score) : '—'}</dd>
         </div>
         <div>
           <dt className="label">Copywriting Score</dt>
-          <dd className="font-serif text-3xl">
+          <dd className="font-sans text-3xl">
             {copy && copy.llm_status === 'ok' && copy.score != null ? Math.round(copy.score) : 'null'}
           </dd>
         </div>
@@ -358,9 +358,9 @@ function PageDetail({ page, report }: { page: PageEvidence; report?: PageReport 
       </dl>
 
       {copy?.llm_status === 'failed' && (
-        <div className="p-4 rounded-lg border border-bad/40 bg-red-50/70 space-y-2">
+        <div className="p-4 rounded-lg border border-bad/40 bg-bad/10 space-y-2">
           <span className="label text-bad block">Copy rewrite FAILED</span>
-          <p className="text-sm text-ink-800 leading-relaxed">
+          <p className="text-sm text-ink-700 leading-relaxed">
             {copy.llm_failure_reason || copy.analysis || 'The model did not return a rewrite.'}
           </p>
           {copy.llm_failure_code && (
@@ -393,10 +393,10 @@ function PageDetail({ page, report }: { page: PageEvidence; report?: PageReport 
           {suggested.hook_3sec && (
             <div className="sheet border border-line rounded-lg p-4 space-y-2">
               <div className="flex items-center justify-between">
-                <span className="label text-pine">3-Second First Impression Hook</span>
+                <span className="label text-ink-700">3-Second First Impression Hook</span>
                 <CopyButton text={suggested.hook_3sec} />
               </div>
-              <p className="text-sm font-serif font-bold text-ink leading-snug">
+              <p className="text-sm font-sans font-bold text-ink leading-snug">
                 "{suggested.hook_3sec}"
               </p>
               <p className="text-[11px] text-ink-500">
@@ -405,12 +405,12 @@ function PageDetail({ page, report }: { page: PageEvidence; report?: PageReport 
             </div>
           )}
           {suggested.geo_snippet && (
-            <div className="sheet border border-line rounded-lg p-4 space-y-2 bg-emerald-50/20">
+            <div className="sheet border border-line rounded-lg p-4 space-y-2 bg-good/10">
               <div className="flex items-center justify-between">
                 <span className="label text-good">Direct AI Citation Snippet (GEO)</span>
                 <CopyButton text={suggested.geo_snippet} />
               </div>
-              <p className="text-xs font-mono text-ink-700 leading-relaxed bg-white/80 p-2.5 rounded border border-emerald-200">
+              <p className="text-xs font-mono text-ink-700 leading-relaxed bg-paper-50/80 p-2.5 rounded border border-good/30">
                 {suggested.geo_snippet}
               </p>
               <p className="text-[11px] text-ink-500">
@@ -433,7 +433,7 @@ function PageDetail({ page, report }: { page: PageEvidence; report?: PageReport 
       {copy?.llm_status === 'ok' && suggested && (
         <section className="sheet border border-line rounded-lg p-5 space-y-4">
           <div className="border-b border-line pb-2">
-            <p className="label text-pine">SERP Metadata & Header Optimization</p>
+            <p className="label text-ink-700">SERP Metadata & Header Optimization</p>
             <p className="text-xs text-ink-500">
               Strict length compliance enforced: Title (50–60 chars) and Meta Description (140–160 chars) to prevent search engine truncation.
             </p>
@@ -490,7 +490,7 @@ function PageDetail({ page, report }: { page: PageEvidence; report?: PageReport 
               <ul className="space-y-1.5 text-xs text-ink-700">
                 {suggested.supporting_points.map((item, idx) => (
                   <li key={idx} className="flex items-start gap-2">
-                    <span className="text-pine font-bold">•</span>
+                    <span className="text-ink-700 font-bold">•</span>
                     <span>{item}</span>
                   </li>
                 ))}
@@ -512,7 +512,7 @@ function PageDetail({ page, report }: { page: PageEvidence; report?: PageReport 
       {/* 7. SEO Issues & Recommendations */}
       {seo && (
         <section className="sheet border border-line rounded-lg p-5 space-y-4">
-          <p className="label text-pine">Search Engine Optimization Audit</p>
+          <p className="label text-ink-700">Search Engine Optimization Audit</p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-8 text-xs">
             <div>
               <p className="text-ink font-semibold mb-2">Identified SEO Issues</p>
@@ -624,7 +624,7 @@ export function Pages({ manifest, summary, pageReports = [] }: PagesProps) {
         {stats.map((item) => (
           <div key={item.label}>
             <dt className="label">{item.label}</dt>
-            <dd className="mt-1 font-serif text-2xl text-ink">{item.value}</dd>
+            <dd className="mt-1 font-sans text-2xl text-ink">{item.value}</dd>
           </div>
         ))}
       </dl>
@@ -642,12 +642,12 @@ export function Pages({ manifest, summary, pageReports = [] }: PagesProps) {
                 {/* Page Bar Header */}
                 <div className="flex flex-wrap items-start justify-between gap-4 border-b border-line pb-4">
                   <div className="min-w-0 max-w-3xl">
-                    <p className="text-lg font-serif text-ink">{display(page.title, page.url)}</p>
+                    <p className="text-lg font-sans text-ink">{display(page.title, page.url)}</p>
                     <p className="text-xs text-ink-500 font-mono truncate mt-0.5">{page.url}</p>
                   </div>
                   <div className="flex items-center gap-3 text-xs text-ink-500 shrink-0">
                     {report && (
-                      <span className={`font-serif text-lg font-bold px-2 py-0.5 rounded border border-line ${scoreTone(report.overall_score)}`}>
+                      <span className={`font-sans text-lg font-bold px-2 py-0.5 rounded border border-line ${scoreTone(report.overall_score)}`}>
                         {Math.round(report.overall_score)}
                       </span>
                     )}

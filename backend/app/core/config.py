@@ -110,6 +110,7 @@ class Settings(BaseSettings):
     TOGETHER_MODEL: Optional[str] = None
 
     # AI Citation Tracker Engine Configuration
+    AI_CITATION_PROVIDER: Optional[str] = Field(default=None, description="Default provider for AI citation engines (e.g. openrouter)")
     AI_CITATION_CROSS_PROVIDER: bool = Field(default=False, description="Enable multi-engine citation tracker fan-out across providers")
     AI_CITATION_CLAUDE_ACTIVE: Optional[bool] = None
     AI_CITATION_CLAUDE_PROVIDER: Optional[str] = None
@@ -140,6 +141,11 @@ class Settings(BaseSettings):
     AI_CITATION_DEEPSEEK_PROVIDER: Optional[str] = None
     AI_CITATION_DEEPSEEK_API_KEY: Optional[str] = None
     AI_CITATION_DEEPSEEK_MODEL: Optional[str] = None
+
+    AI_CITATION_QWEN_ACTIVE: Optional[bool] = None
+    AI_CITATION_QWEN_PROVIDER: Optional[str] = None
+    AI_CITATION_QWEN_API_KEY: Optional[str] = None
+    AI_CITATION_QWEN_MODEL: Optional[str] = None
 
     AI_CITATION_GROK_ACTIVE: Optional[bool] = None
     AI_CITATION_GROK_PROVIDER: Optional[str] = None

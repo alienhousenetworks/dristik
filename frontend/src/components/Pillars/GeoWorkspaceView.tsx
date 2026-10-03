@@ -176,16 +176,16 @@ export function GeoWorkspaceView({
         <div className="space-y-6">
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             {/* ChatGPT */}
-            <Card className="p-4 space-y-2 border-t-4 border-t-emerald-600">
+            <Card className="p-4 space-y-2 border-t-4 border-t-good/30">
               <div className="flex items-center justify-between">
                 <span className="font-semibold text-ink text-sm flex items-center gap-1.5">
-                  <Bot className="w-4 h-4 text-emerald-600" /> ChatGPT
+                  <Bot className="w-4 h-4 text-good" /> ChatGPT
                 </span>
-                <span className="font-mono text-xs px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-700 font-bold">
+                <span className="font-mono text-xs px-2 py-0.5 rounded bg-good/10 text-good font-bold">
                   {perEngine?.chatgpt?.grade ? `Grade ${perEngine.chatgpt.grade}` : 'Not measured'}
                 </span>
               </div>
-              <p className="font-serif text-3xl font-bold text-ink">
+              <p className="font-sans text-3xl font-bold text-ink">
                 {perEngine?.chatgpt?.score != null ? Math.round(perEngine.chatgpt.score) : '—'}
                 <span className="text-xs text-ink-400 font-sans font-normal"> / 100</span>
               </p>
@@ -195,16 +195,16 @@ export function GeoWorkspaceView({
             </Card>
 
             {/* Perplexity */}
-            <Card className="p-4 space-y-2 border-t-4 border-t-cyan-600">
+            <Card className="p-4 space-y-2 border-t-4 border-t-line">
               <div className="flex items-center justify-between">
                 <span className="font-semibold text-ink text-sm flex items-center gap-1.5">
-                  <Search className="w-4 h-4 text-cyan-600" /> Perplexity
+                  <Search className="w-4 h-4 text-ink-700" /> Perplexity
                 </span>
-                <span className="font-mono text-xs px-2 py-0.5 rounded bg-cyan-500/10 text-cyan-700 font-bold">
+                <span className="font-mono text-xs px-2 py-0.5 rounded bg-paper-100 text-ink-700 font-bold">
                   {perEngine?.perplexity?.grade ? `Grade ${perEngine.perplexity.grade}` : 'Not measured'}
                 </span>
               </div>
-              <p className="font-serif text-3xl font-bold text-ink">
+              <p className="font-sans text-3xl font-bold text-ink">
                 {perEngine?.perplexity?.score != null ? Math.round(perEngine.perplexity.score) : '—'}
                 <span className="text-xs text-ink-400 font-sans font-normal"> / 100</span>
               </p>
@@ -214,16 +214,16 @@ export function GeoWorkspaceView({
             </Card>
 
             {/* Google AI Overviews */}
-            <Card className="p-4 space-y-2 border-t-4 border-t-blue-600">
+            <Card className="p-4 space-y-2 border-t-4 border-t-line">
               <div className="flex items-center justify-between">
                 <span className="font-semibold text-ink text-sm flex items-center gap-1.5">
-                  <Sparkles className="w-4 h-4 text-blue-600" /> Google AIO / SGE
+                  <Sparkles className="w-4 h-4 text-ink-700" /> Google AIO / SGE
                 </span>
-                <span className="font-mono text-xs px-2 py-0.5 rounded bg-blue-500/10 text-blue-700 font-bold">
+                <span className="font-mono text-xs px-2 py-0.5 rounded bg-paper-100 text-ink-700 font-bold">
                   {perEngine?.google_aio?.grade ? `Grade ${perEngine.google_aio.grade}` : 'Not measured'}
                 </span>
               </div>
-              <p className="font-serif text-3xl font-bold text-ink">
+              <p className="font-sans text-3xl font-bold text-ink">
                 {perEngine?.google_aio?.score != null ? Math.round(perEngine.google_aio.score) : '—'}
                 <span className="text-xs text-ink-400 font-sans font-normal"> / 100</span>
               </p>
@@ -233,16 +233,16 @@ export function GeoWorkspaceView({
             </Card>
 
             {/* Claude & Gemini */}
-            <Card className="p-4 space-y-2 border-t-4 border-t-amber-600">
+            <Card className="p-4 space-y-2 border-t-4 border-t-warn/30">
               <div className="flex items-center justify-between">
                 <span className="font-semibold text-ink text-sm flex items-center gap-1.5">
-                  <Lightbulb className="w-4 h-4 text-amber-600" /> Claude / Gemini
+                  <Lightbulb className="w-4 h-4 text-warn" /> Claude / Gemini
                 </span>
-                <span className="font-mono text-xs px-2 py-0.5 rounded bg-amber-500/10 text-amber-700 font-bold">
+                <span className="font-mono text-xs px-2 py-0.5 rounded bg-warn/10 text-warn font-bold">
                   {perEngine?.claude_gemini?.grade ? `Grade ${perEngine.claude_gemini.grade}` : 'Not measured'}
                 </span>
               </div>
-              <p className="font-serif text-3xl font-bold text-ink">
+              <p className="font-sans text-3xl font-bold text-ink">
                 {perEngine?.claude_gemini?.score != null ? Math.round(perEngine.claude_gemini.score) : '—'}
                 <span className="text-xs text-ink-400 font-sans font-normal"> / 100</span>
               </p>
@@ -254,8 +254,8 @@ export function GeoWorkspaceView({
 
           {/* AI Bot Directives Card */}
           <Card className="p-5 space-y-4">
-            <h3 className="font-serif font-bold text-ink text-base flex items-center gap-2">
-              <Bot className="w-4 h-4 text-pine" /> AI Search Crawler Directives (`robots.txt`)
+            <h3 className="font-sans font-bold text-ink text-base flex items-center gap-2">
+              <Bot className="w-4 h-4 text-ink-700" /> AI Search Crawler Directives (`robots.txt`)
             </h3>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
               <div className="p-3 bg-ink-50/50 rounded border border-ink/5 space-y-1">
@@ -297,23 +297,23 @@ export function GeoWorkspaceView({
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 <Card className="p-4 space-y-1.5 border-t-4 border-t-pine">
                   <span className="text-xs text-ink-500 font-medium">Funnel-Weighted SoM</span>
-                  <p className="font-serif text-3xl font-bold text-ink">
+                  <p className="font-sans text-3xl font-bold text-ink">
                     {somMetric.funnel_weighted_som_pct != null ? `${somMetric.funnel_weighted_som_pct}%` : '—'}
                   </p>
-                  <p className="text-[11px] text-pine font-medium">Weighted across Awareness, Consideration, and Decision</p>
+                  <p className="text-[11px] text-ink-700 font-medium">Weighted across Awareness, Consideration, and Decision</p>
                 </Card>
 
                 <Card className="p-4 space-y-1.5 border-t-4 border-t-good">
                   <span className="text-xs text-ink-500 font-medium">1st-Party Citation Rate</span>
-                  <p className="font-serif text-3xl font-bold text-ink">
+                  <p className="font-sans text-3xl font-bold text-ink">
                     {somMetric.first_party_citation_share_pct != null ? `${somMetric.first_party_citation_share_pct}%` : '—'}
                   </p>
                   <p className="text-[11px] text-good font-medium">Observed direct domain citations</p>
                 </Card>
 
-                <Card className="p-4 space-y-1.5 border-t-4 border-t-cyan-600">
+                <Card className="p-4 space-y-1.5 border-t-4 border-t-line">
                   <span className="text-xs text-ink-500 font-medium">Rank #1 Recommendation</span>
-                  <p className="font-serif text-3xl font-bold text-ink">
+                  <p className="font-sans text-3xl font-bold text-ink">
                     {somMetric.ordinal_distribution?.rank_1 ?? 0}
                   </p>
                   <p className="text-[11px] text-ink-500 font-mono">Top recommendation count</p>
@@ -321,7 +321,7 @@ export function GeoWorkspaceView({
 
                 <Card className="p-4 space-y-1.5 border-t-4 border-t-bad">
                   <span className="text-xs text-ink-500 font-medium">Competitor Displacements</span>
-                  <p className="font-serif text-3xl font-bold text-bad">
+                  <p className="font-sans text-3xl font-bold text-bad">
                     {somMetric.competitor_displacements?.length ?? 0}
                   </p>
                   <p className="text-[11px] text-bad font-medium">Instances where competitor held top position</p>
@@ -331,17 +331,17 @@ export function GeoWorkspaceView({
               {/* Stage breakdown if available */}
               {somMetric.stage_breakdown && (
                 <Card className="p-5 space-y-4">
-                  <h3 className="font-serif font-bold text-ink text-base flex items-center gap-2">
-                    <Crosshair className="w-4 h-4 text-pine" /> Buyer Journey Stage Weighting
+                  <h3 className="font-sans font-bold text-ink text-base flex items-center gap-2">
+                    <Crosshair className="w-4 h-4 text-ink-700" /> Buyer Journey Stage Weighting
                   </h3>
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
                     {Object.entries(somMetric.stage_breakdown).map(([stageName, sData]: [string, any]) => (
                       <div key={stageName} className="p-4 rounded-lg bg-ink-50/60 border border-ink/5 space-y-2">
                         <div className="flex items-center justify-between">
-                          <span className="font-semibold text-ink uppercase tracking-wider text-[11px]">
+                          <span className="font-semibold text-ink uppercase tracking-[0.04em] text-[11px]">
                             {stageName} ({sData.commercial_weight}x)
                           </span>
-                          <span className="font-mono font-bold text-pine">
+                          <span className="font-mono font-bold text-ink-700">
                             {sData.mention_rate_pct != null ? `${sData.mention_rate_pct}%` : '—'}
                           </span>
                         </div>
@@ -357,7 +357,7 @@ export function GeoWorkspaceView({
           ) : (
             <Card className="p-8 text-center space-y-3">
               <Crosshair className="w-8 h-8 text-ink-400 mx-auto" />
-              <h4 className="font-serif font-bold text-ink text-base">Share of Model: Not Measured</h4>
+              <h4 className="font-sans font-bold text-ink text-base">Share of Model: Not Measured</h4>
               <p className="text-xs text-ink-500 max-w-md mx-auto">
                 Live multi-engine Share of Model (SoM) is computed exclusively from successful live engine responses.
                 To observe real brand presence across AI answer engines, run a live benchmark with configured engine keys.
@@ -375,11 +375,11 @@ export function GeoWorkspaceView({
           {sentimentAudit ? (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <Card className="p-5 space-y-3">
-                <h3 className="font-serif font-bold text-ink text-base flex items-center gap-2">
+                <h3 className="font-sans font-bold text-ink text-base flex items-center gap-2">
                   <Award className="w-4 h-4 text-good" /> Brand Sentiment Polarity
                 </h3>
                 <div className="flex items-center gap-4">
-                  <div className="p-3 bg-good/10 text-good font-serif font-bold text-xl rounded-lg border border-good/20">
+                  <div className="p-3 bg-good/10 text-good font-sans font-bold text-xl rounded-lg border border-good/20">
                     {sentimentAudit.overall_sentiment_distribution?.POSITIVE ?? 0} Positive /{' '}
                     {sentimentAudit.total_evaluated} Total
                   </div>
@@ -389,9 +389,9 @@ export function GeoWorkspaceView({
                 </div>
               </Card>
 
-              <Card className="p-5 space-y-3 border-l-4 border-l-bad">
+              <Card className="p-5 space-y-3 border-l-2 border-l-bad">
                 <div className="flex items-center justify-between">
-                  <h3 className="font-serif font-bold text-ink text-base flex items-center gap-2">
+                  <h3 className="font-sans font-bold text-ink text-base flex items-center gap-2">
                     <ShieldAlert className="w-4 h-4 text-bad" /> Ground-Truth Hallucination Audit
                   </h3>
                   <span className="px-2 py-0.5 rounded text-[11px] font-mono font-bold bg-good/10 text-good">
@@ -406,7 +406,7 @@ export function GeoWorkspaceView({
           ) : (
             <Card className="p-8 text-center space-y-3">
               <ShieldAlert className="w-8 h-8 text-ink-400 mx-auto" />
-              <h4 className="font-serif font-bold text-ink text-base">Brand Sentiment & Hallucinations: Not Measured</h4>
+              <h4 className="font-sans font-bold text-ink text-base">Brand Sentiment & Hallucinations: Not Measured</h4>
               <p className="text-xs text-ink-500 max-w-md mx-auto">
                 Sentiment polarity and factual hallucination detection require verbatim responses from live AI engines.
                 Run the Live AI Citation Tracker to evaluate how AI models represent your brand.
@@ -442,8 +442,8 @@ export function GeoWorkspaceView({
           {offpageReport ? (
             <Card className="p-5 space-y-4">
               <div>
-                <h3 className="font-serif font-bold text-ink text-base flex items-center gap-2">
-                  <Network className="w-4 h-4 text-pine" /> Observed Third-Party Citation Authority Domains
+                <h3 className="font-sans font-bold text-ink text-base flex items-center gap-2">
+                  <Network className="w-4 h-4 text-ink-700" /> Observed Third-Party Citation Authority Domains
                 </h3>
                 <p className="text-xs text-ink-500 mt-1">
                   Third-party authority domains observed in external citation URLs during live AI answer engine benchmarking.
@@ -465,7 +465,7 @@ export function GeoWorkspaceView({
                     {offpageReport.top_authority_hubs?.map((hub: any, i: number) => (
                       <tr key={i}>
                         <td className="py-2.5 px-3 font-semibold text-ink">{hub.domain}</td>
-                        <td className="py-2.5 px-3 text-pine">{hub.hub_type}</td>
+                        <td className="py-2.5 px-3 text-ink-700">{hub.hub_type}</td>
                         <td className="py-2.5 px-3">{hub.frequency_across_queries} queries</td>
                         <td className="py-2.5 px-3 font-bold">
                           {hub.target_brand_present ? (
@@ -484,7 +484,7 @@ export function GeoWorkspaceView({
           ) : (
             <Card className="p-8 text-center space-y-3">
               <Network className="w-8 h-8 text-ink-400 mx-auto" />
-              <h4 className="font-serif font-bold text-ink text-base">Off-Page Citation Network: Not Measured</h4>
+              <h4 className="font-sans font-bold text-ink text-base">Off-Page Citation Network: Not Measured</h4>
               <p className="text-xs text-ink-500 max-w-md mx-auto">
                 Off-page citation networks are aggregated strictly from external URLs observed in live benchmark responses.
                 Run the Live AI Citation Tracker to inspect third-party authority domains cited in engine responses.
@@ -513,7 +513,7 @@ export function GeoWorkspaceView({
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <Card className="p-4 space-y-1">
               <span className="text-xs text-ink-500">Information Gain</span>
-              <p className="font-serif text-3xl font-bold text-ink">
+              <p className="font-sans text-3xl font-bold text-ink">
                 {infoGain?.score != null ? Math.round(infoGain.score) : '—'}
                 <span className="text-xs text-ink-400 font-sans font-normal"> / 100</span>
               </p>
@@ -522,7 +522,7 @@ export function GeoWorkspaceView({
 
             <Card className="p-4 space-y-1">
               <span className="text-xs text-ink-500">Fluff Ratio Score</span>
-              <p className="font-serif text-3xl font-bold text-ink">
+              <p className="font-sans text-3xl font-bold text-ink">
                 {infoGain?.fluff_ratio_score != null ? `${infoGain.fluff_ratio_score}/100` : '—'}
               </p>
               <p className="text-xs text-ink-500">Low promotional filler</p>
@@ -530,7 +530,7 @@ export function GeoWorkspaceView({
 
             <Card className="p-4 space-y-1">
               <span className="text-xs text-ink-500">Proprietary Statistics</span>
-              <p className="font-serif text-3xl font-bold text-ink">
+              <p className="font-sans text-3xl font-bold text-ink">
                 {infoGain?.has_proprietary_statistics ? 'Detected' : 'None detected'}
               </p>
               <p className="text-xs text-ink-500">Primary research statistics</p>
@@ -538,7 +538,7 @@ export function GeoWorkspaceView({
 
             <Card className="p-4 space-y-1">
               <span className="text-xs text-ink-500">Benchmark Tables</span>
-              <p className="font-serif text-3xl font-bold text-ink">
+              <p className="font-sans text-3xl font-bold text-ink">
                 {infoGain?.has_benchmark_tables ? 'Verified' : 'None detected'}
               </p>
               <p className="text-xs text-ink-500">Quotable data comparisons</p>
@@ -552,12 +552,12 @@ export function GeoWorkspaceView({
           ───────────────────────────────────────────────────────────── */}
       {activeSubTab === 'queries' && (
         <Card className="p-5 space-y-4">
-          <h3 className="font-serif font-bold text-ink text-base">Tested Generative Inquiry Matrix</h3>
+          <h3 className="font-sans font-bold text-ink text-base">Tested Generative Inquiry Matrix</h3>
           <div className="space-y-2">
             {queries.slice(0, 10).map((q, idx) => (
               <div key={idx} className="p-3 bg-ink-50/60 rounded-md border border-ink/5 flex items-center justify-between text-xs">
-                <span className="font-mono text-ink-800">{q.query}</span>
-                <span className="px-2 py-0.5 rounded bg-pine/10 text-pine font-mono font-semibold">
+                <span className="font-mono text-ink-700">{q.query}</span>
+                <span className="px-2 py-0.5 rounded bg-paper-200 text-ink-700 font-mono font-semibold">
                   {q.question_type || 'commercial'}
                 </span>
               </div>
@@ -573,14 +573,14 @@ export function GeoWorkspaceView({
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <div>
-              <h3 className="font-serif font-bold text-ink text-base">Inverted-Pyramid Quotable Rewrites</h3>
+              <h3 className="font-sans font-bold text-ink text-base">Inverted-Pyramid Quotable Rewrites</h3>
               <p className="text-xs text-ink-500">Drop-in 40-60 word definitions designed for direct LLM extraction.</p>
             </div>
             {onOpenPatchPack && (
               <button
                 type="button"
                 onClick={onOpenPatchPack}
-                className="px-3 py-1.5 bg-pine hover:bg-pine-dark text-white rounded text-xs font-semibold flex items-center gap-1.5 transition-colors"
+                className="px-3 py-1.5 bg-pine hover:bg-pine-700 text-white rounded text-xs font-semibold flex items-center gap-1.5 transition-colors"
               >
                 <FileCheck className="w-3.5 h-3.5" />
                 <span>Export Patch Pack ZIP</span>
@@ -594,7 +594,7 @@ export function GeoWorkspaceView({
               return (
                 <Card key={idx} className="p-4 space-y-3">
                   <div className="flex items-center justify-between text-xs">
-                    <span className="font-semibold text-pine font-mono bg-pine/5 px-2 py-0.5 rounded border border-pine/20">
+                    <span className="font-semibold text-ink-700 font-mono bg-paper-100 px-2 py-0.5 rounded border border-line">
                       Rewrite #{idx + 1}
                     </span>
                     <button

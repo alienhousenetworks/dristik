@@ -30,7 +30,7 @@ export function Telemetry({ telemetry, onNavigateToCosting }: TelemetryProps) {
           {items.map((item) => (
             <div key={item.label} className="flex items-baseline gap-1.5">
               <dt className="text-ink-500 font-medium">{item.label}:</dt>
-              <dd className={`font-mono ${item.highlight ? 'font-bold text-pine text-sm' : 'text-ink-700'}`}>
+              <dd className={`font-mono ${item.highlight ? 'font-bold text-ink-700 text-sm' : 'text-ink-700'}`}>
                 {item.value}
               </dd>
             </div>
@@ -57,7 +57,7 @@ export function Telemetry({ telemetry, onNavigateToCosting }: TelemetryProps) {
             <button
               type="button"
               onClick={() => setShowStageTable(!showStageTable)}
-              className="text-xs text-pine hover:underline font-semibold flex items-center gap-1 cursor-pointer bg-pine/5 px-2.5 py-1 rounded border border-pine/20 transition-colors hover:bg-pine/10"
+              className="text-xs text-ink-700 hover:underline font-semibold flex items-center gap-1 cursor-pointer bg-paper-100 px-2.5 py-1 rounded border border-line transition-colors hover:bg-paper-100"
             >
               {showStageTable ? 'Hide Quick Summary' : 'Quick Stage Costs'}
             </button>
@@ -66,7 +66,7 @@ export function Telemetry({ telemetry, onNavigateToCosting }: TelemetryProps) {
             <button
               type="button"
               onClick={onNavigateToCosting}
-              className="text-xs text-pine hover:bg-pine hover:text-white font-semibold flex items-center gap-1 cursor-pointer bg-pine/10 px-2.5 py-1 rounded border border-pine/30 transition-colors"
+              className="text-xs text-ink-700 hover:bg-pine hover:text-white font-semibold flex items-center gap-1 cursor-pointer bg-paper-200 px-2.5 py-1 rounded border border-line transition-colors"
             >
               Full Cost Ledger →
             </button>
@@ -75,7 +75,7 @@ export function Telemetry({ telemetry, onNavigateToCosting }: TelemetryProps) {
       </div>
 
       {showStageTable && stageCosts.length > 0 && (
-        <div className="rounded-lg border border-line bg-sand-50/70 p-3 overflow-x-auto shadow-sm">
+        <div className="rounded-lg border border-line bg-paper-50/70 p-3 overflow-x-auto shadow-sm">
           <div className="flex items-center justify-between mb-2">
             <h4 className="text-xs font-bold uppercase tracking-wider text-ink-700">
               Audit Pipeline Stage Cost Ledger
@@ -96,8 +96,8 @@ export function Telemetry({ telemetry, onNavigateToCosting }: TelemetryProps) {
             </thead>
             <tbody className="divide-y divide-line/40 font-mono">
               {stageCosts.map((s) => (
-                <tr key={s.stage} className="hover:bg-sand-100/60 transition-colors">
-                  <td className="py-1.5 px-2 font-sans font-medium text-ink-800">
+                <tr key={s.stage} className="hover:bg-paper-100/60 transition-colors">
+                  <td className="py-1.5 px-2 font-sans font-medium text-ink-700">
                     <div>{s.display_name || s.stage}</div>
                     {s.models?.length > 0 && (
                       <div className="text-[10px] text-ink-400 font-mono">{s.models.join(', ')}</div>
@@ -110,14 +110,14 @@ export function Telemetry({ telemetry, onNavigateToCosting }: TelemetryProps) {
                     <span>{s.output_tokens.toLocaleString()}</span>
                   </td>
                   <td className="py-1.5 px-2 text-right text-ink-600">{formatMs(s.latency_ms)}</td>
-                  <td className="py-1.5 px-2 text-right font-bold text-pine">
+                  <td className="py-1.5 px-2 text-right font-bold text-ink-700">
                     ${s.cost_usd.toFixed(4)}
                   </td>
                 </tr>
               ))}
             </tbody>
             <tfoot>
-              <tr className="border-t-2 border-line font-bold text-ink-900 bg-sand-100/60">
+              <tr className="border-t-2 border-line font-bold text-ink-900 bg-paper-100/60">
                 <td className="py-2 px-2 font-sans">Total Audit Cost</td>
                 <td className="py-2 px-2 text-right font-mono">{telemetry.model_calls_count || 0}</td>
                 <td className="py-2 px-2 text-right font-mono">
@@ -128,7 +128,7 @@ export function Telemetry({ telemetry, onNavigateToCosting }: TelemetryProps) {
                 <td className="py-2 px-2 text-right font-mono">
                   {formatMs(telemetry.total_latency_ms || 0)}
                 </td>
-                <td className="py-2 px-2 text-right font-mono text-pine text-sm">
+                <td className="py-2 px-2 text-right font-mono text-ink-700 text-sm">
                   ${totalCost.toFixed(4)}
                 </td>
               </tr>

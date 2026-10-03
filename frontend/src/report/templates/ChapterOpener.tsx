@@ -16,7 +16,6 @@ interface ChapterOpenerProps {
 }
 
 export function ChapterOpener({
-  theme,
   chapterNumber,
   title,
   subtitle,
@@ -28,17 +27,17 @@ export function ChapterOpener({
   pageNumber,
 }: ChapterOpenerProps) {
   return (
-    <section className="report-page-break p-8 md:p-14 min-h-[960px] flex flex-col justify-between bg-white border-b-2 border-slate-200">
+    <section className="report-page-break p-8 md:p-14 min-h-[960px] flex flex-col justify-between bg-paper-50 border-b-2 border-line">
       {/* Top publisher running bar */}
-      <div className="flex items-center justify-between pb-3 border-b border-slate-200 text-[8pt] font-mono tracking-wider uppercase text-slate-500">
+      <div className="flex items-center justify-between pb-3 border-b border-line text-[8pt] font-mono tracking-[0.04em] uppercase text-ink-500">
         <div className="flex items-center gap-2">
-          <span className="font-bold text-slate-900">DRISTIK</span>
-          <span className="text-slate-300">/</span>
+          <span className="font-bold text-ink">DRISTIK</span>
+          <span className="text-ink-300">/</span>
           <span>ENTERPRISE ADVISORY DOSSIER</span>
         </div>
         <div>
           <span>CHAPTER {chapterNumber}</span>
-          <span className="mx-2 text-slate-300">·</span>
+          <span className="mx-2 text-ink-300">·</span>
           <span>{domain}</span>
         </div>
       </div>
@@ -49,73 +48,71 @@ export function ChapterOpener({
         <div className="flex items-baseline justify-between">
           <div
             className={DESIGN_TOKENS.typography.chapterNumber}
-            style={{ color: theme.accent }}
           >
             {chapterNumber}
           </div>
           {/* Minimal accent graphic */}
           <div className="hidden sm:flex items-center gap-1.5 opacity-80">
-            <span className="w-12 h-[2px]" style={{ backgroundColor: theme.accent }}></span>
-            <span className="w-3 h-3 rounded-full border-2" style={{ borderColor: theme.accent }}></span>
-            <span className="w-32 h-[1px] bg-slate-300"></span>
+            <span className="bg-ink w-10 h-px" />
+            <span className="w-32 h-[1px] bg-paper-300"></span>
           </div>
         </div>
 
         {/* Pillar Subtitle */}
-        <div className="font-mono text-[9pt] font-bold uppercase tracking-[0.2em] text-slate-500">
+        <div className="font-mono text-[9pt] font-bold uppercase tracking-[0.04em] text-ink-500">
           {subtitle}
         </div>
 
         {/* Large Chapter Title */}
-        <h1 className="font-serif text-[32pt] md:text-[38pt] font-normal leading-[1.12] tracking-tight text-slate-950">
+        <h1 className="font-serif text-[32pt] md:text-[38pt] font-normal leading-[1.12] tracking-tight text-ink">
           {title}
         </h1>
 
         {/* Editorial Description */}
-        <p className="font-serif text-[13pt] md:text-[14pt] font-normal leading-[1.6] text-slate-700 max-w-3xl">
+        <p className="font-sans text-[13pt] md:text-[14pt] font-normal leading-[1.6] text-ink-700 max-w-3xl">
           {description}
         </p>
 
         {/* Client-Brand Accent Rule */}
-        <div className="w-24 h-[3px] mt-4" style={{ backgroundColor: theme.accent }}></div>
+        <div className="bg-ink w-10 h-px mt-4" />
       </div>
 
       {/* Structured 3-Part Framing Grid (Why Matters / How Measured / What Analyzed) */}
-      <div className="border-t border-slate-200 pt-6 mt-8">
+      <div className="border-t border-line pt-6 mt-8">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-[8.5pt]">
           {/* 1. Why this matters */}
-          <div className="space-y-1.5 p-4 rounded bg-slate-50 border border-slate-200/80">
-            <span className="font-mono text-[8pt] font-bold uppercase tracking-wider text-slate-500 block">
+          <div className="space-y-1.5 p-4 rounded bg-paper-100 border border-line">
+            <span className="font-mono text-[8pt] font-bold uppercase tracking-[0.04em] text-ink-500 block">
               01 // WHY THIS MATTERS
             </span>
-            <p className="text-slate-800 leading-relaxed font-sans">
+            <p className="text-ink-700 leading-relaxed font-sans">
               {whyThisMatters}
             </p>
           </div>
 
           {/* 2. How we measured it */}
-          <div className="space-y-1.5 p-4 rounded bg-slate-50 border border-slate-200/80">
-            <span className="font-mono text-[8pt] font-bold uppercase tracking-wider text-slate-500 block">
+          <div className="space-y-1.5 p-4 rounded bg-paper-100 border border-line">
+            <span className="font-mono text-[8pt] font-bold uppercase tracking-[0.04em] text-ink-500 block">
               02 // HOW WE MEASURED IT
             </span>
-            <p className="text-slate-800 leading-relaxed font-sans">
+            <p className="text-ink-700 leading-relaxed font-sans">
               {howWeMeasuredIt}
             </p>
           </div>
 
           {/* 3. What was analyzed */}
-          <div className="space-y-1.5 p-4 rounded bg-slate-50 border border-slate-200/80">
-            <span className="font-mono text-[8pt] font-bold uppercase tracking-wider text-slate-500 block">
+          <div className="space-y-1.5 p-4 rounded bg-paper-100 border border-line">
+            <span className="font-mono text-[8pt] font-bold uppercase tracking-[0.04em] text-ink-500 block">
               03 // WHAT WAS ANALYZED
             </span>
-            <p className="text-slate-800 leading-relaxed font-sans">
+            <p className="text-ink-700 leading-relaxed font-sans">
               {whatWasAnalyzed}
             </p>
           </div>
         </div>
 
         {/* Bottom Running Footer on Opener */}
-        <div className="flex items-center justify-between text-[7.5pt] font-mono text-slate-400 mt-6 pt-3 border-t border-slate-100">
+        <div className="flex items-center justify-between text-[7.5pt] font-mono text-ink-400 mt-6 pt-3 border-t border-line">
           <span>CONFIDENTIAL // PREPARED FOR {domain}</span>
           <span>{pageNumber != null ? `PAGE ${pageNumber}` : ''}</span>
         </div>

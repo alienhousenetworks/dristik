@@ -54,8 +54,8 @@ export function LatencyCurveChart({ chart }: LatencyCurveChartProps) {
         <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-auto overflow-visible min-w-[380px]">
           <defs>
             <linearGradient id="latencyAreaGrad" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#0284c7" stopOpacity="0.35" />
-              <stop offset="100%" stopColor="#0284c7" stopOpacity="0.02" />
+              <stop offset="0%" stopColor="#171a20" stopOpacity="0.35" />
+              <stop offset="100%" stopColor="#171a20" stopOpacity="0.02" />
             </linearGradient>
           </defs>
 
@@ -78,7 +78,7 @@ export function LatencyCurveChart({ chart }: LatencyCurveChartProps) {
                 y1={fastY}
                 x2={padLeft + graphWidth}
                 y2={fastY}
-                stroke="#16a34a"
+                stroke="#0f7a48"
                 strokeWidth="1.25"
                 strokeDasharray="4 3"
                 opacity="0.85"
@@ -87,7 +87,7 @@ export function LatencyCurveChart({ chart }: LatencyCurveChartProps) {
                 x={padLeft + graphWidth - 4}
                 y={fastY - 4}
                 textAnchor="end"
-                className="fill-emerald-600 dark:fill-emerald-400 text-[10px] font-mono font-bold"
+                className="fill-good dark:fill-good text-[10px] font-mono font-bold"
               >
                 200ms Fast
               </text>
@@ -102,7 +102,7 @@ export function LatencyCurveChart({ chart }: LatencyCurveChartProps) {
                 y1={warnY}
                 x2={padLeft + graphWidth}
                 y2={warnY}
-                stroke="#dc2626"
+                stroke="#a82620"
                 strokeWidth="1.25"
                 strokeDasharray="4 3"
                 opacity="0.85"
@@ -111,7 +111,7 @@ export function LatencyCurveChart({ chart }: LatencyCurveChartProps) {
                 x={padLeft + graphWidth - 4}
                 y={warnY - 4}
                 textAnchor="end"
-                className="fill-red-600 dark:fill-red-400 text-[10px] font-mono font-bold"
+                className="fill-bad dark:fill-bad text-[10px] font-mono font-bold"
               >
                 800ms Warning
               </text>
@@ -125,7 +125,7 @@ export function LatencyCurveChart({ chart }: LatencyCurveChartProps) {
           <path
             d={pathD}
             fill="none"
-            stroke="#0284c7"
+            stroke="#171a20"
             strokeWidth="2.5"
             strokeLinecap="round"
             strokeLinejoin="round"
@@ -162,7 +162,7 @@ export function LatencyCurveChart({ chart }: LatencyCurveChartProps) {
                   cy={cy}
                   r={isHovered ? 6 : 4}
                   fill="#ffffff"
-                  stroke={isSlow ? '#dc2626' : (isFast ? '#16a34a' : '#0284c7')}
+                  stroke={isSlow ? '#a82620' : (isFast ? '#0f7a48' : '#171a20')}
                   strokeWidth={isHovered ? 3 : 2}
                   className="transition-all duration-150"
                 />
@@ -172,7 +172,7 @@ export function LatencyCurveChart({ chart }: LatencyCurveChartProps) {
                   y={padTop + graphHeight + 18}
                   textAnchor="middle"
                   className={`text-[10px] font-mono transition-colors ${
-                    isHovered ? 'fill-sky-600 font-bold' : 'fill-ink-600 dark:fill-ink-400'
+                    isHovered ? 'fill-ink font-bold' : 'fill-ink-600 dark:fill-ink-400'
                   }`}
                 >
                   {p.label}
@@ -189,10 +189,10 @@ export function LatencyCurveChart({ chart }: LatencyCurveChartProps) {
               {points[hoveredIndex].full_url}
             </span>
             <div className="flex items-center gap-2 mt-1">
-              <span className="font-bold text-sky-600">TTFB: {points[hoveredIndex].value} ms</span>
+              <span className="font-bold text-ink-700">TTFB: {points[hoveredIndex].value} ms</span>
               <span className="text-ink-400">·</span>
-              <span className={points[hoveredIndex].value <= fastThreshold ? 'text-good font-medium' : (points[hoveredIndex].value > warningThreshold ? 'text-bad font-medium' : 'text-amber-600 font-medium')}>
-                {points[hoveredIndex].value <= fastThreshold ? '⚡ Fast (<200ms)' : (points[hoveredIndex].value > warningThreshold ? '⚠️ Slow (>800ms)' : 'Moderate')}
+              <span className={points[hoveredIndex].value <= fastThreshold ? 'text-good font-medium' : (points[hoveredIndex].value > warningThreshold ? 'text-bad font-medium' : 'text-warn font-medium')}>
+                {points[hoveredIndex].value <= fastThreshold ? ' Fast (<200ms)' : (points[hoveredIndex].value > warningThreshold ? ' Slow (>800ms)' : 'Moderate')}
               </span>
             </div>
           </div>
@@ -203,10 +203,10 @@ export function LatencyCurveChart({ chart }: LatencyCurveChartProps) {
       <div className="flex flex-wrap items-center justify-between gap-4 mt-3 pt-2.5 border-t border-line/60 text-xs text-ink-500">
         <div className="flex items-center gap-3">
           <span className="inline-flex items-center gap-1.5">
-            <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" /> &lt;200ms (Optimal)
+            <span className="w-2.5 h-2.5 rounded-full bg-good/10" /> &lt;200ms (Optimal)
           </span>
           <span className="inline-flex items-center gap-1.5">
-            <span className="w-2.5 h-2.5 rounded-full bg-red-500" /> &gt;800ms (Crawl Drag)
+            <span className="w-2.5 h-2.5 rounded-full bg-bad/10" /> &gt;800ms (Crawl Drag)
           </span>
         </div>
         <span className="font-mono text-[11px]">Server Response Latency Curve</span>

@@ -36,7 +36,7 @@ export function AppendixLedger({
       />
 
       {/* 2. Findings Register Section */}
-      <section className="report-page-break p-8 md:p-14 min-h-[960px] flex flex-col justify-between bg-white border-b-2 border-slate-200">
+      <section className="report-page-break p-8 md:p-14 min-h-[960px] flex flex-col justify-between bg-paper-50 border-b-2 border-line">
         <PageHeader
           theme={theme}
           domain={meta.domain}
@@ -45,16 +45,16 @@ export function AppendixLedger({
 
         <div className="space-y-6 max-w-4xl">
           <div>
-            <span className="font-mono text-[8pt] font-bold uppercase tracking-[0.2em] text-slate-500 block mb-1">
+            <span className="font-mono text-[8pt] font-bold uppercase tracking-[0.04em] text-ink-500 block mb-1">
               Deterministic Discrepancies
             </span>
-            <h2 className="font-serif text-[22pt] font-normal tracking-tight text-slate-950">
+            <h2 className="font-serif text-[22pt] font-normal tracking-tight text-ink">
               Verified Findings Register ({appendices.findings.length})
             </h2>
-            <div className="w-16 h-[2.5px] mt-2" style={{ backgroundColor: theme.accent }}></div>
+            <div className="bg-ink w-10 h-px mt-2" />
           </div>
 
-          <p className="text-[8.5pt] text-slate-700 font-sans leading-relaxed">
+          <p className="text-[8.5pt] text-ink-700 font-sans leading-relaxed">
             All findings are generated directly by Dristik's deterministic rules engine. Speculative or unverified claims are strictly withheld from this register.
           </p>
 
@@ -76,7 +76,7 @@ export function AppendixLedger({
 
       {/* 3. Generated Remediation Patches (Point 14) */}
       {appendices.patches.length > 0 && (
-        <section className="report-page-break p-8 md:p-14 min-h-[960px] flex flex-col justify-between bg-white border-b-2 border-slate-200">
+        <section className="report-page-break p-8 md:p-14 min-h-[960px] flex flex-col justify-between bg-paper-50 border-b-2 border-line">
           <PageHeader
             theme={theme}
             domain={meta.domain}
@@ -85,57 +85,57 @@ export function AppendixLedger({
 
           <div className="space-y-6 max-w-4xl">
             <div>
-              <span className="font-mono text-[8pt] font-bold uppercase tracking-[0.2em] text-slate-500 block mb-1">
+              <span className="font-mono text-[8pt] font-bold uppercase tracking-[0.04em] text-ink-500 block mb-1">
                 Proposed Code Remediation (Pending Deployment)
               </span>
-              <h2 className="font-serif text-[22pt] font-normal tracking-tight text-slate-950">
+              <h2 className="font-serif text-[22pt] font-normal tracking-tight text-ink">
                 Generated Remediation Patches
               </h2>
-              <div className="w-16 h-[2.5px] mt-2" style={{ backgroundColor: theme.accent }}></div>
+              <div className="bg-ink w-10 h-px mt-2" />
             </div>
 
-            <div className="p-3 bg-slate-50 border border-slate-200 rounded text-[7.5pt] space-y-1">
-              <div className="flex items-center justify-between pb-1 border-b border-slate-200">
-                <span className="font-mono font-bold uppercase text-slate-700">Remediation Assurance Protocol</span>
-                <span className="font-mono font-bold px-1.5 py-0.2 rounded bg-amber-50 text-amber-800 border border-amber-200">
+            <div className="p-3 bg-paper-100 border border-line rounded text-[7.5pt] space-y-1">
+              <div className="flex items-center justify-between pb-1 border-b border-line">
+                <span className="font-mono font-bold uppercase text-ink-700">Remediation Assurance Protocol</span>
+                <span className="font-mono font-bold px-1.5 py-0.2 rounded bg-warn/10 text-warn border border-warn/30">
                   STATUS: PATCH GENERATED (Unapplied)
                 </span>
               </div>
-              <p className="font-sans text-slate-600">
+              <p className="font-sans text-ink-600">
                 Under Dristik's Zero-Fake governance, generated diffs are labeled as <strong>Generated Remediation Patches</strong> until actively applied to the target codebase and confirmed via automated recrawl.
               </p>
-              <div className="font-mono text-[7pt] text-slate-500 pt-0.5">
+              <div className="font-mono text-[7pt] text-ink-500 pt-0.5">
                 Verification Lifecycle: <strong>PATCH GENERATED</strong> → PENDING APPLICATION → RECRAWL → REGRESSION TEST → VERIFIED REMEDIATION
               </div>
             </div>
 
             <div className="space-y-4">
               {appendices.patches.slice(0, 3).map((patch) => (
-                <div key={patch.patch_id} className="report-avoid-break p-4 border border-slate-200 rounded bg-white space-y-2 text-[8pt]">
-                  <div className="flex items-center justify-between pb-2 border-b border-slate-200">
+                <div key={patch.patch_id} className="report-avoid-break p-4 border border-line rounded bg-paper-50 space-y-2 text-[8pt]">
+                  <div className="flex items-center justify-between pb-2 border-b border-line">
                     <div>
-                      <span className="font-mono text-[8.5pt] font-bold text-slate-900 block">
+                      <span className="font-mono text-[8.5pt] font-bold text-ink block">
                         {patch.target_file || 'index.html'}
                       </span>
-                      <span className="font-mono text-[7.5pt] text-slate-500">
+                      <span className="font-mono text-[7.5pt] text-ink-500">
                         {patch.title || 'Technical Patch'}
                       </span>
                     </div>
                     <div className="flex items-center gap-2">
-                      <span className="font-mono text-[7pt] font-bold px-2 py-0.5 rounded bg-amber-50 text-amber-800 border border-amber-200">
+                      <span className="font-mono text-[7pt] font-bold px-2 py-0.5 rounded bg-warn/10 text-warn border border-warn/30">
                         PENDING DEPLOYMENT
                       </span>
-                      <span className="font-mono text-[7.5pt] font-bold px-2 py-0.5 rounded bg-slate-100 border border-slate-300">
+                      <span className="font-mono text-[7.5pt] font-bold px-2 py-0.5 rounded bg-paper-200 border border-line">
                         Unified Diff
                       </span>
                     </div>
                   </div>
 
-                  <p className="text-slate-700 font-sans leading-relaxed text-[8pt]">
+                  <p className="text-ink-700 font-sans leading-relaxed text-[8pt]">
                     {patch.explanation}
                   </p>
 
-                  <pre className="p-3 bg-slate-950 text-emerald-400 font-mono text-[7.5pt] rounded overflow-x-auto whitespace-pre-wrap leading-relaxed">
+                  <pre className="p-3 bg-ink text-good font-mono text-[7.5pt] rounded overflow-x-auto whitespace-pre-wrap leading-relaxed">
                     {patch.after_snippet}
                   </pre>
                 </div>
@@ -154,7 +154,7 @@ export function AppendixLedger({
       )}
 
       {/* 4. Cryptographic Evidence Ledger */}
-      <section className="report-page-break p-8 md:p-14 min-h-[960px] flex flex-col justify-between bg-white border-b-2 border-slate-200">
+      <section className="report-page-break p-8 md:p-14 min-h-[960px] flex flex-col justify-between bg-paper-50 border-b-2 border-line">
         <PageHeader
           theme={theme}
           domain={meta.domain}
@@ -163,41 +163,41 @@ export function AppendixLedger({
 
         <div className="space-y-6 max-w-4xl">
           <div>
-            <span className="font-mono text-[8pt] font-bold uppercase tracking-[0.2em] text-slate-500 block mb-1">
+            <span className="font-mono text-[8pt] font-bold uppercase tracking-[0.04em] text-ink-500 block mb-1">
               Tamper-Evident Proof
             </span>
-            <h2 className="font-serif text-[22pt] font-normal tracking-tight text-slate-950">
+            <h2 className="font-serif text-[22pt] font-normal tracking-tight text-ink">
               Cryptographic Evidence Ledger
             </h2>
-            <div className="w-16 h-[2.5px] mt-2" style={{ backgroundColor: theme.accent }}></div>
+            <div className="bg-ink w-10 h-px mt-2" />
           </div>
 
-          <p className="text-[8.5pt] text-slate-700 font-sans leading-relaxed">
+          <p className="text-[8.5pt] text-ink-700 font-sans leading-relaxed">
             Every analytical statement throughout this publication is tied to an indexed AST evidence record with recorded origin selector, snippet text, and SHA-256 integrity hash.
           </p>
 
-          <table className="w-full text-[7.5pt] border-collapse border border-slate-200 font-mono">
+          <table className="w-full text-[7.5pt] border-collapse border border-line font-mono">
             <thead>
-              <tr className="bg-slate-50 border-b border-slate-200 text-left text-slate-600 uppercase">
+              <tr className="bg-paper-100 border-b border-line text-left text-ink-600 uppercase">
                 <th className="py-2 px-2" style={{ width: '15%' }}>Evidence ID</th>
                 <th className="py-2 px-2" style={{ width: '22%' }}>URL / Selector</th>
                 <th className="py-2 px-3">Observed Text Snippet</th>
                 <th className="py-2 px-2" style={{ width: '20%' }}>SHA-256 Hash</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-200">
+            <tbody className="divide-y divide-line">
               {appendices.evidenceLedger.slice(0, 10).map((ev) => (
-                <tr key={ev.id} className="hover:bg-slate-50/50">
-                  <td className="py-1.5 px-2 font-bold text-slate-900 truncate">
+                <tr key={ev.id} className="hover:bg-paper-100">
+                  <td className="py-1.5 px-2 font-bold text-ink truncate">
                     {ev.id}
                   </td>
-                  <td className="py-1.5 px-2 text-slate-600 truncate">
+                  <td className="py-1.5 px-2 text-ink-600 truncate">
                     {ev.selector || ev.url || 'DOM AST'}
                   </td>
-                  <td className="py-1.5 px-3 text-slate-800 line-clamp-1 font-sans">
+                  <td className="py-1.5 px-3 text-ink-700 line-clamp-1 font-sans">
                     {ev.snippet || 'DOM node verification'}
                   </td>
-                  <td className="py-1.5 px-2 text-slate-400 truncate">
+                  <td className="py-1.5 px-2 text-ink-400 truncate">
                     {ev.sha256 ? ev.sha256.slice(0, 14) : 'sha256:verified'}…
                   </td>
                 </tr>
@@ -237,12 +237,12 @@ function FindingEditorialCard({
 
   return (
     <div
-      className="report-avoid-break p-4 bg-white border border-slate-200 rounded space-y-2 text-[8pt]"
+      className="report-avoid-break p-4 bg-paper-50 border border-line rounded space-y-2 text-[8pt]"
       style={{ borderLeft: severityStyle.borderLeft }}
     >
-      <div className="flex items-center justify-between pb-1 border-b border-slate-100">
+      <div className="flex items-center justify-between pb-1 border-b border-line">
         <div className="flex items-center gap-2">
-          <span className="font-mono text-[7.5pt] font-bold text-slate-400">
+          <span className="font-mono text-[7.5pt] font-bold text-ink-400">
             {finding.id}
           </span>
           <span
@@ -251,76 +251,76 @@ function FindingEditorialCard({
           >
             {finding.severity}
           </span>
-          <span className="font-mono text-[7pt] text-slate-500 uppercase">
+          <span className="font-mono text-[7pt] text-ink-500 uppercase">
             {finding.category}
           </span>
         </div>
 
         {finding.confidence != null && (
-          <span className="font-mono text-[7pt] text-slate-400">
+          <span className="font-mono text-[7pt] text-ink-400">
             Confidence: {Math.round(finding.confidence * 100)}%
           </span>
         )}
       </div>
 
-      <h4 className="font-serif font-bold text-[10pt] text-slate-950">
+      <h4 className="font-sans font-bold text-[10pt] text-ink">
         {finding.title}
       </h4>
 
-      <p className="text-slate-700 font-sans leading-relaxed text-[8pt]">
+      <p className="text-ink-700 font-sans leading-relaxed text-[8pt]">
         {finding.observation}
       </p>
 
       {finding.businessImpact && (
-        <p className="text-[8pt] text-slate-800 font-sans">
+        <p className="text-[8pt] text-ink-700 font-sans">
           <strong>Commercial Impact:</strong> {finding.businessImpact}
         </p>
       )}
 
       {finding.recommendation && (
-        <p className="text-[8pt] text-slate-900 font-sans" style={{ color: theme.accentDark }}>
+        <p className="text-[8pt] text-ink font-sans">
           <strong>Remediation:</strong> {finding.recommendation}
         </p>
       )}
 
       {/* Structured Evidence Drawer (Point 8) */}
-      <div className="pt-2 border-t border-slate-200 mt-2 bg-slate-50/80 p-3 rounded space-y-1.5 font-mono text-[7.5pt]">
-        <div className="flex items-center justify-between pb-1 border-b border-slate-200">
-          <span className="font-bold text-slate-700 uppercase text-[7pt]">
+      <div className="pt-2 border-t border-line mt-2 bg-paper-100 p-3 rounded space-y-1.5 font-mono text-[7.5pt]">
+        <div className="flex items-center justify-between pb-1 border-b border-line">
+          <span className="font-bold text-ink-700 uppercase text-[7pt]">
             Evidence Drawer // Trace &amp; Verification Protocol
           </span>
-          <span className="px-1.5 py-0.2 rounded bg-slate-200 text-slate-700 font-bold text-[6.5pt]">
+          <span className="px-1.5 py-0.2 rounded bg-paper-200 text-ink-700 font-bold text-[6.5pt]">
             STATUS: OPEN
           </span>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-[7pt]">
           <div>
-            <span className="text-slate-400 block text-[6.5pt] uppercase">Target Origin &amp; Selector:</span>
-            <span className="text-slate-800 break-all font-mono">
+            <span className="text-ink-400 block text-[6.5pt] uppercase">Target Origin &amp; Selector:</span>
+            <span className="text-ink-700 break-all font-mono">
               {finding.evidenceItems[0]?.url || 'Primary Origin Route'} {finding.evidenceItems[0]?.selector ? `· ${finding.evidenceItems[0].selector}` : '· DOM AST'}
             </span>
           </div>
           <div>
-            <span className="text-slate-400 block text-[6.5pt] uppercase">Evidence ID &amp; Hash:</span>
-            <span className="text-slate-800 font-mono">
+            <span className="text-ink-400 block text-[6.5pt] uppercase">Evidence ID &amp; Hash:</span>
+            <span className="text-ink-700 font-mono">
               {finding.evidenceItems[0]?.id || 'EV_001'} · {finding.evidenceItems[0]?.sha256 ? `${finding.evidenceItems[0].sha256.slice(0, 14)}…` : 'sha256:verified'}
             </span>
           </div>
         </div>
 
-        <div className="bg-white p-2 rounded border border-slate-200 font-sans text-[7.5pt] space-y-1">
+        <div className="bg-paper-50 p-2 rounded border border-line font-sans text-[7.5pt] space-y-1">
           <div>
-            <strong className="text-slate-900">Observed Evidence: </strong>
-            <span className="text-slate-700 italic">"{finding.observation.slice(0, 140)}…"</span>
+            <strong className="text-ink">Observed Evidence: </strong>
+            <span className="text-ink-700 italic">"{finding.observation.slice(0, 140)}…"</span>
           </div>
           <div>
-            <strong className="text-slate-900">Why It Matters: </strong>
-            <span className="text-slate-700">{finding.businessImpact || 'Impairs machine extraction clarity and commercial answer retrieval.'}</span>
+            <strong className="text-ink">Why It Matters: </strong>
+            <span className="text-ink-700">{finding.businessImpact || 'Impairs machine extraction clarity and commercial answer retrieval.'}</span>
           </div>
           <div>
-            <strong className="text-slate-900">Verification Test: </strong>
-            <span className="font-mono text-[7pt] text-slate-600">Deterministic AST re-parse confirms target selector resolves valid entity properties with 0 regressions.</span>
+            <strong className="text-ink">Verification Test: </strong>
+            <span className="font-mono text-[7pt] text-ink-600">Deterministic AST re-parse confirms target selector resolves valid entity properties with 0 regressions.</span>
           </div>
         </div>
       </div>

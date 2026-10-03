@@ -171,9 +171,9 @@ export function DeveloperPatchPackModal({
                 }`}
               >
                 <span className="truncate">{key}</span>
-                {key.endsWith('.jsonld') && <span className="text-[9px] px-1 bg-amber-100 text-warn rounded">LD</span>}
+                {key.endsWith('.jsonld') && <span className="text-[9px] px-1 bg-warn/10 text-warn rounded">LD</span>}
                 {key.endsWith('.txt') && <span className="text-[9px] px-1 bg-paper-200 text-ink rounded">TXT</span>}
-                {key.endsWith('.html') && <span className="text-[9px] px-1 bg-pine-100 text-pine rounded">HTML</span>}
+                {key.endsWith('.html') && <span className="text-[9px] px-1 bg-paper-200 text-ink-700 rounded">HTML</span>}
               </button>
             ))}
           </div>
@@ -185,7 +185,7 @@ export function DeveloperPatchPackModal({
               <button
                 type="button"
                 onClick={() => handleCopy(activeFile, files[activeFile] || '')}
-                className="text-pine hover:underline font-medium flex items-center gap-1 transition-colors"
+                className="text-ink-700 hover:underline font-medium flex items-center gap-1 transition-colors"
               >
                 {copiedKey === activeFile ? (
                   <span className="text-good font-bold">✓ Copied!</span>

@@ -42,7 +42,7 @@ export function ContactForm({ user }: { user: AuthUser | null }) {
     <div className="max-w-xl space-y-8 pt-2">
       <div className="space-y-2">
         <p className="label">Contact</p>
-        <h1 className="font-serif text-4xl leading-[1.12] text-ink tracking-tight">Talk to Dristik.</h1>
+        <h1 className="font-sans text-4xl leading-[1.12] text-ink tracking-tight">Talk to Dristik.</h1>
         <p className="text-ink-500 leading-relaxed">
           Tell us about the site, the team, and what you want from the audit.
         </p>

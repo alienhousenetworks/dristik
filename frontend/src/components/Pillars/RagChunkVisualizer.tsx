@@ -22,8 +22,8 @@ export const ControlledRetrievalVisualizer: React.FC<RagChunkVisualizerProps> = 
   return (
     <div className="space-y-4">
       <div>
-        <h3 className="font-serif font-bold text-ink text-base flex items-center gap-2">
-          <Zap className="w-4 h-4 text-pine" /> Controlled Semantic Retrieval Analysis
+        <h3 className="font-sans font-bold text-ink text-base flex items-center gap-2">
+          <Zap className="w-4 h-4 text-ink-700" /> Controlled Semantic Retrieval Analysis
         </h3>
         <p className="text-xs text-ink-500 mt-1">
           Dristik's controlled semantic retrieval methodology evaluates how well crawled page content aligns with buyer queries under deterministic chunking and cosine similarity.
@@ -33,24 +33,24 @@ export const ControlledRetrievalVisualizer: React.FC<RagChunkVisualizerProps> = 
       {/* Methodology & Scope Disclosure Card */}
       <div className="p-3.5 bg-ink-50 rounded-lg border border-ink/10 text-xs space-y-2">
         <div className="flex items-center gap-1.5 font-mono text-[11px] font-bold text-ink-700">
-          <Info className="w-3.5 h-3.5 text-pine shrink-0" />
+          <Info className="w-3.5 h-3.5 text-ink-700 shrink-0" />
           <span>Methodology & Configuration Disclosure</span>
         </div>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-2 font-mono text-[11px] text-ink-600">
-          <div className="bg-white/80 p-2 rounded border border-ink/5">
-            <span className="text-ink-400 block text-[9px] uppercase tracking-wider">Embedding Model</span>
+          <div className="bg-paper-50/80 p-2 rounded border border-ink/5">
+            <span className="text-ink-400 block text-[9px] uppercase tracking-[0.04em]">Embedding Model</span>
             <span className="font-bold text-ink">{report?.methodology?.embedding_model || 'E5-small-v2'}</span>
           </div>
-          <div className="bg-white/80 p-2 rounded border border-ink/5">
-            <span className="text-ink-400 block text-[9px] uppercase tracking-wider">Chunking Strategy</span>
+          <div className="bg-paper-50/80 p-2 rounded border border-ink/5">
+            <span className="text-ink-400 block text-[9px] uppercase tracking-[0.04em]">Chunking Strategy</span>
             <span className="font-bold text-ink">{report?.methodology?.chunk_size || 250} words / {report?.methodology?.chunk_overlap || 40} overlap</span>
           </div>
-          <div className="bg-white/80 p-2 rounded border border-ink/5">
-            <span className="text-ink-400 block text-[9px] uppercase tracking-wider">Similarity Metric</span>
+          <div className="bg-paper-50/80 p-2 rounded border border-ink/5">
+            <span className="text-ink-400 block text-[9px] uppercase tracking-[0.04em]">Similarity Metric</span>
             <span className="font-bold text-ink">Cosine Similarity</span>
           </div>
-          <div className="bg-white/80 p-2 rounded border border-ink/5">
-            <span className="text-ink-400 block text-[9px] uppercase tracking-wider">Threshold Criterion</span>
+          <div className="bg-paper-50/80 p-2 rounded border border-ink/5">
+            <span className="text-ink-400 block text-[9px] uppercase tracking-[0.04em]">Threshold Criterion</span>
             <span className="font-bold text-ink">{report?.methodology?.similarity_threshold || 0.72}</span>
           </div>
         </div>
@@ -69,14 +69,14 @@ export const ControlledRetrievalVisualizer: React.FC<RagChunkVisualizerProps> = 
             type="text"
             value={query}
             onChange={(e) => onQueryChange(e.target.value)}
-            className="flex-1 px-3 py-2 text-xs border border-ink/20 rounded-md focus:outline-none focus:ring-2 focus:ring-pine/30 bg-white"
+            className="flex-1 px-3 py-2 text-xs border border-ink/20 rounded-md focus:outline-none focus:ring-2 focus:ring-pine/30 bg-paper-50"
             placeholder="Enter target inquiry to measure semantic retrieval similarity..."
           />
           <button
             type="button"
             onClick={onRunAnalysis}
             disabled={loading}
-            className="px-4 py-2 bg-pine hover:bg-pine-dark text-white rounded-md text-xs font-semibold flex items-center gap-1.5 transition-colors disabled:opacity-50"
+            className="px-4 py-2 bg-pine hover:bg-pine-700 text-white rounded-md text-xs font-semibold flex items-center gap-1.5 transition-colors disabled:opacity-50"
           >
             {loading ? <Sparkles className="w-3.5 h-3.5 animate-spin" /> : <Zap className="w-3.5 h-3.5" />}
             <span>{loading ? 'Analyzing...' : 'Run Analysis'}</span>
@@ -95,7 +95,7 @@ export const ControlledRetrievalVisualizer: React.FC<RagChunkVisualizerProps> = 
       {report && (
         <div className="space-y-3 pt-2">
           <div className="flex items-center justify-between text-xs">
-            <h4 className="font-mono text-xs font-bold text-ink-600 uppercase tracking-wider">
+            <h4 className="font-mono text-xs font-bold text-ink-600 uppercase tracking-[0.04em]">
               Evaluated Chunks ({report.total_chunks} Total · {report.qualifying_chunks_count} Passing Dristik Threshold)
             </h4>
             <span className="font-mono text-ink-500">
@@ -133,12 +133,12 @@ export const ControlledRetrievalVisualizer: React.FC<RagChunkVisualizerProps> = 
                     </span>
                   </div>
                 </div>
-                <p className="font-mono text-[11px] text-ink-800 leading-relaxed bg-white/70 p-2.5 rounded border border-ink/5">
+                <p className="font-mono text-[11px] text-ink-700 leading-relaxed bg-paper-50/70 p-2.5 rounded border border-ink/5">
                   {c.content}
                 </p>
                 {c.evaluation_notes && c.evaluation_notes.length > 0 && (
                   <div className="text-[10px] text-ink-500 font-mono flex items-center gap-1">
-                    <Info className="w-3 h-3 shrink-0 text-pine" />
+                    <Info className="w-3 h-3 shrink-0 text-ink-700" />
                     <span>{c.evaluation_notes.join(' · ')}</span>
                   </div>
                 )}
@@ -147,8 +147,8 @@ export const ControlledRetrievalVisualizer: React.FC<RagChunkVisualizerProps> = 
           </div>
 
           {report.content_structure_recommendations && report.content_structure_recommendations.length > 0 && (
-            <div className="p-3 bg-pine/5 border border-pine/20 rounded-md text-xs space-y-1">
-              <span className="font-semibold text-pine-dark block">Dristik Content Structure Observations:</span>
+            <div className="p-3 bg-paper-100 border border-line rounded-md text-xs space-y-1">
+              <span className="font-semibold text-ink block">Dristik Content Structure Observations:</span>
               <ul className="list-disc list-inside text-ink-700 space-y-0.5 text-[11px]">
                 {report.content_structure_recommendations.map((rec, idx) => (
                   <li key={idx}>{rec}</li>

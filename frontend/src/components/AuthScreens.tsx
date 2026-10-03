@@ -72,7 +72,7 @@ function OAuthSSOButtons({ onAuthed }: { onAuthed: () => void }) {
       </div>
 
       {ssoNotice && (
-        <div className="p-3 text-xs bg-amber-500/10 border border-amber-500/30 text-amber-900 dark:text-amber-200 rounded leading-relaxed">
+        <div className="p-3 text-xs bg-warn/10 border border-warn/30 text-warn dark:text-warn rounded leading-relaxed">
           {ssoNotice}
         </div>
       )}
@@ -82,7 +82,7 @@ function OAuthSSOButtons({ onAuthed }: { onAuthed: () => void }) {
           <div className="w-full border-t border-line" />
         </div>
         <div className="relative flex justify-center text-xs uppercase">
-          <span className="bg-paper-50 px-2.5 text-ink-400 font-mono tracking-wider">or continue with email</span>
+          <span className="bg-paper-50 px-2.5 text-ink-400 font-mono tracking-[0.04em]">or continue with email</span>
         </div>
       </div>
     </div>
@@ -132,7 +132,7 @@ function AuthShell({
     <div className="max-w-md mx-auto space-y-8 pt-4">
       <div className="space-y-2">
         <p className="label">{kicker}</p>
-        <h1 className="font-serif text-4xl leading-[1.12] text-ink tracking-tight">{title}</h1>
+        <h1 className="font-sans text-4xl leading-[1.12] text-ink tracking-tight">{title}</h1>
       </div>
       <div className="card p-6 sm:p-7 space-y-6">{children}</div>
     </div>

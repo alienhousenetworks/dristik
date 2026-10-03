@@ -74,7 +74,7 @@ export function SearchIntelligenceView({
             <div className="bg-paper-50 dark:bg-ink-900/40 border border-line p-4 rounded-lg space-y-1">
               <span className="label text-[10px] text-ink-500 block">XML Sitemap</span>
               <span className="font-semibold text-ink text-base block">
-                {crawl?.sitemap_found ? '✅ Detected & Valid' : '❌ Not Discovered'}
+                {crawl?.sitemap_found ? ' Detected & Valid' : ' Not Discovered'}
               </span>
               <span className="text-xs text-ink-500 font-mono truncate block">
                 {crawl?.sitemap_url || 'No sitemap link in robots.txt'}
@@ -84,7 +84,7 @@ export function SearchIntelligenceView({
             <div className="bg-paper-50 dark:bg-ink-900/40 border border-line p-4 rounded-lg space-y-1">
               <span className="label text-[10px] text-ink-500 block">Robots.txt Health</span>
               <span className="font-semibold text-ink text-base block">
-                {crawl?.robots_txt_found ? '✅ Accessible' : crawl ? 'Not found' : '—'}
+                {crawl?.robots_txt_found ? ' Accessible' : crawl ? 'Not found' : '—'}
               </span>
               <span className="text-xs text-ink-500 block">
                 {crawl?.robots_txt_found ? 'Standard crawl rules active' : 'Crawl directives absent'}
@@ -115,7 +115,7 @@ export function SearchIntelligenceView({
           {/* Critical Findings Section */}
           <div className="sheet border border-line rounded-lg p-6 space-y-4">
             <div className="flex items-center justify-between">
-              <h3 className="font-serif text-xl text-ink font-bold">
+              <h3 className="font-sans text-xl text-ink font-bold">
                 Verified Search & SEO Deficiencies ({findings.length})
               </h3>
               <span className="text-xs font-mono text-ink-500">Backed by Cryptographic DOM Evidence</span>
@@ -129,13 +129,13 @@ export function SearchIntelligenceView({
                   <div
                     key={item.finding_id}
                     onClick={() => onSelectFinding?.(item)}
-                    className="p-3.5 bg-paper-50 dark:bg-ink-900/40 border border-line rounded-md hover:border-pine cursor-pointer transition-colors flex items-start justify-between gap-4"
+                    className="p-3.5 bg-paper-50 dark:bg-ink-900/40 border border-line rounded-md hover:border-ink cursor-pointer transition-colors flex items-start justify-between gap-4"
                   >
                     <div className="space-y-1">
                       <div className="flex items-center gap-2">
                         <span className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded ${
-                          item.severity === 'CRITICAL' ? 'bg-red-100 text-red-700' :
-                          item.severity === 'HIGH' ? 'bg-amber-100 text-amber-800' : 'bg-paper-200 text-ink-700'
+                          item.severity === 'CRITICAL' ? 'bg-bad/10 text-bad' :
+                          item.severity === 'HIGH' ? 'bg-warn/10 text-warn' : 'bg-paper-200 text-ink-700'
                         }`}>
                           {item.severity}
                         </span>
@@ -144,7 +144,7 @@ export function SearchIntelligenceView({
                       <p className="text-xs text-ink-600 line-clamp-1">{item.description}</p>
                     </div>
 
-                    <span className="text-xs text-pine font-mono font-bold shrink-0 self-center">
+                    <span className="text-xs text-ink-700 font-mono font-bold shrink-0 self-center">
                       Inspect Evidence →
                     </span>
                   </div>
@@ -167,7 +167,7 @@ export function SearchIntelligenceView({
       {/* SUB-VIEW 2: TECHNICAL SEO */}
       {activeSubTab === 'technical' && (
         <div className="sheet border border-line rounded-lg p-6 space-y-6">
-          <h3 className="font-serif text-2xl text-ink font-bold">Technical Crawl & Indexability Directives</h3>
+          <h3 className="font-sans text-2xl text-ink font-bold">Technical Crawl & Indexability Directives</h3>
           <p className="text-xs text-ink-500">Audits canonical tags, noindex tags, sitemap entries, and HTTP status codes.</p>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -206,7 +206,7 @@ export function SearchIntelligenceView({
       {/* SUB-VIEW 3: ON-PAGE & HTML */}
       {activeSubTab === 'onpage' && (
         <div className="sheet border border-line rounded-lg p-6 space-y-6">
-          <h3 className="font-serif text-2xl text-ink font-bold">On-Page Tags & HTML5 Semantic Architecture</h3>
+          <h3 className="font-sans text-2xl text-ink font-bold">On-Page Tags & HTML5 Semantic Architecture</h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
             <div className="border border-line p-4 rounded-lg bg-paper-50 space-y-2">
               <span className="label text-[10px] block">Homepage Title Tag</span>
@@ -225,7 +225,7 @@ export function SearchIntelligenceView({
               <div className="space-y-1.5 font-mono text-xs">
                 {homePage?.h1?.map((h, i) => (
                   <div key={i} className="bg-paper-100 p-2 rounded border border-line">
-                    <span className="text-pine font-bold mr-2">H1:</span> {h}
+                    <span className="text-ink-700 font-bold mr-2">H1:</span> {h}
                   </div>
                 ))}
                 {homePage?.h2?.slice(0, 5).map((h, i) => (
@@ -244,7 +244,7 @@ export function SearchIntelligenceView({
         <div className="sheet border border-line rounded-lg p-6 space-y-6">
           <div className="flex items-center justify-between">
             <div>
-              <h3 className="font-serif text-2xl text-ink font-bold">Topical Authority, Information Gain & Non-Commodity Value</h3>
+              <h3 className="font-sans text-2xl text-ink font-bold">Topical Authority, Information Gain & Non-Commodity Value</h3>
               <p className="text-xs text-ink-500 mt-1">
                 Aligned with Google AI-search guidance: rewarding unique first-party data, expert signals, and empirical proof over commodity word counts.
               </p>
@@ -252,8 +252,8 @@ export function SearchIntelligenceView({
             {report.topical_authority && (
               <span className={`text-xs font-mono font-bold px-2.5 py-1 rounded ${
                 report.topical_authority.status === 'PASS' ? 'bg-good/10 text-good' :
-                report.topical_authority.status === 'NEEDS_IMPROVEMENT' ? 'bg-amber-500/10 text-amber-700' :
-                'bg-red-500/10 text-red-700'
+                report.topical_authority.status === 'NEEDS_IMPROVEMENT' ? 'bg-warn/10 text-warn' :
+                'bg-bad/10 text-bad'
               }`}>
                 {report.topical_authority.status.replace('_', ' ')}
               </span>
@@ -264,7 +264,7 @@ export function SearchIntelligenceView({
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <div className="border border-line p-4 rounded-lg bg-paper-50 space-y-1">
               <span className="label text-[10px] block text-ink-500 uppercase font-mono font-semibold">Information Gain</span>
-              <span className="font-serif text-3xl font-bold text-ink">
+              <span className="font-sans text-3xl font-bold text-ink">
                 {report.topical_authority ? `${report.topical_authority.avg_information_gain}/100` : '50/100'}
               </span>
               <span className="text-xs text-ink-500 block">Unique data vs commodity copy</span>
@@ -272,7 +272,7 @@ export function SearchIntelligenceView({
 
             <div className="border border-line p-4 rounded-lg bg-paper-50 space-y-1">
               <span className="label text-[10px] block text-ink-500 uppercase font-mono font-semibold">Original Data Points</span>
-              <span className="font-serif text-3xl font-bold text-ink">
+              <span className="font-sans text-3xl font-bold text-ink">
                 {report.topical_authority?.total_original_data_points ?? 0}
               </span>
               <span className="text-xs text-ink-500 block">Metrics, percentages, currencies</span>
@@ -280,7 +280,7 @@ export function SearchIntelligenceView({
 
             <div className="border border-line p-4 rounded-lg bg-paper-50 space-y-1">
               <span className="label text-[10px] block text-ink-500 uppercase font-mono font-semibold">Unbacked Claims</span>
-              <span className={`font-serif text-3xl font-bold ${(report.topical_authority?.unbacked_claims_total ?? 0) > 0 ? 'text-amber-600' : 'text-good'}`}>
+              <span className={`font-sans text-3xl font-bold ${(report.topical_authority?.unbacked_claims_total ?? 0) > 0 ? 'text-warn' : 'text-good'}`}>
                 {report.topical_authority?.unbacked_claims_total ?? 0}
               </span>
               <span className="text-xs text-ink-500 block">Superlatives without proof</span>
@@ -288,7 +288,7 @@ export function SearchIntelligenceView({
 
             <div className="border border-line p-4 rounded-lg bg-paper-50 space-y-1">
               <span className="label text-[10px] block text-ink-500 uppercase font-mono font-semibold">Readability & Length</span>
-              <span className="font-serif text-3xl font-bold text-ink">
+              <span className="font-sans text-3xl font-bold text-ink">
                 {homePage?.word_count || 0} <span className="text-sm font-sans font-normal text-ink-500">words</span>
               </span>
               <span className="text-xs text-ink-500 block">
@@ -346,13 +346,13 @@ export function SearchIntelligenceView({
               </p>
 
               {report.topical_authority?.cannibalization_clusters && report.topical_authority.cannibalization_clusters.length > 0 && (
-                <div className="p-3 rounded border border-red-200 bg-red-50 dark:bg-red-950/20 space-y-1.5">
-                  <span className="text-[10px] font-bold text-red-700 uppercase block">
+                <div className="p-3 rounded border border-bad/30 bg-bad/10 dark:bg-bad/10 space-y-1.5">
+                  <span className="text-[10px] font-bold text-bad uppercase block">
                     Content Cannibalization Warning ({report.topical_authority.cannibalization_clusters.length} clusters)
                   </span>
                   {report.topical_authority.cannibalization_clusters.map((c, i) => (
                     <div key={i} className="text-ink-700 text-[11px] space-y-0.5">
-                      <span className="font-semibold text-red-900 dark:text-red-200 block">Topic: {c.primary_topic} ({Math.round(c.similarity_score * 100)}% text similarity)</span>
+                      <span className="font-semibold text-bad dark:text-bad block">Topic: {c.primary_topic} ({Math.round(c.similarity_score * 100)}% text similarity)</span>
                       <span className="font-mono text-ink-500 truncate block">{c.urls.join(' ↔ ')}</span>
                     </div>
                   ))}
@@ -366,7 +366,7 @@ export function SearchIntelligenceView({
       {/* SUB-VIEW 5: INTERNAL LINKING GRAPH */}
       {activeSubTab === 'links' && (
         <div className="sheet border border-line rounded-lg p-6 space-y-6">
-          <h3 className="font-serif text-2xl text-ink font-bold">Internal Linking Architecture & Discovery</h3>
+          <h3 className="font-sans text-2xl text-ink font-bold">Internal Linking Architecture & Discovery</h3>
           <div className="border border-line p-4 rounded-lg bg-paper-50 space-y-3">
             <span className="label text-[10px] block">Internal Links Mapped</span>
             <div className="max-h-60 overflow-y-auto space-y-1.5 font-mono text-xs">

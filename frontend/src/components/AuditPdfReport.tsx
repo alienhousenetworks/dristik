@@ -85,23 +85,23 @@ export function AuditPdfReport({
       data: {
         total: findings.length,
         segments: [
-          { label: 'Critical', count: counts.CRITICAL, color: '#dc2626' },
-          { label: 'High', count: counts.HIGH, color: '#f97316' },
-          { label: 'Medium', count: counts.MEDIUM, color: '#eab308' },
-          { label: 'Low', count: counts.LOW, color: '#3b82f6' },
-          { label: 'Info', count: counts.INFO, color: '#94a3b8' },
+          { label: 'Critical', count: counts.CRITICAL, color: '#a82620' },
+          { label: 'High', count: counts.HIGH, color: '#a82620' },
+          { label: 'Medium', count: counts.MEDIUM, color: '#925a08' },
+          { label: 'Low', count: counts.LOW, color: '#a8aeb6' },
+          { label: 'Info', count: counts.INFO, color: '#a8aeb6' },
         ],
       },
     };
   }, [charts, report.findings]);
 
   return (
-    <article className="dristik-editorial-report text-slate-900 bg-white max-w-5xl mx-auto font-sans leading-normal selection:bg-slate-200">
+    <article className="dristik-editorial-report text-ink bg-paper-50 max-w-5xl mx-auto font-sans leading-normal selection:bg-paper-200">
       {/* Screen-Only Control Toolbar (Hidden in Print) */}
-      <div className="no-print sticky top-2 z-40 mb-4 p-3 bg-slate-900 text-white rounded-lg shadow-lg flex items-center justify-between text-xs font-mono">
+      <div className="no-print sticky top-2 z-40 mb-4 p-3 bg-ink text-white rounded-lg shadow-lg flex items-center justify-between text-xs font-mono">
         <div className="flex items-center gap-2">
-          <span className="font-bold tracking-wider text-emerald-400">DRISTIK PUBLICATION ENGINE</span>
-          <span className="text-slate-500">|</span>
+          <span className="font-bold tracking-[0.04em] text-good">DRISTIK PUBLICATION ENGINE</span>
+          <span className="text-ink-500">|</span>
           <span>Theme: {theme.isClientThemed ? 'Client Accent Calibrated' : 'Dristik Standard'}</span>
         </div>
 
@@ -109,14 +109,14 @@ export function AuditPdfReport({
           <button
             type="button"
             onClick={() => setExhaustiveMode(!exhaustiveMode)}
-            className="px-2.5 py-1 rounded border border-slate-700 hover:bg-slate-800 transition-colors cursor-pointer"
+            className="px-2.5 py-1 rounded border border-line hover:bg-ink-800 transition-colors cursor-pointer"
           >
             Mode: {exhaustiveMode ? 'Exhaustive (100 Questions)' : 'Executive Digest'}
           </button>
           <button
             type="button"
             onClick={() => window.print()}
-            className="px-3 py-1 rounded bg-emerald-600 hover:bg-emerald-500 text-white font-bold transition-colors cursor-pointer"
+            className="px-3 py-1 rounded bg-good/10 hover:bg-good/10 text-white font-bold transition-colors cursor-pointer"
           >
             Print / Save PDF
           </button>

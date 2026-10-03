@@ -24,79 +24,71 @@ export const DESIGN_TOKENS = {
 
   typography: {
     // Large editorial display titles (Chapter openers, cover, major thesis)
-    display: 'font-serif text-[38pt] md:text-[44pt] font-normal leading-[1.08] tracking-tight',
-    displaySmall: 'font-serif text-[26pt] md:text-[30pt] font-normal leading-[1.12] tracking-tight',
+    display: 'font-serif text-[28pt] md:text-[32pt] font-normal leading-[1.12] tracking-tight text-ink',
+    displaySmall: 'font-serif text-[22pt] md:text-[24pt] font-normal leading-[1.16] tracking-tight text-ink',
     
-    // Massive chapter numbering for section transitions
-    chapterNumber: 'font-mono text-[64pt] md:text-[76pt] font-extralight leading-none tracking-tighter',
+    chapterNumber: 'font-mono text-[14pt] font-semibold leading-none tracking-normal text-ink',
     
-    // Editorial section headers
-    sectionTitle: 'font-serif text-[20pt] md:text-[22pt] font-normal leading-snug tracking-tight',
-    pageTitle: 'font-serif text-[15pt] md:text-[17pt] font-medium leading-snug tracking-tight',
+    sectionTitle: 'font-serif text-[18pt] md:text-[20pt] font-normal leading-snug tracking-tight text-ink',
+    pageTitle: 'font-sans text-[14pt] md:text-[15pt] font-semibold leading-snug tracking-tight text-ink',
     
-    // Subheadings and architectural kickers
-    subheading: 'font-sans text-[10.5pt] font-semibold uppercase tracking-wider',
-    kicker: 'font-mono text-[8pt] font-bold uppercase tracking-[0.18em]',
+    subheading: 'font-sans text-[10.5pt] font-semibold text-ink',
+    kicker: 'font-mono text-[8pt] font-medium tracking-[0.04em] text-ink-500',
     
-    // Body text (optimized for sustained readability in print)
-    body: 'font-sans text-[9.5pt] font-normal leading-[1.52] text-slate-800',
-    bodyLead: 'font-serif text-[12pt] font-normal leading-[1.58] text-slate-900',
-    bodySmall: 'font-sans text-[8.5pt] font-normal leading-[1.46] text-slate-600',
+    body: 'font-sans text-[9.5pt] font-normal leading-[1.52] text-ink-700',
+    bodyLead: 'font-sans text-[12pt] font-normal leading-[1.58] text-ink',
+    bodySmall: 'font-sans text-[8.5pt] font-normal leading-[1.46] text-ink-500',
     
-    // Metadata, footnotes, and captions
-    caption: 'font-sans text-[7.5pt] font-medium text-slate-500 tracking-wide',
+    caption: 'font-sans text-[7.5pt] font-medium text-ink-500',
     
-    // High-impact numerical metrics
-    metricHero: 'font-serif text-[44pt] md:text-[52pt] font-light leading-none tracking-tight',
-    metricMedium: 'font-mono text-[22pt] md:text-[26pt] font-bold tracking-tight',
-    metricSmall: 'font-mono text-[14pt] font-bold tracking-tight',
+    metricHero: 'font-mono text-[32pt] md:text-[36pt] font-semibold leading-none tracking-tight text-ink',
+    metricMedium: 'font-mono text-[18pt] md:text-[20pt] font-semibold tracking-tight text-ink',
+    metricSmall: 'font-mono text-[13pt] font-semibold tracking-tight text-ink',
     
-    // Data tables & technical appendix
-    tableHeader: 'font-sans text-[8pt] font-bold uppercase tracking-wider text-slate-700',
-    tableCell: 'font-sans text-[8.5pt] leading-normal text-slate-800',
+    tableHeader: 'font-sans text-[8pt] font-semibold text-ink-600',
+    tableCell: 'font-sans text-[8.5pt] leading-normal text-ink-700',
     
-    // Cryptographic hashes, DOM selectors, code patches
-    mono: 'font-mono text-[8pt] leading-tight text-slate-700',
-    monoSmall: 'font-mono text-[7pt] leading-tight text-slate-600',
+    mono: 'font-mono text-[8pt] leading-tight text-ink-700',
+    monoSmall: 'font-mono text-[7pt] leading-tight text-ink-500',
   },
 
   evidenceStatus: {
     directly_observed: {
       code: 'DIRECTLY_OBSERVED',
       label: 'Directly Observed in DOM',
-      badgeClass: 'bg-emerald-50 text-emerald-800 border-emerald-300',
-      dotColor: '#059669',
+      badgeClass: 'bg-paper-100 text-ink-700 border-line',
+      dotColor: '#171a20',
       symbol: '●',
     },
     calculated: {
       code: 'CALCULATED',
       label: 'Calculated from Sample',
-      badgeClass: 'bg-sky-50 text-sky-800 border-sky-300',
-      dotColor: '#0284c7',
+      badgeClass: 'bg-paper-100 text-ink-700 border-line',
+      dotColor: '#5c6570',
       symbol: '▲',
     },
     model_derived: {
       code: 'MODEL_DERIVED',
       label: 'Model-Derived Grounding',
-      badgeClass: 'bg-purple-50 text-purple-800 border-purple-300',
-      dotColor: '#7c3aed',
+      badgeClass: 'bg-paper-100 text-ink-700 border-line',
+      dotColor: '#5c6570',
       symbol: '◆',
     },
     insufficient_evidence: {
       code: 'INSUFFICIENT_EVIDENCE',
       label: 'Insufficient Evidence',
-      badgeClass: 'bg-slate-50 text-slate-600 border-slate-300',
-      dotColor: '#64748b',
+      badgeClass: 'bg-warn/10 text-warn border-warn/30',
+      dotColor: '#925a08',
       symbol: '○',
     },
   },
 
   rules: {
-    hairline: 'border-b border-slate-200',
-    editorial: 'border-b border-slate-900',
-    double: 'border-b-2 border-slate-900',
-    subtle: 'border border-slate-200',
-    card: 'border border-slate-200/90 bg-white',
+    hairline: 'border-b border-line',
+    editorial: 'border-b border-ink',
+    double: 'border-b-2 border-ink',
+    subtle: 'border border-line',
+    card: 'border border-line bg-paper-50',
   },
 } as const;
 

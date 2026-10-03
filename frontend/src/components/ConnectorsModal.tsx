@@ -334,14 +334,14 @@ export const ConnectorsModal: React.FC<ConnectorsModalProps> = ({
         <div className="px-6 py-4 border-b border-line bg-paper-50 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-lg bg-paper-200 border border-line flex items-center justify-center text-ink shadow-xs">
-              <svg className="w-5 h-5 text-pine" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <svg className="w-5 h-5 text-ink-700" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
               </svg>
             </div>
             <div>
-              <h2 className="text-lg font-serif text-ink tracking-tight flex items-center gap-2">
+              <h2 className="text-lg font-sans text-ink tracking-tight flex items-center gap-2">
                 Connectors & Integrations Hub
-                <span className="text-[11px] uppercase px-2 py-0.5 rounded bg-pine/10 text-pine border border-pine/30 font-mono font-bold">
+                <span className="text-[11px] uppercase px-2 py-0.5 rounded bg-paper-200 text-ink-700 border border-line font-mono font-bold">
                   {ALL_CONNECTORS.length} Connectors Available
                 </span>
               </h2>
@@ -486,7 +486,7 @@ export const ConnectorsModal: React.FC<ConnectorsModalProps> = ({
                         type="button"
                         onClick={handleGoogleOAuth}
                         disabled={loading}
-                        className="w-full py-2.5 px-4 bg-white hover:bg-paper-50 text-ink font-semibold rounded border border-line text-sm transition flex items-center justify-center gap-2 shadow-xs cursor-pointer"
+                        className="w-full py-2.5 px-4 bg-paper-50 hover:bg-paper-50 text-ink font-semibold rounded border border-line text-sm transition flex items-center justify-center gap-2 shadow-xs cursor-pointer"
                       >
                         <GoogleIcon />
                         Sign in with Google Search Console
@@ -1061,7 +1061,7 @@ export const ConnectorsModal: React.FC<ConnectorsModalProps> = ({
               </div>
               <button
                 onClick={fetchIntegrations}
-                className="text-xs text-pine font-medium hover:underline"
+                className="text-xs text-ink-700 font-medium hover:underline"
               >
                 Refresh
               </button>
@@ -1107,7 +1107,7 @@ export const ConnectorsModal: React.FC<ConnectorsModalProps> = ({
                           <button
                             type="button"
                             onClick={() => setActiveTab(conn.id)}
-                            className="text-[11px] font-mono font-medium text-pine hover:underline px-2 py-0.5 rounded border border-pine/30 bg-pine/5"
+                            className="text-[11px] font-mono font-medium text-ink-700 hover:underline px-2 py-0.5 rounded border border-line bg-paper-100"
                           >
                             Configure →
                           </button>
@@ -1166,7 +1166,7 @@ export const ConnectorsModal: React.FC<ConnectorsModalProps> = ({
             {/* Security Guarantee Note */}
             <div className="p-4 rounded-lg bg-paper-100 border border-line text-xs text-ink-700 space-y-1.5 shadow-xs">
               <div className="font-semibold text-ink flex items-center gap-1.5">
-                <span>🛡️ Least-Privilege Isolation</span>
+                <span> Least-Privilege Isolation</span>
               </div>
               <p className="text-[11px] text-ink-500 leading-relaxed">
                 Connectors run within isolated environments. Search queries and CRM revenue metrics are encrypted with AES/HMAC keys and never transmitted to public search engines.

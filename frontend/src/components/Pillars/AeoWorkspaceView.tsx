@@ -206,8 +206,8 @@ export function AeoWorkspaceView({ report, onOpenPatchPack }: AeoWorkspaceViewPr
           <Card className="p-5 space-y-4">
             <div className="flex items-center justify-between border-b border-line pb-3">
               <div className="flex items-center gap-2">
-                <FileCode className="w-4 h-4 text-pine" />
-                <h3 className="font-serif text-lg text-ink font-semibold">
+                <FileCode className="w-4 h-4 text-ink-700" />
+                <h3 className="font-sans text-lg text-ink font-semibold">
                   Machine-Readable Documentation (`/llms.txt`)
                 </h3>
               </div>
@@ -215,7 +215,7 @@ export function AeoWorkspaceView({ report, onOpenPatchPack }: AeoWorkspaceViewPr
                 <span className={`text-xs font-mono px-2 py-0.5 rounded font-semibold ${
                   botDirectives?.llms_txt_found ? 'bg-good/10 text-good' : 'bg-warn/10 text-warn'
                 }`}>
-                  {botDirectives?.llms_txt_found ? '✓ Detected on site' : '⚡ Generated Template Ready'}
+                  {botDirectives?.llms_txt_found ? '✓ Detected on site' : ' Generated Template Ready'}
                 </span>
                 <button
                   type="button"
@@ -232,7 +232,7 @@ export function AeoWorkspaceView({ report, onOpenPatchPack }: AeoWorkspaceViewPr
             </p>
 
             <div className="bg-paper-100 p-4 rounded-lg border border-line font-mono text-xs overflow-x-auto max-h-72">
-              <pre className="text-ink-800 whitespace-pre-wrap">
+              <pre className="text-ink-700 whitespace-pre-wrap">
                 {botDirectives?.llms_txt_generated || `# ${report.business_profile?.business_name || report.domain}\n\n> ${report.business_profile?.value_proposition || 'Enterprise Web Services'}\n\n## Core Offerings\n${report.business_profile?.services?.map(s => `- ${s}`).join('\n') || '- Enterprise platform'}\n\n## Target Audience\n- ${report.business_profile?.target_audience || 'Professionals and organizations'}\n\n## Contact & Primary CTA\n- Primary Action: ${report.business_profile?.primary_cta || 'Get Started'}\n- Official Website: ${report.website_url}\n`}
               </pre>
             </div>
@@ -248,10 +248,10 @@ export function AeoWorkspaceView({ report, onOpenPatchPack }: AeoWorkspaceViewPr
           <Card className="p-5 space-y-4">
             <div className="flex items-center justify-between border-b border-line pb-3">
               <div className="flex items-center gap-2">
-                <Network className="w-4 h-4 text-pine" />
-                <h3 className="font-serif text-lg text-ink font-semibold">Structured Data (JSON-LD) Graph</h3>
+                <Network className="w-4 h-4 text-ink-700" />
+                <h3 className="font-sans text-lg text-ink font-semibold">Structured Data (JSON-LD) Graph</h3>
               </div>
-              <span className="text-xs font-mono font-bold px-2 py-0.5 rounded bg-pine/10 text-pine">
+              <span className="text-xs font-mono font-bold px-2 py-0.5 rounded bg-paper-200 text-ink-700">
                 {schemaTypes.length} Types Discovered
               </span>
             </div>
@@ -292,7 +292,7 @@ export function AeoWorkspaceView({ report, onOpenPatchPack }: AeoWorkspaceViewPr
             {graphConflicts.length > 0 && (
               <div className="space-y-2">
                 {graphConflicts.map((conflict: any, idx: number) => (
-                  <div key={idx} className="p-3 rounded border border-bad/30 bg-bad/5 text-xs text-ink-800">
+                  <div key={idx} className="p-3 rounded border border-bad/30 bg-bad/5 text-xs text-ink-700">
                     <span className="font-mono text-[10px] font-bold text-bad uppercase">{conflict.severity} {conflict.field}</span>
                     <p className="mt-1">
                       {conflict.left_surface} says {conflict.left_value}. {conflict.right_surface} says {conflict.right_value}.
@@ -307,11 +307,11 @@ export function AeoWorkspaceView({ report, onOpenPatchPack }: AeoWorkspaceViewPr
                 {typeAssessments.map((row: any) => (
                   <div key={row.schema_type} className="p-3 rounded border border-line bg-paper-50 space-y-1">
                     <div className="flex items-center justify-between gap-2">
-                      <span className="font-mono text-pine font-bold">{row.schema_type}</span>
+                      <span className="font-mono text-ink-700 font-bold">{row.schema_type}</span>
                       <span className={`text-[10px] font-mono px-2 py-0.5 rounded font-bold ${
                         row.status === 'PRESENT' ? 'bg-good/10 text-good' :
                         row.status === 'NOT_APPLICABLE' ? 'bg-paper-200 text-ink-500' :
-                        row.status === 'PARTIAL' ? 'bg-amber-100 text-amber-800' : 'bg-warn/10 text-warn'
+                        row.status === 'PARTIAL' ? 'bg-warn/10 text-warn' : 'bg-warn/10 text-warn'
                       }`}>
                         {row.status === 'NOT_APPLICABLE' ? 'Not applicable' : row.status === 'PRESENT' ? `${row.present_properties} of ${row.applicable_properties}` : row.status === 'PARTIAL' ? `${row.present_properties} of ${row.applicable_properties}` : 'Absent'}
                       </span>
@@ -324,7 +324,7 @@ export function AeoWorkspaceView({ report, onOpenPatchPack }: AeoWorkspaceViewPr
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
                 {schemaTypes.map((st: string, idx: number) => (
                   <div key={idx} className="p-3 rounded border border-line bg-paper-50 space-y-1">
-                    <span className="font-mono text-pine font-bold block">{st}</span>
+                    <span className="font-mono text-ink-700 font-bold block">{st}</span>
                     <p className="text-[11px] text-ink-500">Type observed. Property fill was not scored on this report.</p>
                   </div>
                 ))}
@@ -346,7 +346,7 @@ export function AeoWorkspaceView({ report, onOpenPatchPack }: AeoWorkspaceViewPr
         <div className="space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <h3 className="font-serif text-lg text-ink font-semibold">50-Question Extraction Graph</h3>
+              <h3 className="font-sans text-lg text-ink font-semibold">50-Question Extraction Graph</h3>
               <p className="text-xs text-ink-500">
                 Deterministic questions tested against on-page content to verify what LLM agents can factually answer.
               </p>
@@ -414,9 +414,9 @@ export function AeoWorkspaceView({ report, onOpenPatchPack }: AeoWorkspaceViewPr
                           isSupported
                             ? 'bg-good/10 text-good border border-good/20'
                             : isPartial
-                              ? 'bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/20'
+                              ? 'bg-warn/10 text-warn dark:text-warn border border-warn/30'
                               : isConflicting
-                                ? 'bg-purple-500/10 text-purple-700 dark:text-purple-400 border border-purple-500/20'
+                                ? 'bg-paper-100 text-ink-700 dark:text-ink-700 border border-line'
                                 : 'bg-bad/10 text-bad border border-bad/20'
                         }`}>
                           {isSupported
@@ -424,7 +424,7 @@ export function AeoWorkspaceView({ report, onOpenPatchPack }: AeoWorkspaceViewPr
                             : isPartial
                               ? '◐ Partial Evidence'
                               : isConflicting
-                                ? '⚠ Conflicting Data'
+                                ? ' Conflicting Data'
                                 : '✗ Unanswered On-Page'}
                         </span>
                       </div>
@@ -438,9 +438,9 @@ export function AeoWorkspaceView({ report, onOpenPatchPack }: AeoWorkspaceViewPr
                       isSupported
                         ? 'bg-good/5 border border-good/20 text-ink-900'
                         : isPartial
-                          ? 'bg-amber-500/5 border border-amber-500/20 text-ink-900'
+                          ? 'bg-warn/10 border border-warn/30 text-ink-900'
                           : isConflicting
-                            ? 'bg-purple-500/5 border border-purple-500/20 text-ink-900'
+                            ? 'bg-paper-100 border border-line text-ink-900'
                             : 'bg-paper-100 dark:bg-ink-900/50 border border-line text-ink-700'
                     }`}>
                       <div className="flex items-center gap-1.5 font-bold mb-1 text-[11px]">
@@ -449,11 +449,11 @@ export function AeoWorkspaceView({ report, onOpenPatchPack }: AeoWorkspaceViewPr
                             <CheckCircle2 className="w-3.5 h-3.5" /> Answer
                           </span>
                         ) : isPartial ? (
-                          <span className="text-amber-700 dark:text-amber-400 flex items-center gap-1">
+                          <span className="text-warn dark:text-warn flex items-center gap-1">
                             <Sparkles className="w-3.5 h-3.5" /> Partial Answer
                           </span>
                         ) : isConflicting ? (
-                          <span className="text-purple-700 dark:text-purple-400 flex items-center gap-1">
+                          <span className="text-ink-700 dark:text-ink-700 flex items-center gap-1">
                             <XCircle className="w-3.5 h-3.5" /> Conflicting Answer
                           </span>
                         ) : (
@@ -462,21 +462,21 @@ export function AeoWorkspaceView({ report, onOpenPatchPack }: AeoWorkspaceViewPr
                           </span>
                         )}
                       </div>
-                      <p className="text-xs text-ink-800 dark:text-paper-100">{directAnswer}</p>
+                      <p className="text-xs text-ink-700 dark:text-paper-100">{directAnswer}</p>
                     </div>
                   )}
 
                   {/* Verbatim Crawl Evidence Snippet */}
                   {excerpt && (
-                    <div className="p-2.5 rounded bg-paper-50 dark:bg-ink-900/60 border border-line text-xs font-mono text-ink-800 space-y-1">
+                    <div className="p-2.5 rounded bg-paper-50 dark:bg-ink-900/60 border border-line text-xs font-mono text-ink-700 space-y-1">
                       <div className="flex items-center justify-between text-[10px] text-ink-500">
-                        <span className="text-pine font-bold uppercase tracking-wider">Verbatim Crawl Evidence</span>
+                        <span className="text-ink-700 font-bold uppercase tracking-[0.04em]">Verbatim Crawl Evidence</span>
                         {sourceUrl && (
                           <a
                             href={sourceUrl}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="text-pine hover:underline truncate max-w-[200px]"
+                            className="text-ink-700 hover:underline truncate max-w-[200px]"
                             title={sourceUrl}
                           >
                             Source: {pathname}
@@ -489,9 +489,9 @@ export function AeoWorkspaceView({ report, onOpenPatchPack }: AeoWorkspaceViewPr
 
                   {/* Recommended Answer / Fix for Unanswered or Partial Questions */}
                   {(isUnsupported || isPartial || isConflicting) && recommendedAnswer && (
-                    <div className="p-2.5 rounded bg-pine/5 border border-pine/20 text-xs space-y-1">
-                      <span className="text-pine font-bold text-[11px] block">
-                        💡 Recommended Content to Add:
+                    <div className="p-2.5 rounded bg-paper-100 border border-line text-xs space-y-1">
+                      <span className="text-ink-700 font-bold text-[11px] block">
+                         Recommended Content to Add:
                       </span>
                       <p className="text-xs text-ink-700 dark:text-paper-200 leading-relaxed">
                         {recommendedAnswer}
@@ -513,8 +513,8 @@ export function AeoWorkspaceView({ report, onOpenPatchPack }: AeoWorkspaceViewPr
           <Card className="p-5 space-y-4">
             <div className="flex items-center justify-between border-b border-line pb-3">
               <div className="flex items-center gap-2">
-                <Network className="w-4 h-4 text-pine" />
-                <h3 className="font-serif text-lg text-ink font-semibold">
+                <Network className="w-4 h-4 text-ink-700" />
+                <h3 className="font-sans text-lg text-ink font-semibold">
                   Entity Knowledge Triples (Subject · Predicate · Object)
                 </h3>
               </div>
@@ -526,17 +526,17 @@ export function AeoWorkspaceView({ report, onOpenPatchPack }: AeoWorkspaceViewPr
 
             <div className="space-y-2 text-xs font-mono">
               <div className="p-3 rounded bg-paper-50 border border-line flex items-center gap-2">
-                <span className="font-bold text-pine">{report.business_profile?.business_name || report.domain}</span>
+                <span className="font-bold text-ink-700">{report.business_profile?.business_name || report.domain}</span>
                 <span className="text-ink-400">→ isA →</span>
                 <span className="font-semibold text-ink">{report.business_profile?.industry || 'Enterprise Service'}</span>
               </div>
               <div className="p-3 rounded bg-paper-50 border border-line flex items-center gap-2">
-                <span className="font-bold text-pine">{report.business_profile?.business_name || report.domain}</span>
+                <span className="font-bold text-ink-700">{report.business_profile?.business_name || report.domain}</span>
                 <span className="text-ink-400">→ offersPrimaryCTA →</span>
                 <span className="font-semibold text-good">{report.business_profile?.primary_cta || 'Contact / Get Started'}</span>
               </div>
               <div className="p-3 rounded bg-paper-50 border border-line flex items-center gap-2">
-                <span className="font-bold text-pine">{report.business_profile?.business_name || report.domain}</span>
+                <span className="font-bold text-ink-700">{report.business_profile?.business_name || report.domain}</span>
                 <span className="text-ink-400">→ targetsAudience →</span>
                 <span className="font-semibold text-ink">{report.business_profile?.target_audience || 'Commercial buyers'}</span>
               </div>

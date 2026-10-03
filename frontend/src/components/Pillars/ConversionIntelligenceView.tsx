@@ -53,8 +53,8 @@ export function ConversionIntelligenceView({
       {activeSubTab === 'cro' && (
         <div className="space-y-6">
           <div className="sheet border border-line rounded-lg p-6 space-y-4">
-            <span className="label text-[10px] block text-pine">5-Second Value Proposition</span>
-            <p className="font-serif text-2xl text-ink leading-relaxed">
+            <span className="label text-[10px] block text-ink-700">5-Second Value Proposition</span>
+            <p className="font-sans text-2xl text-ink leading-relaxed">
               {profile?.value_proposition ? `"${profile.value_proposition}"` : 'No value proposition was extracted from the crawl.'}
             </p>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-2">
@@ -84,7 +84,7 @@ export function ConversionIntelligenceView({
       {/* SUB-VIEW 2: CTAS & FORMS */}
       {activeSubTab === 'cta_forms' && (
         <div className="sheet border border-line rounded-lg p-6 space-y-6">
-          <h3 className="font-serif text-2xl text-ink font-bold">Call to Action & Form Friction Audit</h3>
+          <h3 className="font-sans text-2xl text-ink font-bold">Call to Action & Form Friction Audit</h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="border border-line p-4 rounded-lg bg-paper-50 space-y-2">
               <span className="label text-[10px] block">Action Verbs in CTA Buttons</span>
@@ -95,7 +95,7 @@ export function ConversionIntelligenceView({
 
             <div className="border border-line p-4 rounded-lg bg-paper-50 space-y-2">
               <span className="label text-[10px] block">Form fields</span>
-              <p className="font-serif text-xl font-bold text-ink">Not measured</p>
+              <p className="font-sans text-xl font-bold text-ink">Not measured</p>
               <p className="text-xs text-ink-500">
                 Field count and completion rate are blank until the crawl records the form or a CRM returns submissions.
               </p>
@@ -107,7 +107,7 @@ export function ConversionIntelligenceView({
       {/* SUB-VIEW 3: PRICING & MONETIZATION */}
       {activeSubTab === 'pricing' && (
         <div className="sheet border border-line rounded-lg p-6 space-y-6">
-          <h3 className="font-serif text-2xl text-ink font-bold">Pricing Model & Commercial Transparency</h3>
+          <h3 className="font-sans text-2xl text-ink font-bold">Pricing Model & Commercial Transparency</h3>
           <div className="border border-line p-5 rounded-lg bg-paper-50 space-y-3">
             <span className="label text-[10px] block">Detected Monetization Structure</span>
             <p className="text-sm font-semibold text-ink">
@@ -120,7 +120,7 @@ export function ConversionIntelligenceView({
       {/* SUB-VIEW 4: CUSTOMER JOURNEY & FUNNEL */}
       {activeSubTab === 'funnel' && (
         <div className="sheet border border-line rounded-lg p-6 space-y-6">
-          <h3 className="font-serif text-2xl text-ink font-bold">Discovered Customer Journey Progression</h3>
+          <h3 className="font-sans text-2xl text-ink font-bold">Discovered Customer Journey Progression</h3>
           {semantic?.journey_stages && semantic.journey_stages.length > 0 ? (
             <div className="flex flex-wrap items-center gap-3">
               {semantic.journey_stages.map((stage, idx) => (

@@ -64,7 +64,7 @@ export function Modal({
         aria-labelledby={titleId}
         className={cn('relative card w-full max-w-lg shadow-overlay p-5 sm:p-6', className)}
       >
-        <h2 id={titleId} className="font-serif text-2xl text-ink">
+        <h2 id={titleId} className="font-sans text-2xl text-ink">
           {title}
         </h2>
         {description && <p className="mt-1 text-sm text-ink-500">{description}</p>}
@@ -132,7 +132,7 @@ export function Sheet({
         className="relative h-full w-full max-w-md bg-paper-50 border-l border-line shadow-overlay p-5 overflow-y-auto"
       >
         <div className="flex items-center justify-between gap-3 mb-4">
-          <h2 id={titleId} className="font-serif text-2xl text-ink">
+          <h2 id={titleId} className="font-sans text-2xl text-ink">
             {title}
           </h2>
           <Button variant="ghost" size="sm" onClick={onClose}>

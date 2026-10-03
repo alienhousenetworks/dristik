@@ -76,6 +76,12 @@ _LIST_USD_PER_MILLION: Dict[Tuple[str, str], Tuple[float, float]] = {
     ("perplexity", "sonar"): (1.00, 1.00),
     ("perplexity", "sonar-pro"): (3.00, 15.00),
     ("perplexity", "sonar-reasoning"): (1.00, 5.00),
+    # OpenRouter Frontier Models
+    ("openrouter", "google/gemini-3.8-flash"): (0.30, 2.50),
+    ("openrouter", "openai/gpt-6.1-sol"): (2.00, 8.00),
+    ("openrouter", "anthropic/claude-haiku-4.5"): (1.00, 5.00),
+    ("openrouter", "qwen/qwen3.8-flash"): (0.20, 0.60),
+    ("openrouter", "deepseek/deepseek-v4.1-flash"): (0.14, 0.28),
 }
 
 _KNOWN_PROVIDERS = {
@@ -88,6 +94,8 @@ _KNOWN_PROVIDERS = {
     "together",
     "openai",
     "deepseek",
+    "qwen",
+    "alibaba",
     "perplexity",
     "xai",
     "moonshot",

@@ -235,10 +235,10 @@ export function AppShell(props: AppShellProps) {
         >
           <div className="h-14 px-3 flex items-center justify-between gap-2 border-b border-line shrink-0">
             <button type="button" onClick={() => onNavigate('home')} className="flex items-center gap-2 min-w-0" aria-label="Dristik home">
-              <span className="h-7 w-7 shrink-0 rounded-md bg-pine text-[13px] font-serif text-white inline-flex items-center justify-center">
+              <span className="h-7 w-7 shrink-0 rounded-md bg-ink text-[13px] font-semibold text-paper-50 inline-flex items-center justify-center">
                 D
               </span>
-              {!compact && <span className="font-serif text-xl leading-none text-ink">Dristik</span>}
+              {!compact && <span className="text-base font-semibold leading-none text-ink tracking-tight">Dristik</span>}
             </button>
             <button type="button" className="lg:hidden p-1 text-ink-500" aria-label="Close menu" onClick={() => setMobileOpen(false)}>
               <X className="h-4 w-4" />
@@ -287,7 +287,7 @@ export function AppShell(props: AppShellProps) {
               title="Open Tools & Quick Actions (⌘K)"
             >
               <span className="flex items-center gap-2.5">
-                <Wrench className="h-4 w-4 text-pine" aria-hidden />
+                <Wrench className="h-4 w-4" aria-hidden />
                 {!compact && <span>Tools Menu</span>}
               </span>
             </button>
@@ -335,7 +335,7 @@ export function AppShell(props: AppShellProps) {
                   }`}
                 />
                 <span className="capitalize">{status}</span>
-                <span className="font-mono font-medium text-ink-700 bg-sand-200/80 px-1.5 py-0.5 rounded text-[11px]">
+                <span className="font-mono font-medium text-ink-700 bg-paper-200 px-1.5 py-0.5 rounded text-[11px]">
                   {run.status === 'completed' ? '100%' : `${run.progress_percentage ?? 0}%`}
                 </span>
               </span>
@@ -353,7 +353,7 @@ export function AppShell(props: AppShellProps) {
                 align="right"
                 label={
                   <span className="inline-flex items-center gap-1.5 font-medium text-xs text-ink-700 hover:text-ink">
-                    <Wrench className="h-3.5 w-3.5 text-pine" />
+                    <Wrench className="h-3.5 w-3.5" />
                     <span>Tools</span>
                   </span>
                 }
@@ -477,7 +477,7 @@ export function AppShell(props: AppShellProps) {
           {!workspace && (
             <footer className="no-print border-t border-line mt-auto">
               <div className="max-w-page mx-auto px-4 sm:px-6 lg:px-8 py-5 text-sm text-ink-400 flex items-center justify-between gap-4">
-                <span className="font-serif text-lg text-ink-500">Dristik</span>
+                <span className="font-semibold text-ink-500">Dristik</span>
                 <button type="button" onClick={() => onNavigate('contact')} className="hover:text-ink">
                   Contact
                 </button>

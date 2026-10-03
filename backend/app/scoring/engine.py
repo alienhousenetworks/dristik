@@ -901,7 +901,10 @@ class ScoringEngine:
         if overall >= 90:
             band = "Category Benchmark"
         elif overall >= 75:
-            band = "Citation Ready"
+            if ai_visibility_status == "MEASURED" and (ai_visibility_score or 0) < 15:
+                band = "Structure Ready (Uncited)"
+            else:
+                band = "Citation Ready"
         elif overall >= 50:
             band = "Fragile Presence"
         else:
@@ -910,7 +913,10 @@ class ScoringEngine:
         human_summary = f"Human Experience View: {human_score:.0f}/100 aggregated from UX and Content check evaluations."
         google_summary = f"Google Organic View: {google_score:.0f}/100 aggregated from Technical, On-Page, and Schema checks."
         if ai_visibility_score is not None:
-            ai_summary = f"AI Readiness: {ai_readiness_score:.0f}/100 (GEO on-page checks). AI Visibility: {ai_visibility_score:.0f}/100 (live measurement)."
+            if ai_visibility_score == 0:
+                ai_summary = f"AI Citability: {ai_readiness_score:.0f}/100 (extractable on-page). Live Engine Citations: 0% (domain not cited in live AI search queries)."
+            else:
+                ai_summary = f"AI Readiness: {ai_readiness_score:.0f}/100 (GEO on-page checks). AI Visibility: {ai_visibility_score:.0f}/100 (live measurement)."
         else:
             ai_summary = f"AI Readiness: {ai_readiness_score:.0f}/100 (GEO on-page checks). AI Visibility: NOT MEASURED (live connector not run)."
 

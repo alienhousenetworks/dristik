@@ -44,24 +44,24 @@ function evidenceTypeLabel(nature: string, sourceType?: string): string {
 }
 
 function evidenceTypeBadgeClass(type: string): string {
-  if (type === 'DOM_VERIFIED') return 'bg-emerald-100 text-emerald-900 border-emerald-300 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-800';
-  if (type === 'EXTERNAL_GROUND_TRUTH') return 'bg-blue-100 text-blue-900 border-blue-300 dark:bg-blue-950/60 dark:text-blue-300 dark:border-blue-800';
-  if (type === 'SINGLE_SOURCE_UNVERIFIED') return 'bg-amber-100 text-amber-900 border-amber-300 dark:bg-amber-950/60 dark:text-amber-300 dark:border-amber-800';
-  return 'bg-purple-100 text-purple-900 border-purple-300 dark:bg-purple-950/60 dark:text-purple-300 dark:border-purple-800';
+  if (type === 'DOM_VERIFIED') return 'bg-good/10 text-good border-good/30 dark:bg-good/10 dark:text-good dark:border-good/30';
+  if (type === 'EXTERNAL_GROUND_TRUTH') return 'bg-paper-100 text-ink-700 border-line dark:bg-paper-100 dark:text-ink-700 dark:border-line';
+  if (type === 'SINGLE_SOURCE_UNVERIFIED') return 'bg-warn/10 text-warn border-warn/30 dark:bg-warn/10 dark:text-warn dark:border-warn/30';
+  return 'bg-paper-100 text-ink-700 border-line dark:bg-paper-100 dark:text-ink-700 dark:border-line';
 }
 
 function statusBadgeClass(status: string): string {
   const s = status?.toLowerCase() || '';
-  if (s.includes('verified') || s.includes('confirmed')) return 'bg-emerald-100 text-emerald-900 border-emerald-300 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-800';
-  if (s.includes('unverified') || s.includes('provisional')) return 'bg-amber-100 text-amber-900 border-amber-300 dark:bg-amber-950/60 dark:text-amber-300 dark:border-amber-800';
-  return 'bg-slate-100 text-slate-700 border-slate-300 dark:bg-ink-900 dark:text-ink-300 dark:border-ink-700';
+  if (s.includes('verified') || s.includes('confirmed')) return 'bg-good/10 text-good border-good/30 dark:bg-good/10 dark:text-good dark:border-good/30';
+  if (s.includes('unverified') || s.includes('provisional')) return 'bg-warn/10 text-warn border-warn/30 dark:bg-warn/10 dark:text-warn dark:border-warn/30';
+  return 'bg-paper-200 text-ink-700 border-line dark:bg-ink-900 dark:text-ink-300 dark:border-ink-700';
 }
 
 // ─── Section label ─────────────────────────────────────────────────────────────
 function Section({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="border-t border-line/60 pt-4 space-y-1.5">
-      <span className="block text-[9px] font-mono font-black uppercase tracking-[0.2em] text-ink-400">
+      <span className="block text-[9px] font-mono font-semibold uppercase tracking-[0.04em] text-ink-400">
         {label}
       </span>
       {children}
@@ -113,7 +113,7 @@ export function Drawer({ finding, patches, websiteUrl, analysisId, onClose, onOp
         {/* ── Top bar ─────────────────────────────────────────── */}
         <div className="sticky top-0 z-10 flex items-center justify-between px-6 py-3 border-b border-line bg-paper-50/90 backdrop-blur-sm">
           <div className="flex flex-wrap items-center gap-2">
-            <span className={`px-2.5 py-0.5 rounded text-[10px] font-mono font-bold uppercase tracking-wider border ${cl.badgeClass}`}>
+            <span className={`px-2.5 py-0.5 rounded text-[10px] font-mono font-bold uppercase tracking-[0.04em] border ${cl.badgeClass}`}>
               {cl.badgeLabel}
             </span>
             <span className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase tracking-wide border ${severityTone(finding.severity)}`}>
@@ -156,17 +156,17 @@ export function Drawer({ finding, patches, websiteUrl, analysisId, onClose, onOp
               </div>
 
               {finding.resolution_status === 'RESOLVED' ? (
-                <span className="px-2.5 py-0.5 rounded border text-[11px] font-mono bg-emerald-100 text-emerald-800 border-emerald-300 font-bold">
+                <span className="px-2.5 py-0.5 rounded border text-[11px] font-mono bg-good/10 text-good border-good/30 font-bold">
                   ✓ RESOLVED
                 </span>
               ) : (
-                <span className={`px-2.5 py-0.5 rounded border text-[11px] font-mono font-bold uppercase tracking-wider ${statusBadgeClass(findingStatus)}`}>
+                <span className={`px-2.5 py-0.5 rounded border text-[11px] font-mono font-bold uppercase tracking-[0.04em] ${statusBadgeClass(findingStatus)}`}>
                   {display(findingStatus)}
                 </span>
               )}
             </div>
 
-            <h3 className="font-serif text-lg font-bold text-ink leading-snug">
+            <h3 className="font-sans text-lg font-bold text-ink leading-snug">
               {finding.title || finding.finding}
             </h3>
           </div>
@@ -175,29 +175,29 @@ export function Drawer({ finding, patches, websiteUrl, analysisId, onClose, onOp
           {/* ROOT CAUSE HIERARCHY (IF CLUSTERED)                     */}
           {/* ═══════════════════════════════════════════════════════ */}
           {finding.sub_observations && finding.sub_observations.length > 1 && (
-            <div className="p-4 rounded-xl border border-purple-200 dark:border-purple-900/50 bg-purple-50/50 dark:bg-purple-950/20 space-y-3 shadow-xs">
-              <div className="flex items-center justify-between border-b border-purple-200/60 dark:border-purple-900/40 pb-2">
-                <span className="text-[11px] font-mono font-black uppercase tracking-wider text-purple-950 dark:text-purple-200 flex items-center gap-1.5">
-                  <span>⚡ Root Cause &amp; Contributing Observations Hierarchy</span>
+            <div className="p-4 rounded-xl border border-line dark:border-line bg-paper-100 dark:bg-paper-100 space-y-3 shadow-xs">
+              <div className="flex items-center justify-between border-b border-line dark:border-line pb-2">
+                <span className="text-[11px] font-mono font-semibold uppercase tracking-[0.04em] text-ink-700 dark:text-ink-700 flex items-center gap-1.5">
+                  <span> Root Cause &amp; Contributing Observations Hierarchy</span>
                 </span>
-                <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-purple-200/80 text-purple-900 dark:bg-purple-900 dark:text-purple-200">
+                <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-paper-100 text-ink-700 dark:bg-paper-100 dark:text-ink-700">
                   {finding.sub_observations.length} Observations Clustered
                 </span>
               </div>
-              <p className="text-xs text-purple-950 dark:text-purple-200/90 leading-relaxed font-sans">
+              <p className="text-xs text-ink-700 dark:text-ink-700 leading-relaxed font-sans">
                 Rather than treating each symptom as an isolated failure, this canonical finding synthesizes {finding.sub_observations.length} direct observations that stem from the same root-cause architecture.
               </p>
               <div className="space-y-2 pt-1">
                 {finding.detailed_observations && finding.detailed_observations.length > 0 ? (
                   finding.detailed_observations.map((obs, idx) => (
-                    <div key={obs.observation_id || idx} className="p-3 rounded-lg border border-purple-200/60 dark:border-purple-800/40 bg-white/80 dark:bg-ink-900/80 space-y-1.5 text-xs">
+                    <div key={obs.observation_id || idx} className="p-3 rounded-lg border border-line dark:border-line bg-paper-50/80 dark:bg-ink-900/80 space-y-1.5 text-xs">
                       <div className="flex items-center justify-between gap-2">
                         <span className="font-bold text-ink-900 dark:text-ink-100 flex items-center gap-1.5">
-                          <span className="text-purple-600 font-mono text-[10px]">{idx + 1}.</span>
+                          <span className="text-ink-700 font-mono text-[10px]">{idx + 1}.</span>
                           <span>{obs.title}</span>
                         </span>
                         {obs.selector && (
-                          <code className="text-[10px] px-1.5 py-0.5 rounded bg-paper-100 dark:bg-ink-950 text-emerald-800 dark:text-emerald-400 font-mono font-semibold">
+                          <code className="text-[10px] px-1.5 py-0.5 rounded bg-paper-100 dark:bg-ink-950 text-good dark:text-good font-mono font-semibold">
                             {obs.selector}
                           </code>
                         )}
@@ -215,15 +215,15 @@ export function Drawer({ finding, patches, websiteUrl, analysisId, onClose, onOp
                       )}
                       {obs.url && (
                         <div className="text-[9px] font-mono text-ink-400 truncate">
-                          URL: <span className="text-blue-700 dark:text-blue-400">{obs.url}</span>
+                          URL: <span className="text-ink-700 dark:text-ink-700">{obs.url}</span>
                         </div>
                       )}
                     </div>
                   ))
                 ) : (
                   finding.sub_observations.map((sub, idx) => (
-                    <div key={idx} className="flex items-start gap-2 p-2 rounded bg-white/60 dark:bg-ink-900/60 text-xs text-ink-800 dark:text-ink-200 border border-line/40">
-                      <span className="text-purple-600 font-bold">•</span>
+                    <div key={idx} className="flex items-start gap-2 p-2 rounded bg-paper-50/60 dark:bg-ink-900/60 text-xs text-ink-700 dark:text-ink-200 border border-line/40">
+                      <span className="text-ink-700 font-bold">•</span>
                       <span>{sub}</span>
                     </div>
                   ))
@@ -235,9 +235,9 @@ export function Drawer({ finding, patches, websiteUrl, analysisId, onClose, onOp
           {/* ═══════════════════════════════════════════════════════ */}
           {/* PILLAR 1: WHAT WAS FOUND                               */}
           {/* ═══════════════════════════════════════════════════════ */}
-          <div className="p-4 rounded-xl border border-slate-300 dark:border-ink-800 bg-white dark:bg-ink-950 space-y-3 shadow-xs">
+          <div className="p-4 rounded-xl border border-line dark:border-ink-800 bg-paper-50 dark:bg-ink-950 space-y-3 shadow-xs">
             <div className="flex items-center justify-between border-b border-line/60 pb-2">
-              <span className="text-[11px] font-mono font-black uppercase tracking-wider text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+              <span className="text-[11px] font-mono font-semibold uppercase tracking-[0.04em] text-ink-700 dark:text-ink-300 flex items-center gap-1.5">
                 <span>🔍 1. What Was Found (Observation &amp; Evidence)</span>
               </span>
               <span className={`text-[9px] font-mono font-bold uppercase px-2 py-0.5 rounded border ${cl.badgeClass}`}>
@@ -259,24 +259,24 @@ export function Drawer({ finding, patches, websiteUrl, analysisId, onClose, onOp
                   >
                     {(ev.selector || ev.element) && (
                       <div>
-                        <span className="text-ink-400 text-[9px] uppercase font-bold tracking-wider block">DOM Selector</span>
-                        <code className="text-emerald-800 dark:text-emerald-400 font-bold">{ev.selector || ev.element}</code>
+                        <span className="text-ink-400 text-[9px] uppercase font-bold tracking-[0.04em] block">DOM Selector</span>
+                        <code className="text-good dark:text-good font-bold">{ev.selector || ev.element}</code>
                       </div>
                     )}
                     {(ev.value || ev.snippet || ev.excerpt) && (
                       <div>
-                        <span className="text-ink-400 text-[9px] uppercase font-bold tracking-wider block">Observed Value</span>
+                        <span className="text-ink-400 text-[9px] uppercase font-bold tracking-[0.04em] block">Observed Value</span>
                         <span className="text-ink-700 dark:text-ink-300">"{display(ev.value || ev.snippet || ev.excerpt)}"</span>
                       </div>
                     )}
                     {ev.url && (
                       <div>
-                        <span className="text-ink-400 text-[9px] uppercase font-bold tracking-wider block">Target URL</span>
+                        <span className="text-ink-400 text-[9px] uppercase font-bold tracking-[0.04em] block">Target URL</span>
                         <a
                           href={ev.url}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="text-blue-700 dark:text-blue-400 hover:underline truncate block max-w-full"
+                          className="text-ink-700 dark:text-ink-700 hover:underline truncate block max-w-full"
                         >
                           {ev.url}
                         </a>
@@ -289,24 +289,24 @@ export function Drawer({ finding, patches, websiteUrl, analysisId, onClose, onOp
               <div className="p-3 rounded border border-line bg-paper-100 dark:bg-ink-900 font-mono text-[11px] space-y-1.5">
                 {domSelector && (
                   <div>
-                    <span className="text-ink-400 text-[9px] uppercase font-bold tracking-wider block">DOM Selector</span>
-                    <code className="text-emerald-800 dark:text-emerald-400 font-bold">{domSelector}</code>
+                    <span className="text-ink-400 text-[9px] uppercase font-bold tracking-[0.04em] block">DOM Selector</span>
+                    <code className="text-good dark:text-good font-bold">{domSelector}</code>
                   </div>
                 )}
                 {observedValue && (
                   <div>
-                    <span className="text-ink-400 text-[9px] uppercase font-bold tracking-wider block">Observed</span>
+                    <span className="text-ink-400 text-[9px] uppercase font-bold tracking-[0.04em] block">Observed</span>
                     <span className="text-ink-700 dark:text-ink-300">"{display(observedValue)}"</span>
                   </div>
                 )}
                 {sourceUrl && (
                   <div>
-                    <span className="text-ink-400 text-[9px] uppercase font-bold tracking-wider block">Target URL</span>
+                    <span className="text-ink-400 text-[9px] uppercase font-bold tracking-[0.04em] block">Target URL</span>
                     <a
                       href={sourceUrl}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="text-blue-700 dark:text-blue-400 hover:underline truncate block max-w-full"
+                      className="text-ink-700 dark:text-ink-700 hover:underline truncate block max-w-full"
                     >
                       {sourceUrl}
                     </a>
@@ -333,10 +333,10 @@ export function Drawer({ finding, patches, websiteUrl, analysisId, onClose, onOp
           {/* ═══════════════════════════════════════════════════════ */}
           {/* PILLAR 2: WHAT IS THE PROBLEM                          */}
           {/* ═══════════════════════════════════════════════════════ */}
-          <div className="p-4 rounded-xl border border-amber-300 dark:border-amber-900/50 bg-amber-50/30 dark:bg-amber-950/20 space-y-3 shadow-xs">
-            <div className="flex items-center justify-between border-b border-amber-200 dark:border-amber-900/40 pb-2">
-              <span className="text-[11px] font-mono font-black uppercase tracking-wider text-amber-950 dark:text-amber-200 flex items-center gap-1.5">
-                <span>⚠️ 2. What Is The Problem (Risk &amp; Impact)</span>
+          <div className="p-4 rounded-xl border border-warn/30 dark:border-warn/30 bg-warn/10 dark:bg-warn/10 space-y-3 shadow-xs">
+            <div className="flex items-center justify-between border-b border-warn/30 dark:border-warn/30 pb-2">
+              <span className="text-[11px] font-mono font-semibold uppercase tracking-[0.04em] text-warn dark:text-warn flex items-center gap-1.5">
+                <span> 2. What Is The Problem (Risk &amp; Impact)</span>
               </span>
               <span className={`text-[10px] font-mono font-bold uppercase px-2 py-0.5 rounded border ${severityTone(finding.severity)}`}>
                 Severity: {finding.severity}
@@ -344,8 +344,8 @@ export function Drawer({ finding, patches, websiteUrl, analysisId, onClose, onOp
             </div>
 
             {/* Why It Matters / Business Impact */}
-            <div className="p-3 rounded-lg border border-amber-200 dark:border-amber-900/40 bg-white/80 dark:bg-ink-950/60 space-y-1">
-              <span className="text-[9px] font-mono uppercase tracking-wider font-bold text-amber-800 dark:text-amber-300 block">
+            <div className="p-3 rounded-lg border border-warn/30 dark:border-warn/30 bg-paper-50/80 dark:bg-ink-950/60 space-y-1">
+              <span className="text-[9px] font-mono uppercase tracking-[0.04em] font-bold text-warn dark:text-warn block">
                 Why It Matters &amp; Business Risk
               </span>
               <p className="text-xs text-ink leading-relaxed">
@@ -357,28 +357,28 @@ export function Drawer({ finding, patches, websiteUrl, analysisId, onClose, onOp
             </div>
 
             {/* Impact / Effort / Priority Metrics */}
-            <div className="grid grid-cols-3 gap-3 p-3 bg-white/60 dark:bg-ink-900/40 rounded-lg border border-amber-200/60 dark:border-amber-900/30 font-mono text-center">
+            <div className="grid grid-cols-3 gap-3 p-3 bg-paper-50/60 dark:bg-ink-900/40 rounded-lg border border-warn/30 dark:border-warn/30 font-mono text-center">
               <div>
-                <span className="text-[9px] uppercase tracking-wider text-ink-400 block">Impact</span>
-                <span className={`text-sm font-black ${
+                <span className="text-[9px] uppercase tracking-[0.04em] text-ink-400 block">Impact</span>
+                <span className={`text-sm font-semibold ${
                   finding.impact != null && finding.impact >= 8
-                    ? 'text-red-600'
+                    ? 'text-bad'
                     : finding.impact != null && finding.impact >= 5
-                    ? 'text-amber-600'
-                    : 'text-emerald-700'
+                    ? 'text-warn'
+                    : 'text-good'
                 }`}>
                   {impactWord} ({finding.impact ?? '—'}/10)
                 </span>
               </div>
               <div>
-                <span className="text-[9px] uppercase tracking-wider text-ink-400 block">Effort</span>
-                <span className="text-sm font-black text-ink">
+                <span className="text-[9px] uppercase tracking-[0.04em] text-ink-400 block">Effort</span>
+                <span className="text-sm font-semibold text-ink">
                   {effortWord} ({finding.effort ?? '—'}/10)
                 </span>
               </div>
               <div>
-                <span className="text-[9px] uppercase tracking-wider text-ink-400 block">Confidence</span>
-                <span className={`text-sm font-black ${cl.confidenceClass}`}>
+                <span className="text-[9px] uppercase tracking-[0.04em] text-ink-400 block">Confidence</span>
+                <span className={`text-sm font-semibold ${cl.confidenceClass}`}>
                   {confidencePercent(finding.confidence)}
                 </span>
               </div>
@@ -394,13 +394,13 @@ export function Drawer({ finding, patches, websiteUrl, analysisId, onClose, onOp
           {/* ═══════════════════════════════════════════════════════ */}
           {/* PILLAR 3: HOW TO FIX IT                                */}
           {/* ═══════════════════════════════════════════════════════ */}
-          <div className="p-4 rounded-xl border border-blue-300 dark:border-blue-900/50 bg-blue-50/30 dark:bg-blue-950/20 space-y-4 shadow-xs">
-            <div className="flex items-center justify-between border-b border-blue-200 dark:border-blue-900/40 pb-2">
-              <span className="text-[11px] font-mono font-black uppercase tracking-wider text-blue-950 dark:text-blue-200 flex items-center gap-1.5">
-                <span>🛠️ 3. How To Fix It (Remediation &amp; Live Verification)</span>
+          <div className="p-4 rounded-xl border border-line dark:border-line bg-paper-100 dark:bg-paper-100 space-y-4 shadow-xs">
+            <div className="flex items-center justify-between border-b border-line dark:border-line pb-2">
+              <span className="text-[11px] font-mono font-semibold uppercase tracking-[0.04em] text-ink-700 dark:text-ink-700 flex items-center gap-1.5">
+                <span> 3. How To Fix It (Remediation &amp; Live Verification)</span>
               </span>
               {patch && (
-                <span className="text-[9px] font-mono font-bold uppercase px-2 py-0.5 rounded bg-blue-200 text-blue-900">
+                <span className="text-[9px] font-mono font-bold uppercase px-2 py-0.5 rounded bg-paper-100 text-ink-700">
                   Ready-to-Deploy Patch
                 </span>
               )}
@@ -408,8 +408,8 @@ export function Drawer({ finding, patches, websiteUrl, analysisId, onClose, onOp
 
             {/* Recommendation */}
             {finding.recommendation && (
-              <div className="p-3.5 rounded-lg border border-blue-200 dark:border-blue-900/40 bg-white/80 dark:bg-ink-950/60 space-y-1">
-                <span className="text-[9px] font-mono uppercase tracking-wider font-bold text-blue-800 dark:text-blue-300 block">
+              <div className="p-3.5 rounded-lg border border-line dark:border-line bg-paper-50/80 dark:bg-ink-950/60 space-y-1">
+                <span className="text-[9px] font-mono uppercase tracking-[0.04em] font-bold text-ink-700 dark:text-ink-700 block">
                   Actionable Remediation Guidance
                 </span>
                 <p className="text-xs text-ink leading-relaxed">
@@ -419,8 +419,8 @@ export function Drawer({ finding, patches, websiteUrl, analysisId, onClose, onOp
             )}
 
             {/* Acceptance Criteria */}
-            <div className="p-3 rounded-lg border border-line bg-white/60 dark:bg-ink-900/40 space-y-1 text-xs">
-              <span className="text-[9px] font-mono font-black uppercase tracking-wider text-ink-500 block">
+            <div className="p-3 rounded-lg border border-line bg-paper-50/60 dark:bg-ink-900/40 space-y-1 text-xs">
+              <span className="text-[9px] font-mono font-semibold uppercase tracking-[0.04em] text-ink-500 block">
                 Validation Acceptance Criteria:
               </span>
               <p className="text-ink leading-relaxed">
@@ -434,9 +434,9 @@ export function Drawer({ finding, patches, websiteUrl, analysisId, onClose, onOp
 
             {/* CODE PATCH (if available) */}
             {patch && (
-              <div className="p-3.5 rounded-lg border border-line bg-white dark:bg-ink-950 space-y-2.5">
+              <div className="p-3.5 rounded-lg border border-line bg-paper-50 dark:bg-ink-950 space-y-2.5">
                 <div className="flex items-baseline justify-between gap-3">
-                  <span className="font-mono text-xs text-pine font-bold">{display(patch.target_file, 'patch.diff')}</span>
+                  <span className="font-mono text-xs text-ink-700 font-bold">{display(patch.target_file, 'patch.diff')}</span>
                   <button
                     type="button"
                     onClick={copyPatch}

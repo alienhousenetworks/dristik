@@ -73,10 +73,10 @@ export function DevPatchPackView({ report, analysisId }: DevPatchPackViewProps) 
       {/* Top Header Card */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-line pb-4">
         <div>
-          <span className="text-[10px] font-mono uppercase tracking-widest text-pine font-bold block">
+          <span className="text-[10px] font-mono uppercase tracking-[0.04em] text-ink-700 font-bold block">
             Engineering & Remediation
           </span>
-          <h2 className="font-serif text-3xl text-ink font-semibold">Developer Patch Pack</h2>
+          <h2 className="font-sans text-3xl text-ink font-semibold">Developer Patch Pack</h2>
           <p className="text-xs text-ink-500 mt-1">
             Engineered code diffs ready for review and deployment to resolve identified SEO, Schema, and CRO issues.
           </p>
@@ -123,7 +123,7 @@ export function DevPatchPackView({ report, analysisId }: DevPatchPackViewProps) 
               <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line pb-3">
                 <div className="space-y-0.5">
                   <div className="flex items-center gap-2">
-                    <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-pine/10 text-pine font-bold">
+                    <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-paper-200 text-ink-700 font-bold">
                       {p.category}
                     </span>
                     <span className="text-xs font-mono text-ink-400">{p.patch_id}</span>
@@ -168,7 +168,7 @@ export function DevPatchPackView({ report, analysisId }: DevPatchPackViewProps) 
                 {p.before_snippet && (
                   <div className="p-3 rounded bg-bad/5 border border-bad/20 space-y-1 overflow-x-auto">
                     <span className="text-[10px] font-bold text-bad uppercase block">Existing State (Before)</span>
-                    <pre className="text-ink-800 text-[11px] whitespace-pre-wrap">{p.before_snippet}</pre>
+                    <pre className="text-ink-700 text-[11px] whitespace-pre-wrap">{p.before_snippet}</pre>
                   </div>
                 )}
                 <div className={`p-3 rounded bg-good/5 border border-good/20 space-y-1 overflow-x-auto ${

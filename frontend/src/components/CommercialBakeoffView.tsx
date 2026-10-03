@@ -51,11 +51,11 @@ export function CommercialBakeoffView({
   const getStatusClass = (status: string) => {
     switch (status) {
       case 'Answerable':
-        return 'text-emerald-700 bg-emerald-50 border-emerald-200';
+        return 'text-good bg-good/10 border-good/30';
       case 'Ambiguous':
-        return 'text-amber-700 bg-amber-50 border-amber-200';
+        return 'text-warn bg-warn/10 border-warn/30';
       default:
-        return 'text-red-700 bg-red-50 border-red-200';
+        return 'text-bad bg-bad/10 border-bad/30';
     }
   };
 
@@ -65,7 +65,7 @@ export function CommercialBakeoffView({
         <div>
           <div className="flex items-center gap-2">
             <span className="w-2.5 h-2.5 rounded-full bg-pine"></span>
-            <h3 className="font-serif text-xl text-ink">
+            <h3 className="font-sans text-xl text-ink">
               1-Competitor Bake-Off: Who Does the Model Answer For?
             </h3>
           </div>
@@ -94,7 +94,7 @@ export function CommercialBakeoffView({
       </div>
 
       {error && (
-        <div className="p-3 rounded bg-red-50 border border-red-200 text-xs text-bad">
+        <div className="p-3 rounded bg-bad/10 border border-bad/30 text-xs text-bad">
           {error}
         </div>
       )}
@@ -104,7 +104,7 @@ export function CommercialBakeoffView({
           {/* Executive Score Summary */}
           <div className="flex flex-wrap items-center justify-between gap-4 bg-paper-50 border border-line p-4 rounded-lg">
             <div className="space-y-1">
-              <span className="label text-pine block">
+              <span className="label text-ink-700 block">
                 Commercial Battlecard Summary
               </span>
               <p className="text-xs text-ink-700 leading-relaxed max-w-2xl font-medium">
@@ -134,7 +134,7 @@ export function CommercialBakeoffView({
                 <tr className="bg-paper-50 text-ink-500 font-bold border-b border-line label text-[10px]">
                   <th className="p-3 w-1/5">Commercial Question</th>
                   <th className="p-3 w-2/5 border-l border-line">
-                    <span className="text-pine font-extrabold">{targetDomain}</span> (You)
+                    <span className="text-ink-700 font-extrabold">{targetDomain}</span> (You)
                   </th>
                   <th className="p-3 w-2/5 border-l border-line">
                     <span className="text-ink font-extrabold">{bakeoff.competitor_domain}</span> (Rival)
@@ -153,7 +153,7 @@ export function CommercialBakeoffView({
                     </td>
 
                     {/* Target Domain Column */}
-                    <td className="p-3 align-top border-l border-line space-y-1.5 bg-emerald-50/20">
+                    <td className="p-3 align-top border-l border-line space-y-1.5 bg-good/10">
                       <div className="flex items-center justify-between">
                         <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border ${getStatusClass(item.target_status)}`}>
                           {item.target_status}
@@ -185,11 +185,11 @@ export function CommercialBakeoffView({
                     {/* Advantage Pill */}
                     <td className="p-3 align-top border-l border-line text-center whitespace-nowrap">
                       {item.winner === 'target' ? (
-                        <span className="inline-block px-2 py-1 rounded bg-emerald-100 text-good font-bold text-[10px] border border-emerald-200">
+                        <span className="inline-block px-2 py-1 rounded bg-good/10 text-good font-bold text-[10px] border border-good/30">
                           ✓ You Win
                         </span>
                       ) : item.winner === 'competitor' ? (
-                        <span className="inline-block px-2 py-1 rounded bg-amber-100 text-warn font-bold text-[10px] border border-amber-200">
+                        <span className="inline-block px-2 py-1 rounded bg-warn/10 text-warn font-bold text-[10px] border border-warn/30">
                           Rival Ahead
                         </span>
                       ) : (
@@ -206,8 +206,8 @@ export function CommercialBakeoffView({
         </div>
       ) : (
         <div className="p-8 text-center bg-paper-50 border border-dashed border-line rounded-lg space-y-3">
-          <div className="w-10 h-10 rounded-full bg-paper-200 text-pine flex items-center justify-center mx-auto text-lg font-bold">
-            ⚔️
+          <div className="w-10 h-10 rounded-full bg-paper-200 text-ink-700 flex items-center justify-center mx-auto text-lg font-bold">
+            ⚔
           </div>
           <div>
             <p className="text-sm font-semibold text-ink">No competitor benchmark loaded yet</p>

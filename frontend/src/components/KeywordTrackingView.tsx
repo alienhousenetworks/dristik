@@ -165,7 +165,7 @@ export function KeywordTrackingView({
       {/* Header & Controls */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
-          <h2 className="font-serif text-xl font-bold text-ink">Continuous Keyword & SERP Tracking</h2>
+          <h2 className="font-sans text-xl font-bold text-ink">Continuous Keyword & SERP Tracking</h2>
           <p className="text-xs text-ink-500">
             Daily Google rank positions, AI Overview coverage, SERP features, and competitor movement.
           </p>
@@ -196,41 +196,41 @@ export function KeywordTrackingView({
       {/* Movement Metrics Cards */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
         <Card className="p-3 space-y-1">
-          <span className="text-[10px] text-ink-500 uppercase tracking-wider block">Tracked</span>
-          <span className="font-serif text-xl font-bold text-ink block">{summary?.total_tracked || keywords.length}</span>
+          <span className="text-[10px] text-ink-500 uppercase tracking-[0.04em] block">Tracked</span>
+          <span className="font-sans text-xl font-bold text-ink block">{summary?.total_tracked || keywords.length}</span>
           <span className="text-[11px] text-ink-400">Total terms</span>
         </Card>
         <Card className="p-3 space-y-1">
-          <span className="text-[10px] text-emerald-600 dark:text-emerald-400 uppercase tracking-wider block flex items-center gap-1">
+          <span className="text-[10px] text-good dark:text-good uppercase tracking-[0.04em] block flex items-center gap-1">
             <TrendingUp className="h-3 w-3" /> Improved
           </span>
-          <span className="font-serif text-xl font-bold text-emerald-600 block">+{summary?.improved_count || 0}</span>
+          <span className="font-sans text-xl font-bold text-good block">+{summary?.improved_count || 0}</span>
           <span className="text-[11px] text-ink-400">Past 24 hours</span>
         </Card>
         <Card className="p-3 space-y-1">
-          <span className="text-[10px] text-rose-600 dark:text-rose-400 uppercase tracking-wider block flex items-center gap-1">
+          <span className="text-[10px] text-bad dark:text-bad uppercase tracking-[0.04em] block flex items-center gap-1">
             <ArrowDownRight className="h-3 w-3" /> Declined
           </span>
-          <span className="font-serif text-xl font-bold text-rose-600 block">-{summary?.declined_count || 0}</span>
+          <span className="font-sans text-xl font-bold text-bad block">-{summary?.declined_count || 0}</span>
           <span className="text-[11px] text-ink-400">Past 24 hours</span>
         </Card>
         <Card className="p-3 space-y-1">
-          <span className="text-[10px] text-amber-600 uppercase tracking-wider block flex items-center gap-1">
+          <span className="text-[10px] text-warn uppercase tracking-[0.04em] block flex items-center gap-1">
             <Award className="h-3 w-3" /> Top 3
           </span>
-          <span className="font-serif text-xl font-bold text-ink block">{summary?.top_3_count || 0}</span>
+          <span className="font-sans text-xl font-bold text-ink block">{summary?.top_3_count || 0}</span>
           <span className="text-[11px] text-ink-400">Prime positions</span>
         </Card>
         <Card className="p-3 space-y-1">
-          <span className="text-[10px] text-blue-600 uppercase tracking-wider block">Top 10</span>
-          <span className="font-serif text-xl font-bold text-ink block">{summary?.top_10_count || 0}</span>
+          <span className="text-[10px] text-ink-700 uppercase tracking-[0.04em] block">Top 10</span>
+          <span className="font-sans text-xl font-bold text-ink block">{summary?.top_10_count || 0}</span>
           <span className="text-[11px] text-ink-400">Page 1 share</span>
         </Card>
         <Card className="p-3 space-y-1">
-          <span className="text-[10px] text-purple-600 uppercase tracking-wider block flex items-center gap-1">
+          <span className="text-[10px] text-ink-700 uppercase tracking-[0.04em] block flex items-center gap-1">
             <Sparkles className="h-3 w-3" /> AI Overview
           </span>
-          <span className="font-serif text-xl font-bold text-purple-600 block">{summary?.ai_overview_count || 0}</span>
+          <span className="font-sans text-xl font-bold text-ink-700 block">{summary?.ai_overview_count || 0}</span>
           <span className="text-[11px] text-ink-400">Generative results</span>
         </Card>
       </div>
@@ -307,9 +307,9 @@ export function KeywordTrackingView({
                           <span
                             className={`font-semibold font-mono ${
                               kw.current_position <= 3
-                                ? 'text-amber-600 dark:text-amber-400'
+                                ? 'text-warn dark:text-warn'
                                 : kw.current_position <= 10
-                                ? 'text-emerald-600 dark:text-emerald-400'
+                                ? 'text-good dark:text-good'
                                 : 'text-ink'
                             }`}
                           >
@@ -321,11 +321,11 @@ export function KeywordTrackingView({
                       </td>
                       <td className="py-2.5 px-3 text-center">
                         {delta > 0 ? (
-                          <span className="inline-flex items-center text-emerald-600 font-semibold text-[11px]">
+                          <span className="inline-flex items-center text-good font-semibold text-[11px]">
                             <ArrowUpRight className="h-3 w-3" /> +{delta}
                           </span>
                         ) : delta < 0 ? (
-                          <span className="inline-flex items-center text-rose-600 font-semibold text-[11px]">
+                          <span className="inline-flex items-center text-bad font-semibold text-[11px]">
                             <ArrowDownRight className="h-3 w-3" /> {delta}
                           </span>
                         ) : (
@@ -340,22 +340,22 @@ export function KeywordTrackingView({
                       <td className="py-2.5 px-3">
                         <div className="flex items-center gap-1.5 flex-wrap">
                           {kw.has_ai_overview && (
-                            <span className="px-1.5 py-0.5 rounded text-[10px] bg-purple-100 text-purple-700 dark:bg-purple-950/60 dark:text-purple-300 font-medium inline-flex items-center gap-0.5">
+                            <span className="px-1.5 py-0.5 rounded text-[10px] bg-paper-100 text-ink-700 dark:bg-paper-100 dark:text-ink-700 font-medium inline-flex items-center gap-0.5">
                               <Sparkles className="h-2.5 w-2.5" /> AI
                             </span>
                           )}
                           {kw.has_featured_snippet && (
-                            <span className="px-1.5 py-0.5 rounded text-[10px] bg-blue-100 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300 font-medium">
+                            <span className="px-1.5 py-0.5 rounded text-[10px] bg-paper-100 text-ink-700 dark:bg-paper-100 dark:text-ink-700 font-medium">
                               Snippet
                             </span>
                           )}
                           {kw.serp_features?.includes('people_also_ask') && (
-                            <span className="px-1.5 py-0.5 rounded text-[10px] bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300 font-medium">
+                            <span className="px-1.5 py-0.5 rounded text-[10px] bg-warn/10 text-warn dark:bg-warn/10 dark:text-warn font-medium">
                               PAA
                             </span>
                           )}
                           {kw.serp_features?.includes('local_pack') && (
-                            <span className="px-1.5 py-0.5 rounded text-[10px] bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 font-medium">
+                            <span className="px-1.5 py-0.5 rounded text-[10px] bg-good/10 text-good dark:bg-good/10 dark:text-good font-medium">
                               Map
                             </span>
                           )}
@@ -365,7 +365,7 @@ export function KeywordTrackingView({
                         <button
                           type="button"
                           onClick={() => handleDelete(kw.keyword_id)}
-                          className="text-ink-400 hover:text-rose-600 p-1 transition-colors"
+                          className="text-ink-400 hover:text-bad p-1 transition-colors"
                           title="Stop Tracking"
                         >
                           <Trash2 className="h-3.5 w-3.5" />
@@ -384,7 +384,7 @@ export function KeywordTrackingView({
       {showAddModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <Card className="w-full max-w-md p-6 space-y-4 bg-paper dark:bg-ink-950">
-            <h3 className="font-serif text-lg font-bold text-ink">Add Tracked Keyword</h3>
+            <h3 className="font-sans text-lg font-bold text-ink">Add Tracked Keyword</h3>
             <form onSubmit={handleAddKeyword} className="space-y-3">
               <div>
                 <label className="text-xs font-medium text-ink block mb-1">Search Keyword *</label>

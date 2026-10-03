@@ -19,14 +19,14 @@ import {
 function ScorePill({ score, label }: { score: number; label: string }) {
   const color =
     score >= 7
-      ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
+      ? 'bg-good/10 text-good border-good/30'
       : score >= 5
-      ? 'bg-amber-100 text-amber-800 border-amber-300'
-      : 'bg-rose-100 text-rose-800 border-rose-300';
+      ? 'bg-warn/10 text-warn border-warn/30'
+      : 'bg-bad/10 text-bad border-bad/30';
   return (
     <div className="flex flex-col items-center">
       <span className="text-[10px] font-medium text-ink-500 mb-0.5">{label}</span>
-      <span className={`font-mono text-lg font-black px-3 py-1 rounded border ${color}`}>
+      <span className={`font-mono text-lg font-semibold px-3 py-1 rounded border ${color}`}>
         {score}/10
       </span>
     </div>
@@ -44,14 +44,14 @@ function GroundingPill({
   const pct = Math.round(ratio * 100);
   const color =
     pct >= 60
-      ? 'bg-emerald-50 border-emerald-300 text-emerald-800'
+      ? 'bg-good/10 border-good/30 text-good'
       : pct >= 30
-      ? 'bg-amber-50 border-amber-300 text-amber-800'
-      : 'bg-rose-50 border-rose-300 text-rose-800';
+      ? 'bg-warn/10 border-warn/30 text-warn'
+      : 'bg-bad/10 border-bad/30 text-bad';
   return (
     <div className="flex flex-col items-center">
       <span className="text-[10px] font-medium text-ink-500 mb-0.5">{label}</span>
-      <span className={`font-mono text-lg font-black px-3 py-1 rounded border ${color}`}>
+      <span className={`font-mono text-lg font-semibold px-3 py-1 rounded border ${color}`}>
         {pct}%
       </span>
       <span className="text-[9px] text-ink-400 mt-0.5">Grounding</span>
@@ -62,9 +62,9 @@ function GroundingPill({
 function RiskBadge({ risk }: { risk?: KieAnswerRisk | string | null }) {
   if (!risk) return null;
   const config: Record<string, string> = {
-    HIGH: 'bg-rose-100 text-rose-800 border-rose-300',
-    MEDIUM: 'bg-amber-100 text-amber-800 border-amber-300',
-    LOW: 'bg-emerald-100 text-emerald-800 border-emerald-300',
+    HIGH: 'bg-bad/10 text-bad border-bad/30',
+    MEDIUM: 'bg-warn/10 text-warn border-warn/30',
+    LOW: 'bg-good/10 text-good border-good/30',
   };
   return (
     <span className={`text-[10px] px-2 py-0.5 rounded border font-semibold ${config[risk] ?? 'bg-paper-100 border-line text-ink-600'}`}>
@@ -75,9 +75,9 @@ function RiskBadge({ risk }: { risk?: KieAnswerRisk | string | null }) {
 
 function EvidenceStatusBadge({ status }: { status: string }) {
   const config: Record<string, string> = {
-    VERIFIED: 'bg-emerald-100 text-emerald-800 border-emerald-300',
-    AMBIGUOUS: 'bg-amber-100 text-amber-800 border-amber-300',
-    MISSING: 'bg-rose-100 text-rose-800 border-rose-300',
+    VERIFIED: 'bg-good/10 text-good border-good/30',
+    AMBIGUOUS: 'bg-warn/10 text-warn border-warn/30',
+    MISSING: 'bg-bad/10 text-bad border-bad/30',
   };
   return (
     <span className={`text-[10px] px-2 py-0.5 rounded border font-semibold uppercase ${config[status] ?? 'bg-paper-100 border-line text-ink-600'}`}>
@@ -184,7 +184,7 @@ export function ReQueryDiffView({
         <div>
           <div className="flex items-center gap-2">
             <span className="w-2.5 h-2.5 rounded-full bg-pine" />
-            <h3 className="font-serif text-xl text-ink">
+            <h3 className="font-sans text-xl text-ink">
               Re-Query After Patch — Citation Readiness Diff
             </h3>
           </div>
@@ -211,8 +211,8 @@ export function ReQueryDiffView({
                 )}
                 {scoreDelta != null && (
                   <div className="border-l border-line pl-3 text-center">
-                    <span className="text-[10px] font-medium text-pine block mb-0.5">Score Δ</span>
-                    <span className="text-lg font-black text-pine font-mono">+{scoreDelta}</span>
+                    <span className="text-[10px] font-medium text-ink-700 block mb-0.5">Score Δ</span>
+                    <span className="text-lg font-semibold text-ink-700 font-mono">+{scoreDelta}</span>
                   </div>
                 )}
               </>
@@ -228,8 +228,8 @@ export function ReQueryDiffView({
                     <GroundingPill ratio={avgAfterGrounding / 100} label="After Grounding" />
                     {groundingDelta != null && (
                       <div className="border-l border-line pl-3 text-center">
-                        <span className="text-[10px] font-medium text-pine block mb-0.5">Grounding Δ</span>
-                        <span className="text-lg font-black text-pine font-mono">+{groundingDelta}%</span>
+                        <span className="text-[10px] font-medium text-ink-700 block mb-0.5">Grounding Δ</span>
+                        <span className="text-lg font-semibold text-ink-700 font-mono">+{groundingDelta}%</span>
                       </div>
                     )}
                   </>
@@ -242,8 +242,8 @@ export function ReQueryDiffView({
 
       {/* ── KIE Context Notice ── */}
       {highRiskCount > 0 && (
-        <div className="flex items-start gap-2 p-3 bg-rose-50 border border-rose-200 rounded-md text-xs text-rose-800">
-          <AlertTriangle className="w-3.5 h-3.5 mt-0.5 shrink-0 text-rose-600" />
+        <div className="flex items-start gap-2 p-3 bg-bad/10 border border-bad/30 rounded-md text-xs text-bad">
+          <AlertTriangle className="w-3.5 h-3.5 mt-0.5 shrink-0 text-bad" />
           <span>
             <strong>{highRiskCount} inquiry{highRiskCount > 1 ? 'ies' : 'y'} flagged HIGH Answer Risk:</strong>{' '}
             These topics have insufficient first-party evidence, meaning AI answer engines
@@ -319,7 +319,7 @@ export function ReQueryDiffView({
                   </div>
 
                   {/* AFTER */}
-                  <div className="p-4 space-y-3 bg-emerald-50/40">
+                  <div className="p-4 space-y-3 bg-good/10">
                     <div className="flex items-center justify-between">
                       <span className="label text-good flex items-center gap-1.5">
                         <span className="w-2 h-2 rounded-full bg-good" />
@@ -327,25 +327,25 @@ export function ReQueryDiffView({
                       </span>
                       <div className="flex items-center gap-2">
                         {item.after_grounding_ratio != null && (
-                          <span className="font-mono text-[10px] text-emerald-700 bg-emerald-100 border border-emerald-200 px-1.5 py-0.5 rounded">
+                          <span className="font-mono text-[10px] text-good bg-good/10 border border-good/30 px-1.5 py-0.5 rounded">
                             {Math.round(item.after_grounding_ratio * 100)}% grounded
                           </span>
                         )}
-                        <span className="font-bold px-2 py-0.5 rounded bg-emerald-100 text-good border border-emerald-200 font-mono">
+                        <span className="font-bold px-2 py-0.5 rounded bg-good/10 text-good border border-good/30 font-mono">
                           {item.after_score != null ? `${item.after_score}/10` : 'Pending'}
                         </span>
                         {item.delta != null && item.delta > 0 && (
-                          <span className="font-bold px-1.5 py-0.5 rounded bg-pine-100 text-pine text-[10px] font-mono">
+                          <span className="font-bold px-1.5 py-0.5 rounded bg-paper-200 text-ink-700 text-[10px] font-mono">
                             +{item.delta}
                           </span>
                         )}
                       </div>
                     </div>
-                    <p className="text-ink-700 leading-relaxed bg-paper-50 p-2.5 rounded border border-emerald-200 font-mono text-[11px] shadow-2xs">
+                    <p className="text-ink-700 leading-relaxed bg-paper-50 p-2.5 rounded border border-good/30 font-mono text-[11px] shadow-2xs">
                       {item.after_answer || 'Pending patch application and re-query.'}
                     </p>
                     {item.evidence_snippet && (
-                      <blockquote className="text-[11px] text-emerald-800/80 border-l-2 border-emerald-500 pl-2 font-mono">
+                      <blockquote className="text-[11px] text-good border-l-2 border-good/30 pl-2 font-mono">
                         "{item.evidence_snippet}"
                       </blockquote>
                     )}
@@ -377,7 +377,7 @@ export function ReQueryDiffView({
                       competitor evidence or fabricating specifics. Applying the recommended patches
                       (Schema.org markup, FAQ sections, pricing tables) directly increases this ratio.
                     </p>
-                    <div className="flex items-center gap-1 text-[11px] text-pine font-semibold">
+                    <div className="flex items-center gap-1 text-[11px] text-ink-700 font-semibold">
                       <Zap className="w-3.5 h-3.5" />
                       Fix: Publish a dedicated, citable page section addressing this inquiry with explicit
                       facts, pricing, certifications, or case study data.
@@ -395,7 +395,7 @@ export function ReQueryDiffView({
         <button
           type="button"
           onClick={() => setShowCustomPatch(!showCustomPatch)}
-          className="text-xs font-semibold text-pine hover:underline flex items-center gap-1.5"
+          className="text-xs font-semibold text-ink-700 hover:underline flex items-center gap-1.5"
         >
           <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
           {showCustomPatch
@@ -421,7 +421,7 @@ export function ReQueryDiffView({
                   onChange={(e) => setCustomSchema(e.target.value)}
                   placeholder='{"@context": "https://schema.org", "@type": "FAQPage", ...}'
                   rows={4}
-                  className="w-full text-xs font-mono p-2 border border-line rounded bg-white text-ink"
+                  className="w-full text-xs font-mono p-2 border border-line rounded bg-paper-50 text-ink"
                 />
               </div>
               <div>
@@ -434,7 +434,7 @@ export function ReQueryDiffView({
                   onChange={(e) => setCustomFaq(e.target.value)}
                   placeholder="<div class='faq-item'><h3>How much does it cost?</h3><p>Starting at ₹49k...</p></div>"
                   rows={4}
-                  className="w-full text-xs font-mono p-2 border border-line rounded bg-white text-ink"
+                  className="w-full text-xs font-mono p-2 border border-line rounded bg-paper-50 text-ink"
                 />
               </div>
             </div>

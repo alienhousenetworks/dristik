@@ -92,8 +92,8 @@ export function CompetitorKeywordGapView({
       <Card className="p-5 space-y-4">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div>
-            <h3 className="font-serif text-lg font-bold text-ink flex items-center gap-2">
-              <Swords className="h-5 w-5 text-pine" />
+            <h3 className="font-sans text-lg font-bold text-ink flex items-center gap-2">
+              <Swords className="h-5 w-5 text-ink-700" />
               Competitor Keyword Gap Analysis
             </h3>
             <p className="text-xs text-ink-500">
@@ -104,7 +104,7 @@ export function CompetitorKeywordGapView({
 
         <div className="flex flex-col sm:flex-row items-center gap-3 pt-2">
           <div className="w-full sm:w-1/3">
-            <span className="text-[10px] text-ink-400 uppercase tracking-wider block mb-1">Target Website</span>
+            <span className="text-[10px] text-ink-400 uppercase tracking-[0.04em] block mb-1">Target Website</span>
             <input
               type="text"
               readOnly
@@ -113,7 +113,7 @@ export function CompetitorKeywordGapView({
             />
           </div>
           <div className="w-full sm:flex-1">
-            <span className="text-[10px] text-ink-400 uppercase tracking-wider block mb-1">
+            <span className="text-[10px] text-ink-400 uppercase tracking-[0.04em] block mb-1">
               Rival Domains (Comma-separated)
             </span>
             <input
@@ -136,7 +136,7 @@ export function CompetitorKeywordGapView({
             </Button>
           </div>
         </div>
-        {error && <p className="text-xs text-rose-600 dark:text-rose-400">{error}</p>}
+        {error && <p className="text-xs text-bad dark:text-bad">{error}</p>}
       </Card>
 
       {/* Results Section */}
@@ -144,31 +144,31 @@ export function CompetitorKeywordGapView({
         <div className="space-y-6">
           {/* Headline Metrics */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <Card className="p-4 space-y-1 bg-rose-50/40 dark:bg-rose-950/20 border-rose-200 dark:border-rose-900/40">
-              <span className="text-[10px] text-rose-700 dark:text-rose-400 font-semibold uppercase tracking-wider block flex items-center gap-1">
+            <Card className="p-4 space-y-1 bg-bad/10 dark:bg-bad/10 border-bad/30 dark:border-bad/30">
+              <span className="text-[10px] text-bad dark:text-bad font-semibold uppercase tracking-[0.04em] block flex items-center gap-1">
                 <AlertTriangle className="h-3.5 w-3.5" /> Missing Opportunities
               </span>
-              <span className="font-serif text-2xl font-bold text-rose-700 dark:text-rose-300 block">
+              <span className="font-sans text-2xl font-bold text-bad dark:text-bad block">
                 {report.total_missing_keywords}
               </span>
               <span className="text-[11px] text-ink-500">Rivals rank top 10 · You have 0 presence</span>
             </Card>
 
-            <Card className="p-4 space-y-1 bg-amber-50/40 dark:bg-amber-950/20 border-amber-200 dark:border-amber-900/40">
-              <span className="text-[10px] text-amber-700 dark:text-amber-400 font-semibold uppercase tracking-wider block">
+            <Card className="p-4 space-y-1 bg-warn/10 dark:bg-warn/10 border-warn/30 dark:border-warn/30">
+              <span className="text-[10px] text-warn dark:text-warn font-semibold uppercase tracking-[0.04em] block">
                 Weak Page 2 Terms
               </span>
-              <span className="font-serif text-2xl font-bold text-amber-700 dark:text-amber-300 block">
+              <span className="font-sans text-2xl font-bold text-warn dark:text-warn block">
                 {report.total_weak_keywords}
               </span>
               <span className="text-[11px] text-ink-500">Ranks #11–#30 · Fast jump candidates</span>
             </Card>
 
-            <Card className="p-4 space-y-1 bg-emerald-50/40 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-900/40">
-              <span className="text-[10px] text-emerald-700 dark:text-emerald-400 font-semibold uppercase tracking-wider block flex items-center gap-1">
+            <Card className="p-4 space-y-1 bg-good/10 dark:bg-good/10 border-good/30 dark:border-good/30">
+              <span className="text-[10px] text-good dark:text-good font-semibold uppercase tracking-[0.04em] block flex items-center gap-1">
                 <TrendingUp className="h-3.5 w-3.5" /> Traffic Gain Potential
               </span>
-              <span className="font-serif text-2xl font-bold text-emerald-700 dark:text-emerald-300 block">
+              <span className="font-sans text-2xl font-bold text-good dark:text-good block">
                 +{report.total_opportunity_traffic.toLocaleString()}
               </span>
               <span className="text-[11px] text-ink-500">Estimated monthly organic visits</span>
@@ -219,10 +219,10 @@ export function CompetitorKeywordGapView({
                             <span
                               className={`px-1.5 py-0.5 rounded text-[10px] font-semibold ${
                                 opp.keyword_difficulty > 65
-                                  ? 'bg-rose-100 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300'
+                                  ? 'bg-bad/10 text-bad dark:bg-bad/10 dark:text-bad'
                                   : opp.keyword_difficulty > 35
-                                  ? 'bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300'
-                                  : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300'
+                                  ? 'bg-warn/10 text-warn dark:bg-warn/10 dark:text-warn'
+                                  : 'bg-good/10 text-good dark:bg-good/10 dark:text-good'
                               }`}
                             >
                               {opp.keyword_difficulty}%
@@ -232,7 +232,7 @@ export function CompetitorKeywordGapView({
                           )}
                         </td>
                         <td className="py-2.5 px-3">
-                          <span className="font-semibold text-emerald-600 font-mono">
+                          <span className="font-semibold text-good font-mono">
                             #{opp.competitor_rank}
                           </span>{' '}
                           <span className="text-[10px] text-ink-400 truncate max-w-[100px] inline-block align-bottom">
@@ -241,19 +241,19 @@ export function CompetitorKeywordGapView({
                         </td>
                         <td className="py-2.5 px-3 font-mono">
                           {opp.target_rank != null ? (
-                            <span className="text-amber-600 font-semibold">#{opp.target_rank}</span>
+                            <span className="text-warn font-semibold">#{opp.target_rank}</span>
                           ) : (
                             <Badge tone="bad" className="text-[10px]">
                               Unranked
                             </Badge>
                           )}
                         </td>
-                        <td className="py-2.5 px-3 text-right font-mono font-semibold text-emerald-600">
+                        <td className="py-2.5 px-3 text-right font-mono font-semibold text-good">
                           +{opp.estimated_monthly_visits_opportunity.toLocaleString()} /mo
                         </td>
                         <td className="py-2.5 px-3">
                           <div className="flex items-center gap-1.5">
-                            <FilePlus2 className="h-3.5 w-3.5 text-pine shrink-0" />
+                            <FilePlus2 className="h-3.5 w-3.5 text-ink-700 shrink-0" />
                             <span className="text-[11px] text-ink font-medium">
                               {opp.recommended_action}
                             </span>

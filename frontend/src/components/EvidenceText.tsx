@@ -33,7 +33,7 @@ export function EvidenceText({ text, onSelectEvidence, className = '' }: Evidenc
                 }
               }}
               title={`Click to inspect verified snapshot & SHA-256 hash for ${evId}`}
-              className="inline-flex items-center px-1.5 py-0.5 rounded font-mono text-[10px] font-bold bg-blue-100/80 hover:bg-blue-200 text-blue-900 border border-blue-300 hover:border-blue-400 transition-colors mx-0.5 align-baseline cursor-pointer"
+              className="inline-flex items-center px-1.5 py-0.5 rounded font-mono text-[10px] font-bold bg-paper-100 hover:bg-paper-100 text-ink-700 border border-line hover:border-line transition-colors mx-0.5 align-baseline cursor-pointer"
             >
               [{evId}]
             </button>

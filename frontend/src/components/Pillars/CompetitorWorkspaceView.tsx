@@ -174,7 +174,7 @@ export function CompetitorWorkspaceView({
       {activeSubTab === 'perspectives' && (
         <div className="space-y-6">
           <Card className="p-5 space-y-4">
-            <h3 className="font-serif text-lg text-ink font-semibold">
+            <h3 className="font-sans text-lg text-ink font-semibold">
               Three-Way Alignment Matrix
             </h3>
             <p className="text-xs text-ink-600">

@@ -170,13 +170,13 @@ export function PillarNavBar({
         className={cn('workspace-link text-xs font-medium', active && 'is-active')}
       >
         <div className="flex items-center gap-2.5 truncate">
-          <Icon className={cn('w-4 h-4 shrink-0', active ? 'text-pine' : 'text-ink-500')} />
+          <Icon className={cn('w-4 h-4 shrink-0', active ? 'text-ink' : 'text-ink-500')} />
           {!collapsed && <span className="truncate">{item.label}</span>}
         </div>
         {!collapsed && (
           <div className="flex items-center gap-1.5 shrink-0">
             {item.badge != null && (
-              <span className="text-[10px] font-mono px-1.5 py-0.5 rounded-full bg-ink/5 text-ink-600">{item.badge}</span>
+              <span className="text-[10px] font-mono px-1.5 py-0.5 rounded-md bg-ink/5 text-ink-600">{item.badge}</span>
             )}
             {item.score != null && <ScorePill score={item.score} />}
           </div>
@@ -186,7 +186,7 @@ export function PillarNavBar({
   };
 
   const groupLabel = (label: string) =>
-    !collapsed && <p className="text-[10px] font-mono font-bold uppercase tracking-[0.14em] text-ink-400 px-2.5 mb-1.5">{label}</p>;
+    !collapsed && <p className="text-[10px] font-mono font-bold uppercase tracking-[0.04em] text-ink-400 px-2.5 mb-1.5">{label}</p>;
 
   const nav = (
     <nav className={cn('flex flex-col gap-5', !embedded && 'px-3 py-3 lg:px-4 lg:py-5')} aria-label="Audit sections">
@@ -210,7 +210,7 @@ export function PillarNavBar({
         <div className="pt-3 border-t border-line">
           <button type="button" onClick={onNewAudit} className="workspace-link text-xs font-semibold" title="New audit">
             <span className="flex items-center gap-2">
-              <PlusCircle className="w-4 h-4 text-pine" />
+              <PlusCircle className="w-4 h-4 text-ink-500" />
               {!collapsed && <span>New audit</span>}
             </span>
           </button>

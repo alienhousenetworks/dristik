@@ -144,42 +144,42 @@ export function RegressionDetectionView({
   const isReportVariant = variant === 'report_section';
 
   return (
-    <div className={`space-y-4 font-sans ${isReportVariant ? 'text-slate-900' : ''}`}>
+    <div className={`space-y-4 font-sans ${isReportVariant ? 'text-ink' : ''}`}>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <div className="flex items-center gap-2">
-            <span className="font-mono text-[10px] font-bold uppercase tracking-wider text-slate-700 bg-slate-100 px-2 py-0.5 border border-slate-300 rounded">
+            <span className="font-mono text-[10px] font-bold uppercase tracking-[0.04em] text-ink-700 bg-paper-200 px-2 py-0.5 border border-line rounded">
               Continuous Website Assurance
             </span>
-            <span className="text-xs font-mono text-slate-500">
+            <span className="text-xs font-mono text-ink-500">
               Sealed snapshot diff
             </span>
           </div>
-          <h3 className="text-xl font-serif font-bold text-slate-900 mt-1">
+          <h3 className="text-xl font-sans font-bold text-ink mt-1">
             Automated Regression Detection
           </h3>
-          <p className="text-xs text-slate-600 mt-0.5">
+          <p className="text-xs text-ink-600 mt-0.5">
             Compares this audit with earlier sealed crawls of the same site. A drop is reported only when both runs were measured.
           </p>
         </div>
 
         {overallRegressed && (
-          <div className="flex items-center gap-2 bg-red-50 border border-red-300 px-3 py-1.5 rounded text-xs font-mono">
-            <span className="w-2 h-2 rounded-full bg-red-600" />
-            <span className="font-bold text-red-900 uppercase">
+          <div className="flex items-center gap-2 bg-bad/10 border border-bad/30 px-3 py-1.5 rounded text-xs font-mono">
+            <span className="w-2 h-2 rounded-full bg-bad/10" />
+            <span className="font-bold text-bad uppercase">
               Score down since the previous audit
             </span>
           </div>
         )}
       </div>
 
-      <div className="p-4 bg-slate-50 border border-slate-300 rounded shadow-xs space-y-3">
-        <span className="font-mono text-[10px] font-bold uppercase tracking-wider text-slate-500 block">
+      <div className="p-4 bg-paper-100 border border-line rounded shadow-xs space-y-3">
+        <span className="font-mono text-[10px] font-bold uppercase tracking-[0.04em] text-ink-500 block">
           Sequential audit snapshot chain
         </span>
 
         {timeline.length === 0 ? (
-          <p className="text-sm text-slate-600">
+          <p className="text-sm text-ink-600">
             This audit has no sealed score yet, so there is nothing to compare.
           </p>
         ) : (
@@ -192,43 +192,43 @@ export function RegressionDetectionView({
                   key={`${snap.snapshot_id}-${idx}`}
                   className={`p-3.5 rounded border ${
                     isCurrent && snap.status === 'REGRESSION'
-                      ? 'bg-red-50/70 border-red-300'
+                      ? 'bg-bad/10 border-bad/30'
                       : isBaseline
-                      ? 'bg-white border-slate-300'
-                      : 'bg-white border-slate-200'
+                      ? 'bg-paper-50 border-line'
+                      : 'bg-paper-50 border-line'
                   }`}
                 >
                   <div className="flex items-center justify-between mb-1.5">
-                    <span className="font-mono font-bold text-xs text-slate-900">
+                    <span className="font-mono font-bold text-xs text-ink">
                       {snap.run_label}
                     </span>
-                    <span className="text-[11px] font-mono text-slate-500">
+                    <span className="text-[11px] font-mono text-ink-500">
                       {snap.date}
                     </span>
                   </div>
 
                   <div className="flex items-baseline justify-between mb-2">
-                    <span className="text-[11px] text-slate-500 font-mono">Score:</span>
+                    <span className="text-[11px] text-ink-500 font-mono">Score:</span>
                     <span className={`text-2xl font-mono font-bold ${scoreTone(snap.score)}`}>
                       {Math.round(snap.score)}
-                      <span className="text-xs text-slate-400 font-normal"> / 100</span>
+                      <span className="text-xs text-ink-400 font-normal"> / 100</span>
                     </span>
                   </div>
 
-                  <div className="space-y-1 pt-2 border-t border-slate-200/80 text-[10px] font-mono">
-                    <div className="text-slate-600">
-                      <span className="block text-slate-500">Evidence seal</span>
-                      <span className="text-slate-800 break-all">{snap.evidence_seal}</span>
+                  <div className="space-y-1 pt-2 border-t border-line text-[10px] font-mono">
+                    <div className="text-ink-600">
+                      <span className="block text-ink-500">Evidence seal</span>
+                      <span className="text-ink-700 break-all">{snap.evidence_seal}</span>
                     </div>
                     <div className="flex items-center justify-between">
-                      <span className="text-slate-500">Status:</span>
+                      <span className="text-ink-500">Status:</span>
                       <span
                         className={`px-1.5 py-0.2 rounded font-bold uppercase ${
                           snap.status === 'REGRESSION'
-                            ? 'bg-red-100 text-red-800'
+                            ? 'bg-bad/10 text-bad'
                             : snap.status === 'IMPROVED'
-                            ? 'bg-emerald-100 text-emerald-800'
-                            : 'bg-slate-100 text-slate-700'
+                            ? 'bg-good/10 text-good'
+                            : 'bg-paper-200 text-ink-700'
                         }`}
                       >
                         {statusLabel(snap.status)}
@@ -242,26 +242,26 @@ export function RegressionDetectionView({
         )}
 
         {!comparable && timeline.length > 0 && (
-          <p className="text-xs text-slate-600 leading-relaxed">
+          <p className="text-xs text-ink-600 leading-relaxed">
             {regressionData.summary} The next audit of this domain is compared with this seal.
           </p>
         )}
       </div>
 
       {comparable && (
-        <div className={`border rounded p-5 space-y-4 ${overallRegressed || items.length > 0 ? 'border-red-300 bg-red-50/30' : 'border-slate-300 bg-white'}`}>
-          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 pb-3">
+        <div className={`border rounded p-5 space-y-4 ${overallRegressed || items.length > 0 ? 'border-bad/30 bg-bad/10' : 'border-line bg-paper-50'}`}>
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line pb-3">
             <div>
-              <h4 className="text-base font-bold text-slate-950">
+              <h4 className="text-base font-bold text-ink">
                 {items.length > 0
                   ? `${items.length} measured drop${items.length === 1 ? '' : 's'} since ${baseline.run_label}`
                   : `No measured drop since ${baseline.run_label}`}
               </h4>
-              <p className="text-xs text-slate-700 mt-1 font-mono">
+              <p className="text-xs text-ink-700 mt-1 font-mono">
                 {current.run_label} ({current.date}) vs {baseline.run_label} ({baseline.date}) · Overall score {Math.round(baseline.score)} → {Math.round(current.score)} ({formatDelta(regressionData.score_delta)} pts)
               </p>
             </div>
-            <span className="text-xs font-mono px-2.5 py-1 rounded bg-slate-100 text-slate-900 border border-slate-300 font-bold">
+            <span className="text-xs font-mono px-2.5 py-1 rounded bg-paper-200 text-ink border border-line font-bold">
               Delta: {formatDelta(regressionData.score_delta)} pts
             </span>
           </div>
@@ -271,28 +271,28 @@ export function RegressionDetectionView({
               {items.map((item, idx) => (
                 <div
                   key={`${item.title}-${idx}`}
-                  className="p-3 bg-white border border-slate-200 rounded flex items-start justify-between gap-3 text-xs"
+                  className="p-3 bg-paper-50 border border-line rounded flex items-start justify-between gap-3 text-xs"
                 >
                   <div className="space-y-1">
                     <div className="flex items-center gap-2 flex-wrap">
                       <span
                         className={`text-[9px] font-mono px-1.5 py-0.2 rounded font-bold uppercase ${
                           item.severity === 'CRITICAL'
-                            ? 'bg-red-100 text-red-800 border border-red-300'
+                            ? 'bg-bad/10 text-bad border border-bad/30'
                             : item.severity === 'HIGH'
-                            ? 'bg-amber-100 text-amber-900 border border-amber-300'
-                            : 'bg-slate-100 text-slate-700 border border-slate-300'
+                            ? 'bg-warn/10 text-warn border border-warn/30'
+                            : 'bg-paper-200 text-ink-700 border border-line'
                         }`}
                       >
                         {item.severity}
                       </span>
-                      <span className="font-bold text-slate-900 text-sm">{item.title}</span>
-                      <span className="text-[10px] font-mono text-slate-500">[{item.category}]</span>
+                      <span className="font-bold text-ink text-sm">{item.title}</span>
+                      <span className="text-[10px] font-mono text-ink-500">[{item.category}]</span>
                     </div>
-                    <p className="text-[11px] text-slate-600 leading-relaxed font-sans">{item.description}</p>
+                    <p className="text-[11px] text-ink-600 leading-relaxed font-sans">{item.description}</p>
                   </div>
                   {item.dimension_delta != null && (
-                    <div className="font-mono font-bold text-red-700 whitespace-nowrap text-sm">
+                    <div className="font-mono font-bold text-bad whitespace-nowrap text-sm">
                       {formatDelta(item.dimension_delta)} pts
                     </div>
                   )}
@@ -301,7 +301,7 @@ export function RegressionDetectionView({
             </div>
           )}
 
-          <p className="text-[11px] font-mono text-slate-500">
+          <p className="text-[11px] font-mono text-ink-500">
             Evidence seal {current.evidence_seal}
           </p>
         </div>

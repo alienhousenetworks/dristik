@@ -150,10 +150,10 @@ export function CompetitorSideBySideBenchmark({
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-line pb-4">
           <div>
             <div className="flex items-center gap-2">
-              <span className="text-xl">⚔️</span>
-              <span className="label text-pine text-xs">Real Competitive Benchmarking Layer</span>
+              <span className="text-xl">⚔</span>
+              <span className="label text-ink-700 text-xs">Real Competitive Benchmarking Layer</span>
             </div>
-            <h3 className="font-serif text-2xl sm:text-3xl text-ink mt-1 font-normal">
+            <h3 className="font-sans text-2xl sm:text-3xl text-ink mt-1 font-normal">
               3-Way Side-by-Side Homepage Benchmark
             </h3>
             <p className="text-xs text-ink-500 mt-1 max-w-2xl">
@@ -191,7 +191,7 @@ export function CompetitorSideBySideBenchmark({
             </label>
             <div className="p-2 bg-paper-100 dark:bg-ink-950 rounded border border-line font-mono text-xs text-ink font-semibold flex items-center justify-between">
               <span>{cleanTarget}</span>
-              <span className="text-[9px] bg-pine/15 text-pine px-1.5 py-0.5 rounded font-bold">TARGET</span>
+              <span className="text-[9px] bg-paper-200 text-ink-700 px-1.5 py-0.5 rounded font-bold">TARGET</span>
             </div>
           </div>
 
@@ -204,7 +204,7 @@ export function CompetitorSideBySideBenchmark({
               value={comp1}
               onChange={(e) => setComp1(e.target.value)}
               placeholder="e.g. competitor1.com"
-              className="w-full p-2 bg-white dark:bg-ink-900 rounded border border-line font-mono text-xs text-ink focus:border-pine focus:outline-hidden"
+              className="w-full p-2 bg-paper-50 dark:bg-ink-900 rounded border border-line font-mono text-xs text-ink focus:border-pine focus:outline-hidden"
             />
           </div>
 
@@ -217,7 +217,7 @@ export function CompetitorSideBySideBenchmark({
               value={comp2}
               onChange={(e) => setComp2(e.target.value)}
               placeholder="e.g. competitor2.com"
-              className="w-full p-2 bg-white dark:bg-ink-900 rounded border border-line font-mono text-xs text-ink focus:border-pine focus:outline-hidden"
+              className="w-full p-2 bg-paper-50 dark:bg-ink-900 rounded border border-line font-mono text-xs text-ink focus:border-pine focus:outline-hidden"
             />
           </div>
         </div>
@@ -231,13 +231,13 @@ export function CompetitorSideBySideBenchmark({
               onClick={() => applySuggestions(suggestions[0].domain, suggestions[1].domain)}
               className="px-2.5 py-1 bg-paper-100 hover:bg-paper-200 dark:bg-ink-800 rounded border border-line text-[11px] font-mono text-ink-700 transition-colors cursor-pointer"
             >
-              ⚡ Benchmark against {suggestions[0].brand} ({suggestions[0].domain}) &amp; {suggestions[1].brand} ({suggestions[1].domain})
+               Benchmark against {suggestions[0].brand} ({suggestions[0].domain}) &amp; {suggestions[1].brand} ({suggestions[1].domain})
             </button>
           </div>
         )}
 
         {error && (
-          <div className="p-3 bg-red-50 dark:bg-red-950/30 border border-red-200 text-xs text-bad rounded">
+          <div className="p-3 bg-bad/10 dark:bg-bad/10 border border-bad/30 text-xs text-bad rounded">
             <strong>Benchmark Error:</strong> {error}
           </div>
         )}
@@ -246,9 +246,9 @@ export function CompetitorSideBySideBenchmark({
       {/* Empty State before running */}
       {!benchmarkResult && !loading && (
         <div className="sheet border border-dashed border-line rounded-xl p-10 text-center space-y-4">
-          <div className="text-4xl">📊</div>
+          <div className="text-4xl"></div>
           <div className="max-w-md mx-auto space-y-1">
-            <h4 className="font-serif text-xl text-ink font-semibold">No Peer Benchmark Loaded Yet</h4>
+            <h4 className="font-sans text-xl text-ink font-semibold">No Peer Benchmark Loaded Yet</h4>
             <p className="text-xs text-ink-500">
               Enterprise buyers never evaluate scores in isolation. Run the 3-way crawl to compare your TTFB speed, Schema richness, and conversion CTAs against your top 2 rivals.
             </p>
@@ -278,8 +278,8 @@ export function CompetitorSideBySideBenchmark({
                   key={peer.domain}
                   className={`sheet rounded-xl p-5 border transition-all space-y-3 relative ${
                     isTarget
-                      ? 'border-2 border-pine shadow-md bg-paper-50/70 dark:bg-ink-900/60'
-                      : 'border-line bg-white dark:bg-ink-950'
+                      ? 'border-2 border-line shadow-md bg-paper-50/70 dark:bg-ink-900/60'
+                      : 'border-line bg-paper-50 dark:bg-ink-950'
                   }`}
                 >
                   <div className="flex items-center justify-between">
@@ -288,7 +288,7 @@ export function CompetitorSideBySideBenchmark({
                         isLead
                           ? 'bg-good/15 text-good'
                           : peer.rank === 2
-                          ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300'
+                          ? 'bg-warn/10 text-warn dark:bg-warn/10 dark:text-warn'
                           : 'bg-bad/15 text-bad'
                       }`}
                     >
@@ -303,7 +303,7 @@ export function CompetitorSideBySideBenchmark({
                   </div>
 
                   <div>
-                    <h4 className="font-serif text-xl font-bold text-ink">{peer.brand_name}</h4>
+                    <h4 className="font-sans text-xl font-bold text-ink">{peer.brand_name}</h4>
                     <p className="font-mono text-xs text-ink-500 truncate">{peer.domain}</p>
                   </div>
 
@@ -311,7 +311,7 @@ export function CompetitorSideBySideBenchmark({
                     <div>
                       <span className="label text-[10px] block">Overall Score</span>
                       <div className="flex items-baseline gap-1">
-                        <span className="font-serif text-4xl font-bold text-ink">
+                        <span className="font-sans text-4xl font-bold text-ink">
                           {peer.scores.overall_score}
                         </span>
                         <span className="text-xs font-mono text-ink-500">/ 100</span>
@@ -334,7 +334,7 @@ export function CompetitorSideBySideBenchmark({
                   </div>
 
                   {peer.crawl_status === 'FAILED' && (
-                    <div className="text-[10px] text-bad font-mono bg-red-50 dark:bg-red-950/30 p-1.5 rounded border border-red-200">
+                    <div className="text-[10px] text-bad font-mono bg-bad/10 dark:bg-bad/10 p-1.5 rounded border border-bad/30">
                       Crawl note: {peer.error_message}
                     </div>
                   )}
@@ -344,8 +344,8 @@ export function CompetitorSideBySideBenchmark({
           </div>
 
           {/* Strategic Narrative Takeaway */}
-          <div className="sheet border-l-4 border-l-pine border border-line rounded-lg p-4 text-xs space-y-1">
-            <span className="font-mono text-[10px] uppercase font-bold text-pine block">
+          <div className="sheet border-l-2 border-l-pine border border-line rounded-lg p-4 text-xs space-y-1">
+            <span className="font-mono text-[10px] uppercase font-bold text-ink-700 block">
               Strategic Competitive TakeawayBLUF
             </span>
             <p className="text-ink leading-relaxed font-normal">{benchmarkResult.strategic_summary}</p>
@@ -354,7 +354,7 @@ export function CompetitorSideBySideBenchmark({
           {/* 2. 5-PILLAR SIDE-BY-SIDE COMPARISON */}
           <div className="sheet border border-line rounded-xl p-6 space-y-5">
             <div className="border-b border-line pb-3">
-              <h4 className="font-serif text-lg text-ink font-semibold">5-Pillar Scorecard Comparison</h4>
+              <h4 className="font-sans text-lg text-ink font-semibold">5-Pillar Scorecard Comparison</h4>
               <p className="text-xs text-ink-500">
                 Peer comparison across the 5 canonical Website Intelligence pillars under the same deterministic rules.
               </p>
@@ -390,15 +390,15 @@ export function CompetitorSideBySideBenchmark({
                     </div>
 
                     <div className="grid grid-cols-3 gap-3 font-mono text-xs">
-                      <div className={`p-2 rounded border ${targetScore != null && targetScore === maxScore ? 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-300 text-emerald-900 dark:text-emerald-200 font-bold' : 'bg-white dark:bg-ink-950 border-line text-ink'}`}>
+                      <div className={`p-2 rounded border ${targetScore != null && targetScore === maxScore ? 'bg-good/10 dark:bg-good/10 border-good/30 text-good dark:text-good font-bold' : 'bg-paper-50 dark:bg-ink-950 border-line text-ink'}`}>
                         <span className="text-[10px] block text-ink-400">Target ({cleanTarget})</span>
                         <span className="text-sm">{showScore(targetScore)}</span>
                       </div>
-                      <div className={`p-2 rounded border ${p1Score != null && p1Score === maxScore ? 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-300 text-emerald-900 dark:text-emerald-200 font-bold' : 'bg-white dark:bg-ink-950 border-line text-ink'}`}>
+                      <div className={`p-2 rounded border ${p1Score != null && p1Score === maxScore ? 'bg-good/10 dark:bg-good/10 border-good/30 text-good dark:text-good font-bold' : 'bg-paper-50 dark:bg-ink-950 border-line text-ink'}`}>
                         <span className="text-[10px] block text-ink-400">{benchmarkResult.competitor_1_domain}</span>
                         <span className="text-sm">{showScore(p1Score)}</span>
                       </div>
-                      <div className={`p-2 rounded border ${p2Score != null && p2Score === maxScore ? 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-300 text-emerald-900 dark:text-emerald-200 font-bold' : 'bg-white dark:bg-ink-950 border-line text-ink'}`}>
+                      <div className={`p-2 rounded border ${p2Score != null && p2Score === maxScore ? 'bg-good/10 dark:bg-good/10 border-good/30 text-good dark:text-good font-bold' : 'bg-paper-50 dark:bg-ink-950 border-line text-ink'}`}>
                         <span className="text-[10px] block text-ink-400">{benchmarkResult.competitor_2_domain}</span>
                         <span className="text-sm">{showScore(p2Score)}</span>
                       </div>
@@ -412,7 +412,7 @@ export function CompetitorSideBySideBenchmark({
           {/* 3. HEAD-TO-HEAD TECHNICAL SPECIFICATION TABLE */}
           <div className="sheet border border-line rounded-xl p-6 space-y-4">
             <div className="border-b border-line pb-3">
-              <h4 className="font-serif text-lg text-ink font-semibold">Head-to-Head Technical Architecture Specs</h4>
+              <h4 className="font-sans text-lg text-ink font-semibold">Head-to-Head Technical Architecture Specs</h4>
               <p className="text-xs text-ink-500">
                 Direct empirical measurements extracted from the HTML DOM and network layer across all 3 sites.
               </p>
@@ -423,7 +423,7 @@ export function CompetitorSideBySideBenchmark({
                 <thead>
                   <tr className="border-b border-line text-[10px] uppercase text-ink-500">
                     <th className="py-2.5 px-3">Specification / Metric</th>
-                    <th className="py-2.5 px-3 text-pine font-bold bg-paper-100 dark:bg-ink-800">
+                    <th className="py-2.5 px-3 text-ink-700 font-bold bg-paper-100 dark:bg-ink-800">
                       Target ({cleanTarget})
                     </th>
                     <th className="py-2.5 px-3">{benchmarkResult.competitor_1_domain}</th>
@@ -433,7 +433,7 @@ export function CompetitorSideBySideBenchmark({
                 <tbody className="divide-y divide-line text-ink">
                   <tr>
                     <td className="py-2.5 px-3 font-semibold font-sans">Server Latency (TTFB)</td>
-                    <td className="py-2.5 px-3 font-bold text-pine bg-paper-50 dark:bg-ink-900/40">
+                    <td className="py-2.5 px-3 font-bold text-ink-700 bg-paper-50 dark:bg-ink-900/40">
                       {benchmarkResult.peers[0]?.specs.ttfb_ms} ms
                     </td>
                     <td className="py-2.5 px-3">{benchmarkResult.peers[1]?.specs.ttfb_ms} ms</td>
@@ -441,7 +441,7 @@ export function CompetitorSideBySideBenchmark({
                   </tr>
                   <tr>
                     <td className="py-2.5 px-3 font-semibold font-sans">Content Depth (Word Count)</td>
-                    <td className="py-2.5 px-3 font-bold text-pine bg-paper-50 dark:bg-ink-900/40">
+                    <td className="py-2.5 px-3 font-bold text-ink-700 bg-paper-50 dark:bg-ink-900/40">
                       {benchmarkResult.peers[0]?.specs.word_count} words
                     </td>
                     <td className="py-2.5 px-3">{benchmarkResult.peers[1]?.specs.word_count} words</td>
@@ -449,7 +449,7 @@ export function CompetitorSideBySideBenchmark({
                   </tr>
                   <tr>
                     <td className="py-2.5 px-3 font-semibold font-sans">Schema.org Entity Types</td>
-                    <td className="py-2.5 px-3 font-bold text-pine bg-paper-50 dark:bg-ink-900/40">
+                    <td className="py-2.5 px-3 font-bold text-ink-700 bg-paper-50 dark:bg-ink-900/40">
                       {benchmarkResult.peers[0]?.specs.schema_count} types ({benchmarkResult.peers[0]?.specs.schema_types.slice(0, 2).join(', ') || 'None'})
                     </td>
                     <td className="py-2.5 px-3">
@@ -461,7 +461,7 @@ export function CompetitorSideBySideBenchmark({
                   </tr>
                   <tr>
                     <td className="py-2.5 px-3 font-semibold font-sans">Primary CTA Action Verb</td>
-                    <td className="py-2.5 px-3 font-bold text-pine bg-paper-50 dark:bg-ink-900/40 truncate max-w-[150px]">
+                    <td className="py-2.5 px-3 font-bold text-ink-700 bg-paper-50 dark:bg-ink-900/40 truncate max-w-[150px]">
                       "{benchmarkResult.peers[0]?.specs.primary_cta || 'None detected'}"
                     </td>
                     <td className="py-2.5 px-3 truncate max-w-[150px]">
@@ -473,7 +473,7 @@ export function CompetitorSideBySideBenchmark({
                   </tr>
                   <tr>
                     <td className="py-2.5 px-3 font-semibold font-sans">Mobile Viewport Meta</td>
-                    <td className="py-2.5 px-3 font-bold text-pine bg-paper-50 dark:bg-ink-900/40">
+                    <td className="py-2.5 px-3 font-bold text-ink-700 bg-paper-50 dark:bg-ink-900/40">
                       {benchmarkResult.peers[0]?.specs.has_viewport ? '✓ Configured' : '✗ Missing'}
                     </td>
                     <td className="py-2.5 px-3">
@@ -485,7 +485,7 @@ export function CompetitorSideBySideBenchmark({
                   </tr>
                   <tr>
                     <td className="py-2.5 px-3 font-semibold font-sans">DOM Elements Weight</td>
-                    <td className="py-2.5 px-3 font-bold text-pine bg-paper-50 dark:bg-ink-900/40">
+                    <td className="py-2.5 px-3 font-bold text-ink-700 bg-paper-50 dark:bg-ink-900/40">
                       {benchmarkResult.peers[0]?.specs.dom_elements_count} nodes
                     </td>
                     <td className="py-2.5 px-3">{benchmarkResult.peers[1]?.specs.dom_elements_count} nodes</td>
@@ -499,10 +499,10 @@ export function CompetitorSideBySideBenchmark({
           {/* 4. MOATS VS GAPS */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* Competitive Moats */}
-            <div className="sheet border border-emerald-300 dark:border-emerald-800 bg-emerald-50/20 dark:bg-emerald-950/10 rounded-xl p-5 space-y-3">
-              <div className="flex items-center gap-2 border-b border-emerald-200 dark:border-emerald-900 pb-2">
-                <span className="text-base">🛡️</span>
-                <h5 className="font-serif text-base font-bold text-emerald-950 dark:text-emerald-200">
+            <div className="sheet border border-good/30 dark:border-good/30 bg-good/10 dark:bg-good/10 rounded-xl p-5 space-y-3">
+              <div className="flex items-center gap-2 border-b border-good/30 dark:border-good/30 pb-2">
+                <span className="text-base"></span>
+                <h5 className="font-sans text-base font-bold text-good dark:text-good">
                   Competitive Moats (Where You Lead Peers)
                 </h5>
               </div>
@@ -510,7 +510,7 @@ export function CompetitorSideBySideBenchmark({
               {benchmarkResult.competitive_moats.length > 0 ? (
                 <div className="space-y-3">
                   {benchmarkResult.competitive_moats.map((moat, i) => (
-                    <div key={i} className="p-3 bg-white dark:bg-ink-900 rounded border border-emerald-200 dark:border-emerald-900 text-xs space-y-1">
+                    <div key={i} className="p-3 bg-paper-50 dark:bg-ink-900 rounded border border-good/30 dark:border-good/30 text-xs space-y-1">
                       <div className="flex items-center justify-between">
                         <span className="font-bold text-ink">{moat.title}</span>
                         <span className="text-[10px] font-mono font-bold bg-good/15 text-good px-1.5 py-0.5 rounded">
@@ -529,10 +529,10 @@ export function CompetitorSideBySideBenchmark({
             </div>
 
             {/* Vulnerability Gaps */}
-            <div className="sheet border border-amber-300 dark:border-amber-800 bg-amber-50/20 dark:bg-amber-950/10 rounded-xl p-5 space-y-3">
-              <div className="flex items-center gap-2 border-b border-amber-200 dark:border-amber-900 pb-2">
-                <span className="text-base">⚠️</span>
-                <h5 className="font-serif text-base font-bold text-amber-950 dark:text-amber-200">
+            <div className="sheet border border-warn/30 dark:border-warn/30 bg-warn/10 dark:bg-warn/10 rounded-xl p-5 space-y-3">
+              <div className="flex items-center gap-2 border-b border-warn/30 dark:border-warn/30 pb-2">
+                <span className="text-base"></span>
+                <h5 className="font-sans text-base font-bold text-warn dark:text-warn">
                   Priority Vulnerability Gaps (Where Rivals Beat You)
                 </h5>
               </div>
@@ -540,15 +540,15 @@ export function CompetitorSideBySideBenchmark({
               {benchmarkResult.vulnerability_gaps.length > 0 ? (
                 <div className="space-y-3">
                   {benchmarkResult.vulnerability_gaps.map((gap, i) => (
-                    <div key={i} className="p-3 bg-white dark:bg-ink-900 rounded border border-amber-200 dark:border-amber-900 text-xs space-y-1">
+                    <div key={i} className="p-3 bg-paper-50 dark:bg-ink-900 rounded border border-warn/30 dark:border-warn/30 text-xs space-y-1">
                       <div className="flex items-center justify-between">
                         <span className="font-bold text-ink">{gap.title}</span>
-                        <span className="text-[10px] font-mono text-amber-800 dark:text-amber-300 font-semibold">
+                        <span className="text-[10px] font-mono text-warn dark:text-warn font-semibold">
                           Captured by {gap.winning_competitor}
                         </span>
                       </div>
                       <p className="text-ink-600 dark:text-ink-300 leading-relaxed">{gap.description}</p>
-                      <div className="pt-1 text-[11px] text-pine font-medium">
+                      <div className="pt-1 text-[11px] text-ink-700 font-medium">
                         Fix: {gap.recommendation}
                       </div>
                     </div>

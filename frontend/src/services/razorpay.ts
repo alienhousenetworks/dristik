@@ -114,7 +114,7 @@ export async function launchRazorpayCheckout(options: {
         target_url: order.target_url,
       },
       theme: {
-        color: '#1f3d36',
+        color: '#105c4c',
         backdrop_color: 'rgba(28, 25, 21, 0.45)',
       },
       modal: {

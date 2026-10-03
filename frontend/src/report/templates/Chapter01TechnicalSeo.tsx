@@ -36,7 +36,7 @@ export function Chapter01TechnicalSeo({
       />
 
       {/* 2. Analytical Data Page */}
-      <section className="report-page-break p-8 md:p-14 min-h-[960px] flex flex-col justify-between bg-white border-b-2 border-slate-200">
+      <section className="report-page-break p-8 md:p-14 min-h-[960px] flex flex-col justify-between bg-paper-50 border-b-2 border-line">
         <PageHeader
           theme={theme}
           domain={meta.domain}
@@ -45,40 +45,40 @@ export function Chapter01TechnicalSeo({
 
         <div className="space-y-6 max-w-4xl">
           <div>
-            <span className="font-mono text-[8pt] font-bold uppercase tracking-[0.2em] text-slate-500 block mb-1">
+            <span className="font-mono text-[8pt] font-bold uppercase tracking-[0.04em] text-ink-500 block mb-1">
               Analysis &amp; Measurements
             </span>
-            <h2 className="font-serif text-[22pt] font-normal tracking-tight text-slate-950">
+            <h2 className="font-serif text-[22pt] font-normal tracking-tight text-ink">
               Canonical Consolidation, Latency &amp; Directives
             </h2>
-            <div className="w-16 h-[2.5px] mt-2" style={{ backgroundColor: theme.accent }}></div>
+            <div className="bg-ink w-10 h-px mt-2" />
           </div>
 
           {/* 1.1 Canonical Host Consolidation Table */}
           <div className="space-y-2">
-            <h3 className="font-mono text-[8.5pt] font-bold uppercase tracking-wider text-slate-700">
+            <h3 className="font-mono text-[8.5pt] font-bold uppercase tracking-[0.04em] text-ink-700">
               1.1 Canonical Host &amp; Routing Verification
             </h3>
-            <table className="w-full text-[8.5pt] border-collapse border border-slate-200">
+            <table className="w-full text-[8.5pt] border-collapse border border-line">
               <tbody>
-                <tr className="border-b border-slate-200">
-                  <th className="py-2 px-3 text-left font-semibold text-slate-600 bg-slate-50 w-1/3">
+                <tr className="border-b border-line">
+                  <th className="py-2 px-3 text-left font-semibold text-ink-600 bg-paper-100 w-1/3">
                     Canonical Destination
                   </th>
-                  <td className="py-2 px-3 text-slate-900 font-mono">
+                  <td className="py-2 px-3 text-ink font-mono">
                     {technicalSeo.canonicalDestination}
                   </td>
                 </tr>
-                <tr className="border-b border-slate-200">
-                  <th className="py-2 px-3 text-left font-semibold text-slate-600 bg-slate-50">
+                <tr className="border-b border-line">
+                  <th className="py-2 px-3 text-left font-semibold text-ink-600 bg-paper-100">
                     Host Redirection Consolidation
                   </th>
                   <td className="py-2 px-3">
                     <span
                       className={`inline-flex items-center gap-1 px-2 py-0.5 rounded font-mono text-[8pt] font-bold ${
                         technicalSeo.is301Consolidated
-                          ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
-                          : 'bg-amber-50 text-amber-800 border border-amber-200'
+                          ? 'bg-good/10 text-good border border-good/30'
+                          : 'bg-warn/10 text-warn border border-warn/30'
                       }`}
                     >
                       {technicalSeo.is301Consolidated
@@ -87,37 +87,37 @@ export function Chapter01TechnicalSeo({
                     </span>
                   </td>
                 </tr>
-                <tr className="border-b border-slate-200">
-                  <th className="py-2 px-3 text-left font-semibold text-slate-600 bg-slate-50">
+                <tr className="border-b border-line">
+                  <th className="py-2 px-3 text-left font-semibold text-ink-600 bg-paper-100">
                     Redirect Chains Recorded
                   </th>
-                  <td className="py-2 px-3 text-slate-800">
+                  <td className="py-2 px-3 text-ink-700">
                     {technicalSeo.redirectChainsCount === 0
                       ? 'Zero redirect chains detected (Direct 200 OK delivery)'
                       : `${technicalSeo.redirectChainsCount} multi-hop redirect chains observed`}
                   </td>
                 </tr>
-                <tr className="border-b border-slate-200">
-                  <th className="py-2 px-3 text-left font-semibold text-slate-600 bg-slate-50">
+                <tr className="border-b border-line">
+                  <th className="py-2 px-3 text-left font-semibold text-ink-600 bg-paper-100">
                     Robots.txt Directives
                   </th>
-                  <td className="py-2 px-3 text-slate-800">
+                  <td className="py-2 px-3 text-ink-700">
                     {technicalSeo.robotsTxtStatus}
                   </td>
                 </tr>
-                <tr className="border-b border-slate-200">
-                  <th className="py-2 px-3 text-left font-semibold text-slate-600 bg-slate-50">
+                <tr className="border-b border-line">
+                  <th className="py-2 px-3 text-left font-semibold text-ink-600 bg-paper-100">
                     XML Sitemap Health
                   </th>
-                  <td className="py-2 px-3 text-slate-800">
+                  <td className="py-2 px-3 text-ink-700">
                     {technicalSeo.sitemapStatus}
                   </td>
                 </tr>
                 <tr>
-                  <th className="py-2 px-3 text-left font-semibold text-slate-600 bg-slate-50">
+                  <th className="py-2 px-3 text-left font-semibold text-ink-600 bg-paper-100">
                     HTTP 200 Sampling Pass Rate
                   </th>
-                  <td className="py-2 px-3 font-semibold text-slate-900">
+                  <td className="py-2 px-3 font-semibold text-ink">
                     {technicalSeo.http200RateText}
                   </td>
                 </tr>
@@ -127,16 +127,16 @@ export function Chapter01TechnicalSeo({
 
           {/* 1.2 Latency Curve Visualization */}
           {latencyChart && (
-            <div className="p-4 border border-slate-200 rounded bg-slate-50/50 space-y-2">
-              <div className="flex items-center justify-between pb-1 border-b border-slate-200">
-                <span className="font-mono text-[8pt] font-bold uppercase tracking-wider text-slate-700">
+            <div className="p-4 border border-line rounded bg-paper-100 space-y-2">
+              <div className="flex items-center justify-between pb-1 border-b border-line">
+                <span className="font-mono text-[8pt] font-bold uppercase tracking-[0.04em] text-ink-700">
                   1.2 Server Time-to-First-Byte (TTFB) Response Distribution
                 </span>
-                <span className="font-mono text-[7.5pt] text-slate-500">
+                <span className="font-mono text-[7.5pt] text-ink-500">
                   Dristik target threshold: &lt; 400ms · CWV good boundary: &lt; 800ms
                 </span>
               </div>
-              <p className="text-[7.5pt] text-slate-500 font-sans">
+              <p className="text-[7.5pt] text-ink-500 font-sans">
                 Continuous network latency histogram across audited sample nodes. The &lt;400ms boundary represents Dristik's internal benchmark for high-velocity answer engine bot responsiveness, distinguished from universal web standards.
               </p>
               <div className="py-2">
@@ -146,11 +146,11 @@ export function Chapter01TechnicalSeo({
           )}
 
           {/* 1.3 Key Crawl Observations */}
-          <div className="p-4 rounded bg-slate-50 border border-slate-200 space-y-2 text-[8.5pt]">
-            <span className="font-mono text-[8pt] font-bold uppercase tracking-wider text-slate-600 block">
+          <div className="p-4 rounded bg-paper-100 border border-line space-y-2 text-[8.5pt]">
+            <span className="font-mono text-[8pt] font-bold uppercase tracking-[0.04em] text-ink-600 block">
               Architectural Crawl Interpretation
             </span>
-            <p className="text-slate-800 font-sans leading-relaxed">
+            <p className="text-ink-700 font-sans leading-relaxed">
               Search spider accessibility is fundamentally sound. The origin server maintains deterministic canonical delivery without index-diluting redirect loops. Ensure future staging and regional subdomains maintain identical 301 consolidation to prevent split authority signals.
             </p>
           </div>

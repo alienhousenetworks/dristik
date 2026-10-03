@@ -24,12 +24,12 @@ export function EngineComparisonBarChart({ chart }: EngineComparisonBarChartProp
 
   const getStatusBadge = (status: string, readiness: number) => {
     if (readiness >= 70 || status === 'Cited') {
-      return 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border-emerald-300';
+      return 'bg-good/10 dark:bg-good/10 text-good dark:text-good border-good/30';
     }
     if (readiness >= 50 || status === 'Partial') {
-      return 'bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 border-amber-300';
+      return 'bg-warn/10 dark:bg-warn/10 text-warn dark:text-warn border-warn/30';
     }
-    return 'bg-red-100 dark:bg-red-950/60 text-red-800 dark:text-red-300 border-red-300';
+    return 'bg-bad/10 dark:bg-bad/10 text-bad dark:text-bad border-bad/30';
   };
 
   return (
@@ -42,7 +42,7 @@ export function EngineComparisonBarChart({ chart }: EngineComparisonBarChartProp
             key={idx}
             className={`p-3 rounded-lg border transition-all ${
               isHovered
-                ? 'bg-paper-100 dark:bg-ink-800/90 border-pine/40 shadow-xs'
+                ? 'bg-paper-100 dark:bg-ink-800/90 border-line shadow-xs'
                 : 'bg-paper-50 dark:bg-ink-900/40 border-line hover:border-line-dark'
             }`}
             onMouseEnter={() => setHoveredIdx(idx)}
@@ -57,7 +57,7 @@ export function EngineComparisonBarChart({ chart }: EngineComparisonBarChartProp
                 </span>
               </div>
               <div className="flex items-center gap-2">
-                <span className="font-mono text-sm font-bold text-pine">{eng.readiness}%</span>
+                <span className="font-mono text-sm font-bold text-ink-700">{eng.readiness}%</span>
                 <span className="text-[11px] font-mono text-ink-400">vs {eng.benchmark}% target</span>
               </div>
             </div>
@@ -75,10 +75,10 @@ export function EngineComparisonBarChart({ chart }: EngineComparisonBarChartProp
               <div
                 className={`h-full rounded-full transition-all duration-500 ${
                   eng.readiness >= 70
-                    ? 'bg-gradient-to-r from-emerald-600 to-teal-500'
+                    ? '  to-teal-500'
                     : eng.readiness >= 50
-                    ? 'bg-gradient-to-r from-amber-500 to-yellow-500'
-                    : 'bg-gradient-to-r from-rose-500 to-red-600'
+                    ? '  '
+                    : '  '
                 }`}
                 style={{ width: `${eng.readiness}%` }}
               />

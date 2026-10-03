@@ -40,7 +40,7 @@ export function AccountPanel({
     <div className="max-w-2xl space-y-8 pt-2">
       <div className="space-y-2">
         <p className="label">Account</p>
-        <h1 className="font-serif text-4xl leading-[1.12] text-ink tracking-tight">{user.full_name}</h1>
+        <h1 className="font-sans text-4xl leading-[1.12] text-ink tracking-tight">{user.full_name}</h1>
         <p className="text-ink-500">
           {user.email} · {user.role_label} · {user.org_name}
         </p>
@@ -121,7 +121,7 @@ export function TeamPanel({ user }: { user: AuthUser }) {
     <div className="max-w-2xl space-y-8 pt-2">
       <div className="space-y-2">
         <p className="label">Team</p>
-        <h1 className="font-serif text-4xl leading-[1.12] text-ink tracking-tight">{orgName}</h1>
+        <h1 className="font-sans text-4xl leading-[1.12] text-ink tracking-tight">{orgName}</h1>
         <p className="text-ink-500 leading-relaxed">
           Owner and admin sit above staff. Staff levels are analyst, viewer, and auditor.
         </p>

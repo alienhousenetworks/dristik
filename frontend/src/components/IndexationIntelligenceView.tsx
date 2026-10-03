@@ -148,14 +148,14 @@ export function IndexationIntelligenceView({
         </div>
 
         <div className="bg-paper-50 dark:bg-ink-900/40 border border-line p-3 rounded-lg space-y-1">
-          <span className="label text-[10px] text-pine block">Canonical Mismatch</span>
-          <span className="text-xl font-bold font-mono text-pine block">{stats.canonMismatch}</span>
+          <span className="label text-[10px] text-ink-700 block">Canonical Mismatch</span>
+          <span className="text-xl font-bold font-mono text-ink-700 block">{stats.canonMismatch}</span>
           <span className="text-[10px] text-ink-500 block">Alternate declared</span>
         </div>
 
         <div className="bg-paper-50 dark:bg-ink-900/40 border border-line p-3 rounded-lg space-y-1">
-          <span className="label text-[10px] text-pine block">JS-Dependent</span>
-          <span className="text-xl font-bold font-mono text-pine block">{stats.jsDep}</span>
+          <span className="label text-[10px] text-ink-700 block">JS-Dependent</span>
+          <span className="text-xl font-bold font-mono text-ink-700 block">{stats.jsDep}</span>
           <span className="text-[10px] text-ink-500 block">Requires JS rendering</span>
         </div>
       </div>
@@ -228,7 +228,7 @@ export function IndexationIntelligenceView({
           className={`px-3 py-1.5 rounded-lg text-xs font-semibold cursor-pointer transition-colors ${
             activeFilter === 'canonical_mismatch'
               ? 'bg-pine text-paper-50'
-              : 'bg-paper-100 text-ink-600 hover:text-pine'
+              : 'bg-paper-100 text-ink-600 hover:text-ink'
           }`}
         >
           Canonical Mismatch ({stats.canonMismatch})
@@ -240,7 +240,7 @@ export function IndexationIntelligenceView({
           className={`px-3 py-1.5 rounded-lg text-xs font-semibold cursor-pointer transition-colors ${
             activeFilter === 'js_dependent'
               ? 'bg-pine text-paper-50'
-              : 'bg-paper-100 text-ink-600 hover:text-pine'
+              : 'bg-paper-100 text-ink-600 hover:text-ink'
           }`}
         >
           JS Dependency ({stats.jsDep})
@@ -251,7 +251,7 @@ export function IndexationIntelligenceView({
       <div className="sheet border border-line rounded-lg overflow-hidden">
         <div className="p-4 border-b border-line bg-paper-100 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <h4 className="font-serif font-bold text-ink text-base">Indexation State Machine</h4>
+            <h4 className="font-sans font-bold text-ink text-base">Indexation State Machine</h4>
             <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-paper-200 border border-line text-ink-700">
               {filteredPages.length} URLs shown
             </span>
@@ -290,12 +290,12 @@ export function IndexationIntelligenceView({
                         </span>
                         {page.is_soft_404 && (
                           <span className="inline-block mt-0.5 text-[9px] px-1.5 py-0.2 rounded bg-warn/15 text-warn font-semibold">
-                            ⚠️ Soft 404 Copy Detected
+                             Soft 404 Copy Detected
                           </span>
                         )}
                         {page.is_duplicate && (
                           <span className="inline-block mt-0.5 text-[9px] px-1.5 py-0.2 rounded bg-bad/15 text-bad font-semibold">
-                            ⚠️ Duplicate of {page.duplicate_of_url}
+                             Duplicate of {page.duplicate_of_url}
                           </span>
                         )}
                       </td>
@@ -305,7 +305,7 @@ export function IndexationIntelligenceView({
                           page.status_code === 200
                             ? 'bg-good/15 text-good'
                             : page.status_code >= 300 && page.status_code < 400
-                            ? 'bg-pine/15 text-pine'
+                            ? 'bg-paper-200 text-ink-700'
                             : 'bg-bad/15 text-bad'
                         }`}>
                           {page.status_code}
@@ -315,11 +315,11 @@ export function IndexationIntelligenceView({
                       <td className="p-3">
                         {page.indexable ? (
                           <span className="inline-flex items-center gap-1 text-good font-semibold font-sans">
-                            <span>✅</span> Indexable
+                            <span></span> Indexable
                           </span>
                         ) : (
                           <span className="inline-flex items-center gap-1 text-bad font-semibold font-sans">
-                            <span>❌</span> Non-Indexable
+                            <span></span> Non-Indexable
                           </span>
                         )}
                       </td>
@@ -371,7 +371,7 @@ export function IndexationIntelligenceView({
                             </span>
                             {delta.js_dependency_risk === 'CRITICAL' && (
                               <span className="text-[9px] font-bold text-bad bg-bad/10 px-1.5 py-0.2 rounded inline-block">
-                                ⚠️ High JS Dependency (+{delta.word_count_delta} words)
+                                 High JS Dependency (+{delta.word_count_delta} words)
                               </span>
                             )}
                           </div>
@@ -404,7 +404,7 @@ export function IndexationIntelligenceView({
           <div className="bg-paper border border-line rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col animate-in fade-in zoom-in-95 duration-150">
             <div className="p-5 border-b border-line flex items-center justify-between bg-paper-100">
               <div>
-                <h3 className="font-serif text-lg font-bold text-ink">
+                <h3 className="font-sans text-lg font-bold text-ink">
                   Render Delta: Raw HTTP Stream vs Headless Browser DOM
                 </h3>
                 <span className="text-xs text-ink-500 font-mono truncate block max-w-xl">
@@ -432,8 +432,8 @@ export function IndexationIntelligenceView({
                 </div>
 
                 <div className="border border-line rounded-lg p-3 bg-paper-50 space-y-1">
-                  <span className="label text-[10px] text-pine block">Rendered DOM Word Count</span>
-                  <span className="text-2xl font-bold font-mono text-pine block">
+                  <span className="label text-[10px] text-ink-700 block">Rendered DOM Word Count</span>
+                  <span className="text-2xl font-bold font-mono text-ink-700 block">
                     {selectedPageForDiff.render_delta?.rendered_word_count ?? '—'}
                   </span>
                   <span className="text-[10px] text-ink-500 block">Seen after JS execution</span>
@@ -474,7 +474,7 @@ export function IndexationIntelligenceView({
 
                 <div className="border border-line rounded-lg p-4 bg-paper-50 space-y-3">
                   <div className="flex items-center justify-between border-b border-line pb-2">
-                    <span className="font-semibold text-pine">Rendered DOM Headings (Final)</span>
+                    <span className="font-semibold text-ink-700">Rendered DOM Headings (Final)</span>
                     <span className="text-ink-500 font-mono">
                       {(selectedPageForDiff.render_delta?.rendered_headings || []).length} tags
                     </span>

@@ -107,9 +107,9 @@ export function synthesizeVisualIntelligenceFallback(report: ExecutiveReport): V
       config: {
         max_value: 100,
         target_label: domain,
-        target_color: '#2e6f5e',
+        target_color: '#171a20',
         benchmark_label: 'No industry baseline measured',
-        benchmark_color: '#94a3b8',
+        benchmark_color: '#a8aeb6',
       },
       is_recommended: true,
       priority_order: priority++,
@@ -146,9 +146,9 @@ export function synthesizeVisualIntelligenceFallback(report: ExecutiveReport): V
         unit: 'ms',
       },
       config: {
-        curve_color: '#0284c7',
-        fast_color: '#16a34a',
-        warning_color: '#dc2626',
+        curve_color: '#171a20',
+        fast_color: '#0f7a48',
+        warning_color: '#a82620',
       },
       is_recommended: true,
       priority_order: priority++,
@@ -172,7 +172,7 @@ export function synthesizeVisualIntelligenceFallback(report: ExecutiveReport): V
         engines: [{ name: 'Measured composite', readiness: Math.round(liveVisibility), benchmark: 0, status: 'Measured' }],
         visibility_status: 'MEASURED',
       },
-      config: { bar_color: '#2e6f5e', benchmark_color: '#94a3b8' },
+      config: { bar_color: '#171a20', benchmark_color: '#a8aeb6' },
       is_recommended: true,
       priority_order: priority++,
     });
@@ -185,7 +185,7 @@ export function synthesizeVisualIntelligenceFallback(report: ExecutiveReport): V
       ai_insight: 'ChatGPT, Perplexity, and Google AI Overview citations were not queried. On-page AI readiness is a separate score.',
       category: 'GEO',
       data: { engines: [], visibility_status: 'NOT_MEASURED' },
-      config: { bar_color: '#2e6f5e', benchmark_color: '#94a3b8' },
+      config: { bar_color: '#171a20', benchmark_color: '#a8aeb6' },
       is_recommended: false,
       priority_order: priority++,
     });
@@ -203,10 +203,10 @@ export function synthesizeVisualIntelligenceFallback(report: ExecutiveReport): V
       data: {
         total: totalDefects,
         segments: [
-          { label: 'Critical Blocker', count: sevCounts.CRITICAL, color: '#ef4444' },
-          { label: 'High Severity', count: sevCounts.HIGH, color: '#f59e0b' },
-          { label: 'Medium Drag', count: sevCounts.MEDIUM, color: '#eab308' },
-          { label: 'Low / Advisory', count: sevCounts.LOW + sevCounts.INFO, color: '#10b981' },
+          { label: 'Critical Blocker', count: sevCounts.CRITICAL, color: '#a82620' },
+          { label: 'High Severity', count: sevCounts.HIGH, color: '#a82620' },
+          { label: 'Medium Drag', count: sevCounts.MEDIUM, color: '#925a08' },
+          { label: 'Low / Advisory', count: sevCounts.LOW + sevCounts.INFO, color: '#a8aeb6' },
         ],
       },
       config: { inner_radius: 58, outer_radius: 90 },
@@ -231,7 +231,7 @@ export function synthesizeVisualIntelligenceFallback(report: ExecutiveReport): V
           { stage: 'Conversion', score: croScore, drop_reason: 'Conversion category score' },
         ],
       },
-      config: { funnel_color: '#2e6f5e' },
+      config: { funnel_color: '#171a20' },
       is_recommended: isTransactional,
       priority_order: priority++,
     });

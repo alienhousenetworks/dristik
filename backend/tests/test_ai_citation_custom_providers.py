@@ -116,3 +116,97 @@ def test_anthropic_provider_does_not_activate_groq_citation_engine():
         assert engines["claude"]["provider"] in ("anthropic", "claude")
         assert engines["llama"]["active"] is False
         assert engines["llama"]["provider"] == "groq"
+
+
+def test_openrouter_frontier_models_configuration():
+    from app.core.config import settings
+
+    with patch.object(settings, "OPENROUTER_API_KEY", "sk-or-v1-test-frontier-key"), \
+         patch.dict("os.environ", {
+             "AI_CITATION_PROVIDER": "openrouter",
+             "AI_CITATION_CROSS_PROVIDER": "true",
+             "AI_CITATION_GEMINI_MODEL": "google/gemini-3.8-flash",
+             "AI_CITATION_CHATGPT_MODEL": "openai/gpt-6.1-sol",
+             "AI_CITATION_CLAUDE_MODEL": "anthropic/claude-haiku-4.5",
+             "AI_CITATION_QWEN_MODEL": "qwen/qwen3.8-flash",
+             "AI_CITATION_DEEPSEEK_MODEL": "deepseek/deepseek-v4.1-flash",
+         }, clear=False):
+        engines = {e["id"]: e for e in get_configured_ai_engines()}
+
+        # Verify Gemini
+        assert engines["gemini"]["active"] is True
+        assert engines["gemini"]["provider"] == "openrouter"
+        assert engines["gemini"]["model"] == "google/gemini-3.8-flash"
+        assert engines["gemini"]["api_key"] == "sk-or-v1-test-frontier-key"
+
+        # Verify OpenAI / ChatGPT
+        assert engines["chatgpt"]["active"] is True
+        assert engines["chatgpt"]["provider"] == "openrouter"
+        assert engines["chatgpt"]["model"] == "openai/gpt-6.1-sol"
+        assert engines["chatgpt"]["api_key"] == "sk-or-v1-test-frontier-key"
+
+        # Verify Claude
+        assert engines["claude"]["active"] is True
+        assert engines["claude"]["provider"] == "openrouter"
+        assert engines["claude"]["model"] == "anthropic/claude-haiku-4.5"
+        assert engines["claude"]["api_key"] == "sk-or-v1-test-frontier-key"
+
+        # Verify Qwen
+        assert engines["qwen"]["active"] is True
+        assert engines["qwen"]["provider"] == "openrouter"
+        assert engines["qwen"]["model"] == "qwen/qwen3.8-flash"
+        assert engines["qwen"]["api_key"] == "sk-or-v1-test-frontier-key"
+
+        # Verify DeepSeek
+        assert engines["deepseek"]["active"] is True
+        assert engines["deepseek"]["provider"] == "openrouter"
+        assert engines["deepseek"]["model"] == "deepseek/deepseek-v4.1-flash"
+        assert engines["deepseek"]["api_key"] == "sk-or-v1-test-frontier-key"
+
+
+def test_openrouter_frontier_models_defaults_without_explicit_models():
+    """When models are not explicitly set in env, the openrouter defaults match the frontier IDs."""
+    from app.core.config import settings
+
+    with patch.object(settings, "OPENROUTER_API_KEY", "sk-or-v1-test-key"), \
+         patch.dict("os.environ", {
+             "AI_CITATION_PROVIDER": "openrouter",
+             "AI_CITATION_CROSS_PROVIDER": "true",
+             "AI_CITATION_GEMINI_MODEL": "",
+             "AI_CITATION_CHATGPT_MODEL": "",
+             "AI_CITATION_CLAUDE_MODEL": "",
+             "AI_CITATION_QWEN_MODEL": "",
+             "AI_CITATION_DEEPSEEK_MODEL": "",
+         }, clear=False):
+        engines = {e["id"]: e for e in get_configured_ai_engines()}
+        assert engines["gemini"]["model"] == "google/gemini-3.8-flash"
+        assert engines["chatgpt"]["model"] == "openai/gpt-6.1-sol"
+        assert engines["claude"]["model"] == "anthropic/claude-haiku-4.5"
+        assert engines["qwen"]["model"] == "qwen/qwen3.8-flash"
+        assert engines["deepseek"]["model"] == "deepseek/deepseek-v4.1-flash"
+
+
+@pytest.mark.asyncio
+async def test_qwen_dispatch_via_openrouter():
+    tracker = AiCitationTracker()
+    mock_res = {
+        "content": "Qwen model response analyzing Acme Software citations.",
+        "citations": ["https://acmesoftware.in"],
+        "error": None,
+        "status_code": 200,
+    }
+    with patch.object(tracker, "_query_openrouter_engine", new_callable=AsyncMock, return_value=mock_res) as mock_or:
+        eng_def = {
+            "id": "qwen",
+            "name": "Qwen (Alibaba)",
+            "provider": "openrouter",
+            "api_key": "sk-or-v1-test-qwen",
+            "model": "qwen/qwen3.8-flash"
+        }
+        res = await tracker._dispatch_engine_call("What is Acme Software?", eng_def)
+        assert res["content"] == "Qwen model response analyzing Acme Software citations."
+        assert mock_or.called
+        call_args = mock_or.call_args[0]
+        assert call_args[0] == "What is Acme Software?"
+        assert call_args[1] == "qwen/qwen3.8-flash"
+        assert call_args[2] == "sk-or-v1-test-qwen"

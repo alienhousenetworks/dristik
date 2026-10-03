@@ -58,8 +58,8 @@ export function Pipeline({ run, onRefreshRun }: PipelineProps) {
             <span
               className={`font-bold px-2 py-0.5 rounded border ${
                 done
-                  ? 'bg-emerald-500/10 text-emerald-700 border-emerald-500/30'
-                  : 'bg-pine/10 text-pine border-pine/30'
+                  ? 'bg-good/10 text-good border-good/30'
+                  : 'bg-paper-200 text-ink-700 border-line'
               }`}
             >
               {done ? '100% Complete' : `${run.progress_percentage ?? 0}%`}
@@ -72,12 +72,12 @@ export function Pipeline({ run, onRefreshRun }: PipelineProps) {
         <div className="pt-3 border-t border-line/60">
           <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
             <div className="flex items-center gap-2">
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded font-mono font-semibold bg-pine/10 text-pine border border-pine/20">
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded font-mono font-semibold bg-paper-200 text-ink-700 border border-line">
                 <span>Total AI Cost:</span>
                 <span>${totalCost.toFixed(4)}</span>
               </span>
               {isActualBilled && (
-                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-mono bg-sand-100 text-ink-700">
+                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[11px] font-mono bg-paper-100 text-ink-700">
                   Actual Billed: ${actualCost.toFixed(4)}
                 </span>
               )}
@@ -90,7 +90,7 @@ export function Pipeline({ run, onRefreshRun }: PipelineProps) {
               <button
                 type="button"
                 onClick={() => setShowStages(!showStages)}
-                className="text-pine hover:underline font-medium flex items-center gap-1 cursor-pointer"
+                className="text-ink-700 hover:underline font-medium flex items-center gap-1 cursor-pointer"
               >
                 {showStages ? '▲ Hide stage costs' : '▼ Stage costs breakdown'}
               </button>
@@ -99,10 +99,10 @@ export function Pipeline({ run, onRefreshRun }: PipelineProps) {
 
           {/* Collapsible Stage-by-Stage Cost Breakdown */}
           {showStages && stageCosts.length > 0 && (
-            <div className="mt-3 overflow-x-auto rounded border border-line bg-sand-50/50 p-2">
+            <div className="mt-3 overflow-x-auto rounded border border-line bg-paper-50/50 p-2">
               <table className="w-full text-left text-xs">
                 <thead>
-                  <tr className="border-b border-line text-[11px] uppercase tracking-wider text-ink-500">
+                  <tr className="border-b border-line text-[11px] uppercase tracking-[0.04em] text-ink-500">
                     <th className="py-1 px-2 font-medium">Pipeline Stage</th>
                     <th className="py-1 px-2 font-medium text-right">Calls</th>
                     <th className="py-1 px-2 font-medium text-right">Tokens</th>
@@ -112,8 +112,8 @@ export function Pipeline({ run, onRefreshRun }: PipelineProps) {
                 </thead>
                 <tbody className="divide-y divide-line/40 font-mono">
                   {stageCosts.map((s) => (
-                    <tr key={s.stage} className="hover:bg-sand-100/60 transition-colors">
-                      <td className="py-1 px-2 font-sans font-medium text-ink-800">
+                    <tr key={s.stage} className="hover:bg-paper-100/60 transition-colors">
+                      <td className="py-1 px-2 font-sans font-medium text-ink-700">
                         {s.display_name || s.stage}
                         {s.models?.length > 0 && (
                           <span className="block text-[10px] text-ink-500 font-mono">
@@ -126,14 +126,14 @@ export function Pipeline({ run, onRefreshRun }: PipelineProps) {
                         {s.total_tokens.toLocaleString()}
                       </td>
                       <td className="py-1 px-2 text-right text-ink-600">{formatMs(s.latency_ms)}</td>
-                      <td className="py-1 px-2 text-right font-bold text-pine">
+                      <td className="py-1 px-2 text-right font-bold text-ink-700">
                         ${s.cost_usd.toFixed(4)}
                       </td>
                     </tr>
                   ))}
                 </tbody>
                 <tfoot>
-                  <tr className="border-t border-line font-bold text-ink-900 bg-sand-100/40">
+                  <tr className="border-t border-line font-bold text-ink-900 bg-paper-100/40">
                     <td className="py-1.5 px-2 font-sans">Total Pipeline Cost</td>
                     <td className="py-1.5 px-2 text-right font-mono">{telemetry.model_calls_count || 0}</td>
                     <td className="py-1.5 px-2 text-right font-mono">
@@ -142,7 +142,7 @@ export function Pipeline({ run, onRefreshRun }: PipelineProps) {
                     <td className="py-1.5 px-2 text-right font-mono">
                       {formatMs(telemetry.total_latency_ms || 0)}
                     </td>
-                    <td className="py-1.5 px-2 text-right font-mono text-pine">
+                    <td className="py-1.5 px-2 text-right font-mono text-ink-700">
                       ${totalCost.toFixed(4)}
                     </td>
                   </tr>
