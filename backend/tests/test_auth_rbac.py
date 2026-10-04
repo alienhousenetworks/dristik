@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 from app.identity.authorizer import Authorizer, UserIdentity
 from app.identity.store import reset_store
 from app.domain.enums import UserRole
+from app.core.config import settings
 from app.main import app
 
 
@@ -54,7 +55,7 @@ def test_system_admin_follows_env_on_reseed(client: TestClient, monkeypatch):
 def test_system_admin_seeded(client: TestClient):
     res = client.post("/api/v1/auth/login", json={
         "email": "admin@dristik.ai",
-        "password": "DristikAdmin1!",
+        "password": settings.SYSTEM_ADMIN_PASSWORD,
     })
     assert res.status_code == 200
     user = res.json()["user"]
@@ -187,7 +188,7 @@ def test_contact_form_and_system_inbox(client: TestClient):
     client.post("/api/v1/auth/logout")
     client.post("/api/v1/auth/login", json={
         "email": "admin@dristik.ai",
-        "password": "DristikAdmin1!",
+        "password": settings.SYSTEM_ADMIN_PASSWORD,
     })
     inbox = client.get("/api/v1/contact")
     assert inbox.status_code == 200
@@ -221,7 +222,7 @@ def test_system_admin_console_kpis_and_ops(client: TestClient):
 
     client.post("/api/v1/auth/login", json={
         "email": "admin@dristik.ai",
-        "password": "DristikAdmin1!",
+        "password": settings.SYSTEM_ADMIN_PASSWORD,
     })
     overview = client.get("/api/v1/system/overview")
     assert overview.status_code == 200
