@@ -111,9 +111,35 @@ def verify_docs_access(
     )
 
 
+import json
+from fastapi.responses import HTMLResponse, JSONResponse, Response
+
 @app.get("/docs", include_in_schema=False)
 async def get_documentation(_user: UserIdentity = Depends(verify_docs_access)):
-    return get_swagger_ui_html(openapi_url="/openapi.json", title=f"{settings.APP_NAME} - Swagger UI")
+    html_resp = get_swagger_ui_html(openapi_url="/openapi.json", title=f"{settings.APP_NAME} - Swagger UI")
+    body = html_resp.body.decode("utf-8")
+    top_bar = """
+    <div style="background: #0f172a; border-bottom: 1px solid #334155; padding: 12px 24px; display: flex; align-items: center; justify-content: space-between; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; color: #f8fafc; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); position: sticky; top: 0; z-index: 9999;">
+      <div style="display: flex; align-items: center; gap: 12px;">
+        <span style="font-weight: 700; font-size: 16px; letter-spacing: -0.02em;">Dristik AI API Hub</span>
+        <span style="background: rgba(56, 189, 248, 0.15); color: #38bdf8; font-size: 12px; font-weight: 600; padding: 3px 8px; border-radius: 9999px; border: 1px solid rgba(56, 189, 248, 0.3);">340+ Endpoints</span>
+      </div>
+      <div style="display: flex; align-items: center; gap: 10px;">
+        <a id="download-json-btn" href="/api/v1/openapi/download" download="dristik_api_list.json" style="display: inline-flex; align-items: center; gap: 8px; background: #2563eb; color: #ffffff; text-decoration: none; padding: 8px 16px; border-radius: 6px; font-size: 13px; font-weight: 600; box-shadow: 0 1px 3px rgba(0,0,0,0.2); transition: background 0.15s ease;">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+          ⬇ 1-Click Download JSON
+        </a>
+        <a id="download-md-btn" href="/api/v1/openapi/markdown" download="dristik_api_list.md" style="display: inline-flex; align-items: center; gap: 8px; background: #1e293b; border: 1px solid #475569; color: #f1f5f9; text-decoration: none; padding: 8px 14px; border-radius: 6px; font-size: 13px; font-weight: 500;">
+          ⬇ Download Markdown (.md)
+        </a>
+        <a href="/redoc" target="_blank" style="display: inline-flex; align-items: center; gap: 6px; background: #334155; color: #e2e8f0; text-decoration: none; padding: 8px 14px; border-radius: 6px; font-size: 13px; font-weight: 500;">
+          ReDoc View
+        </a>
+      </div>
+    </div>
+    """
+    body = body.replace('<div id="swagger-ui">', top_bar + '<div id="swagger-ui">')
+    return HTMLResponse(content=body)
 
 
 @app.get("/redoc", include_in_schema=False)
@@ -131,6 +157,55 @@ async def get_open_api_endpoint(_user: UserIdentity = Depends(verify_docs_access
             routes=app.routes,
         )
     )
+
+
+@app.get("/api/v1/openapi/download", include_in_schema=False)
+@app.get("/openapi.json/download", include_in_schema=False)
+async def download_openapi_json(_user: UserIdentity = Depends(verify_docs_access)):
+    schema = get_openapi(
+        title=settings.APP_NAME,
+        version=settings.APP_VERSION,
+        description="Dristik AI: Enterprise Evidence-Driven Website Intelligence Platform",
+        routes=app.routes,
+    )
+    return Response(
+        content=json.dumps(schema, indent=2),
+        media_type="application/json",
+        headers={"Content-Disposition": 'attachment; filename="dristik_api_list.json"'},
+    )
+
+
+@app.get("/api/v1/openapi/markdown", include_in_schema=False)
+async def download_openapi_markdown(_user: UserIdentity = Depends(verify_docs_access)):
+    schema = get_openapi(
+        title=settings.APP_NAME,
+        version=settings.APP_VERSION,
+        description="Dristik AI: Enterprise Evidence-Driven Website Intelligence Platform",
+        routes=app.routes,
+    )
+    lines = [
+        f"# {settings.APP_NAME} - API Reference List",
+        f"**Version**: {settings.APP_VERSION}  ",
+        f"**Total Paths**: {len(schema.get('paths', {}))}  \n",
+        "| Method | Endpoint Path | Summary | Tags |",
+        "| :--- | :--- | :--- | :--- |",
+    ]
+    for path, methods in sorted(schema.get("paths", {}).items()):
+        for method, spec in methods.items():
+            if method.lower() not in ("get", "post", "put", "delete", "patch", "options", "head"):
+                continue
+            summary = (spec.get("summary") or spec.get("description") or "").replace("\n", " ").strip()
+            if len(summary) > 80:
+                summary = summary[:77] + "..."
+            tags = ", ".join(spec.get("tags", []))
+            lines.append(f"| `{method.upper()}` | `{path}` | {summary or '-'} | {tags or '-'} |")
+
+    return Response(
+        content="\n".join(lines),
+        media_type="text/markdown; charset=utf-8",
+        headers={"Content-Disposition": 'attachment; filename="dristik_api_list.md"'},
+    )
+
 
 origins = [
     "http://localhost:5173",

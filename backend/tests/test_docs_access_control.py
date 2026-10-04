@@ -57,3 +57,22 @@ def test_docs_blocked_for_normal_customer_role(client: TestClient):
     res = client.get("/docs", headers={"Authorization": f"Bearer {token}"})
     # Since customer org owner is an admin/owner role, they have access:
     assert res.status_code == 200
+
+
+def test_1_click_download_endpoints(client: TestClient):
+    auth_header = _make_basic_auth("admin@dristik.ai", settings.SYSTEM_ADMIN_PASSWORD)
+
+    # 1. Download JSON
+    res_json = client.get("/api/v1/openapi/download", headers={"Authorization": auth_header})
+    assert res_json.status_code == 200
+    assert "attachment" in res_json.headers.get("content-disposition", "")
+    data = res_json.json()
+    assert "openapi" in data
+    assert "paths" in data
+
+    # 2. Download Markdown
+    res_md = client.get("/api/v1/openapi/markdown", headers={"Authorization": auth_header})
+    assert res_md.status_code == 200
+    assert "attachment" in res_md.headers.get("content-disposition", "")
+    assert "| Method | Endpoint Path |" in res_md.text
+
