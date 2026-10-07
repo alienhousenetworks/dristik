@@ -233,7 +233,29 @@ COPYWRITING_TASK_CARDS: Dict[str, str] = {
     ),
 }
 
-ALL_TASK_CARDS: Dict[str, str] = {**TASK_CARDS, **COPYWRITING_TASK_CARDS}
+DECK_TASK_CARDS: Dict[str, str] = {
+    "deck.architect.v1": (
+        "Construct an executive 70+ slide master presentation blueprint spanning 11 strategic modules: "
+        "Executive Mandate, Tri-Perspective Diagnostic, 8-Category Deep-Dives, Technical Infrastructure, "
+        "Page-by-Page Audit, GEO & Answer Engines, Conversion Ergonomics, Competitive Parity, Causal Diagnostics, "
+        "7/30/90 Roadmap, and Governance. Enforce strict zero-repetition across all slides: each slide must have "
+        "a distinct metric focus, unique title, dedicated analytical angle, and zero boilerplate duplication."
+    ),
+    "deck.data_analyst.v1": (
+        "Extract grounded quantitative metrics and chart specifications for every slide in the blueprint. "
+        "Generate concrete series data for bar charts, doughnut charts, category radars, and KPI cards across "
+        "the 8 category scores, HTTP status counts, TTFB latency, heading counts, severity breakdowns, query matrices, "
+        "and 7/30/90 roadmap milestones. Never fabricate numbers: mark unmeasured integrations as NOT_MEASURED."
+    ),
+    "deck.pptx_builder.v1": (
+        "Compile structured slide blueprints and visual data into production 16:9 widescreen PowerPoint (.pptx) decks. "
+        "Render native charts, dark-mode styling (#0B0F19 canvas, slate cards, sky cyan and emerald accents), "
+        "structured data tables, metric badges, and clear narrative typography. Ensure slide elements fit cleanly "
+        "without text collision or visual clipping across all 70+ slides."
+    ),
+}
+
+ALL_TASK_CARDS: Dict[str, str] = {**TASK_CARDS, **COPYWRITING_TASK_CARDS, **DECK_TASK_CARDS}
 
 
 def task_card_for(agent_id: str) -> str:

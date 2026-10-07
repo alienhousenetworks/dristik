@@ -605,10 +605,60 @@ COPYWRITING_AGENTS_V3: Dict[str, AgentDefinition] = {
     ),
 }
 
+# DOMAIN 10: EXECUTIVE PRESENTATION & PPTX DECK GENERATION WORKFORCE (3 SPECIALISTS)
+DECK_AGENTS_V1: Dict[str, AgentDefinition] = {
+    "deck.architect.v1": AgentDefinition(
+        agent_id="deck.architect.v1",
+        agent_name="Deck Architecture & Slide Sequencing Agent",
+        domain="PRESENTATION",
+        worker_type="architect_worker",
+        description="Blueprints comprehensive 70+ slide executive presentations with strict non-repetition partitioning across 11 strategic modules.",
+        capabilities=["deck_architecture", "slide_sequencing", "non_repetition_orchestration"],
+        allowed_models=["judge_model", "reasoning_model"],
+        token_budget=6000,
+        risk_level="low",
+        timeout_sec=30,
+        dependencies=["strategy.executive.v3"],
+        required_evidence=["verified_findings", "scores", "crawl_manifest", "page_manifest"]
+    ),
+    "deck.data_analyst.v1": AgentDefinition(
+        agent_id="deck.data_analyst.v1",
+        agent_name="Deck Quantitative & Visual Data Agent",
+        domain="PRESENTATION",
+        worker_type="analyst_worker",
+        description="Synthesizes grounded metrics, chart specifications, and quantitative benchmarks for 70+ slides without simulating or fabricating data.",
+        capabilities=["quantitative_chart_synthesis", "visual_data_extraction", "metric_grounding"],
+        allowed_models=["reasoning_model", "fast_slm"],
+        token_budget=7000,
+        risk_level="low",
+        timeout_sec=30,
+        dependencies=["deck.architect.v1"],
+        required_evidence=["verified_findings", "scores", "telemetry", "claims"]
+    ),
+    "deck.pptx_builder.v1": AgentDefinition(
+        agent_id="deck.pptx_builder.v1",
+        agent_name="Presentation Compiler & Native Chart Agent",
+        domain="PRESENTATION",
+        worker_type="builder_worker",
+        description="Compiles structured slide blueprints and visual data into production 16:9 widescreen PowerPoint (.pptx) decks with native dark-mode charts.",
+        capabilities=["pptx_compilation", "native_chart_generation", "executive_visual_styling"],
+        allowed_models=["fast_slm"],
+        token_budget=5000,
+        risk_level="low",
+        timeout_sec=40,
+        dependencies=["deck.data_analyst.v1"],
+        required_evidence=["slide_blueprints", "chart_specifications"]
+    ),
+}
+
 # Backward Compatibility Alias Map
 AGENT_REGISTRY: Dict[str, AgentDefinition] = {
     **SPECIALIST_AGENTS_V3,
     **COPYWRITING_AGENTS_V3,
+    **DECK_AGENTS_V1,
+    "deck_architect": DECK_AGENTS_V1["deck.architect.v1"],
+    "deck_data_analyst": DECK_AGENTS_V1["deck.data_analyst.v1"],
+    "deck_pptx_builder": DECK_AGENTS_V1["deck.pptx_builder.v1"],
     "copywriting_seo": COPYWRITING_AGENTS_V3["copywriting.seo.v3"],
     "copywriting_geo": COPYWRITING_AGENTS_V3["copywriting.geo.v3"],
     "copywriting_cro": COPYWRITING_AGENTS_V3["copywriting.cro.v3"],
@@ -674,6 +724,7 @@ DOMAIN_CATEGORY: Dict[str, str] = {
     "EXPERIENCE": "UX_CONVERSION",
     "VERIFICATION": "CONTENT",
     "COPYWRITING": "CONTENT",
+    "PRESENTATION": "REPORTING",
 }
 
 def get_agent_definition(agent_id: str) -> Optional[AgentDefinition]:
@@ -687,6 +738,10 @@ def list_all_specialists() -> List[AgentDefinition]:
 def list_copywriting_specialists() -> List[AgentDefinition]:
     """List all 5 specialized copywriting agents."""
     return list(COPYWRITING_AGENTS_V3.values())
+
+def list_deck_specialists() -> List[AgentDefinition]:
+    """List all 3 specialized deck generation agents."""
+    return list(DECK_AGENTS_V1.values())
 
 def specialist_count() -> int:
     return len(SPECIALIST_AGENTS_V3)
