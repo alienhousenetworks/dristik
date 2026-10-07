@@ -173,12 +173,24 @@ export async function fetchAuthProviders(): Promise<AuthProvidersResponse> {
   return request<AuthProvidersResponse>('/api/v1/auth/providers');
 }
 
-export function startSSOAuth(provider: 'google' | 'github', onComplete: () => void): () => void {
+export function startSSOAuth(
+  provider: 'google' | 'github',
+  onComplete: () => void,
+  mode: 'popup' | 'redirect' = 'popup'
+): () => void {
+  const currentPath = window.location.pathname + window.location.search + window.location.hash;
+  const redirectParam = encodeURIComponent(currentPath || '/');
+  const authUrl = `/api/v1/auth/oauth/${provider}/authorize?redirect=${redirectParam}`;
+
+  if (mode === 'redirect') {
+    window.location.href = authUrl;
+    return () => {};
+  }
+
   const width = 540;
   const height = 660;
   const left = window.screenX + (window.outerWidth - width) / 2;
   const top = window.screenY + (window.outerHeight - height) / 2;
-  const authUrl = `/api/v1/auth/oauth/${provider}/authorize`;
 
   const popup = window.open(
     authUrl,
@@ -186,31 +198,78 @@ export function startSSOAuth(provider: 'google' | 'github', onComplete: () => vo
     `width=${width},height=${height},left=${left},top=${top},status=no,resizable=yes`
   );
 
+  // If popup was blocked or opened in tab that closed immediately, fallback to same-window redirect
+  if (!popup) {
+    window.location.href = authUrl;
+    return () => {};
+  }
+
   let cleaned = false;
   let timer: any = null;
-
-  const handleMessage = (e: MessageEvent) => {
-    if (e.origin !== window.location.origin) return;
-    if (e.data && e.data.type === 'AUTH_SUCCESS') {
-      cleanup();
-      onComplete();
-    }
-  };
+  let bc: BroadcastChannel | null = null;
 
   const cleanup = () => {
     if (cleaned) return;
     cleaned = true;
     if (timer) clearInterval(timer);
     window.removeEventListener('message', handleMessage);
+    window.removeEventListener('storage', handleStorage);
+    if (bc) {
+      try {
+        bc.close();
+      } catch (_) {}
+    }
   };
 
-  timer = setInterval(() => {
-    if (!popup || popup.closed) {
+  const isAllowedOrigin = (origin: string) => {
+    if (origin === window.location.origin) return true;
+    try {
+      const url = new URL(origin);
+      return url.hostname === window.location.hostname && (url.port === '8000' || url.port === '5173' || !url.port);
+    } catch (_) {
+      return false;
+    }
+  };
+
+  const handleMessage = (e: MessageEvent) => {
+    if (!isAllowedOrigin(e.origin)) return;
+    if (e.data && e.data.type === 'AUTH_SUCCESS') {
       cleanup();
       onComplete();
     }
-  }, 800);
+  };
+
+  const handleStorage = (e: StorageEvent) => {
+    if (e.key === 'dristik_auth_sync' && e.newValue) {
+      try {
+        const payload = JSON.parse(e.newValue);
+        if (payload?.type === 'AUTH_SUCCESS') {
+          localStorage.removeItem('dristik_auth_sync');
+          cleanup();
+          onComplete();
+        }
+      } catch (_) {}
+    }
+  };
+
+  try {
+    bc = new BroadcastChannel('dristik_auth');
+    bc.onmessage = (e) => {
+      if (e.data && e.data.type === 'AUTH_SUCCESS') {
+        cleanup();
+        onComplete();
+      }
+    };
+  } catch (_) {}
+
+  timer = setInterval(() => {
+    if (popup.closed) {
+      cleanup();
+      onComplete();
+    }
+  }, 500);
 
   window.addEventListener('message', handleMessage);
+  window.addEventListener('storage', handleStorage);
   return cleanup;
 }

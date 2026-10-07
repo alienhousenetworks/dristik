@@ -135,17 +135,51 @@ export const ConnectorsModal: React.FC<ConnectorsModalProps> = ({
     }
   }, [isOpen, targetUrl, initialTab]);
 
-  // Listen for Google OAuth callback from popup window
+  // Listen for Google / Connector OAuth callback from popup window / broadcast
   useEffect(() => {
+    const onAuthSuccess = async (provider?: string) => {
+      setStatusMessage(`Signed in${provider ? ` with ${provider}` : ''}. Token saved. Metrics stay blank until a live query returns them.`);
+      await fetchIntegrations();
+      onIntegrationAdded?.();
+    };
+
     const handleMessage = async (e: MessageEvent) => {
       if (e.data && (e.data.type === 'GSC_OAUTH_SUCCESS' || e.data.type === 'OAUTH_SUCCESS')) {
-        setStatusMessage(`Signed in${e.data.provider ? ` with ${e.data.provider}` : ''}. Token saved. Metrics stay blank until a live query returns them.`);
-        await fetchIntegrations();
-        onIntegrationAdded?.();
+        await onAuthSuccess(e.data.provider);
       }
     };
+
+    let bcGsc: BroadcastChannel | null = null;
+    let bcConn: BroadcastChannel | null = null;
+    try {
+      bcGsc = new BroadcastChannel('dristik_gsc_auth');
+      bcGsc.onmessage = async () => {
+        await onAuthSuccess('Google Search Console');
+      };
+      bcConn = new BroadcastChannel('dristik_connector_oauth');
+      bcConn.onmessage = async (e) => {
+        await onAuthSuccess(e.data?.provider);
+      };
+    } catch (_) {}
+
+    const handleStorage = async (e: StorageEvent) => {
+      if ((e.key === 'dristik_gsc_auth_sync' || e.key === 'dristik_connector_oauth_sync') && e.newValue) {
+        try {
+          const payload = JSON.parse(e.newValue);
+          localStorage.removeItem(e.key);
+          await onAuthSuccess(payload?.provider);
+        } catch (_) {}
+      }
+    };
+
     window.addEventListener('message', handleMessage);
-    return () => window.removeEventListener('message', handleMessage);
+    window.addEventListener('storage', handleStorage);
+    return () => {
+      window.removeEventListener('message', handleMessage);
+      window.removeEventListener('storage', handleStorage);
+      if (bcGsc) try { bcGsc.close(); } catch (_) {}
+      if (bcConn) try { bcConn.close(); } catch (_) {}
+    };
   }, []);
 
   useEffect(() => {

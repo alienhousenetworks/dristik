@@ -173,17 +173,54 @@ export function SearchConsoleAttributionView({ domain, analysisId, onOpenConnect
     fetchGsc();
   }, [domain, analysisId]);
 
-  // Listen for Google OAuth callback from popup window
+  // Listen for Google OAuth callback from popup window / broadcast
   useEffect(() => {
+    const onAuthSuccess = (email?: string) => {
+      fetchGsc();
+      setShowDirectModal(false);
+      setConnecting(false);
+      setConnectSuccess(`Google Search Console authorized via Google OAuth (${email || 'Verified'})!`);
+    };
+
     const handleMessage = (e: MessageEvent) => {
       if (e.data && e.data.type === 'GSC_OAUTH_SUCCESS') {
-        fetchGsc();
-        setShowDirectModal(false);
-        setConnectSuccess(`Google Search Console authorized via Google OAuth (${e.data.email || 'Verified'})!`);
+        onAuthSuccess(e.data.email);
       }
     };
+
+    let bc: BroadcastChannel | null = null;
+    try {
+      bc = new BroadcastChannel('dristik_gsc_auth');
+      bc.onmessage = (e) => {
+        if (e.data && e.data.type === 'GSC_OAUTH_SUCCESS') {
+          onAuthSuccess(e.data.email);
+        }
+      };
+    } catch (_) {}
+
+    const handleStorage = (e: StorageEvent) => {
+      if (e.key === 'dristik_gsc_auth_sync' && e.newValue) {
+        try {
+          const payload = JSON.parse(e.newValue);
+          if (payload?.type === 'GSC_OAUTH_SUCCESS') {
+            localStorage.removeItem('dristik_gsc_auth_sync');
+            onAuthSuccess(payload.email);
+          }
+        } catch (_) {}
+      }
+    };
+
     window.addEventListener('message', handleMessage);
-    return () => window.removeEventListener('message', handleMessage);
+    window.addEventListener('storage', handleStorage);
+    return () => {
+      window.removeEventListener('message', handleMessage);
+      window.removeEventListener('storage', handleStorage);
+      if (bc) {
+        try {
+          bc.close();
+        } catch (_) {}
+      }
+    };
   }, []);
 
   const handleGoogleOAuth = () => {

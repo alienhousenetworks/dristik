@@ -14,6 +14,84 @@ SCORING_RUBRIC_V4: Dict[str, Any] = {
         "Strict Confidence Gating: Single-source unverified claims cannot headline executive summaries or trigger critical severity penalties.",
         "Empirical Grounding: DOM-checkable facts are separated from cognitive AI advisories.",
     ],
+    "eight_categories": [
+        {
+            "id": "technical_seo",
+            "name": "Technical SEO",
+            "weight_pct": 15,
+            "core_signals": ["HTTP Status Codes", "Canonical Headers", "Robots.txt & XML Sitemaps", "TTFB & Server Latency", "Crawl Budget & 4xx/5xx Errors"],
+            "measurement_mode": "Deterministic AST & DOM Crawl Engine",
+        },
+        {
+            "id": "on_page_seo",
+            "name": "On-Page SEO",
+            "weight_pct": 10,
+            "core_signals": ["H1 Hierarchy", "Title & Meta Description Quality", "URL Structure", "Open Graph & Social Cards", "Image Alt Text"],
+            "measurement_mode": "HTML & Semantic DOM Analysis",
+        },
+        {
+            "id": "content",
+            "name": "Content & Semantics",
+            "weight_pct": 15,
+            "core_signals": ["Topic Depth & Coverage", "Readability Metrics", "Entity Grounding", "Keyword Cannibalization", "Information Density"],
+            "measurement_mode": "Natural Language & Linguistic Heuristics",
+        },
+        {
+            "id": "geo",
+            "name": "GEO & AI Readiness",
+            "weight_pct": 15,
+            "core_signals": ["On-Page Extractability", "Top 200 Words Entity Definition", "Pricing Transparency", "Commercial Q&A Extractability"],
+            "measurement_mode": "On-Page Answer Extraction Analysis",
+        },
+        {
+            "id": "ai_search",
+            "name": "AI Search Visibility",
+            "weight_pct": 15,
+            "core_signals": ["Live Cross-Engine Citations (Gemini, ChatGPT, Perplexity, Claude)", "Mention Rate & Share of Voice", "Entity Accuracy"],
+            "measurement_mode": "Live Multi-Model Querying (Blank when unmeasured)",
+        },
+        {
+            "id": "schema",
+            "name": "Schema Architecture",
+            "weight_pct": 10,
+            "core_signals": ["JSON-LD Validation", "Schema.org Class Alignment", "Entity sameAs Relationships", "Rich Result Eligibility"],
+            "measurement_mode": "AST Structured Data Parser",
+        },
+        {
+            "id": "ux_conversion",
+            "name": "UX & Conversion (CRO)",
+            "weight_pct": 10,
+            "core_signals": ["5-Second Value Proposition", "CTA Hierarchy & Contrast", "Form Barrier Count", "Mobile Viewport Readiness"],
+            "measurement_mode": "Behavioral Heuristics + GA4 Telemetry",
+        },
+        {
+            "id": "trust_authority",
+            "name": "Trust & Authority",
+            "weight_pct": 10,
+            "core_signals": ["HTTPS & Modern TLS", "Organization Legal Entity Schema", "Privacy Policy & Terms URLs", "Author / E-E-A-T Attribution", "NAP Transparency"],
+            "measurement_mode": "Verified On-Page Governance & External Providers",
+        },
+    ],
+    "honest_perspectives": [
+        {
+            "id": "google_perspective",
+            "name": "Google Discoverability",
+            "description": "Blended view of Technical SEO (45%), On-Page SEO (35%), and Schema Architecture (20%). Evaluates indexation and organic search readiness.",
+            "formula": "0.45 * Technical + 0.35 * OnPage + 0.20 * Schema"
+        },
+        {
+            "id": "human_perspective",
+            "name": "Human Experience",
+            "description": "Blended view of UX & Conversion (40%), Content Readability (35%), and Trust & Security (25%). Evaluates real buyer engagement and trust.",
+            "formula": "0.40 * UX + 0.35 * Content + 0.25 * Trust"
+        },
+        {
+            "id": "ai_perspective",
+            "name": "AI Search Readiness",
+            "description": "Blended view of On-Page GEO extractability (50%) and live AI Visibility (50% when measured; otherwise on-page only). Evaluates citation readiness in generative answers.",
+            "formula": "0.50 * GEO + 0.50 * AIVisibility (or 1.0 * GEO if visibility unmeasured)"
+        }
+    ],
     "five_pillars": [
         {
             "id": "search_seo",

@@ -374,23 +374,52 @@ async def google_oauth_callback(
             <p style="color: #4a5568; font-size: 13px; line-height: 1.5; margin-bottom: 20px;">
                 Successfully authorized property for <strong>{target_domain}</strong> via Google OAuth (<code>{user_email}</code>).
             </p>
-            <p style="color: #718096; font-size: 12px;">This window will close automatically...</p>
+            <p id="close-msg" style="color: #718096; font-size: 12px;">This window will close automatically...</p>
+            <button id="close-btn" onclick="window.close()" style="display: none; margin-top: 14px; background: #137547; color: #fff; border: none; padding: 8px 18px; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 600;">Return to App</button>
         </div>
         <script>
-            try {{
-                if (window.opener && !window.opener.closed) {{
-                    window.opener.postMessage({{
-                        type: 'GSC_OAUTH_SUCCESS',
-                        domain: '{target_domain}',
-                        email: '{user_email}'
-                    }}, '*');
-                    setTimeout(function() {{ window.close(); }}, 1200);
+            (function() {{
+                var payload = {{
+                    type: 'GSC_OAUTH_SUCCESS',
+                    domain: '{target_domain}',
+                    email: '{user_email}',
+                    timestamp: Date.now()
+                }};
+                var isPopup = (window.opener && !window.opener.closed) || (window.name && window.name.indexOf('popup') !== -1);
+
+                // 1. Post to opener if available
+                try {{
+                    if (window.opener && !window.opener.closed) {{
+                        window.opener.postMessage(payload, '*');
+                    }}
+                }} catch (e) {{}}
+
+                // 2. BroadcastChannel: Works across tabs/windows without opener
+                try {{
+                    var bc = new BroadcastChannel('dristik_gsc_auth');
+                    bc.postMessage(payload);
+                    bc.close();
+                }} catch (e) {{}}
+
+                // 3. localStorage fallback: fires storage events
+                try {{
+                    localStorage.setItem('dristik_gsc_auth_sync', JSON.stringify(payload));
+                }} catch (e) {{}}
+
+                if (isPopup) {{
+                    setTimeout(function() {{ window.close(); }}, 800);
+                    setTimeout(function() {{
+                        var btn = document.getElementById('close-btn');
+                        if (btn) btn.style.display = 'inline-block';
+                        var msg = document.getElementById('close-msg');
+                        if (msg) msg.textContent = 'Authorization complete. You can return to Dristik.';
+                    }}, 1600);
                 }} else {{
-                    setTimeout(function() {{ window.location.href = '/?tab=search_console&gsc_connected=true'; }}, 1500);
+                    setTimeout(function() {{
+                        window.location.href = '/?tab=search_console&gsc_connected=true';
+                    }}, 600);
                 }}
-            }} catch (e) {{
-                setTimeout(function() {{ window.close(); }}, 2000);
-            }}
+            }})();
         </script>
     </body>
     </html>

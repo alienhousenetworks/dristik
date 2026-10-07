@@ -189,16 +189,43 @@ async def oauth_sso_callback(
         if success:
             script = f"""
             <script>
-              try {{
-                if (window.opener && !window.opener.closed) {{
-                  window.opener.postMessage({{ type: 'AUTH_SUCCESS', provider: {json.dumps(provider)} }}, '*');
-                  setTimeout(function () {{ window.close(); }}, 800);
+              (function() {{
+                var payload = {{ type: 'AUTH_SUCCESS', provider: {json.dumps(provider)}, timestamp: Date.now() }};
+                var isPopup = (window.opener && !window.opener.closed) || (window.name && window.name.indexOf('oauth') !== -1);
+
+                // 1. Post to opener if available
+                try {{
+                  if (window.opener && !window.opener.closed) {{
+                    window.opener.postMessage(payload, '*');
+                  }}
+                }} catch (e) {{}}
+
+                // 2. BroadcastChannel: Works across tabs/windows on same origin without opener
+                try {{
+                  var bc = new BroadcastChannel('dristik_auth');
+                  bc.postMessage(payload);
+                  bc.close();
+                }} catch (e) {{}}
+
+                // 3. localStorage fallback: fires storage events across all tabs/windows
+                try {{
+                  localStorage.setItem('dristik_auth_sync', JSON.stringify(payload));
+                }} catch (e) {{}}
+
+                if (isPopup) {{
+                  setTimeout(function () {{
+                    window.close();
+                  }}, 600);
+                  setTimeout(function () {{
+                    var btn = document.getElementById('close-btn');
+                    if (btn) btn.style.display = 'inline-block';
+                  }}, 1500);
                 }} else {{
-                  window.location.href = {json.dumps(redirect_url)};
+                  setTimeout(function () {{
+                    window.location.href = {json.dumps(redirect_url)};
+                  }}, 500);
                 }}
-              }} catch (e) {{
-                window.location.href = {json.dumps(redirect_url)};
-              }}
+              }})();
             </script>
             """
         content = f"""<!DOCTYPE html>
@@ -211,12 +238,14 @@ async def oauth_sso_callback(
     .card {{ background: #fff; border: 1px solid #e2e0d8; border-radius: 12px; padding: 32px; max-width: 420px; text-align: center; box-shadow: 0 4px 12px rgba(0,0,0,0.05); }}
     h1 {{ font-size: 18px; font-weight: 600; margin-bottom: 8px; color: {'#1b4332' if success else '#842029'}; }}
     p {{ font-size: 14px; color: #666; line-height: 1.5; }}
+    .btn {{ display: inline-block; margin-top: 16px; padding: 8px 18px; background: #1b4332; color: #fff; border: none; border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: 500; text-decoration: none; }}
   </style>
 </head>
 <body>
   <div class="card">
     <h1>{safe_title}</h1>
     <p>{safe_msg}</p>
+    <button id="close-btn" class="btn" style="display: none;" onclick="window.close()">Return to Dristik</button>
   </div>
   {script}
 </body>
@@ -246,6 +275,12 @@ async def oauth_sso_callback(
 
     if format == "json":
         return {"user": service.public_user(user), "token": token, "redirect": redirect_target}
+
+    if format == "redirect":
+        from fastapi.responses import RedirectResponse
+        red_res = RedirectResponse(redirect_target or "/", status_code=302)
+        _set_session_cookie(red_res, token)
+        return red_res
 
     return _page(
         "Signed in successfully",

@@ -25,12 +25,20 @@ class SemanticGapEngine:
         Fails closed with explicit UNAVAILABLE status when neural embeddings are not available.
         """
         if not queries:
-            return {"status": "NOT_EVALUATED", "coverage_score": None, "evaluations": []}
+            return {
+                "domain": domain,
+                "status": "NOT_EVALUATED",
+                "coverage_score": None,
+                "overall_semantic_coverage_score": None,
+                "total_queries_evaluated": 0,
+                "evaluations": [],
+            }
 
         if not embedding_service.is_available():
             return {
                 "domain": domain,
                 "status": "UNAVAILABLE",
+                "coverage_score": None,
                 "overall_semantic_coverage_score": None,
                 "total_queries_evaluated": len(queries),
                 "evaluations": [],
@@ -78,6 +86,7 @@ class SemanticGapEngine:
         return {
             "domain": domain,
             "status": "AVAILABLE" if coverage_score is not None else "INSUFFICIENT_EVIDENCE",
+            "coverage_score": coverage_score,
             "overall_semantic_coverage_score": coverage_score,
             "total_queries_evaluated": len(queries),
             "evaluations": evaluations

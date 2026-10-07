@@ -34,66 +34,100 @@ export function ScoringRubricModal({ isOpen, onClose }: ScoringRubricModalProps)
 
   const pillars: PillarDetail[] = [
     {
-      id: 'search_seo',
-      name: 'Pillar 1: Search Intelligence (Technical & On-Page SEO)',
-      weight_pct: 25,
+      id: 'technical_seo',
+      name: '1. Technical SEO',
+      weight_pct: 15,
       core_signals: [
         'HTTP Status Codes & Canonical URL integrity',
         'Robots.txt & XML Sitemap 200 OK indexing directive',
+        'TTFB latency (<500ms), DNS resolution, TLS handshake',
+        'Crawl health, orphan page avoidance, and 4xx/5xx error rates',
+      ],
+      measurement_mode: 'Deterministic AST & DOM Crawl Engine',
+    },
+    {
+      id: 'on_page_seo',
+      name: '2. On-Page SEO',
+      weight_pct: 10,
+      core_signals: [
         'H1 Hierarchy & Title/Meta tag character bounds',
-        'DOM-Validated Schema.org structured data scripts',
-        'Mobile Viewport, TTFB latency (<500ms), and 4xx/5xx crawl rates',
+        'Semantic HTML structure & internal anchor link clarity',
+        'Open Graph tags & social sharing cards',
+        'Image alt text coverage & media accessibility',
       ],
-      measurement_mode: 'Empirical AST & DOM Crawl Engine',
+      measurement_mode: 'HTML & Semantic DOM Analysis',
     },
     {
-      id: 'ai_search_geo',
-      name: 'Pillar 2: AI Search Intelligence (GEO & AEO)',
-      weight_pct: 25,
+      id: 'content',
+      name: '3. Content & Semantics',
+      weight_pct: 15,
       core_signals: [
-        'Live Cross-Engine Citations (ChatGPT, Perplexity, Gemini, Claude)',
-        'Direct Definition & Entity Clarity in First 200 Words',
-        'Fact Extractability & Pricing Transparency for LLM synthesizers',
-        '6-Prompt Canonical Commercial Buyer Inquiry Matrix coverage',
+        'Flesch-Kincaid & Gunning-Fog readability bounds (60–80 target)',
+        'Topic depth, semantic keyword cannibalization analysis',
+        'Proof-point density and low fluff ratio',
+        'Authoritative entity naming and terminology consistency',
       ],
-      measurement_mode: 'Live Multi-Model Querying + DOM Semantic Extraction',
+      measurement_mode: 'Natural Language & Linguistic Heuristics',
     },
     {
-      id: 'experience_sxo',
-      name: 'Pillar 3: Experience Intelligence (SXO & Readability)',
-      weight_pct: 20,
+      id: 'geo',
+      name: '4. GEO & AI Readiness',
+      weight_pct: 15,
       core_signals: [
-        'Flesch-Kincaid & Gunning-Fog Readability (Target: 60–80)',
-        'Content scannability, proof-point density, and low fluff ratio',
-        'Visual hierarchy, CTA button contrast & placement above the fold',
-        'Cumulative Layout Shift (CLS) and viewport stabilization',
+        'Direct definition and entity clarity in top 200 words',
+        'Fact extractability and pricing transparency for LLMs',
+        'Quotable claims, statistical citations, and clear headings',
+        '6-Prompt commercial buyer inquiry matrix coverage',
       ],
-      measurement_mode: 'Empirical Heuristics & Text Complexity Algorithms',
+      measurement_mode: 'On-Page Extractability & Semantic Grounding',
     },
     {
-      id: 'conversion_cro',
-      name: 'Pillar 4: Conversion Intelligence (CRO & Funnels)',
-      weight_pct: 20,
+      id: 'ai_search',
+      name: '5. AI Search Visibility',
+      weight_pct: 15,
       core_signals: [
-        '5-Second Value Proposition Clarity & ICP recognition',
-        'High-contrast Action Verbs in primary call-to-action buttons',
-        'Form Field Friction Count (< 4 input fields optimal)',
-        'Commercial Bakeoff Delta against top 2 direct market peers',
+        'Live cross-engine citations (ChatGPT, Perplexity, Gemini, Claude)',
+        'Brand mention rate and synthesized share of voice',
+        'Citation accuracy against source page ground truth',
+        'Zero synthetic guesses: remains blank unless live engines ran',
+      ],
+      measurement_mode: 'Live Multi-Engine Monitor (Blank when unmeasured)',
+    },
+    {
+      id: 'schema',
+      name: '6. Schema Architecture',
+      weight_pct: 10,
+      core_signals: [
+        'DOM-validated Schema.org JSON-LD scripts and microdata',
+        'Organization schema with verified sameAs profiles',
+        'Product, FAQPage, Article, and BreadcrumbList syntax',
+        'Google Rich Results eligibility validation',
+      ],
+      measurement_mode: 'AST Structured Data Parser',
+    },
+    {
+      id: 'ux_conversion',
+      name: '7. UX & Conversion (CRO)',
+      weight_pct: 10,
+      core_signals: [
+        '5-second value proposition clarity above the fold',
+        'High-contrast action verbs in primary CTAs',
+        'Form barrier count (< 4 input fields optimal)',
+        'Mobile viewport responsiveness & layout shift (CLS)',
       ],
       measurement_mode: 'Behavioral Heuristics + GA4 First-Party Connector',
     },
     {
-      id: 'brand_trust',
-      name: 'Pillar 5: Trust Intelligence (On-Page E-E-A-T Architecture)',
+      id: 'trust_authority',
+      name: '8. Trust & Authority (E-E-A-T)',
       weight_pct: 10,
       core_signals: [
-        'Strict HTTPS encryption & valid SSL/TLS handshake',
-        'Organization Schema with sameAs social profile verification',
-        'Published Privacy Policy & Terms of Service URLs',
-        'Direct Physical NAP (Name, Address, Phone) & Support Routing',
-        'Executive & Author Byline Attribution',
+        'Strict HTTPS encryption and modern TLS protocols',
+        'Published Privacy Policy, Terms, and physical NAP',
+        'Leadership & author byline attribution with verifiable experience',
+        'Connected external vendor authority (GSC, Ahrefs, Semrush, Moz)',
       ],
-      measurement_mode: 'Verified On-Page Governance (External Backlink Graph Optional via Majestic/DataForSEO)',
+      measurement_mode: 'Verified On-Page Governance & External Providers',
     },
   ];
 
@@ -131,7 +165,7 @@ export function ScoringRubricModal({ isOpen, onClose }: ScoringRubricModalProps)
         {/* Tab Navigation */}
         <div className="flex border-b border-line px-6 gap-3 bg-paper-50 dark:bg-ink-900/30">
           {[
-            { id: 'weights', label: '1. Five Pillar Weights' },
+            { id: 'weights', label: '1. Eight Engine Categories' },
             { id: 'formula', label: '2. Diminishing Returns Math' },
             { id: 'gating', label: '3. Confidence Gating Rules' },
             { id: 'bands', label: '4. Calibrated Score Bands' },
@@ -161,8 +195,29 @@ export function ScoringRubricModal({ isOpen, onClose }: ScoringRubricModalProps)
                   Core Philosophical Principle
                 </span>
                 <p className="text-xs text-ink-600 dark:text-ink-400">
-                  Scores are calculated strictly from empirically observed DOM nodes, HTTP telemetry, and live model queries. No invented CAC, synthetic TAM, or fabricated backlink authority.
+                  Scores are calculated strictly from empirically observed DOM nodes, HTTP telemetry, and live model queries. No invented CAC, synthetic TAM, or fabricated backlink authority. Missing external providers stay unmeasured.
                 </p>
+              </div>
+
+              {/* Three Honesty Perspective Views */}
+              <div className="p-4 rounded-xl border border-line bg-paper-100/60 dark:bg-ink-900/30 space-y-3">
+                <span className="font-semibold text-ink text-xs uppercase tracking-[0.04em] block">
+                  3 Honest Perspective Views (Composite Blends)
+                </span>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+                  <div className="p-3 rounded-lg bg-paper-50 dark:bg-ink-950 border border-line space-y-1">
+                    <span className="font-bold text-ink block">Google Discoverability</span>
+                    <p className="text-[11px] text-ink-500">45% Technical + 35% On-Page + 20% Schema. Evaluates organic crawling and indexing posture.</p>
+                  </div>
+                  <div className="p-3 rounded-lg bg-paper-50 dark:bg-ink-950 border border-line space-y-1">
+                    <span className="font-bold text-ink block">Human Experience</span>
+                    <p className="text-[11px] text-ink-500">40% UX/CRO + 35% Content Readability + 25% Trust. Evaluates engagement and conversion friction.</p>
+                  </div>
+                  <div className="p-3 rounded-lg bg-paper-50 dark:bg-ink-950 border border-line space-y-1">
+                    <span className="font-bold text-ink block">AI Search Readiness</span>
+                    <p className="text-[11px] text-ink-500">50% GEO Extractability + 50% AI Search Visibility (stays blank if live engine monitor was not run).</p>
+                  </div>
+                </div>
               </div>
 
               <div className="space-y-4">

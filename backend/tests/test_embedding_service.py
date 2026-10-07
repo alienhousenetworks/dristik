@@ -78,6 +78,7 @@ def test_semantic_gap_engine_evaluation(tmp_path):
     mock_vec = [1.0] + [0.0] * 1023
     
     with patch("app.intelligence.competitive.semantic_gap.vector_store", store), \
+         patch("app.intelligence.competitive.semantic_gap.embedding_service.is_available", return_value=True), \
          patch("app.intelligence.competitive.semantic_gap.embedding_service.embed_query", return_value=mock_vec):
         # Empty evaluation
         res = semantic_gap_engine.evaluate_intent_coverage("testdomain.com", [])

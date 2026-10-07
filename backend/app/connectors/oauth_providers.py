@@ -315,14 +315,25 @@ async def oauth_callback(
     safe_target = html.escape(str(target))
     script = """
     <script>
-      try {
-        if (window.opener && !window.opener.closed) {
-          window.opener.postMessage({ type: 'OAUTH_SUCCESS', provider: %s }, '*');
-          setTimeout(function () { window.close(); }, 900);
-        }
-      } catch (e) {}
+      (function() {
+        var payload = { type: 'OAUTH_SUCCESS', provider: %s, target: %s, timestamp: Date.now() };
+        try {
+          if (window.opener && !window.opener.closed) {
+            window.opener.postMessage(payload, '*');
+          }
+        } catch (e) {}
+        try {
+          var bc = new BroadcastChannel('dristik_connector_oauth');
+          bc.postMessage(payload);
+          bc.close();
+        } catch (e) {}
+        try {
+          localStorage.setItem('dristik_connector_oauth_sync', JSON.stringify(payload));
+        } catch (e) {}
+        setTimeout(function () { window.close(); }, 800);
+      })();
     </script>
-    """ % json.dumps(provider)
+    """ % (json.dumps(provider), json.dumps(safe_target))
     return _page(
         "Signed in",
         f"The {html.escape(spec['label'])} token for <strong>{safe_target}</strong> is saved. "

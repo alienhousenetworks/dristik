@@ -182,3 +182,46 @@ def test_connectors_oauth_providers_status():
         "wordpress",
     ]:
         assert expected in providers, f"Missing connector provider: {expected}"
+
+
+def test_oauth_sso_callback_html_broadcast_channel():
+    """Verify HTML callback sends BroadcastChannel and localStorage events without force-navigating popups."""
+    state = oauth_service._sign_state({"provider": "google", "redirect": "/#audit-view"})
+    mock_profile = {
+        "provider": "google",
+        "oauth_id": "goog_test_broadcast",
+        "email": "broadcast.test@example.com",
+        "full_name": "Broadcast Test User",
+        "avatar_url": None,
+    }
+    with patch("app.identity.oauth_service.exchange_and_get_profile", return_value=(mock_profile, "/#audit-view")):
+        res = client.get(
+            f"/api/v1/auth/oauth/google/callback?code=mock_code&state={state}"
+        )
+        assert res.status_code == 200
+        html = res.text
+        assert "BroadcastChannel('dristik_auth')" in html
+        assert "dristik_auth_sync" in html
+        assert "window.close()" in html
+        assert "Return to Dristik" in html
+
+
+def test_oauth_sso_callback_format_redirect():
+    """Verify format=redirect performs 302 redirect directly back to the preserved redirect_target."""
+    target_path = "/#deep-audit-456"
+    state = oauth_service._sign_state({"provider": "google", "redirect": target_path})
+    mock_profile = {
+        "provider": "google",
+        "oauth_id": "goog_test_redirect",
+        "email": "redirect.test@example.com",
+        "full_name": "Redirect Test User",
+        "avatar_url": None,
+    }
+    with patch("app.identity.oauth_service.exchange_and_get_profile", return_value=(mock_profile, target_path)):
+        res = client.get(
+            f"/api/v1/auth/oauth/google/callback?code=mock_code&state={state}&format=redirect",
+            follow_redirects=False,
+        )
+        assert res.status_code == 302
+        assert res.headers["location"] == target_path
+        assert "dristik_session=" in res.headers.get("set-cookie", "")
