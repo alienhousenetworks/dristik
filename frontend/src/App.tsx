@@ -491,7 +491,14 @@ export function App() {
                   )}
 
                   {/* 7. EVIDENCE LEDGER / FINDINGS */}
-                  {tab === 'findings' && <Findings findings={report.findings} onSelect={setFinding} />}
+                  {tab === 'findings' && (
+                    <Findings
+                      findings={report.findings}
+                      patches={report.code_patches}
+                      evidenceLedger={report.evidence_ledger}
+                      onSelect={setFinding}
+                    />
+                  )}
 
                   {/* 8. DEV PATCH PACK */}
                   {tab === 'patches' && (
