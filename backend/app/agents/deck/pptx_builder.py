@@ -72,6 +72,10 @@ class DeckPptxBuilderAgent:
                 self._render_table_matrix(slide, slide_bp)
             elif slide_bp.layout in (SlideLayoutType.FINDINGS_LEDGER, SlideLayoutType.TIMELINE_PHASES):
                 self._render_timeline_or_ledger(slide, slide_bp)
+            elif slide_bp.layout == SlideLayoutType.COMPOSITE_DASHBOARD:
+                self._render_cards_grid(slide, slide_bp, count=4)
+            elif slide_bp.layout in (SlideLayoutType.CONVERSION_FUNNEL, SlideLayoutType.REMEDIATION_WATERFALL):
+                self._render_chart_with_analysis(slide, slide_bp)
             elif slide_bp.layout == SlideLayoutType.GOVERNANCE_SEAL:
                 self._render_governance_seal(slide, slide_bp)
             else:
@@ -191,6 +195,17 @@ class DeckPptxBuilderAgent:
                 p.text = f"• {b}"
                 p.font.size = Pt(12)
                 p.font.color.rgb = self.COLOR_TEXT_SECONDARY
+
+        # 3. Takeaway / Interpretation Footer Callout
+        if bp.interpretation:
+            interp_box = slide.shapes.add_textbox(Inches(0.8), Inches(6.6), Inches(11.733), Inches(0.4))
+            tf = interp_box.text_frame
+            tf.word_wrap = True
+            p = tf.paragraphs[0]
+            p.text = bp.interpretation
+            p.font.size = Pt(9.5)
+            p.font.italic = True
+            p.font.color.rgb = self.COLOR_ACCENT_CYAN
 
     def _embed_chart(self, slide, left, top, width, height, chart_spec: ChartDataSpec):
         """Constructs native PowerPoint chart object."""

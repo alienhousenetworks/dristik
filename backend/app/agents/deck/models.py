@@ -1,6 +1,7 @@
 """
 Typed data models for 70+ slide executive presentation generation.
-Enforces non-repetition, structured chart specs, and visual layouts.
+Enforces non-repetition, structured chart specs, visual layout grammar,
+evidence lineage, and automated quality linting.
 """
 from enum import Enum
 from typing import Dict, Any, List, Optional
@@ -19,6 +20,9 @@ class SlideLayoutType(str, Enum):
     FINDINGS_LEDGER = "FINDINGS_LEDGER"
     CODE_PATCH_DIFF = "CODE_PATCH_DIFF"
     GOVERNANCE_SEAL = "GOVERNANCE_SEAL"
+    COMPOSITE_DASHBOARD = "COMPOSITE_DASHBOARD"
+    CONVERSION_FUNNEL = "CONVERSION_FUNNEL"
+    REMEDIATION_WATERFALL = "REMEDIATION_WATERFALL"
 
 
 class DeckChartType(str, Enum):
@@ -65,7 +69,27 @@ class SlideBlueprint(BaseModel):
     table_headers: List[str] = Field(default_factory=list)
     table_rows: List[List[str]] = Field(default_factory=list)
     evidence_citations: List[str] = Field(default_factory=list)
+    interpretation: Optional[str] = None  # Mandatory "Read: ..." takeaway line for exhibits
+    grounded_assertion: Optional[str] = None  # Direct quantitative assertion derived from math engine
+    lineage_evidence_tokens: List[str] = Field(default_factory=list)  # e.g. ["ev_001", "ext_004"]
     footer_text: Optional[str] = None
+
+
+class DeckLintIssue(BaseModel):
+    rule: str
+    slide_id: str
+    slide_number: int
+    severity: str  # "ERROR", "WARNING"
+    message: str
+
+
+class DeckLintResult(BaseModel):
+    passed: bool
+    total_checks: int
+    errors_count: int
+    warnings_count: int
+    issues: List[DeckLintIssue] = Field(default_factory=list)
+    verified_at: str = ""
 
 
 class DeckBlueprint(BaseModel):
@@ -75,3 +99,6 @@ class DeckBlueprint(BaseModel):
     slides: List[SlideBlueprint]
     generated_at: str
     dedup_verification_token: str
+    lint_result: Optional[DeckLintResult] = None
+    provenance_hash: Optional[str] = None
+    data_quota_ratio: Optional[float] = None

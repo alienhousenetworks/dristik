@@ -761,4 +761,31 @@ class DeckDataAnalystAgent:
                     CardSpec(kicker="LEGAL & COMPLIANCE", title="Confidential Advisory", description="Prepared exclusively for executive leadership. All rights reserved.", badge="PROPRIETARY", badge_color="sky")
                 ]
 
+        # Post-processing pass: bind deterministic metrics, interpretations, and lineage tokens
+        from app.agents.deck.math_engine import DeterministicMetricEngine
+        from app.agents.deck.adjudication import BlackboardAdjudicationAuditor
+        from app.agents.deck.narrative_synthesizer import ExecutiveNarrativeSynthesizer
+        from app.agents.deck.models import SlideLayoutType
+
+        math_engine = DeterministicMetricEngine()
+        metric_bundle = math_engine.compute_bundle(report)
+
+        adjudicator = BlackboardAdjudicationAuditor()
+        adj_report = adjudicator.audit_report(report)
+
+        synthesizer = ExecutiveNarrativeSynthesizer()
+
+        for s in blueprint.slides:
+            # Bind evidence tokens for findings, tables, and code patches
+            if s.layout in (SlideLayoutType.FINDINGS_LEDGER, SlideLayoutType.CODE_PATCH_DIFF, SlideLayoutType.TABLE_MATRIX):
+                if not s.lineage_evidence_tokens:
+                    s.lineage_evidence_tokens = list(adj_report.evidence_token_inventory[:4])
+                if not s.evidence_citations:
+                    s.evidence_citations = [f"Proof: {tok}" for tok in s.lineage_evidence_tokens]
+
+            # Bind analytical interpretation ("Read: ...") on exhibits
+            has_exhibit = (s.chart is not None or len(s.table_rows) > 0)
+            if has_exhibit and not s.interpretation:
+                s.interpretation = synthesizer.synthesize_interpretation(s.thematic_focus, metric_bundle)
+
         return blueprint

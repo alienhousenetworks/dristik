@@ -3,12 +3,14 @@ Headless PDF & Executive Board Deck Report Generator.
 Generates multi-page vector-styled presentation decks for C-level executives.
 """
 from typing import Dict, Any, Optional
+import logging
 from fastapi import APIRouter, Depends, HTTPException, Response
 
 from app.identity.authorizer import UserIdentity
 from app.identity.deps import get_current_user_optional
 from app.orchestration.orchestrator import orchestrator
 
+logger = logging.getLogger("dristik.reports")
 router = APIRouter(prefix="/reports", tags=["Executive Reports"])
 
 
@@ -356,17 +358,36 @@ async def get_executive_deck(
     story_summary = getattr(report, "story_summary", None) if report else None
     primary_opp = getattr(report, "primary_strategic_opportunity", None) if report else None
 
-    gen = get_executive_deck_generator()
-    html_content = gen.render_executive_deck_html({
-        "domain": domain_val,
-        "overall_score": score,
-        "created_at": str(date_str),
-        "human_visitor_perspective": human_p,
-        "search_engine_perspective": search_p,
-        "ai_answer_engine_perspective": ai_p,
-        "story_summary": story_summary,
-        "primary_strategic_opportunity": primary_opp,
-    })
+    # Render dynamic institutional vector HTML presentation if report is available
+    if report:
+        try:
+            from app.agents.deck.coordinator import generate_executive_html_deck
+            html_content, _ = generate_executive_html_deck(report)
+        except Exception as e:
+            logger.warning("Falling back to template HTML deck: %s", e)
+            gen = get_executive_deck_generator()
+            html_content = gen.render_executive_deck_html({
+                "domain": domain_val,
+                "overall_score": score,
+                "created_at": str(date_str),
+                "human_visitor_perspective": human_p,
+                "search_engine_perspective": search_p,
+                "ai_answer_engine_perspective": ai_p,
+                "story_summary": story_summary,
+                "primary_strategic_opportunity": primary_opp,
+            })
+    else:
+        gen = get_executive_deck_generator()
+        html_content = gen.render_executive_deck_html({
+            "domain": domain_val,
+            "overall_score": score,
+            "created_at": str(date_str),
+            "human_visitor_perspective": human_p,
+            "search_engine_perspective": search_p,
+            "ai_answer_engine_perspective": ai_p,
+            "story_summary": story_summary,
+            "primary_strategic_opportunity": primary_opp,
+        })
 
     if format == "json":
         return {
@@ -386,7 +407,7 @@ async def get_presentation_deck_pptx(
 ):
     """
     Generates and streams the 76-slide PowerPoint (.pptx) presentation deck
-    created by the 3 dedicated deck generation agents (Architect, Data Analyst, Builder).
+    created by the dedicated deck generation orchestrator.
     """
     run = orchestrator.get_run(analysis_id)
     if not run:
@@ -419,7 +440,7 @@ async def get_presentation_deck_manifest(
 ):
     """
     Returns the structured slide blueprint manifest, chart specifications,
-    and non-repetition verification proof for the 76-slide presentation deck.
+    lint results, and non-repetition verification proof for the presentation deck.
     """
     run = orchestrator.get_run(analysis_id)
     if not run:
@@ -428,17 +449,11 @@ async def get_presentation_deck_manifest(
     if not report:
         raise HTTPException(status_code=400, detail="Executive report not yet synthesized for this analysis run.")
 
-    from app.agents.deck.architect import DeckArchitectAgent
-    from app.agents.deck.data_analyst import DeckDataAnalystAgent
+    from app.agents.deck.coordinator import get_deck_orchestrator
 
     domain = report.domain or "audit"
-    date_str = report.generated_at or "Measured on audit execution"
-
-    architect = DeckArchitectAgent()
-    blueprint = architect.create_blueprint(domain, date_str)
-
-    analyst = DeckDataAnalystAgent()
-    populated = analyst.populate_data(blueprint, report)
+    deck_orchestrator = get_deck_orchestrator()
+    populated = deck_orchestrator.build_blueprint(report)
 
     return {
         "analysis_id": analysis_id,
@@ -447,5 +462,8 @@ async def get_presentation_deck_manifest(
         "modules": populated.modules,
         "dedup_verification_token": populated.dedup_verification_token,
         "zero_repetition_verified": True,
+        "provenance_hash": populated.provenance_hash,
+        "data_quota_ratio": populated.data_quota_ratio,
+        "lint_result": populated.lint_result.model_dump() if populated.lint_result else None,
         "slides": [s.model_dump() for s in populated.slides]
     }
