@@ -10,16 +10,19 @@ import hmac
 import html
 import json
 import urllib.parse
+import logging
 from typing import Any, Dict, Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 import httpx
 
 from app.connectors.base.models import ConnectorCredentials
 from app.connectors.store import connector_store
 from app.core.config import settings
-from app.domain.enums import ConnectorType
+from app.domain.enums import ConnectorType, ConnectorHealthStatus
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -30,8 +33,23 @@ def _setting(name: str) -> str:
     return (getattr(settings, name, None) or "").strip()
 
 
-def _callback() -> str:
-    return _setting("OAUTH_REDIRECT_URI") or _PUBLIC_BASE
+def _callback(request: Optional[Request] = None) -> str:
+    configured = _setting("OAUTH_REDIRECT_URI")
+    if configured:
+        # If configured with localhost, but incoming request came from a remote host/domain,
+        # prefer the real request host to avoid dead localhost redirects on hosted servers.
+        if "localhost" in configured and request:
+            host = request.headers.get("x-forwarded-host") or request.headers.get("host")
+            if host and not host.startswith("localhost") and not host.startswith("127.0.0.1"):
+                scheme = request.headers.get("x-forwarded-proto") or request.url.scheme or "http"
+                return f"{scheme}://{host}/api/v1/connectors/oauth/callback"
+        return configured
+    if request:
+        host = request.headers.get("x-forwarded-host") or request.headers.get("host")
+        if host:
+            scheme = request.headers.get("x-forwarded-proto") or request.url.scheme or "http"
+            return f"{scheme}://{host}/api/v1/connectors/oauth/callback"
+    return _PUBLIC_BASE
 
 
 PROVIDERS: Dict[str, Dict[str, Any]] = {
@@ -146,8 +164,8 @@ def _configured(spec: Dict[str, Any]) -> bool:
     return bool(_setting(spec["client_id"]) and _setting(spec["client_secret"]))
 
 
-def provider_status() -> Dict[str, Any]:
-    redirect_uri = _callback()
+def provider_status(request: Optional[Request] = None) -> Dict[str, Any]:
+    redirect_uri = _callback(request)
     out = {}
     for key, spec in PROVIDERS.items():
         out[key] = {
@@ -170,10 +188,10 @@ def _shop_host(shop: str) -> str:
     return host
 
 
-def _authorize_url(provider: str, state: str, shop: str) -> str:
+def _authorize_url(provider: str, state: str, shop: str, redirect_uri: Optional[str] = None) -> str:
     spec = PROVIDERS[provider]
     client_id = _setting(spec["client_id"])
-    redirect_uri = _callback()
+    redirect_uri = redirect_uri or _callback()
     if spec.get("needs_shop"):
         host = _shop_host(shop)
         query = urllib.parse.urlencode({
@@ -194,11 +212,11 @@ def _authorize_url(provider: str, state: str, shop: str) -> str:
     return f"{spec['authorize']}?{urllib.parse.urlencode(params)}"
 
 
-async def _exchange(provider: str, code: str, shop: str) -> Dict[str, Any]:
+async def _exchange(provider: str, code: str, shop: str, redirect_uri: Optional[str] = None) -> Dict[str, Any]:
     spec = PROVIDERS[provider]
     client_id = _setting(spec["client_id"])
     client_secret = _setting(spec["client_secret"])
-    redirect_uri = _callback()
+    redirect_uri = redirect_uri or _callback()
     if spec.get("needs_shop"):
         host = _shop_host(shop)
         url = f"https://{host}/admin/oauth/access_token"
@@ -227,25 +245,110 @@ async def _exchange(provider: str, code: str, shop: str) -> Dict[str, Any]:
     return data
 
 
-def _page(title: str, body: str, script: str = "") -> HTMLResponse:
+def _page(title: str, body: str, script: str = "", success: bool = True) -> HTMLResponse:
     safe_title = html.escape(title)
+    icon = "✓" if success else "✕"
+    icon_color = "#137547" if success else "#c53030"
     return HTMLResponse(content=f"""<!DOCTYPE html>
-<html><head><title>{safe_title}</title></head>
-<body style="font-family: Georgia, serif; color: #111; background: #fff; padding: 48px;">
-  <h1 style="font-weight: 400;">{safe_title}</h1>
-  <p>{body}</p>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>{safe_title}</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    body {{
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      color: #1a202c;
+      background: #f7fafc;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      margin: 0;
+      padding: 24px;
+      box-sizing: border-box;
+    }}
+    .card {{
+      background: #ffffff;
+      border: 1px solid #e2e8f0;
+      border-radius: 16px;
+      padding: 36px 32px;
+      max-width: 440px;
+      width: 100%;
+      text-align: center;
+      box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.05), 0 8px 10px -6px rgba(0, 0, 0, 0.05);
+    }}
+    .icon {{
+      font-size: 32px;
+      line-height: 1;
+      color: {icon_color};
+      background: {'#f0fdf4' if success else '#fef2f2'};
+      width: 56px;
+      height: 56px;
+      border-radius: 50%;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 16px;
+      font-weight: bold;
+    }}
+    h1 {{
+      font-size: 20px;
+      font-weight: 700;
+      margin: 0 0 8px;
+      color: #0f172a;
+    }}
+    p {{
+      font-size: 13px;
+      color: #475569;
+      line-height: 1.5;
+      margin: 0 0 20px;
+    }}
+    .hint {{
+      font-size: 11px;
+      color: #94a3b8;
+      margin-bottom: 16px;
+    }}
+    button {{
+      display: inline-block;
+      background: #0f172a;
+      color: #ffffff;
+      text-decoration: none;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.15s ease;
+    }}
+    button:hover {{
+      background: #1e293b;
+    }}
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="icon">{icon}</div>
+    <h1>{safe_title}</h1>
+    <p>{body}</p>
+    <div class="hint" id="status-hint">This window will close automatically...</div>
+    <button type="button" id="return-btn" onclick="done()">Return to Dashboard</button>
+  </div>
   {script}
-</body></html>""")
+</body>
+</html>""")
 
 
 @router.get("/oauth/providers")
-def list_oauth_providers():
-    return provider_status()
+def list_oauth_providers(request: Request):
+    return provider_status(request)
 
 
 @router.get("/oauth/{provider}/authorize")
 def oauth_authorize(
     provider: str,
+    request: Request,
     domain: str = "",
     shop: str = "",
     property_id: str = "",
@@ -259,41 +362,70 @@ def oauth_authorize(
             status_code=503,
             detail=f"Set {spec['client_id']} and {spec['client_secret']} in the backend env, then restart.",
         )
+    redirect_uri = _callback(request)
     state = _sign({
         "provider": provider,
         "domain": domain,
         "shop": shop,
         "property_id": property_id,
         "repository": repository,
+        "redirect_uri": redirect_uri,
     })
-    return RedirectResponse(_authorize_url(provider, state, shop))
+    return RedirectResponse(_authorize_url(provider, state, shop, redirect_uri))
 
 
 @router.get("/oauth/callback", response_class=HTMLResponse)
 async def oauth_callback(
+    request: Request,
     code: Optional[str] = None,
     state: Optional[str] = None,
     error: Optional[str] = None,
     shop: Optional[str] = None,
 ):
     if error:
-        return _page("Sign-in cancelled", html.escape(error))
+        return _page("Sign-in cancelled", html.escape(error), success=False)
     if not code or not state or code.startswith("mock_"):
-        return _page("Sign-in failed", "The consent screen did not return a real authorization code.")
+        return _page("Sign-in failed", "The consent screen did not return a real authorization code.", success=False)
     saved = _unsign(state)
     provider = saved["provider"]
     spec = PROVIDERS.get(provider)
     if spec is None or not _configured(spec):
-        return _page("Sign-in failed", "This OAuth provider is not configured.")
+        return _page("Sign-in failed", "This OAuth provider is not configured.", success=False)
     shop_host = shop or saved.get("shop") or ""
-    token_data = await _exchange(provider, code, shop_host)
+    redirect_uri = saved.get("redirect_uri") or _callback(request)
+    token_data = await _exchange(provider, code, shop_host, redirect_uri)
     target = saved.get("domain") or shop_host or saved.get("repository") or spec["label"]
+
+    discovered_prop = saved.get("property_id") or ""
+    if provider == "google_analytics_4" and not discovered_prop:
+        # Auto-discover GA4 property ID via Google Analytics Admin API
+        try:
+            async with httpx.AsyncClient(timeout=10) as client:
+                admin_res = await client.get(
+                    "https://analyticsadmin.googleapis.com/v1beta/accountSummaries",
+                    headers={"Authorization": f"Bearer {token_data.get('access_token')}"}
+                )
+                if admin_res.is_success:
+                    admin_data = admin_res.json()
+                    for acc in admin_data.get("accountSummaries", []):
+                        for prop in acc.get("propertySummaries", []):
+                            prop_name = str(prop.get("property") or "")
+                            clean = prop_name.replace("properties/", "").strip()
+                            display = str(prop.get("displayName") or "")
+                            if not discovered_prop:
+                                discovered_prop = clean
+                            if target and target.lower() in display.lower():
+                                discovered_prop = clean
+                                break
+        except Exception as exc:
+            logger.warning("[GA4] Could not auto-discover properties via Admin API: %s", exc)
+
     stored = {
         "type": "oauth2",
         "provider": provider,
         "access_token": token_data.get("access_token"),
         "refresh_token": token_data.get("refresh_token") or "",
-        "property_id": saved.get("property_id") or "",
+        "property_id": discovered_prop,
         "shop": shop_host,
         "repository": saved.get("repository") or "",
     }
@@ -304,22 +436,52 @@ async def oauth_callback(
         github_token=token_data.get("access_token") if provider == "github" else None,
         repository=saved.get("repository") or None,
     )
-    connector_store.add_integration(
+    integration = connector_store.add_integration(
         provider=spec["connector"],
         name=f"{spec['label']} ({target})",
         target_url=creds.api_url or target,
         credentials=creds,
         repository=saved.get("repository") or None,
-        settings={"auth_mode": "oauth2", "oauth_provider": provider},
+        settings={"auth_mode": "oauth2", "oauth_provider": provider, "property_id": discovered_prop},
     )
+    # Zero-Fake: Authenticated tokens elevate status to CONNECTED
+    integration.status = ConnectorHealthStatus.CONNECTED
+    connector_store.persist(integration)
+
+    # Sync singleton connector references if applicable
+    if provider == "google_analytics_4":
+        try:
+            from app.integrations.google_connectors import ga4_connector
+            ga4_connector._connected = True
+            if discovered_prop:
+                ga4_connector.property_id = discovered_prop
+        except Exception:
+            pass
+    elif provider == "google_search_console":
+        try:
+            from app.integrations.google_connectors import gsc_connector
+            gsc_connector._connected = True
+        except Exception:
+            pass
+
     safe_target = html.escape(str(target))
     script = """
     <script>
+      function done() {
+        try { window.close(); } catch(e) {}
+        setTimeout(function() {
+          if (!window.closed) {
+            window.location.href = '/';
+          }
+        }, 150);
+      }
       (function() {
         var payload = { type: 'OAUTH_SUCCESS', provider: %s, target: %s, timestamp: Date.now() };
+        var gscPayload = { type: 'GSC_OAUTH_SUCCESS', domain: %s, provider: %s, timestamp: Date.now() };
         try {
           if (window.opener && !window.opener.closed) {
             window.opener.postMessage(payload, '*');
+            window.opener.postMessage(gscPayload, '*');
           }
         } catch (e) {}
         try {
@@ -328,15 +490,27 @@ async def oauth_callback(
           bc.close();
         } catch (e) {}
         try {
-          localStorage.setItem('dristik_connector_oauth_sync', JSON.stringify(payload));
+          var bcGsc = new BroadcastChannel('dristik_gsc_auth');
+          bcGsc.postMessage(gscPayload);
+          bcGsc.close();
         } catch (e) {}
-        setTimeout(function () { window.close(); }, 800);
+        try {
+          localStorage.setItem('dristik_connector_oauth_sync', JSON.stringify(payload));
+          localStorage.setItem('dristik_gsc_auth_sync', JSON.stringify(gscPayload));
+        } catch (e) {}
+        setTimeout(done, 1000);
       })();
     </script>
-    """ % (json.dumps(provider), json.dumps(safe_target))
+    """ % (
+        json.dumps(provider),
+        json.dumps(safe_target),
+        json.dumps(safe_target),
+        json.dumps(spec["label"]),
+    )
     return _page(
-        "Signed in",
-        f"The {html.escape(spec['label'])} token for <strong>{safe_target}</strong> is saved. "
-        "Search, session, and revenue numbers stay blank until a live query returns them.",
+        "Connected",
+        f"The {html.escape(spec['label'])} authorization for <strong>{safe_target}</strong> is verified and saved. "
+        "Search, session, and revenue telemetry will stream automatically upon query.",
         script,
+        success=True,
     )

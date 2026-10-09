@@ -7,7 +7,7 @@ import os
 import json
 import urllib.parse
 from typing import List, Optional, Dict, Any
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, status, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
 from pydantic import BaseModel, Field
 import httpx
@@ -213,11 +213,28 @@ class GoogleOAuthQuickConnectRequest(BaseModel):
     property_url: Optional[str] = None
     account_email: Optional[str] = None
 
+def _get_gsc_redirect_uri(request: Optional[Request] = None) -> str:
+    configured = os.environ.get("GOOGLE_OAUTH_REDIRECT_URI") or settings.GOOGLE_OAUTH_REDIRECT_URI
+    if configured:
+        if "localhost" in configured and request:
+            host = request.headers.get("x-forwarded-host") or request.headers.get("host")
+            if host and not host.startswith("localhost") and not host.startswith("127.0.0.1"):
+                scheme = request.headers.get("x-forwarded-proto") or request.url.scheme or "http"
+                return f"{scheme}://{host}/api/v1/connectors/google/oauth/callback"
+        return configured
+    if request:
+        host = request.headers.get("x-forwarded-host") or request.headers.get("host")
+        if host:
+            scheme = request.headers.get("x-forwarded-proto") or request.url.scheme or "http"
+            return f"{scheme}://{host}/api/v1/connectors/google/oauth/callback"
+    return "http://localhost:8000/api/v1/connectors/google/oauth/callback"
+
+
 @router.get("/google/oauth/status")
-async def google_oauth_status():
+async def google_oauth_status(request: Request):
     """Returns whether Google OAuth credentials are configured on the server."""
     client_id = os.environ.get("GOOGLE_CLIENT_ID") or settings.GOOGLE_CLIENT_ID
-    redirect_uri = os.environ.get("GOOGLE_OAUTH_REDIRECT_URI") or settings.GOOGLE_OAUTH_REDIRECT_URI or "http://localhost:8000/api/v1/connectors/google/oauth/callback"
+    redirect_uri = _get_gsc_redirect_uri(request)
     return {
         "configured": bool(client_id),
         "client_id": (client_id[:8] + "...") if client_id else None,
@@ -225,14 +242,14 @@ async def google_oauth_status():
     }
 
 @router.get("/google/oauth/authorize")
-async def google_oauth_authorize(domain: str = "example.com"):
+async def google_oauth_authorize(request: Request, domain: str = "example.com"):
     """
     Initiates 1-click Google OAuth 2.0 flow for Google Search Console.
     Redirects to Google Accounts consent screen if GOOGLE_CLIENT_ID is configured,
     or completes seamless instant-consent in local development mode.
     """
     client_id = os.environ.get("GOOGLE_CLIENT_ID") or settings.GOOGLE_CLIENT_ID
-    redirect_uri = os.environ.get("GOOGLE_OAUTH_REDIRECT_URI") or settings.GOOGLE_OAUTH_REDIRECT_URI or "http://localhost:8000/api/v1/connectors/google/oauth/callback"
+    redirect_uri = _get_gsc_redirect_uri(request)
     clean_domain = domain.replace("https://", "").replace("http://", "").split("/")[0]
 
     if client_id:
@@ -257,6 +274,7 @@ async def google_oauth_authorize(domain: str = "example.com"):
 
 @router.get("/google/oauth/callback", response_class=HTMLResponse)
 async def google_oauth_callback(
+    request: Request,
     code: Optional[str] = None,
     state: Optional[str] = None,
     error: Optional[str] = None
@@ -285,7 +303,7 @@ async def google_oauth_callback(
 
     client_id = os.environ.get("GOOGLE_CLIENT_ID") or settings.GOOGLE_CLIENT_ID
     client_secret = os.environ.get("GOOGLE_CLIENT_SECRET") or settings.GOOGLE_CLIENT_SECRET
-    redirect_uri = os.environ.get("GOOGLE_OAUTH_REDIRECT_URI") or settings.GOOGLE_OAUTH_REDIRECT_URI or "http://localhost:8000/api/v1/connectors/google/oauth/callback"
+    redirect_uri = _get_gsc_redirect_uri(request)
 
     def _oauth_error(message: str) -> HTMLResponse:
         return HTMLResponse(content=f"""
@@ -352,13 +370,20 @@ async def google_oauth_callback(
         api_url=f"https://{target_domain}",
         api_key=json.dumps(tokens)
     )
-    connector_store.add_integration(
+    integration = connector_store.add_integration(
         provider=ConnectorType.GOOGLE_SEARCH_CONSOLE,
         name=f"Google Search Console ({target_domain})",
         target_url=f"https://{target_domain}",
         credentials=creds,
         settings={"auth_mode": "oauth2", "email": user_email}
     )
+    integration.status = ConnectorHealthStatus.CONNECTED
+    connector_store.persist(integration)
+    try:
+        from app.integrations.google_connectors import gsc_connector
+        gsc_connector._connected = True
+    except Exception:
+        pass
 
     return HTMLResponse(content=f"""
     <!DOCTYPE html>

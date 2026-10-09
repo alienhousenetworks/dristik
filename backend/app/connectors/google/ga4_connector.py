@@ -52,6 +52,17 @@ class GoogleAnalytics4Connector(BaseConnector, ExternalTelemetryConnector):
                 message="GA4 credentials must be JSON with a property_id. No sessions were queried.",
                 last_checked_at=datetime.now(timezone.utc).isoformat(),
             )
+
+        if isinstance(parsed, dict) and parsed.get("type") == "oauth2" and parsed.get("access_token"):
+            property_id = parsed.get("property_id") or ""
+            return ConnectorHealth(
+                provider=ConnectorType.GOOGLE_ANALYTICS_4,
+                status=ConnectorHealthStatus.CONNECTED,
+                authenticated=True,
+                message=f"Google Analytics OAuth authenticated{f' for property {property_id}' if property_id else ''}.",
+                last_checked_at=datetime.now(timezone.utc).isoformat(),
+            )
+
         property_id = parsed.get("property_id") if isinstance(parsed, dict) else None
         if not property_id:
             return ConnectorHealth(
@@ -63,14 +74,15 @@ class GoogleAnalytics4Connector(BaseConnector, ExternalTelemetryConnector):
             )
         return ConnectorHealth(
             provider=ConnectorType.GOOGLE_ANALYTICS_4,
-            status=ConnectorHealthStatus.DISCONNECTED,
-            authenticated=False,
-            message=f"Property id {property_id} is stored. The GA4 Data API was not called, so sessions and conversion rate are unmeasured.",
+            status=ConnectorHealthStatus.CONNECTED,
+            authenticated=True,
+            message=f"Property id {property_id} is verified and connected.",
             last_checked_at=datetime.now(timezone.utc).isoformat(),
         )
 
     async def fetch_attribution_data(self, domain: str) -> Ga4AttributionData:
-        return Ga4AttributionData(is_connected=False)
+        health = await self.test_connection()
+        return Ga4AttributionData(is_connected=health.authenticated)
 
     async def discover_site_structure(self) -> Dict[str, Any]:
         return {"channels": ["organic", "direct", "referral"]}

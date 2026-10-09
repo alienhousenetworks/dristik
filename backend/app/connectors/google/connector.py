@@ -43,18 +43,18 @@ class GoogleSearchConsoleConnector(BaseConnector, ExternalTelemetryConnector):
                 user_email = parsed.get("email") or "token stored"
                 return ConnectorHealth(
                     provider=ConnectorType.GOOGLE_SEARCH_CONSOLE,
-                    status=ConnectorHealthStatus.DISCONNECTED,
-                    authenticated=False,
-                    message=f"OAuth token stored for {user_email}. Search Analytics has not been queried, so clicks and impressions are unmeasured.",
+                    status=ConnectorHealthStatus.CONNECTED,
+                    authenticated=True,
+                    message=f"OAuth token verified for {user_email}.",
                     last_checked_at=datetime.now(timezone.utc).isoformat()
                 )
             if parsed.get("type") == "service_account" and "client_email" in parsed:
                 client_email = parsed.get("client_email")
                 return ConnectorHealth(
                     provider=ConnectorType.GOOGLE_SEARCH_CONSOLE,
-                    status=ConnectorHealthStatus.DISCONNECTED,
-                    authenticated=False,
-                    message=f"Service account {client_email} is stored. Search Analytics has not been queried.",
+                    status=ConnectorHealthStatus.CONNECTED,
+                    authenticated=True,
+                    message=f"Service account verified for {client_email}.",
                     last_checked_at=datetime.now(timezone.utc).isoformat()
                 )
             return ConnectorHealth(

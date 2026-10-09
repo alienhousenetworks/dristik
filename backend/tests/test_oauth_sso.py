@@ -225,3 +225,80 @@ def test_oauth_sso_callback_format_redirect():
         assert res.status_code == 302
         assert res.headers["location"] == target_path
         assert "dristik_session=" in res.headers.get("set-cookie", "")
+
+
+def test_ga4_connector_oauth_hosted_redirect_and_connect():
+    """Verify GA4 1-click OAuth flow on hosted server preserves host, saves connected status, and updates status endpoint."""
+    from app.connectors.oauth_providers import _sign
+    from app.connectors.store import connector_store
+    from app.domain.enums import ConnectorType, ConnectorHealthStatus
+
+    # 1. Authorize on a hosted domain with X-Forwarded-Host
+    with patch.object(settings, "GOOGLE_CLIENT_ID", "mock-ga4-id"), \
+         patch.object(settings, "GOOGLE_CLIENT_SECRET", "mock-ga4-sec"):
+        res = client.get(
+            "/api/v1/connectors/oauth/google_analytics_4/authorize?domain=acme-store.com",
+            headers={"Host": "hosted-app.dristik.ai", "X-Forwarded-Proto": "https"},
+            follow_redirects=False,
+        )
+        assert res.status_code in (302, 307)
+        loc = res.headers["location"]
+        assert "accounts.google.com/o/oauth2/v2/auth" in loc
+        assert "https%3A%2F%2Fhosted-app.dristik.ai%2Fapi%2Fv1%2Fconnectors%2Foauth%2Fcallback" in loc
+
+    # 2. Callback completion
+    state = _sign({
+        "provider": "google_analytics_4",
+        "domain": "acme-store.com",
+        "redirect_uri": "https://hosted-app.dristik.ai/api/v1/connectors/oauth/callback",
+    })
+    mock_token_data = {
+        "access_token": "ya29.mock_ga4_token",
+        "refresh_token": "mock_refresh_token",
+    }
+    with patch("app.connectors.oauth_providers._exchange", return_value=mock_token_data), \
+         patch.object(settings, "GOOGLE_CLIENT_ID", "mock-ga4-id"), \
+         patch.object(settings, "GOOGLE_CLIENT_SECRET", "mock-ga4-sec"):
+        res = client.get(
+            f"/api/v1/connectors/oauth/callback?code=test_code_123&state={state}",
+            headers={"Host": "hosted-app.dristik.ai", "X-Forwarded-Proto": "https"},
+        )
+        assert res.status_code == 200
+        html_text = res.text
+        assert "Connected" in html_text
+        assert "Google Analytics" in html_text
+        assert "Return to Dashboard" in html_text
+        assert "BroadcastChannel('dristik_connector_oauth')" in html_text
+        assert "dristik_connector_oauth_sync" in html_text
+        assert "window.location.href = '/'" in html_text
+
+        # 3. Verify saved integration in connector_store has CONNECTED status
+        integrations = connector_store.list_integrations()
+        ga4_integs = [i for i in integrations if i.provider == ConnectorType.GOOGLE_ANALYTICS_4]
+        assert len(ga4_integs) > 0
+        latest_ga4 = ga4_integs[-1]
+        assert latest_ga4.status == ConnectorHealthStatus.CONNECTED
+
+        # 4. Verify /api/v1/integrations/status reflects connected == True
+        status_res = client.get("/api/v1/integrations/status")
+        assert status_res.status_code == 200
+        data = status_res.json()
+        assert data["google_analytics_4"]["connected"] is True
+
+
+@pytest.mark.asyncio
+async def test_ga4_connector_test_connection_oauth():
+    """Verify GA4 connector test_connection returns CONNECTED and authenticated=True when OAuth credentials exist."""
+    from app.connectors.google.ga4_connector import GoogleAnalytics4Connector
+    from app.connectors.base.models import ConnectorCredentials
+    from app.domain.enums import ConnectorType, ConnectorHealthStatus
+
+    creds = ConnectorCredentials(
+        provider=ConnectorType.GOOGLE_ANALYTICS_4,
+        api_key=json.dumps({"type": "oauth2", "access_token": "ya29.sample_oauth_token", "property_id": "123456789"}),
+    )
+    connector = GoogleAnalytics4Connector(creds)
+    health = await connector.test_connection()
+    assert health.status == ConnectorHealthStatus.CONNECTED
+    assert health.authenticated is True
+

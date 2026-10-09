@@ -38,16 +38,78 @@ export function AnalyticsIntegrationsModal({
   const [ga4Error, setGa4Error] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'overview' | 'gsc' | 'ga4' | 'backlinks' | 'entity'>('overview');
 
+  const refreshStatus = () => {
+    fetch('/api/v1/integrations/status')
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data) setStatus(data);
+      })
+      .catch(() => {});
+  };
+
   useEffect(() => {
     if (isOpen) {
-      fetch('/api/v1/integrations/status')
-        .then((res) => (res.ok ? res.json() : null))
-        .then((data) => {
-          if (data) setStatus(data);
-        })
-        .catch(() => {});
+      refreshStatus();
     }
   }, [isOpen]);
+
+  useEffect(() => {
+    const handleMessage = (e: MessageEvent) => {
+      if (e.data && (e.data.type === 'GSC_OAUTH_SUCCESS' || e.data.type === 'OAUTH_SUCCESS')) {
+        refreshStatus();
+      }
+    };
+    let bcConn: BroadcastChannel | null = null;
+    let bcGsc: BroadcastChannel | null = null;
+    try {
+      bcConn = new BroadcastChannel('dristik_connector_oauth');
+      bcConn.onmessage = () => refreshStatus();
+      bcGsc = new BroadcastChannel('dristik_gsc_auth');
+      bcGsc.onmessage = () => refreshStatus();
+    } catch (_) {}
+
+    const handleStorage = (e: StorageEvent) => {
+      if ((e.key === 'dristik_gsc_auth_sync' || e.key === 'dristik_connector_oauth_sync') && e.newValue) {
+        refreshStatus();
+      }
+    };
+
+    window.addEventListener('message', handleMessage);
+    window.addEventListener('storage', handleStorage);
+    return () => {
+      window.removeEventListener('message', handleMessage);
+      window.removeEventListener('storage', handleStorage);
+      if (bcConn) try { bcConn.close(); } catch (_) {}
+      if (bcGsc) try { bcGsc.close(); } catch (_) {}
+    };
+  }, []);
+
+  const startGa4Oauth = () => {
+    const query = new URLSearchParams();
+    if (domain) query.set('domain', domain);
+    if (ga4PropertyId) query.set('property_id', ga4PropertyId);
+    const width = 520;
+    const height = 680;
+    const left = window.screenX + (window.outerWidth - width) / 2;
+    const top = window.screenY + (window.outerHeight - height) / 2;
+    const popup = window.open(
+      `/api/v1/connectors/oauth/google_analytics_4/authorize?${query.toString()}`,
+      'connector_oauth',
+      `width=${width},height=${height},left=${left},top=${top},status=no,resizable=yes`
+    );
+    let attempts = 0;
+    const timer = setInterval(() => {
+      attempts++;
+      let isClosed = false;
+      try {
+        isClosed = !popup || popup.closed;
+      } catch (_) {}
+      if (isClosed || attempts > 180) {
+        clearInterval(timer);
+        refreshStatus();
+      }
+    }, 1000);
+  };
 
   if (!isOpen) return null;
 
@@ -358,11 +420,25 @@ export function AnalyticsIntegrationsModal({
           )}
 
           {activeTab === 'ga4' && (
-            <form onSubmit={handleSaveGa4} className="space-y-4">
-              <div className="p-4 rounded-xl bg-paper-100/60 dark:bg-ink-900/60 border border-line space-y-2">
+            <div className="space-y-4">
+              <div className="p-4 rounded-xl bg-paper-100/60 dark:bg-ink-900/60 border border-line space-y-3">
                 <h3 className="font-sans font-bold text-ink text-base">Google Analytics 4 Property Connector</h3>
                 <p className="text-xs text-ink-600 dark:text-ink-400 leading-relaxed">
-                  A numeric property ID is not a connection. Dristik probes the GA4 Data API with the server service account and only then marks the property measured. Set GOOGLE_APPLICATION_CREDENTIALS to a service-account JSON first.
+                  Sign in with Google to automatically link your GA4 properties, or manually configure a service account property ID.
+                </p>
+                <button
+                  type="button"
+                  onClick={startGa4Oauth}
+                  className="w-full py-2.5 px-4 rounded-lg border border-line bg-paper-50 dark:bg-ink-900 text-xs font-semibold text-ink hover:bg-paper-200 dark:hover:bg-ink-800 transition"
+                >
+                  1-Click Google Sign-In (OAuth SSO)
+                </button>
+              </div>
+
+              <form onSubmit={handleSaveGa4} className="p-4 rounded-xl bg-paper-100/60 dark:bg-ink-900/60 border border-line space-y-2">
+                <h4 className="font-sans font-semibold text-ink text-sm">Manual Property ID Probe</h4>
+                <p className="text-xs text-ink-600 dark:text-ink-400 leading-relaxed">
+                  Probes the GA4 Data API with the server service account. Requires GOOGLE_APPLICATION_CREDENTIALS.
                 </p>
                 <div className="pt-2 flex gap-3">
                   <input
@@ -386,8 +462,8 @@ export function AnalyticsIntegrationsModal({
                 {ga4Error && (
                   <p className="text-xs text-bad font-semibold">{ga4Error}</p>
                 )}
-              </div>
-            </form>
+              </form>
+            </div>
           )}
 
           {activeTab === 'backlinks' && (

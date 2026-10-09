@@ -138,7 +138,8 @@ export const ConnectorsModal: React.FC<ConnectorsModalProps> = ({
   // Listen for Google / Connector OAuth callback from popup window / broadcast
   useEffect(() => {
     const onAuthSuccess = async (provider?: string) => {
-      setStatusMessage(`Signed in${provider ? ` with ${provider}` : ''}. Token saved. Metrics stay blank until a live query returns them.`);
+      setLoading(false);
+      setStatusMessage(`Signed in${provider ? ` with ${provider}` : ''}. Connected successfully.`);
       await fetchIntegrations();
       onIntegrationAdded?.();
     };
@@ -198,6 +199,8 @@ export const ConnectorsModal: React.FC<ConnectorsModalProps> = ({
       setStatusMessage(`Add ${ready.client_id_env} and ${ready.client_secret_env} to backend/.env, then restart the API.`);
       return;
     }
+    setLoading(true);
+    setStatusMessage(null);
     const query = new URLSearchParams(Object.entries(params).filter(([, value]) => value));
     const width = 520;
     const height = 680;
@@ -208,8 +211,16 @@ export const ConnectorsModal: React.FC<ConnectorsModalProps> = ({
       'connector_oauth',
       `width=${width},height=${height},left=${left},top=${top},status=no,resizable=yes`
     );
+    let attempts = 0;
     const timer = setInterval(async () => {
-      if (!popup || popup.closed) {
+      attempts++;
+      let isClosed = false;
+      try {
+        isClosed = !popup || popup.closed;
+      } catch (_) {
+        // Cross-origin access restrictions can occur during authentication redirect
+      }
+      if (isClosed || attempts > 180) {
         clearInterval(timer);
         setLoading(false);
         await fetchIntegrations();
@@ -554,8 +565,8 @@ export const ConnectorsModal: React.FC<ConnectorsModalProps> = ({
                   </div>
                   <button
                     type="button"
-                    onClick={() => startOauth('google_analytics_4', { domain: siteUrl, property_id: ga4PropertyId })}
-                    className="w-full py-2.5 px-4 rounded border border-line bg-paper-50 text-sm font-semibold"
+                    onClick={() => startOauth('google_analytics_4', { domain: siteUrl || targetUrl, property_id: ga4PropertyId })}
+                    className="w-full py-2.5 px-4 rounded border border-line bg-paper-50 text-sm font-semibold hover:bg-paper-100 transition"
                   >
                     Sign in with Google Analytics
                   </button>

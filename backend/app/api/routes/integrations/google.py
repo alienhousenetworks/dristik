@@ -31,15 +31,32 @@ class GscConnectRequest(BaseModel):
 @router.get("/status")
 def get_integrations_status() -> Dict[str, Any]:
     """Returns the operational and connection status of all analytics and keyword providers."""
+    from app.connectors.store import connector_store
+    from app.domain.enums import ConnectorType, ConnectorHealthStatus
+
+    integrations = connector_store.list_integrations()
+    ga4_integ = [i for i in integrations if i.provider == ConnectorType.GOOGLE_ANALYTICS_4]
+    ga4_connected = bool(ga4_connector.is_connected or any(i.status == ConnectorHealthStatus.CONNECTED for i in ga4_integ))
+    ga4_prop = ga4_connector.property_id
+    if not ga4_prop and ga4_integ:
+        for i in ga4_integ:
+            p = i.settings.get("property_id")
+            if p:
+                ga4_prop = p
+                break
+
+    gsc_integ = [i for i in integrations if i.provider == ConnectorType.GOOGLE_SEARCH_CONSOLE]
+    gsc_connected = bool(gsc_connector.is_connected or any(i.status == ConnectorHealthStatus.CONNECTED for i in gsc_integ))
+
     return {
         "google_search_console": {
-            "connected": gsc_connector.is_connected,
+            "connected": gsc_connected,
             "provider": "Google Search Console API v1",
             "capabilities": ["real_search_queries", "impressions", "clicks", "average_position", "crawl_coverage"],
         },
         "google_analytics_4": {
-            "connected": ga4_connector.is_connected,
-            "property_id": ga4_connector.property_id,
+            "connected": ga4_connected,
+            "property_id": ga4_prop,
             "provider": "Google Analytics 4 Data API",
             "capabilities": ["real_sessions", "bounce_rate", "dwell_time", "conversion_rate", "landing_pages"],
         },
