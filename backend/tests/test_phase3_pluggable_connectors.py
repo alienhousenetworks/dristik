@@ -51,7 +51,10 @@ async def test_gsc_connector_authenticated_with_evidence_ref():
     connector = GoogleSearchConsoleConnector(
         ConnectorCredentials(provider=ConnectorType.GOOGLE_SEARCH_CONSOLE, api_key=creds_json)
     )
-    with patch.object(connector, "test_connection") as mock_test:
+    with patch.object(connector, "test_connection") as mock_test, \
+         patch("app.integrations.google_api.query_search_analytics_token", return_value={
+             "rows": [{"keys": ["example reviews"], "clicks": 12, "impressions": 80, "ctr": 0.15, "position": 4.2}],
+         }):
         from app.connectors.base.models import ConnectorHealth
         from app.domain.enums import ConnectorHealthStatus
         mock_test.return_value = ConnectorHealth(
@@ -91,8 +94,27 @@ async def test_ga4_connector_unconfigured_fail_closed():
 
 @pytest.mark.asyncio
 async def test_ga4_connector_authenticated_with_evidence_ref():
-    connector = GoogleAnalytics4Connector(ConnectorCredentials(provider=ConnectorType.GOOGLE_ANALYTICS_4))
-    with patch.object(connector, "test_connection") as mock_test:
+    creds_json = json.dumps({"type": "oauth2", "access_token": "ya29.test", "property_id": "123456789"})
+    connector = GoogleAnalytics4Connector(
+        ConnectorCredentials(provider=ConnectorType.GOOGLE_ANALYTICS_4, api_key=creds_json)
+    )
+    with patch.object(connector, "test_connection") as mock_test, \
+         patch("app.integrations.google_api.query_ga4_with_token", return_value={
+             "metricHeaders": [
+                 {"name": "sessions"},
+                 {"name": "bounceRate"},
+                 {"name": "averageSessionDuration"},
+                 {"name": "conversions"},
+                 {"name": "engagementRate"},
+             ],
+             "rows": [{"metricValues": [
+                 {"value": "120"},
+                 {"value": "0.4"},
+                 {"value": "80"},
+                 {"value": "6"},
+                 {"value": "0.6"},
+             ]}],
+         }):
         from app.connectors.base.models import ConnectorHealth
         from app.domain.enums import ConnectorHealthStatus
         mock_test.return_value = ConnectorHealth(

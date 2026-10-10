@@ -245,10 +245,29 @@ async def _exchange(provider: str, code: str, shop: str, redirect_uri: Optional[
     return data
 
 
+def _fallback_return(path: str) -> str:
+    return (
+        "<script>function done(){window.location.replace(%s);}setTimeout(done,600);</script>"
+        % json.dumps(path)
+    )
+
+
+def _oauth_fail(detail: str) -> HTMLResponse:
+    text = detail if isinstance(detail, str) and detail.strip() else "The connection was not saved."
+    return _page(
+        "Sign-in failed",
+        html.escape(text),
+        script=_fallback_return("/?connector=error&reason=rejected"),
+        success=False,
+    )
+
+
 def _page(title: str, body: str, script: str = "", success: bool = True) -> HTMLResponse:
     safe_title = html.escape(title)
     icon = "✓" if success else "✕"
     icon_color = "#137547" if success else "#c53030"
+    if not script:
+        script = _fallback_return("/?connector=connected" if success else "/?connector=error")
     return HTMLResponse(content=f"""<!DOCTYPE html>
 <html>
 <head>
@@ -332,7 +351,7 @@ def _page(title: str, body: str, script: str = "", success: bool = True) -> HTML
     <div class="icon">{icon}</div>
     <h1>{safe_title}</h1>
     <p>{body}</p>
-    <div class="hint" id="status-hint">This window will close automatically...</div>
+    <div class="hint" id="status-hint">Returning to Dristik in this tab…</div>
     <button type="button" id="return-btn" onclick="done()">Return to Dashboard</button>
   </div>
   {script}
@@ -383,17 +402,33 @@ async def oauth_callback(
     shop: Optional[str] = None,
 ):
     if error:
-        return _page("Sign-in cancelled", html.escape(error), success=False)
+        return _page(
+            "Sign-in cancelled",
+            html.escape(error),
+            script=_fallback_return("/?connector=error&reason=cancelled"),
+            success=False,
+        )
     if not code or not state or code.startswith("mock_"):
-        return _page("Sign-in failed", "The consent screen did not return a real authorization code.", success=False)
-    saved = _unsign(state)
+        return _page(
+            "Sign-in failed",
+            "The consent screen did not return a real authorization code.",
+            script=_fallback_return("/?connector=error&reason=missing"),
+            success=False,
+        )
+    try:
+        saved = _unsign(state)
+    except HTTPException as exc:
+        return _oauth_fail(str(exc.detail))
     provider = saved["provider"]
     spec = PROVIDERS.get(provider)
     if spec is None or not _configured(spec):
         return _page("Sign-in failed", "This OAuth provider is not configured.", success=False)
     shop_host = shop or saved.get("shop") or ""
     redirect_uri = saved.get("redirect_uri") or _callback(request)
-    token_data = await _exchange(provider, code, shop_host, redirect_uri)
+    try:
+        token_data = await _exchange(provider, code, shop_host, redirect_uri)
+    except HTTPException as exc:
+        return _oauth_fail(str(exc.detail))
     target = saved.get("domain") or shop_host or saved.get("repository") or spec["label"]
 
     discovered_prop = saved.get("property_id") or ""
@@ -465,15 +500,11 @@ async def oauth_callback(
             pass
 
     safe_target = html.escape(str(target))
+    return_path = "/?connector=connected&provider=" + urllib.parse.quote(provider)
     script = """
     <script>
       function done() {
-        try { window.close(); } catch(e) {}
-        setTimeout(function() {
-          if (!window.closed) {
-            window.location.href = '/';
-          }
-        }, 150);
+        window.location.replace(%s);
       }
       (function() {
         var payload = { type: 'OAUTH_SUCCESS', provider: %s, target: %s, timestamp: Date.now() };
@@ -498,10 +529,18 @@ async def oauth_callback(
           localStorage.setItem('dristik_connector_oauth_sync', JSON.stringify(payload));
           localStorage.setItem('dristik_gsc_auth_sync', JSON.stringify(gscPayload));
         } catch (e) {}
-        setTimeout(done, 1000);
+        var closed = false;
+        try {
+          if (window.opener && !window.opener.closed) {
+            window.close();
+            closed = !!window.closed;
+          }
+        } catch (e) {}
+        if (!closed) setTimeout(done, 400);
       })();
     </script>
     """ % (
+        json.dumps(return_path),
         json.dumps(provider),
         json.dumps(safe_target),
         json.dumps(safe_target),

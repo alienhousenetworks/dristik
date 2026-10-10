@@ -127,16 +127,71 @@ class GoogleSearchConsoleConnector(BaseConnector, ExternalTelemetryConnector):
                 provenance_label="UNCONNECTED_FALLBACK",
             )
 
-        # Authenticated query
+        parsed = {}
+        try:
+            raw = self.credentials.api_key or self.credentials.app_password or ""
+            parsed = json.loads(raw) if raw else {}
+        except Exception:
+            parsed = {}
+        token = parsed.get("access_token") if isinstance(parsed, dict) else None
+        if not token:
+            return ExternalTelemetryResult(
+                connector_id="gsc",
+                connector_name="Google Search Console",
+                domain=domain,
+                status="NOT_CONNECTED",
+                is_connected=False,
+                metrics={"total_clicks": 0, "total_impressions": 0, "average_ctr": 0.0, "average_position": 0.0, "queries": []},
+                unavailability_reason="Google Search Console token is missing. Search impressions and clicks are unmeasured.",
+                provenance_label="UNCONNECTED_FALLBACK",
+            )
+        try:
+            from app.integrations.google_api import query_search_analytics_token, refresh_google_access_token
+            try:
+                payload = query_search_analytics_token(str(token), domain, days=days)
+            except RuntimeError as exc:
+                refresh = parsed.get("refresh_token") if isinstance(parsed, dict) else None
+                if refresh and "401" in str(exc):
+                    payload = query_search_analytics_token(refresh_google_access_token(str(refresh)), domain, days=days)
+                else:
+                    raise
+        except Exception as exc:
+            return ExternalTelemetryResult(
+                connector_id="gsc",
+                connector_name="Google Search Console",
+                domain=domain,
+                status="UNAVAILABLE",
+                is_connected=False,
+                metrics={"total_clicks": 0, "total_impressions": 0, "average_ctr": 0.0, "average_position": 0.0, "queries": []},
+                unavailability_reason=f"Google Search Console query failed: {exc}",
+                provenance_label="LIVE_EXTERNAL_QUERY",
+            )
+        rows = payload.get("rows") or []
+        clicks = impressions = 0
+        weighted = 0.0
+        queries = []
+        for row in rows:
+            keys = row.get("keys") or []
+            if not keys:
+                continue
+            row_clicks = int(row.get("clicks") or 0)
+            row_impressions = int(row.get("impressions") or 0)
+            clicks += row_clicks
+            impressions += row_impressions
+            position = float(row.get("position") or 0)
+            weighted += position * row_impressions
+            queries.append({
+                "query": str(keys[0]),
+                "clicks": row_clicks,
+                "impressions": row_impressions,
+                "position": position,
+            })
         metrics = {
-            "total_clicks": 1420,
-            "total_impressions": 38900,
-            "average_ctr": 3.65,
-            "average_position": 14.2,
-            "queries": [
-                {"query": f"{domain} reviews", "clicks": 320, "impressions": 4100, "position": 1.8},
-                {"query": f"{domain} pricing", "clicks": 210, "impressions": 2800, "position": 2.1},
-            ],
+            "total_clicks": clicks,
+            "total_impressions": impressions,
+            "average_ctr": round((clicks / impressions) * 100, 2) if impressions else 0.0,
+            "average_position": round(weighted / impressions, 2) if impressions else 0.0,
+            "queries": queries,
         }
         ev_hash = hashlib.sha256(json.dumps(metrics, sort_keys=True).encode()).hexdigest()
         ev_ref = EvidenceRef(

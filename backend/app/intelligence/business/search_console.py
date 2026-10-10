@@ -148,6 +148,105 @@ class SearchConsoleEngine:
                 pass
         return None
 
+    def _oauth_access_token(self, creds: Dict[str, Any]) -> str:
+        from app.integrations.google_api import refresh_google_access_token
+
+        token = str(creds.get("access_token") or "")
+        if token:
+            return token
+        refresh = str(creds.get("refresh_token") or "")
+        if not refresh:
+            raise RuntimeError("Google Search Console authorization has no access token.")
+        return refresh_google_access_token(refresh)
+
+    def _report_from_oauth(
+        self,
+        creds: Dict[str, Any],
+        target_domain: str,
+        findings: list,
+        chains: list,
+    ) -> SearchConsoleAttributionReport:
+        from app.integrations.google_api import query_search_analytics_token, refresh_google_access_token
+
+        try:
+            token = self._oauth_access_token(creds)
+            try:
+                payload = query_search_analytics_token(token, target_domain, days=28)
+            except RuntimeError as exc:
+                refresh = str(creds.get("refresh_token") or "")
+                if refresh and "401" in str(exc):
+                    token = refresh_google_access_token(refresh)
+                    payload = query_search_analytics_token(token, target_domain, days=28)
+                else:
+                    raise
+        except Exception as exc:
+            expired = "401" in str(exc)
+            return SearchConsoleAttributionReport(
+                domain=target_domain,
+                is_connected=not expired,
+                status="sync_error" if not expired else "unavailable",
+                reason=str(exc),
+                causal_chains=chains,
+                estimated_traffic_leakage_inr=0.0,
+                connection_status_message=(
+                    "Google authorization expired. Sign in with Google Search Console again."
+                    if expired
+                    else f"Google Search Console is connected. The property query did not succeed: {exc}"
+                ),
+                provenance={"source": "google_search_console", "status": "sync_error", "reason": str(exc)},
+            )
+
+        rows = payload.get("rows") or []
+        keywords: List[KeywordRankingItem] = []
+        total_clicks = 0
+        total_impressions = 0
+        pos_sum = 0.0
+        for row in rows:
+            keys = row.get("keys") or []
+            if not keys:
+                continue
+            query = str(keys[0])
+            page = str(keys[1]) if len(keys) > 1 else "/"
+            clicks = int(row.get("clicks") or 0)
+            impressions = int(row.get("impressions") or 0)
+            ctr = float(row.get("ctr") or 0.0) * 100
+            position = float(row.get("position") or 0.0)
+            total_clicks += clicks
+            total_impressions += impressions
+            pos_sum += position
+            keywords.append(KeywordRankingItem(
+                query=query,
+                current_position=round(position, 1),
+                monthly_impressions=impressions,
+                monthly_clicks=clicks,
+                ctr_percentage=round(ctr, 2),
+                intent="",
+                target_page=page,
+                associated_technical_bottleneck=findings[0].title if findings else None,
+            ))
+        count = max(1, len(keywords))
+        property_url = str(payload.get("_property") or target_domain)
+        return SearchConsoleAttributionReport(
+            domain=target_domain,
+            is_connected=True,
+            status="authenticated",
+            reason=None,
+            total_monthly_clicks=total_clicks,
+            total_monthly_impressions=total_impressions,
+            average_ctr=round((total_clicks / max(1, total_impressions)) * 100, 2),
+            average_position=round(pos_sum / count, 1) if keywords else 0.0,
+            top_ranking_keywords=keywords,
+            causal_chains=chains,
+            estimated_traffic_leakage_inr=0.0,
+            connection_status_message=f"Connected to Google Search Console ({property_url}).",
+            provenance={
+                "source": "google_search_console",
+                "property": property_url,
+                "date_range": "28d",
+                "status": "authenticated",
+            },
+        )
+
     def generate_search_attribution(
         self,
         domain: str = "example.com",
@@ -182,6 +281,10 @@ class SearchConsoleEngine:
                 "traffic_consequence": "Suppresses organic snippet click-through rate and SERP rich results",
                 "conversion_opportunity": "Remediating structured data unlocks high-intent commercial visitors"
             })
+
+        # User OAuth tokens are not service-account JSON. Query them directly.
+        if isinstance(creds, dict) and creds.get("type") == "oauth2":
+            return self._report_from_oauth(creds, target_domain, findings, chains)
 
         # IF REAL GOOGLE CREDENTIALS EXIST:
         if creds:

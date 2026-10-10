@@ -24,23 +24,43 @@ from app.domain.models import RemediationPatch
 from app.evidence.models import EvidenceRef
 
 
+def resolve_crux_api_key(explicit: Optional[str] = None) -> Optional[str]:
+    """Chrome UX Report uses an API key. A Google OAuth client id is not a CrUX credential."""
+    if explicit and str(explicit).strip():
+        return str(explicit).strip()
+    for value in (
+        getattr(settings, "CRUX_API_KEY", None),
+        os.getenv("CRUX_API_KEY"),
+        os.getenv("PAGESPEED_API_KEY"),
+        getattr(settings, "GOOGLE_API_KEY", None),
+        os.getenv("GOOGLE_API_KEY"),
+    ):
+        if value and str(value).strip():
+            return str(value).strip()
+    return None
+
+
 class CruxConnector(BaseConnector, ExternalTelemetryConnector):
     """
     Connects to Google Chrome User Experience Report (CrUX).
     Enforces honest fail-closed lab fallbacks when API key or origin traffic is missing.
     """
 
+    def _api_key(self) -> Optional[str]:
+        return resolve_crux_api_key(self.credentials.api_key)
+
     async def test_connection(self) -> ConnectorHealth:
-        key = self.credentials.api_key or os.getenv("PAGESPEED_API_KEY") or os.getenv("GOOGLE_API_KEY")
+        key = self._api_key()
         if not key:
-            # CrUX public API can be queried with public quota or key
             return ConnectorHealth(
                 provider=ConnectorType.CRUX,
-                status=ConnectorHealthStatus.CONNECTED,
-                authenticated=True,
-                message="Google CrUX public API enabled (Standard Rate Limit).",
+                status=ConnectorHealthStatus.UNAUTHORIZED,
+                authenticated=False,
+                message=(
+                    "Chrome UX Report API key is not configured. Set CRUX_API_KEY or paste a key. "
+                    "Google OAuth client credentials do not authorize CrUX."
+                ),
                 last_checked_at=datetime.now(timezone.utc).isoformat(),
-                permissions_granted=["crux_field_metrics", "core_web_vitals"],
             )
 
         return ConnectorHealth(
@@ -76,7 +96,7 @@ class CruxConnector(BaseConnector, ExternalTelemetryConnector):
 
     async def fetch_telemetry(self, domain: str, **kwargs: Any) -> ExternalTelemetryResult:
         import httpx
-        key = self.credentials.api_key or os.getenv("PAGESPEED_API_KEY") or os.getenv("GOOGLE_API_KEY")
+        key = self._api_key()
         if not key:
             return ExternalTelemetryResult(
                 connector_id="crux",

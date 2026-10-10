@@ -74,9 +74,12 @@ class GoogleAnalytics4Connector(BaseConnector, ExternalTelemetryConnector):
             )
         return ConnectorHealth(
             provider=ConnectorType.GOOGLE_ANALYTICS_4,
-            status=ConnectorHealthStatus.CONNECTED,
-            authenticated=True,
-            message=f"Property id {property_id} is verified and connected.",
+            status=ConnectorHealthStatus.DISCONNECTED,
+            authenticated=False,
+            message=(
+                f"Property id {property_id} is saved, but Google has not authorized this connector. "
+                "Use Sign in with Google."
+            ),
             last_checked_at=datetime.now(timezone.utc).isoformat(),
         )
 
@@ -127,17 +130,89 @@ class GoogleAnalytics4Connector(BaseConnector, ExternalTelemetryConnector):
                 provenance_label="UNCONNECTED_FALLBACK",
             )
 
-        # Authenticated query
+        parsed = {}
+        try:
+            raw = self.credentials.api_key or self.credentials.app_password or ""
+            parsed = json.loads(raw) if raw else {}
+        except Exception:
+            parsed = {}
+        token = parsed.get("access_token") if isinstance(parsed, dict) else None
+        property_id = ""
+        if isinstance(parsed, dict):
+            property_id = str(parsed.get("property_id") or "")
+        if not token or not property_id:
+            return ExternalTelemetryResult(
+                connector_id="ga4",
+                connector_name="Google Analytics 4",
+                domain=domain,
+                status="UNAVAILABLE",
+                is_connected=bool(token),
+                metrics={
+                    "sessions_30d": 0,
+                    "engagement_rate": 0.0,
+                    "bounce_rate": 0.0,
+                    "conversions_count": 0,
+                    "conversion_rate": 0.0,
+                    "top_landing_pages": [],
+                },
+                unavailability_reason="Google Analytics is authorized, but no GA4 property id was found. Open the connector and confirm the property.",
+                provenance_label="UNCONNECTED_FALLBACK",
+            )
+        try:
+            from app.integrations.google_api import query_ga4_with_token, refresh_google_access_token
+            try:
+                payload = query_ga4_with_token(str(token), property_id)
+            except RuntimeError as exc:
+                refresh = parsed.get("refresh_token") if isinstance(parsed, dict) else None
+                if refresh and "401" in str(exc):
+                    payload = query_ga4_with_token(refresh_google_access_token(str(refresh)), property_id)
+                else:
+                    raise
+        except Exception as exc:
+            return ExternalTelemetryResult(
+                connector_id="ga4",
+                connector_name="Google Analytics 4",
+                domain=domain,
+                status="UNAVAILABLE",
+                is_connected=False,
+                metrics={
+                    "sessions_30d": 0,
+                    "engagement_rate": 0.0,
+                    "bounce_rate": 0.0,
+                    "conversions_count": 0,
+                    "conversion_rate": 0.0,
+                    "top_landing_pages": [],
+                },
+                unavailability_reason=f"Google Analytics query failed: {exc}",
+                provenance_label="LIVE_EXTERNAL_QUERY",
+            )
+        headers = [item.get("name") for item in (payload.get("metricHeaders") or [])]
+        values = []
+        rows = payload.get("rows") or []
+        if rows:
+            values = [item.get("value") for item in (rows[0].get("metricValues") or [])]
+        named = {}
+        for index, name in enumerate(headers):
+            named[name] = values[index] if index < len(values) else None
+        if not named and values:
+            order = ["sessions", "bounceRate", "averageSessionDuration", "conversions", "engagementRate"]
+            named = {order[index]: values[index] for index in range(min(len(order), len(values)))}
+
+        def _num(key: str) -> float:
+            try:
+                return float(named.get(key) or 0)
+            except (TypeError, ValueError):
+                return 0.0
+
+        sessions = int(_num("sessions"))
+        conversions = int(_num("conversions"))
         metrics = {
-            "sessions_30d": 8420,
-            "engagement_rate": 62.4,
-            "bounce_rate": 37.6,
-            "conversions_count": 284,
-            "conversion_rate": 3.37,
-            "top_landing_pages": [
-                {"path": "/", "sessions": 5120, "conversion_rate": 3.8},
-                {"path": "/pricing", "sessions": 1840, "conversion_rate": 6.2},
-            ],
+            "sessions_30d": sessions,
+            "engagement_rate": round(_num("engagementRate") * 100, 2),
+            "bounce_rate": round(_num("bounceRate") * 100, 2),
+            "conversions_count": conversions,
+            "conversion_rate": round((conversions / sessions) * 100, 2) if sessions else 0.0,
+            "top_landing_pages": [],
         }
         ev_hash = hashlib.sha256(json.dumps(metrics, sort_keys=True).encode()).hexdigest()
         ev_ref = EvidenceRef(

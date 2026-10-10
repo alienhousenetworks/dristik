@@ -88,27 +88,7 @@ export function AnalyticsIntegrationsModal({
     const query = new URLSearchParams();
     if (domain) query.set('domain', domain);
     if (ga4PropertyId) query.set('property_id', ga4PropertyId);
-    const width = 520;
-    const height = 680;
-    const left = window.screenX + (window.outerWidth - width) / 2;
-    const top = window.screenY + (window.outerHeight - height) / 2;
-    const popup = window.open(
-      `/api/v1/connectors/oauth/google_analytics_4/authorize?${query.toString()}`,
-      'connector_oauth',
-      `width=${width},height=${height},left=${left},top=${top},status=no,resizable=yes`
-    );
-    let attempts = 0;
-    const timer = setInterval(() => {
-      attempts++;
-      let isClosed = false;
-      try {
-        isClosed = !popup || popup.closed;
-      } catch (_) {}
-      if (isClosed || attempts > 180) {
-        clearInterval(timer);
-        refreshStatus();
-      }
-    }, 1000);
+    window.location.assign(`/api/v1/connectors/oauth/google_analytics_4/authorize?${query.toString()}`);
   };
 
   if (!isOpen) return null;

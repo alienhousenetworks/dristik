@@ -147,7 +147,8 @@ async def test_dataforseo_live_ai_search_and_crux_connectors():
     crux = CruxConnector(credentials=ConnectorCredentials(provider=ConnectorType.CRUX))
     crux_health = await crux.test_connection()
     assert crux_health.provider == ConnectorType.CRUX
-    assert crux_health.status == ConnectorHealthStatus.CONNECTED
+    assert crux_health.status == ConnectorHealthStatus.UNAUTHORIZED
+    assert crux_health.authenticated is False
 
     # 4. Connector Store Instantiation
     dfs_integ = connector_store.add_integration(

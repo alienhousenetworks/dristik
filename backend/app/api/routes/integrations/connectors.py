@@ -51,12 +51,29 @@ async def list_integrations(org_id: str = "org_default"):
 @router.post("/connect", response_model=ConnectPlatformResponse)
 async def connect_platform(req: ConnectPlatformRequest):
     """Register and verify a new platform connector."""
+    api_key = req.api_key
+    if req.provider == ConnectorType.CRUX and not (api_key and str(api_key).strip()):
+        api_key = (
+            settings.CRUX_API_KEY
+            or os.getenv("CRUX_API_KEY")
+            or os.getenv("PAGESPEED_API_KEY")
+            or settings.GOOGLE_API_KEY
+            or os.getenv("GOOGLE_API_KEY")
+        )
+        if not (api_key and str(api_key).strip()):
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "Google CrUX needs a Chrome UX Report API key. Set CRUX_API_KEY in the server environment, "
+                    "or paste a key. The Google OAuth client id does not authorize CrUX."
+                ),
+            )
     creds = ConnectorCredentials(
         provider=req.provider,
         api_url=req.api_url or req.target_url,
         username=req.username,
         app_password=req.app_password,
-        api_key=req.api_key,
+        api_key=api_key,
         github_token=req.github_token,
         repository=req.repository,
         branch=req.branch or "main",
@@ -244,32 +261,21 @@ async def google_oauth_status(request: Request):
 @router.get("/google/oauth/authorize")
 async def google_oauth_authorize(request: Request, domain: str = "example.com"):
     """
-    Initiates 1-click Google OAuth 2.0 flow for Google Search Console.
-    Redirects to Google Accounts consent screen if GOOGLE_CLIENT_ID is configured,
-    or completes seamless instant-consent in local development mode.
+    Search Console sign-in uses the shared connector callback.
+
+    GOOGLE_OAUTH_REDIRECT_URI points at the external-authority callback, which
+    rejects this flow's state. The shared callback is the URI in OAUTH_REDIRECT_URI.
     """
     client_id = os.environ.get("GOOGLE_CLIENT_ID") or settings.GOOGLE_CLIENT_ID
-    redirect_uri = _get_gsc_redirect_uri(request)
-    clean_domain = domain.replace("https://", "").replace("http://", "").split("/")[0]
-
-    if client_id:
-        scope = urllib.parse.quote("https://www.googleapis.com/auth/webmasters.readonly openid email profile")
-        state = urllib.parse.quote(clean_domain)
-        auth_url = (
-            f"https://accounts.google.com/o/oauth2/v2/auth?"
-            f"client_id={client_id}&"
-            f"redirect_uri={urllib.parse.quote(redirect_uri)}&"
-            f"response_type=code&"
-            f"scope={scope}&"
-            f"access_type=offline&"
-            f"prompt=consent&"
-            f"state={state}"
+    if not client_id:
+        raise HTTPException(
+            status_code=503,
+            detail="Google OAuth is not configured. Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET. Mock consent codes are not issued.",
         )
-        return RedirectResponse(auth_url)
-
-    raise HTTPException(
-        status_code=503,
-        detail="Google OAuth is not configured. Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET. Mock consent codes are not issued.",
+    clean_domain = domain.replace("https://", "").replace("http://", "").split("/")[0]
+    return RedirectResponse(
+        url=f"/api/v1/connectors/oauth/google_search_console/authorize?domain={urllib.parse.quote(clean_domain)}",
+        status_code=302,
     )
 
 @router.get("/google/oauth/callback", response_class=HTMLResponse)
@@ -399,7 +405,7 @@ async def google_oauth_callback(
             <p style="color: #4a5568; font-size: 13px; line-height: 1.5; margin-bottom: 20px;">
                 Successfully authorized property for <strong>{target_domain}</strong> via Google OAuth (<code>{user_email}</code>).
             </p>
-            <p id="close-msg" style="color: #718096; font-size: 12px;">This window will close automatically...</p>
+            <p id="close-msg" style="color: #718096; font-size: 12px;">Returning to Dristik in this tab…</p>
             <button id="close-btn" onclick="window.close()" style="display: none; margin-top: 14px; background: #137547; color: #fff; border: none; padding: 8px 18px; border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: 600;">Return to App</button>
         </div>
         <script>
@@ -410,40 +416,35 @@ async def google_oauth_callback(
                     email: '{user_email}',
                     timestamp: Date.now()
                 }};
-                var isPopup = (window.opener && !window.opener.closed) || (window.name && window.name.indexOf('popup') !== -1);
-
-                // 1. Post to opener if available
+                function finish() {{
+                    window.location.replace('/?connector=connected&provider=google_search_console');
+                }}
                 try {{
                     if (window.opener && !window.opener.closed) {{
                         window.opener.postMessage(payload, '*');
                     }}
                 }} catch (e) {{}}
-
-                // 2. BroadcastChannel: Works across tabs/windows without opener
                 try {{
                     var bc = new BroadcastChannel('dristik_gsc_auth');
                     bc.postMessage(payload);
                     bc.close();
                 }} catch (e) {{}}
-
-                // 3. localStorage fallback: fires storage events
                 try {{
                     localStorage.setItem('dristik_gsc_auth_sync', JSON.stringify(payload));
                 }} catch (e) {{}}
-
-                if (isPopup) {{
-                    setTimeout(function() {{ window.close(); }}, 800);
-                    setTimeout(function() {{
-                        var btn = document.getElementById('close-btn');
-                        if (btn) btn.style.display = 'inline-block';
-                        var msg = document.getElementById('close-msg');
-                        if (msg) msg.textContent = 'Authorization complete. You can return to Dristik.';
-                    }}, 1600);
-                }} else {{
-                    setTimeout(function() {{
-                        window.location.href = '/?tab=search_console&gsc_connected=true';
-                    }}, 600);
+                var closed = false;
+                try {{
+                    if (window.opener && !window.opener.closed) {{
+                        window.close();
+                        closed = !!window.closed;
+                    }}
+                }} catch (e) {{}}
+                var btn = document.getElementById('close-btn');
+                if (btn) {{
+                    btn.style.display = 'inline-block';
+                    btn.onclick = finish;
                 }}
+                if (!closed) setTimeout(finish, 400);
             }})();
         </script>
     </body>

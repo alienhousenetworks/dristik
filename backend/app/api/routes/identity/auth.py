@@ -140,6 +140,17 @@ def delete_account(
     return {"ok": True}
 
 
+def _same_tab_return(path: str) -> str:
+    """Stay on this site. A finished Google sign-in should not land back on the signup form."""
+    raw = (path or "/").strip()
+    if not raw.startswith("/") or raw.startswith("//") or "\\" in raw:
+        return "/"
+    lowered = raw.lower()
+    if any(part in lowered for part in ("#signup", "#login", "#forgot", "#reset")):
+        return "/"
+    return raw
+
+
 # ---------------------------------------------------------------------------
 # 1-Click OAuth Single Sign-On (Google & GitHub)
 # ---------------------------------------------------------------------------
@@ -187,43 +198,43 @@ async def oauth_sso_callback(
         safe_msg = html.escape(message)
         script = ""
         if success:
+            # Google's consent page severs window.opener, so a popup often comes
+            # back as a new tab that cannot close. Always continue in this tab.
             script = f"""
             <script>
               (function() {{
                 var payload = {{ type: 'AUTH_SUCCESS', provider: {json.dumps(provider)}, timestamp: Date.now() }};
-                var isPopup = (window.opener && !window.opener.closed) || (window.name && window.name.indexOf('oauth') !== -1);
-
-                // 1. Post to opener if available
+                var next = {json.dumps(redirect_url)};
+                function finish() {{
+                  window.location.replace(next);
+                }}
                 try {{
                   if (window.opener && !window.opener.closed) {{
                     window.opener.postMessage(payload, '*');
                   }}
                 }} catch (e) {{}}
-
-                // 2. BroadcastChannel: Works across tabs/windows on same origin without opener
                 try {{
                   var bc = new BroadcastChannel('dristik_auth');
                   bc.postMessage(payload);
                   bc.close();
                 }} catch (e) {{}}
-
-                // 3. localStorage fallback: fires storage events across all tabs/windows
                 try {{
                   localStorage.setItem('dristik_auth_sync', JSON.stringify(payload));
                 }} catch (e) {{}}
-
-                if (isPopup) {{
-                  setTimeout(function () {{
+                var closed = false;
+                try {{
+                  if (window.opener && !window.opener.closed) {{
                     window.close();
-                  }}, 600);
-                  setTimeout(function () {{
-                    var btn = document.getElementById('close-btn');
-                    if (btn) btn.style.display = 'inline-block';
-                  }}, 1500);
-                }} else {{
-                  setTimeout(function () {{
-                    window.location.href = {json.dumps(redirect_url)};
-                  }}, 500);
+                    closed = !!window.closed;
+                  }}
+                }} catch (e) {{}}
+                if (!closed) {{
+                  setTimeout(finish, 300);
+                }}
+                var btn = document.getElementById('close-btn');
+                if (btn) {{
+                  btn.style.display = 'inline-block';
+                  btn.onclick = finish;
                 }}
               }})();
             </script>
@@ -282,10 +293,14 @@ async def oauth_sso_callback(
         _set_session_cookie(red_res, token)
         return red_res
 
-    return _page(
+    # Returning HTMLResponse discards cookies set on the injected Response.
+    # The browser only stays signed in if Set-Cookie is on this page.
+    page = _page(
         "Signed in successfully",
-        f"Welcome back, {user.full_name or user.email}! Finalizing your secure session…",
+        f"Signed in as {user.full_name or user.email}. Returning to Dristik in this tab.",
         success=True,
-        redirect_url=redirect_target,
+        redirect_url=_same_tab_return(redirect_target),
     )
+    _set_session_cookie(page, token)
+    return page
 

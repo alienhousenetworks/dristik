@@ -184,6 +184,27 @@ def test_connectors_oauth_providers_status():
         assert expected in providers, f"Missing connector provider: {expected}"
 
 
+def test_search_console_authorize_uses_connector_callback_not_external_authority():
+    """Search Console must not send Google back to the external-authority callback."""
+    with patch.object(settings, "GOOGLE_CLIENT_ID", "mock-google-id"), \
+         patch.object(settings, "GOOGLE_CLIENT_SECRET", "mock-google-sec"), \
+         patch.object(settings, "OAUTH_REDIRECT_URI", "https://octaos.org/api/v1/connectors/oauth/callback"):
+        res = client.get(
+            "/api/v1/connectors/google/oauth/authorize?domain=example.com",
+            follow_redirects=False,
+        )
+        assert res.status_code == 302
+        assert "external-authority" not in res.headers["location"]
+        assert "/api/v1/connectors/oauth/google_search_console/authorize" in res.headers["location"]
+
+        followed = client.get(res.headers["location"], follow_redirects=False)
+        assert followed.status_code in (302, 307)
+        location = followed.headers["location"]
+        assert "accounts.google.com" in location
+        assert "external-authority" not in location
+        assert "connectors%2Foauth%2Fcallback" in location or "connectors/oauth/callback" in location
+
+
 def test_oauth_sso_callback_html_broadcast_channel():
     """Verify HTML callback sends BroadcastChannel and localStorage events without force-navigating popups."""
     state = oauth_service._sign_state({"provider": "google", "redirect": "/#audit-view"})
@@ -203,7 +224,10 @@ def test_oauth_sso_callback_html_broadcast_channel():
         assert "BroadcastChannel('dristik_auth')" in html
         assert "dristik_auth_sync" in html
         assert "window.close()" in html
+        assert "window.location.replace" in html
+        assert "/#audit-view" in html
         assert "Return to Dristik" in html
+        assert "dristik_session=" in res.headers.get("set-cookie", "")
 
 
 def test_oauth_sso_callback_format_redirect():
@@ -235,7 +259,8 @@ def test_ga4_connector_oauth_hosted_redirect_and_connect():
 
     # 1. Authorize on a hosted domain with X-Forwarded-Host
     with patch.object(settings, "GOOGLE_CLIENT_ID", "mock-ga4-id"), \
-         patch.object(settings, "GOOGLE_CLIENT_SECRET", "mock-ga4-sec"):
+         patch.object(settings, "GOOGLE_CLIENT_SECRET", "mock-ga4-sec"), \
+         patch.object(settings, "OAUTH_REDIRECT_URI", "http://localhost:8000/api/v1/connectors/oauth/callback"):
         res = client.get(
             "/api/v1/connectors/oauth/google_analytics_4/authorize?domain=acme-store.com",
             headers={"Host": "hosted-app.dristik.ai", "X-Forwarded-Proto": "https"},
@@ -270,7 +295,8 @@ def test_ga4_connector_oauth_hosted_redirect_and_connect():
         assert "Return to Dashboard" in html_text
         assert "BroadcastChannel('dristik_connector_oauth')" in html_text
         assert "dristik_connector_oauth_sync" in html_text
-        assert "window.location.href = '/'" in html_text
+        assert "connector=connected" in html_text
+        assert "window.location.replace" in html_text
 
         # 3. Verify saved integration in connector_store has CONNECTED status
         integrations = connector_store.list_integrations()

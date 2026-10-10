@@ -31,10 +31,12 @@ export function ExternalAuthorityPanel({
   isOpen,
   onClose,
   domain,
+  notice,
 }: {
   isOpen: boolean;
   onClose: () => void;
   domain: string;
+  notice?: string | null;
 }) {
   const [rows, setRows] = useState<ConnectorRow[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -87,6 +89,7 @@ export function ExternalAuthorityPanel({
           <button type="button" className="btn-secondary px-3 py-1.5" onClick={onClose}>Close</button>
         </div>
 
+        {notice && <p className="text-sm text-good">{notice}</p>}
         {error && <p className="text-sm text-bad">{error}</p>}
 
         <div className="space-y-3">
@@ -94,7 +97,11 @@ export function ExternalAuthorityPanel({
             <article key={row.provider_id} className="border border-line rounded-lg p-3 text-sm space-y-1">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <h3 className="font-semibold">{row.provider}</h3>
-                <span className="font-mono text-xs">{row.connection_status} · {row.status}</span>
+                {row.connection_status === 'CONNECTED' ? (
+                  <span className="font-mono text-xs text-good font-semibold">Connected</span>
+                ) : (
+                  <span className="font-mono text-xs">{row.connection_status} · {row.status}</span>
+                )}
               </div>
               <p>Account: {row.account || '—'} · Property: {row.property || '—'}</p>
               <p>Last sync: {row.last_successful_sync || '—'} · Last attempt: {row.last_attempted_sync || '—'} · Next: {row.next_sync || '—'}</p>
@@ -102,17 +109,21 @@ export function ExternalAuthorityPanel({
               <p>Capabilities: {(row.capabilities || []).join(', ') || '—'}</p>
               {row.error_message && <p className="text-bad">{row.error_message}</p>}
               <div className="flex flex-wrap gap-2 pt-1">
-                <button
-                  type="button"
-                  className="btn-primary px-3 py-1.5"
-                  disabled={busy}
-                  onClick={() => run(async () => {
-                    const started = await startExternalOAuth(row.provider_id, domain);
-                    window.location.assign(started.authorize_url);
-                  })}
-                >
-                  Connect
-                </button>
+                {row.connection_status === 'CONNECTED' ? (
+                  <span className="text-xs text-good font-semibold px-3 py-1.5">Connected</span>
+                ) : (
+                  <button
+                    type="button"
+                    className="btn-primary px-3 py-1.5"
+                    disabled={busy || row.auth_mode === 'api_key'}
+                    onClick={() => run(async () => {
+                      const started = await startExternalOAuth(row.provider_id, domain);
+                      window.location.assign(started.authorize_url);
+                    })}
+                  >
+                    Connect
+                  </button>
+                )}
                 <button
                   type="button"
                   className="btn-secondary px-3 py-1.5"

@@ -219,6 +219,17 @@ async def get_crux_telemetry(domain: str) -> Dict[str, Any]:
     from app.connectors.base.models import ConnectorCredentials
     from app.domain.enums import ConnectorType
 
-    connector = CruxConnector(ConnectorCredentials(provider=ConnectorType.CRUX))
+    from app.connectors.store import connector_store
+
+    stored_key = None
+    for integration in connector_store.list_integrations():
+        status = getattr(integration.status, "value", integration.status)
+        if integration.provider == ConnectorType.CRUX and str(status).lower() == "connected":
+            live = connector_store.get_connector(integration.integration_id)
+            candidate = live.credentials.api_key if live and live.credentials else None
+            if candidate and str(candidate).strip():
+                stored_key = str(candidate).strip()
+                break
+    connector = CruxConnector(ConnectorCredentials(provider=ConnectorType.CRUX, api_key=stored_key))
     res = await connector.fetch_telemetry(domain)
     return res.model_dump()

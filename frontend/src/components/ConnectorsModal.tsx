@@ -7,6 +7,7 @@ interface ConnectorsModalProps {
   targetUrl?: string;
   initialTab?: ConnectorType;
   onIntegrationAdded?: () => void;
+  notice?: string | null;
 }
 
 export type ConnectorCategory = 'ALL' | 'ANALYTICS' | 'CRM' | 'GEO' | 'CMS';
@@ -61,6 +62,7 @@ export const ConnectorsModal: React.FC<ConnectorsModalProps> = ({
   targetUrl = '',
   initialTab,
   onIntegrationAdded,
+  notice,
 }) => {
   const [integrations, setIntegrations] = useState<Integration[]>([]);
   const [activeTab, setActiveTab] = useState<ConnectorType>(initialTab || 'google_search_console');
@@ -132,8 +134,13 @@ export const ConnectorsModal: React.FC<ConnectorsModalProps> = ({
       if (initialTab) {
         setActiveTab(initialTab);
       }
+      if (notice) {
+        const saved = /connected/i.test(notice);
+        setStatusMessage(saved ? `✓ ${notice}` : notice);
+        setRightPanelTab('active');
+      }
     }
-  }, [isOpen, targetUrl, initialTab]);
+  }, [isOpen, targetUrl, initialTab, notice]);
 
   // Listen for Google / Connector OAuth callback from popup window / broadcast
   useEffect(() => {
@@ -200,33 +207,9 @@ export const ConnectorsModal: React.FC<ConnectorsModalProps> = ({
       return;
     }
     setLoading(true);
-    setStatusMessage(null);
+    setStatusMessage('Taking you to Google in this tab. You will come back here when the connection is saved.');
     const query = new URLSearchParams(Object.entries(params).filter(([, value]) => value));
-    const width = 520;
-    const height = 680;
-    const left = window.screenX + (window.outerWidth - width) / 2;
-    const top = window.screenY + (window.outerHeight - height) / 2;
-    const popup = window.open(
-      `/api/v1/connectors/oauth/${provider}/authorize?${query.toString()}`,
-      'connector_oauth',
-      `width=${width},height=${height},left=${left},top=${top},status=no,resizable=yes`
-    );
-    let attempts = 0;
-    const timer = setInterval(async () => {
-      attempts++;
-      let isClosed = false;
-      try {
-        isClosed = !popup || popup.closed;
-      } catch (_) {
-        // Cross-origin access restrictions can occur during authentication redirect
-      }
-      if (isClosed || attempts > 180) {
-        clearInterval(timer);
-        setLoading(false);
-        await fetchIntegrations();
-        onIntegrationAdded?.();
-      }
-    }, 1000);
+    window.location.assign(`/api/v1/connectors/oauth/${provider}/authorize?${query.toString()}`);
   };
 
   const handleGoogleOAuth = () => {
@@ -244,25 +227,10 @@ export const ConnectorsModal: React.FC<ConnectorsModalProps> = ({
       setLoading(false);
       return;
     }
-    const width = 520;
-    const height = 660;
-    const left = window.screenX + (window.outerWidth - width) / 2;
-    const top = window.screenY + (window.outerHeight - height) / 2;
-    const authUrl = `/api/v1/connectors/google/oauth/authorize?domain=${encodeURIComponent(cleanDomain)}`;
-    const popup = window.open(
-      authUrl,
-      'google_oauth_popup',
-      `width=${width},height=${height},left=${left},top=${top},status=no,resizable=yes`
+    setStatusMessage('Taking you to Google in this tab. Search Console will show as connected when you return.');
+    window.location.assign(
+      `/api/v1/connectors/oauth/google_search_console/authorize?domain=${encodeURIComponent(cleanDomain)}`,
     );
-
-    const timer = setInterval(async () => {
-      if (!popup || popup.closed) {
-        clearInterval(timer);
-        setLoading(false);
-        await fetchIntegrations();
-        onIntegrationAdded?.();
-      }
-    }, 1000);
   };
 
   const handleConnect = async (e: React.FormEvent) => {
@@ -335,15 +303,15 @@ export const ConnectorsModal: React.FC<ConnectorsModalProps> = ({
         body: JSON.stringify(payload),
       });
       const data = await res.json();
-      if (res.ok && (data.success || data.integration)) {
+      if (res.ok && data.success) {
         setStatusMessage(`✓ ${data.message || 'Connected successfully'}`);
+        setRightPanelTab('active');
         await fetchIntegrations();
         onIntegrationAdded?.();
       } else {
-        setStatusMessage(`Notice: ${data.detail || data.message || 'Saved'}`);
-        if (data.integration) {
-          await fetchIntegrations();
-        }
+        const detail = data.health?.message || data.detail || data.message || 'The connector was not saved.';
+        setStatusMessage(detail);
+        await fetchIntegrations();
       }
     } catch (err: any) {
       setStatusMessage(`Connection failed: ${err.message}`);
@@ -367,7 +335,10 @@ export const ConnectorsModal: React.FC<ConnectorsModalProps> = ({
       : ALL_CONNECTORS.filter((c) => c.category === categoryFilter);
 
   const isConnectorConnected = (connId: ConnectorType) => {
-    return integrations.some((i) => i.provider === connId);
+    return integrations.some((integration) => {
+      const status = String(integration.status || '').toLowerCase();
+      return integration.provider === connId && status === 'connected';
+    });
   };
 
   if (!isOpen) return null;
@@ -665,7 +636,7 @@ export const ConnectorsModal: React.FC<ConnectorsModalProps> = ({
               {activeTab === 'crux' && (
                 <div className="space-y-4">
                   <div className="text-xs text-ink-700 leading-relaxed bg-paper-100 p-3 rounded border border-line">
-                    <span className="text-ink font-semibold">Google CrUX (Chrome User Experience Report):</span> Pulls actual 75th-percentile field user metrics (LCP, INP, CLS) from millions of real Chrome browsers.
+                    <span className="text-ink font-semibold">Google CrUX (Chrome User Experience Report):</span> Pulls actual 75th-percentile field user metrics (LCP, INP, CLS). This is not the Google sign-in used by Search Console. It needs a Chrome UX Report API key (CRUX_API_KEY on the server, or paste one here).
                   </div>
                   <div>
                     <label className="text-xs text-ink-700 font-medium block mb-1">Target Website URL</label>

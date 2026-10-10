@@ -262,11 +262,35 @@ export function startSSOAuth(
     };
   } catch (_) {}
 
+  const waitForSession = async () => {
+    for (let attempt = 0; attempt < 10; attempt += 1) {
+      try {
+        const user = await fetchMe();
+        if (user) return true;
+      } catch {
+        /* session cookie may land a moment after the popup closes */
+      }
+      await new Promise((resolve) => window.setTimeout(resolve, 400));
+    }
+    return false;
+  };
+
   timer = setInterval(() => {
-    if (popup.closed) {
+    let closed = false;
+    try {
+      closed = Boolean(popup.closed);
+    } catch {
+      closed = false;
+    }
+    if (!closed) return;
+    clearInterval(timer);
+    timer = null;
+    // Google often reports the popup closed before the callback finishes.
+    // Keep BroadcastChannel and storage listeners until the session exists.
+    void waitForSession().finally(() => {
       cleanup();
       onComplete();
-    }
+    });
   }, 500);
 
   window.addEventListener('message', handleMessage);

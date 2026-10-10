@@ -41,10 +41,12 @@ function OAuthSSOButtons({ onAuthed }: { onAuthed: () => void }) {
     }
 
     setSsoBusy(provider);
+    // Same-tab redirect. Google's consent page drops window.opener, so a popup
+    // comes back as a second tab and the original page never signs in.
     startSSOAuth(provider, () => {
       setSsoBusy(null);
       onAuthed();
-    });
+    }, 'redirect');
   };
 
   return (

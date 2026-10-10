@@ -227,24 +227,9 @@ export function SearchConsoleAttributionView({ domain, analysisId, onOpenConnect
     setConnecting(true);
     setConnectError(null);
     const cleanDomain = (gscPropertyUrl || domain).replace('https://', '').replace('http://', '').split('/')[0];
-    const width = 520;
-    const height = 660;
-    const left = window.screenX + (window.outerWidth - width) / 2;
-    const top = window.screenY + (window.outerHeight - height) / 2;
-    const authUrl = `/api/v1/connectors/google/oauth/authorize?domain=${encodeURIComponent(cleanDomain)}`;
-    const popup = window.open(
-      authUrl,
-      'google_oauth_popup',
-      `width=${width},height=${height},left=${left},top=${top},status=no,resizable=yes`
+    window.location.assign(
+      `/api/v1/connectors/oauth/google_search_console/authorize?domain=${encodeURIComponent(cleanDomain)}`,
     );
-
-    const timer = setInterval(() => {
-      if (!popup || popup.closed) {
-        clearInterval(timer);
-        setConnecting(false);
-        fetchGsc();
-      }
-    }, 1000);
   };
 
   const handleDirectConnect = async (e: React.FormEvent) => {

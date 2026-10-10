@@ -57,6 +57,8 @@ export function App() {
   const [connectorsOpen, setConnectorsOpen] = useState(false);
   const [externalOpen, setExternalOpen] = useState(false);
   const [connectorsInitialTab, setConnectorsInitialTab] = useState<ConnectorType>('google_search_console');
+  const [connectorNotice, setConnectorNotice] = useState<string | null>(null);
+  const [externalNotice, setExternalNotice] = useState<string | null>(null);
   const [remediationOpen, setRemediationOpen] = useState(false);
   const [agencyOpen, setAgencyOpen] = useState(false);
   const [rubricOpen, setRubricOpen] = useState(false);
@@ -157,6 +159,78 @@ export function App() {
   };
 
   useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const connectorFlag = params.get('connector');
+    const externalFlag = params.get('external');
+    const provider = params.get('provider') || '';
+    const reason = params.get('reason') || '';
+    const labels: Record<string, string> = {
+      google_search_console: 'Google Search Console',
+      google_analytics_4: 'Google Analytics 4',
+      crux: 'Google CrUX',
+    };
+    const label = labels[provider] || provider.replace(/_/g, ' ') || 'Connector';
+    let changed = false;
+    if (connectorFlag === 'connected') {
+      const known: ConnectorType[] = [
+        'google_search_console',
+        'google_analytics_4',
+        'crux',
+        'dataforseo',
+        'crm',
+        'live_ai_search',
+        'wordpress',
+        'github',
+        'shopify',
+        'webflow',
+        'generic',
+      ];
+      if (known.includes(provider as ConnectorType)) {
+        setConnectorsInitialTab(provider as ConnectorType);
+      }
+      setConnectorNotice(`${label} is connected.`);
+      setConnectorsOpen(true);
+      notify({ title: `${label} is connected`, description: 'The account is saved on this page.', tone: 'success' });
+      params.delete('connector');
+      params.delete('provider');
+      changed = true;
+    } else if (connectorFlag === 'error') {
+      const description = reason === 'cancelled'
+        ? 'Google sign-in was cancelled. Nothing was connected.'
+        : 'The connection was not saved. Use Connect again from this page.';
+      setConnectorNotice(description);
+      setConnectorsOpen(true);
+      notify({ title: 'Connection was not saved', description, tone: 'warning' });
+      params.delete('connector');
+      params.delete('provider');
+      params.delete('reason');
+      changed = true;
+    }
+    if (externalFlag === 'connected') {
+      setExternalNotice(`${label} is connected.`);
+      setExternalOpen(true);
+      notify({ title: `${label} is connected`, tone: 'success' });
+      params.delete('external');
+      params.delete('provider');
+      changed = true;
+    } else if (externalFlag === 'error') {
+      const description = reason === 'state'
+        ? 'Google returned without a saved connection. Use Connect again from this page.'
+        : 'The connection was not saved.';
+      setExternalNotice(description);
+      setExternalOpen(true);
+      notify({ title: 'Connection was not saved', description, tone: 'warning' });
+      params.delete('external');
+      params.delete('reason');
+      changed = true;
+    }
+    if (changed) {
+      const query = params.toString();
+      const next = query
+        ? `${window.location.pathname}?${query}${window.location.hash}`
+        : `${window.location.pathname}${window.location.hash}`;
+      window.history.replaceState(null, '', next);
+    }
     fetchMe().then(setUser).catch(() => setUser(null));
     listAnalyses(6).then(setRecentAudits).catch(() => {});
 
@@ -745,14 +819,22 @@ export function App() {
         />
         <ConnectorsModal
           isOpen={connectorsOpen}
-          onClose={() => setConnectorsOpen(false)}
+          onClose={() => {
+            setConnectorsOpen(false);
+            setConnectorNotice(null);
+          }}
           targetUrl={url || run?.website_url || 'https://example.com'}
           initialTab={connectorsInitialTab}
+          notice={connectorNotice}
         />
         <ExternalAuthorityPanel
           isOpen={externalOpen}
-          onClose={() => setExternalOpen(false)}
+          onClose={() => {
+            setExternalOpen(false);
+            setExternalNotice(null);
+          }}
           domain={url || run?.website_url || ''}
+          notice={externalNotice}
         />
         <RemediationFlowModal
           isOpen={remediationOpen}
