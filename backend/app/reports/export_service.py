@@ -182,3 +182,76 @@ def generate_remediation_tracker_csv(report: ExecutiveReport) -> str:
         ])
 
     return output.getvalue()
+
+
+def generate_geo_remediation_csv(report: ExecutiveReport) -> str:
+    """
+    Generates a specialized GEO Remediation Tracker CSV adhering to the 14-field
+    Generative Engine Optimization issue schema.
+    """
+    output = io.StringIO()
+    writer = csv.writer(output, quoting=csv.QUOTE_MINIMAL)
+
+    headers = [
+        "Finding ID",
+        "Category / Domain",
+        "Subcategory",
+        "Severity",
+        "Lifecycle Status",
+        "Priority (1-10)",
+        "Citability Impact (1-10)",
+        "Remediation Effort (1-10)",
+        "Title",
+        "Observed Result",
+        "Reference Baseline (Expected Condition)",
+        "Commercial Risk / Citability Impact",
+        "Prescriptive Recommendation",
+        "Validation Criteria (Fixed vs Verified)",
+        "Owner",
+        "Affected URLs Count",
+        "Affected URLs (Sample)",
+        "Dependencies",
+        "Evidence Class",
+        "Confidence & Provenance",
+    ]
+    writer.writerow(headers)
+
+    findings: List[Finding] = report.findings or []
+
+    for idx, f in enumerate(findings):
+        fid = f.finding_id or f"GEO-ISS-{idx+1:03d}"
+        if not fid.startswith("GEO-"):
+            fid = f"GEO-{fid}"
+
+        cat_str = f.category.value if hasattr(f.category, "value") else str(f.category)
+        sev_str = f.severity.value if hasattr(f.severity, "value") else str(f.severity)
+        stat_str = f.status.value if hasattr(f.status, "value") else str(f.status)
+
+        aff_urls = f.affected_urls or []
+        aff_sample = "; ".join(aff_urls[:5]) + (f" (+{len(aff_urls)-5} more)" if len(aff_urls) > 5 else "")
+
+        writer.writerow([
+            fid,
+            cat_str,
+            f.subcategory or cat_str,
+            sev_str,
+            stat_str,
+            f.priority,
+            f.impact,
+            f.effort,
+            f.title,
+            f.description.replace("\n", " ").strip(),
+            f.expected_condition or "Structured, verifiable answer present in crawlable DOM.",
+            (f.why_it_matters or f.business_impact or "May prevent AI search engines from extracting or citing page.").replace("\n", " ").strip(),
+            f.recommendation.replace("\n", " ").strip(),
+            (f.validation_criteria or "Automated re-crawl confirms passage extractability and zero entity contradiction.").replace("\n", " ").strip(),
+            f.owner or "AI Search & Growth Team",
+            len(aff_urls),
+            aff_sample,
+            "; ".join(f.dependencies or []),
+            f.evidence_class.value if hasattr(f.evidence_class, "value") else str(f.evidence_class),
+            f"{int(f.confidence * 100)}% ({f.confidence_basis or 'Machine observation'})",
+        ])
+
+    return output.getvalue()
+

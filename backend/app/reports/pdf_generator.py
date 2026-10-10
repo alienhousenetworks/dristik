@@ -552,3 +552,60 @@ async def export_remediation_tracker_csv(
         headers={"Content-Disposition": f'attachment; filename="{filename}"'}
     )
 
+
+@router.get("/{analysis_id}/geo-report")
+async def get_complete_geo_report(
+    analysis_id: str,
+    format: str = "html",
+    user: Optional[UserIdentity] = Depends(get_current_user_optional)
+):
+    """
+    Renders the dedicated, complete 20-Section GEO Master Audit and AI Citability Report.
+    format='html': returns modern responsive standalone HTML report with sticky 20-section navigation.
+    format='json': returns structured 20-section JSON payload.
+    """
+    run = orchestrator.get_run(analysis_id)
+    if not run:
+        raise HTTPException(status_code=404, detail=f"Analysis run '{analysis_id}' not found.")
+    report = getattr(run, "report", None)
+    if not report:
+        raise HTTPException(status_code=400, detail="Executive report not yet synthesized for this analysis run.")
+
+    from app.reports.geo_report_generator import geo_report_generator
+
+    if format.lower() == "json":
+        return geo_report_generator.render_json_report(report)
+
+    html_content = geo_report_generator.render_html_report(report)
+    return Response(content=html_content, media_type="text/html")
+
+
+@router.get("/{analysis_id}/export/geo-remediation-tracker.csv")
+async def export_geo_remediation_tracker_csv(
+    analysis_id: str,
+    user: Optional[UserIdentity] = Depends(get_current_user_optional)
+):
+    """
+    Exports comprehensive GEO Remediation Tracker CSV formatted to the 14-field
+    Generative Engine Optimization issue schema.
+    """
+    run = orchestrator.get_run(analysis_id)
+    if not run:
+        raise HTTPException(status_code=404, detail=f"Analysis run '{analysis_id}' not found.")
+    report = getattr(run, "report", None)
+    if not report:
+        raise HTTPException(status_code=400, detail="Executive report not yet synthesized for this analysis run.")
+
+    from app.reports.export_service import generate_geo_remediation_csv
+
+    csv_data = generate_geo_remediation_csv(report)
+    domain_clean = (report.domain or "website").replace("https://", "").replace("http://", "").split("/")[0]
+    filename = f"{domain_clean}_geo_remediation_tracker.csv"
+
+    return Response(
+        content=csv_data,
+        media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+    )
+
+
