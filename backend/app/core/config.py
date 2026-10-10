@@ -199,16 +199,19 @@ class Settings(BaseSettings):
 
     # Crawling & Ingestion
     FIRECRAWL_API_KEY: Optional[str] = None
-    MAX_CRAWL_PAGES: Any = Field(default=10, description="Page limit or tier: quick | standard | professional | deep | enterprise")
+    MAX_CRAWL_PAGES: Any = Field(default=5, description="Page limit or tier: quick (5) | standard (20) | expanded (50) | deep (500)")
     # Analyzed-URL budgets. These are plan caps, not a promise of an unlimited crawl.
-    CRAWL_PAGE_CAP: int = 5000
+    CRAWL_PAGE_CAP: int = 500
     CRAWL_TIERS: Dict[str, int] = Field(
         default_factory=lambda: {
-            "quick": 10,
-            "standard": 50,
-            "professional": 250,
+            "quick": 5,
+            "starter": 5,
+            "standard": 20,
+            "growth": 20,
+            "expanded": 50,
+            "professional": 50,
             "deep": 500,
-            "enterprise": 1000,
+            "enterprise": 500,
         }
     )
     CRAWL_TIMEOUT_SECONDS: int = 15
@@ -223,12 +226,12 @@ class Settings(BaseSettings):
     def get_max_crawl_pages(self, override: Optional[Any] = None) -> int:
         """
         Resolves the analyzed-URL budget.
-        quick=10, standard=50, professional=250, deep=500, enterprise=1000.
+        quick=5, standard=20, expanded=50, deep=500.
         'all', 'full', and '-1' stay on the deep cap (500). A positive integer
-        is accepted up to CRAWL_PAGE_CAP (5000). An unknown tier uses quick.
+        is accepted up to CRAWL_PAGE_CAP (500). An unknown tier uses quick (5).
         """
         raw = override if override is not None else self.MAX_CRAWL_PAGES
-        cap = int(self.CRAWL_PAGE_CAP or 5000)
+        cap = int(self.CRAWL_PAGE_CAP or 500)
         if isinstance(raw, str):
             s = raw.strip().lower()
             if s in self.CRAWL_TIERS:
@@ -238,14 +241,14 @@ class Settings(BaseSettings):
             try:
                 requested = int(s)
             except ValueError:
-                return self.CRAWL_TIERS.get("quick", 10)
+                return self.CRAWL_TIERS.get("quick", 5)
             if requested <= 0:
                 return min(self.CRAWL_TIERS.get("deep", 500), cap)
             return min(requested, cap)
         try:
             val = int(raw)
         except (ValueError, TypeError):
-            return self.CRAWL_TIERS.get("quick", 10)
+            return self.CRAWL_TIERS.get("quick", 5)
         if val <= 0:
             return min(self.CRAWL_TIERS.get("deep", 500), cap)
         return min(val, cap)

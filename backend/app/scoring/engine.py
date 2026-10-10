@@ -911,6 +911,7 @@ class ScoringEngine:
         performance_metrics: Optional[Dict[str, float]] = None,
         plan_tier: str = "starter",
         live_benchmark_data: Optional[Dict[str, Any]] = None,
+        external_authority_connected: bool = False,
     ) -> HonestScores:
         """
         Specialized Views:
@@ -923,7 +924,7 @@ class ScoringEngine:
             has_schema=has_schema,
             is_https=is_https,
             readability=readability,
-            external_authority_connected=False,
+            external_authority_connected=external_authority_connected,
             live_citation_score=live_citation_score,
             live_benchmark_data=live_benchmark_data,
             performance_metrics=performance_metrics,

@@ -112,3 +112,14 @@ def _unavailable(error_type: str) -> Dict[str, Any]:
 
 def measured_findings(findings: List[Finding]) -> List[Finding]:
     return [item for item in findings if not item.held_from_executive]
+
+
+def has_measured_external_authority(coverage: Optional[List[Dict[str, Any]]]) -> bool:
+    """Return True if at least one external provider yielded measured or partially measured data.
+
+    A provider with connection_status="CONNECTED" but data_state="NOT_CONNECTED" or
+    "UNAVAILABLE" does NOT constitute measured external authority.
+    """
+    if not coverage:
+        return False
+    return any(c.get("data_state") in {"MEASURED", "PARTIALLY_MEASURED"} for c in coverage)

@@ -13,23 +13,51 @@
     }
   },
   "plans": {
+    "quick": {
+      "name": "Quick Audit",
+      "default_scope_pages": 5,
+      "ai_search_min_sample": 10,
+      "ai_search_min_prompts": 6,
+      "ai_search_repeats": 1
+    },
     "starter": {
       "name": "Starter Audit",
       "default_scope_pages": 5,
       "ai_search_min_sample": 10,
-      "ai_search_min_prompts": 10,
+      "ai_search_min_prompts": 6,
       "ai_search_repeats": 1
+    },
+    "standard": {
+      "name": "Standard Audit",
+      "default_scope_pages": 20,
+      "ai_search_min_sample": 25,
+      "ai_search_min_prompts": 15,
+      "ai_search_repeats": 2
     },
     "growth": {
       "name": "Growth Audit",
-      "default_scope_pages": 15,
+      "default_scope_pages": 20,
+      "ai_search_min_sample": 25,
+      "ai_search_min_prompts": 15,
+      "ai_search_repeats": 2
+    },
+    "expanded": {
+      "name": "Expanded Audit",
+      "default_scope_pages": 50,
       "ai_search_min_sample": 50,
       "ai_search_min_prompts": 25,
-      "ai_search_repeats": 2
+      "ai_search_repeats": 3
+    },
+    "deep": {
+      "name": "Deep Audit",
+      "default_scope_pages": 500,
+      "ai_search_min_sample": 100,
+      "ai_search_min_prompts": 30,
+      "ai_search_repeats": 3
     },
     "enterprise": {
       "name": "Enterprise Audit",
-      "default_scope_pages": 50,
+      "default_scope_pages": 500,
       "ai_search_min_sample": 100,
       "ai_search_min_prompts": 30,
       "ai_search_repeats": 3

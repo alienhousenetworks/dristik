@@ -519,3 +519,35 @@ def test_http_api_hides_secrets_and_reports_not_connected(env, tmp_path, monkeyp
         denied = client.post("/api/v1/external-authority/connect", json={"provider": "majestic", "api_key": API_KEY, "project_id": PROJECT, "domain": DOMAIN})
         assert denied.status_code == 503
         assert API_KEY not in denied.text
+
+
+def test_has_measured_external_authority_returns_false_for_all_not_connected():
+    from app.external_authority.audit_bridge import has_measured_external_authority
+
+    # 1. Empty coverage
+    assert has_measured_external_authority([]) is False
+    assert has_measured_external_authority(None) is False
+
+    # 2. All providers NOT_CONNECTED or UNAVAILABLE, even if connection_status is CONNECTED
+    not_connected_coverage = [
+        {"provider": "google_search_console", "connection_status": "NOT_CONNECTED", "data_state": "NOT_CONNECTED"},
+        {"provider": "ahrefs", "connection_status": "CONNECTED", "data_state": "UNAVAILABLE"},
+        {"provider": "semrush", "connection_status": "NOT_CONNECTED", "data_state": "NOT_CONNECTED"},
+        {"provider": "google_analytics_4", "connection_status": "CONNECTED", "data_state": "NOT_CONNECTED"},
+        {"provider": "google_business_profile", "connection_status": "NOT_CONNECTED", "data_state": "NOT_APPLICABLE"},
+    ]
+    # Critical test: bool(not_connected_coverage) is True, but has_measured_external_authority MUST be False
+    assert bool(not_connected_coverage) is True
+    assert has_measured_external_authority(not_connected_coverage) is False
+
+    # 3. Measured or partially measured provider present
+    measured_coverage = [
+        {"provider": "google_search_console", "connection_status": "CONNECTED", "data_state": "MEASURED"},
+        {"provider": "ahrefs", "connection_status": "NOT_CONNECTED", "data_state": "NOT_CONNECTED"},
+    ]
+    assert has_measured_external_authority(measured_coverage) is True
+
+    partially_measured_coverage = [
+        {"provider": "google_search_console", "connection_status": "CONNECTED", "data_state": "PARTIALLY_MEASURED"},
+    ]
+    assert has_measured_external_authority(partially_measured_coverage) is True

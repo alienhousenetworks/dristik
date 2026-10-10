@@ -197,7 +197,7 @@ export function synthesizePillars(report: ExecutiveReport | undefined | null): W
   const croParts = [humanScore, formScore].filter((n): n is number => typeof n === 'number');
   const croScore = croParts.length
     ? Math.round(croParts.reduce((sum, n) => sum + n, 0) / croParts.length)
-    : (typeof humanScore === 'number' ? Math.round(humanScore) : 65);
+    : (typeof humanScore === 'number' ? Math.round(humanScore) : null);
 
   const croFindings = findings.filter(f => f.category === 'UX_CONVERSION');
 
@@ -209,7 +209,9 @@ export function synthesizePillars(report: ExecutiveReport | undefined | null): W
     score: croScore,
     grade: getGrade(croScore),
     health: getHealth(croScore),
-    headline: croScore >= 75 ? 'Clear Value Proposition & Frictionless Conversion Path' : 'Conversion Friction in Forms, CTAs & User Flow',
+    headline: croScore == null
+      ? 'CRO was not scored on this crawl'
+      : (croScore >= 75 ? 'Clear Value Proposition & Frictionless Conversion Path' : 'Conversion Friction in Forms, CTAs & User Flow'),
     summary: 'Audits form field complexity, missing labels, CTA action verbs, 5-second value proposition clarity, and visual UX friction barriers.',
     highlights: [
       `Form Friction: ${formAudit ? `Grade ${formAudit.cro_friction_grade} (${formAudit.total_forms_detected} forms)` : 'Evaluated'}`,
