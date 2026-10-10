@@ -555,3 +555,12 @@ class ImpactLevel(str, Enum):
     LOW = "LOW"
     INFO = "INFO"
 
+
+class FindingStatus(str, Enum):
+    OPEN = "OPEN"
+    IN_PROGRESS = "IN_PROGRESS"
+    FIXED = "FIXED"               # Code deployed by developer
+    VERIFIED = "VERIFIED"         # Confirmed resolved by re-crawl / automated retest
+    ACCEPTED_RISK = "ACCEPTED_RISK"
+
+

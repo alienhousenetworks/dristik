@@ -23,6 +23,7 @@ from app.domain.models import (
     Severity,
     Category,
     CategoryScore,
+    RoadmapItem,
 )
 from app.agents.deck.architect import DeckArchitectAgent
 from app.agents.deck.data_analyst import DeckDataAnalystAgent
@@ -125,7 +126,37 @@ def _build_test_report() -> ExecutiveReport:
             ai_answer_engine_perspective="Generative answer engines struggle to extract pricing and target personas."
         ),
         crawl_manifest=manifest,
-        findings=findings
+        findings=findings,
+        roadmap_7_days=[
+            RoadmapItem(
+                timeframe="7_days",
+                title="Deploy Canonical 301 Rules",
+                description="Consolidate duplicate URL variants to protect crawl budget.",
+                impact="High",
+                effort="Low",
+                category=Category.TECHNICAL_SEO,
+            )
+        ],
+        roadmap_30_days=[
+            RoadmapItem(
+                timeframe="30_days",
+                title="Inject Organization JSON-LD Schema",
+                description="Anchor corporate entity with SameAs links.",
+                impact="Medium",
+                effort="Medium",
+                category=Category.SCHEMA,
+            )
+        ],
+        roadmap_90_days=[
+            RoadmapItem(
+                timeframe="90_days",
+                title="Establish Closed-Loop Regression Tests",
+                description="Automate monthly DOM and answer-engine extraction audits.",
+                impact="Medium",
+                effort="High",
+                category=Category.TECHNICAL_SEO,
+            )
+        ],
     )
 
 
@@ -217,6 +248,30 @@ def test_pptx_builder_creates_valid_presentation_binary():
     # Check standard ZIP / Office OpenXML magic bytes
     assert pptx_bytes.startswith(b"PK\x03\x04")
     assert blueprint.total_slides >= 70
+
+
+def test_roadmap_cards_binding_with_populated_items():
+    """Verify that roadmap items (7-day, 30-day, 90-day) bind descriptions correctly to slide cards."""
+    report = _build_test_report()
+    item = report.roadmap_7_days[0]
+    assert item.rationale == item.description  # Check property compatibility
+
+    architect = DeckArchitectAgent()
+    blueprint = architect.create_blueprint(report.domain, report.generated_at)
+    analyst = DeckDataAnalystAgent()
+    populated = analyst.populate_data(blueprint, report)
+
+    s71 = next(s for s in populated.slides if s.slide_id == "slide_71_phase1_7days")
+    assert s71.cards[0].title == "Deploy Canonical 301 Rules"
+    assert s71.cards[0].description == "Consolidate duplicate URL variants to protect crawl budget."
+
+    s72 = next(s for s in populated.slides if s.slide_id == "slide_72_phase2_30days")
+    assert s72.cards[0].title == "Inject Organization JSON-LD Schema"
+    assert s72.cards[0].description == "Anchor corporate entity with SameAs links."
+
+    s73 = next(s for s in populated.slides if s.slide_id == "slide_73_phase3_90days")
+    assert s73.cards[0].title == "Establish Closed-Loop Regression Tests"
+    assert s73.cards[0].description == "Automate monthly DOM and answer-engine extraction audits."
 
 
 def test_deck_api_endpoints():

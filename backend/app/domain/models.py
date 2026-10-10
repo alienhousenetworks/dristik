@@ -41,6 +41,7 @@ from app.domain.enums import (
     FindingClassification,
     ImpactLevel,
     ClaimSourceType,
+    FindingStatus,
 )
 from app.evidence.models import EvidenceRef
 
@@ -290,6 +291,12 @@ class Finding(BaseModel):
     workspace_id: str = "ws_default"
     mission_id: Optional[str] = None
     category: Category
+    subcategory: Optional[str] = None
+    affected_urls: List[str] = Field(default_factory=list)
+    expected_condition: Optional[str] = None
+    dependencies: List[str] = Field(default_factory=list)
+    status: FindingStatus = FindingStatus.OPEN
+    owner: Optional[str] = "Engineering"
     severity: Severity
     classification: FindingClassification = FindingClassification.VERIFIED_DEFECT
     calibrated_impact: Optional[FindingCalibratedImpact] = None
@@ -958,6 +965,10 @@ class RoadmapItem(BaseModel):
     category: Category
     related_finding_id: Optional[str] = None
     code_snippet: Optional[str] = None
+
+    @property
+    def rationale(self) -> str:
+        return self.description
 
 class ExecutiveActionItem(BaseModel):
     rank: int
@@ -1935,6 +1946,57 @@ class TopicalAuthorityAuditReport(BaseModel):
     pages: List[PageContentAuthority] = Field(default_factory=list)
     summary: str = ""
 
+class ProductSchemaIssue(BaseModel):
+    url: str
+    product_name: Optional[str] = None
+    missing_fields: List[str] = Field(default_factory=list)
+    has_merchant_return_policy: bool = False
+    has_shipping_details: bool = False
+
+class FacetedFilterTrap(BaseModel):
+    url: str
+    param_keys: List[str] = Field(default_factory=list)
+    has_canonical: bool = False
+    canonical_target: Optional[str] = None
+    is_noindexed: bool = False
+    risk_level: str = "HIGH"
+
+class EcommerceSeoAuditReport(BaseModel):
+    is_ecommerce_detected: bool = False
+    status: str = "NOT_APPLICABLE"  # PASS | WARNING | CRITICAL | NOT_APPLICABLE
+    detection_basis: str = ""
+    products_analyzed: int = 0
+    product_schema_compliance_pct: float = 0.0
+    products_with_issues: List[ProductSchemaIssue] = Field(default_factory=list)
+    faceted_urls_found: int = 0
+    faceted_traps: List[FacetedFilterTrap] = Field(default_factory=list)
+    out_of_stock_handling_notes: str = ""
+    summary: str = ""
+
+class SerpSnippetPreview(BaseModel):
+    url: str
+    desktop_title: str = ""
+    desktop_title_pixel_width: int = 0
+    desktop_title_truncated: bool = False
+    mobile_title_truncated: bool = False
+    meta_description: str = ""
+    meta_description_pixel_width: int = 0
+    meta_description_truncated: bool = False
+    rich_snippet_eligible: bool = False
+    rich_snippet_types: List[str] = Field(default_factory=list)
+    snippet_badge: Optional[str] = None
+    preview_url_display: str = ""
+
+class SerpAppearanceReport(BaseModel):
+    status: str = "PASS"  # PASS | WARNING | CRITICAL
+    total_urls_evaluated: int = 0
+    titles_truncated_count: int = 0
+    descriptions_truncated_count: int = 0
+    rich_snippets_supported_count: int = 0
+    rich_snippet_readiness_pct: float = 0.0
+    snippets: List[SerpSnippetPreview] = Field(default_factory=list)
+    summary: str = ""
+
 class ExecutiveReport(BaseModel):
     report_id: str
     analysis_id: Optional[str] = None
@@ -2022,6 +2084,8 @@ class ExecutiveReport(BaseModel):
     local_seo: Optional[LocalSeoAuditReport] = None
     international_seo: Optional[InternationalSeoAuditReport] = None
     topical_authority: Optional[TopicalAuthorityAuditReport] = None
+    ecommerce_seo: Optional[EcommerceSeoAuditReport] = None
+    serp_appearance: Optional[SerpAppearanceReport] = None
     derived_intelligence: List[DerivedMetric] = Field(default_factory=list)
     claim_ledger: Optional[ClaimLedger] = None
 

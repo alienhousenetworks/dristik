@@ -17,6 +17,8 @@ from app.analyzers.media_asset_analyzer import MediaAssetAnalyzer, analyze_media
 from app.analyzers.local_seo_analyzer import analyze_local_seo
 from app.analyzers.international_seo_analyzer import analyze_international_seo
 from app.analyzers.topical_authority_analyzer import analyze_topical_authority
+from app.analyzers.ecommerce_seo import analyze_ecommerce_seo
+from app.analyzers.serp_appearance import analyze_serp_appearance
 
 __all__ = [
     "MetaRollupAnalyzer",
@@ -34,4 +36,6 @@ __all__ = [
     "analyze_local_seo",
     "analyze_international_seo",
     "analyze_topical_authority",
+    "analyze_ecommerce_seo",
+    "analyze_serp_appearance",
 ]

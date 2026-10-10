@@ -754,6 +754,8 @@ class AnalysisOrchestrator:
             from app.analyzers.local_seo_analyzer import analyze_local_seo
             from app.analyzers.international_seo_analyzer import analyze_international_seo
             from app.analyzers.topical_authority_analyzer import analyze_topical_authority
+            from app.analyzers.ecommerce_seo import analyze_ecommerce_seo
+            from app.analyzers.serp_appearance import analyze_serp_appearance
             from app.intelligence.accessibility.wcag_auditor import DeepWcagAuditor
             from app.intelligence.indexation.classifier import indexation_classifier
             from app.intelligence.competitive.benchmark import build_competitor_seo_parity_matrix
@@ -790,6 +792,8 @@ class AnalysisOrchestrator:
             local_seo_rep, local_findings = analyze_local_seo(eval_pages, target_domain=domain)
             intl_seo_rep, intl_findings = analyze_international_seo(eval_pages, target_domain=domain)
             topical_auth_rep, topical_findings = analyze_topical_authority(eval_pages, target_domain=domain)
+            ecom_seo_rep, ecom_findings = analyze_ecommerce_seo(eval_pages, target_domain=domain)
+            serp_app_rep, serp_findings = analyze_serp_appearance(eval_pages, target_domain=domain)
 
             indexation_rollup_rep, indexation_findings = indexation_classifier.audit(
                 manifest=manifest,
@@ -823,7 +827,7 @@ class AnalysisOrchestrator:
                 raw_findings = [f for f in raw_findings if f.finding_id != "find_cro_001"]
                 raw_findings.append(cro_finding)
 
-            for f_group in (can_findings, http_findings, heading_findings, media_findings, link_findings, wcag_findings, local_findings, intl_findings, topical_findings, indexation_findings):
+            for f_group in (can_findings, http_findings, heading_findings, media_findings, link_findings, wcag_findings, local_findings, intl_findings, topical_findings, indexation_findings, ecom_findings, serp_findings):
                 for f in f_group:
                     if not any(x.finding_id == f.finding_id for x in raw_findings):
                         raw_findings.append(f)
@@ -1378,6 +1382,8 @@ class AnalysisOrchestrator:
                 local_seo=local_seo_rep,
                 international_seo=intl_seo_rep,
                 topical_authority=topical_auth_rep,
+                ecommerce_seo=ecom_seo_rep,
+                serp_appearance=serp_app_rep,
                 derived_intelligence=derived_intel_metrics,
             )
 

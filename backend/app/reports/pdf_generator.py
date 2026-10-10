@@ -467,3 +467,88 @@ async def get_presentation_deck_manifest(
         "lint_result": populated.lint_result.model_dump() if populated.lint_result else None,
         "slides": [s.model_dump() for s in populated.slides]
     }
+
+
+@router.get("/{analysis_id}/seo-report")
+async def get_complete_seo_report(
+    analysis_id: str,
+    format: str = "html",
+    user: Optional[UserIdentity] = Depends(get_current_user_optional)
+):
+    """
+    Renders the dedicated, complete 20-Section SEO Master Audit and Remediation Report.
+    format='html': returns modern responsive HTML report.
+    format='json': returns structured 20-section JSON payload.
+    """
+    run = orchestrator.get_run(analysis_id)
+    if not run:
+        raise HTTPException(status_code=404, detail=f"Analysis run '{analysis_id}' not found.")
+    report = getattr(run, "report", None)
+    if not report:
+        raise HTTPException(status_code=400, detail="Executive report not yet synthesized for this analysis run.")
+
+    from app.reports.seo_report_generator import seo_report_generator
+
+    if format.lower() == "json":
+        return seo_report_generator.render_json_report(report)
+
+    html_content = seo_report_generator.render_html_report(report)
+    return Response(content=html_content, media_type="text/html")
+
+
+@router.get("/{analysis_id}/export/urls.csv")
+async def export_urls_csv(
+    analysis_id: str,
+    user: Optional[UserIdentity] = Depends(get_current_user_optional)
+):
+    """
+    Exports full URL-level crawl dataset in CSV format.
+    """
+    run = orchestrator.get_run(analysis_id)
+    if not run:
+        raise HTTPException(status_code=404, detail=f"Analysis run '{analysis_id}' not found.")
+    report = getattr(run, "report", None)
+    if not report:
+        raise HTTPException(status_code=400, detail="Executive report not yet synthesized for this analysis run.")
+
+    from app.reports.export_service import generate_urls_csv
+
+    csv_data = generate_urls_csv(report)
+    domain_clean = (report.domain or "website").replace("https://", "").replace("http://", "").split("/")[0]
+    filename = f"{domain_clean}_urls.csv"
+
+    return Response(
+        content=csv_data,
+        media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+    )
+
+
+@router.get("/{analysis_id}/export/remediation-tracker.csv")
+async def export_remediation_tracker_csv(
+    analysis_id: str,
+    user: Optional[UserIdentity] = Depends(get_current_user_optional)
+):
+    """
+    Exports comprehensive Remediation Tracker CSV with all 14 finding fields,
+    ownership, priority, and 'Fixed vs Verified' lifecycle states.
+    """
+    run = orchestrator.get_run(analysis_id)
+    if not run:
+        raise HTTPException(status_code=404, detail=f"Analysis run '{analysis_id}' not found.")
+    report = getattr(run, "report", None)
+    if not report:
+        raise HTTPException(status_code=400, detail="Executive report not yet synthesized for this analysis run.")
+
+    from app.reports.export_service import generate_remediation_tracker_csv
+
+    csv_data = generate_remediation_tracker_csv(report)
+    domain_clean = (report.domain or "website").replace("https://", "").replace("http://", "").split("/")[0]
+    filename = f"{domain_clean}_remediation_tracker.csv"
+
+    return Response(
+        content=csv_data,
+        media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+    )
+
