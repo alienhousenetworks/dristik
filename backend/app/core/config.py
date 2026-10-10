@@ -396,6 +396,17 @@ class Settings(BaseSettings):
             return explicit
         return "http://localhost:8000/api/v1/external-authority/oauth/callback"
 
+    def registered_google_redirect_uri(self) -> Optional[str]:
+        """Callback registered on the Google OAuth client, when one is configured.
+
+        This deployment's client allows the external-authority callback only.
+        Sign-in and the Google connectors must send that exact URI.
+        """
+        explicit = (self.EXTERNAL_OAUTH_REDIRECT_URI or self.GOOGLE_OAUTH_REDIRECT_URI or "").strip()
+        if explicit and "external-authority" in explicit:
+            return explicit
+        return None
+
     def get_github_sso_client(self) -> tuple[Optional[str], Optional[str]]:
         cid = self.GITHUB_SSO_CLIENT_ID or self.GITHUB_CLIENT_ID
         sec = self.GITHUB_SSO_CLIENT_SECRET or self.GITHUB_CLIENT_SECRET

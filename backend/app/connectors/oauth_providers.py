@@ -52,6 +52,51 @@ def _callback(request: Optional[Request] = None) -> str:
     return _PUBLIC_BASE
 
 
+def google_redirect_uri(request: Optional[Request] = None) -> str:
+    """Redirect URI Google will accept for this OAuth client.
+
+    When GOOGLE_OAUTH_REDIRECT_URI is the external-authority callback, that
+    value is the one registered in Google Cloud. Other connector providers
+    keep using OAUTH_REDIRECT_URI.
+    """
+    configured = settings.registered_google_redirect_uri()
+    if not configured:
+        return _callback(request)
+    if "localhost" in configured and request is not None:
+        host = request.headers.get("x-forwarded-host") or request.headers.get("host")
+        if host and not host.startswith("localhost") and not host.startswith("127.0.0.1"):
+            scheme = request.headers.get("x-forwarded-proto") or request.url.scheme or "https"
+            return f"{scheme}://{host}/api/v1/external-authority/oauth/callback"
+    return configured
+
+
+def peek_signed_state(state: str) -> Optional[Dict[str, Any]]:
+    """Read an SSO or connector state. Returns None for external-authority states."""
+    if not state or "." not in state:
+        return None
+    try:
+        raw, sig = state.split(".", 1)
+    except ValueError:
+        return None
+    secrets = []
+    auth_secret = (settings.AUTH_SECRET or "").encode()
+    if auth_secret:
+        secrets.append(auth_secret)
+    secrets.extend((b"dristik-auth-secret", b"dristik"))
+    for secret in secrets:
+        expected = hmac.new(secret, raw.encode(), hashlib.sha256).hexdigest()
+        if not hmac.compare_digest(expected, sig):
+            continue
+        try:
+            data = json.loads(base64.urlsafe_b64decode(raw.encode()))
+        except Exception:
+            return None
+        if isinstance(data, dict) and data.get("provider"):
+            return data
+        return None
+    return None
+
+
 PROVIDERS: Dict[str, Dict[str, Any]] = {
     "google_search_console": {
         "label": "Google Search Console",
@@ -168,12 +213,13 @@ def provider_status(request: Optional[Request] = None) -> Dict[str, Any]:
     redirect_uri = _callback(request)
     out = {}
     for key, spec in PROVIDERS.items():
+        provider_redirect = google_redirect_uri(request) if key.startswith("google") else redirect_uri
         out[key] = {
             "label": spec["label"],
             "configured": _configured(spec),
             "client_id_env": spec["client_id"],
             "client_secret_env": spec["client_secret"],
-            "redirect_uri": redirect_uri,
+            "redirect_uri": provider_redirect,
             "needs_shop": bool(spec.get("needs_shop")),
         }
     return {"redirect_uri": redirect_uri, "providers": out}
@@ -381,7 +427,7 @@ def oauth_authorize(
             status_code=503,
             detail=f"Set {spec['client_id']} and {spec['client_secret']} in the backend env, then restart.",
         )
-    redirect_uri = _callback(request)
+    redirect_uri = google_redirect_uri(request) if provider.startswith("google") else _callback(request)
     state = _sign({
         "provider": provider,
         "domain": domain,

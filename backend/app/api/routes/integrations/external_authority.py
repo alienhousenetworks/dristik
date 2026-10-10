@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, Field
 
@@ -140,7 +140,36 @@ def oauth_start(
 
 
 @router.get("/oauth/callback")
-def oauth_callback(code: str = "", state: str = ""):
+async def oauth_callback(request: Request, code: str = "", state: str = "", error: str = ""):
+    """Google's client allows only this callback.
+
+    Sign-in and connector consent land here too. Their state is a signed
+    payload. External-authority consent uses an opaque stored state.
+    """
+    from app.connectors.oauth_providers import PROVIDERS, peek_signed_state
+
+    payload = peek_signed_state(state)
+    provider = str((payload or {}).get("provider") or "")
+    if payload and provider in {"google", "github"} and "nonce" in payload:
+        from fastapi import Response
+        from app.api.routes.identity.auth import oauth_sso_callback
+        return await oauth_sso_callback(
+            provider,
+            Response(),
+            code or None,
+            state or None,
+            error or None,
+        )
+    if payload and provider in PROVIDERS:
+        from app.connectors.oauth_providers import oauth_callback as connector_oauth_callback
+        return await connector_oauth_callback(
+            request,
+            code or None,
+            state or None,
+            error or None,
+            None,
+        )
+
     frontend = (settings.FRONTEND_URL or "http://localhost:5173").rstrip("/")
     try:
         result = _service().finish_oauth(code, state)

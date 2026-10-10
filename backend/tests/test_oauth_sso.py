@@ -184,25 +184,49 @@ def test_connectors_oauth_providers_status():
         assert expected in providers, f"Missing connector provider: {expected}"
 
 
-def test_search_console_authorize_uses_connector_callback_not_external_authority():
-    """Search Console must not send Google back to the external-authority callback."""
+def test_search_console_authorize_uses_registered_google_redirect():
+    """Search Console must send the redirect URI registered on the Google client."""
+    registered = "https://octaos.org/api/v1/external-authority/oauth/callback"
     with patch.object(settings, "GOOGLE_CLIENT_ID", "mock-google-id"), \
          patch.object(settings, "GOOGLE_CLIENT_SECRET", "mock-google-sec"), \
+         patch.object(settings, "GOOGLE_OAUTH_REDIRECT_URI", registered), \
+         patch.object(settings, "EXTERNAL_OAUTH_REDIRECT_URI", None), \
          patch.object(settings, "OAUTH_REDIRECT_URI", "https://octaos.org/api/v1/connectors/oauth/callback"):
         res = client.get(
             "/api/v1/connectors/google/oauth/authorize?domain=example.com",
             follow_redirects=False,
         )
         assert res.status_code == 302
-        assert "external-authority" not in res.headers["location"]
         assert "/api/v1/connectors/oauth/google_search_console/authorize" in res.headers["location"]
 
         followed = client.get(res.headers["location"], follow_redirects=False)
         assert followed.status_code in (302, 307)
         location = followed.headers["location"]
         assert "accounts.google.com" in location
-        assert "external-authority" not in location
-        assert "connectors%2Foauth%2Fcallback" in location or "connectors/oauth/callback" in location
+        assert "external-authority%2Foauth%2Fcallback" in location or "external-authority/oauth/callback" in location
+
+        sso = client.get("/api/v1/auth/oauth/google/authorize", follow_redirects=False)
+        assert sso.status_code in (302, 307)
+        assert "external-authority%2Foauth%2Fcallback" in sso.headers["location"] or "external-authority/oauth/callback" in sso.headers["location"]
+
+
+def test_registered_google_callback_completes_sso():
+    """Google returns sign-in to the one registered callback. That route must finish SSO."""
+    state = oauth_service._sign_state({"provider": "google", "nonce": "abc", "redirect": "/"})
+    mock_profile = {
+        "provider": "google",
+        "oauth_id": "goog_registered_callback",
+        "email": "registered.callback@example.com",
+        "full_name": "Registered Callback",
+        "avatar_url": None,
+    }
+    with patch("app.identity.oauth_service.exchange_and_get_profile", return_value=(mock_profile, "/")):
+        res = client.get(
+            f"/api/v1/external-authority/oauth/callback?code=mock_code&state={state}"
+        )
+    assert res.status_code == 200
+    assert "Signed in as Registered Callback" in res.text
+    assert "dristik_session=" in res.headers.get("set-cookie", "")
 
 
 def test_oauth_sso_callback_html_broadcast_channel():
@@ -260,6 +284,8 @@ def test_ga4_connector_oauth_hosted_redirect_and_connect():
     # 1. Authorize on a hosted domain with X-Forwarded-Host
     with patch.object(settings, "GOOGLE_CLIENT_ID", "mock-ga4-id"), \
          patch.object(settings, "GOOGLE_CLIENT_SECRET", "mock-ga4-sec"), \
+         patch.object(settings, "GOOGLE_OAUTH_REDIRECT_URI", None), \
+         patch.object(settings, "EXTERNAL_OAUTH_REDIRECT_URI", None), \
          patch.object(settings, "OAUTH_REDIRECT_URI", "http://localhost:8000/api/v1/connectors/oauth/callback"):
         res = client.get(
             "/api/v1/connectors/oauth/google_analytics_4/authorize?domain=acme-store.com",

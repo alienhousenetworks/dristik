@@ -261,10 +261,9 @@ async def google_oauth_status(request: Request):
 @router.get("/google/oauth/authorize")
 async def google_oauth_authorize(request: Request, domain: str = "example.com"):
     """
-    Search Console sign-in uses the shared connector callback.
+    Search Console sign-in uses the shared Google authorize route.
 
-    GOOGLE_OAUTH_REDIRECT_URI points at the external-authority callback, which
-    rejects this flow's state. The shared callback is the URI in OAUTH_REDIRECT_URI.
+    That route sends Google the redirect URI registered on this OAuth client.
     """
     client_id = os.environ.get("GOOGLE_CLIENT_ID") or settings.GOOGLE_CLIENT_ID
     if not client_id:

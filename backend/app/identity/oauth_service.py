@@ -20,6 +20,10 @@ from app.core.config import settings
 
 
 def _callback_url(provider: str) -> str:
+    if provider.lower().strip() == "google":
+        # Google rejects any callback that is not on the client's allow list.
+        from app.connectors.oauth_providers import google_redirect_uri
+        return google_redirect_uri()
     base = settings.FRONTEND_URL.rstrip("/")
     # If running backend on separate host/port or same host
     backend_base = f"http://localhost:{settings.PORT}" if settings.DEBUG else base
