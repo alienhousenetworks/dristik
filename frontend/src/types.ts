@@ -1248,6 +1248,8 @@ export interface ExecutiveReport {
   };
   commercial_evaluations?: CommercialQueryEvaluation[];
   dynamic_sandbox_evaluations?: DynamicSandboxQuestionEvaluation[];
+  kie_graph_summary?: KieGraphSummary;
+  five_dimension_ai_visibility?: FiveDimensionAiVisibility;
   competitor_bakeoff?: CompetitorBakeoffResult;
   character_safe_copy?: CharacterSafeCopy;
   whatsapp_summary?: string;

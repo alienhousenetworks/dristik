@@ -500,16 +500,24 @@ async def generate_audit_dynamic_sandbox(
         raise HTTPException(status_code=404, detail="Analysis report not ready yet.")
 
     pages = []
-    if run.report.page_reports:
+    if run.report.crawl_manifest and run.report.crawl_manifest.pages:
+        pages = list(run.report.crawl_manifest.pages)
+    elif run.report.page_reports:
         for p in run.report.page_reports:
+            p_title = getattr(p, "title", None) or (getattr(p, "seo", None) and getattr(p.seo, "title", None)) or run.report.domain
+            p_desc = (getattr(p, "seo", None) and getattr(p.seo, "meta_description", None)) or getattr(p, "meta_description", "")
+            p_h1 = getattr(p, "h1", None)
+            h1_list = [p_h1] if isinstance(p_h1, str) else (p_h1 or [])
+            p_h2 = getattr(p, "h2", None) or []
+            p_text = getattr(p, "body_text", None) or run.report.story_summary or ""
             pages.append(PageEvidence(
-                url=p.url,
-                title=p.title,
-                meta_description=p.meta_description,
-                h1=[p.h1] if isinstance(p.h1, str) else (p.h1 or []),
-                h2=p.h2 or [],
-                body_text=p.body_text or "",
-                word_count=p.word_count or 0
+                url=getattr(p, "url", run.report.website_url),
+                title=p_title,
+                meta_description=p_desc,
+                h1=h1_list,
+                h2=p_h2,
+                body_text=p_text,
+                word_count=getattr(p, "word_count", None) or len(p_text.split()) or 100
             ))
     elif run.report.crawl_manifest and run.report.crawl_manifest.crawled_urls:
         for u in run.report.crawl_manifest.crawled_urls:
@@ -532,7 +540,11 @@ async def generate_audit_dynamic_sandbox(
         pages=pages
     )
 
-    sandbox_engine = DynamicQuestionSandboxEngine(model_router=orchestrator.model_router)
+    model_router = getattr(orchestrator, "model_router", None)
+    if not model_router:
+        from app.inference.model_router import ModelRouter
+        model_router = ModelRouter()
+    sandbox_engine = DynamicQuestionSandboxEngine(model_router=model_router)
     evaluations = await sandbox_engine.generate_and_evaluate_100_questions(
         pages=pages,
         website_url=run.report.website_url,
@@ -578,6 +590,12 @@ async def generate_audit_dynamic_sandbox(
         pass  # Non-fatal; KIE data is enhancement not hard requirement
 
     run.report.dynamic_sandbox_evaluations = evaluations
+
+    # Persist the updated run to storage so reloads retain generated evaluations
+    try:
+        orchestrator.repository.save_run(run)
+    except Exception:
+        pass
 
     answerable = sum(1 for e in evaluations if e.is_answerable)
     unanswerable = sum(1 for e in evaluations if not e.is_answerable)

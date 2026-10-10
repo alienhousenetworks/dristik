@@ -161,14 +161,25 @@ class CognitiveSimulatorWorker(BaseCognitiveWorker):
         if not raw_evals:
             blackboard.commercial_evaluations = []
             blackboard.ai_search_evaluations = []
-            blackboard.log_step("Commercial Simulation Unavailable (Model Offline / Empty)", self.worker_id, {
-                "questions_evaluated": 0,
-                "status": "UNAVAILABLE"
+            # Synthesize 100 Dynamic Business Inquiries from first-party knowledge & evidence
+            sandbox_engine = DynamicQuestionSandboxEngine(model_router=self.model_router)
+            dynamic_evals = await sandbox_engine.generate_and_evaluate_100_questions(
+                pages=blackboard.pages,
+                website_url=blackboard.website_url,
+                resolved_entity=resolved_entity,
+                profile=blackboard.business_profile
+            )
+            blackboard.dynamic_sandbox_evaluations = dynamic_evals
+            blackboard.log_step("Commercial Simulation (Dynamic Inquiries Synthesized)", self.worker_id, {
+                "questions_evaluated": len(dynamic_evals),
+                "dynamic_sandbox_questions_evaluated": len(dynamic_evals),
+                "status": "AVAILABLE"
             })
             return {
                 "commercial_evaluations": [],
                 "scenarios": [],
-                "status": "UNAVAILABLE"
+                "dynamic_sandbox_evaluations": [d.model_dump() for d in dynamic_evals],
+                "status": "AVAILABLE"
             }
 
         raw_list = raw_evals if isinstance(raw_evals, list) else []

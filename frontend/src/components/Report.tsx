@@ -247,6 +247,8 @@ export function Report({
         <DynamicQuestionSandboxView
           analysisId={targetAnalysisId}
           initialEvaluations={report.dynamic_sandbox_evaluations}
+          initialKieGraphSummary={report.kie_graph_summary}
+          initialFiveDimensions={report.five_dimension_ai_visibility}
           onEvaluationsUpdate={() => {}}
         />
       </section>

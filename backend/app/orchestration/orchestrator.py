@@ -77,6 +77,7 @@ class AnalysisOrchestrator:
         self.timelines: Dict[str, WebsiteIntelligenceTimeline] = {}
         from app.persistence.repository import get_audit_repository
         self.repository = get_audit_repository()
+        self.model_router = ModelRouter()
 
     def create_run(self, website_url: str, org_id: str = "org_default", created_by: Optional[str] = None) -> AnalysisRun:
         analysis_id = f"run_{uuid.uuid4().hex[:10]}"
@@ -1289,6 +1290,53 @@ class AnalysisOrchestrator:
             derived_engine = DerivedIntelligenceEngine()
             derived_intel_metrics = derived_engine.compute_all(blackboard.evidence_store, manifest)
 
+            # Ensure 100 Dynamic Sandbox Questions & KIE Knowledge Graph are assembled
+            kie_summary = None
+            five_dim_visibility = None
+            try:
+                from app.intelligence.geo.dynamic_sandbox import DynamicQuestionSandboxEngine
+                from app.intelligence.knowledge.website_knowledge_graph import WebsiteKnowledgeGraph
+                from app.intelligence.knowledge.grounded_simulator import AiVisibilityIndexCalculator
+                from app.intelligence.knowledge.primitives import GroundedAnswerSimulation, KieAnswerRisk
+
+                eval_pages_for_kg = eval_pages or blackboard.pages or []
+                if not getattr(blackboard, "dynamic_sandbox_evaluations", None):
+                    sandbox_engine = DynamicQuestionSandboxEngine(model_router=model_router)
+                    blackboard.dynamic_sandbox_evaluations = await sandbox_engine.generate_and_evaluate_100_questions(
+                        pages=eval_pages_for_kg,
+                        website_url=website_url,
+                        resolved_entity=blackboard.resolved_entity,
+                        profile=blackboard.business_profile,
+                    )
+
+                brand_for_kg = blackboard.resolved_entity.name if blackboard.resolved_entity else domain
+                kg = WebsiteKnowledgeGraph(brand=brand_for_kg, domain=domain)
+                kg.build_from_pages(eval_pages_for_kg)
+                kie_summary = kg.summary()
+
+                sim_list = []
+                for ev in (blackboard.dynamic_sandbox_evaluations or []):
+                    grounding = ev.grounding_ratio or 0.0
+                    risk = ev.answer_risk or "LOW"
+                    if isinstance(risk, str):
+                        try:
+                            risk = KieAnswerRisk(risk)
+                        except Exception:
+                            risk = KieAnswerRisk.LOW
+                    sim_obj = GroundedAnswerSimulation(
+                        question_id=ev.question_id,
+                        candidate_answer=ev.crawled_answer or "",
+                        grounding_ratio=grounding,
+                        retrieval_evidence_count=ev.retrieval_evidence_count or 0,
+                        answer_risk=risk,
+                    )
+                    sim_list.append(sim_obj)
+
+                dims = AiVisibilityIndexCalculator().compute(kg, sim_list)
+                five_dim_visibility = dims.model_dump()
+            except Exception as kie_err:
+                logger.info("KIE Graph / Sandbox assembly note: %s", kie_err)
+
             report = ExecutiveReport(
                 report_id=report_uuid,
                 analysis_id=analysis_id,
@@ -1311,6 +1359,8 @@ class AnalysisOrchestrator:
                 agent_readiness=agent_readiness,
                 commercial_evaluations=blackboard.commercial_evaluations,
                 dynamic_sandbox_evaluations=getattr(blackboard, "dynamic_sandbox_evaluations", []),
+                kie_graph_summary=kie_summary,
+                five_dimension_ai_visibility=five_dim_visibility,
                 competitor_bakeoff=blackboard.competitor_bakeoff,
                 character_safe_copy=character_copy,
                 whatsapp_summary=wa_summary,

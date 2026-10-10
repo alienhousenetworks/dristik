@@ -336,7 +336,10 @@ export function DynamicQuestionSandboxView({
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
       });
-      if (!res.ok) throw new Error(`Failed: ${res.statusText}`);
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => null);
+        throw new Error(errJson?.detail || `Server returned ${res.status}: ${res.statusText}`);
+      }
       const data = await res.json();
       if (data.evaluations && Array.isArray(data.evaluations)) {
         setEvaluations(data.evaluations);
@@ -407,13 +410,19 @@ export function DynamicQuestionSandboxView({
           className="btn-secondary text-xs flex items-center gap-2 px-3 py-2 rounded-md transition-colors"
         >
           <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin text-ink-700' : ''}`} />
-          {isLoading ? 'Building Knowledge Graph...' : totalCount > 0 ? 'Re-Evaluate' : 'Generate Questions'}
+          {isLoading ? 'Building Knowledge Graph...' : totalCount > 0 ? 'Re-Evaluate Inquiries' : 'Synthesize 100 Questions'}
         </button>
       </div>
 
       {error && (
-        <div className="p-3 bg-bad/10 border border-bad/30 text-bad text-xs rounded-md">
-          {error}
+        <div className="p-3.5 bg-bad/10 border border-bad/30 text-bad text-xs rounded-md flex items-center justify-between gap-3">
+          <span>{error}</span>
+          <button
+            onClick={handleGenerateOrRefresh}
+            className="underline text-xs font-medium hover:opacity-80 shrink-0"
+          >
+            Retry
+          </button>
         </div>
       )}
 
@@ -434,118 +443,189 @@ export function DynamicQuestionSandboxView({
         </div>
       )}
 
-      {/* ── Aggregate Scorecards ── */}
-      {totalCount > 0 && (
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-          <div className="p-3 bg-paper-50 border border-line rounded-md text-center">
-            <span className="label text-[10px] text-ink-400 block">Total Questions</span>
-            <span className="text-xl font-bold font-mono text-ink">{totalCount}</span>
-          </div>
-          <div className="p-3 bg-good/10 border border-good/30 rounded-md text-center">
-            <span className="label text-[10px] text-good block">Answerable</span>
-            <span className="text-xl font-bold font-mono text-good">
-              {answerableCount}{' '}
-              <span className="text-xs font-normal">({Math.round((answerableCount / totalCount) * 100)}%)</span>
-            </span>
-          </div>
-          <div className="p-3 bg-warn/10 border border-warn/30 rounded-md text-center">
-            <span className="label text-[10px] text-warn block">Partial Evidence</span>
-            <span className="text-xl font-bold font-mono text-warn">
-              {partialCount}{' '}
-              <span className="text-xs font-normal">({Math.round((partialCount / totalCount) * 100)}%)</span>
-            </span>
-          </div>
-          <div className="p-3 bg-bad/10 border border-bad/30 rounded-md text-center">
-            <span className="label text-[10px] text-bad block">Evidence Gaps</span>
-            <span className="text-xl font-bold font-mono text-bad">
-              {unanswerableCount}{' '}
-              <span className="text-xs font-normal">({Math.round((unanswerableCount / totalCount) * 100)}%)</span>
-            </span>
-          </div>
-          <div className="p-3 bg-paper-100 border border-line rounded-md text-center col-span-2 md:col-span-1">
-            <span className="label text-[10px] text-ink-700 block">Avg Grounding</span>
-            <span className="text-xl font-bold font-mono text-ink-700">
-              {avgGrounding !== null ? `${avgGrounding}%` : '—'}
-            </span>
-          </div>
-        </div>
-      )}
-
-      {/* ── Filters ── */}
-      <div className="flex flex-wrap items-center justify-between gap-3 bg-paper-50 p-3 rounded-md border border-line">
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="text-xs font-medium text-ink-600">Filter:</span>
-          {[
-            { key: 'all', label: `All (${evaluations.length})` },
-            { key: 'answerable', label: `Answerable (${answerableCount})`, color: 'emerald' },
-            { key: 'partial', label: `Partial (${partialCount})`, color: 'amber' },
-            { key: 'unanswerable', label: `Gaps (${unanswerableCount})`, color: 'rose' },
-            ...(highRiskCount > 0 ? [{ key: 'high_risk', label: `High Risk (${highRiskCount})`, color: 'rose' }] : []),
-          ].map(({ key, label, color }) => (
+      {/* ── Uninitialized / Empty Sandbox: Readiness Card ── */}
+      {totalCount === 0 ? (
+        <div className="rounded-xl border border-line bg-paper-50 p-6 md:p-8 space-y-6">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="space-y-1.5">
+              <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium bg-pine/10 text-pine border border-pine/30">
+                <span className="w-1.5 h-1.5 rounded-full bg-pine animate-pulse" />
+                Knowledge Graph Standby · Ready for Inquiry Synthesis
+              </div>
+              <h4 className="text-base font-semibold text-ink">
+                100-Question Dynamic AI Sandbox & Grounding Check
+              </h4>
+              <p className="text-xs text-ink-600 max-w-2xl leading-relaxed">
+                Synthesize 100 bespoke commercial buyer inquiries across 10 strategic facets (Identity, ICP, Pricing, Core Capabilities, Tech Stack, Competitive Moat, Enterprise Trust, Customer Proof, Onboarding, Purchase Flow). Each inquiry is evaluated using <strong>Hybrid Retrieval + Claim Grounding Verification</strong> to audit how AI engines (ChatGPT, Perplexity, Claude, Gemini) cite or hallucinate answers.
+              </p>
+            </div>
             <button
-              key={key}
-              onClick={() => setStatusFilter(key)}
-              className={`px-2.5 py-1 text-xs rounded-md font-mono transition-colors ${
-                statusFilter === key
-                  ? color ? `bg-${color}-700 text-white font-semibold` : 'bg-pine text-white font-semibold'
-                  : color ? `bg-paper text-${color}-800 hover:bg-${color}-50 border border-${color}-200` : 'bg-paper text-ink-600 hover:bg-paper-100 border border-line'
-              }`}
+              onClick={handleGenerateOrRefresh}
+              disabled={isLoading}
+              className="btn-primary text-xs px-4 py-3 rounded-lg shadow-sm flex items-center justify-center gap-2 shrink-0 transition-transform active:scale-95"
             >
-              {label}
+              <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
+              {isLoading ? 'Synthesizing 100 Questions...' : 'Synthesize 100 AI Inquiries & Check Grounding'}
             </button>
-          ))}
-        </div>
-        <div className="relative w-full sm:w-64">
-          <Search className="w-3.5 h-3.5 text-ink-400 absolute left-2.5 top-2.5" />
-          <input
-            type="text"
-            placeholder="Search questions..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-8 pr-3 py-1.5 text-xs bg-paper border border-line rounded-md focus:outline-none focus:border-pine"
-          />
-        </div>
-      </div>
+          </div>
 
-      {/* ── Facet Tabs ── */}
-      <div className="flex items-center gap-1 overflow-x-auto pb-1 text-xs border-b border-line scrollbar-thin">
-        <button
-          onClick={() => setSelectedFacet('all')}
-          className={`px-3 py-1.5 whitespace-nowrap rounded-t-md font-medium transition-colors ${
-            selectedFacet === 'all'
-              ? 'border-b-2 border-line text-ink-700 bg-paper-50 font-semibold'
-              : 'text-ink-500 hover:text-ink hover:bg-paper-50'
-          }`}
-        >
-          All Facets ({totalCount})
-        </button>
-        {facets.map((facet) => {
-          const facetCount = evaluations.filter((e) => e.facet === facet).length;
-          const shortFacet = facet.split(',')[0].split('&')[0].trim();
-          return (
+          {/* 3-Pillar Readiness Inspection Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-2">
+            <div className="p-3.5 rounded-lg border border-line bg-paper space-y-1.5">
+              <div className="flex items-center gap-2 text-xs font-semibold text-ink">
+                <Database className="w-4 h-4 text-pine" />
+                <span>1. Knowledge Graph Extraction</span>
+              </div>
+              <p className="text-[11px] text-ink-500 leading-normal">
+                Maps entities, relationships, and first-party claims from crawled pages to construct the domain authority graph.
+              </p>
+            </div>
+            <div className="p-3.5 rounded-lg border border-line bg-paper space-y-1.5">
+              <div className="flex items-center gap-2 text-xs font-semibold text-ink">
+                <Search className="w-4 h-4 text-pine" />
+                <span>2. Hybrid Evidence Retriever</span>
+              </div>
+              <p className="text-[11px] text-ink-500 leading-normal">
+                Runs Query Planner to retrieve top-5 evidence chunks per inquiry using semantic vector + lexical BM25 matching.
+              </p>
+            </div>
+            <div className="p-3.5 rounded-lg border border-line bg-paper space-y-1.5">
+              <div className="flex items-center gap-2 text-xs font-semibold text-ink">
+                <GitBranch className="w-4 h-4 text-pine" />
+                <span>3. Claim-Level Grounding Verifier</span>
+              </div>
+              <p className="text-[11px] text-ink-500 leading-normal">
+                Decomposes candidate answers into atomic claims to audit citation accuracy, calculating Grounding Ratio and Answer Risk.
+              </p>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <>
+          {/* ── Aggregate Scorecards ── */}
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+            <div className="p-3 bg-paper-50 border border-line rounded-md text-center">
+              <span className="label text-[10px] text-ink-400 block">Total Questions</span>
+              <span className="text-xl font-bold font-mono text-ink">{totalCount}</span>
+            </div>
+            <div className="p-3 bg-good/10 border border-good/30 rounded-md text-center">
+              <span className="label text-[10px] text-good block">Answerable</span>
+              <span className="text-xl font-bold font-mono text-good">
+                {answerableCount}{' '}
+                <span className="text-xs font-normal">({Math.round((answerableCount / totalCount) * 100)}%)</span>
+              </span>
+            </div>
+            <div className="p-3 bg-warn/10 border border-warn/30 rounded-md text-center">
+              <span className="label text-[10px] text-warn block">Partial Evidence</span>
+              <span className="text-xl font-bold font-mono text-warn">
+                {partialCount}{' '}
+                <span className="text-xs font-normal">({Math.round((partialCount / totalCount) * 100)}%)</span>
+              </span>
+            </div>
+            <div className="p-3 bg-bad/10 border border-bad/30 rounded-md text-center">
+              <span className="label text-[10px] text-bad block">Evidence Gaps</span>
+              <span className="text-xl font-bold font-mono text-bad">
+                {unanswerableCount}{' '}
+                <span className="text-xs font-normal">({Math.round((unanswerableCount / totalCount) * 100)}%)</span>
+              </span>
+            </div>
+            <div className="p-3 bg-paper-100 border border-line rounded-md text-center col-span-2 md:col-span-1">
+              <span className="label text-[10px] text-ink-700 block">Avg Grounding</span>
+              <span className="text-xl font-bold font-mono text-ink-700">
+                {avgGrounding !== null ? `${avgGrounding}%` : '—'}
+              </span>
+            </div>
+          </div>
+
+          {/* ── Filters ── */}
+          <div className="flex flex-wrap items-center justify-between gap-3 bg-paper-50 p-3 rounded-md border border-line">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-xs font-medium text-ink-600">Filter:</span>
+              {[
+                { key: 'all', label: `All (${evaluations.length})` },
+                { key: 'answerable', label: `Answerable (${answerableCount})`, color: 'emerald' },
+                { key: 'partial', label: `Partial (${partialCount})`, color: 'amber' },
+                { key: 'unanswerable', label: `Gaps (${unanswerableCount})`, color: 'rose' },
+                ...(highRiskCount > 0 ? [{ key: 'high_risk', label: `High Risk (${highRiskCount})`, color: 'rose' }] : []),
+              ].map(({ key, label, color }) => (
+                <button
+                  key={key}
+                  onClick={() => setStatusFilter(key)}
+                  className={`px-2.5 py-1 text-xs rounded-md font-mono transition-colors ${
+                    statusFilter === key
+                      ? color ? `bg-${color}-700 text-white font-semibold` : 'bg-pine text-white font-semibold'
+                      : color ? `bg-paper text-${color}-800 hover:bg-${color}-50 border border-${color}-200` : 'bg-paper text-ink-600 hover:bg-paper-100 border border-line'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            <div className="relative w-full sm:w-64">
+              <Search className="w-3.5 h-3.5 text-ink-400 absolute left-2.5 top-2.5" />
+              <input
+                type="text"
+                placeholder="Search questions..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pl-8 pr-3 py-1.5 text-xs bg-paper border border-line rounded-md focus:outline-none focus:border-pine"
+              />
+            </div>
+          </div>
+
+          {/* ── Facet Tabs ── */}
+          <div className="flex items-center gap-1 overflow-x-auto pb-1 text-xs border-b border-line scrollbar-thin">
             <button
-              key={facet}
-              onClick={() => setSelectedFacet(facet)}
+              onClick={() => setSelectedFacet('all')}
               className={`px-3 py-1.5 whitespace-nowrap rounded-t-md font-medium transition-colors ${
-                selectedFacet === facet
+                selectedFacet === 'all'
                   ? 'border-b-2 border-line text-ink-700 bg-paper-50 font-semibold'
                   : 'text-ink-500 hover:text-ink hover:bg-paper-50'
               }`}
             >
-              {shortFacet} ({facetCount})
+              All Facets ({totalCount})
             </button>
-          );
-        })}
-      </div>
+            {facets.map((facet) => {
+              const facetCount = evaluations.filter((e) => e.facet === facet).length;
+              const shortFacet = facet.split(',')[0].split('&')[0].trim();
+              return (
+                <button
+                  key={facet}
+                  onClick={() => setSelectedFacet(facet)}
+                  className={`px-3 py-1.5 whitespace-nowrap rounded-t-md font-medium transition-colors ${
+                    selectedFacet === facet
+                      ? 'border-b-2 border-line text-ink-700 bg-paper-50 font-semibold'
+                      : 'text-ink-500 hover:text-ink hover:bg-paper-50'
+                  }`}
+                >
+                  {shortFacet} ({facetCount})
+                </button>
+              );
+            })}
+          </div>
 
-      {/* ── Question Cards ── */}
-      {filteredEvaluations.length === 0 ? (
-        <div className="text-center py-10 bg-paper-50 rounded-md border border-line">
-          <HelpCircle className="w-8 h-8 text-ink-300 mx-auto mb-2" />
-          <p className="text-sm font-medium text-ink-700">No questions match the current filters.</p>
-          <p className="text-xs text-ink-500 mt-1">Reset the status filter or clear the search.</p>
-        </div>
-      ) : (
+          {/* ── Question Cards or Filter Empty State ── */}
+          {filteredEvaluations.length === 0 ? (
+            <div className="text-center py-10 bg-paper-50 rounded-md border border-line space-y-2">
+              <HelpCircle className="w-8 h-8 text-ink-300 mx-auto" />
+              <p className="text-sm font-medium text-ink-700">No questions match the current filters.</p>
+              <p className="text-xs text-ink-500">
+                {statusFilter !== 'all' ? `Status: ${statusFilter}. ` : ''}
+                {selectedFacet !== 'all' ? `Facet: ${selectedFacet.split(',')[0]}. ` : ''}
+                {searchQuery ? `Search: "${searchQuery}".` : ''}
+              </p>
+              <button
+                onClick={() => {
+                  setStatusFilter('all');
+                  setSelectedFacet('all');
+                  setSearchQuery('');
+                }}
+                className="text-xs text-pine font-medium underline hover:opacity-80 pt-1"
+              >
+                Reset all filters and clear search
+              </button>
+            </div>
+          ) : (
         <div className="space-y-3">
           {filteredEvaluations.map((item) => {
             const isExpanded = expandedId === item.question_id;
@@ -708,6 +788,8 @@ export function DynamicQuestionSandboxView({
             );
           })}
         </div>
+      )}
+        </>
       )}
     </div>
   );
