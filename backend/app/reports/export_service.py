@@ -255,3 +255,139 @@ def generate_geo_remediation_csv(report: ExecutiveReport) -> str:
 
     return output.getvalue()
 
+
+def generate_aeo_remediation_csv(report: ExecutiveReport) -> str:
+    """
+    Generates a dedicated Answer Engine Optimization (AEO) Remediation Tracker CSV.
+    Conforms to the 14-field standard with AEO query mappings, lifecycle states,
+    and verification acceptance criteria.
+    """
+    output = io.StringIO()
+    writer = csv.writer(output, quoting=csv.QUOTE_MINIMAL)
+
+    headers = [
+        "Finding ID",
+        "AEO Domain",
+        "Subcategory",
+        "Severity",
+        "Lifecycle Status",
+        "Priority (1-10)",
+        "Answer Impact (1-10)",
+        "Remediation Effort (1-10)",
+        "Target Query",
+        "Affected URL",
+        "Title",
+        "Observed Evidence",
+        "Reference Baseline (Expected Condition)",
+        "Potential Impact on Answer Visibility",
+        "Prescriptive AEO Recommendation",
+        "Verification Acceptance Criteria (Fixed vs Verified)",
+        "Owner",
+        "Evidence Class",
+        "Confidence & Provenance",
+    ]
+    writer.writerow(headers)
+
+    findings: List[Finding] = report.findings or []
+
+    for idx, f in enumerate(findings):
+        fid = f.finding_id or f"AEO-ANS-{idx+1:03d}"
+        if not fid.startswith("AEO-"):
+            fid = f"AEO-{fid}"
+
+        cat_str = f.category.value if hasattr(f.category, "value") else str(f.category)
+        sev_str = f.severity.value if hasattr(f.severity, "value") else str(f.severity)
+        stat_str = f.status.value if hasattr(f.status, "value") else str(f.status)
+
+        aff_urls = f.affected_urls or []
+        primary_url = aff_urls[0] if aff_urls else (report.website_url or "")
+
+        # Infer target query from subcategory or title
+        target_query = f.subcategory or f.title
+
+        writer.writerow([
+            fid,
+            cat_str,
+            f.subcategory or cat_str,
+            sev_str,
+            stat_str,
+            f.priority,
+            f.impact,
+            f.effort,
+            target_query,
+            primary_url,
+            f.title,
+            f.description.replace("\n", " ").strip(),
+            f.expected_condition or "Concise, verified 40-60 word answer passage formatted under matching H2 question heading.",
+            (f.why_it_matters or f.business_impact or "Users fail to find direct answers; answer engines cite competitor sources.").replace("\n", " ").strip(),
+            f.recommendation.replace("\n", " ").strip(),
+            (f.validation_criteria or "Automated re-crawl confirms passage extractability and zero entity contradiction.").replace("\n", " ").strip(),
+            f.owner or "Answer Content & SEO Engineering",
+            f.evidence_class.value if hasattr(f.evidence_class, "value") else str(f.evidence_class),
+            f"{int(f.confidence * 100)}% ({f.confidence_basis or 'DOM crawl & answer evaluator'})",
+        ])
+
+    return output.getvalue()
+
+
+def generate_aeo_question_dataset_csv(report: ExecutiveReport) -> str:
+    """
+    Generates Deliverable B: Question-to-Page Evidence Dataset in CSV format.
+    Includes target questions, intent classification, answer excerpts,
+    evidence URLs, and recommended remedial answer blocks.
+    """
+    output = io.StringIO()
+    writer = csv.writer(output, quoting=csv.QUOTE_MINIMAL)
+
+    headers = [
+        "Question Key",
+        "Target Question",
+        "Question Type",
+        "Category / Domain",
+        "Answer Status",
+        "Target Page URL",
+        "Direct Answer Excerpt",
+        "Evidence Grounding Snippet",
+        "Recommended Answer Remediation",
+        "Remediation Type",
+        "Verification Status",
+    ]
+    writer.writerow(headers)
+
+    g = report.geo_readiness
+    questions = getattr(g, "questions", []) if g else []
+
+    for idx, q in enumerate(questions):
+        q_key = getattr(q, "question_key", f"Q-{idx+1:03d}")
+        q_text = getattr(q, "question", "").strip()
+        q_lower = q_text.lower()
+        q_type = "What"
+        for word in ["what", "why", "how", "when", "where", "who", "which", "compare", "vs"]:
+            if q_lower.startswith(word) or f" {word} " in q_lower:
+                q_type = word.capitalize()
+                break
+
+        q_cat = getattr(q, "category", "General")
+        q_stat = getattr(q, "status", "UNSUPPORTED")
+        q_url = getattr(q, "evidence_url", "") or report.website_url or ""
+        q_ans = (getattr(q, "answer", "") or getattr(q, "answer_snippet", "") or "").replace("\n", " ").strip()
+        q_ev = (getattr(q, "evidence_snippet", "") or "").replace("\n", " ").strip()
+        q_rec = (getattr(q, "recommended_answer", "") or "").replace("\n", " ").strip()
+        q_rem_type = getattr(q, "remediation_type", "ANSWER_BLOCK") or "ANSWER_BLOCK"
+
+        writer.writerow([
+            q_key,
+            q_text,
+            q_type,
+            q_cat,
+            q_stat,
+            q_url,
+            q_ans,
+            q_ev,
+            q_rec,
+            q_rem_type,
+            "VERIFIED" if q_stat == "SUPPORTED" else "UNVERIFIED",
+        ])
+
+    return output.getvalue()
+

@@ -609,3 +609,88 @@ async def export_geo_remediation_tracker_csv(
     )
 
 
+@router.get("/{analysis_id}/aeo-report")
+async def get_complete_aeo_report(
+    analysis_id: str,
+    format: str = "html",
+    user: Optional[UserIdentity] = Depends(get_current_user_optional)
+):
+    """
+    Renders the dedicated, complete 20-Section AEO Master Audit and Answer Engine Optimization Report.
+    format='html': returns modern responsive standalone HTML report with sticky 20-section navigation.
+    format='json': returns structured 20-section JSON payload.
+    """
+    run = orchestrator.get_run(analysis_id)
+    if not run:
+        raise HTTPException(status_code=404, detail=f"Analysis run '{analysis_id}' not found.")
+    report = getattr(run, "report", None)
+    if not report:
+        raise HTTPException(status_code=400, detail="Executive report not yet synthesized for this analysis run.")
+
+    from app.reports.aeo_report_generator import aeo_report_generator
+
+    if format.lower() == "json":
+        return aeo_report_generator.render_json_report(report)
+
+    html_content = aeo_report_generator.render_html_report(report)
+    return Response(content=html_content, media_type="text/html")
+
+
+@router.get("/{analysis_id}/export/aeo-remediation-tracker.csv")
+async def export_aeo_remediation_tracker_csv(
+    analysis_id: str,
+    user: Optional[UserIdentity] = Depends(get_current_user_optional)
+):
+    """
+    Exports comprehensive AEO Remediation Tracker CSV formatted to the 14-field
+    Answer Engine Optimization issue schema with verification acceptance criteria.
+    """
+    run = orchestrator.get_run(analysis_id)
+    if not run:
+        raise HTTPException(status_code=404, detail=f"Analysis run '{analysis_id}' not found.")
+    report = getattr(run, "report", None)
+    if not report:
+        raise HTTPException(status_code=400, detail="Executive report not yet synthesized for this analysis run.")
+
+    from app.reports.export_service import generate_aeo_remediation_csv
+
+    csv_data = generate_aeo_remediation_csv(report)
+    domain_clean = (report.domain or "website").replace("https://", "").replace("http://", "").split("/")[0]
+    filename = f"{domain_clean}_aeo_remediation_tracker.csv"
+
+    return Response(
+        content=csv_data,
+        media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+    )
+
+
+@router.get("/{analysis_id}/export/aeo-question-dataset.csv")
+async def export_aeo_question_dataset_csv(
+    analysis_id: str,
+    user: Optional[UserIdentity] = Depends(get_current_user_optional)
+):
+    """
+    Exports Deliverable B: Question-to-Page Evidence Dataset in CSV format,
+    mapping target user queries to pages, status, and verified answer passages.
+    """
+    run = orchestrator.get_run(analysis_id)
+    if not run:
+        raise HTTPException(status_code=404, detail=f"Analysis run '{analysis_id}' not found.")
+    report = getattr(run, "report", None)
+    if not report:
+        raise HTTPException(status_code=400, detail="Executive report not yet synthesized for this analysis run.")
+
+    from app.reports.export_service import generate_aeo_question_dataset_csv
+
+    csv_data = generate_aeo_question_dataset_csv(report)
+    domain_clean = (report.domain or "website").replace("https://", "").replace("http://", "").split("/")[0]
+    filename = f"{domain_clean}_aeo_question_dataset.csv"
+
+    return Response(
+        content=csv_data,
+        media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+    )
+
+

@@ -85,6 +85,17 @@ export function Report({
             >
               Receipt
             </button>
+            <button
+              type="button"
+              onClick={() => {
+                const id = report.analysis_id || report.report_id;
+                if (id) window.open(`/api/v1/reports/${id}/aeo-report?format=html`, '_blank');
+              }}
+              className="btn-secondary px-3 py-2 text-sm flex items-center gap-1.5"
+              title="Open 20-Section Answer Engine Optimization (AEO) Master Report"
+            >
+              AEO Report
+            </button>
             {onPreviewDeck && (
               <button
                 type="button"
