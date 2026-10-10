@@ -37,6 +37,8 @@ export interface CodePatch {
   after_snippet: string;
   explanation: string;
   release_status?: string;
+  approval_status?: string;
+  verification_status?: string;
 }
 
 export interface SubObservation {

@@ -9,7 +9,9 @@ export function SeverityDonutChart({ chart }: SeverityDonutChartProps) {
   const [hoveredIdx, setHoveredIdx] = useState<number | null>(null);
 
   const total: number = chart.data?.total || 0;
-  const segments: Array<{ label: string; count: number; color: string }> = chart.data?.segments || [];
+  const segments: Array<{ label: string; count: number; color: string }> = (chart.data?.segments || []).filter(
+    (segment: { count?: number }) => (segment.count ?? 0) > 0,
+  );
 
   if (total === 0 || segments.length === 0) return null;
 

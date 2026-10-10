@@ -57,7 +57,7 @@ export function MethodologyChapter({
                 01 // CRAWL SCOPE &amp; BOUNDARIES
               </span>
               <p className="text-ink-700 font-sans leading-relaxed">
-                The audit traversed {methodology.sampledPagesCount} primary origin routes up to a maximum depth of {methodology.crawlDepth} hops. Crawl directives adhere strictly to standard user-agent rules and respectful latency caps.
+                The audit analyzed {methodology.sampledPagesCount} URL{methodology.sampledPagesCount === 1 ? '' : 's'}. That sample is not a claim that every discovered URL was audited. Crawl directives follow the site&apos;s robots rules, with concurrency and timeout limits on the crawl.
               </p>
             </div>
 
@@ -75,7 +75,7 @@ export function MethodologyChapter({
                 03 // AI ANSWER ENGINE TESTING PROTOCOL
               </span>
               <p className="text-ink-700 font-sans leading-relaxed">
-                Evaluations executed across live endpoints for ChatGPT Search, Perplexity AI, Google AI Overviews, Claude, and Gemini. Citations require explicit, unambiguous brand attribution.
+                Live citation tests run only for engines that were actually queried. Engines that were not queried are labeled not executed. On-page answerability is a separate check and is not reported as a live mention or citation rate.
               </p>
             </div>
 
@@ -84,7 +84,7 @@ export function MethodologyChapter({
                 04 // SCORING ENGINE &amp; MATHEMATICAL TRANSPARENCY
               </span>
               <p className="text-ink-700 font-sans leading-relaxed">
-                Composite scores are continuous (0–100) and deterministically derived from verified pillar results: Technical Discoverability (30%), Generative Extractability (25%), Answer Engine Citations (25%), and CRO &amp; Value Proposition (20%). Every score is auditable in the Score Calculation Ledger with exact contribution arithmetic.
+                The cover score, the grade, and the calculation ledger are the same total. Nominal weights are Technical Discoverability 30%, Generative Extractability 25%, live citations 25%, and CRO 20%. A measured zero stays in the total. A pillar that was not measured is excluded and the remaining weights are scaled to 100%.
               </p>
             </div>
           </div>

@@ -8,7 +8,7 @@ from app.audit.snapshots import SnapshotStore
 from app.cognition.blackboard import CognitiveBlackboard
 from app.domain.enums import Category, Severity
 from app.domain.models import Finding
-from app.evidence.provenance import compute_raw_source_hash, sha256_text
+from app.evidence.provenance import compute_raw_source_hash, sha256_text, verify_evidence_hash
 from app.evidence.store import EvidenceStore
 from app.inference.telemetry import TelemetryTracker
 
@@ -57,6 +57,50 @@ def test_evidence_token_stores_content_hash_timestamp_and_snapshot(tmp_path: Pat
     retrieved = ev_store.snapshots.get(ev.raw_snapshot_id)
     assert retrieved.body == html
     assert compute_raw_source_hash(retrieved.body) == ev.content_sha256
+
+
+def test_evidence_rows_from_one_page_do_not_share_a_payload_hash(tmp_path: Path, monkeypatch):
+    """The page snapshot hash is shared. Each evidence row keeps its own payload digest."""
+    monkeypatch.setenv("DRISTIK_RUN_ARTIFACTS", str(tmp_path))
+    ev_store = EvidenceStore("run_distinct", snapshots=SnapshotStore("run_distinct", root=tmp_path / "run_distinct"))
+    html = "<html><h1>AlienHouse</h1><title>Networks</title></html>"
+    snap = ev_store.record_fetch("https://alienhouse.example/", html)
+    heading = ev_store.add_evidence(
+        source_type="dom",
+        analyzer="html_analyzer",
+        url="https://alienhouse.example/",
+        selector="h1",
+        text="AlienHouse",
+    )
+    title = ev_store.add_evidence(
+        source_type="dom",
+        analyzer="html_analyzer",
+        url="https://alienhouse.example/",
+        selector="title",
+        text="Networks",
+    )
+    assert heading.content_sha256 == snap.sha256
+    assert title.content_sha256 == snap.sha256
+    assert heading.hash != title.hash
+    assert verify_evidence_hash("dom", "html_analyzer", "https://alienhouse.example/", "h1", "AlienHouse", None, heading.hash)
+    assert verify_evidence_hash("dom", "html_analyzer", "https://alienhouse.example/", "title", "Networks", None, title.hash)
+    assert not verify_evidence_hash("dom", "html_analyzer", "https://alienhouse.example/", "h1", "AlienHouse", None, title.hash)
+
+
+def test_measured_zero_is_not_rewritten_to_one_hundred():
+    from app.domain.enums import Category
+    from app.domain.models import CategoryScore
+    from app.scoring.engine import measured_category_score, weighted_mean
+
+    zero = CategoryScore(category=Category.UX_CONVERSION, score=0, summary="measured miss", status="MEASURED")
+    missing = CategoryScore(category=Category.CONTENT, score=None, summary="absent", status="NOT_MEASURED")
+    scores = {
+        Category.UX_CONVERSION.value: zero,
+        Category.CONTENT.value: missing,
+    }
+    assert measured_category_score(scores, Category.UX_CONVERSION) == 0.0
+    assert measured_category_score(scores, Category.CONTENT) is None
+    assert weighted_mean([(0.5, 0.0), (0.5, None)]) == 0.0
 
 
 def test_external_token_snapshots_raw_api_payload(tmp_path: Path, monkeypatch):

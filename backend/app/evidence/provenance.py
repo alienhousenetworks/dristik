@@ -31,6 +31,24 @@ def compute_raw_source_hash(raw: Any) -> str:
     return sha256_bytes(canonical_bytes(raw))
 
 
+def verify_evidence_hash(
+    source_type: str,
+    analyzer: str,
+    url: str | None,
+    selector: str | None,
+    text: str | None,
+    value: Any,
+    expected: str | None,
+) -> bool:
+    """True when expected is the SHA-256 of this evidence payload, not of a shared page body."""
+    supplied = (expected or "").strip().lower()
+    if supplied.startswith("sha256:"):
+        supplied = supplied[len("sha256:"):]
+    if len(supplied) != 64:
+        return False
+    return supplied == compute_evidence_hash(source_type, analyzer, url, selector, text, value)
+
+
 def compute_evidence_hash(source_type: str, analyzer: str, url: str | None, selector: str | None, text: str | None, value: Any) -> str:
     payload = {
         "source_type": source_type,

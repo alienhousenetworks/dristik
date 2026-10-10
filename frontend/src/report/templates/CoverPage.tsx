@@ -1,4 +1,5 @@
 import React from 'react';
+import { formatPercentPoints } from '../../lib/format';
 import { ReportTheme } from '../brandTheme';
 import { NormalizedReport } from '../models/normalizedReport';
 
@@ -81,7 +82,7 @@ export function CoverPage({ report }: CoverPageProps) {
               </span>
               <div className="flex items-baseline gap-2 mt-0.5">
                 <span className="font-sans text-3xl font-bold text-ink">
-                  {scorecard.overallScore != null ? Math.round(scorecard.overallScore) : '—'}
+                  {scorecard.overallScore != null ? scorecard.overallScore.toFixed(1) : '—'}
                 </span>
                 <span className="font-mono text-xs text-ink-500">/ 100</span>
                 <span
@@ -99,15 +100,19 @@ export function CoverPage({ report }: CoverPageProps) {
               </span>
               <div className="flex items-baseline gap-2 mt-0.5">
                 <span className="font-sans text-xl font-bold text-ink">
-                  {meta.pagesAnalyzed} / {meta.discoveredUrlsCount || 47}
+                  {meta.discoveredUrlsCount != null
+                    ? `${meta.pagesAnalyzed} / ${meta.discoveredUrlsCount}`
+                    : meta.pagesAnalyzed}
                 </span>
                 <span className="font-mono text-xs text-ink-500">URLs</span>
-                <span className="font-mono text-[7.5pt] font-bold px-1.5 py-0.2 rounded bg-paper-200 text-ink-700 ml-1">
-                  {meta.sampleCoveragePct || 10.6}%
-                </span>
+                {meta.sampleCoveragePct != null && (
+                  <span className="font-mono text-[7.5pt] font-bold px-1.5 py-0.2 rounded bg-paper-200 text-ink-700 ml-1">
+                    {formatPercentPoints(meta.sampleCoveragePct)}
+                  </span>
+                )}
               </div>
               <span className="font-mono text-[6.5pt] text-ink-500 block mt-0.5">
-                Score applies ONLY to audited sample
+                Same total as the calculation ledger. Applies only to the audited sample.
               </span>
             </div>
           </div>

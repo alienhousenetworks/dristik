@@ -199,13 +199,16 @@ class Settings(BaseSettings):
 
     # Crawling & Ingestion
     FIRECRAWL_API_KEY: Optional[str] = None
-    MAX_CRAWL_PAGES: Any = Field(default=10, description="Page limit: 10 | 25 | 50 | 200 | 500 | 'quick' | 'standard' | 'deep' | 'enterprise'")
+    MAX_CRAWL_PAGES: Any = Field(default=10, description="Page limit or tier: quick | standard | professional | deep | enterprise")
+    # Analyzed-URL budgets. These are plan caps, not a promise of an unlimited crawl.
+    CRAWL_PAGE_CAP: int = 5000
     CRAWL_TIERS: Dict[str, int] = Field(
         default_factory=lambda: {
             "quick": 10,
             "standard": 50,
+            "professional": 250,
             "deep": 500,
-            "enterprise": 500,
+            "enterprise": 1000,
         }
     )
     CRAWL_TIMEOUT_SECONDS: int = 15
@@ -219,26 +222,33 @@ class Settings(BaseSettings):
 
     def get_max_crawl_pages(self, override: Optional[Any] = None) -> int:
         """
-        Resolves maximum crawl pages allowing integer counts or named tiers:
-        'quick' -> 10, 'standard' -> 50, 'deep' / 'enterprise' / 'all' -> 500.
-        Invalid strings fallback to default 5.
+        Resolves the analyzed-URL budget.
+        quick=10, standard=50, professional=250, deep=500, enterprise=1000.
+        'all', 'full', and '-1' stay on the deep cap (500). A positive integer
+        is accepted up to CRAWL_PAGE_CAP (5000). An unknown tier uses quick.
         """
         raw = override if override is not None else self.MAX_CRAWL_PAGES
+        cap = int(self.CRAWL_PAGE_CAP or 5000)
         if isinstance(raw, str):
             s = raw.strip().lower()
             if s in self.CRAWL_TIERS:
-                return self.CRAWL_TIERS[s]
-            if s in ("all", "-1", "deep", "full", "max", "enterprise"):
-                return 500
+                return min(self.CRAWL_TIERS[s], cap)
+            if s in ("all", "-1", "full", "max"):
+                return min(self.CRAWL_TIERS.get("deep", 500), cap)
             try:
-                return int(s)
+                requested = int(s)
             except ValueError:
-                return 5
+                return self.CRAWL_TIERS.get("quick", 10)
+            if requested <= 0:
+                return min(self.CRAWL_TIERS.get("deep", 500), cap)
+            return min(requested, cap)
         try:
             val = int(raw)
-            return 500 if val <= 0 else val
         except (ValueError, TypeError):
-            return 5
+            return self.CRAWL_TIERS.get("quick", 10)
+        if val <= 0:
+            return min(self.CRAWL_TIERS.get("deep", 500), cap)
+        return min(val, cap)
     
     # Security
     SSRF_PROTECTION_ENABLED: bool = True

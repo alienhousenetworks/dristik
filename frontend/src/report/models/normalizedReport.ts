@@ -18,6 +18,11 @@ import {
   CharacterSafeCopy,
   RoadmapItem,
 } from '../../types';
+import { formatPercentPoints, formatRatioPercent, joinMetricValue } from '../../lib/format';
+import { answerabilityConfidence, buildLiveObservation } from './aiMeasurement';
+import { assignEvidenceHashes, EvidenceHashStatus } from './evidenceIntegrity';
+import { deriveRemediationClaim, RemediationClaim } from './remediationClaim';
+import { buildAuthoritativeScore, finiteNumber, PillarInput, REPORT_PILLARS } from './scoreLedger';
 
 export interface NormalizedEvidenceItem {
   id: string;
@@ -26,6 +31,8 @@ export interface NormalizedEvidenceItem {
   selector?: string;
   snippet?: string;
   sha256?: string;
+  sourceSnapshotSha256?: string;
+  hashStatus: EvidenceHashStatus;
   timestamp?: string;
   confidence?: number;
 }
@@ -52,6 +59,7 @@ export interface ScoreLedgerRow {
   weightPct: number;
   contribution: number;
   status: string;
+  included: boolean;
 }
 
 export interface NormalizedQuestionRecord {
@@ -61,7 +69,8 @@ export interface NormalizedQuestionRecord {
   evidenceRef: string;
   answerabilityPct: number;
   citationReadiness: 'High' | 'Medium' | 'Low';
-  confidencePct: number;
+  confidencePct: number | null;
+  confidenceBasis: string;
 }
 
 export interface NormalizedFacetSummary {
@@ -87,8 +96,8 @@ export interface NormalizedReport {
     policyPack: string;
     certifiedZeroFake: boolean;
     pagesAnalyzed: number;
-    discoveredUrlsCount: number;
-    sampleCoveragePct: number;
+    discoveredUrlsCount: number | null;
+    sampleCoveragePct: number | null;
     evidenceCount: number;
     rawBrandColor?: string;
   };
@@ -96,13 +105,14 @@ export interface NormalizedReport {
   // Explicit Evidence & Crawl Coverage Confidence
   coverageConfidence: {
     pagesAudited: number;
-    pagesDiscovered: number;
-    pageCoveragePct: number;
-    evidenceCoveragePct: number;
-    commercialQueryCoveragePct: number;
-    externalAuthorityCoveragePct: number;
+    pagesDiscovered: number | null;
+    pageCoveragePct: number | null;
+    evidenceCoveragePct: number | null;
+    answerabilityQuestions: number;
+    liveQueriesExecuted: number;
+    externalAuthorityLabel: string;
     performancePagesCount: number;
-    overallEvidenceConfidence: 'HIGH' | 'MEDIUM' | 'LOW';
+    overallEvidenceConfidence: 'HIGH' | 'MEDIUM' | 'LOW' | 'NOT_SCORED';
     scopeLimitationNotice: string;
   };
 
@@ -183,25 +193,25 @@ export interface NormalizedReport {
       engineCount: number;
       queriesExecuted: number;
       brandMentionedCount: number;
-      brandMentionRatePct: number;
+      brandMentionRatePct: number | null;
       brandCitedCount: number;
-      liveCitationRatePct: number;
+      liveCitationRatePct: number | null;
       status: string;
       engineDetails: Array<{
         engine: string;
         queriesExecuted: number;
         brandMentioned: number;
         brandCited: number;
-        citationRatePct: number;
+        citationRatePct: number | null;
         status: string;
       }>;
     };
     readiness: {
-      domExtractabilityScore: number;
+      domExtractabilityScore: number | null;
       readinessBand: string;
       citationReadiness: string;
-      groundingCoveragePct: number;
-      answerabilityRatePct: number;
+      groundingCoveragePct: number | null;
+      answerabilityRatePct: number | null;
     };
     engines: Array<{
       name: string;
@@ -236,7 +246,7 @@ export interface NormalizedReport {
   // Chapter 05: Conversion & Production Copy
   conversion: {
     fiveSecondHook?: string;
-    formCount: number;
+    formCount: number | null;
     formAccessibilityStatus: string;
     characterSafeCopy?: CharacterSafeCopy;
     contradictions: Array<{ statementA: string; statementB: string; conflict: string }>;
@@ -276,7 +286,7 @@ export interface NormalizedReport {
       priority: string;
       impact: string;
       effort: string;
-      engineerHours: number;
+      engineerHours: number | null;
       outcome: string;
       validation: string;
       findingId?: string;
@@ -290,16 +300,9 @@ export interface NormalizedReport {
     roadmapNow: RoadmapItem[];
     roadmapNext: RoadmapItem[];
     roadmapOngoing: RoadmapItem[];
-    financialModel?: {
-      evidenceTier: 'DERIVED';
-      monthlyLossEstimate?: string;
-      projectedLift?: string;
-      basisSummary?: string;
-      methodology?: string;
-      assumptions?: string;
-      confidence?: string;
-    };
   };
+
+  remediation: RemediationClaim;
 
   // Methodology
   methodology: {
@@ -340,37 +343,66 @@ export function normalizeExecutiveReport(report: ExecutiveReport): NormalizedRep
   const brandName = resolved?.name || profile.business_name || domain.replace(/^www\./i, '');
 
   // 1. Evidence Ledger Normalization
-  const evidenceMap = new Map<string, NormalizedEvidenceItem>();
+  // `hash` is the per-record payload digest. `content_sha256` is the page
+  // snapshot and is shared by every extract from that fetch.
+  const evidenceDrafts: Array<NormalizedEvidenceItem & { payloadHash?: string; snapshotHash?: string }> = [];
+  const seenEvidenceIds = new Set<string>();
   if (report.evidence_ledger) {
     Object.entries(report.evidence_ledger).forEach(([id, item]: [string, any]) => {
-      evidenceMap.set(id, {
+      seenEvidenceIds.add(id);
+      evidenceDrafts.push({
         id,
         sourceType: item.source_type || 'html_dom_ast',
         url: item.url,
         selector: item.selector || item.element,
         snippet: item.text || item.snippet,
-        sha256: item.content_sha256 || item.hash,
+        payloadHash: item.hash,
+        snapshotHash: item.content_sha256,
+        hashStatus: 'NOT_SEALED',
         timestamp: item.fetched_at || report.generated_at,
         confidence: item.confidence,
       });
     });
   }
 
-  // Corroborate evidence from findings
   rawFindings.forEach((f) => {
     (f.evidence || []).forEach((ev) => {
-      const evId = ev.evidence_id || `ev_${evidenceMap.size + 1}`;
-      if (!evidenceMap.has(evId)) {
-        evidenceMap.set(evId, {
-          id: evId,
-          sourceType: ev.source || 'DOM Element Inspection',
-          url: ev.url || report.website_url,
-          selector: ev.selector || (ev as any).element,
-          snippet: ev.snippet || (ev as any).excerpt || (ev as any).value,
-          sha256: (ev as any).content_sha256 || (ev as any).hash,
-          timestamp: report.generated_at,
-        });
-      }
+      const evId = ev.evidence_id || `ev_${evidenceDrafts.length + 1}`;
+      if (seenEvidenceIds.has(evId)) return;
+      seenEvidenceIds.add(evId);
+      evidenceDrafts.push({
+        id: evId,
+        sourceType: ev.source || 'DOM Element Inspection',
+        url: ev.url || report.website_url,
+        selector: ev.selector || (ev as any).element,
+        snippet: ev.snippet || (ev as any).excerpt || (ev as any).value,
+        payloadHash: (ev as any).hash,
+        snapshotHash: (ev as any).content_sha256,
+        hashStatus: 'NOT_SEALED',
+        timestamp: report.generated_at,
+      });
+    });
+  });
+
+  const hashDecisions = assignEvidenceHashes(evidenceDrafts.map((item) => ({
+    id: item.id,
+    payloadHash: item.payloadHash,
+    snapshotHash: item.snapshotHash,
+  })));
+  const evidenceMap = new Map<string, NormalizedEvidenceItem>();
+  evidenceDrafts.forEach((item, index) => {
+    const decision = hashDecisions[index];
+    evidenceMap.set(item.id, {
+      id: item.id,
+      sourceType: item.sourceType,
+      url: item.url,
+      selector: item.selector,
+      snippet: item.snippet,
+      sha256: decision.sha256,
+      sourceSnapshotSha256: decision.sourceSnapshotSha256,
+      hashStatus: decision.hashStatus,
+      timestamp: item.timestamp,
+      confidence: item.confidence,
     });
   });
 
@@ -395,6 +427,8 @@ export function normalizeExecutiveReport(report: ExecutiveReport): NormalizedRep
         url: e.url,
         selector: e.selector,
         snippet: e.snippet,
+        sha256: (e as { hash?: string }).hash,
+        hashStatus: (e as { hash?: string }).hash ? 'SEALED' as const : 'NOT_SEALED' as const,
       })),
       businessImpact: f.business_impact,
       recommendation: f.recommendation,
@@ -454,75 +488,73 @@ export function normalizeExecutiveReport(report: ExecutiveReport): NormalizedRep
     !bakeoff.competitor_domain.includes('placeholder')
   );
 
-  // 6. Build the final Normalized Report Model
-  const technicalScore = honest?.google_score ?? Math.round(scores.category_scores?.['TECHNICAL_SEO']?.score || 75);
-  const geoScore = honest?.ai_readiness_score ?? Math.round(scores.category_scores?.['GEO']?.score || 60);
-  const aeoScore = honest?.ai_citation_score ?? Math.round(scores.category_scores?.['GEO']?.score || 55);
-  const croScore = honest?.human_score ?? Math.round(scores.category_scores?.['UX_CONVERSION']?.score || 70);
-
-  // Score Calculation Ledger (Mathematical transparency)
-  const techContrib = Math.round(technicalScore * 0.30 * 100) / 100;
-  const geoContrib = Math.round(geoScore * 0.25 * 100) / 100;
-  const aeoContrib = Math.round(aeoScore * 0.25 * 100) / 100;
-  const croContrib = Math.round(croScore * 0.20 * 100) / 100;
-  const calculatedComposite = Math.round((techContrib + geoContrib + aeoContrib + croContrib) * 10) / 10;
-
-  const scoreLedger: ScoreLedgerRow[] = [
+  // 6. One score for the cover, the grade, and the ledger.
+  // Live citation is never copied from the on-page GEO score. A missing
+  // pillar is excluded. A measured zero stays a zero.
+  const categoryScore = (key: string): number | null => {
+    const category = scores.category_scores?.[key] as { score?: number; status?: string } | undefined;
+    if (!category || category.status === 'NOT_MEASURED') return null;
+    return finiteNumber(category.score);
+  };
+  const liveCitation = finiteNumber(honest?.live_ai_citation_score)
+    ?? (honest?.ai_visibility_status === 'MEASURED' ? finiteNumber(honest?.ai_visibility_score) : null);
+  const pillarInputs = ([
     {
-      pillar: 'Technical Discoverability (SEO)',
-      categoryKey: 'TECHNICAL_SEO',
-      rawScore: technicalScore,
-      weightPct: 30,
-      contribution: techContrib,
-      status: 'MEASURED',
+      ...REPORT_PILLARS.technical,
+      rawScore: finiteNumber(honest?.google_score) ?? categoryScore('TECHNICAL_SEO'),
+      status: 'MEASURED' as const,
     },
     {
-      pillar: 'Generative Extractability (GEO)',
-      categoryKey: 'GEO',
-      rawScore: geoScore,
-      weightPct: 25,
-      contribution: geoContrib,
-      status: 'MEASURED',
+      ...REPORT_PILLARS.geo,
+      rawScore: finiteNumber(honest?.ai_readiness_score) ?? categoryScore('GEO'),
+      status: 'MEASURED' as const,
     },
     {
-      pillar: 'Answer Engine Citations (AEO)',
-      categoryKey: 'AEO',
-      rawScore: aeoScore,
-      weightPct: 25,
-      contribution: aeoContrib,
-      status: honest?.live_ai_citation_score != null ? 'LIVE_MEASURED' : 'READINESS_PROXY',
+      ...REPORT_PILLARS.aeo,
+      rawScore: liveCitation,
+      status: liveCitation == null ? 'NOT_MEASURED' as const : 'LIVE_MEASURED' as const,
     },
     {
-      pillar: 'Conversion & UX Friction (CRO)',
-      categoryKey: 'UX_CONVERSION',
-      rawScore: croScore,
-      weightPct: 20,
-      contribution: croContrib,
-      status: 'MEASURED',
+      ...REPORT_PILLARS.cro,
+      rawScore: finiteNumber(honest?.human_score) ?? categoryScore('UX_CONVERSION'),
+      status: 'MEASURED' as const,
     },
-  ];
+  ] satisfies PillarInput[]).map((pillar): PillarInput => (
+    pillar.rawScore == null ? { ...pillar, status: 'NOT_MEASURED' } : pillar
+  ));
+  const authoritative = buildAuthoritativeScore(pillarInputs);
+  const scoreLedger: ScoreLedgerRow[] = authoritative.rows;
+  const calculatedComposite = authoritative.composite;
+  const technicalScore = scoreLedger.find((row) => row.categoryKey === 'TECHNICAL_SEO')?.rawScore ?? null;
+  const geoScore = scoreLedger.find((row) => row.categoryKey === 'GEO')?.rawScore ?? null;
+  const aeoScore = scoreLedger.find((row) => row.categoryKey === 'AEO')?.rawScore ?? null;
+  const croScore = scoreLedger.find((row) => row.categoryKey === 'UX_CONVERSION')?.rawScore ?? null;
 
   const auditedQuestions: NormalizedQuestionRecord[] = sandboxEvals.map((q, idx) => {
-    const answerabilityPct = q.answerability_status === 'ANSWERABLE' ? 100 : (q.answerability_status === 'PARTIAL' ? 50 : 0);
-    const readiness: 'High' | 'Medium' | 'Low' = (q.citability_score || 0) >= 7 ? 'High' : ((q.citability_score || 0) >= 4 ? 'Medium' : 'Low');
-    const evRef = q.evidence_url ? (evidenceMap.get(q.evidence_url)?.id || 'EV_001') : 'No evidence';
-    const conf = (q.citability_score || 0) > 0 ? Math.min(100, Math.round((q.citability_score / 10) * 35 + 65)) : 100;
+    const matchedEvidence = q.evidence_url
+      ? Array.from(evidenceMap.values()).find((item) => item.url === q.evidence_url || item.id === q.evidence_url)
+      : undefined;
+    const hasPassage = Boolean(q.evidence_url || q.evidence_snippet);
+    const judged = answerabilityConfidence({
+      evidenceUrl: q.evidence_url,
+      evidenceSnippet: q.evidence_snippet,
+      answerabilityStatus: q.answerability_status,
+      citabilityScore: q.citability_score,
+      groundingRatio: q.grounding_ratio,
+    });
     return {
       questionId: q.question_id || `Q-${String(idx + 1).padStart(3, '0')}`,
       facet: q.facet || 'General Capabilities',
       question: q.generated_question,
-      evidenceRef: evRef,
-      answerabilityPct,
-      citationReadiness: readiness,
-      confidencePct: conf,
+      evidenceRef: matchedEvidence?.id || (hasPassage ? 'Passage recorded' : 'No evidence'),
+      answerabilityPct: judged.answerabilityPct,
+      citationReadiness: judged.citationReadiness,
+      confidencePct: judged.confidencePct,
+      confidenceBasis: judged.confidenceBasis,
     };
   });
 
-  const isLiveMeasured = Boolean(
-    honest?.live_ai_citation_score != null ||
-    honest?.ai_visibility_status === 'MEASURED'
-  );
-  const liveCitationRate = honest?.live_ai_citation_score ?? 0;
+  const liveObservation = buildLiveObservation(report.ai_visibility_scorecard);
 
   const competitiveChapterTitle = hasLegitCompetitor
     ? 'Competitive Intelligence & Knowledge Graph'
@@ -534,8 +566,27 @@ export function normalizeExecutiveReport(report: ExecutiveReport): NormalizedRep
     ? 'Machine-readable entity graph crosscheck, structured data verification, and head-to-head evaluation on commercial buyer queries against verified industry peers.'
     : 'Machine-readable entity graph crosscheck, structured data verification, and first-party semantic knowledge extraction.';
 
-  const totalDiscovered = (report.crawl_manifest as any)?.total_discovered_urls || 47;
-  const sampleCoverage = Math.round((rawPages.length / totalDiscovered) * 1000) / 10;
+  const manifest = report.crawl_manifest as (typeof report.crawl_manifest & {
+    total_discovered_urls?: number;
+    crawl_budget?: { discovery_truncated?: boolean };
+  }) | undefined;
+  const discoveredRaw = finiteNumber(manifest?.total_pages_discovered) ?? finiteNumber(manifest?.total_discovered_urls);
+  const totalDiscovered = discoveredRaw != null && discoveredRaw > 0 ? Math.max(discoveredRaw, rawPages.length) : null;
+  const discoveryTruncated = Boolean(
+    (manifest?.crawl_health as { discovery_truncated?: boolean } | undefined)?.discovery_truncated
+    || manifest?.crawl_budget?.discovery_truncated,
+  );
+  const sampleCoverage = totalDiscovered
+    ? Math.round((rawPages.length / totalDiscovered) * 1000) / 10
+    : null;
+  const evidenceCoverageRatio = finiteNumber(scores.evidence_coverage);
+  const evidenceCoveragePct = evidenceCoverageRatio == null
+    ? null
+    : (evidenceCoverageRatio <= 1 ? Math.round(evidenceCoverageRatio * 1000) / 10 : evidenceCoverageRatio);
+  const evidenceConfidence: NormalizedReport['coverageConfidence']['overallEvidenceConfidence'] = evidenceCoveragePct == null
+    ? 'NOT_SCORED'
+    : evidenceCoveragePct >= 80 ? 'HIGH' : evidenceCoveragePct >= 50 ? 'MEDIUM' : 'LOW';
+  const remediation = deriveRemediationClaim(report.code_patches || []);
 
   return {
     meta: {
@@ -558,12 +609,15 @@ export function normalizeExecutiveReport(report: ExecutiveReport): NormalizedRep
       pagesAudited: rawPages.length,
       pagesDiscovered: totalDiscovered,
       pageCoveragePct: sampleCoverage,
-      evidenceCoveragePct: 72,
-      commercialQueryCoveragePct: 100,
-      externalAuthorityCoveragePct: 0,
-      performancePagesCount: rawPages.length,
-      overallEvidenceConfidence: 'MEDIUM',
-      scopeLimitationNotice: `Composite score applies ONLY to audited sample (${rawPages.length} primary origin nodes). Uncrawled routes are explicitly excluded from mathematical score contribution.`,
+      evidenceCoveragePct,
+      answerabilityQuestions: sandboxEvals.length,
+      liveQueriesExecuted: liveObservation.queriesExecuted,
+      externalAuthorityLabel: report.external_authority ? 'Connected' : 'Not connected',
+      performancePagesCount: rawPages.filter((page) => page.ttfb_ms != null).length,
+      overallEvidenceConfidence: evidenceConfidence,
+      scopeLimitationNotice: totalDiscovered
+        ? `The score applies only to the ${rawPages.length} analyzed URL${rawPages.length === 1 ? '' : 's'} out of ${totalDiscovered} discovered. Uncrawled URLs are not in the score.${discoveryTruncated ? ' The sitemap listing stopped at the discovery cap, so the discovered count is a floor, not the size of the site.' : ''}`
+        : `The score applies only to the ${rawPages.length} analyzed URL${rawPages.length === 1 ? '' : 's'}. The crawl did not record how many URLs were discovered.`,
     },
 
     brief: {
@@ -572,7 +626,7 @@ export function normalizeExecutiveReport(report: ExecutiveReport): NormalizedRep
         `Independent technical assurance and discoverability diagnostic executed across ${rawPages.length} sampled URLs for ${brandName}. Comprehensive findings indicate strong digital surface foundations coupled with measurable generative AI extraction gaps.`,
       keySignals: {
         overallScore: calculatedComposite,
-        overallGrade: scores.grade || 'B',
+        overallGrade: authoritative.grade,
         technicalScore,
         geoScore,
         aeoScore,
@@ -588,11 +642,11 @@ export function normalizeExecutiveReport(report: ExecutiveReport): NormalizedRep
 
     scorecard: {
       overallScore: calculatedComposite,
-      grade: scores.grade || 'B',
-      confidencePercent: `${Math.round((scores.overall_confidence ?? 0.88) * 100)}%`,
-      evidenceCoveragePercent: `${Math.round((scores.evidence_coverage ?? 0.94) * 100)}%`,
+      grade: authoritative.grade,
+      confidencePercent: formatRatioPercent(finiteNumber(scores.overall_confidence)),
+      evidenceCoveragePercent: evidenceCoveragePct == null ? '—' : formatPercentPoints(evidenceCoveragePct),
       calculatedComposite,
-      compositeFormula: 'Technical SEO (30%) + GEO Extractability (25%) + AEO Citations (25%) + CRO Conversion (20%)',
+      compositeFormula: authoritative.formula,
       ledger: scoreLedger,
       perspectives: {
         human:
@@ -615,7 +669,7 @@ export function normalizeExecutiveReport(report: ExecutiveReport): NormalizedRep
       spotlightMetrics: (report.visual_intelligence?.spotlight_metrics
         ? report.visual_intelligence.spotlight_metrics.map((m) => ({
             label: m.label,
-            value: String(m.value) + (m.unit || ''),
+            value: joinMetricValue(m.value, m.unit),
             significance: m.significance,
           }))
         : [
@@ -638,11 +692,7 @@ export function normalizeExecutiveReport(report: ExecutiveReport): NormalizedRep
     },
 
     geo: {
-      dimensions: geoReadiness?.dimensions || [
-        { key: 'clarity', label: 'Semantic Entity Clarity', band: 'HIGH', summary: 'Core organization identity clearly declared.' },
-        { key: 'information_gain', label: 'Unique Information Gain', band: 'PARTIAL', summary: 'Factual commercial claims require higher density.' },
-        { key: 'citability', label: 'RAG Citability Readiness', band: 'MODERATE', summary: 'Answer engines require structured FAQ and schema grounding.' },
-      ],
+      dimensions: geoReadiness?.dimensions || [],
       llmsTxtFound: rawPages.some((p) => p.url.endsWith('llms.txt')),
       botDirectives: {
         gptBot: (report.crawl_manifest?.robots_txt_content || '').includes('GPTBot') ? 'Explicit Directive Declared' : 'Default Permitted (No Block)',
@@ -657,74 +707,34 @@ export function normalizeExecutiveReport(report: ExecutiveReport): NormalizedRep
     },
 
     aeo: {
-      liveObservation: {
-        isMeasured: isLiveMeasured,
-        engineCount: isLiveMeasured ? 1 : 0,
-        queriesExecuted: isLiveMeasured ? 20 : 0,
-        brandMentionedCount: isLiveMeasured ? 4 : 0,
-        brandMentionRatePct: isLiveMeasured ? 20 : 0,
-        brandCitedCount: isLiveMeasured ? 0 : 0,
-        liveCitationRatePct: liveCitationRate,
-        status: isLiveMeasured ? 'MEASURED (LOW)' : 'NOT_EXECUTED',
-        engineDetails: [
-          {
-            engine: 'Claude (Anthropic)',
-            queriesExecuted: isLiveMeasured ? 20 : 0,
-            brandMentioned: isLiveMeasured ? 4 : 0,
-            brandCited: isLiveMeasured ? 0 : 0,
-            citationRatePct: 0,
-            status: isLiveMeasured ? 'Low Visibility (0% Cited)' : 'NOT_EXECUTED',
-          },
-          {
-            engine: 'ChatGPT Search (OpenAI)',
-            queriesExecuted: 0,
-            brandMentioned: 0,
-            brandCited: 0,
-            citationRatePct: 0,
-            status: 'NOT_EXECUTED (Fail-Closed)',
-          },
-          {
-            engine: 'Perplexity AI',
-            queriesExecuted: 0,
-            brandMentioned: 0,
-            brandCited: 0,
-            citationRatePct: 0,
-            status: 'NOT_EXECUTED (Fail-Closed)',
-          },
-          {
-            engine: 'Google AI Overviews',
-            queriesExecuted: 0,
-            brandMentioned: 0,
-            brandCited: 0,
-            citationRatePct: 0,
-            status: 'NOT_EXECUTED (Fail-Closed)',
-          },
-          {
-            engine: 'Gemini (Google)',
-            queriesExecuted: 0,
-            brandMentioned: 0,
-            brandCited: 0,
-            citationRatePct: 0,
-            status: 'NOT_EXECUTED (Fail-Closed)',
-          },
-        ],
-      },
+      liveObservation,
       readiness: {
         domExtractabilityScore: geoScore,
-        readinessBand: geoScore >= 75 ? 'High' : (geoScore >= 50 ? 'Medium' : 'Low'),
-        citationReadiness: geoScore >= 75 ? 'High' : 'Medium',
-        groundingCoveragePct: Math.round((scores.evidence_coverage ?? 0.94) * 100),
+        readinessBand: geoScore == null ? 'Not measured' : geoScore >= 75 ? 'High' : (geoScore >= 50 ? 'Medium' : 'Low'),
+        citationReadiness: geoScore == null ? 'Not measured' : geoScore >= 75 ? 'High' : 'Medium',
+        groundingCoveragePct: evidenceCoveragePct,
         answerabilityRatePct: sandboxEvals.length > 0
           ? Math.round((sandboxEvals.filter((q) => q.answerability_status === 'ANSWERABLE').length / sandboxEvals.length) * 100)
-          : 65,
+          : null,
       },
-      engines: [
-        { name: 'ChatGPT Search (OpenAI)', score: perEngine?.chatgpt?.score ?? 60, status: perEngine?.chatgpt?.readiness_band ?? 'Medium', retrievalSource: 'Bing Web Index + DOM Extractability' },
-        { name: 'Perplexity AI', score: perEngine?.perplexity?.score ?? 50, status: perEngine?.perplexity?.readiness_band ?? 'Medium', retrievalSource: 'Live Multi-Index + RAG Parsing' },
-        { name: 'Google AI Overviews', score: perEngine?.google_aio?.score ?? 80, status: perEngine?.google_aio?.readiness_band ?? 'Pass', retrievalSource: 'Google Knowledge Graph + Web Schema' },
-        { name: 'Claude (Anthropic)', score: perEngine?.claude?.score ?? 80, status: perEngine?.claude?.readiness_band ?? 'Pass', retrievalSource: 'Direct Corpus Grounding & DOM AST' },
-        { name: 'Gemini (Google)', score: perEngine?.gemini?.score ?? 79.1, status: perEngine?.gemini?.readiness_band ?? 'Pass', retrievalSource: 'Google Search Index & Semantic Chunks' },
-      ],
+      engines: (['chatgpt', 'perplexity', 'google_aio', 'claude', 'gemini'] as const).flatMap((key) => {
+        const row = perEngine?.[key];
+        const score = finiteNumber(row?.score);
+        if (score == null) return [];
+        const names: Record<string, string> = {
+          chatgpt: 'ChatGPT Search (OpenAI)',
+          perplexity: 'Perplexity AI',
+          google_aio: 'Google AI Overviews',
+          claude: 'Claude (Anthropic)',
+          gemini: 'Gemini (Google)',
+        };
+        return [{
+          name: names[key],
+          score,
+          status: row?.readiness_band || 'Measured',
+          retrievalSource: 'On-page extractability for this engine profile. Not a live citation count.',
+        }];
+      }),
       commercialInquiries: commEvals,
       requeryGainPct,
       sandboxFacets: normalizedFacets,
@@ -743,27 +753,27 @@ export function normalizeExecutiveReport(report: ExecutiveReport): NormalizedRep
       competitorName: hasLegitCompetitor ? bakeoff?.competitor_domain : undefined,
       bakeoffResults: hasLegitCompetitor ? bakeoff : undefined,
       entitySummary: (report.geo_readiness?.schema_crosscheck as any)?.summary || 'Entity machine-readability evaluated across schema nodes.',
-      schemaTypes: report.geo_readiness?.schema_types || ['Organization', 'WebSite'],
-      schemaAssessmentSummary: `${(report.geo_readiness?.schema_crosscheck as any)?.quality_score ?? 70}/100 Schema Integrity`,
+      schemaTypes: report.geo_readiness?.schema_types || [],
+      schemaAssessmentSummary: finiteNumber((report.geo_readiness?.schema_crosscheck as any)?.quality_score) == null
+        ? 'Schema quality was not scored'
+        : `${finiteNumber((report.geo_readiness?.schema_crosscheck as any)?.quality_score)}/100 Schema Integrity`,
       socialMetaStatus: rawPages.some((p) => p.og_tags && Object.keys(p.og_tags).length > 0) ? 'OpenGraph & Twitter Card Attributes Verified' : 'Missing Social Graph Tags',
     },
 
     conversion: {
       fiveSecondHook: (rawPageReports[0]?.copywriting?.suggested as any)?.hook_3sec || profile.value_proposition,
-      formCount: (report as any).form_audit?.total_forms_found || 1,
-      formAccessibilityStatus: (report as any).form_audit?.wcag_accessible ? 'Compliant Form Architecture' : 'Unlabeled Inputs Detected',
+      formCount: (report as any).form_audit ? finiteNumber((report as any).form_audit.total_forms_found) : null,
+      formAccessibilityStatus: !(report as any).form_audit
+        ? 'Not measured'
+        : (report as any).form_audit.wcag_accessible
+          ? 'Automated screening: labels present'
+          : 'Automated screening: unlabeled inputs',
       characterSafeCopy: report.character_safe_copy,
       contradictions: (report.contradictions || []).map((c) => ({
         statementA: c.declared_type || c.contradiction_type,
         statementB: c.detected_type || 'Observed DOM Value',
         conflict: c.reason,
       })),
-      leadGenOpportunity: {
-        route: `/solutions/${profile.industry ? profile.industry.toLowerCase().replace(/\s+/g, '-') : 'enterprise-suite'}`,
-        title: `${brandName} Solutions | High-Intent Enterprise Platform`,
-        cta: profile.primary_cta || 'Request Strategic Assessment',
-        schemaType: 'Service',
-      },
     },
 
     pages: {
@@ -795,41 +805,26 @@ export function normalizeExecutiveReport(report: ExecutiveReport): NormalizedRep
       top10Actions: (report.top_10_actions?.actions || []).slice(0, 10).map((act, i) => ({
         rank: act.rank || i + 1,
         action: act.action,
-        priority: act.priority || 'P1',
-        impact: act.impact || 'HIGH',
-        effort: act.effort || 'MEDIUM',
-        engineerHours: act.estimated_engineer_hours || 4,
-        outcome: act.expected_outcome || 'Citation & Discoverability Uplift',
-        validation: act.validation || 'HTTP 200 & DOM verification',
-        findingId: act.related_finding_id || `ACT_${i + 1}`,
-        evidenceId: `EV_00${(i % 5) + 1}`,
-        affectedRoutes: ['/', '/services/ai-engineering'],
-        observed: 'Marketing-dense phrasing lacking explicit entity, ICP, and technical capability taxonomy in DOM AST.',
-        remediationSteps: [
-          'Add explicit ICP definition & company size qualification',
-          'Declare structured Service taxonomy with JSON-LD',
-          'Deploy direct question-and-answer extraction block',
-        ],
-        verificationRule: 'DOM AST contains: meta[name="icp"] OR schema.org/Service',
-        expectedEffect: 'Improves answerability for commercial-intent queries from 0% to >85%',
+        priority: act.priority || '',
+        impact: act.impact || '',
+        effort: act.effort || '',
+        engineerHours: finiteNumber(act.estimated_engineer_hours),
+        outcome: act.expected_outcome || '',
+        validation: act.validation || '',
+        findingId: act.related_finding_id,
       })),
       roadmapNow: report.roadmap_7_days || [],
       roadmapNext: report.roadmap_30_days || [],
       roadmapOngoing: report.roadmap_90_days || [],
-      financialModel: {
-        evidenceTier: 'DERIVED',
-        monthlyLossEstimate: 'Estimated $4,200 - $12,800/mo in potential commercial demand',
-        projectedLift: '+18% to +35% organic citation visibility',
-        basisSummary: 'Derived from high-intent buyer query search volume across verified gap topics.',
-        methodology: 'Synthetic commercial intent query volume × estimated category ACV capture model.',
-        assumptions: 'Assumes 2.0% - 4.5% qualified conversion rate on recovered answer engine citations.',
-        confidence: 'MEDIUM (Derived financial model; actual pipeline loss is not directly measured).',
-      },
     },
 
+    remediation,
+
     methodology: {
-      auditScope: `Headless AST parsing, DOM semantic decomposition, and live AI engine citation testing across ${rawPages.length} primary origin nodes.`,
-      crawlDepth: 3,
+      auditScope: liveObservation.isMeasured
+        ? `DOM analysis of ${rawPages.length} URL${rawPages.length === 1 ? '' : 's'}, plus ${liveObservation.queriesExecuted} live AI quer${liveObservation.queriesExecuted === 1 ? 'y' : 'ies'}.`
+        : `DOM analysis of ${rawPages.length} URL${rawPages.length === 1 ? '' : 's'}. Live AI engines were not queried on this run.`,
+      crawlDepth: 0,
       sampledPagesCount: rawPages.length,
       verifiedFactCount: evidenceList.length,
       knownLimitations: [

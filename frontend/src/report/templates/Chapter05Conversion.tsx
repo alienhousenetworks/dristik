@@ -22,13 +22,13 @@ export function Chapter05Conversion({
       <ChapterOpener
         theme={theme}
         chapterNumber="05"
-        subtitle="VISITOR VALUE PROPOSITION, WCAG &amp; COPYWRITING"
+        subtitle="VISITOR VALUE PROPOSITION &amp; COPY"
         title="Conversion Ergonomics &amp; Production Copy"
-        description="Above-the-fold value proposition analysis, web form friction diagnostics, character-compliant SERP copy recommendations, and multi-surface contradiction detection."
+        description="Above-the-fold value proposition, automated form screening when a form audit ran, and character counts only when a copy recommendation was generated."
         domain={meta.domain}
         whyThisMatters="Discoverability gains are wasted if visitors encounter ambiguous value propositions, unlabeled lead capture forms, or truncated SERP titles that lower click-through rates."
-        howWeMeasuredIt="Heuristic 5-second cognitive threshold testing, WCAG 2.1 AA form label AST parsing, and strict character-length compliance verification."
-        whatWasAnalyzed="Hero section value prop clarity, lead form input labels, pixel-safe title/meta lengths, and conflicting statements across disparate page routes."
+        howWeMeasuredIt="Recorded hero copy, an automated form-label screen when that audit ran, and character counts on generated recommendations. This is not a WCAG certification."
+        whatWasAnalyzed="Hero copy on sampled pages, form labels when a form audit ran, and contradictions recorded by the audit."
         pageNumber={14}
       />
 
@@ -58,7 +58,7 @@ export function Chapter05Conversion({
                 5-Second First-Impression Value Proposition
               </span>
               <p className="font-sans text-[11pt] font-normal italic text-ink leading-snug">
-                "{conversion.fiveSecondHook || 'Empirical value proposition detected on primary origin landing page.'}"
+                "{conversion.fiveSecondHook || 'No hero value proposition was recorded on the sampled pages.'}"
               </p>
               <p className="text-[7.5pt] text-ink-500 font-sans">
                 Tested against the 5-second visitor cognitive threshold for category comprehension.
@@ -67,18 +67,24 @@ export function Chapter05Conversion({
 
             <div className="p-4 rounded bg-paper-100 border border-line space-y-2">
               <span className="font-mono text-[8pt] font-bold uppercase tracking-[0.04em] text-ink-600 block">
-                Lead Capture Form Ergonomics (WCAG)
+                Lead capture forms
               </span>
               <div className="flex items-center gap-2">
-                <span className="font-mono text-[8pt] font-bold px-2 py-0.5 rounded bg-good/10 text-good border border-good/30">
+                <span className={`font-mono text-[8pt] font-bold px-2 py-0.5 rounded border ${
+                  conversion.formCount == null
+                    ? 'bg-paper-200 text-ink-700 border-line'
+                    : 'bg-paper-100 text-ink border-line'
+                }`}>
                   {conversion.formAccessibilityStatus}
                 </span>
                 <span className="font-mono text-[7.5pt] text-ink-500">
-                  {conversion.formCount} Form(s) Analyzed
+                  {conversion.formCount == null
+                    ? 'No form audit on this run'
+                    : `${conversion.formCount} form(s) in the automated screen`}
                 </span>
               </div>
               <p className="text-[7.5pt] text-ink-600 font-sans">
-                Inputs evaluated for explicit label associations, autofocus traps, and mobile keyboard type declarations.
+                Automated screening only. It is not a WCAG certification.
               </p>
             </div>
           </div>
@@ -90,7 +96,7 @@ export function Chapter05Conversion({
                 5.2 Character-Safe Production Copy Recommendations
               </h3>
               <span className="font-mono text-[7.5pt] text-ink-500">
-                Guaranteed Google SERP &amp; Snippet Safe
+                Counts apply only to generated recommendations
               </span>
             </div>
 
@@ -99,10 +105,12 @@ export function Chapter05Conversion({
               <div className="p-3 space-y-1">
                 <div className="flex items-center justify-between font-mono text-[7.5pt]">
                   <span className="font-bold text-ink">RECOMMENDED TITLE TAG</span>
-                  <span className="text-good font-bold">54 / 60 Characters (Safe)</span>
+                  <span className="text-ink-600 font-bold">
+                    {copySuite?.title ? `${copySuite.title_char_count} characters · ${copySuite.title_status}` : 'Not generated'}
+                  </span>
                 </div>
                 <p className="font-sans text-[10pt] text-ink font-medium">
-                  {copySuite?.title || `${meta.brandName} | Enterprise Intelligence & Performance Solutions`}
+                  {copySuite?.title || 'No title recommendation was generated.'}
                 </p>
               </div>
 
@@ -110,10 +118,12 @@ export function Chapter05Conversion({
               <div className="p-3 space-y-1">
                 <div className="flex items-center justify-between font-mono text-[7.5pt]">
                   <span className="font-bold text-ink">RECOMMENDED META DESCRIPTION</span>
-                  <span className="text-good font-bold">148 / 160 Characters (Safe)</span>
+                  <span className="text-ink-600 font-bold">
+                    {copySuite?.meta_description ? `${copySuite.meta_char_count} characters · ${copySuite.meta_status}` : 'Not generated'}
+                  </span>
                 </div>
                 <p className="text-ink-700 font-sans leading-relaxed">
-                  {copySuite?.meta_description || `Discover ${meta.brandName}. Verified platform capabilities, enterprise specifications, and autonomous intelligence for modern operations.`}
+                  {copySuite?.meta_description || 'No meta description recommendation was generated.'}
                 </p>
               </div>
 
@@ -121,10 +131,12 @@ export function Chapter05Conversion({
               <div className="p-3 space-y-1">
                 <div className="flex items-center justify-between font-mono text-[7.5pt]">
                   <span className="font-bold text-ink">RECOMMENDED PRIMARY H1 HEADLINE</span>
-                  <span className="text-ink-500 font-mono">Semantic Entity Match</span>
+                  <span className="text-ink-500 font-mono">
+                    {copySuite?.hero_headline ? `${copySuite.hero_word_count} words · ${copySuite.hero_status}` : 'Not generated'}
+                  </span>
                 </div>
                 <p className="font-sans text-[10.5pt] text-ink font-normal">
-                  {copySuite?.hero_headline || `Autonomous Digital Intelligence & High-Performance Solutions`}
+                  {copySuite?.hero_headline || 'No headline recommendation was generated.'}
                 </p>
               </div>
             </div>

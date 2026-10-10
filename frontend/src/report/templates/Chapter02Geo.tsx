@@ -53,6 +53,11 @@ export function Chapter02Geo({ theme, report }: Chapter02GeoProps) {
               2.1 The 8-Dimension Extractability Framework
             </h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-[8.5pt]">
+              {geo.dimensions.length === 0 && (
+                <p className="text-ink-600 font-sans md:col-span-2">
+                  Extractability dimensions were not scored on this run.
+                </p>
+              )}
               {geo.dimensions.map((dim) => (
                 <div key={dim.key} className="p-3 border border-line rounded bg-paper-100 space-y-1">
                   <div className="flex items-center justify-between pb-1 border-b border-line">

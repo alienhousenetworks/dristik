@@ -1,4 +1,5 @@
 import React from 'react';
+import { formatPercentPoints } from '../../lib/format';
 import { ReportTheme } from '../brandTheme';
 import { NormalizedReport } from '../models/normalizedReport';
 import { PageHeader, PageFooter } from './PageHeaderFooter';
@@ -78,13 +79,15 @@ export function ExecutiveBrief({ theme, report }: ExecutiveBriefProps) {
 
             <div className="text-center p-2 border-r border-line last:border-r-0">
               <span className="font-mono text-[7.5pt] uppercase tracking-[0.04em] text-ink-500 block">
-                3. AEO Readiness (25%)
+                3. Live citations
               </span>
               <div className="font-sans text-3xl font-bold text-ink mt-1">
                 {keySignals.aeoScore != null ? keySignals.aeoScore : '—'}
               </div>
               <span className="font-mono text-[7.5pt] text-ink-400 block mt-1">
-                {report.aeo.liveObservation.isMeasured ? `Live Rate: ${report.aeo.liveObservation.liveCitationRatePct}%` : 'Readiness Proxy'}
+                {report.aeo.liveObservation.isMeasured
+                  ? `Live citation ${formatPercentPoints(report.aeo.liveObservation.liveCitationRatePct)}`
+                  : 'Not measured'}
               </span>
             </div>
 
@@ -111,34 +114,46 @@ export function ExecutiveBrief({ theme, report }: ExecutiveBriefProps) {
               <span className="font-mono text-[7.5pt] font-bold uppercase tracking-[0.04em] text-ink-700">
                 Audit Scope &amp; Evidence Coverage Confidence
               </span>
-              <span className="font-mono text-[7pt] font-bold px-2 py-0.5 rounded bg-good/10 text-good border border-good/30">
+              <span className="font-mono text-[7pt] font-bold px-2 py-0.5 rounded bg-paper-200 text-ink-700 border border-line">
                 EVIDENCE CONFIDENCE: {report.coverageConfidence.overallEvidenceConfidence}
               </span>
             </div>
 
-            <div className="grid grid-cols-2 md:grid-cols-5 gap-2.5 font-mono text-[7.5pt]">
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-2.5 font-mono text-[7.5pt]">
               <div className="bg-paper-50 p-2 rounded border border-line">
                 <span className="text-ink-400 block text-[6.5pt] uppercase">Page Coverage</span>
                 <strong className="text-ink text-[8pt] block mt-0.5 truncate">
-                  {report.coverageConfidence.pagesAudited} / {report.coverageConfidence.pagesDiscovered} URLs ({report.coverageConfidence.pageCoveragePct}%)
+                  {report.coverageConfidence.pagesDiscovered != null
+                    ? `${report.coverageConfidence.pagesAudited} / ${report.coverageConfidence.pagesDiscovered} (${formatPercentPoints(report.coverageConfidence.pageCoveragePct)})`
+                    : `${report.coverageConfidence.pagesAudited} analyzed`}
                 </strong>
               </div>
               <div className="bg-paper-50 p-2 rounded border border-line">
                 <span className="text-ink-400 block text-[6.5pt] uppercase">Evidence Coverage</span>
                 <strong className="text-ink text-[8pt] block mt-0.5">
-                  {report.coverageConfidence.evidenceCoveragePct}% Grounded
+                  {report.coverageConfidence.evidenceCoveragePct == null
+                    ? 'Not recorded'
+                    : `${formatPercentPoints(report.coverageConfidence.evidenceCoveragePct)} grounded`}
                 </strong>
               </div>
               <div className="bg-paper-50 p-2 rounded border border-line">
-                <span className="text-ink-400 block text-[6.5pt] uppercase">Commercial Queries</span>
+                <span className="text-ink-400 block text-[6.5pt] uppercase">On-page questions</span>
                 <strong className="text-ink text-[8pt] block mt-0.5">
-                  100 / 100 Evaluated
+                  {report.coverageConfidence.answerabilityQuestions} evaluated
+                </strong>
+              </div>
+              <div className="bg-paper-50 p-2 rounded border border-line">
+                <span className="text-ink-400 block text-[6.5pt] uppercase">Live AI queries</span>
+                <strong className="text-ink text-[8pt] block mt-0.5">
+                  {report.coverageConfidence.liveQueriesExecuted > 0
+                    ? `${report.coverageConfidence.liveQueriesExecuted} executed`
+                    : 'Not executed'}
                 </strong>
               </div>
               <div className="bg-paper-50 p-2 rounded border border-line">
                 <span className="text-ink-400 block text-[6.5pt] uppercase">External Authority</span>
-                <strong className="text-warn text-[8pt] block mt-0.5">
-                  0% (Unprovisioned)
+                <strong className="text-ink text-[8pt] block mt-0.5">
+                  {report.coverageConfidence.externalAuthorityLabel}
                 </strong>
               </div>
               <div className="bg-paper-50 p-2 rounded border border-line">

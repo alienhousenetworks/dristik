@@ -3,6 +3,7 @@ import { ExecutiveReport, ChartSpecification } from '../types';
 import { buildReportTheme } from '../report/brandTheme';
 import { normalizeExecutiveReport } from '../report/models/normalizedReport';
 import { synthesizeVisualIntelligenceFallback } from '../lib/visualSynthesizerFallback';
+import { shortPillarLabel } from '../report/models/scoreLedger';
 
 // Editorial Publication Chapter Templates
 import { CoverPage } from '../report/templates/CoverPage';
@@ -47,10 +48,30 @@ export function AuditPdfReport({
   const visual = report.visual_intelligence || synthesizeVisualIntelligenceFallback(report);
   const charts = visual?.selected_visualizations || [];
 
-  const radarChart = useMemo(
-    () => charts.find((c) => c.chart_type === 'radar') || null,
-    [charts]
-  );
+  const radarChart = useMemo<ChartSpecification | null>(() => {
+    const rows = normalized.scorecard.ledger.filter((row) => row.included && row.rawScore != null);
+    if (rows.length === 0) return charts.find((c) => c.chart_type === 'radar') || null;
+    return {
+      id: 'chart_pillar_radar',
+      chart_type: 'radar',
+      title: 'Ledger pillar scores',
+      subtitle: 'Same scores as the calculation ledger.',
+      ai_insight: normalized.scorecard.compositeFormula,
+      category: 'OVERALL',
+      data: {
+        labels: rows.map((row) => shortPillarLabel(row.categoryKey)),
+        target_values: rows.map((row) => row.rawScore as number),
+        benchmark_values: [],
+      },
+      config: {
+        max_value: 100,
+        target_label: normalized.meta.domain,
+        benchmark_label: '',
+      },
+      is_recommended: true,
+      priority_order: 1,
+    };
+  }, [charts, normalized.meta.domain, normalized.scorecard.compositeFormula, normalized.scorecard.ledger]);
   const engineChart = useMemo(
     () => charts.find((c) => c.chart_type === 'engine_comparison_bar') || null,
     [charts]
@@ -86,11 +107,11 @@ export function AuditPdfReport({
         total: findings.length,
         segments: [
           { label: 'Critical', count: counts.CRITICAL, color: '#a82620' },
-          { label: 'High', count: counts.HIGH, color: '#a82620' },
+          { label: 'High', count: counts.HIGH, color: '#c45c26' },
           { label: 'Medium', count: counts.MEDIUM, color: '#925a08' },
-          { label: 'Low', count: counts.LOW, color: '#a8aeb6' },
-          { label: 'Info', count: counts.INFO, color: '#a8aeb6' },
-        ],
+          { label: 'Low', count: counts.LOW, color: '#5c6b7a' },
+          { label: 'Info', count: counts.INFO, color: '#8b939c' },
+        ].filter((segment) => segment.count > 0),
       },
     };
   }, [charts, report.findings]);

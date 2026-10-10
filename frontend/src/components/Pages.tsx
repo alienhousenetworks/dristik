@@ -592,7 +592,8 @@ export function Pages({ manifest, summary, pageReports = [] }: PagesProps) {
   const [openScrapedUrls, setOpenScrapedUrls] = useState<Set<string>>(new Set());
   const pages = manifest?.pages || [];
   const reportsByUrl = new Map(pageReports.map((item) => [item.url, item]));
-  const discovered = manifest?.total_pages_discovered || asNumber(summary.total_pages_discovered, pages.length);
+  const recordedDiscovered = [manifest?.total_pages_discovered, summary.total_pages_discovered]
+    .find((value) => typeof value === 'number' && value > 0);
   const sitemap = manifest?.sitemap_found ?? Boolean(summary.sitemap_found);
   const robots = manifest?.robots_txt_found ?? Boolean(summary.robots_txt_found);
   const health = manifest?.crawl_health || summary || {};
@@ -612,7 +613,7 @@ export function Pages({ manifest, summary, pageReports = [] }: PagesProps) {
   const stats = [
     { label: 'Crawled', value: String(pages.length) },
     { label: 'Reports', value: String(pageReports.length || pages.length) },
-    { label: 'Discovered', value: String(discovered) },
+    { label: 'Discovered', value: recordedDiscovered != null ? String(recordedDiscovered) : '—' },
     { label: 'Sitemap', value: sitemap ? 'Yes' : 'No' },
     { label: 'robots.txt', value: robots ? 'Yes' : 'No' },
     { label: 'Words', value: String(asNumber(health.total_words_across_site ?? summary.total_words, 0)) },

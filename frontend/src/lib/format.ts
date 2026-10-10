@@ -65,6 +65,44 @@ export function formatPercent(value?: number | null): string {
   return `${Math.round(n)}%`;
 }
 
+/**
+ * Print a 0–100 percentage once. Values that already end in "%" stay
+ * a single percent sign, so "10.6%" and "100%" cannot become "10.6%%".
+ */
+export function formatPercentPoints(value?: number | string | null, digits = 1): string {
+  if (value == null) return '—';
+  let numeric: number;
+  if (typeof value === 'string') {
+    const stripped = value.trim().replace(/%+$/g, '').trim();
+    if (!stripped) return '—';
+    numeric = Number(stripped);
+  } else {
+    numeric = value;
+  }
+  if (!Number.isFinite(numeric)) return '—';
+  const factor = 10 ** Math.max(0, digits);
+  const rounded = Math.round((numeric + Number.EPSILON) * factor) / factor;
+  const text = Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(digits);
+  return `${text}%`;
+}
+
+/** Finding confidence is stored as 0–1. A value already on a 0–100 scale is not multiplied again. */
+export function formatRatioPercent(value?: number | null): string {
+  if (value == null || Number.isNaN(value)) return '—';
+  const points = value >= 0 && value <= 1 ? value * 100 : value;
+  return formatPercentPoints(points, 0);
+}
+
+export function joinMetricValue(value: unknown, unit?: string | null): string {
+  const raw = String(value ?? '').trim();
+  const suffix = (unit || '').trim();
+  if (!raw) return '—';
+  if (!suffix) return raw.replace(/%{2,}/g, '%');
+  if (suffix === '%' || suffix.toLowerCase() === 'percent') return formatPercentPoints(raw);
+  if (raw.endsWith(suffix)) return raw.replace(/%{2,}/g, '%');
+  return `${raw}${suffix}`.replace(/%{2,}/g, '%');
+}
+
 export function formatUsd(value: number): string {
   if (!value) return '$0.00';
   return `$${value.toFixed(4)}`;

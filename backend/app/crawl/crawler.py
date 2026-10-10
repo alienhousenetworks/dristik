@@ -205,7 +205,7 @@ class CrawlerService:
         declared_sitemaps: List[str],
         client: httpx.AsyncClient,
         max_sitemap_urls: int = 500
-    ) -> Tuple[bool, Optional[str], List[str]]:
+    ) -> Tuple[bool, Optional[str], List[str], bool]:
         candidate_sitemaps = declared_sitemaps + [
             f"{base_origin}/sitemap.xml",
             f"{base_origin}/sitemap_index.xml",
@@ -214,6 +214,21 @@ class CrawlerService:
         discovered_urls: List[str] = []
         found_sitemap_url: Optional[str] = None
         visited_xml_sitemaps: Set[str] = set()
+        truncated = False
+
+        def at_cap() -> bool:
+            nonlocal truncated
+            if len(discovered_urls) >= max_sitemap_urls:
+                truncated = True
+                return True
+            return False
+
+        def add_page(raw: str) -> None:
+            if at_cap():
+                return
+            norm = self._normalize_url(raw, base_domain, base_origin)
+            if norm and norm not in discovered_urls:
+                discovered_urls.append(norm)
 
         for s_url in candidate_sitemaps:
             if s_url in visited_xml_sitemaps:
@@ -225,6 +240,8 @@ class CrawlerService:
                     found_sitemap_url = s_url
                     locs = re.findall(r"<loc>(.*?)</loc>", resp.text, re.IGNORECASE)
                     for loc in locs:
+                        if at_cap():
+                            break
                         loc_clean = loc.strip()
                         if loc_clean.endswith(".xml") or "sitemap" in loc_clean.lower():
                             if loc_clean not in visited_xml_sitemaps and len(visited_xml_sitemaps) < 25:
@@ -234,25 +251,19 @@ class CrawlerService:
                                     if sub_resp.status_code == 200:
                                         sub_locs = re.findall(r"<loc>(.*?)</loc>", sub_resp.text, re.IGNORECASE)
                                         for s_loc in sub_locs:
-                                            norm = self._normalize_url(s_loc.strip(), base_domain, base_origin)
-                                            if norm and norm not in discovered_urls:
-                                                discovered_urls.append(norm)
-                                                if len(discovered_urls) >= max_sitemap_urls:
-                                                    break
+                                            if at_cap():
+                                                break
+                                            add_page(s_loc.strip())
                                 except Exception:
                                     pass
                         else:
-                            norm = self._normalize_url(loc_clean, base_domain, base_origin)
-                            if norm and norm not in discovered_urls:
-                                discovered_urls.append(norm)
-                                if len(discovered_urls) >= max_sitemap_urls:
-                                    break
+                            add_page(loc_clean)
                     if discovered_urls:
-                        return True, found_sitemap_url, discovered_urls[:max_sitemap_urls]
+                        return True, found_sitemap_url, discovered_urls[:max_sitemap_urls], truncated
             except Exception:
                 continue
 
-        return (found_sitemap_url is not None), found_sitemap_url, discovered_urls[:max_sitemap_urls]
+        return (found_sitemap_url is not None), found_sitemap_url, discovered_urls[:max_sitemap_urls], truncated
 
     async def _js_render_page(
         self,
@@ -483,7 +494,10 @@ class CrawlerService:
                 progress_callback(f"Connecting to {base_origin}...", 15)
                 
             robots_found, robots_content, declared_sitemaps = await self._fetch_robots_txt(base_origin, client)
-            sitemap_found, sitemap_url, sitemap_urls = await self._fetch_sitemap_urls(base_origin, base_domain, declared_sitemaps, client, max_sitemap_urls=max(target_max_pages * 2, 500))
+            discovery_cap = max(int(getattr(settings, "CRAWL_PAGE_CAP", 5000) or 5000), target_max_pages)
+            sitemap_found, sitemap_url, sitemap_urls, discovery_truncated = await self._fetch_sitemap_urls(
+                base_origin, base_domain, declared_sitemaps, client, max_sitemap_urls=discovery_cap
+            )
             
             for u in sitemap_urls:
                 norm_s = self._normalize_url(u, base_domain, base_origin)
@@ -752,7 +766,8 @@ class CrawlerService:
             robots_txt_content=robots_content,
             broken_links=broken_links,
             sitemap_urls=sitemap_urls,
-            target_max_pages=target_max_pages
+            target_max_pages=target_max_pages,
+            discovery_truncated=discovery_truncated,
         )
 
         # Step D: Index page chunks into VectorStore using E5-Large
@@ -818,7 +833,8 @@ class CrawlerService:
         robots_txt_content: Optional[str],
         broken_links: List[Dict[str, str]],
         sitemap_urls: Optional[List[str]] = None,
-        target_max_pages: int = 10
+        target_max_pages: int = 10,
+        discovery_truncated: bool = False,
     ) -> CrawlManifest:
         title_map: Dict[str, List[str]] = {}
         desc_map: Dict[str, List[str]] = {}
@@ -870,7 +886,8 @@ class CrawlerService:
             "skip_reasons": {
                 "budget_cap_reached": max(0, urls_skipped_cnt - len(broken_links)),
                 "failed_or_broken": len(broken_links)
-            }
+            },
+            "discovery_truncated": discovery_truncated,
         }
 
         role_labels = {
@@ -894,10 +911,15 @@ class CrawlerService:
         required_roles = ["homepage", "primary commercial", "high-intent", "secondary commercial", "proof or about"]
         missing_roles = [role for role in required_roles if role not in seen_roles]
         sitemap_count = len(s_urls)
+        floor_note = (
+            " The sitemap listing stopped at the discovery cap, so the discovered count is a floor, not the size of the site."
+            if discovery_truncated else ""
+        )
         sampling_note = (
-            f"Deep audit covered {len(crawled_pages)} URL"
+            f"This run analyzed {len(crawled_pages)} URL"
             f"{'' if len(crawled_pages) == 1 else 's'}"
-            f" selected for these roles: {', '.join(seen_roles) or 'general pages'}. "
+            f" of {urls_discovered_cnt} discovered.{floor_note} "
+            f"Pages were selected for these roles: {', '.join(seen_roles) or 'general pages'}. "
             f"Sitemap listed {sitemap_count} URL{'' if sitemap_count == 1 else 's'}. "
             f"Findings are page-verified, sample-verified, origin-verified, or site-inferred. "
             f"This run does not claim every URL was rendered."
@@ -912,6 +934,7 @@ class CrawlerService:
             "roles_missing": missing_roles,
             "sitemap_url_count": sitemap_count,
             "total_pages_discovered": urls_discovered_cnt,
+            "discovery_truncated": discovery_truncated,
             "sitemap_status": "Verified" if sitemap_found else "Missing / Inaccessible",
             "robots_txt_status": "Configured" if robots_txt_found else "Missing",
             "duplicate_titles_count": len(duplicate_titles),

@@ -1,4 +1,5 @@
 import React from 'react';
+import { formatPercentPoints } from '../../lib/format';
 import { ReportTheme } from '../brandTheme';
 import { NormalizedReport } from '../models/normalizedReport';
 import { PageHeader, PageFooter } from './PageHeaderFooter';
@@ -98,13 +99,13 @@ export function AuditSnapshot({
             {/* Radar Chart */}
             <div className="flex flex-col items-center justify-center p-3 bg-paper-50 border border-line rounded">
               <span className="font-mono text-[8pt] font-bold uppercase tracking-[0.04em] text-ink-700 mb-1">
-                5-Pillar Score Radar vs Baseline
+                Ledger pillar scores
               </span>
               <p className="text-[7.5pt] text-ink-500 mb-2 text-center">
-                Target performance mapped against industry standard across core digital pillars
+                Same measured pillars as the calculation ledger. Unmeasured pillars are omitted.
               </p>
               {radarChart ? (
-                <div className="w-full max-w-[270px]">
+                <div className="w-full">
                   <RadarChart chart={radarChart} />
                 </div>
               ) : (
@@ -188,10 +189,10 @@ export function AuditSnapshot({
                         {row.status}
                       </span>
                     </td>
-                    <td className="py-2 px-3 font-bold">{row.rawScore != null ? `${row.rawScore}` : '—'}</td>
-                    <td className="py-2 px-3 text-ink-600">{row.weightPct}%</td>
+                    <td className="py-2 px-3 font-bold">{row.included && row.rawScore != null ? row.rawScore.toFixed(1) : '—'}</td>
+                    <td className="py-2 px-3 text-ink-600">{row.included ? formatPercentPoints(row.weightPct) : '—'}</td>
                     <td className="py-2 px-3 text-right font-bold text-ink">
-                      +{row.contribution.toFixed(2)}
+                      {row.included ? `+${row.contribution.toFixed(2)}` : 'excluded'}
                     </td>
                   </tr>
                 ))}
@@ -201,9 +202,11 @@ export function AuditSnapshot({
                   <td colSpan={3} className="py-2 px-3 font-bold font-sans text-ink">
                     Total Deterministic Composite Score
                   </td>
-                  <td className="py-2 px-3 text-ink-600 font-bold">100.0%</td>
+                  <td className="py-2 px-3 text-ink-600 font-bold">
+                    {formatPercentPoints(scorecard.ledger.filter((row) => row.included).reduce((sum, row) => sum + row.weightPct, 0))}
+                  </td>
                   <td className="py-2 px-3 text-right font-bold text-ink text-[10pt]">
-                    {scorecard.calculatedComposite ?? scorecard.overallScore} / 100
+                    {scorecard.calculatedComposite != null ? scorecard.calculatedComposite.toFixed(1) : '—'} / 100
                   </td>
                 </tr>
               </tfoot>

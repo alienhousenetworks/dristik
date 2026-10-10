@@ -13,7 +13,7 @@ export function Chapter07Roadmap({
   theme,
   report,
 }: Chapter07RoadmapProps) {
-  const { priorities, meta } = report;
+  const { priorities, meta, remediation } = report;
 
   return (
     <>
@@ -80,7 +80,7 @@ export function Chapter07Roadmap({
                       </span>
                     </td>
                     <td className="py-2 px-3 font-mono text-[7.5pt] text-ink-700">
-                      {act.effort} ({act.engineerHours}h)
+                      {act.effort || '—'}{act.engineerHours != null ? ` (${act.engineerHours}h)` : ''}
                     </td>
                     <td className="py-2 px-3 text-ink-700 font-sans leading-relaxed">
                       {act.outcome}
@@ -92,126 +92,19 @@ export function Chapter07Roadmap({
             </table>
           </div>
 
-          {/* Engineering-Grade Strategic Action Specification (Point 7) */}
-          <div className="space-y-2 pt-1">
-            <div className="flex items-center justify-between pb-1 border-b border-line">
-              <span className="font-mono text-[8pt] font-bold uppercase tracking-[0.04em] text-ink-700">
-                Engineering-Grade Action Specification (Deep Diagnostic Trace)
-              </span>
-              <span className="font-mono text-[7pt] text-ink-500">
-                Zero Generic Directives
-              </span>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-[7.5pt]">
-              <div className="p-3 bg-paper-100 border border-line rounded space-y-1.5">
-                <div className="flex items-center justify-between">
-                  <span className="font-mono font-bold text-ink">ACTION 01 // ICP &amp; Category Clarity</span>
-                  <span className="font-mono font-bold text-bad bg-bad/10 px-1.5 py-0.2 rounded border border-bad/30">P0 BLOCKER</span>
-                </div>
-                <div className="font-mono text-[7pt] text-ink-600">
-                  <span>Evidence: <strong>EV_004</strong> · Routes: <strong>/ , /services/*</strong></span>
-                </div>
-                <p className="text-ink-700 font-sans leading-tight">
-                  <strong>Observed:</strong> No explicit ICP entity statement in DOM AST. Headline contains marketing slogans rather than service classification.
-                </p>
-                <div className="bg-paper-50 p-2 rounded border border-line space-y-1 text-ink-700 font-sans">
-                  <strong>Remediation Checklist:</strong>
-                  <ul className="list-disc pl-3 text-[7pt] space-y-0.5 text-ink-600">
-                    <li>Add explicit ICP definition, company size, and target industry.</li>
-                    <li>Declare primary software service categories in &lt;h1&gt; and title.</li>
-                    <li>Add customer exclusion criteria to prevent mismatched queries.</li>
-                  </ul>
-                </div>
-                <div className="font-mono text-[7pt] text-ink-600 bg-paper-200 p-1.5 rounded">
-                  <strong>Verification Test:</strong> DOM contains [data-entity="icp"] OR schema.org/Service with audience specs.
-                </div>
-                <div className="font-sans text-[7pt] text-good font-semibold">
-                  Expected Effect: Improves answerability for commercial-intent queries from 0% to &gt;85%.
-                </div>
-              </div>
-
-              <div className="p-3 bg-paper-100 border border-line rounded space-y-1.5">
-                <div className="flex items-center justify-between">
-                  <span className="font-mono font-bold text-ink">ACTION 02 // Structured Schema.org Grounding</span>
-                  <span className="font-mono font-bold text-warn bg-warn/10 px-1.5 py-0.2 rounded border border-warn/30">P1 CORE</span>
-                </div>
-                <div className="font-mono text-[7pt] text-ink-600">
-                  <span>Evidence: <strong>EV_002</strong> · Routes: <strong>/ (Primary Origin)</strong></span>
-                </div>
-                <p className="text-ink-700 font-sans leading-tight">
-                  <strong>Observed:</strong> JSON-LD schema is absent or limited to bare Organization without Service, FAQPage, or SoftwareApplication nodes.
-                </p>
-                <div className="bg-paper-50 p-2 rounded border border-line space-y-1 text-ink-700 font-sans">
-                  <strong>Remediation Checklist:</strong>
-                  <ul className="list-disc pl-3 text-[7pt] space-y-0.5 text-ink-600">
-                    <li>Inject JSON-LD script containing Organization &amp; Service nodes.</li>
-                    <li>Populate `offers`, `areaServed`, `serviceType`, and `description`.</li>
-                    <li>Publish verified FAQPage schema matching visible on-page copy.</li>
-                  </ul>
-                </div>
-                <div className="font-mono text-[7pt] text-ink-600 bg-paper-200 p-1.5 rounded">
-                  <strong>Verification Test:</strong> Google Rich Results Validator yields 0 errors; JSON-LD parses with required fields.
-                </div>
-                <div className="font-sans text-[7pt] text-good font-semibold">
-                  Expected Effect: Establishes authoritative entity resolution in Perplexity &amp; ChatGPT RAG.
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Closed-Loop Remediation Verification Demonstrator (Point 15) */}
           <div className="p-3.5 bg-paper-100 border border-line rounded space-y-2 text-[8pt]">
             <div className="flex items-center justify-between pb-1 border-b border-line">
               <span className="font-mono text-[8pt] font-bold uppercase tracking-[0.04em] text-ink-700">
-                Closed-Loop Verification Loop (Before → Remediation → Recrawl → After)
+                Remediation state
               </span>
-              <span className="font-mono text-[7pt] font-bold px-1.5 py-0.5 rounded bg-good/10 text-good border border-good/30">
-                VERIFIED IN STAGING SIMULATION
+              <span className="font-mono text-[7pt] font-bold px-1.5 py-0.5 rounded bg-paper-200 text-ink-700 border border-line">
+                {remediation.label}
               </span>
             </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-2 font-mono text-[7.5pt] items-stretch">
-              {/* Step 1: Before */}
-              <div className="bg-paper-50 p-2.5 rounded border border-line space-y-1">
-                <span className="text-bad font-bold block uppercase text-[7pt]">1. PRE-AUDIT DEFECT</span>
-                <p className="font-sans text-[7.5pt] text-ink-700">
-                  <strong>H1:</strong> "BEYOND IMAGINATION"
-                </p>
-                <span className="text-ink-500 block text-[6.5pt]">Category Clarity: LOW (0/10)</span>
-                <span className="text-ink-400 block text-[6.5pt]">Evidence: EV_001</span>
-              </div>
-
-              {/* Step 2: Remediation Patch */}
-              <div className="bg-paper-50 p-2.5 rounded border border-line space-y-1">
-                <span className="text-ink-700 font-bold block uppercase text-[7pt]">2. CODE PATCH</span>
-                <p className="font-sans text-[7.5pt] text-ink-700">
-                  <strong>H1:</strong> "Enterprise AI &amp; Digital Engineering"
-                </p>
-                <span className="text-ink-500 block text-[6.5pt]">Diff: unified_patch_01.diff</span>
-                <span className="text-ink-400 block text-[6.5pt]">Action: Applied to Staging</span>
-              </div>
-
-              {/* Step 3: Automated Recrawl */}
-              <div className="bg-paper-50 p-2.5 rounded border border-line space-y-1">
-                <span className="text-warn font-bold block uppercase text-[7pt]">3. AUTOMATED RECRAWL</span>
-                <p className="font-sans text-[7.5pt] text-ink-700">
-                  AST Crawler re-parsed target route
-                </p>
-                <span className="text-ink-500 block text-[6.5pt]">HTTP 200 · TTFB: 210ms</span>
-                <span className="text-ink-400 block text-[6.5pt]">SHA-256 Re-hashed</span>
-              </div>
-
-              {/* Step 4: After / Verified */}
-              <div className="bg-good/10 p-2.5 rounded border border-good/30 space-y-1">
-                <span className="text-good font-bold block uppercase text-[7pt]">4. VERIFIED REMEDIATION</span>
-                <p className="font-sans text-[7.5pt] text-ink font-semibold">
-                  Category Clarity: HIGH (10/10)
-                </p>
-                <span className="text-good block text-[6.5pt]">Regressions: 0 DEFECTS</span>
-                <span className="text-good block text-[6.5pt]">Status: CLOSED &amp; VERIFIED</span>
-              </div>
-            </div>
+            <p className="font-sans text-ink-700 leading-relaxed">{remediation.detail}</p>
+            <p className="font-mono text-[7pt] text-ink-500">
+              Recommendation, generated patch, applied change, and independently verified fix are separate states.
+            </p>
           </div>
 
           {/* Editorial NOW / NEXT / ONGOING Roadmap Tree */}
@@ -268,46 +161,7 @@ export function Chapter07Roadmap({
             </div>
           </div>
 
-          {/* Financial Exposure Note (If Calculated) - Points 6 & 16 */}
-          {priorities.financialModel && (
-            <div className="p-3.5 rounded bg-paper-100 border border-line text-[8pt] text-ink-700 space-y-2">
-              <div className="flex items-center justify-between pb-1 border-b border-line">
-                <div className="flex items-center gap-2">
-                  <span className="font-mono font-bold text-ink-700 text-[9pt]">$</span>
-                  <strong className="font-mono text-[7.5pt] uppercase tracking-[0.04em] text-ink">
-                    Commercial Opportunity &amp; Inaction Cost Model
-                  </strong>
-                </div>
-                <span className="font-mono text-[7pt] font-bold px-2 py-0.5 rounded bg-warn/10 text-warn border border-warn/30">
-                  EVIDENCE TIER: {priorities.financialModel.evidenceTier || 'DERIVED'}
-                </span>
-              </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-[7.5pt]">
-                <div className="space-y-1">
-                  <p className="font-sans leading-relaxed text-ink-700 font-semibold">
-                    {priorities.financialModel.monthlyLossEstimate}.
-                  </p>
-                  <p className="font-sans text-ink-600">
-                    Expected outcome upon full roadmap deployment: <strong>{priorities.financialModel.projectedLift}</strong>.
-                  </p>
-                  <p className="font-sans text-ink-500 text-[7pt]">
-                    {priorities.financialModel.basisSummary}
-                  </p>
-                </div>
-
-                <div className="space-y-1 bg-paper-50 p-2.5 rounded border border-line font-mono text-[7pt] text-ink-600">
-                  <div><strong>Methodology:</strong> {priorities.financialModel.methodology || 'Synthetic commercial intent query volume × estimated category ACV capture model.'}</div>
-                  <div><strong>Assumptions:</strong> {priorities.financialModel.assumptions || 'Assumes 2.0% - 4.5% qualified conversion rate on recovered answer engine citations.'}</div>
-                  <div><strong>Confidence:</strong> {priorities.financialModel.confidence || 'MEDIUM (Derived financial model; actual pipeline loss is not directly measured).'}</div>
-                </div>
-              </div>
-
-              <div className="pt-1 border-t border-line text-[7pt] text-ink-500 font-sans italic">
-                Causal Mechanism: Observed absence of explicit ICP and service definitions in DOM $\to$ reduced relevancy in commercial AI search prompts $\to$ potential reduction in qualified discovery. <strong>Not measured:</strong> Actual historical lost revenue.
-              </div>
-            </div>
-          )}
         </div>
 
         <PageFooter

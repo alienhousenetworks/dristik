@@ -15,9 +15,9 @@ export function RadarChart({ chart }: RadarChartProps) {
   const targetLabel = chart.config?.target_label || 'Target Site';
   const benchmarkLabel = chart.config?.benchmark_label || 'Industry Baseline';
 
-  const size = 340;
+  const size = 360;
   const center = size / 2;
-  const radius = center - 48;
+  const radius = center - 78;
   const total = labels.length;
 
   if (total === 0) return null;
@@ -88,15 +88,16 @@ export function RadarChart({ chart }: RadarChartProps) {
             );
           })}
 
-          {/* Benchmark Polygon */}
-          <polygon
-            points={benchmarkPoints}
-            fill="none"
-            stroke="#a8aeb6"
-            strokeWidth="1.75"
-            strokeDasharray="4 3"
-            opacity="0.8"
-          />
+          {benchmarkValues.length > 0 && (
+            <polygon
+              points={benchmarkPoints}
+              fill="none"
+              stroke="#a8aeb6"
+              strokeWidth="1.75"
+              strokeDasharray="4 3"
+              opacity="0.8"
+            />
+          )}
 
           {/* Target Site Polygon with Gradient Fill */}
           <defs>
@@ -135,15 +136,15 @@ export function RadarChart({ chart }: RadarChartProps) {
           {/* Axis Labels */}
           {labels.map((lbl, i) => {
             const angle = (Math.PI * 2 / total) * i - Math.PI / 2;
-            const labelRadius = radius + 22;
+            const labelRadius = radius + 28;
             const x = center + labelRadius * Math.cos(angle);
             const y = center + labelRadius * Math.sin(angle);
             const score = targetValues[i] ?? 0;
             const isHovered = hoveredIndex === i;
 
             let textAnchor: 'middle' | 'start' | 'end' = 'middle';
-            if (Math.cos(angle) > 0.3) textAnchor = 'start';
-            else if (Math.cos(angle) < -0.3) textAnchor = 'end';
+            if (Math.cos(angle) > 0.35) textAnchor = 'start';
+            else if (Math.cos(angle) < -0.35) textAnchor = 'end';
 
             return (
               <text
@@ -152,13 +153,14 @@ export function RadarChart({ chart }: RadarChartProps) {
                 y={y}
                 textAnchor={textAnchor}
                 dominantBaseline="central"
-                className={`text-[11px] font-mono select-none transition-colors duration-150 ${
+                className={`text-[10px] font-mono select-none transition-colors duration-150 ${
                   isHovered ? 'fill-ink font-bold' : 'fill-ink-700 dark:fill-ink-300 font-medium'
                 }`}
                 onMouseEnter={() => setHoveredIndex(i)}
                 onMouseLeave={() => setHoveredIndex(null)}
               >
-                {lbl} <tspan className="font-bold text-[10px] fill-ink">({score})</tspan>
+                <tspan x={x} dy="-0.45em">{lbl}</tspan>
+                <tspan x={x} dy="1.15em" className="font-bold fill-ink">{score}</tspan>
               </text>
             );
           })}
@@ -183,10 +185,12 @@ export function RadarChart({ chart }: RadarChartProps) {
           <span className="w-3.5 h-3.5 rounded-sm bg-paper-200 border border-line" />
           <span className="text-ink-700 font-medium">{targetLabel}</span>
         </div>
-        <div className="flex items-center gap-2">
-          <span className="w-3.5 h-0.5 border-t-2 border-dashed border-line" />
-          <span className="text-ink-500">{benchmarkLabel}</span>
-        </div>
+        {benchmarkValues.length > 0 && (
+          <div className="flex items-center gap-2">
+            <span className="w-3.5 h-0.5 border-t-2 border-dashed border-line" />
+            <span className="text-ink-500">{benchmarkLabel}</span>
+          </div>
+        )}
       </div>
     </div>
   );

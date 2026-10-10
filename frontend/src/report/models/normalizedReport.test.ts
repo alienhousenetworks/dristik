@@ -141,4 +141,61 @@ describe('NormalizedReport Model & Zero-Fake Enforcer', () => {
 
     expect(normalized.appendices.findings[0].evidenceItems[0].id).toBe('ev_dom_1');
   });
+
+  it('prints the ledger composite instead of a second overall score', () => {
+    const normalized = normalizeExecutiveReport({
+      ...mockReport,
+      scores: {
+        ...mockReport.scores,
+        overall_score: 83,
+        grade: 'A',
+      },
+      honest_scores: {
+        google_score: 79.6,
+        ai_readiness_score: 80,
+        human_score: 76.6,
+        live_ai_citation_score: 0,
+        ai_visibility_status: 'MEASURED',
+        ai_citation_score: 80,
+      },
+    } as ExecutiveReport);
+
+    expect(normalized.scorecard.overallScore).toBe(59.2);
+    expect(normalized.scorecard.grade).toBe('D');
+    expect(normalized.brief.keySignals.overallScore).toBe(59.2);
+    expect(normalized.brief.keySignals.overallGrade).toBe('D');
+  });
+
+  it('does not copy on-page GEO into live citations', () => {
+    const normalized = normalizeExecutiveReport({
+      ...mockReport,
+      honest_scores: {
+        google_score: 79.6,
+        ai_readiness_score: 80,
+        human_score: 76.6,
+        ai_visibility_status: 'NOT_MEASURED',
+        ai_citation_score: 80,
+      },
+    } as ExecutiveReport);
+
+    expect(normalized.scorecard.ledger.find((row) => row.categoryKey === 'AEO')?.included).toBe(false);
+    expect(normalized.scorecard.overallScore).toBe(78.9);
+    expect(normalized.aeo.liveObservation.queriesExecuted).toBe(0);
+    expect(normalized.meta.discoveredUrlsCount).toBeNull();
+    expect(normalized.conversion.formCount).toBeNull();
+  });
+
+  it('does not reuse one page snapshot as every evidence seal', () => {
+    const shared = 'sha256:abcdef1234567890abcdef1234567890';
+    const normalized = normalizeExecutiveReport({
+      ...mockReport,
+      evidence_ledger: {
+        h1: { source_type: 'dom', url: 'https://enterprise-analytics.io', text: 'One', content_sha256: shared },
+        title: { source_type: 'dom', url: 'https://enterprise-analytics.io', text: 'Two', content_sha256: shared },
+      },
+    } as ExecutiveReport);
+
+    expect(normalized.appendices.evidenceLedger.map((item) => item.hashStatus)).toEqual(['SHARED_SNAPSHOT', 'SHARED_SNAPSHOT']);
+    expect(normalized.appendices.evidenceLedger.every((item) => item.sha256 == null)).toBe(true);
+  });
 });

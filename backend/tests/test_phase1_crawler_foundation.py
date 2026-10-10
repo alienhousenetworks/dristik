@@ -118,17 +118,25 @@ async def test_recursive_sitemap_discovery():
     crawler = CrawlerService()
 
     async with httpx.AsyncClient(transport=transport) as client:
-        found, s_url, urls = await crawler._fetch_sitemap_urls(
+        found, s_url, urls, truncated = await crawler._fetch_sitemap_urls(
             "https://example.com", "example.com", [], client, max_sitemap_urls=500
         )
 
         assert found is True
+        assert truncated is False
         assert s_url == "https://example.com/sitemap.xml"
         assert len(urls) == 4
         assert "https://example.com/pricing" in urls
         assert "https://example.com/about" in urls
         assert "https://example.com/blog/ai-search" in urls
         assert "https://example.com/blog/geo-optimization" in urls
+
+        found_cap, _, capped, was_truncated = await crawler._fetch_sitemap_urls(
+            "https://example.com", "example.com", [], client, max_sitemap_urls=2
+        )
+        assert found_cap is True
+        assert len(capped) == 2
+        assert was_truncated is True
 
 
 def test_dom_image_asset_extraction_and_cls_risk():

@@ -16,7 +16,12 @@ def test_max_crawl_pages_parsing():
     assert settings.get_max_crawl_pages("deep") == 500
     assert settings.get_max_crawl_pages("full") == 500
     assert settings.get_max_crawl_pages("-1") == 500
-    assert settings.get_max_crawl_pages("invalid") == 5
+    assert settings.get_max_crawl_pages("quick") == 10
+    assert settings.get_max_crawl_pages("standard") == 50
+    assert settings.get_max_crawl_pages("professional") == 250
+    assert settings.get_max_crawl_pages("enterprise") == 1000
+    assert settings.get_max_crawl_pages(9000) == 5000
+    assert settings.get_max_crawl_pages("invalid") == 10
 
 
 def test_e5_query_and_document_prefixes():

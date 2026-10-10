@@ -21,6 +21,24 @@ from app.scoring.curves import log_normal_curve, wilson_interval, audience_reada
 from app.cognition.finding_registry import _canonical_id
 
 
+def measured_category_score(cat_scores: Dict[str, CategoryScore], category: Category) -> Optional[float]:
+    """Return a measured category score. Zero stays zero. Missing and NOT_MEASURED stay None."""
+    cat = cat_scores.get(category.value)
+    if cat is None or cat.score is None or getattr(cat, "status", "MEASURED") == "NOT_MEASURED":
+        return None
+    return float(cat.score)
+
+
+def weighted_mean(parts: List[Tuple[float, Optional[float]]]) -> Optional[float]:
+    present = [(weight, score) for weight, score in parts if score is not None]
+    if not present:
+        return None
+    total_weight = sum(weight for weight, _ in present)
+    if total_weight <= 0:
+        return None
+    return round(sum(weight * score for weight, score in present) / total_weight, 1)
+
+
 CHECK_KEYWORDS: Dict[str, List[str]] = {
     "robots_txt_rfc9309": ["robots.txt", "robots", "disallow"],
     "sitemap_urls_valid_200": ["sitemap", "xml sitemap"],
@@ -857,34 +875,36 @@ class ScoringEngine:
         )
 
         cat_scores = scores_res.category_scores
-        ux_score = cat_scores.get(Category.UX_CONVERSION.value, CategoryScore(category=Category.UX_CONVERSION, summary="")).score or 100.0
-        content_score = cat_scores.get(Category.CONTENT.value, CategoryScore(category=Category.CONTENT, summary="")).score or 100.0
-        tech_score = cat_scores.get(Category.TECHNICAL_SEO.value, CategoryScore(category=Category.TECHNICAL_SEO, summary="")).score or 100.0
-        onpage_score = cat_scores.get(Category.ON_PAGE_SEO.value, CategoryScore(category=Category.ON_PAGE_SEO, summary="")).score or 100.0
-        schema_score = cat_scores.get(Category.SCHEMA.value, CategoryScore(category=Category.SCHEMA, summary="")).score or 100.0
-        geo_score = cat_scores.get(Category.GEO.value, CategoryScore(category=Category.GEO, summary="")).score or 100.0
+        ux_score = measured_category_score(cat_scores, Category.UX_CONVERSION)
+        content_score = measured_category_score(cat_scores, Category.CONTENT)
+        tech_score = measured_category_score(cat_scores, Category.TECHNICAL_SEO)
+        onpage_score = measured_category_score(cat_scores, Category.ON_PAGE_SEO)
+        schema_score = measured_category_score(cat_scores, Category.SCHEMA)
+        geo_score = measured_category_score(cat_scores, Category.GEO)
 
-        # Human View: UX & Conversion (50%) + Content (50%)
-        human_score = round(ux_score * 0.50 + content_score * 0.50, 1)
+        # Human View: UX & Conversion (50%) + Content (50%). Unmeasured inputs are left out.
+        human_score = weighted_mean([(0.50, ux_score), (0.50, content_score)])
 
-        # Google View: Technical (40%) + On-Page (30%) + Schema (30%)
-        google_score = round(tech_score * 0.40 + onpage_score * 0.30 + schema_score * 0.30, 1)
+        # Google View: Technical (40%) + On-Page (30%) + Schema (30%).
+        google_score = weighted_mean([(0.40, tech_score), (0.30, onpage_score), (0.30, schema_score)])
 
-        # AI Readiness View: GEO Category Score blended with question support / commercial evaluations if available
+        # AI Readiness View: GEO category score blended with question support when both exist.
+        support_points = None
         if geo_readiness is not None and getattr(geo_readiness, "questions_total", 0) > 0:
             support_ratio = getattr(geo_readiness, "questions_supported", 0) / geo_readiness.questions_total
-            ai_readiness_score = round(geo_score * 0.6 + (support_ratio * 100.0) * 0.4, 1)
+            support_points = support_ratio * 100.0
+            ai_readiness_score = weighted_mean([(0.6, geo_score), (0.4, support_points)])
         elif commercial_evals:
             valid_comm = [getattr(c, "before_score", None) for c in commercial_evals if getattr(c, "before_score", None) is not None]
             if valid_comm:
                 avg_comm = sum(valid_comm) / len(valid_comm)
-                ai_readiness_score = round(geo_score * 0.5 + (avg_comm * 10.0) * 0.5, 1)
+                ai_readiness_score = weighted_mean([(0.5, geo_score), (0.5, avg_comm * 10.0)])
             else:
-                ai_readiness_score = round(geo_score, 1)
+                ai_readiness_score = None if geo_score is None else round(geo_score, 1)
         else:
-            ai_readiness_score = round(geo_score, 1)
+            ai_readiness_score = None if geo_score is None else round(geo_score, 1)
 
-        # AI Visibility: Live empirical outcome only
+        # AI Visibility: Live empirical outcome only. Zero is measured. None is not.
         if live_citation_score is not None:
             ai_visibility_score = round(float(live_citation_score), 1)
             ai_visibility_status = "MEASURED"
@@ -896,12 +916,18 @@ class ScoringEngine:
             live_ai_citation_score = None
             ai_citation_status = "not_measured"
 
-        overall = round(human_score * 0.35 + google_score * 0.35 + ai_readiness_score * 0.30, 1)
+        overall = weighted_mean([
+            (0.35, human_score),
+            (0.35, google_score),
+            (0.30, ai_readiness_score),
+        ])
 
-        if overall >= 90:
+        if overall is None:
+            band = "Not scored"
+        elif overall >= 90:
             band = "Category Benchmark"
         elif overall >= 75:
-            if ai_visibility_status == "MEASURED" and (ai_visibility_score or 0) < 15:
+            if ai_visibility_status == "MEASURED" and ai_visibility_score is not None and ai_visibility_score < 15:
                 band = "Structure Ready (Uncited)"
             else:
                 band = "Citation Ready"
@@ -910,15 +936,18 @@ class ScoringEngine:
         else:
             band = "Low readiness"
 
-        human_summary = f"Human Experience View: {human_score:.0f}/100 aggregated from UX and Content check evaluations."
-        google_summary = f"Google Organic View: {google_score:.0f}/100 aggregated from Technical, On-Page, and Schema checks."
+        def _view(score: Optional[float]) -> str:
+            return "not measured" if score is None else f"{score:.0f}/100"
+
+        human_summary = f"Human Experience View: {_view(human_score)} aggregated from measured UX and Content checks."
+        google_summary = f"Google Organic View: {_view(google_score)} aggregated from measured Technical, On-Page, and Schema checks."
         if ai_visibility_score is not None:
             if ai_visibility_score == 0:
-                ai_summary = f"AI Citability: {ai_readiness_score:.0f}/100 (extractable on-page). Live Engine Citations: 0% (domain not cited in live AI search queries)."
+                ai_summary = f"AI Readiness: {_view(ai_readiness_score)} (on-page). Live Engine Citations: 0% (measured; domain not cited)."
             else:
-                ai_summary = f"AI Readiness: {ai_readiness_score:.0f}/100 (GEO on-page checks). AI Visibility: {ai_visibility_score:.0f}/100 (live measurement)."
+                ai_summary = f"AI Readiness: {_view(ai_readiness_score)} (on-page). AI Visibility: {ai_visibility_score:.0f}/100 (live measurement)."
         else:
-            ai_summary = f"AI Readiness: {ai_readiness_score:.0f}/100 (GEO on-page checks). AI Visibility: NOT MEASURED (live connector not run)."
+            ai_summary = f"AI Readiness: {_view(ai_readiness_score)} (on-page). AI Visibility: NOT MEASURED (live connector not run)."
 
         all_evidence: List[str] = []
         for f in findings:

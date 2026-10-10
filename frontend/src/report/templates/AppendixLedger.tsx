@@ -1,5 +1,8 @@
 import React from 'react';
+import { formatRatioPercent } from '../../lib/format';
 import { ReportTheme } from '../brandTheme';
+import { formatEvidenceHash } from '../models/evidenceIntegrity';
+import { patchStateLabel } from '../models/remediationClaim';
 import { NormalizedReport, NormalizedFinding } from '../models/normalizedReport';
 import { ChapterOpener } from './ChapterOpener';
 import { PageHeader, PageFooter } from './PageHeaderFooter';
@@ -13,7 +16,7 @@ export function AppendixLedger({
   theme,
   report,
 }: AppendixLedgerProps) {
-  const { appendices, meta } = report;
+  const { appendices, meta, remediation } = report;
   const criticalFindings = appendices.findings.filter((f) => f.severity === 'CRITICAL');
   const highFindings = appendices.findings.filter((f) => f.severity === 'HIGH');
   const mediumFindings = appendices.findings.filter((f) => f.severity === 'MEDIUM');
@@ -86,7 +89,11 @@ export function AppendixLedger({
           <div className="space-y-6 max-w-4xl">
             <div>
               <span className="font-mono text-[8pt] font-bold uppercase tracking-[0.04em] text-ink-500 block mb-1">
-                Proposed Code Remediation (Pending Deployment)
+                {remediation.state === 'VERIFIED'
+                  ? 'Independently verified fixes'
+                  : remediation.state === 'APPLIED'
+                    ? 'Applied changes — not independently verified'
+                    : 'Proposed code remediation'}
               </span>
               <h2 className="font-serif text-[22pt] font-normal tracking-tight text-ink">
                 Generated Remediation Patches
@@ -98,11 +105,11 @@ export function AppendixLedger({
               <div className="flex items-center justify-between pb-1 border-b border-line">
                 <span className="font-mono font-bold uppercase text-ink-700">Remediation Assurance Protocol</span>
                 <span className="font-mono font-bold px-1.5 py-0.2 rounded bg-warn/10 text-warn border border-warn/30">
-                  STATUS: PATCH GENERATED (Unapplied)
+                  STATUS: {remediation.label}
                 </span>
               </div>
               <p className="font-sans text-ink-600">
-                Under Dristik's Zero-Fake governance, generated diffs are labeled as <strong>Generated Remediation Patches</strong> until actively applied to the target codebase and confirmed via automated recrawl.
+                {remediation.detail}
               </p>
               <div className="font-mono text-[7pt] text-ink-500 pt-0.5">
                 Verification Lifecycle: <strong>PATCH GENERATED</strong> → PENDING APPLICATION → RECRAWL → REGRESSION TEST → VERIFIED REMEDIATION
@@ -123,7 +130,7 @@ export function AppendixLedger({
                     </div>
                     <div className="flex items-center gap-2">
                       <span className="font-mono text-[7pt] font-bold px-2 py-0.5 rounded bg-warn/10 text-warn border border-warn/30">
-                        PENDING DEPLOYMENT
+                        {patchStateLabel(patch)}
                       </span>
                       <span className="font-mono text-[7.5pt] font-bold px-2 py-0.5 rounded bg-paper-200 border border-line">
                         Unified Diff
@@ -198,7 +205,7 @@ export function AppendixLedger({
                     {ev.snippet || 'DOM node verification'}
                   </td>
                   <td className="py-1.5 px-2 text-ink-400 truncate">
-                    {ev.sha256 ? ev.sha256.slice(0, 14) : 'sha256:verified'}…
+                    <span title={ev.sha256 || ev.sourceSnapshotSha256 || ''}>{formatEvidenceHash(ev.sha256, ev.hashStatus)}</span>
                   </td>
                 </tr>
               ))}
@@ -258,7 +265,7 @@ function FindingEditorialCard({
 
         {finding.confidence != null && (
           <span className="font-mono text-[7pt] text-ink-400">
-            Confidence: {Math.round(finding.confidence * 100)}%
+            Confidence: {formatRatioPercent(finding.confidence)}
           </span>
         )}
       </div>
@@ -304,7 +311,7 @@ function FindingEditorialCard({
           <div>
             <span className="text-ink-400 block text-[6.5pt] uppercase">Evidence ID &amp; Hash:</span>
             <span className="text-ink-700 font-mono">
-              {finding.evidenceItems[0]?.id || 'EV_001'} · {finding.evidenceItems[0]?.sha256 ? `${finding.evidenceItems[0].sha256.slice(0, 14)}…` : 'sha256:verified'}
+              {finding.evidenceItems[0]?.id || 'No evidence id'} · {formatEvidenceHash(finding.evidenceItems[0]?.sha256, finding.evidenceItems[0]?.hashStatus || 'NOT_SEALED')}
             </span>
           </div>
         </div>
