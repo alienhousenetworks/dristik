@@ -988,21 +988,8 @@ class AnalysisOrchestrator:
             except Exception:
                 ai_visibility_scorecard = None
 
-            if not visibility_measured:
-                try:
-                    from app.intelligence.geo.pipeline_store import geo_pipeline_store
-                    snap = geo_pipeline_store.get_latest_snapshot(domain)
-                    if snap and (snap.engines_measured_count or 0) > 0 and snap.overall_score is not None:
-                        visibility_measured = True
-                        live_citation_score = float(snap.overall_score)
-                        engines = ", ".join(sorted((snap.engine_scores or {}).keys())) or "unlisted"
-                        visibility_detail = (
-                            f"GEO pipeline snapshot {snap.snapshot_id} measured {snap.engines_measured_count} engine(s) "
-                            f"({engines}). Citation rate {snap.overall_score}. Not inferred from HTML."
-                        )
-                except Exception:
-                    visibility_measured = False
-                    live_citation_score = None
+            # A previous GEO snapshot is not this run. Leave the citation unmeasured
+            # unless this run recorded successful engine responses.
             geo_readiness = evaluate_geo_readiness(
                 website_url=website_url,
                 pages=blackboard.pages,
@@ -1041,12 +1028,13 @@ class AnalysisOrchestrator:
                 agent_readiness = None
 
             live_bench = None
-            if snap and (snap.engines_measured_count or 0) > 0 and snap.overall_score is not None:
-                live_bench = {
-                    "overall_mention_rate_pct": float(snap.overall_score),
-                    "overall_first_party_citation_rate_pct": float(snap.overall_score),
-                    "total_queries": snap.total_queries or 18,
-                }
+            completed_runs = int(getattr(ai_visibility_scorecard, "successful_runs", 0) or 0) if ai_visibility_scorecard is not None else 0
+            if visibility_measured and completed_runs > 0 and ai_visibility_scorecard is not None:
+                live_bench = {"total_queries": completed_runs}
+                if ai_visibility_scorecard.mention_rate_pct is not None:
+                    live_bench["overall_mention_rate_pct"] = float(ai_visibility_scorecard.mention_rate_pct)
+                if ai_visibility_scorecard.citation_rate_pct is not None:
+                    live_bench["overall_first_party_citation_rate_pct"] = float(ai_visibility_scorecard.citation_rate_pct)
 
             # Human, Google, and on-page AI readiness. Live citation stays null unless a snapshot exists.
             honest_scores = self.scoring_engine.calculate_honest_scores(
@@ -1061,6 +1049,28 @@ class AnalysisOrchestrator:
                 live_benchmark_data=live_bench,
             )
             blackboard.honest_scores = honest_scores
+            try:
+                from app.scoring.displayed_score import align_story_score, displayed_composite
+                score_payload = {
+                    "scores": overall_scores.model_dump(mode="json") if hasattr(overall_scores, "model_dump") else {},
+                    "honest_scores": honest_scores.model_dump(mode="json") if hasattr(honest_scores, "model_dump") else {},
+                    "geo_readiness": geo_readiness.model_dump(mode="json") if geo_readiness is not None and hasattr(geo_readiness, "model_dump") else {},
+                    "ai_visibility_scorecard": (
+                        ai_visibility_scorecard.model_dump(mode="json")
+                        if ai_visibility_scorecard is not None and hasattr(ai_visibility_scorecard, "model_dump")
+                        else None
+                    ),
+                    "observatory_records": list(getattr(ai_visibility_scorecard, "observatory_records", None) or []),
+                }
+                dossier_composite = displayed_composite(score_payload)
+                if dossier_composite is not None and narrative_data.get("story_summary"):
+                    narrative_data["story_summary"] = align_story_score(
+                        narrative_data["story_summary"],
+                        getattr(overall_scores, "overall_score", None),
+                        dossier_composite,
+                    )
+            except Exception:
+                logger.info("displayed score alignment skipped")
 
             # Enforce Character-Safe Copy bounds
             character_copy = generate_character_safe_copy(
@@ -1337,6 +1347,24 @@ class AnalysisOrchestrator:
             except Exception as kie_err:
                 logger.info("KIE Graph / Sandbox assembly note: %s", kie_err)
 
+            try:
+                from app.integrations.google_report import collect_google_performance
+                google_performance = collect_google_performance(domain)
+            except Exception:
+                logger.info("google performance seal skipped")
+                google_performance = {
+                    "search_console": {
+                        "state": "FETCH_FAILED",
+                        "source": "google_search_console",
+                        "notice": "Google Search Console could not be retrieved. No clicks or impressions are shown.",
+                    },
+                    "analytics": {
+                        "state": "FETCH_FAILED",
+                        "source": "google_analytics_4",
+                        "notice": "Google Analytics could not be retrieved. No sessions are shown.",
+                    },
+                }
+
             report = ExecutiveReport(
                 report_id=report_uuid,
                 analysis_id=analysis_id,
@@ -1427,6 +1455,7 @@ class AnalysisOrchestrator:
                 competitor_seo_parity=competitor_seo_parity_rep,
                 wcag_audit=wcag_audit_rep,
                 external_authority=external_authority_payload,
+                google_performance=google_performance,
                 causal_diagnostic_chains=causal_diagnostic_chains,
                 observatory_records=(ai_visibility_scorecard.observatory_records if ai_visibility_scorecard else []),
                 competitive_evidence_graph=comp_graph_res.model_dump(),

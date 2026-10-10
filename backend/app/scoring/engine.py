@@ -29,6 +29,14 @@ def measured_category_score(cat_scores: Dict[str, CategoryScore], category: Cate
     return float(cat.score)
 
 
+def positive_query_count(value: Any) -> Optional[int]:
+    """Live AI sample size. A missing or zero count is not a default of 18."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    count = int(value)
+    return count if count > 0 else None
+
+
 def weighted_mean(parts: List[Tuple[float, Optional[float]]]) -> Optional[float]:
     present = [(weight, score) for weight, score in parts if score is not None]
     if not present:
@@ -402,19 +410,26 @@ class ScoringEngine:
                         evidence_list.append({"schema": "missing", "status": "FAIL", "detail": "No Schema.org types recorded in crawl sample."})
                     elif cid == "ai_brand_mention_rate":
                         if live_benchmark_data and "overall_mention_rate_pct" in live_benchmark_data:
-                            s = min(1.0, max(0.0, float(live_benchmark_data["overall_mention_rate_pct"]) / 100.0))
-                            sample_size = int(live_benchmark_data.get("total_queries", 18))
-                            passed = int(round(s * sample_size))
-                            failed = sample_size - passed
-                            _, low, high = wilson_interval(passed, sample_size)
-                            evidence_list.append({
-                                "metric": "brand_mention_rate",
-                                "observed_rate": f"{s*100:.1f}%",
-                                "wilson_ci": [round(low, 3), round(high, 3)],
-                                "sample_size": sample_size,
-                                "status": "PASS" if s >= 0.6 else "PARTIAL",
-                                "detail": f"Observed brand mention rate: {s*100:.1f}% across {sample_size} engine queries."
-                            })
+                            sample_size = positive_query_count(live_benchmark_data.get("total_queries"))
+                            if sample_size is None:
+                                is_measured = False
+                                status = "NOT_MEASURED"
+                                s = 0.0
+                                passed = 0
+                                sample_size = 0
+                            else:
+                                s = min(1.0, max(0.0, float(live_benchmark_data["overall_mention_rate_pct"]) / 100.0))
+                                passed = int(round(s * sample_size))
+                                failed = sample_size - passed
+                                _, low, high = wilson_interval(passed, sample_size)
+                                evidence_list.append({
+                                    "metric": "brand_mention_rate",
+                                    "observed_rate": f"{s*100:.1f}%",
+                                    "wilson_ci": [round(low, 3), round(high, 3)],
+                                    "sample_size": sample_size,
+                                    "status": "PASS" if s >= 0.6 else "PARTIAL",
+                                    "detail": f"Observed brand mention rate: {s*100:.1f}% across {sample_size} engine queries."
+                                })
                         elif live_citation_score is not None:
                             s = min(1.0, max(0.0, live_citation_score / 100.0))
                             sample_size = self.rubric.plans.get(plan_tier, self.rubric.plans["starter"]).ai_search_min_sample
@@ -426,19 +441,26 @@ class ScoringEngine:
 
                     elif cid == "ai_domain_citation_rate":
                         if live_benchmark_data and "overall_first_party_citation_rate_pct" in live_benchmark_data:
-                            s = min(1.0, max(0.0, float(live_benchmark_data["overall_first_party_citation_rate_pct"]) / 100.0))
-                            sample_size = int(live_benchmark_data.get("total_queries", 18))
-                            passed = int(round(s * sample_size))
-                            failed = sample_size - passed
-                            _, low, high = wilson_interval(passed, sample_size)
-                            evidence_list.append({
-                                "metric": "domain_citation_rate",
-                                "observed_rate": f"{s*100:.1f}%",
-                                "wilson_ci": [round(low, 3), round(high, 3)],
-                                "sample_size": sample_size,
-                                "status": "PASS" if s >= 0.4 else "PARTIAL",
-                                "detail": f"Own-domain citation link rate: {s*100:.1f}% across {sample_size} queries."
-                            })
+                            sample_size = positive_query_count(live_benchmark_data.get("total_queries"))
+                            if sample_size is None:
+                                is_measured = False
+                                status = "NOT_MEASURED"
+                                s = 0.0
+                                passed = 0
+                                sample_size = 0
+                            else:
+                                s = min(1.0, max(0.0, float(live_benchmark_data["overall_first_party_citation_rate_pct"]) / 100.0))
+                                passed = int(round(s * sample_size))
+                                failed = sample_size - passed
+                                _, low, high = wilson_interval(passed, sample_size)
+                                evidence_list.append({
+                                    "metric": "domain_citation_rate",
+                                    "observed_rate": f"{s*100:.1f}%",
+                                    "wilson_ci": [round(low, 3), round(high, 3)],
+                                    "sample_size": sample_size,
+                                    "status": "PASS" if s >= 0.4 else "PARTIAL",
+                                    "detail": f"Own-domain citation link rate: {s*100:.1f}% across {sample_size} queries."
+                                })
                         elif live_citation_score is not None:
                             sample_size = self.rubric.plans.get(plan_tier, self.rubric.plans["starter"]).ai_search_min_sample
                             domain_finding = next((f for f in check_findings if "citation" in f.title.lower()), None)
@@ -460,23 +482,28 @@ class ScoringEngine:
                     elif cid == "ai_displacement_resistance":
                         if live_benchmark_data and "share_of_model" in live_benchmark_data:
                             som = live_benchmark_data["share_of_model"]
-                            total_q = int(live_benchmark_data.get("total_queries", 18))
-                            sample_size = total_q
-                            displacements = som.get("competitor_displacements", [])
-                            comp_only_rate = som.get("competitor_only_rate")
-                            if comp_only_rate is not None:
-                                s = max(0.0, min(1.0, 1.0 - float(comp_only_rate)))
+                            total_q = positive_query_count(live_benchmark_data.get("total_queries"))
+                            if total_q is None:
+                                is_measured = False
+                                status = "NOT_MEASURED"
+                                sample_size = 0
                             else:
-                                s = max(0.0, min(1.0, 1.0 - (len(displacements) / max(1, total_q))))
-                            passed = int(round(s * sample_size))
-                            failed = sample_size - passed
-                            evidence_list.append({
-                                "metric": "displacement_resistance",
-                                "brand_presence": som.get("share_of_model_pct", 0.0),
-                                "displacements_count": len(displacements),
-                                "status": "PASS" if s >= 0.75 else "PARTIAL",
-                                "detail": f"Displacement resistance {s*100:.1f}% ({len(displacements)} competitor displacement events)."
-                            })
+                                sample_size = total_q
+                                displacements = som.get("competitor_displacements", [])
+                                comp_only_rate = som.get("competitor_only_rate")
+                                if comp_only_rate is not None:
+                                    s = max(0.0, min(1.0, 1.0 - float(comp_only_rate)))
+                                else:
+                                    s = max(0.0, min(1.0, 1.0 - (len(displacements) / max(1, total_q))))
+                                passed = int(round(s * sample_size))
+                                failed = sample_size - passed
+                                evidence_list.append({
+                                    "metric": "displacement_resistance",
+                                    "brand_presence": som.get("share_of_model_pct", 0.0),
+                                    "displacements_count": len(displacements),
+                                    "status": "PASS" if s >= 0.75 else "PARTIAL",
+                                    "detail": f"Displacement resistance {s*100:.1f}% ({len(displacements)} competitor displacement events)."
+                                })
                         elif check_findings:
                             top_f = max(check_findings, key=lambda f: f.severity.value)
                             s = 0.20 if top_f.severity in (Severity.CRITICAL, Severity.HIGH) else 0.50
@@ -607,8 +634,11 @@ class ScoringEngine:
                         total_cat_weight_measured += w
                         sub_score_accum += w * s
 
-                    # Status & intervals
-                    if s >= 0.75:
+                    # Status & intervals. An unmeasured check stays unmeasured.
+                    if not is_measured:
+                        status = "NOT_MEASURED"
+                        s = 0.0
+                    elif s >= 0.75:
                         status = "PASS"
                     elif s >= 0.40:
                         status = "PARTIAL"
@@ -645,7 +675,7 @@ class ScoringEngine:
                     )
                     category_checks.append(check_res)
 
-                    if s < 0.75:
+                    if is_measured and s < 0.75:
                         if check_findings:
                             for idx, f in enumerate(check_findings):
                                 pts = round(w * (1.0 - s), 1) if idx == 0 else 0.0
@@ -671,7 +701,7 @@ class ScoringEngine:
                                 "why_it_matters": check_def.description
                             })
                         cat_weaknesses.append(check_def.name)
-                    else:
+                    elif is_measured:
                         cat_strengths.append(check_def.name)
 
                 # Subsection Score

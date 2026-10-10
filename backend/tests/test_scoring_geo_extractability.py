@@ -87,4 +87,4 @@ def test_displayed_composite_matches_the_dossier_cover():
         },
         "geo_readiness": {"extractability_score": 52.7},
     })
-    assert composite == 52.4
+    assert composite == 69.8

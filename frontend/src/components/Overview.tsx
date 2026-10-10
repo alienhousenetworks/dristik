@@ -9,7 +9,7 @@ import {
   TabId,
 } from '../types';
 import { synthesizePillars } from '../lib/pillarSynthesis';
-import { buildDisplayedScore } from '../lib/displayedAuditScore';
+import { alignDisplayedStory, buildDisplayedScore } from '../lib/displayedAuditScore';
 import { display, scoreTone } from '../lib/format';
 import { ExecutiveTopActions } from './ExecutiveTopActions';
 import { CalibrationLeaders } from './CalibrationAxes';
@@ -101,9 +101,7 @@ export function Overview({
   const rollup = synthesizePillars(report);
   const activeContradictions = contradictions || (semantic?.contradiction ? [semantic.contradiction] : []);
   const displayed = report ? buildDisplayedScore(report) : null;
-  const overallScore = displayed?.composite != null
-    ? Math.round(displayed.composite)
-    : (typeof scores?.overall_score === 'number' ? Math.round(scores.overall_score) : null);
+  const overallScore = displayed?.composite ?? null;
 
   const disciplineCards = [
     {
@@ -196,7 +194,7 @@ export function Overview({
             <div className="text-right">
               <span className="label text-[10px] text-ink-500 block">Overall Score</span>
               <span className={`font-sans text-4xl sm:text-5xl font-bold leading-none ${scoreTone(overallScore ?? 0)}`}>
-                {overallScore != null ? overallScore : '—'}
+                {overallScore != null ? overallScore.toFixed(1) : '—'}
               </span>
               <span className="text-xs text-ink-400 block mt-0.5">/ 100</span>
             </div>
@@ -403,7 +401,7 @@ export function Overview({
           <Card className="lg:col-span-2 space-y-2 p-5">
             <p className="label text-ink-500">Executive Narrative</p>
             <p className="text-sm text-ink-700 leading-relaxed font-sans text-[15px]">
-              {display(story)}
+              {display(displayed ? alignDisplayedStory(story, scores?.overall_score, displayed) : story)}
             </p>
             <CalibrationLeaders findings={report?.findings || []} />
           </Card>

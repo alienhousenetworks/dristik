@@ -122,7 +122,10 @@ export function AppendixLedger({
                   <div className="flex items-center justify-between pb-2 border-b border-line">
                     <div>
                       <span className="font-mono text-[8.5pt] font-bold text-ink block">
-                        {patch.target_file || 'index.html'}
+                        {patch.target_file || 'Suggested file'}
+                      </span>
+                      <span className="font-mono text-[7pt] text-ink-500 block">
+                        Template — the site repository was not inspected. This path was not verified in the customer codebase.
                       </span>
                       <span className="font-mono text-[7.5pt] text-ink-500">
                         {patch.title || 'Technical Patch'}

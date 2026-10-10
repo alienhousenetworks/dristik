@@ -23,7 +23,8 @@ import { answerabilityConfidence, buildLiveObservation } from './aiMeasurement';
 import { assignEvidenceHashes, EvidenceHashStatus } from './evidenceIntegrity';
 import { deriveRemediationClaim, RemediationClaim } from './remediationClaim';
 import { finiteNumber } from './scoreLedger';
-import { buildDisplayedScore } from '../../lib/displayedAuditScore';
+import { alignDisplayedStory, buildDisplayedScore } from '../../lib/displayedAuditScore';
+import { GoogleChannelPayload } from '../../types';
 
 export interface NormalizedEvidenceItem {
   id: string;
@@ -85,6 +86,104 @@ export interface NormalizedFacetSummary {
   sampleQuestions: DynamicSandboxQuestionEvaluation[];
 }
 
+export type GoogleDataState = 'NOT_CONNECTED' | 'NOT_AUTHORIZED' | 'NO_DATA' | 'FETCH_FAILED' | 'MEASURED';
+
+export interface GoogleChannelView {
+  state: GoogleDataState;
+  notice: string;
+  property: string | null;
+  period: string | null;
+  metrics: Array<{ label: string; value: string }>;
+  rows: Array<{ label: string; detail: string }>;
+}
+
+const GOOGLE_NOTICES: Record<'search_console' | 'analytics', Record<GoogleDataState, string>> = {
+  search_console: {
+    NOT_CONNECTED: 'Google Search Console was not connected for this audit. Clicks, impressions, CTR, average position, queries, pages, and indexing coverage were not retrieved.',
+    NOT_AUTHORIZED: 'Google Search Console authorization expired or was refused. Search performance was not retrieved.',
+    NO_DATA: 'Google Search Console is connected, and the property returned no rows for this period.',
+    FETCH_FAILED: 'The Search Console request failed. No clicks or impressions are shown.',
+    MEASURED: 'Retrieved from Google Search Console for this audit.',
+  },
+  analytics: {
+    NOT_CONNECTED: 'Google Analytics 4 was not connected for this audit. Sessions, landing pages, engagement, and conversions were not retrieved.',
+    NOT_AUTHORIZED: 'Google Analytics authorization expired or was refused. Session data was not retrieved.',
+    NO_DATA: 'Google Analytics is connected, and the property returned no sessions metric for this period.',
+    FETCH_FAILED: 'The Google Analytics request failed. No sessions are shown.',
+    MEASURED: 'Retrieved from Google Analytics 4 for this audit.',
+  },
+};
+
+function googleState(value: unknown): GoogleDataState {
+  if (value === 'MEASURED' || value === 'NOT_AUTHORIZED' || value === 'NO_DATA' || value === 'FETCH_FAILED' || value === 'NOT_CONNECTED') {
+    return value;
+  }
+  return 'NOT_CONNECTED';
+}
+
+function formatCount(value: unknown): string | null {
+  return typeof value === 'number' && Number.isFinite(value) ? Math.round(value).toLocaleString('en-US') : null;
+}
+
+function formatDecimal(value: unknown, digits = 1): string | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value.toFixed(digits) : null;
+}
+
+export function googleChannelView(
+  source: 'search_console' | 'analytics',
+  raw?: GoogleChannelPayload | null,
+): GoogleChannelView {
+  const state = googleState(raw?.state);
+  const view: GoogleChannelView = {
+    state,
+    notice: raw?.notice || GOOGLE_NOTICES[source][state],
+    property: raw?.property || null,
+    period: raw?.period || null,
+    metrics: [],
+    rows: [],
+  };
+  if (state !== 'MEASURED') return view;
+  if (source === 'search_console') {
+    const clicks = formatCount(raw?.clicks);
+    const impressions = formatCount(raw?.impressions);
+    const ctr = formatDecimal(raw?.average_ctr, 2);
+    const position = formatDecimal(raw?.average_position, 1);
+    if (clicks != null) view.metrics.push({ label: 'Clicks', value: clicks });
+    if (impressions != null) view.metrics.push({ label: 'Impressions', value: impressions });
+    if (ctr != null) view.metrics.push({ label: 'Average CTR', value: `${ctr}%` });
+    if (position != null) view.metrics.push({ label: 'Average position', value: position });
+    (raw?.queries || []).slice(0, 8).forEach((row) => {
+      if (!row.query) return;
+      const bits = [
+        row.page,
+        formatCount(row.clicks) != null ? `${formatCount(row.clicks)} clicks` : '',
+        formatCount(row.impressions) != null ? `${formatCount(row.impressions)} impressions` : '',
+        formatDecimal(row.position, 1) != null ? `position ${formatDecimal(row.position, 1)}` : '',
+      ].filter(Boolean);
+      view.rows.push({ label: row.query, detail: bits.join(' · ') });
+    });
+    return view;
+  }
+  const sessions = formatCount(raw?.sessions);
+  const engagement = formatDecimal(raw?.engagement_rate_pct, 1);
+  const conversions = formatCount(raw?.conversions);
+  if (sessions != null) view.metrics.push({ label: 'Sessions', value: sessions });
+  if (engagement != null) view.metrics.push({ label: 'Engagement rate', value: `${engagement}%` });
+  if (conversions != null) view.metrics.push({ label: 'Conversions', value: conversions });
+  return view;
+}
+
+function ttfbQualifier(sampleCount: number): string {
+  if (sampleCount <= 0) return 'No server-response sample was recorded.';
+  return `Mean of ${sampleCount} sampled URL${sampleCount === 1 ? '' : 's'}, one server-response measurement each. Not a full page load, not Core Web Vitals field data, and not a site-wide performance score.`;
+}
+
+function externalAuthorityLabel(authority: ExecutiveReport['external_authority']): string {
+  const coverage = (authority as { coverage?: Array<{ data_state?: string }> } | null | undefined)?.coverage;
+  const measured = Array.isArray(coverage) && coverage.some((item) => item?.data_state === 'MEASURED' || item?.data_state === 'PARTIALLY_MEASURED');
+  return measured ? 'Connected' : 'Not connected';
+}
+
 export interface NormalizedReport {
   // Metadata & Identity
   meta: {
@@ -111,6 +210,8 @@ export interface NormalizedReport {
     evidenceCoveragePct: number | null;
     answerabilityQuestions: number;
     liveQueriesExecuted: number;
+    liveQueriesAttempted: number;
+    liveQueriesFailed: number;
     externalAuthorityLabel: string;
     performancePagesCount: number;
     overallEvidenceConfidence: 'HIGH' | 'MEDIUM' | 'LOW' | 'NOT_SCORED';
@@ -132,6 +233,11 @@ export interface NormalizedReport {
     whatNeedsAttention: string[];
     whatMattersNext: string;
     consultantIgnoreAdvice?: string;
+  };
+
+  googlePerformance: {
+    searchConsole: GoogleChannelView;
+    analytics: GoogleChannelView;
   };
 
   // 5-Pillar Scorecard & Tri-Perspective
@@ -193,6 +299,8 @@ export interface NormalizedReport {
       isMeasured: boolean;
       engineCount: number;
       queriesExecuted: number;
+      queriesAttempted: number;
+      queriesFailed: number;
       brandMentionedCount: number;
       brandMentionRatePct: number | null;
       brandCitedCount: number;
@@ -556,6 +664,10 @@ export function normalizeExecutiveReport(report: ExecutiveReport): NormalizedRep
     ? 'NOT_SCORED'
     : evidenceCoveragePct >= 80 ? 'HIGH' : evidenceCoveragePct >= 50 ? 'MEDIUM' : 'LOW';
   const remediation = deriveRemediationClaim(report.code_patches || []);
+  const ttfbSamples = rawPages.filter((page) => typeof page.ttfb_ms === 'number' && Number.isFinite(page.ttfb_ms));
+  const ttfbMean = ttfbSamples.length
+    ? Math.round(ttfbSamples.reduce((sum, page) => sum + (page.ttfb_ms || 0), 0) / ttfbSamples.length)
+    : null;
 
   return {
     meta: {
@@ -581,7 +693,9 @@ export function normalizeExecutiveReport(report: ExecutiveReport): NormalizedRep
       evidenceCoveragePct,
       answerabilityQuestions: sandboxEvals.length,
       liveQueriesExecuted: liveObservation.queriesExecuted,
-      externalAuthorityLabel: report.external_authority ? 'Connected' : 'Not connected',
+      liveQueriesAttempted: liveObservation.queriesAttempted,
+      liveQueriesFailed: liveObservation.queriesFailed,
+      externalAuthorityLabel: externalAuthorityLabel(report.external_authority),
       performancePagesCount: rawPages.filter((page) => page.ttfb_ms != null).length,
       overallEvidenceConfidence: evidenceConfidence,
       scopeLimitationNotice: totalDiscovered
@@ -589,10 +703,18 @@ export function normalizeExecutiveReport(report: ExecutiveReport): NormalizedRep
         : `The score applies only to the ${rawPages.length} analyzed URL${rawPages.length === 1 ? '' : 's'}. The crawl did not record how many URLs were discovered.`,
     },
 
+    googlePerformance: {
+      searchConsole: googleChannelView('search_console', report.google_performance?.search_console),
+      analytics: googleChannelView('analytics', report.google_performance?.analytics),
+    },
+
     brief: {
-      leadThesis:
+      leadThesis: alignDisplayedStory(
         report.story_summary ||
         `Independent technical assurance and discoverability diagnostic executed across ${rawPages.length} sampled URLs for ${brandName}. Comprehensive findings indicate strong digital surface foundations coupled with measurable generative AI extraction gaps.`,
+        scores.overall_score,
+        authoritative,
+      ),
       keySignals: {
         overallScore: calculatedComposite,
         overallGrade: authoritative.grade,
@@ -639,12 +761,18 @@ export function normalizeExecutiveReport(report: ExecutiveReport): NormalizedRep
         ? report.visual_intelligence.spotlight_metrics.map((m) => ({
             label: m.label,
             value: joinMetricValue(m.value, m.unit),
-            significance: m.significance,
+            significance: /ttfb|time-to-first-byte|server response/i.test(`${m.label} ${m.significance}`)
+              ? `${m.significance} ${ttfbQualifier(ttfbSamples.length)}`
+              : m.significance,
           }))
         : [
             { label: 'Sampled Pages', value: String(rawPages.length), significance: 'Crawl depth across critical routes' },
             { label: 'Verified Findings', value: String(rawFindings.length), significance: 'Deterministic issues detected' },
-            { label: 'Average Server TTFB', value: `${Math.round(rawPages.reduce((a, b) => a + (b.ttfb_ms || 0), 0) / (rawPages.length || 1))}ms`, significance: 'Network response latency' },
+            {
+              label: 'Sampled server TTFB',
+              value: ttfbMean == null ? 'Not measured' : `${ttfbMean} ms`,
+              significance: ttfbQualifier(ttfbSamples.length),
+            },
             { label: 'Evidence Ledger', value: `${evidenceList.length} items`, significance: 'Cryptographically sealed AST facts' },
           ]
       ).slice(0, 4),
@@ -790,8 +918,8 @@ export function normalizeExecutiveReport(report: ExecutiveReport): NormalizedRep
     remediation,
 
     methodology: {
-      auditScope: liveObservation.isMeasured
-        ? `DOM analysis of ${rawPages.length} URL${rawPages.length === 1 ? '' : 's'}, plus ${liveObservation.queriesExecuted} live AI quer${liveObservation.queriesExecuted === 1 ? 'y' : 'ies'}.`
+      auditScope: liveObservation.queriesAttempted > 0
+        ? `DOM analysis of ${rawPages.length} URL${rawPages.length === 1 ? '' : 's'}. Live AI queries: ${liveObservation.queriesAttempted} attempted, ${liveObservation.queriesExecuted} completed, ${liveObservation.queriesFailed} failed.`
         : `DOM analysis of ${rawPages.length} URL${rawPages.length === 1 ? '' : 's'}. Live AI engines were not queried on this run.`,
       crawlDepth: 0,
       sampledPagesCount: rawPages.length,

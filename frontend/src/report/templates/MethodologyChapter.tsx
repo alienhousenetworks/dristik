@@ -84,7 +84,7 @@ export function MethodologyChapter({
                 04 // SCORING ENGINE &amp; MATHEMATICAL TRANSPARENCY
               </span>
               <p className="text-ink-700 font-sans leading-relaxed">
-                The cover score, the grade, and the calculation ledger are the same total. Nominal weights are Technical Discoverability 30%, Generative Extractability 25%, live citations 25%, and CRO 20%. A measured zero stays in the total. A pillar that was not measured is excluded and the remaining weights are scaled to 100%.
+                The cover score, the grade, and the calculation ledger are the same total. Nominal weights are Technical Discoverability 30%, Generative Extractability 25%, live citations 25%, and CRO 20%. A citation rate of zero stays in the total only when an engine on this run returned a response. An engine that was not executed, and a provider that did not respond, are excluded and the remaining weights are scaled to 100%. Attempted queries are not counted as completed tests.
               </p>
             </div>
           </div>

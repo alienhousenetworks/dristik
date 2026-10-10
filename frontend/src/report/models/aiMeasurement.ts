@@ -15,7 +15,10 @@ export interface LiveEngineRow {
 export interface LiveObservation {
   isMeasured: boolean;
   engineCount: number;
+  /** Completed responses. An attempted budget is not a completed query. */
   queriesExecuted: number;
+  queriesAttempted: number;
+  queriesFailed: number;
   brandMentionedCount: number;
   brandMentionRatePct: number | null;
   brandCitedCount: number;
@@ -39,6 +42,8 @@ export interface VisibilityScorecard {
   mention_rate_pct?: number | null;
   citation_rate_pct?: number | null;
   not_measured_reason?: string | null;
+  successful_runs?: number;
+  failed_runs?: number;
   observatory_records?: ObservatoryRecord[];
 }
 
@@ -55,6 +60,24 @@ function engineLabel(record: ObservatoryRecord): string | null {
   if (!raw.trim()) return null;
   const match = NAMED_ENGINES.find((engine) => engine.keys.some((key) => raw.includes(key)));
   return match?.label || record.engine_name || record.engine_id || null;
+}
+
+function positiveCount(value: unknown): number {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? Math.round(value) : 0;
+}
+
+function measuredRow(label: string, rows: ObservatoryRecord[]): LiveEngineRow {
+  if (rows.length === 0) return notExecuted(label);
+  const mentioned = rows.filter((row) => row.brand_mentioned).length;
+  const cited = rows.filter((row) => row.brand_cited).length;
+  return {
+    engine: label,
+    queriesExecuted: rows.length,
+    brandMentioned: mentioned,
+    brandCited: cited,
+    citationRatePct: Math.round((cited / rows.length) * 1000) / 10,
+    status: 'MEASURED',
+  };
 }
 
 function notExecuted(label: string): LiveEngineRow {
@@ -79,48 +102,50 @@ export function buildLiveObservation(scorecard?: VisibilityScorecard | null): Li
     grouped.set(label, bucket);
   });
 
-  const engineDetails = NAMED_ENGINES.map((engine) => {
-    const rows = grouped.get(engine.label) || [];
-    if (rows.length === 0) return notExecuted(engine.label);
-    const mentioned = rows.filter((row) => row.brand_mentioned).length;
-    const cited = rows.filter((row) => row.brand_cited).length;
-    return {
-      engine: engine.label,
-      queriesExecuted: rows.length,
-      brandMentioned: mentioned,
-      brandCited: cited,
-      citationRatePct: Math.round((cited / rows.length) * 1000) / 10,
-      status: 'MEASURED',
-    };
-  });
+  const namedLabels = new Set(NAMED_ENGINES.map((engine) => engine.label));
+  const engineDetails = [
+    ...NAMED_ENGINES.map((engine) => measuredRow(engine.label, grouped.get(engine.label) || [])),
+    ...[...grouped.keys()]
+      .filter((label) => !namedLabels.has(label))
+      .map((label) => measuredRow(label, grouped.get(label) || [])),
+  ];
 
   const executed = engineDetails.filter((row) => row.status === 'MEASURED');
   const queriesFromRecords = executed.reduce((sum, row) => sum + row.queriesExecuted, 0);
   const mentionedFromRecords = executed.reduce((sum, row) => sum + row.brandMentioned, 0);
   const citedFromRecords = executed.reduce((sum, row) => sum + row.brandCited, 0);
   const status = (scorecard?.status || '').toUpperCase();
-  const declaredQueries = typeof scorecard?.queries === 'number' ? scorecard.queries : 0;
-  const isMeasured = status === 'MEASURED' || queriesFromRecords > 0 || declaredQueries > 0;
+  const declaredQueries = positiveCount(scorecard?.queries);
+  const successfulRuns = positiveCount(scorecard?.successful_runs);
+  const failedRuns = positiveCount(scorecard?.failed_runs);
+  const enginesMeasured = positiveCount(scorecard?.engines_measured);
+  const provenByRuns = status === 'MEASURED' && successfulRuns > 0 && enginesMeasured > 0;
+  const queriesCompleted = queriesFromRecords > 0 ? queriesFromRecords : (provenByRuns ? successfulRuns : 0);
+  const isMeasured = queriesFromRecords > 0 || provenByRuns;
+  const queriesAttempted = declaredQueries > 0 ? declaredQueries : queriesCompleted;
 
   if (!isMeasured) {
     return {
       isMeasured: false,
       engineCount: 0,
       queriesExecuted: 0,
+      queriesAttempted,
+      queriesFailed: failedRuns,
       brandMentionedCount: 0,
       brandMentionRatePct: null,
       brandCitedCount: 0,
       liveCitationRatePct: null,
-      status: scorecard?.not_measured_reason ? 'NOT_EXECUTED' : 'NOT_EXECUTED',
+      status: 'NOT_EXECUTED',
       engineDetails,
     };
   }
 
-  const queriesExecuted = queriesFromRecords || declaredQueries;
   return {
     isMeasured: true,
-    engineCount: executed.length || scorecard?.engines_measured || 0,
-    queriesExecuted,
+    engineCount: executed.length || enginesMeasured,
+    queriesExecuted: queriesCompleted,
+    queriesAttempted,
+    queriesFailed: failedRuns,
     brandMentionedCount: queriesFromRecords > 0 ? mentionedFromRecords : 0,
     brandMentionRatePct: queriesFromRecords > 0
       ? Math.round((mentionedFromRecords / queriesFromRecords) * 1000) / 10

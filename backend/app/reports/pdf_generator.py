@@ -21,10 +21,10 @@ class ExecutiveDeckGenerator:
 
     def render_executive_deck_html(self, run_data: Dict[str, Any]) -> str:
         domain = run_data.get("domain") or "unspecified"
-        overall_score = run_data.get("overall_score")
-        if overall_score is not None:
-            grade = "A" if overall_score >= 80 else ("B" if overall_score >= 70 else "C")
-            score_display = f"{int(round(overall_score))}/100 [GRADE {grade}]"
+        dossier_score = run_data.get("dossier_score")
+        if dossier_score is not None:
+            grade = run_data.get("dossier_grade") or "—"
+            score_display = f"{float(dossier_score):.1f}/100 [GRADE {grade}]"
         else:
             score_display = "UNMEASURED"
 
@@ -352,7 +352,17 @@ async def get_executive_deck(
     search_p = getattr(p, "search_engine_perspective", None) if p else None
     ai_p = getattr(p, "ai_answer_engine_perspective", None) if p else None
 
-    score = getattr(report.scores, "overall_score", None) if (report and getattr(report, "scores", None)) else None
+    score = None
+    dossier_grade = None
+    if report is not None:
+        try:
+            from app.scoring.displayed_score import displayed_composite, grade_for_displayed
+            payload = report.model_dump(mode="json") if hasattr(report, "model_dump") else None
+            score = displayed_composite(payload) if payload else None
+            if score is not None:
+                dossier_grade = grade_for_displayed(score)
+        except Exception:
+            logger.info("executive deck dossier score unavailable")
     date_str = (getattr(report, "generated_at", None) if report else None) or getattr(run, "created_at", None) or "Measured on audit execution"
     domain_val = (getattr(report, "domain", None) if report else None) or getattr(run, "domain", None) or getattr(run, "website_url", "unspecified")
     story_summary = getattr(report, "story_summary", None) if report else None
@@ -368,7 +378,8 @@ async def get_executive_deck(
             gen = get_executive_deck_generator()
             html_content = gen.render_executive_deck_html({
                 "domain": domain_val,
-                "overall_score": score,
+                "dossier_score": score,
+                "dossier_grade": dossier_grade,
                 "created_at": str(date_str),
                 "human_visitor_perspective": human_p,
                 "search_engine_perspective": search_p,
@@ -380,7 +391,8 @@ async def get_executive_deck(
         gen = get_executive_deck_generator()
         html_content = gen.render_executive_deck_html({
             "domain": domain_val,
-            "overall_score": score,
+            "dossier_score": score,
+            "dossier_grade": dossier_grade,
             "created_at": str(date_str),
             "human_visitor_perspective": human_p,
             "search_engine_perspective": search_p,

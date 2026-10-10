@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { ExecutiveReport } from '../types';
 import { categoryLabel, display, formatPercent, humanize, scoreTone } from '../lib/format';
+import { alignDisplayedStory, buildDisplayedScore } from '../lib/displayedAuditScore';
 import { ReQueryDiffView } from './ReQueryDiffView';
 import { DynamicQuestionSandboxView } from './DynamicQuestionSandboxView';
 import { OutcomeTrackingView } from './OutcomeTrackingView';
@@ -280,7 +281,7 @@ export function Report({
         <div>
           <span className="label text-ink-500">Executive Narrative</span>
           <p className="text-base leading-relaxed text-ink font-sans mt-1">
-            {display(report.story_summary)}
+            {display(alignDisplayedStory(report.story_summary, report.scores?.overall_score, buildDisplayedScore(report)))}
           </p>
           <div className="mt-4">
             <CalibrationLeaders findings={report.findings || []} />

@@ -1,13 +1,14 @@
 """The one composite the dashboard and the PDF cover both show.
 
-Matches frontend ``buildDisplayedScore``: GEO is the measured extractability
-score, a live citation of zero stays in the total, and an unmeasured pillar
-is left out.
+Matches frontend ``buildDisplayedScore``. GEO is the measured extractability
+score. A live citation of zero stays in the total only when this run recorded
+successful engine responses. An unmeasured pillar is left out.
 """
 from __future__ import annotations
 
 import json
 import math
+import re
 from typing import Any, Optional
 
 
@@ -43,6 +44,78 @@ def _as_report(report: Any) -> Optional[dict]:
     return report if isinstance(report, dict) else None
 
 
+def _positive_int(value: Any) -> int:
+    number = _num(value)
+    if number is None or number <= 0:
+        return 0
+    return int(number)
+
+
+def _record_identifies_engine(record: Any) -> bool:
+    if not isinstance(record, dict):
+        return False
+    return bool(str(record.get("engine_id") or "").strip() or str(record.get("engine_name") or "").strip())
+
+
+def live_execution_proven(report: Any) -> bool:
+    """True when this run has a successful engine response, not merely an attempted budget."""
+    payload = _as_report(report) or {}
+    card = payload.get("ai_visibility_scorecard") or {}
+    records = []
+    if isinstance(card, dict):
+        if _positive_int(card.get("successful_runs")) > 0:
+            return True
+        card_records = card.get("observatory_records") or []
+        if isinstance(card_records, list):
+            records.extend(card_records)
+    top_records = payload.get("observatory_records") or []
+    if isinstance(top_records, list):
+        records.extend(top_records)
+    return any(_record_identifies_engine(record) for record in records)
+
+
+def grade_for_displayed(score: float) -> str:
+    """Grade bands shared with the editorial ledger."""
+    if score >= 93:
+        return "A+"
+    if score >= 85:
+        return "A"
+    if score >= 75:
+        return "B"
+    if score >= 65:
+        return "C"
+    if score >= 50:
+        return "D"
+    return "F"
+
+
+def align_story_score(story: str, sealed_score: Any, composite: float) -> str:
+    """Replace the sealed overall sentence with the dossier composite and its grade."""
+    if not story or composite is None:
+        return story
+    sealed = _num(sealed_score)
+    if sealed is None:
+        return story
+    sealed_token = str(int(round(sealed)))
+    pattern = rf"{re.escape(sealed_token)}(?:\.0)?/100(?:\s*\([^)]*\))?"
+    replacement = f"{composite:.1f}/100 (grade {grade_for_displayed(composite)})"
+    updated, count = re.subn(pattern, replacement, story, count=1)
+    return updated if count else story
+
+
+def _live_citation(payload: dict, honest: dict) -> Optional[float]:
+    if not live_execution_proven(payload):
+        return None
+    live = _num(honest.get("live_ai_citation_score"))
+    if live is None and honest.get("ai_visibility_status") == "MEASURED":
+        live = _num(honest.get("ai_visibility_score"))
+    if live is None:
+        card = payload.get("ai_visibility_scorecard") or {}
+        if isinstance(card, dict):
+            live = _num(card.get("citation_rate_pct"))
+    return live
+
+
 def displayed_composite(report: Any) -> Optional[float]:
     """Return the dossier composite, or None when the report has no measured pillars."""
     payload = _as_report(report)
@@ -59,9 +132,7 @@ def displayed_composite(report: Any) -> Optional[float]:
             return None
         return _num(category.get("score"))
 
-    live = _num(honest.get("live_ai_citation_score"))
-    if live is None and honest.get("ai_visibility_status") == "MEASURED":
-        live = _num(honest.get("ai_visibility_score"))
+    live = _live_citation(payload, honest if isinstance(honest, dict) else {})
     pillars = [
         (0.30, _num(honest.get("google_score")) if _num(honest.get("google_score")) is not None else category_score("TECHNICAL_SEO")),
         (0.25, _num(geo.get("extractability_score")) if _num(geo.get("extractability_score")) is not None else (

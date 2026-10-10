@@ -17,7 +17,8 @@ export function Chapter01TechnicalSeo({
   report,
   latencyChart,
 }: Chapter01TechnicalSeoProps) {
-  const { technicalSeo, meta } = report;
+  const { technicalSeo, meta, coverageConfidence } = report;
+  const ttfbSamples = coverageConfidence.performancePagesCount;
 
   return (
     <>
@@ -30,7 +31,7 @@ export function Chapter01TechnicalSeo({
         description="Comprehensive evaluation of how search crawlers navigate, parse, and allocate crawl budget across target origin surfaces. Assesses canonical routing, indexability directives, and server response latency."
         domain={meta.domain}
         whyThisMatters="Unconsolidated canonical domains, redirect loops, and slow server latency actively degrade organic crawl frequency and divide PageRank equity."
-        howWeMeasuredIt="Deterministic AST crawler parsing, canonical header crosscheck, and TTFB server latency measurements across sampled origin endpoints."
+        howWeMeasuredIt="Deterministic AST crawler parsing, canonical header crosscheck, and one server time-to-first-byte measurement per sampled URL. This is not a Core Web Vitals field study and it is not a full page-load time."
         whatWasAnalyzed="Apex vs WWW consolidation, 301 redirect chains, robots.txt permissions, XML sitemaps, and HTTP status code distribution."
         pageNumber={5}
       />
@@ -133,11 +134,11 @@ export function Chapter01TechnicalSeo({
                   1.2 Server Time-to-First-Byte (TTFB) Response Distribution
                 </span>
                 <span className="font-mono text-[7.5pt] text-ink-500">
-                  Dristik target threshold: &lt; 400ms · CWV good boundary: &lt; 800ms
+                  Sample of {ttfbSamples} URL{ttfbSamples === 1 ? '' : 's'} · response-time reference &lt; 800ms
                 </span>
               </div>
               <p className="text-[7.5pt] text-ink-500 font-sans">
-                Continuous network latency histogram across audited sample nodes. The &lt;400ms boundary represents Dristik's internal benchmark for high-velocity answer engine bot responsiveness, distinguished from universal web standards.
+                Server time-to-first-byte for the {ttfbSamples} URL{ttfbSamples === 1 ? '' : 's'} this run fetched, one measurement each. It is not a full page-load time, not a Chrome User Experience Report result, and not a site-wide performance score. The 400 ms line is Dristik&apos;s response-time target.
               </p>
               <div className="py-2">
                 <LatencyCurveChart chart={latencyChart} />

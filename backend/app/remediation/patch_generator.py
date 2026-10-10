@@ -60,8 +60,8 @@ def _format_title_copy(page_path: str, biz_name: str, niche: str) -> str:
     if len(raw) < 50:
         raw = f"{raw} Platform"
     if len(raw) > 60:
-        truncated = raw[:60].rsplit(" ", 1)[0]
-        raw = truncated if len(truncated) >= 40 else raw[:60].strip()
+        from app.remediation.serp_text import fit_serp_text
+        raw = fit_serp_text(raw, 60)
     return raw[:60].strip()
 
 
@@ -85,11 +85,9 @@ def _format_meta_description(page_path: str, biz_name: str, val_prop: str, audie
     if len(desc) < 140:
         desc = f"{desc} Learn more and get started today."
     if len(desc) > 160:
-        truncated = desc[:160].rsplit(" ", 1)[0]
-        desc = (truncated + ".") if not truncated.endswith((".", "!", "?")) else truncated
-        if len(desc) > 160:
-            desc = desc[:160].strip()
-    return desc[:160].strip()
+        from app.remediation.serp_text import fit_serp_text
+        desc = fit_serp_text(desc, 160)
+    return desc
 
 
 class RemediationPatcher:

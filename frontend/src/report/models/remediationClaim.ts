@@ -76,6 +76,6 @@ export function deriveRemediationClaim(patches: PatchLike[]): RemediationClaim {
   return {
     state: 'GENERATED',
     label: 'Patch generated (unapplied)',
-    detail: 'Generated diffs have not been deployed. They are not a before-and-after result and they are not verified in staging.',
+    detail: 'Generated diffs have not been deployed. They are not a before-and-after result and they are not verified in staging. Each patch is a template: the site repository was not inspected, so file paths are suggestions.',
   };
 }

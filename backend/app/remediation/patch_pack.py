@@ -35,8 +35,8 @@ def generate_character_safe_copy(bp: Optional[BusinessProfile], website_url: str
     if len(raw_title) < 50:
         raw_title = f"{biz_name} — High-Performance {niche} Platform"
     if len(raw_title) > 60:
-        truncated = raw_title[:60].rsplit(" ", 1)[0]
-        raw_title = truncated if len(truncated) >= 40 else raw_title[:60].strip()
+        from app.remediation.serp_text import fit_serp_text
+        raw_title = fit_serp_text(raw_title, 60)
     title = raw_title[:60].strip()
     t_len = len(title)
     t_status = "compliant" if 50 <= t_len <= 60 else "too_short" if t_len < 50 else "too_long"
@@ -50,10 +50,8 @@ def generate_character_safe_copy(bp: Optional[BusinessProfile], website_url: str
             f"Discover how {biz_name} accelerates enterprise outcomes today."
         )
     if len(base_desc) > 160:
-        truncated = base_desc[:160].rsplit(" ", 1)[0]
-        base_desc = (truncated + ".") if not truncated.endswith((".", "!", "?")) else truncated
-        if len(base_desc) > 160:
-            base_desc = base_desc[:160].strip()
+        from app.remediation.serp_text import fit_serp_text
+        base_desc = fit_serp_text(base_desc, 160)
     meta_desc = base_desc[:160].strip()
     m_len = len(meta_desc)
     m_status = "compliant" if 140 <= m_len <= 160 else "too_short" if m_len < 140 else "too_long"

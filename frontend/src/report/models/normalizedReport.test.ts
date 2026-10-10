@@ -160,15 +160,20 @@ describe('NormalizedReport Model & Zero-Fake Enforcer', () => {
       },
     } as ExecutiveReport);
 
-    expect(normalized.scorecard.overallScore).toBe(59.2);
-    expect(normalized.scorecard.grade).toBe('D');
-    expect(normalized.brief.keySignals.overallScore).toBe(59.2);
-    expect(normalized.brief.keySignals.overallGrade).toBe('D');
+    expect(normalized.scorecard.overallScore).toBe(78.9);
+    expect(normalized.scorecard.grade).toBe('B');
+    expect(normalized.brief.keySignals.overallScore).toBe(78.9);
+    expect(normalized.brief.keySignals.overallGrade).toBe('B');
+    expect(normalized.scorecard.ledger.find((row) => row.categoryKey === 'AEO')?.included).toBe(false);
+    expect(normalized.googlePerformance.searchConsole.state).toBe('NOT_CONNECTED');
+    expect(normalized.googlePerformance.analytics.state).toBe('NOT_CONNECTED');
+    expect(normalized.googlePerformance.searchConsole.metrics).toEqual([]);
   });
 
   it('uses measured extractability instead of a GEO category score of 100', () => {
     const normalized = normalizeExecutiveReport({
       ...mockReport,
+      story_summary: 'Acme scores 83/100 (B, Good). This figure is the weighted rollup of pillar scores.',
       scores: {
         ...mockReport.scores,
         overall_score: 83,
@@ -191,10 +196,60 @@ describe('NormalizedReport Model & Zero-Fake Enforcer', () => {
       },
     } as ExecutiveReport);
 
-    expect(normalized.scorecard.overallScore).toBe(52.4);
-    expect(normalized.scorecard.grade).toBe('D');
+    expect(normalized.scorecard.overallScore).toBe(69.8);
+    expect(normalized.scorecard.grade).toBe('C');
     expect(normalized.brief.keySignals.geoScore).toBe(52.7);
     expect(normalized.scorecard.ledger.find((row) => row.categoryKey === 'GEO')?.rawScore).toBe(52.7);
+    expect(normalized.brief.leadThesis).toContain('69.8/100 (grade C)');
+    expect(normalized.brief.leadThesis).not.toContain('83/100');
+  });
+
+  it('keeps a measured citation zero when this run has engine responses', () => {
+    const normalized = normalizeExecutiveReport({
+      ...mockReport,
+      story_summary: 'Acme scores 83/100 (B, Good). This figure is the weighted rollup of pillar scores.',
+      honest_scores: {
+        google_score: 79.6,
+        ai_readiness_score: 80,
+        human_score: 76.6,
+        live_ai_citation_score: 0,
+        ai_visibility_status: 'MEASURED',
+      },
+      geo_readiness: { extractability_score: 52.7 },
+      ai_visibility_scorecard: {
+        status: 'MEASURED',
+        queries: 18,
+        successful_runs: 3,
+        failed_runs: 0,
+        engines_measured: 1,
+        engines_requested: 5,
+        repeats: 1,
+        citation_rate_pct: 0,
+        observatory_records: [{ engine_id: 'claude', brand_cited: false, brand_mentioned: false }],
+      },
+      google_performance: {
+        search_console: {
+          state: 'MEASURED',
+          property: 'sc-domain:enterprise-analytics.io',
+          period: '28d',
+          clicks: 120,
+          impressions: 4000,
+          average_ctr: 3,
+          average_position: 8.2,
+          queries: [{ query: 'enterprise analytics', page: '/', clicks: 40, impressions: 900, position: 6.1 }],
+        },
+        analytics: { state: 'NOT_AUTHORIZED' },
+      },
+    } as ExecutiveReport);
+
+    expect(normalized.scorecard.overallScore).toBe(52.4);
+    expect(normalized.scorecard.grade).toBe('D');
+    expect(normalized.aeo.liveObservation.queriesExecuted).toBe(1);
+    expect(normalized.aeo.liveObservation.queriesAttempted).toBe(18);
+    expect(normalized.googlePerformance.searchConsole.state).toBe('MEASURED');
+    expect(normalized.googlePerformance.searchConsole.metrics.find((metric) => metric.label === 'Clicks')?.value).toBe('120');
+    expect(normalized.googlePerformance.analytics.state).toBe('NOT_AUTHORIZED');
+    expect(normalized.googlePerformance.analytics.metrics).toEqual([]);
   });
 
   it('does not copy on-page GEO into live citations', () => {

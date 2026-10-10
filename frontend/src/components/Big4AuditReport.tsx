@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { ExecutiveReport, Finding, Severity, ClaimSourceType } from '../types';
 import { categoryLabel, costBasisCaption, display, formatAuditCost, formatPercent, formatMs, humanize } from '../lib/format';
-import { buildDisplayedScore } from '../lib/displayedAuditScore';
+import { alignDisplayedStory, buildDisplayedScore } from '../lib/displayedAuditScore';
 import { finiteNumber } from '../report/models/scoreLedger';
 import { classifyFindingNature } from '../lib/findingClassifier';
 import { ScoringRubricModal } from './ScoringRubricModal';
@@ -39,6 +39,7 @@ export function Big4AuditReport({
   const categories = Object.entries(scores.category_scores || {});
   const displayed = buildDisplayedScore(report);
   const displayedOverall = displayed.composite;
+  const displayedStory = alignDisplayedStory(report.story_summary, report.scores?.overall_score, displayed);
   const geoMeasured = finiteNumber(report.geo_readiness?.extractability_score);
   const shownCategoryScore = (key: string, score: number): number => (
     key === 'GEO' && geoMeasured != null ? geoMeasured : score
@@ -379,15 +380,13 @@ export function Big4AuditReport({
               <span className="text-[10px] font-bold uppercase tracking-[0.04em] text-ink-500">Overall Health</span>
               <div className="flex items-baseline gap-2 mt-1">
                 <span className="text-4xl font-sans font-bold text-ink">
-                  {displayedOverall != null
-                    ? Math.round(displayedOverall)
-                    : Math.round(report.honest_scores?.overall_score ?? scores.overall_score)}
+                  {displayedOverall != null ? displayedOverall.toFixed(1) : '—'}
                 </span>
                 <span className="text-sm font-semibold text-ink-600">/ 100</span>
               </div>
               <div className="mt-2 text-xs font-semibold text-ink-700 flex items-center gap-1.5">
                 <span className="px-1.5 py-0.5 bg-paper-200 border border-line rounded text-[10px] font-mono">
-                  {report.honest_scores?.score_band ?? display(scores.health_label)}
+                  {displayed.grade}
                 </span>
               </div>
             </div>
@@ -588,7 +587,7 @@ export function Big4AuditReport({
               Strategic Executive Narrative
             </div>
             <p className="text-base text-ink-700 leading-relaxed font-sans">
-              {display(report.story_summary)}
+              {display(displayedStory)}
             </p>
             <div className="mt-4">
               <CalibrationLeaders findings={findings} />
@@ -882,7 +881,7 @@ export function Big4AuditReport({
                     {displayedOverall != null ? displayedOverall.toFixed(1) : scores.overall_score.toFixed(2)} pts
                   </td>
                   <td className="p-3 text-center text-[10px] text-good uppercase font-sans">
-                    {displayedOverall != null ? Math.round(displayedOverall) : Math.round(scores.overall_score)}/100 Composite
+                    {displayedOverall != null ? `${displayedOverall.toFixed(1)}/100` : '—'} Composite
                   </td>
                 </tr>
               </tfoot>

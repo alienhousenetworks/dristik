@@ -452,8 +452,8 @@ class UniversalPatchEngine:
             if len(meta_copy) < 140:
                 meta_copy = f"{meta_copy} Discover how our platform accelerates growth."
             if len(meta_copy) > 160:
-                meta_copy = meta_copy[:157].rstrip() + "..."
-            meta_copy = meta_copy[:160]
+                from app.remediation.serp_text import fit_serp_text
+                meta_copy = fit_serp_text(meta_copy, 160)
 
             return RemediationPatch(
                 **common_kw,

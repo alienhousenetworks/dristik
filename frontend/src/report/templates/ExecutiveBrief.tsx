@@ -9,6 +9,70 @@ interface ExecutiveBriefProps {
   report: NormalizedReport;
 }
 
+function GoogleChannelCard({
+  title,
+  channel,
+}: {
+  title: string;
+  channel: NormalizedReport['googlePerformance']['searchConsole'];
+}) {
+  return (
+    <div className="bg-paper-50 p-2.5 rounded border border-line space-y-1.5">
+      <div className="flex items-center justify-between gap-2">
+        <span className="font-mono text-[7pt] font-bold uppercase tracking-[0.04em] text-ink-700">{title}</span>
+        <span className="font-mono text-[6.5pt] font-bold px-1.5 py-0.5 rounded bg-paper-200 text-ink-700 border border-line">
+          {channel.state}
+        </span>
+      </div>
+      {channel.state === 'MEASURED' && (channel.property || channel.period) && (
+        <p className="font-mono text-[7pt] text-ink-500">
+          {[channel.property, channel.period].filter(Boolean).join(' · ')}
+        </p>
+      )}
+      {channel.state === 'MEASURED' && channel.metrics.length > 0 && (
+        <div className="grid grid-cols-2 gap-1.5">
+          {channel.metrics.map((metric) => (
+            <div key={metric.label}>
+              <span className="text-ink-400 block text-[6.5pt] uppercase">{metric.label}</span>
+              <strong className="text-ink text-[8pt]">{metric.value}</strong>
+            </div>
+          ))}
+        </div>
+      )}
+      {channel.state === 'MEASURED' && channel.rows.length > 0 && (
+        <ul className="space-y-0.5">
+          {channel.rows.map((row) => (
+            <li key={row.label} className="text-ink-700">
+              <span className="font-semibold">{row.label}</span>
+              {row.detail ? <span className="text-ink-500"> — {row.detail}</span> : null}
+            </li>
+          ))}
+        </ul>
+      )}
+      {channel.state !== 'MEASURED' && (
+        <p className="font-sans text-[7.5pt] text-ink-600 leading-relaxed">{channel.notice}</p>
+      )}
+    </div>
+  );
+}
+
+function GooglePerformance({ report }: { report: NormalizedReport }) {
+  return (
+    <div className="p-3.5 bg-paper-100 border border-line rounded text-[8pt] space-y-2">
+      <div className="flex flex-wrap items-center justify-between pb-1.5 border-b border-line">
+        <span className="font-mono text-[7.5pt] font-bold uppercase tracking-[0.04em] text-ink-700">
+          Google Search Console &amp; Analytics
+        </span>
+        <span className="font-mono text-[7pt] text-ink-500">Shown only when this audit retrieved them</span>
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 font-mono text-[7.5pt]">
+        <GoogleChannelCard title="Search Console" channel={report.googlePerformance.searchConsole} />
+        <GoogleChannelCard title="Analytics 4" channel={report.googlePerformance.analytics} />
+      </div>
+    </div>
+  );
+}
+
 export function ExecutiveBrief({ theme, report }: ExecutiveBriefProps) {
   const { brief, meta } = report;
   const { keySignals } = brief;
@@ -146,8 +210,10 @@ export function ExecutiveBrief({ theme, report }: ExecutiveBriefProps) {
                 <span className="text-ink-400 block text-[6.5pt] uppercase">Live AI queries</span>
                 <strong className="text-ink text-[8pt] block mt-0.5">
                   {report.coverageConfidence.liveQueriesExecuted > 0
-                    ? `${report.coverageConfidence.liveQueriesExecuted} executed`
-                    : 'Not executed'}
+                    ? `${report.coverageConfidence.liveQueriesExecuted} completed`
+                    : report.coverageConfidence.liveQueriesAttempted > 0
+                      ? `${report.coverageConfidence.liveQueriesAttempted} attempted, 0 completed`
+                      : 'Not executed'}
                 </strong>
               </div>
               <div className="bg-paper-50 p-2 rounded border border-line">
@@ -157,9 +223,9 @@ export function ExecutiveBrief({ theme, report }: ExecutiveBriefProps) {
                 </strong>
               </div>
               <div className="bg-paper-50 p-2 rounded border border-line">
-                <span className="text-ink-400 block text-[6.5pt] uppercase">Performance Sample</span>
+                <span className="text-ink-400 block text-[6.5pt] uppercase">Server response sample</span>
                 <strong className="text-ink text-[8pt] block mt-0.5">
-                  {report.coverageConfidence.performancePagesCount} Nodes Tested
+                  {report.coverageConfidence.performancePagesCount} URL TTFB {report.coverageConfidence.performancePagesCount === 1 ? 'sample' : 'samples'}
                 </strong>
               </div>
             </div>
@@ -169,6 +235,8 @@ export function ExecutiveBrief({ theme, report }: ExecutiveBriefProps) {
             </p>
           </div>
         )}
+
+        <GooglePerformance report={report} />
 
         {/* Editorial Triad: What is Working / What Needs Attention / What Matters Next */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-5 pt-2">

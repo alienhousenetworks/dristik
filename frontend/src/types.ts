@@ -1137,6 +1137,24 @@ export interface OutcomeRecord {
   horizon_days: number;
 }
 
+export interface GoogleChannelPayload {
+  state?: 'NOT_CONNECTED' | 'NOT_AUTHORIZED' | 'NO_DATA' | 'FETCH_FAILED' | 'MEASURED' | string;
+  source?: string;
+  notice?: string;
+  property?: string | null;
+  period?: string | null;
+  clicks?: number;
+  impressions?: number;
+  average_ctr?: number | null;
+  average_position?: number | null;
+  queries?: Array<{ query?: string; page?: string; clicks?: number; impressions?: number; ctr?: number | null; position?: number | null }>;
+  sessions?: number;
+  engagement_rate_pct?: number | null;
+  bounce_rate_pct?: number | null;
+  average_session_duration_sec?: number | null;
+  conversions?: number;
+}
+
 export interface ExecutiveReport {
   report_id: string;
   analysis_id?: string;
@@ -1205,7 +1223,18 @@ export interface ExecutiveReport {
     hallucination_rate_pct?: number | null;
     source_consistency_pct?: number | null;
     not_measured_reason?: string | null;
+    observatory_records?: Array<{
+      engine_id?: string;
+      engine_name?: string;
+      brand_mentioned?: boolean;
+      brand_cited?: boolean;
+      timestamp?: string;
+    }>;
   };
+  google_performance?: {
+    search_console?: GoogleChannelPayload;
+    analytics?: GoogleChannelPayload;
+  } | null;
   geo_readiness?: {
     visibility_status: string;
     visibility_message: string;

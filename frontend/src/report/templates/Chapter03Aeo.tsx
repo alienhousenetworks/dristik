@@ -67,7 +67,11 @@ export function Chapter03Aeo({
                 3.1 Empirical Live Citation Observation (Direct API Query Telemetry)
               </span>
               <span className="font-mono text-[7.5pt] px-2 py-0.5 rounded bg-paper-200 text-ink-700 font-bold">
-                {liveObservation.isMeasured ? 'LIVE MEASURED' : 'NOT CONFIGURED'}
+                {liveObservation.isMeasured
+                  ? 'LIVE MEASURED'
+                  : liveObservation.queriesAttempted > 0
+                    ? 'ATTEMPTED — NOT COMPLETED'
+                    : 'NOT EXECUTED'}
               </span>
             </div>
 
@@ -92,16 +96,20 @@ export function Chapter03Aeo({
                 <span className="text-[7pt] text-ink-500 block">Named in answer text</span>
               </div>
               <div className="p-2.5 bg-paper-50 border border-line rounded">
-                <span className="font-mono text-[7.5pt] text-ink-500 block uppercase">Queries Executed</span>
+                <span className="font-mono text-[7.5pt] text-ink-500 block uppercase">Queries completed</span>
                 <span className="text-xl font-sans font-bold text-ink block mt-0.5">
                   {liveObservation.queriesExecuted}
                 </span>
-                <span className="text-[7pt] text-ink-500 block">Empirical test prompts</span>
+                <span className="text-[7pt] text-ink-500 block">
+                  {liveObservation.queriesAttempted > 0
+                    ? `${liveObservation.queriesAttempted} attempted${liveObservation.queriesFailed > 0 ? `, ${liveObservation.queriesFailed} failed` : ''}`
+                    : 'No live prompts were sent'}
+                </span>
               </div>
               <div className="p-2.5 bg-paper-50 border border-line rounded">
                 <span className="font-mono text-[7.5pt] text-ink-500 block uppercase">Engines Measured</span>
                 <span className="text-xl font-sans font-bold text-ink block mt-0.5">
-                  {liveObservation.engineCount} / 5
+                  {liveObservation.engineCount} / {liveObservation.engineDetails.length}
                 </span>
                 <span className="text-[7pt] text-ink-500 block">Fail-closed unmeasured</span>
               </div>
@@ -374,7 +382,7 @@ export function Chapter03Aeo({
             <span>
               MODE: {exhaustiveMode ? 'FULL QUESTION LIST' : 'EXECUTIVE SAMPLE OF EVALUATED QUESTIONS'}
             </span>
-            <span>On-page questions evaluated: {questionCount}. Live queries executed: {liveObservation.queriesExecuted}.</span>
+            <span>On-page questions evaluated: {questionCount}. Live queries attempted: {liveObservation.queriesAttempted}. Completed: {liveObservation.queriesExecuted}.</span>
           </div>
         </div>
 

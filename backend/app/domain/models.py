@@ -2075,6 +2075,7 @@ class ExecutiveReport(BaseModel):
     competitor_seo_parity: Optional[CompetitorSeoParityMatrix] = None
     wcag_audit: Optional[WcagAuditSummary] = None
     external_authority: Optional[Dict[str, Any]] = None
+    google_performance: Optional[Dict[str, Any]] = None
     causal_diagnostic_chains: List[CausalDiagnosticChain] = Field(default_factory=list)
     scoring_explanation: Optional[str] = None
     observatory_records: List[Dict[str, Any]] = Field(default_factory=list)

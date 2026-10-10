@@ -11,7 +11,42 @@ import {
  * One score for the dashboard and the PDF.
  * GEO uses the measured extractability composite. A category score of 100
  * from checks that were never run is not used in its place.
+ * A live citation of zero stays in the total only when an engine on this
+ * run returned a response. An attempted query budget is not that response.
  */
+function positiveCount(value: unknown): number {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : 0;
+}
+
+function recordNamesEngine(record: { engine_id?: string; engine_name?: string } | null | undefined): boolean {
+  return Boolean(`${record?.engine_id || ''} ${record?.engine_name || ''}`.trim());
+}
+
+export function liveExecutionProven(report: ExecutiveReport): boolean {
+  const card = report.ai_visibility_scorecard;
+  if (positiveCount(card?.successful_runs)) return true;
+  const records = [
+    ...(card?.observatory_records || []),
+    ...(report.observatory_records || []),
+  ];
+  return records.some((record) => recordNamesEngine(record));
+}
+
+export function alignDisplayedStory(
+  story: string | null | undefined,
+  sealedScore: unknown,
+  score: AuthoritativeScore,
+): string {
+  const text = story || '';
+  if (score.composite == null) return text;
+  const sealed = finiteNumber(sealedScore);
+  if (sealed == null) return text;
+  const token = String(Math.round(sealed));
+  const pattern = new RegExp(`${token}(?:\\.0)?/100(?:\\s*\\([^)]*\\))?`);
+  if (!pattern.test(text)) return text;
+  return text.replace(pattern, `${score.composite.toFixed(1)}/100 (grade ${score.grade})`);
+}
+
 export function buildDisplayedScore(report: ExecutiveReport): AuthoritativeScore {
   const scores = report.scores;
   const honest = report.honest_scores;
@@ -20,8 +55,14 @@ export function buildDisplayedScore(report: ExecutiveReport): AuthoritativeScore
     if (!category || category.status === 'NOT_MEASURED') return null;
     return finiteNumber(category.score);
   };
-  const liveCitation = finiteNumber(honest?.live_ai_citation_score)
-    ?? (honest?.ai_visibility_status === 'MEASURED' ? finiteNumber(honest?.ai_visibility_score) : null);
+  const proven = liveExecutionProven(report);
+  const liveCitation = proven
+    ? (
+      finiteNumber(honest?.live_ai_citation_score)
+      ?? (honest?.ai_visibility_status === 'MEASURED' ? finiteNumber(honest?.ai_visibility_score) : null)
+      ?? finiteNumber(report.ai_visibility_scorecard?.citation_rate_pct)
+    )
+    : null;
   const geoMeasured = finiteNumber(report.geo_readiness?.extractability_score);
   const technical = finiteNumber(honest?.google_score) ?? categoryScore('TECHNICAL_SEO');
   const geo = geoMeasured ?? finiteNumber(honest?.ai_readiness_score) ?? categoryScore('GEO');

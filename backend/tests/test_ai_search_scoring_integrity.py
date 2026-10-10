@@ -39,6 +39,33 @@ def test_ai_search_without_live_data_is_not_measured():
         assert check_res.score == 0.0 or check_res.score is None
 
 
+def test_ai_search_without_a_query_count_does_not_invent_eighteen():
+    engine = ScoringEngine()
+    profile = BusinessProfile(
+        business_name="Test Brand",
+        domain="testbrand.com",
+        primary_intent=BusinessIntent.SAAS
+    )
+    res = engine.calculate_scores(
+        findings=[],
+        business_profile=profile,
+        live_citation_score=77.8,
+        live_benchmark_data={
+            "overall_mention_rate_pct": 77.8,
+            "overall_first_party_citation_rate_pct": 44.4,
+            "share_of_model": {"competitor_only_rate": 0.15, "competitor_displacements": []},
+        },
+    )
+    checks = {
+        item.check_id: item
+        for item in res.category_scores[Category.AI_SEARCH.value].check_results
+    }
+    assert checks["ai_brand_mention_rate"].status == "NOT_MEASURED"
+    assert checks["ai_domain_citation_rate"].status == "NOT_MEASURED"
+    assert checks["ai_displacement_resistance"].status == "NOT_MEASURED"
+    assert checks["ai_brand_mention_rate"].evidence == []
+
+
 def test_ai_search_with_live_benchmark_data_computes_all_checks():
     engine = ScoringEngine()
     profile = BusinessProfile(
