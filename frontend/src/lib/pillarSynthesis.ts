@@ -98,6 +98,9 @@ export function synthesizePillars(report: ExecutiveReport | undefined | null): W
   const perEngine = report.per_engine_geo;
   const perEngineOverall = perEngine?.overall_engine_score;
   const liveCitations = honest?.ai_visibility_status === 'MEASURED' ? honest?.ai_visibility_score : null;
+  const measuredExtractability = typeof report.geo_readiness?.extractability_score === 'number'
+    ? report.geo_readiness.extractability_score
+    : null;
   const geoCatScore = catScores['GEO']?.score;
   const infoGainScore = perEngine?.information_gain?.fluff_ratio_score != null
     ? Math.round(100 - perEngine.information_gain.fluff_ratio_score)
@@ -106,9 +109,11 @@ export function synthesizePillars(report: ExecutiveReport | undefined | null): W
   const geoParts = [perEngineOverall, liveCitations, geoCatScore, infoGainScore].filter(
     (n): n is number => typeof n === 'number'
   );
-  const geoScore = geoParts.length
-    ? Math.round(geoParts.reduce((sum, n) => sum + n, 0) / geoParts.length)
-    : (typeof perEngineOverall === 'number' ? Math.round(perEngineOverall) : (typeof geoCatScore === 'number' ? Math.round(geoCatScore) : null));
+  const geoScore = measuredExtractability != null
+    ? Math.round(measuredExtractability)
+    : (geoParts.length
+      ? Math.round(geoParts.reduce((sum, n) => sum + n, 0) / geoParts.length)
+      : (typeof perEngineOverall === 'number' ? Math.round(perEngineOverall) : (typeof geoCatScore === 'number' ? Math.round(geoCatScore) : null)));
 
   const geoFindings = findings.filter(f => f.category === 'GEO' || (f.category === 'AI_SEARCH' && f.title?.toLowerCase().includes('citation')));
 

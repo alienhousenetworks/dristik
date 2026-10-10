@@ -21,6 +21,7 @@ from app.identity.deps import get_current_user, get_current_user_optional, requi
 from app.identity.store import get_store
 from app.payments.store import get_payment_store
 from app.orchestration.orchestrator import orchestrator
+from app.scoring.displayed_score import displayed_composite
 from app.remediation.patch_pack import (
     generate_patch_pack_zip,
     generate_notion_block,
@@ -29,6 +30,12 @@ from app.remediation.patch_pack import (
 )
 
 router = APIRouter(prefix="/analyses", tags=["Analyses"])
+
+
+def _listed_score(report: Any, fallback: Any) -> Any:
+    """History badge uses the same composite as the open audit and the PDF cover."""
+    shown = displayed_composite(report)
+    return fallback if shown is None else shown
 
 _BAKEOFF_PLANS = {
     "diagnostic_bakeoff",
@@ -110,7 +117,10 @@ async def list_analyses(
                 "domain": getattr(r.report, "domain", None) or urlparse(r.website_url).netloc.replace("www.", ""),
                 "status": r.status.value if hasattr(r.status, "value") else str(r.status),
                 "progress": r.progress_percentage,
-                "score_overall": getattr(getattr(r.report, "scores", None), "overall_score", None),
+                "score_overall": _listed_score(
+                    r.report,
+                    getattr(getattr(r.report, "scores", None), "overall_score", None),
+                ),
                 "score_band": getattr(r, "score_band", None) or getattr(getattr(r.report, "honest_scores", None), "score_band", None),
                 "started_at": r.created_at.isoformat() if hasattr(r.created_at, "isoformat") else str(r.created_at),
                 "completed_at": r.completed_at.isoformat() if getattr(r, "completed_at", None) and hasattr(r.completed_at, "isoformat") else None,
@@ -128,7 +138,7 @@ async def list_analyses(
                 "domain": r.get("domain") or urlparse(r["website_url"]).netloc.replace("www.", ""),
                 "status": r["status"],
                 "progress": r["progress"],
-                "score_overall": r.get("score_overall"),
+                "score_overall": _listed_score(r.get("raw_report_json"), r.get("score_overall")),
                 "score_band": r.get("score_band"),
                 "started_at": r.get("started_at") or r.get("created_at"),
                 "completed_at": r.get("completed_at"),

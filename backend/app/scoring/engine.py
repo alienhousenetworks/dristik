@@ -842,6 +842,62 @@ class ScoringEngine:
             mathematical_derivation=math_derivation
         )
 
+    def apply_measured_geo_score(self, scores: Optional[OverallScoreResult], extractability: Optional[float]) -> Optional[OverallScoreResult]:
+        """Replace a rubric GEO score with the measured extractability composite.
+
+        GEO checks with no matching findings take a perfect pass. That pass is not
+        a measurement. Extractability is the measured GEO number, so the category
+        score and its points in the overall follow that composite.
+        """
+        if scores is None or extractability is None:
+            return scores
+        try:
+            value = float(extractability)
+        except (TypeError, ValueError):
+            return scores
+        if value != value:
+            return scores
+        value = max(0.0, min(100.0, value))
+        geo = scores.category_scores.get(Category.GEO.value)
+        if geo is None or geo.score is None:
+            return scores
+
+        weight = float(geo.weight or 0.0)
+        fraction = weight / 100.0 if weight > 1.5 else weight
+        old_points = float(geo.weighted_score) if geo.weighted_score is not None else round(float(geo.score) * fraction, 2)
+        new_points = round(value * fraction, 2)
+        geo.score = round(value, 1)
+        geo.weighted_score = new_points
+        geo.status = "MEASURED"
+        geo.provenance = "GEO_EXTRACTABILITY"
+        geo.summary = (
+            f"{geo.score:.0f}/100 from the measured extractability composite. "
+            "Rubric checks with no matching findings are not a perfect score."
+        )
+        scores.overall_score = round(max(0.0, min(100.0, float(scores.overall_score or 0.0) - old_points + new_points)), 1)
+        overall_score = scores.overall_score
+        if overall_score >= 93:
+            grade, health = "A+", "Exceptional"
+        elif overall_score >= 85:
+            grade, health = "A", "Excellent"
+        elif overall_score >= 75:
+            grade, health = "B", "Good"
+        elif overall_score >= 65:
+            grade, health = "C", "Moderate"
+        elif overall_score >= 50:
+            grade, health = "D", "Needs Attention"
+        else:
+            grade, health = "F", "Low readiness"
+        scores.grade = grade
+        scores.health_label = health
+        for row in scores.mathematical_derivation or []:
+            if row.get("category") == Category.GEO.value:
+                row["raw_score"] = geo.score
+                row["weighted_points"] = new_points
+                row["status"] = "MEASURED"
+                row["provenance"] = "GEO_EXTRACTABILITY"
+        return scores
+
     def calculate_honest_scores(
         self,
         findings: List[Finding],
@@ -873,6 +929,9 @@ class ScoringEngine:
             performance_metrics=performance_metrics,
             plan_tier=plan_tier
         )
+        extractability = getattr(geo_readiness, "extractability_score", None) if geo_readiness is not None else None
+        if extractability is not None:
+            self.apply_measured_geo_score(scores_res, extractability)
 
         cat_scores = scores_res.category_scores
         ux_score = measured_category_score(cat_scores, Category.UX_CONVERSION)

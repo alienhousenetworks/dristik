@@ -1,6 +1,7 @@
 import React from 'react';
 import { ExecutiveReport, TabId } from '../types';
 import { synthesizePillars } from '../lib/pillarSynthesis';
+import { buildDisplayedScore } from '../lib/displayedAuditScore';
 import { cn } from './ui';
 
 interface WebsiteIntelligenceTriadHeroProps {
@@ -53,7 +54,8 @@ export function WebsiteIntelligenceTriadHero({
     },
   ];
 
-  const overall = typeof report.scores?.overall_score === 'number' ? Math.round(report.scores.overall_score) : null;
+  const displayed = buildDisplayedScore(report);
+  const overall = displayed.composite != null ? Math.round(displayed.composite) : null;
   const tone = overall == null ? 'text-ink' : overall >= 80 ? 'text-good' : overall >= 60 ? 'text-warn' : 'text-bad';
 
   return (
@@ -68,7 +70,7 @@ export function WebsiteIntelligenceTriadHero({
           <p className="label">Overall</p>
           <p className={cn('font-sans text-5xl leading-none mt-1', tone)}>{overall == null ? '—' : overall}</p>
           <p className="text-sm text-ink-500 mt-1">
-            {report.scores?.grade} · {report.scores?.health_label}
+            Grade {displayed.grade}
           </p>
         </div>
       </div>

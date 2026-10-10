@@ -22,7 +22,8 @@ import { formatPercentPoints, formatRatioPercent, joinMetricValue } from '../../
 import { answerabilityConfidence, buildLiveObservation } from './aiMeasurement';
 import { assignEvidenceHashes, EvidenceHashStatus } from './evidenceIntegrity';
 import { deriveRemediationClaim, RemediationClaim } from './remediationClaim';
-import { buildAuthoritativeScore, finiteNumber, PillarInput, REPORT_PILLARS } from './scoreLedger';
+import { finiteNumber } from './scoreLedger';
+import { buildDisplayedScore } from '../../lib/displayedAuditScore';
 
 export interface NormalizedEvidenceItem {
   id: string;
@@ -329,7 +330,6 @@ export function normalizeExecutiveReport(report: ExecutiveReport): NormalizedRep
   const profile = report.business_profile || ({} as any);
   const resolved = report.resolved_entity;
   const scores = report.scores || ({} as any);
-  const honest = report.honest_scores;
   const rawFindings = report.findings || [];
   const rawPages = report.crawl_manifest?.pages || [];
   const rawPageReports = report.page_reports || [];
@@ -491,38 +491,7 @@ export function normalizeExecutiveReport(report: ExecutiveReport): NormalizedRep
   // 6. One score for the cover, the grade, and the ledger.
   // Live citation is never copied from the on-page GEO score. A missing
   // pillar is excluded. A measured zero stays a zero.
-  const categoryScore = (key: string): number | null => {
-    const category = scores.category_scores?.[key] as { score?: number; status?: string } | undefined;
-    if (!category || category.status === 'NOT_MEASURED') return null;
-    return finiteNumber(category.score);
-  };
-  const liveCitation = finiteNumber(honest?.live_ai_citation_score)
-    ?? (honest?.ai_visibility_status === 'MEASURED' ? finiteNumber(honest?.ai_visibility_score) : null);
-  const pillarInputs = ([
-    {
-      ...REPORT_PILLARS.technical,
-      rawScore: finiteNumber(honest?.google_score) ?? categoryScore('TECHNICAL_SEO'),
-      status: 'MEASURED' as const,
-    },
-    {
-      ...REPORT_PILLARS.geo,
-      rawScore: finiteNumber(honest?.ai_readiness_score) ?? categoryScore('GEO'),
-      status: 'MEASURED' as const,
-    },
-    {
-      ...REPORT_PILLARS.aeo,
-      rawScore: liveCitation,
-      status: liveCitation == null ? 'NOT_MEASURED' as const : 'LIVE_MEASURED' as const,
-    },
-    {
-      ...REPORT_PILLARS.cro,
-      rawScore: finiteNumber(honest?.human_score) ?? categoryScore('UX_CONVERSION'),
-      status: 'MEASURED' as const,
-    },
-  ] satisfies PillarInput[]).map((pillar): PillarInput => (
-    pillar.rawScore == null ? { ...pillar, status: 'NOT_MEASURED' } : pillar
-  ));
-  const authoritative = buildAuthoritativeScore(pillarInputs);
+  const authoritative = buildDisplayedScore(report);
   const scoreLedger: ScoreLedgerRow[] = authoritative.rows;
   const calculatedComposite = authoritative.composite;
   const technicalScore = scoreLedger.find((row) => row.categoryKey === 'TECHNICAL_SEO')?.rawScore ?? null;

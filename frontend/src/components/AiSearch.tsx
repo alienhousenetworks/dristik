@@ -225,13 +225,15 @@ export function AiSearch({ evaluations, geoReadiness, analysisId, onOpenPatchPac
                   <span className="label block text-[10px]">Extractability Score</span>
                   <div className="flex items-baseline justify-end gap-1 mt-0.5">
                     <span className="text-2xl font-sans font-bold text-ink">
-                      {geoReadiness?.extractability_score ?? 68}
+                      {geoReadiness?.extractability_score != null ? Math.round(geoReadiness.extractability_score) : '—'}
                     </span>
                     <span className="text-xs text-ink-500 font-mono">/ 100</span>
                   </div>
                 </div>
                 <div className="w-10 h-10 rounded-full bg-paper-200 border border-line flex items-center justify-center text-xs font-bold text-ink-700 font-mono">
-                  {geoReadiness?.questions_supported ?? 3}/{geoReadiness?.questions_total ?? 6}
+                  {geoReadiness?.questions_supported != null && geoReadiness?.questions_total != null
+                    ? `${geoReadiness.questions_supported}/${geoReadiness.questions_total}`
+                    : '—'}
                 </div>
               </div>
             </div>

@@ -9,6 +9,7 @@ import {
   TabId,
 } from '../types';
 import { synthesizePillars } from '../lib/pillarSynthesis';
+import { buildDisplayedScore } from '../lib/displayedAuditScore';
 import { display, scoreTone } from '../lib/format';
 import { ExecutiveTopActions } from './ExecutiveTopActions';
 import { CalibrationLeaders } from './CalibrationAxes';
@@ -99,7 +100,10 @@ export function Overview({
 }: OverviewProps) {
   const rollup = synthesizePillars(report);
   const activeContradictions = contradictions || (semantic?.contradiction ? [semantic.contradiction] : []);
-  const overallScore = typeof scores?.overall_score === 'number' ? Math.round(scores.overall_score) : null;
+  const displayed = report ? buildDisplayedScore(report) : null;
+  const overallScore = displayed?.composite != null
+    ? Math.round(displayed.composite)
+    : (typeof scores?.overall_score === 'number' ? Math.round(scores.overall_score) : null);
 
   const disciplineCards = [
     {

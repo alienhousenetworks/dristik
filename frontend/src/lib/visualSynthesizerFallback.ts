@@ -41,9 +41,12 @@ export function synthesizeVisualIntelligenceFallback(report: ExecutiveReport): V
     [catScores['ON_PAGE_SEO']?.score, 0.4],
   ]);
   const readiness = report.honest_scores?.ai_readiness_score;
-  const geoScore = typeof catScores['GEO']?.score === 'number'
-    ? Math.round(catScores['GEO'].score)
-    : (typeof readiness === 'number' ? Math.round(readiness) : null);
+  const measuredExtractability = report.geo_readiness?.extractability_score;
+  const geoScore = typeof measuredExtractability === 'number'
+    ? Math.round(measuredExtractability)
+    : (typeof catScores['GEO']?.score === 'number'
+      ? Math.round(catScores['GEO'].score)
+      : (typeof readiness === 'number' ? Math.round(readiness) : null));
   const sxoScore = typeof report.honest_scores?.human_score === 'number'
     ? Math.round(report.honest_scores.human_score)
     : (typeof catScores['UX_CONVERSION']?.score === 'number' ? Math.round(catScores['UX_CONVERSION'].score) : null);

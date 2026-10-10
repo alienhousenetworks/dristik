@@ -166,6 +166,37 @@ describe('NormalizedReport Model & Zero-Fake Enforcer', () => {
     expect(normalized.brief.keySignals.overallGrade).toBe('D');
   });
 
+  it('uses measured extractability instead of a GEO category score of 100', () => {
+    const normalized = normalizeExecutiveReport({
+      ...mockReport,
+      scores: {
+        ...mockReport.scores,
+        overall_score: 83,
+        grade: 'B',
+        category_scores: {
+          ...mockReport.scores.category_scores,
+          GEO: { score: 100, weight: 0.2, weighted_score: 20, status: 'MEASURED', summary: 'rubric pass' },
+        },
+      },
+      honest_scores: {
+        google_score: 79.6,
+        ai_readiness_score: 80,
+        human_score: 76.6,
+        live_ai_citation_score: 0,
+        ai_visibility_status: 'MEASURED',
+        ai_citation_score: 0,
+      },
+      geo_readiness: {
+        extractability_score: 52.7,
+      },
+    } as ExecutiveReport);
+
+    expect(normalized.scorecard.overallScore).toBe(52.4);
+    expect(normalized.scorecard.grade).toBe('D');
+    expect(normalized.brief.keySignals.geoScore).toBe(52.7);
+    expect(normalized.scorecard.ledger.find((row) => row.categoryKey === 'GEO')?.rawScore).toBe(52.7);
+  });
+
   it('does not copy on-page GEO into live citations', () => {
     const normalized = normalizeExecutiveReport({
       ...mockReport,

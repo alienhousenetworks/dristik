@@ -89,7 +89,7 @@ export function GeoWorkspaceView({
     return true;
   });
 
-  const readinessScore = report.scores?.category_scores?.['GEO']?.score;
+  const readinessScore = report.geo_readiness?.extractability_score ?? report.scores?.category_scores?.['GEO']?.score;
   const geoScore = readinessScore != null ? Math.round(readinessScore) : null;
   const scorecard = report.ai_visibility_scorecard;
   const brandName = report.business_profile?.business_name || report.domain.split('.')[0];

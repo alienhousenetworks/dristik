@@ -1,6 +1,7 @@
 import React from 'react';
 import { TabId, ExecutiveReport } from '../../types';
 import { synthesizePillars } from '../../lib/pillarSynthesis';
+import { buildDisplayedScore } from '../../lib/displayedAuditScore';
 import { cn, ScorePill } from '../ui';
 import { tabMatches } from '../../routes/navigation';
 import {
@@ -43,6 +44,7 @@ export function PillarNavBar({
   collapsed = false,
 }: PillarNavBarProps) {
   const rollup = synthesizePillars(report);
+  const displayedOverall = report ? buildDisplayedScore(report).composite : null;
   const patchesCount = (report?.code_patches?.length || 0) + (report?.remediation_patches?.length || 0);
 
   // Group 1: Executive
@@ -51,7 +53,7 @@ export function PillarNavBar({
       id: 'overview' as TabId,
       label: 'Executive Overview',
       icon: LayoutDashboard,
-      score: report && typeof report.scores?.overall_score === 'number' ? Math.round(report.scores.overall_score) : undefined,
+      score: displayedOverall != null ? Math.round(displayedOverall) : undefined,
     },
     {
       id: 'report' as TabId,

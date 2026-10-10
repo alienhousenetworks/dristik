@@ -1,6 +1,8 @@
 import React, { useState, useMemo } from 'react';
 import { ExecutiveReport, Finding, Severity, ClaimSourceType } from '../types';
 import { categoryLabel, costBasisCaption, display, formatAuditCost, formatPercent, formatMs, humanize } from '../lib/format';
+import { buildDisplayedScore } from '../lib/displayedAuditScore';
+import { finiteNumber } from '../report/models/scoreLedger';
 import { classifyFindingNature } from '../lib/findingClassifier';
 import { ScoringRubricModal } from './ScoringRubricModal';
 import { AdaptiveVisualIntelligence } from './VisualIntelligence/AdaptiveVisualIntelligence';
@@ -35,6 +37,12 @@ export function Big4AuditReport({
   const profile = report.business_profile;
   const scores = report.scores;
   const categories = Object.entries(scores.category_scores || {});
+  const displayed = buildDisplayedScore(report);
+  const displayedOverall = displayed.composite;
+  const geoMeasured = finiteNumber(report.geo_readiness?.extractability_score);
+  const shownCategoryScore = (key: string, score: number): number => (
+    key === 'GEO' && geoMeasured != null ? geoMeasured : score
+  );
   const findings = report.findings || [];
   const groundedFindings = findings.filter((f) => f.confidence_rubric !== 'GUESSING');
   const guessingFindings = findings.filter((f) => f.confidence_rubric === 'GUESSING');
@@ -371,7 +379,9 @@ export function Big4AuditReport({
               <span className="text-[10px] font-bold uppercase tracking-[0.04em] text-ink-500">Overall Health</span>
               <div className="flex items-baseline gap-2 mt-1">
                 <span className="text-4xl font-sans font-bold text-ink">
-                  {Math.round(report.honest_scores?.overall_score ?? scores.overall_score)}
+                  {displayedOverall != null
+                    ? Math.round(displayedOverall)
+                    : Math.round(report.honest_scores?.overall_score ?? scores.overall_score)}
                 </span>
                 <span className="text-sm font-semibold text-ink-600">/ 100</span>
               </div>
@@ -774,11 +784,13 @@ export function Big4AuditReport({
           <div className="mt-6 border border-line overflow-hidden shadow-sm">
             <div className="bg-paper-200 px-4 py-2.5 border-b border-line flex items-center justify-between text-xs">
               <span className="font-mono font-bold uppercase tracking-[0.04em] text-ink-700 text-[11px]">
-                Mathematical Score Formulation: Score = &Sigma; (Dimension Score &times; Base Weight)
+                Dossier composite: technical, measured GEO extractability, live citations, and conversion
               </span>
               <span className="font-mono text-ink-600 text-[11px]">
                 Audited Total:{' '}
-                <strong className="text-ink font-bold">{scores.overall_score.toFixed(2)}</strong> / 100
+                <strong className="text-ink font-bold">
+                  {displayedOverall != null ? displayedOverall.toFixed(1) : scores.overall_score.toFixed(2)}
+                </strong> / 100
               </span>
             </div>
             <table className="w-full text-left text-xs border-collapse">
@@ -794,9 +806,14 @@ export function Big4AuditReport({
               </thead>
               <tbody className="divide-y divide-line">
                 {categories.map(([key, cat]) => {
-                  const score = Math.round(cat.score);
-                  const weightPct = (cat.weight <= 1 ? cat.weight * 100 : cat.weight).toFixed(1);
-                  const contribution = (cat.weighted_score ?? (cat.score * (cat.weight <= 1 ? cat.weight : cat.weight / 100))).toFixed(2);
+                  const rawScore = shownCategoryScore(key, cat.score);
+                  const score = Math.round(rawScore);
+                  const weightFraction = cat.weight <= 1 ? cat.weight : cat.weight / 100;
+                  const weightPct = (weightFraction * 100).toFixed(1);
+                  const contribution = (key === 'GEO' && geoMeasured != null
+                    ? rawScore * weightFraction
+                    : (cat.weighted_score ?? (cat.score * weightFraction))
+                  ).toFixed(2);
                   const isSelected = inspectedScoreDimension === key;
                   const deductionsCount = cat.deductions?.length ?? 0;
 
@@ -859,13 +876,13 @@ export function Big4AuditReport({
                   <td className="p-3 text-center text-ink-400">—</td>
                   <td className="p-3 text-center text-ink-600">100.0%</td>
                   <td className="p-3 text-center text-ink-500 text-[11px]">
-                    &Sigma; (Score &times; Weight)
+                    Same number as the dossier cover
                   </td>
                   <td className="p-3 text-right text-sm font-bold text-ink-700">
-                    {scores.overall_score.toFixed(2)} pts
+                    {displayedOverall != null ? displayedOverall.toFixed(1) : scores.overall_score.toFixed(2)} pts
                   </td>
                   <td className="p-3 text-center text-[10px] text-good uppercase font-sans">
-                    {Math.round(scores.overall_score)}/100 Composite
+                    {displayedOverall != null ? Math.round(displayedOverall) : Math.round(scores.overall_score)}/100 Composite
                   </td>
                 </tr>
               </tfoot>
@@ -875,12 +892,13 @@ export function Big4AuditReport({
           {/* Interactive Scorecard Rubric & Finding Deductions Deep-Dive */}
           {(() => {
             const activeKey = inspectedScoreDimension || categories.reduce((minKey, [k, c]) => {
-              const currentScore = scores.category_scores?.[minKey]?.score ?? 100;
-              return c.score < currentScore ? k : minKey;
+              const currentScore = shownCategoryScore(minKey, scores.category_scores?.[minKey]?.score ?? 100);
+              return shownCategoryScore(k, c.score) < currentScore ? k : minKey;
             }, categories[0]?.[0] || 'TECHNICAL_SEO');
 
             const activeCat = scores.category_scores?.[activeKey];
             if (!activeCat) return null;
+            const activeShown = shownCategoryScore(activeKey, activeCat.score);
 
             const formulaBreakdown = activeCat.formula_breakdown || [];
             const deductions = activeCat.deductions || [];
@@ -898,11 +916,13 @@ export function Big4AuditReport({
                         {categoryLabel(activeKey)} Scorecard
                       </h3>
                       <span className="font-mono text-xs text-ink-500">
-                        (Raw Score: <strong className="text-ink">{Math.round(activeCat.score)}/100</strong> · Weight: {formatPercent(activeCat.weight)})
+                        (Raw Score: <strong className="text-ink">{Math.round(activeShown)}/100</strong> · Weight: {formatPercent(activeCat.weight)})
                       </span>
                     </div>
                     <p className="text-xs text-ink-600 mt-1">
-                      {activeCat.summary || 'Deterministic rubric components and itemized finding deductions for this dimension.'}
+                      {activeKey === 'GEO' && geoMeasured != null
+                        ? `Measured extractability is ${Math.round(geoMeasured)}/100. Rubric checks with no matching findings are not counted as 100.`
+                        : (activeCat.summary || 'Deterministic rubric components and itemized finding deductions for this dimension.')}
                     </p>
                   </div>
                   <div className="flex items-center gap-1 font-mono text-xs">
@@ -931,7 +951,7 @@ export function Big4AuditReport({
                         Rubric Scorecard Formula Breakdown
                       </span>
                       <span className="font-mono text-ink-500 text-[11px]">
-                        Formula Sum: <strong>{Math.round(activeCat.score)}</strong> / 100 pts
+                        Formula Sum: <strong>{Math.round(activeShown)}</strong> / 100 pts
                       </span>
                     </div>
                     <div className="border border-line bg-paper-50 rounded overflow-hidden">
@@ -983,10 +1003,10 @@ export function Big4AuditReport({
                         <tfoot>
                           <tr className="bg-paper-200 border-t border-line font-bold text-ink text-xs">
                             <td className="p-2 font-sans">Total Dimension Score</td>
-                            <td className="p-2 text-center">{Math.round(activeCat.score)}</td>
+                            <td className="p-2 text-center">{Math.round(activeShown)}</td>
                             <td className="p-2 text-center text-ink-500">100</td>
                             <td className="p-2 text-right font-sans text-[10px] text-ink-700">
-                              {activeCat.score >= 80 ? 'Optimal' : activeCat.score >= 60 ? 'Acceptable' : 'Deficient'}
+                              {activeShown >= 80 ? 'Optimal' : activeShown >= 60 ? 'Acceptable' : 'Deficient'}
                             </td>
                           </tr>
                         </tfoot>

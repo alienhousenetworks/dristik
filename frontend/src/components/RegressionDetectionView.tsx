@@ -1,6 +1,7 @@
 import React, { useMemo } from 'react';
 import { ExecutiveReport, RegressionReport, AuditSnapshot, RegressionItem } from '../types';
 import { scoreTone } from '../lib/format';
+import { buildDisplayedScore } from '../lib/displayedAuditScore';
 
 interface RegressionDetectionViewProps {
   report: ExecutiveReport;
@@ -64,11 +65,16 @@ function formatDelta(value: number): string {
 }
 
 function snapshotFromReport(report: ExecutiveReport): RegressionReport {
-  const score = report.scores?.overall_score;
+  const displayed = buildDisplayedScore(report).composite;
+  const score = displayed != null ? displayed : report.scores?.overall_score;
   const seal = report.sealed_evidence_snapshot_id || report.analysis_id || report.report_id || 'current';
   const categoryScores: Record<string, number> = {};
   const categories = report.scores?.category_scores || {};
   for (const [key, value] of Object.entries(categories)) {
+    if (key === 'GEO' && typeof report.geo_readiness?.extractability_score === 'number') {
+      categoryScores[key] = report.geo_readiness.extractability_score;
+      continue;
+    }
     if (value && typeof value.score === 'number') categoryScores[key] = value.score;
   }
   const snap: AuditSnapshot = {

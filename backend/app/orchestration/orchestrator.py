@@ -1027,6 +1027,9 @@ class AnalysisOrchestrator:
             except Exception as e:
                 logger.warning("Failed to enrich GEO readiness citations with LLM: %s", e)
             blackboard.geo_readiness = geo_readiness
+            extractability = getattr(geo_readiness, "extractability_score", None)
+            if overall_scores is not None and extractability is not None:
+                self.scoring_engine.apply_measured_geo_score(overall_scores, extractability)
 
             telemetry_data = telemetry_tracker.get_data()
 
