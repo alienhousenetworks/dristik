@@ -507,6 +507,7 @@ class SemanticBusinessRepresentation(BaseModel):
 
 class ResolvedEntity(BaseModel):
     name: str = Field(..., description="Canonical entity/brand name (never 'Unknown Business')")
+    brand_name: Optional[str] = Field(None, description="Canonical or displayed brand name alias")
     legal_name: Optional[str] = Field(None, description="Registered corporate/legal entity name")
     domain: str = Field(..., description="Canonical website domain")
     clean_host: Optional[str] = Field(None, description="Normalized hostname")
@@ -519,6 +520,17 @@ class ResolvedEntity(BaseModel):
     extraction_source: str = "DOMAIN_HEURISTIC"  # "ORGANIZATION_SCHEMA" | "OG_SITE_NAME" | "DOM_BRANDING" | "PAGE_TITLE" | "DOMAIN_TOKEN"
     niche: Optional[str] = None
     value_proposition: Optional[str] = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def _reconcile_brand_name(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            name_val = data.get("name") or data.get("brand_name")
+            if name_val:
+                data["name"] = name_val
+                if not data.get("brand_name"):
+                    data["brand_name"] = name_val
+        return data
 
 
 class BusinessProfile(BaseModel):

@@ -21,7 +21,10 @@ export interface LedgerRow {
   pillar: string;
   categoryKey: string;
   rawScore: number | null;
+  /** Effective share of this composite. Zero when the pillar is excluded. */
   weightPct: number;
+  /** Stated share before missing pillars are removed, such as 30. */
+  nominalWeightPct: number;
   contribution: number;
   status: PillarMeasurement;
   included: boolean;
@@ -32,6 +35,10 @@ export interface AuthoritativeScore {
   composite: number | null;
   grade: string;
   formula: string;
+  /** True when at least one pillar was left out and at least one remains. */
+  partialCoverage: boolean;
+  coverageLabel: string;
+  excludedPillars: string[];
 }
 
 export const REPORT_PILLARS = {
@@ -66,12 +73,14 @@ export function buildAuthoritativeScore(pillars: PillarInput[]): AuthoritativeSc
 
   const rows: LedgerRow[] = pillars.map((pillar) => {
     const included = pillar.status !== 'NOT_MEASURED' && pillar.rawScore != null && weightSum > 0;
+    const nominalWeightPct = roundTo(pillar.nominalWeight * 100, 1);
     if (!included || pillar.rawScore == null) {
       return {
         pillar: pillar.pillar,
         categoryKey: pillar.categoryKey,
         rawScore: null,
         weightPct: 0,
+        nominalWeightPct,
         contribution: 0,
         status: 'NOT_MEASURED',
         included: false,
@@ -83,6 +92,7 @@ export function buildAuthoritativeScore(pillars: PillarInput[]): AuthoritativeSc
       categoryKey: pillar.categoryKey,
       rawScore: roundTo(pillar.rawScore, 1),
       weightPct: roundTo(share * 100, 1),
+      nominalWeightPct,
       contribution: roundTo(pillar.rawScore * share, 2),
       status: pillar.status,
       included: true,
@@ -114,11 +124,22 @@ export function buildAuthoritativeScore(pillars: PillarInput[]): AuthoritativeSc
     ))
     .join(' + ');
 
+  const excludedPillars = rows.filter((row) => !row.included).map((row) => row.pillar);
+  const partialCoverage = excludedPillars.length > 0 && rows.some((row) => row.included);
+  const coverageLabel = composite == null
+    ? 'Not scored'
+    : partialCoverage
+      ? 'Partial-coverage composite'
+      : 'Full composite';
+
   return {
     rows,
     composite,
     grade: gradeForScore(composite),
     formula: composite == null ? formula : `${formula} = ${composite.toFixed(1)}`,
+    partialCoverage,
+    coverageLabel,
+    excludedPillars,
   };
 }
 

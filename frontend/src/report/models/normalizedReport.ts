@@ -19,7 +19,8 @@ import {
   RoadmapItem,
 } from '../../types';
 import { formatPercentPoints, formatRatioPercent, joinMetricValue } from '../../lib/format';
-import { answerabilityConfidence, buildLiveObservation } from './aiMeasurement';
+import { answerabilityConfidence, buildLiveObservation, questionDenominators } from './aiMeasurement';
+import { evidenceSupportsFinding } from './evidenceIntegrity';
 import { assignEvidenceHashes, EvidenceHashStatus } from './evidenceIntegrity';
 import { deriveRemediationClaim, RemediationClaim } from './remediationClaim';
 import { finiteNumber } from './scoreLedger';
@@ -59,6 +60,7 @@ export interface ScoreLedgerRow {
   categoryKey: string;
   rawScore: number | null;
   weightPct: number;
+  nominalWeightPct: number;
   contribution: number;
   status: string;
   included: boolean;
@@ -209,6 +211,9 @@ export interface NormalizedReport {
     pageCoveragePct: number | null;
     evidenceCoveragePct: number | null;
     answerabilityQuestions: number;
+    questionCoverage: { numerator: number; denominator: number };
+    answerability: { numerator: number; denominator: number };
+    claimGrounding: { numerator: number; denominator: number } | null;
     liveQueriesExecuted: number;
     liveQueriesAttempted: number;
     liveQueriesFailed: number;
@@ -248,6 +253,9 @@ export interface NormalizedReport {
     evidenceCoveragePercent: string;
     calculatedComposite: number | null;
     compositeFormula: string;
+    partialCoverage: boolean;
+    coverageLabel: string;
+    excludedPillars: string[];
     ledger: ScoreLedgerRow[];
     perspectives: {
       human: string;
@@ -355,6 +363,9 @@ export interface NormalizedReport {
   // Chapter 05: Conversion & Production Copy
   conversion: {
     fiveSecondHook?: string;
+    fiveSecondStatus: 'NOT_DETERMINABLE' | 'OBSERVED_COPY';
+    fiveSecondNotice: string;
+    croBoundary: string;
     formCount: number | null;
     formAccessibilityStatus: string;
     characterSafeCopy?: CharacterSafeCopy;
@@ -522,6 +533,19 @@ export function normalizeExecutiveReport(report: ExecutiveReport): NormalizedRep
       .map((ref) => evidenceMap.get(ref))
       .filter((item): item is NormalizedEvidenceItem => item !== undefined);
 
+    const claimText = `${f.title || ''} ${f.description || ''}`;
+    const inlineEvidence = (f.evidence || []).map((e, i) => ({
+      id: e.evidence_id || `ev_inline_${i + 1}`,
+      sourceType: e.source || 'DOM Ast',
+      url: e.url,
+      selector: e.selector,
+      snippet: e.snippet,
+      sha256: (e as { hash?: string }).hash,
+      hashStatus: (e as { hash?: string }).hash ? 'SEALED' as const : 'NOT_SEALED' as const,
+    }));
+    const citedEvidence = (matchedEvidence.length > 0 ? matchedEvidence : inlineEvidence)
+      .filter((item) => evidenceSupportsFinding(claimText, item));
+
     return {
       id: f.finding_id || `F-${String(idx + 1).padStart(3, '0')}`,
       title: f.title || 'Technical Discrepancy',
@@ -529,15 +553,7 @@ export function normalizeExecutiveReport(report: ExecutiveReport): NormalizedRep
       category: f.category || 'TECHNICAL_SEO',
       confidence: f.confidence,
       observation: f.description || '',
-      evidenceItems: matchedEvidence.length > 0 ? matchedEvidence : (f.evidence || []).map((e, i) => ({
-        id: e.evidence_id || `ev_inline_${i + 1}`,
-        sourceType: e.source || 'DOM Ast',
-        url: e.url,
-        selector: e.selector,
-        snippet: e.snippet,
-        sha256: (e as { hash?: string }).hash,
-        hashStatus: (e as { hash?: string }).hash ? 'SEALED' as const : 'NOT_SEALED' as const,
-      })),
+      evidenceItems: citedEvidence,
       businessImpact: f.business_impact,
       recommendation: f.recommendation,
       verificationNotes: f.verification_notes,
@@ -632,6 +648,7 @@ export function normalizeExecutiveReport(report: ExecutiveReport): NormalizedRep
   });
 
   const liveObservation = buildLiveObservation(report.ai_visibility_scorecard);
+  const questionMetrics = questionDenominators(sandboxEvals);
 
   const competitiveChapterTitle = hasLegitCompetitor
     ? 'Competitive Intelligence & Knowledge Graph'
@@ -692,6 +709,9 @@ export function normalizeExecutiveReport(report: ExecutiveReport): NormalizedRep
       pageCoveragePct: sampleCoverage,
       evidenceCoveragePct,
       answerabilityQuestions: sandboxEvals.length,
+      questionCoverage: questionMetrics.coverage,
+      answerability: questionMetrics.answerability,
+      claimGrounding: questionMetrics.claimGrounding,
       liveQueriesExecuted: liveObservation.queriesExecuted,
       liveQueriesAttempted: liveObservation.queriesAttempted,
       liveQueriesFailed: liveObservation.queriesFailed,
@@ -738,6 +758,9 @@ export function normalizeExecutiveReport(report: ExecutiveReport): NormalizedRep
       evidenceCoveragePercent: evidenceCoveragePct == null ? '—' : formatPercentPoints(evidenceCoveragePct),
       calculatedComposite,
       compositeFormula: authoritative.formula,
+      partialCoverage: authoritative.partialCoverage,
+      coverageLabel: authoritative.coverageLabel,
+      excludedPillars: authoritative.excludedPillars,
       ledger: scoreLedger,
       perspectives: {
         human:
@@ -809,7 +832,9 @@ export function normalizeExecutiveReport(report: ExecutiveReport): NormalizedRep
         domExtractabilityScore: geoScore,
         readinessBand: geoScore == null ? 'Not measured' : geoScore >= 75 ? 'High' : (geoScore >= 50 ? 'Medium' : 'Low'),
         citationReadiness: geoScore == null ? 'Not measured' : geoScore >= 75 ? 'High' : 'Medium',
-        groundingCoveragePct: evidenceCoveragePct,
+        groundingCoveragePct: questionMetrics.claimGrounding && questionMetrics.claimGrounding.denominator > 0
+          ? Math.round((questionMetrics.claimGrounding.numerator / questionMetrics.claimGrounding.denominator) * 1000) / 10
+          : null,
         answerabilityRatePct: sandboxEvals.length > 0
           ? Math.round((sandboxEvals.filter((q) => q.answerability_status === 'ANSWERABLE').length / sandboxEvals.length) * 100)
           : null,
@@ -858,7 +883,18 @@ export function normalizeExecutiveReport(report: ExecutiveReport): NormalizedRep
     },
 
     conversion: {
-      fiveSecondHook: (rawPageReports[0]?.copywriting?.suggested as any)?.hook_3sec || profile.value_proposition,
+      fiveSecondHook: Array.isArray(rawPages[0]?.h1) ? rawPages[0]?.h1?.[0] : undefined,
+      fiveSecondStatus: 'NOT_DETERMINABLE',
+      fiveSecondNotice: Array.isArray(rawPages[0]?.h1) && rawPages[0]?.h1?.[0]
+        ? 'The line above is the crawled H1. A timed five-second comprehension test was not run, so comprehension was not scored.'
+        : 'A five-second value-proposition test was not determinable from the crawled evidence. No timed comprehension result is reported.',
+      croBoundary: [
+        'This CRO figure covers observable copy and DOM checks on the analyzed pages.',
+        (report as any).form_audit ? 'A form screen ran. It is an automated label check, not a WCAG certification.' : 'No form audit ran.',
+        report.google_performance?.analytics?.state === 'MEASURED'
+          ? 'Analytics supplied visitor numbers for this run.'
+          : 'GA4 was not connected, so conversion rate, funnel abandonment, and revenue were not measured.',
+      ].join(' '),
       formCount: (report as any).form_audit ? finiteNumber((report as any).form_audit.total_forms_found) : null,
       formAccessibilityStatus: !(report as any).form_audit
         ? 'Not measured'
@@ -926,7 +962,9 @@ export function normalizeExecutiveReport(report: ExecutiveReport): NormalizedRep
       verifiedFactCount: evidenceList.length,
       knownLimitations: [
         'Chrome User Experience Report (CrUX) publishes real-user 28-day Core Web Vitals only for origins with sufficient Chrome traffic volume.',
-        'Answer engines continually update RAG indexes; citations reflect empirical tests during audit execution.',
+        liveObservation.isMeasured
+          ? 'Citation figures count only the engine responses that completed on this run. On-page extractability is a separate measurement.'
+          : 'Live answer-engine citations were not measured on this run. On-page extractability is not a citation rate.',
         'Zero-Fake enforcement: Unmeasured dimensions are explicitly labeled as unmeasured rather than estimated.',
       ],
     },

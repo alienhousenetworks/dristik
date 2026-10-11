@@ -202,6 +202,75 @@ describe('NormalizedReport Model & Zero-Fake Enforcer', () => {
     expect(normalized.scorecard.ledger.find((row) => row.categoryKey === 'GEO')?.rawScore).toBe(52.7);
     expect(normalized.brief.leadThesis).toContain('69.8/100 (grade C)');
     expect(normalized.brief.leadThesis).not.toContain('83/100');
+    expect(normalized.scorecard.coverageLabel).toBe('Partial-coverage composite');
+    expect(normalized.scorecard.ledger.find((row) => row.categoryKey === 'TECHNICAL_SEO')?.nominalWeightPct).toBe(30);
+    expect(normalized.scorecard.ledger.find((row) => row.categoryKey === 'TECHNICAL_SEO')?.weightPct).toBe(40);
+  });
+
+  it('rewrites an executive score that is not the sealed overall', () => {
+    const normalized = normalizeExecutiveReport({
+      ...mockReport,
+      story_summary: 'Acme scores 78/100 (grade B). This figure is the weighted rollup of pillar scores.',
+      scores: {
+        ...mockReport.scores,
+        overall_score: 68,
+        grade: 'C',
+      },
+      honest_scores: {
+        google_score: 79.6,
+        ai_readiness_score: 80,
+        human_score: 76.6,
+        live_ai_citation_score: 0,
+        ai_visibility_status: 'MEASURED',
+      },
+      geo_readiness: { extractability_score: 52.7 },
+    } as ExecutiveReport);
+
+    expect(normalized.scorecard.overallScore).toBe(69.8);
+    expect(normalized.brief.keySignals.overallGrade).toBe('C');
+    expect(normalized.brief.leadThesis).toContain('69.8/100 (grade C)');
+    expect(normalized.brief.leadThesis).not.toContain('78/100');
+  });
+
+  it('does not cite a title selector for an image-alt finding that shares ext_001', () => {
+    const normalized = normalizeExecutiveReport({
+      ...mockReport,
+      findings: [
+        {
+          finding_id: 'F-ALT',
+          title: 'Missing image accessibility alt text',
+          description: 'Images lack alt attributes.',
+          severity: 'MEDIUM',
+          category: 'ON_PAGE_SEO',
+          evidence_refs: ['ext_001'],
+        },
+        {
+          finding_id: 'F-TITLE',
+          title: 'Duplicate title tag',
+          description: 'Several URLs share one title.',
+          severity: 'MEDIUM',
+          category: 'ON_PAGE_SEO',
+          evidence_refs: ['ext_001'],
+        },
+      ] as any,
+      evidence_ledger: {
+        ext_001: {
+          source_type: 'external',
+          url: 'https://enterprise-analytics.io',
+          selector: 'title',
+          text: 'Enterprise Analytics',
+          hash: `sha256:${'c'.repeat(64)}`,
+        },
+      } as any,
+    } as ExecutiveReport);
+
+    expect(normalized.appendices.findings[0].evidenceItems).toEqual([]);
+    expect(normalized.appendices.findings[1].evidenceItems[0].selector).toBe('title');
+    expect(normalized.coverageConfidence.questionCoverage).toEqual({ numerator: 1, denominator: 1 });
+    expect(normalized.coverageConfidence.answerability).toEqual({ numerator: 0, denominator: 1 });
+    expect(normalized.coverageConfidence.claimGrounding).toBeNull();
+    expect(normalized.conversion.fiveSecondStatus).toBe('NOT_DETERMINABLE');
+    expect(normalized.conversion.fiveSecondHook).toBeUndefined();
   });
 
   it('keeps a measured citation zero when this run has engine responses', () => {

@@ -78,7 +78,7 @@ export function CoverPage({ report }: CoverPageProps) {
           <div className="flex flex-wrap items-center gap-3">
             <div className="p-3 px-5 border border-line bg-paper-100 rounded">
               <span className="font-mono text-[7.5pt] uppercase tracking-[0.04em] text-ink-500 block">
-                Composite Discoverability Score
+                {scorecard.coverageLabel}
               </span>
               <div className="flex items-baseline gap-2 mt-0.5">
                 <span className="font-sans text-3xl font-bold text-ink">
@@ -112,7 +112,7 @@ export function CoverPage({ report }: CoverPageProps) {
                 )}
               </div>
               <span className="font-mono text-[6.5pt] text-ink-500 block mt-0.5">
-                Same total as the calculation ledger. Applies only to the audited sample.
+                Same total and grade as the executive brief and the calculation ledger. Applies only to the audited sample.
               </span>
             </div>
           </div>
@@ -123,7 +123,7 @@ export function CoverPage({ report }: CoverPageProps) {
               <span>EVIDENCE-GOVERNED AUDIT SPECIFICATION</span>
             </div>
             <p className="text-[7.5pt] font-mono text-ink-500 mt-1">
-              Empirically verified AST ground truth · SHA-256 sealed ledger
+              Evidence-linked findings · a content hash checks integrity, not correctness
             </p>
           </div>
         </div>

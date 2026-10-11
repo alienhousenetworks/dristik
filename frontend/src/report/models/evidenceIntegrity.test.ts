@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { assignEvidenceHashes, formatEvidenceHash } from './evidenceIntegrity';
+import { assignEvidenceHashes, evidenceSupportsFinding, formatEvidenceHash } from './evidenceIntegrity';
 
 const snapshot = 'sha256:abcdef1234567890abcdef1234567890';
 
@@ -28,5 +28,12 @@ describe('evidence hashes', () => {
     expect(rows[0].sha256).not.toBe(rows[1].sha256);
     expect(rows[0].hashStatus).toBe('SEALED');
     expect(formatEvidenceHash(rows[0].sha256, rows[0].hashStatus)).toMatch(/^sha256:a{16}…$/);
+  });
+
+  it('rejects a title selector on an image-alt finding and on a header finding', () => {
+    expect(evidenceSupportsFinding('Images lack alt text', { id: 'ext_001', selector: 'title' })).toBe(false);
+    expect(evidenceSupportsFinding('HSTS header is missing', { id: 'ext_001', selector: 'title', sourceType: 'external' })).toBe(false);
+    expect(evidenceSupportsFinding('Images lack alt text', { id: 'ev_img', selector: 'img', sourceType: 'dom' })).toBe(true);
+    expect(evidenceSupportsFinding('Duplicate title tag', { id: 'ext_001', selector: 'title' })).toBe(true);
   });
 });

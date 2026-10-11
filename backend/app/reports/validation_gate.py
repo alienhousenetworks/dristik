@@ -125,6 +125,17 @@ class ValidationGate:
             "; ".join(score_inconsistencies) if score_inconsistencies else ""
         )
 
+        from app.scoring.displayed_score import displayed_composite, story_matches_composite
+        dossier_composite = displayed_composite(report)
+        story_agrees = story_matches_composite(getattr(report, "story_summary", "") or "", dossier_composite)
+        record(
+            "headline_score_matches_composite",
+            story_agrees,
+            "" if story_agrees else (
+                f"Executive story score disagrees with the dossier composite {dossier_composite}."
+            ),
+        )
+
         # 1.5: Composite scores are derivable from components
         composite_ok = True
         composite_err = ""
@@ -634,6 +645,17 @@ class ValidationGate:
         5. Copy linting: removes banned terms.
         """
         repairs_made: List[str] = []
+
+        from app.scoring.displayed_score import align_story_score, displayed_composite, story_matches_composite
+        dossier_composite = displayed_composite(report)
+        if dossier_composite is not None and report.story_summary and not story_matches_composite(report.story_summary, dossier_composite):
+            sealed = getattr(getattr(report, "scores", None), "overall_score", None)
+            aligned = align_story_score(report.story_summary, sealed, dossier_composite)
+            if aligned != report.story_summary:
+                report.story_summary = aligned
+                repairs_made.append(
+                    f"Rewrote the executive headline score to the dossier composite {dossier_composite:.1f}."
+                )
 
         # 0. Rule 4.2: Cross-check 100-scores against findings and rescore
         if report.scores and report.scores.category_scores:

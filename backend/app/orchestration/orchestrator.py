@@ -1734,9 +1734,22 @@ class AnalysisOrchestrator:
             elif node_id == "node_entity_resolution":
                 domain = urlparse(blackboard.website_url).netloc.replace("www.", "")
                 if not getattr(blackboard, "resolved_entity", None):
+                    try:
+                        from app.intelligence.business.entity_resolver import UniversalEntityResolver
+                        blackboard.resolved_entity = UniversalEntityResolver.resolve_from_evidence(
+                            evidence_store=blackboard.evidence_store,
+                            website_url=blackboard.website_url,
+                            pages=blackboard.pages or [],
+                            profile=getattr(blackboard, "business_profile", None),
+                        )
+                    except Exception:
+                        pass
+                if not getattr(blackboard, "resolved_entity", None):
                     from app.domain.models import ResolvedEntity
+                    brand = domain.split(".")[0].capitalize() or "Brand"
                     blackboard.resolved_entity = ResolvedEntity(
-                        brand_name=domain.split(".")[0].capitalize(),
+                        name=brand,
+                        brand_name=brand,
                         domain=domain,
                         confidence=0.9
                     )

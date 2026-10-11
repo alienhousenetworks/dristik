@@ -9,6 +9,19 @@ interface ExecutiveBriefProps {
   report: NormalizedReport;
 }
 
+function ratioText(ratio: { numerator: number; denominator: number } | null, empty: string): string {
+  if (!ratio || ratio.denominator <= 0) return empty;
+  return `${ratio.numerator}/${ratio.denominator}`;
+}
+
+function weightCaption(row: NormalizedReport['scorecard']['ledger'][number] | undefined): string {
+  if (!row) return 'Not in this composite';
+  const nominal = `${row.nominalWeightPct}% nominal`;
+  if (!row.included) return `${nominal} · excluded`;
+  if (row.nominalWeightPct !== row.weightPct) return `${nominal} · ${row.weightPct}% effective`;
+  return `${row.weightPct}%`;
+}
+
 function GoogleChannelCard({
   title,
   channel,
@@ -76,6 +89,11 @@ function GooglePerformance({ report }: { report: NormalizedReport }) {
 export function ExecutiveBrief({ theme, report }: ExecutiveBriefProps) {
   const { brief, meta } = report;
   const { keySignals } = brief;
+  const ledger = report.scorecard.ledger;
+  const technicalRow = ledger.find((row) => row.categoryKey === 'TECHNICAL_SEO');
+  const geoRow = ledger.find((row) => row.categoryKey === 'GEO');
+  const aeoRow = ledger.find((row) => row.categoryKey === 'AEO');
+  const croRow = ledger.find((row) => row.categoryKey === 'UX_CONVERSION');
 
   return (
     <section className="report-page-break p-8 md:p-14 min-h-[960px] flex flex-col justify-between bg-paper-50 border-b-2 border-line">
@@ -109,7 +127,7 @@ export function ExecutiveBrief({ theme, report }: ExecutiveBriefProps) {
           <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 p-4 bg-paper-100 border border-line rounded">
             <div className="text-center p-2 border-r border-line last:border-r-0">
               <span className="font-mono text-[7.5pt] uppercase tracking-[0.04em] text-ink-500 block">
-                Composite Index
+                {report.scorecard.coverageLabel}
               </span>
               <div className="font-sans text-3xl font-bold text-ink mt-1">
                 {keySignals.overallScore != null ? keySignals.overallScore.toFixed(1) : '—'}
@@ -123,8 +141,9 @@ export function ExecutiveBrief({ theme, report }: ExecutiveBriefProps) {
 
             <div className="text-center p-2 border-r border-line last:border-r-0">
               <span className="font-mono text-[7.5pt] uppercase tracking-[0.04em] text-ink-500 block">
-                1. Technical SEO (30%)
+                1. Technical SEO
               </span>
+              <span className="font-mono text-[6.5pt] text-ink-400 block">{weightCaption(technicalRow)}</span>
               <div className="font-sans text-3xl font-bold text-ink mt-1">
                 {keySignals.technicalScore != null ? keySignals.technicalScore : '—'}
               </div>
@@ -133,8 +152,9 @@ export function ExecutiveBrief({ theme, report }: ExecutiveBriefProps) {
 
             <div className="text-center p-2 border-r border-line last:border-r-0">
               <span className="font-mono text-[7.5pt] uppercase tracking-[0.04em] text-ink-500 block">
-                2. GEO Readiness (25%)
+                2. GEO Readiness
               </span>
+              <span className="font-mono text-[6.5pt] text-ink-400 block">{weightCaption(geoRow)}</span>
               <div className="font-sans text-3xl font-bold text-ink mt-1">
                 {keySignals.geoScore != null ? keySignals.geoScore : '—'}
               </div>
@@ -145,6 +165,7 @@ export function ExecutiveBrief({ theme, report }: ExecutiveBriefProps) {
               <span className="font-mono text-[7.5pt] uppercase tracking-[0.04em] text-ink-500 block">
                 3. Live citations
               </span>
+              <span className="font-mono text-[6.5pt] text-ink-400 block">{weightCaption(aeoRow)}</span>
               <div className="font-sans text-3xl font-bold text-ink mt-1">
                 {keySignals.aeoScore != null ? keySignals.aeoScore : '—'}
               </div>
@@ -157,17 +178,27 @@ export function ExecutiveBrief({ theme, report }: ExecutiveBriefProps) {
 
             <div className="text-center p-2">
               <span className="font-mono text-[7.5pt] uppercase tracking-[0.04em] text-ink-500 block">
-                4. CRO &amp; UX (20%)
+                4. CRO &amp; UX
               </span>
+              <span className="font-mono text-[6.5pt] text-ink-400 block">{weightCaption(croRow)}</span>
               <div className="font-sans text-3xl font-bold text-ink mt-1">
                 {keySignals.croScore != null ? keySignals.croScore : '—'}
               </div>
-              <span className="font-mono text-[7.5pt] text-ink-400 block mt-1">Visitor Clarity</span>
+              <span className="font-mono text-[7.5pt] text-ink-400 block mt-1">Copy and DOM only</span>
             </div>
           </div>
-          <div className="px-1 flex items-center justify-between text-[7.5pt] font-mono text-ink-500">
-            <span>Deterministic Derivation: Σ (Pillar Score × Assigned Weight) = {keySignals.overallScore != null ? keySignals.overallScore.toFixed(1) : '—'}</span>
-            <span>Mathematical Ledger Audited</span>
+          <div className="px-1 space-y-1 text-[7.5pt] font-mono text-ink-500">
+            <div className="flex items-center justify-between gap-3">
+              <span>Same composite as the calculation ledger: Σ (pillar score × effective weight) = {keySignals.overallScore != null ? keySignals.overallScore.toFixed(1) : '—'}</span>
+              <span>{report.scorecard.coverageLabel}</span>
+            </div>
+            {report.scorecard.partialCoverage && (
+              <p className="font-sans text-ink-600 leading-relaxed">
+                Partial-coverage composite. Excluded: {report.scorecard.excludedPillars.join('; ') || 'none'}.
+                Nominal weights stay 30% SEO, 25% GEO, 25% live citations, and 20% CRO. Effective weights are the nominal weights of the measured pillars scaled to 100%. This total is not comparable to a fully measured audit.
+              </p>
+            )}
+            <p className="font-sans text-ink-600 leading-relaxed">{report.conversion.croBoundary}</p>
           </div>
         </div>
 
@@ -193,17 +224,29 @@ export function ExecutiveBrief({ theme, report }: ExecutiveBriefProps) {
                 </strong>
               </div>
               <div className="bg-paper-50 p-2 rounded border border-line">
-                <span className="text-ink-400 block text-[6.5pt] uppercase">Evidence Coverage</span>
+                <span className="text-ink-400 block text-[6.5pt] uppercase">Evidence coverage</span>
                 <strong className="text-ink text-[8pt] block mt-0.5">
                   {report.coverageConfidence.evidenceCoveragePct == null
                     ? 'Not recorded'
-                    : `${formatPercentPoints(report.coverageConfidence.evidenceCoveragePct)} grounded`}
+                    : `${formatPercentPoints(report.coverageConfidence.evidenceCoveragePct)} of score inputs`}
                 </strong>
               </div>
               <div className="bg-paper-50 p-2 rounded border border-line">
-                <span className="text-ink-400 block text-[6.5pt] uppercase">On-page questions</span>
+                <span className="text-ink-400 block text-[6.5pt] uppercase">Question coverage</span>
                 <strong className="text-ink text-[8pt] block mt-0.5">
-                  {report.coverageConfidence.answerabilityQuestions} evaluated
+                  {ratioText(report.coverageConfidence.questionCoverage, 'Not assessed')}
+                </strong>
+              </div>
+              <div className="bg-paper-50 p-2 rounded border border-line">
+                <span className="text-ink-400 block text-[6.5pt] uppercase">Answerability</span>
+                <strong className="text-ink text-[8pt] block mt-0.5">
+                  {ratioText(report.coverageConfidence.answerability, 'Not assessed')}
+                </strong>
+              </div>
+              <div className="bg-paper-50 p-2 rounded border border-line">
+                <span className="text-ink-400 block text-[6.5pt] uppercase">Claim grounding</span>
+                <strong className="text-ink text-[8pt] block mt-0.5">
+                  {ratioText(report.coverageConfidence.claimGrounding, 'Not recorded')}
                 </strong>
               </div>
               <div className="bg-paper-50 p-2 rounded border border-line">
@@ -232,6 +275,7 @@ export function ExecutiveBrief({ theme, report }: ExecutiveBriefProps) {
 
             <p className="font-sans text-[7.5pt] text-ink-500 italic">
               {report.coverageConfidence.scopeLimitationNotice}
+              {' '}Question coverage is completed assessments over questions in scope. Answerability is questions with a supporting passage over questions assessed. Claim grounding is supported claims over claims evaluated. A completed question is not an answered question.
             </p>
           </div>
         )}
@@ -243,7 +287,7 @@ export function ExecutiveBrief({ theme, report }: ExecutiveBriefProps) {
           {/* 1. What is working */}
           <div className="p-4 rounded bg-good/10 border border-good/30 space-y-2">
             <span className="font-mono text-[8pt] font-bold uppercase tracking-[0.04em] text-good block">
-              ✓ WHAT IS WORKING (VERIFIED)
+              ✓ WHAT IS WORKING (OBSERVED)
             </span>
             <ul className="text-[8.5pt] text-ink-700 space-y-1.5 list-disc pl-4 font-sans leading-relaxed">
               {brief.whatIsWorking.length > 0 ? (

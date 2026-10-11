@@ -1,5 +1,6 @@
 import React from 'react';
 import { ReportTheme } from '../brandTheme';
+import { countWords } from '../models/copyCounts';
 import { NormalizedReport } from '../models/normalizedReport';
 import { ChapterOpener } from './ChapterOpener';
 import { PageHeader, PageFooter } from './PageHeaderFooter';
@@ -15,6 +16,9 @@ export function Chapter05Conversion({
 }: Chapter05ConversionProps) {
   const { conversion, meta } = report;
   const copySuite = conversion.characterSafeCopy;
+  const headlineWords = countWords(copySuite?.hero_headline);
+  const blockWords = countWords(`${copySuite?.hero_headline || ''} ${copySuite?.hero_subhead || ''}`);
+  const blockStatus = blockWords >= 40 && blockWords <= 60 ? 'within 40–60' : blockWords < 40 ? 'under 40' : 'over 60';
 
   return (
     <>
@@ -58,10 +62,10 @@ export function Chapter05Conversion({
                 5-Second First-Impression Value Proposition
               </span>
               <p className="font-sans text-[11pt] font-normal italic text-ink leading-snug">
-                "{conversion.fiveSecondHook || 'No hero value proposition was recorded on the sampled pages.'}"
+                {conversion.fiveSecondHook ? `"${conversion.fiveSecondHook}"` : 'Not determinable from the crawled evidence.'}
               </p>
               <p className="text-[7.5pt] text-ink-500 font-sans">
-                Tested against the 5-second visitor cognitive threshold for category comprehension.
+                {conversion.fiveSecondNotice}
               </p>
             </div>
 
@@ -84,7 +88,7 @@ export function Chapter05Conversion({
                 </span>
               </div>
               <p className="text-[7.5pt] text-ink-600 font-sans">
-                Automated screening only. It is not a WCAG certification.
+                {conversion.croBoundary} Automated screening is not a WCAG certification and it is not a measured conversion rate.
               </p>
             </div>
           </div>
@@ -132,12 +136,17 @@ export function Chapter05Conversion({
                 <div className="flex items-center justify-between font-mono text-[7.5pt]">
                   <span className="font-bold text-ink">RECOMMENDED PRIMARY H1 HEADLINE</span>
                   <span className="text-ink-500 font-mono">
-                    {copySuite?.hero_headline ? `${copySuite.hero_word_count} words · ${copySuite.hero_status}` : 'Not generated'}
+                    {copySuite?.hero_headline ? `${headlineWords} words in this headline` : 'Not generated'}
                   </span>
                 </div>
                 <p className="font-sans text-[10.5pt] text-ink font-normal">
                   {copySuite?.hero_headline || 'No headline recommendation was generated.'}
                 </p>
+                {copySuite?.hero_subhead && (
+                  <p className="font-mono text-[7.5pt] text-ink-500">
+                    Headline and subhead together: {blockWords} words ({blockStatus} for the 40–60 word block). The headline count above is only the H1.
+                  </p>
+                )}
               </div>
             </div>
           </div>
@@ -149,8 +158,8 @@ export function Chapter05Conversion({
                 <span className="font-mono text-[8pt] font-bold uppercase tracking-[0.04em] text-ink">
                   5.3 Commercial Landing Page Blueprint: {conversion.leadGenOpportunity.route}
                 </span>
-                <span className="font-mono text-[7.5pt] font-bold px-2 py-0.5 rounded bg-good/10 text-good">
-                  Ready to Deploy
+                <span className="font-mono text-[7.5pt] font-bold px-2 py-0.5 rounded bg-warn/10 text-warn">
+                  Suggested — not deployed
                 </span>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-[8pt] pt-1">

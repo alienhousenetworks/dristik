@@ -185,6 +185,72 @@ export interface AnswerabilityConfidence {
  * Confidence is omitted unless the check recorded grounding or citability
  * against a passage that was actually found.
  */
+export interface QuestionRatio {
+  numerator: number;
+  denominator: number;
+}
+
+export interface QuestionDenominators {
+  /** Questions with a completed assessment, over questions in scope. */
+  coverage: QuestionRatio;
+  /** Questions with a supporting passage and an answerable status, over questions assessed. */
+  answerability: QuestionRatio;
+  /** Supported claims over claims evaluated. Null when no claim check was recorded. */
+  claimGrounding: QuestionRatio | null;
+}
+
+const COMPLETED_QUESTION = new Set(['ANSWERABLE', 'PARTIAL', 'UNANSWERABLE', 'CONFLICTING']);
+
+export interface QuestionMetricInput {
+  answerability_status?: string | null;
+  evidence_url?: string | null;
+  evidence_snippet?: string | null;
+  grounding_ratio?: number | null;
+  claim_decomposition?: Array<{ status?: string | null; evidence_url?: string | null; evidence_snippet?: string | null }> | null;
+}
+
+function hasPassage(question: QuestionMetricInput): boolean {
+  return Boolean((question.evidence_url || '').trim() || (question.evidence_snippet || '').trim());
+}
+
+/**
+ * Coverage, answerability, and claim grounding use different denominators.
+ * A finished question check is not an answered question, and evidence
+ * coverage of the score is not claim grounding.
+ */
+export function questionDenominators(questions: QuestionMetricInput[]): QuestionDenominators {
+  const completed = questions.filter((question) => COMPLETED_QUESTION.has((question.answerability_status || '').toUpperCase()));
+  const answerable = completed.filter((question) => (
+    (question.answerability_status || '').toUpperCase() === 'ANSWERABLE' && hasPassage(question)
+  ));
+  let claimsEvaluated = 0;
+  let claimsGrounded = 0;
+  let sawClaimCheck = false;
+  questions.forEach((question) => {
+    const claims = question.claim_decomposition || [];
+    if (claims.length > 0) {
+      sawClaimCheck = true;
+      claimsEvaluated += claims.length;
+      claimsGrounded += claims.filter((claim) => (
+        (claim.status || '').toUpperCase() === 'SUPPORTED'
+        && Boolean((claim.evidence_url || '').trim() || (claim.evidence_snippet || '').trim())
+      )).length;
+      return;
+    }
+    if (typeof question.grounding_ratio === 'number' && Number.isFinite(question.grounding_ratio)) {
+      sawClaimCheck = true;
+      claimsEvaluated += 1;
+      const points = question.grounding_ratio <= 1 ? question.grounding_ratio : question.grounding_ratio / 100;
+      if (points >= 1 && hasPassage(question)) claimsGrounded += 1;
+    }
+  });
+  return {
+    coverage: { numerator: completed.length, denominator: questions.length },
+    answerability: { numerator: answerable.length, denominator: completed.length },
+    claimGrounding: sawClaimCheck ? { numerator: claimsGrounded, denominator: claimsEvaluated } : null,
+  };
+}
+
 export function answerabilityConfidence(input: AnswerabilityInput): AnswerabilityConfidence {
   const status = (input.answerabilityStatus || '').toUpperCase();
   const answerabilityPct = status === 'ANSWERABLE' ? 100 : status === 'PARTIAL' ? 50 : 0;

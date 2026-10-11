@@ -40,6 +40,9 @@ export function AuditSnapshot({
             Audit Snapshot &amp; Cognitive Matrix
           </h2>
           <div className="bg-ink w-10 h-px mt-2" />
+          <p className="text-[8pt] text-ink-600 font-sans mt-2 leading-relaxed">
+            {report.coverageConfidence.scopeLimitationNotice} {report.scorecard.coverageLabel}.
+          </p>
         </div>
 
         {/* 1. Tri-Perspective Cognitive Diagnosis */}
@@ -176,7 +179,8 @@ export function AuditSnapshot({
                   <th className="py-2 px-3">Audit Pillar / Category</th>
                   <th className="py-2 px-3">Status</th>
                   <th className="py-2 px-3">Raw Score</th>
-                  <th className="py-2 px-3">Weight (%)</th>
+                  <th className="py-2 px-3">Nominal</th>
+                  <th className="py-2 px-3">Effective</th>
                   <th className="py-2 px-3 text-right">Contribution</th>
                 </tr>
               </thead>
@@ -190,7 +194,8 @@ export function AuditSnapshot({
                       </span>
                     </td>
                     <td className="py-2 px-3 font-bold">{row.included && row.rawScore != null ? row.rawScore.toFixed(1) : '—'}</td>
-                    <td className="py-2 px-3 text-ink-600">{row.included ? formatPercentPoints(row.weightPct) : '—'}</td>
+                    <td className="py-2 px-3 text-ink-600">{formatPercentPoints(row.nominalWeightPct)}</td>
+                    <td className="py-2 px-3 text-ink-600">{row.included ? formatPercentPoints(row.weightPct) : 'excluded'}</td>
                     <td className="py-2 px-3 text-right font-bold text-ink">
                       {row.included ? `+${row.contribution.toFixed(2)}` : 'excluded'}
                     </td>
@@ -199,8 +204,8 @@ export function AuditSnapshot({
               </tbody>
               <tfoot>
                 <tr className="bg-paper-200 border-t-2 border-line font-mono text-[8.5pt]">
-                  <td colSpan={3} className="py-2 px-3 font-bold font-sans text-ink">
-                    Total Deterministic Composite Score
+                  <td colSpan={4} className="py-2 px-3 font-bold font-sans text-ink">
+                    {scorecard.coverageLabel}
                   </td>
                   <td className="py-2 px-3 text-ink-600 font-bold">
                     {formatPercentPoints(scorecard.ledger.filter((row) => row.included).reduce((sum, row) => sum + row.weightPct, 0))}

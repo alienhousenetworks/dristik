@@ -1,7 +1,7 @@
 """Dossier score, SERP copy, and Google channel status stay internally consistent."""
 from app.integrations.google_report import collect_google_performance, map_analytics, map_search_console
 from app.remediation.serp_text import fit_serp_text
-from app.scoring.displayed_score import align_story_score, displayed_composite
+from app.scoring.displayed_score import align_story_score, displayed_composite, story_matches_composite
 
 
 def _pillars(**extra):
@@ -42,6 +42,22 @@ def test_story_sentence_uses_the_dossier_composite():
     aligned = align_story_score(story, 83, 69.8)
     assert aligned.startswith("Acme scores 69.8/100 (grade C).")
     assert "83/100" not in aligned
+
+
+def test_story_sentence_replaces_a_score_that_is_not_the_sealed_overall():
+    story = "Acme scores 78/100 (grade B). This figure is the weighted rollup of pillar scores."
+    aligned = align_story_score(story, 68, 68.0)
+    assert aligned.startswith("Acme scores 68.0/100 (grade C).")
+    assert "78/100" not in aligned
+    assert "grade B" not in aligned
+
+
+def test_story_match_rejects_a_headline_that_is_not_the_composite():
+    story = "Enterprise Platform scores 78/100 (grade B)."
+    assert story_matches_composite(story, 68.0) is False
+    assert story_matches_composite(story, 80.0) is False
+    assert story_matches_composite("No score in this sentence.", 80.0) is True
+    assert story_matches_composite("Enterprise Platform scores 68.0/100 (grade C).", 68.0) is True
 
 
 def test_serp_copy_does_not_invent_a_period_on_a_fragment():

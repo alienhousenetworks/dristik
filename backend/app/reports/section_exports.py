@@ -303,24 +303,72 @@ class SectionReportGenerator:
             return "COMPETITOR" in cat or "bakeoff" in title or "rival" in title or "benchmark" in title
         return False
 
+    def _extract_score_num(self, val: Any) -> Optional[int]:
+        if val is None:
+            return None
+        if hasattr(val, "score"):
+            s = getattr(val, "score")
+            if s is not None:
+                try:
+                    return int(round(float(s)))
+                except (ValueError, TypeError):
+                    pass
+        if isinstance(val, dict):
+            s = val.get("score")
+            if s is not None:
+                try:
+                    return int(round(float(s)))
+                except (ValueError, TypeError):
+                    pass
+        if isinstance(val, (int, float)):
+            return int(round(val))
+        if isinstance(val, str):
+            try:
+                return int(round(float(val)))
+            except (ValueError, TypeError):
+                pass
+        return None
+
+    def _resolve_category_score(self, cat_scores: Dict[str, Any], *candidates: str) -> Optional[int]:
+        for candidate in candidates:
+            for variant in (candidate, candidate.upper(), candidate.lower()):
+                if variant in cat_scores:
+                    extracted = self._extract_score_num(cat_scores[variant])
+                    if extracted is not None:
+                        return extracted
+        return None
+
     def _get_section_score(self, report: ExecutiveReport, section_key: str) -> int:
         honest = getattr(report, "honest_scores", None)
         scores = getattr(report, "scores", None)
         cat_scores = getattr(scores, "category_scores", {}) or {} if scores else {}
-        base_score = int(getattr(scores, "overall_score", 70)) if scores else 70
+        base_score = 70
+        if scores:
+            extracted_base = self._extract_score_num(getattr(scores, "overall_score", None))
+            if extracted_base is not None:
+                base_score = extracted_base
 
         if section_key in ("crawl", "seo"):
             if honest and getattr(honest, "honest_google_search", None) is not None:
-                return int(honest.honest_google_search)
-            return int(cat_scores.get("TECHNICAL_SEO", cat_scores.get("ON_PAGE_SEO", base_score)))
+                val = self._extract_score_num(getattr(honest, "honest_google_search"))
+                if val is not None:
+                    return val
+            cat_val = self._resolve_category_score(cat_scores, "TECHNICAL_SEO", "ON_PAGE_SEO", "technical_seo", "on_page_seo")
+            return cat_val if cat_val is not None else base_score
         elif section_key in ("geo", "aeo"):
             if honest and getattr(honest, "honest_ai_readiness", None) is not None:
-                return int(honest.honest_ai_readiness)
-            return int(cat_scores.get("GEO", cat_scores.get("AI_SEARCH", base_score)))
+                val = self._extract_score_num(getattr(honest, "honest_ai_readiness"))
+                if val is not None:
+                    return val
+            cat_val = self._resolve_category_score(cat_scores, "GEO", "AI_SEARCH", "geo", "ai_search", "SCHEMA", "schema")
+            return cat_val if cat_val is not None else base_score
         elif section_key == "cro":
             if honest and getattr(honest, "honest_human_experience", None) is not None:
-                return int(honest.honest_human_experience)
-            return int(cat_scores.get("UX_CONVERSION", base_score))
+                val = self._extract_score_num(getattr(honest, "honest_human_experience"))
+                if val is not None:
+                    return val
+            cat_val = self._resolve_category_score(cat_scores, "UX_CONVERSION", "ux_conversion", "CRO", "cro")
+            return cat_val if cat_val is not None else base_score
         elif section_key == "competitors":
             bakeoff = getattr(report, "competitor_bakeoff", None)
             if bakeoff:

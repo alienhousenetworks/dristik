@@ -21,9 +21,9 @@ export function Chapter06PageByPage({
       <ChapterOpener
         theme={theme}
         chapterNumber="06"
-        subtitle="EXHAUSTIVE CRAWL INVENTORY &amp; ROUTE BLUEPRINTS"
+        subtitle="SAMPLED ROUTE INVENTORY"
         title="Page-by-Page Audit Review"
-        description="Comprehensive technical analysis of every sampled URL within the audit scope. Compares current SERP metadata against optimized, character-compliant production blueprints."
+        description={`Review of the ${meta.pagesAnalyzed} analyzed URL${meta.pagesAnalyzed === 1 ? '' : 's'}${meta.discoveredUrlsCount != null ? ` out of ${meta.discoveredUrlsCount} discovered` : ''}. This is the sample, not a site-wide inventory.`}
         domain={meta.domain}
         whyThisMatters="Systemic indexation failures frequently originate on specific high-value sub-routes. Granular route audits prevent individual weak links from diluting overall domain discoverability."
         howWeMeasuredIt="Per-URL DOM extraction, HTTP header validation, TTFB network telemetry, and section-by-section copywriting analysis."
@@ -48,6 +48,12 @@ export function Chapter06PageByPage({
               URL-Level Diagnostics &amp; Rewrites
             </h2>
             <div className="bg-ink w-10 h-px mt-2" />
+            <p className="text-[8pt] text-ink-600 font-sans mt-2">
+              {meta.discoveredUrlsCount != null
+                ? `${meta.pagesAnalyzed} of ${meta.discoveredUrlsCount} discovered URLs are in this inventory.`
+                : `${meta.pagesAnalyzed} analyzed URL${meta.pagesAnalyzed === 1 ? '' : 's'}. The crawl did not record a discovered-URL total.`}
+              {' '}Findings in this chapter apply to these URLs only.
+            </p>
           </div>
 
           <div className="space-y-4">
@@ -71,7 +77,7 @@ export function Chapter06PageByPage({
                   </div>
 
                   <div className="flex items-center gap-3 font-mono text-[7.5pt]">
-                    <span>Status: <strong>{p.statusCode != null ? p.statusCode : '200'}</strong></span>
+                    <span>Status: <strong>{p.statusCode != null ? p.statusCode : 'Not recorded'}</strong></span>
                     <span>Words: <strong>{p.wordCount}</strong></span>
                     <span>TTFB: <strong>{p.ttfbMs ? `${Math.round(p.ttfbMs)}ms` : '—'}</strong></span>
                     {p.seoScore != null && (

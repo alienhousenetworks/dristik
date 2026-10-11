@@ -70,3 +70,32 @@ def test_section_pptx_generation():
         assert isinstance(pptx_bytes, bytes)
         assert len(pptx_bytes) > 1000
         assert blueprint.total_slides > 0
+
+
+def test_section_html_generation_with_category_score_objects():
+    from app.domain.models import CategoryScore, Category
+    rep = _mock_report()
+    rep.scores.category_scores = {
+        "TECHNICAL_SEO": CategoryScore(
+            category=Category.TECHNICAL_SEO,
+            score=82.4,
+            summary="Strong technical foundation.",
+        ),
+        "GEO": CategoryScore(
+            category=Category.GEO,
+            score=68.0,
+            summary="GEO extractability measured.",
+        ),
+        "UX_CONVERSION": CategoryScore(
+            category=Category.UX_CONVERSION,
+            score=74.5,
+            summary="UX conversion measured.",
+        ),
+    }
+    for sec in ["crawl", "seo", "geo", "aeo", "cro", "competitors"]:
+        html = section_report_generator.render_section_html(rep, sec)
+        assert html is not None
+        assert "example.com" in html
+        assert "<html" in html
+        assert "</html>" in html
+

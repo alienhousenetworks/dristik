@@ -147,6 +147,18 @@ def create_sample_report(
     )
 
 
+def test_validation_gate_repairs_a_disagreeing_headline_score():
+    report = create_sample_report()
+    report.story_summary = "Enterprise Platform scores 78/100 (grade B)."
+    res = ValidationGate.validate_report(report)
+    assert "headline_score_matches_composite" in res.failed_checks
+    repaired, repairs = ValidationGate.repair_report(report)
+    assert any("dossier composite" in note for note in repairs)
+    assert "78/100" not in repaired.story_summary
+    again = ValidationGate.validate_report(repaired)
+    assert "headline_score_matches_composite" not in again.failed_checks
+
+
 def test_validation_gate_clean_report_passes():
     report = create_sample_report()
     res = ValidationGate.validate_report(report)

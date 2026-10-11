@@ -78,6 +78,50 @@ def test_waves_respect_dependencies():
 
 
 @pytest.mark.asyncio
+async def test_image_and_header_findings_do_not_reuse_the_title_evidence():
+    bb, title_ev = _board()
+    bb.evidence_store.add_evidence(
+        source_type="meta",
+        analyzer="test",
+        url="https://example.com/",
+        selector="title",
+        text="Example Co",
+        value={"title": "Example Co"},
+    )
+    bb.evidence_store.add_external_evidence(
+        source="ahrefs",
+        claim="External authority snapshot",
+        raw_value={"domain_rating": 12},
+        url="https://example.com/",
+    )
+    bb.pages[0].images_without_alt = 4
+    bb.pages[0].response_headers = {"server": "nginx"}
+
+    assets = SpecialistAgent(SPECIALIST_AGENTS_V3["seo.assets.v3"], _FakeRouter())
+    await assets.run(bb)
+    alt_claims = [claim for claim in bb.claim_registry.get_all() if "alt" in claim.statement.lower()]
+    assert alt_claims
+    for claim in alt_claims:
+        assert title_ev.id not in claim.evidence_refs
+        for ref in claim.evidence_refs:
+            evidence = bb.evidence_store.get(ref)
+            assert evidence is not None
+            assert evidence.selector == "img"
+            assert not evidence.id.startswith("ext_")
+
+    security = SpecialistAgent(SPECIALIST_AGENTS_V3["seo.security.v3"], _FakeRouter())
+    await security.run(bb)
+    header_claims = [claim for claim in bb.claim_registry.get_all() if "hsts" in claim.statement.lower() or "strict-transport" in claim.statement.lower()]
+    assert header_claims
+    for claim in header_claims:
+        for ref in claim.evidence_refs:
+            evidence = bb.evidence_store.get(ref)
+            assert evidence is not None
+            assert evidence.selector == "strict-transport-security"
+            assert (evidence.selector or "").lower() != "title"
+
+
+@pytest.mark.asyncio
 async def test_deterministic_crawl_agent_uses_manifest_not_fiction():
     bb, ev = _board()
     agent = SpecialistAgent(SPECIALIST_AGENTS_V3["seo.crawl.v3"], _FakeRouter())

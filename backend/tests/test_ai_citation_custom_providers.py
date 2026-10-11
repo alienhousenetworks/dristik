@@ -64,6 +64,18 @@ def test_get_configured_ai_engines_env_overrides():
         assert engines_by_id["deepseek"]["active"] is True
         assert engines_by_id["deepseek"]["model"] == "deepseek-reasoner"
 
+    with patch.dict("os.environ", {
+        "AI_CITATION_CROSS_PROVIDER": "true",
+        "AI_CITATION_KIMI_PROVIDER": "openrouter",
+        "AI_CITATION_GROK_PROVIDER": "openrouter",
+        "OPENROUTER_API_KEY": "sk-or-test",
+    }, clear=False):
+        engines = get_configured_ai_engines()
+        engines_by_id = {e["id"]: e for e in engines}
+        assert engines_by_id["kimi"]["model"] == "moonshotai/moonshot-v1-8k"
+        assert engines_by_id["grok"]["model"] == "x-ai/grok-2-1212"
+
+
 
 def test_citation_engines_do_not_borrow_openrouter_without_explicit_provider():
     from app.core.config import settings, GROQ_DEFAULT_REASONING

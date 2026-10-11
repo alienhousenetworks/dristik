@@ -414,7 +414,11 @@ def get_configured_ai_engines() -> List[Dict[str, Any]]:
     else:
         kimi_key = kimi_explicit_key or kimi_native
     kimi_active = _engine_active("AI_CITATION_KIMI_ACTIVE", bool(kimi_key))
-    kimi_model = os.environ.get("AI_CITATION_KIMI_MODEL") or "moonshot-v1-8k"
+    kimi_model = os.environ.get("AI_CITATION_KIMI_MODEL") or (
+        "moonshotai/moonshot-v1-8k" if kimi_provider == "openrouter" else "moonshot-v1-8k"
+    )
+    if kimi_provider == "openrouter" and kimi_model == "moonshot-v1-8k":
+        kimi_model = "moonshotai/moonshot-v1-8k"
 
     # 8. xAI Grok
     grok_explicit_key = os.environ.get("AI_CITATION_GROK_API_KEY")
@@ -429,7 +433,11 @@ def get_configured_ai_engines() -> List[Dict[str, Any]]:
     else:
         grok_key = grok_explicit_key or grok_native
     grok_active = _engine_active("AI_CITATION_GROK_ACTIVE", bool(grok_key))
-    grok_model = os.environ.get("AI_CITATION_GROK_MODEL") or "grok-2-latest"
+    grok_model = os.environ.get("AI_CITATION_GROK_MODEL") or (
+        "x-ai/grok-2-1212" if grok_provider == "openrouter" else "grok-2-latest"
+    )
+    if grok_provider == "openrouter" and grok_model == "grok-2-latest":
+        grok_model = "x-ai/grok-2-1212"
 
     # 9. Meta Llama — Dedicated Groq / Together or OpenRouter
     llama_explicit_key = os.environ.get("AI_CITATION_LLAMA_API_KEY")

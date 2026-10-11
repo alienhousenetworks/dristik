@@ -16,6 +16,9 @@ describe('remediation claims', () => {
     expect(deriveRemediationClaim([]).state).toBe('RECOMMENDATION');
     expect(deriveRemediationClaim([{ approval_status: 'APPLIED', verification_status: 'provisional' }]).state).toBe('APPLIED');
     expect(deriveRemediationClaim([{ verification_status: 'verified' }]).state).toBe('VERIFIED');
+    expect(deriveRemediationClaim([{ release_status: 'APPROVED' }]).state).toBe('APPROVED');
+    expect(deriveRemediationClaim([{ verification_status: 'RESCANNED' }]).state).toBe('RESCANNED');
+    expect(patchStateLabel({ release_status: 'APPROVED' })).toBe('APPROVED — NOT APPLIED');
     expect(deriveRemediationClaim([
       { verification_status: 'verified' },
       { release_status: 'PENDING_APPROVAL' },

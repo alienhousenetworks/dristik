@@ -29,6 +29,12 @@ describe('authoritative report score', () => {
     expect(score.grade).toBe('B');
     const aeo = score.rows.find((row) => row.categoryKey === 'AEO');
     expect(aeo?.included).toBe(false);
+    expect(aeo?.nominalWeightPct).toBe(25);
+    expect(score.rows.find((row) => row.categoryKey === 'TECHNICAL_SEO')?.weightPct).toBe(40);
+    expect(score.rows.find((row) => row.categoryKey === 'TECHNICAL_SEO')?.nominalWeightPct).toBe(30);
+    expect(score.partialCoverage).toBe(true);
+    expect(score.coverageLabel).toBe('Partial-coverage composite');
+    expect(score.excludedPillars).toContain('Live Answer-Engine Citations (AEO)');
     expect(score.rows.filter((row) => row.included).reduce((sum, row) => sum + row.weightPct, 0)).toBe(100);
   });
 });

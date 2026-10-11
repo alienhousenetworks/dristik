@@ -28,9 +28,9 @@ export function AppendixLedger({
       <ChapterOpener
         theme={theme}
         chapterNumber="09"
-        subtitle="VERIFIED DEFECT REGISTER &amp; EVIDENCE LEDGER"
-        title="Institutional Findings Register &amp; Appendices"
-        description="Comprehensive technical record of all verified discrepancies, deterministic code patches with exact file paths, and cryptographically hashed AST evidence citations."
+        subtitle="FINDINGS REGISTER &amp; EVIDENCE LEDGER"
+        title="Findings Register &amp; Appendices"
+        description="Recorded findings, generated patches, and the evidence each finding cites. A hash checks that a stored snippet was not edited. It does not prove the analysis is correct, and a generated patch is not an applied fix."
         domain={meta.domain}
         whyThisMatters="Engineering resolution requires exact reproduction paths, affected DOM selectors, and before/after code diffs with unambiguous acceptance criteria."
         howWeMeasuredIt="Automated 20-point validation checks, AST node verification, and SHA-256 hash sealing against the crawl snapshot."
@@ -43,7 +43,7 @@ export function AppendixLedger({
         <PageHeader
           theme={theme}
           domain={meta.domain}
-          chapterTitle="09 / FINDINGS REGISTER // VERIFIED AUDIT DEFECTS"
+          chapterTitle="09 / FINDINGS REGISTER // RECORDED OBSERVATIONS"
         />
 
         <div className="space-y-6 max-w-4xl">
@@ -52,13 +52,13 @@ export function AppendixLedger({
               Deterministic Discrepancies
             </span>
             <h2 className="font-serif text-[22pt] font-normal tracking-tight text-ink">
-              Verified Findings Register ({appendices.findings.length})
+              Findings Register ({appendices.findings.length})
             </h2>
             <div className="bg-ink w-10 h-px mt-2" />
           </div>
 
           <p className="text-[8.5pt] text-ink-700 font-sans leading-relaxed">
-            All findings are generated directly by Dristik's deterministic rules engine. Speculative or unverified claims are strictly withheld from this register.
+            Each card cites the evidence record whose selector matches the observation. A finding with no matching record says so. Missing a security header is a hardening observation. It is not, by itself, proof of an exploit, and it does not block indexing.
           </p>
 
           <div className="space-y-4">
@@ -91,9 +91,13 @@ export function AppendixLedger({
               <span className="font-mono text-[8pt] font-bold uppercase tracking-[0.04em] text-ink-500 block mb-1">
                 {remediation.state === 'VERIFIED'
                   ? 'Independently verified fixes'
-                  : remediation.state === 'APPLIED'
-                    ? 'Applied changes — not independently verified'
-                    : 'Proposed code remediation'}
+                  : remediation.state === 'RESCANNED'
+                    ? 'Rescanned changes — not independently verified'
+                    : remediation.state === 'APPLIED'
+                      ? 'Applied changes — not independently verified'
+                      : remediation.state === 'APPROVED'
+                        ? 'Approved patches — not applied'
+                        : 'Proposed code remediation'}
               </span>
               <h2 className="font-serif text-[22pt] font-normal tracking-tight text-ink">
                 Generated Remediation Patches
@@ -112,7 +116,7 @@ export function AppendixLedger({
                 {remediation.detail}
               </p>
               <div className="font-mono text-[7pt] text-ink-500 pt-0.5">
-                Verification Lifecycle: <strong>PATCH GENERATED</strong> → PENDING APPLICATION → RECRAWL → REGRESSION TEST → VERIFIED REMEDIATION
+                Lifecycle: recommendation → generated → approved → applied → rescanned → verified. This run's status is the weakest state that is still true.
               </div>
             </div>
 
@@ -183,7 +187,7 @@ export function AppendixLedger({
           </div>
 
           <p className="text-[8.5pt] text-ink-700 font-sans leading-relaxed">
-            Every analytical statement throughout this publication is tied to an indexed AST evidence record with recorded origin selector, snippet text, and SHA-256 integrity hash.
+            A row is shown when its selector matches the finding. The hash checks the stored payload. It is not a certificate that the conclusion is correct. First-party DOM evidence and external header evidence stay distinct.
           </p>
 
           <table className="w-full text-[7.5pt] border-collapse border border-line font-mono">
@@ -238,6 +242,10 @@ function FindingEditorialCard({
   finding: NormalizedFinding;
   theme: ReportTheme;
 }) {
+  const evidence = finding.evidenceItems[0];
+  const headerFinding = /hsts|strict-transport|content-security-policy|\bcsp\b|security header|x-frame-options|x-content-type/i.test(
+    `${finding.title} ${finding.observation}`,
+  );
   const severityStyle =
     finding.severity === 'CRITICAL'
       ? { borderLeft: `3px solid ${theme.semantic.critical}`, badgeBg: theme.semantic.criticalBg, badgeColor: theme.semantic.critical }
@@ -308,29 +316,45 @@ function FindingEditorialCard({
           <div>
             <span className="text-ink-400 block text-[6.5pt] uppercase">Target Origin &amp; Selector:</span>
             <span className="text-ink-700 break-all font-mono">
-              {finding.evidenceItems[0]?.url || 'Primary Origin Route'} {finding.evidenceItems[0]?.selector ? `· ${finding.evidenceItems[0].selector}` : '· DOM AST'}
+              {evidence
+                ? `${evidence.url || 'URL not recorded'}${evidence.selector ? ` · ${evidence.selector}` : ''}`
+                : 'No matching evidence record'}
             </span>
           </div>
           <div>
             <span className="text-ink-400 block text-[6.5pt] uppercase">Evidence ID &amp; Hash:</span>
             <span className="text-ink-700 font-mono">
-              {finding.evidenceItems[0]?.id || 'No evidence id'} · {formatEvidenceHash(finding.evidenceItems[0]?.sha256, finding.evidenceItems[0]?.hashStatus || 'NOT_SEALED')}
+              {evidence
+                ? `${evidence.id} · ${formatEvidenceHash(evidence.sha256, evidence.hashStatus || 'NOT_SEALED')}`
+                : 'Not linked'}
             </span>
           </div>
         </div>
 
         <div className="bg-paper-50 p-2 rounded border border-line font-sans text-[7.5pt] space-y-1">
           <div>
-            <strong className="text-ink">Observed Evidence: </strong>
-            <span className="text-ink-700 italic">"{finding.observation.slice(0, 140)}…"</span>
+            <strong className="text-ink">Observed: </strong>
+            <span className="text-ink-700 italic">
+              {evidence?.snippet
+                ? `"${evidence.snippet}"`
+                : 'No snippet was stored for a selector that matches this finding.'}
+            </span>
           </div>
           <div>
-            <strong className="text-ink">Why It Matters: </strong>
-            <span className="text-ink-700">{finding.businessImpact || 'Impairs machine extraction clarity and commercial answer retrieval.'}</span>
+            <strong className="text-ink">Why it matters: </strong>
+            <span className="text-ink-700">
+              {headerFinding
+                ? 'A missing response header is a hardening gap. The absence itself is not an exploit, and it does not block crawler access or indexing.'
+                : (finding.businessImpact || 'The business effect depends on the surface named above.')}
+            </span>
           </div>
           <div>
-            <strong className="text-ink">Verification Test: </strong>
-            <span className="font-mono text-[7pt] text-ink-600">Deterministic AST re-parse confirms target selector resolves valid entity properties with 0 regressions.</span>
+            <strong className="text-ink">How to re-check: </strong>
+            <span className="font-mono text-[7pt] text-ink-600">
+              {headerFinding
+                ? 'Re-fetch the URL and confirm the named response header. Do not treat a missing header as an indexing block.'
+                : 'Re-fetch the URL and confirm this selector and snippet. This card records the observation. It is not a closed-loop retest.'}
+            </span>
           </div>
         </div>
       </div>

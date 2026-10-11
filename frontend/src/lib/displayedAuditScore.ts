@@ -32,6 +32,11 @@ export function liveExecutionProven(report: ExecutiveReport): boolean {
   return records.some((record) => recordNamesEngine(record));
 }
 
+function scoreClaimPattern(token?: string): RegExp {
+  const number = token ? `${token}(?:\\.0)?` : '\\d+(?:\\.\\d+)?';
+  return new RegExp(`${number}/100(?:\\s*\\([^)]*\\))?(?:,?\\s*grade\\s+[A-F]\\+?)?`, 'i');
+}
+
 export function alignDisplayedStory(
   story: string | null | undefined,
   sealedScore: unknown,
@@ -39,12 +44,13 @@ export function alignDisplayedStory(
 ): string {
   const text = story || '';
   if (score.composite == null) return text;
+  const replacement = `${score.composite.toFixed(1)}/100 (grade ${score.grade})`;
   const sealed = finiteNumber(sealedScore);
-  if (sealed == null) return text;
-  const token = String(Math.round(sealed));
-  const pattern = new RegExp(`${token}(?:\\.0)?/100(?:\\s*\\([^)]*\\))?`);
-  if (!pattern.test(text)) return text;
-  return text.replace(pattern, `${score.composite.toFixed(1)}/100 (grade ${score.grade})`);
+  if (sealed != null) {
+    const sealedClaim = scoreClaimPattern(String(Math.round(sealed)));
+    if (sealedClaim.test(text)) return text.replace(sealedClaim, replacement);
+  }
+  return text.replace(scoreClaimPattern(), replacement);
 }
 
 export function buildDisplayedScore(report: ExecutiveReport): AuthoritativeScore {

@@ -33,6 +33,120 @@ def _severity(value: Any) -> Severity:
     return Severity.MEDIUM
 
 
+_IMAGE_CLAIM = ("alt text", "alt attribute", "missing alt", "image accessibility", "images lack", "without alt")
+_HEADER_CLAIM = (
+    "hsts", "strict-transport", "content-security-policy", "csp header",
+    "x-frame-options", "x-content-type", "security header", "clickjacking", "mime-sniff",
+)
+_TITLE_SELECTORS = {"title", "h1", "h2", "h3"}
+
+
+def _preferred_binding(statement: str) -> tuple:
+    """Selector that the statement actually observed. Never a borrowed title node."""
+    text = (statement or "").lower()
+    if any(token in text for token in _IMAGE_CLAIM):
+        return "dom", "img"
+    if "strict-transport" in text or "hsts" in text:
+        return "http_header", "strict-transport-security"
+    if "content-security-policy" in text or "csp header" in text or "(csp)" in text:
+        return "http_header", "content-security-policy"
+    if "x-frame-options" in text or "clickjacking" in text:
+        return "http_header", "x-frame-options"
+    if "x-content-type" in text or "mime-sniff" in text or "mime type" in text:
+        return "http_header", "x-content-type-options"
+    if "sitemap" in text:
+        return "sitemap", "sitemap"
+    if "robots" in text:
+        return "robots", "robots.txt"
+    if "canonical" in text:
+        return "meta", 'link[rel="canonical"]'
+    if "json-ld" in text or "schema" in text:
+        return "schema", 'script[type="application/ld+json"]'
+    if "h1" in text or "heading" in text:
+        return "dom", "h1"
+    if "meta description" in text:
+        return "meta", 'meta[name="description"]'
+    if "title" in text:
+        return "meta", "title"
+    if "crux" in text or "core web vital" in text:
+        return "external", "crux"
+    if "form" in text or "label" in text:
+        return "dom", "form"
+    return "audit_observation", "observation"
+
+
+def _evidence_blob(ev: Any) -> str:
+    keys = ""
+    value = getattr(ev, "value", None)
+    if isinstance(value, dict):
+        keys = " ".join(str(key) for key in value.keys())
+    return " ".join([
+        str(getattr(ev, "selector", None) or ""),
+        str(getattr(ev, "text", None) or ""),
+        str(getattr(ev, "source_type", None) or ""),
+        str(getattr(ev, "analyzer", None) or ""),
+        str(getattr(ev, "id", None) or ""),
+        keys,
+    ]).lower()
+
+
+def _is_external(ev: Any) -> bool:
+    source = str(getattr(ev, "source_type", None) or "").lower()
+    evidence_id = str(getattr(ev, "id", None) or "").lower()
+    return source == "external" or evidence_id.startswith("ext_")
+
+
+def _incompatible_evidence(statement: str, ev: Any) -> bool:
+    text = (statement or "").lower()
+    selector = str(getattr(ev, "selector", None) or "").strip().lower()
+    image = any(token in text for token in _IMAGE_CLAIM)
+    header = any(token in text for token in _HEADER_CLAIM) or "(csp)" in text
+    if image and (selector in _TITLE_SELECTORS or selector.startswith("meta[name")):
+        return True
+    if image and _is_external(ev) and selector != "img":
+        return True
+    if header and (selector in _TITLE_SELECTORS or selector == "img"):
+        return True
+    return False
+
+
+def _evidence_overlaps(statement: str, ev: Any, selector: str) -> bool:
+    blob = _evidence_blob(ev)
+    hint = (selector or "").split("[", 1)[0].lower()
+    if hint and hint in blob:
+        return True
+    text = (statement or "").lower()
+    for token in (
+        "alt", "sitemap", "robots", "canonical", "hsts", "strict-transport",
+        "content-security-policy", "x-frame", "x-content-type", "h1", "schema",
+        "json-ld", "crux", "title", "meta description", "viewport",
+    ):
+        if token in text and token in blob:
+            return True
+    return False
+
+
+def _supporting_evidence_ids(statement: str, evidence_slice) -> List[str]:
+    _source, selector = _preferred_binding(statement)
+    text = (statement or "").lower()
+    allow_external = _source == "external" or any(
+        token in text for token in ("crux", "search console", "analytics", "backlink")
+    )
+    matches: List[str] = []
+    for ev in evidence_slice or []:
+        if _incompatible_evidence(statement, ev):
+            continue
+        if _is_external(ev) and not allow_external:
+            continue
+        if _evidence_overlaps(statement, ev, selector):
+            evidence_id = getattr(ev, "id", None)
+            if evidence_id and evidence_id not in matches:
+                matches.append(evidence_id)
+        if len(matches) >= 3:
+            break
+    return matches
+
+
 class SpecialistAgent(BaseAgent):
     """Parameterized specialist bound to a v3 AgentDefinition."""
 
@@ -222,14 +336,30 @@ class SpecialistAgent(BaseAgent):
         cat = _category_for(self.definition)
         claims_spec: List[Dict[str, Any]] = []
         observations: Dict[str, Any] = {"mode": "DETERMINISTIC"}
-        ev_ids = [ev.id for ev in evidence_slice[:3]]
 
         def add(statement: str, severity: Severity, recommendation: str, refs: Optional[List[str]] = None):
+            bound = [ref for ref in (refs or []) if ref]
+            if not bound:
+                bound = _supporting_evidence_ids(statement, evidence_slice)
+            if not bound and getattr(blackboard, "evidence_store", None) is not None:
+                source_type, selector = _preferred_binding(statement)
+                page_url = pages[0].url if pages else getattr(blackboard, "website_url", None)
+                created = blackboard.evidence_store.add_evidence(
+                    source_type=source_type,
+                    analyzer=self.agent_id,
+                    url=page_url,
+                    selector=selector,
+                    text=statement[:500],
+                    value={"observation": statement[:500], "selector": selector},
+                )
+                bound = [created.id]
+            if not bound:
+                return
             claims_spec.append({
                 "statement": statement,
                 "severity": severity,
                 "recommendation": recommendation,
-                "refs": refs or ev_ids,
+                "refs": bound,
             })
 
         aid = self.agent_id

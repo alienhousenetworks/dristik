@@ -155,9 +155,16 @@ export function Chapter03Aeo({
                 3.2 Generative Extractability &amp; Citation Readiness (On-Page Structural Analysis)
               </h3>
               <span className="font-mono text-[7.5pt] text-ink-500 italic">
-                *Measures DOM machine-readability, not live citation rank
+                On-page extractability. Not a live citation rate.
               </span>
             </div>
+            {!aeo.liveObservation.isMeasured && (
+              <p className="text-[8pt] text-ink-700 font-sans border border-line bg-paper-100 rounded px-3 py-2">
+                No live engine completed a measurement on this run
+                {aeo.liveObservation.queriesAttempted > 0 ? ` (${aeo.liveObservation.queriesAttempted} attempted, ${aeo.liveObservation.queriesFailed} failed, ${aeo.liveObservation.queriesExecuted} completed)` : ''}.
+                The scores below are on-page readiness for each engine profile. They are not mentions, citations, or a rank.
+              </p>
+            )}
 
             <table className="w-full text-[8.5pt] border-collapse border border-line">
               <thead>
@@ -282,6 +289,16 @@ export function Chapter03Aeo({
             {questionCount > 0
               ? `${questionCount} on-page question${questionCount === 1 ? '' : 's'} checked against crawled pages for ${meta.brandName}. This is answerability, not a live citation test. A question with no supporting passage does not receive an answer-confidence score.`
               : `No on-page answerability questions were evaluated for ${meta.brandName}. This is not a 100-question audit.`}
+          </p>
+          <p className="text-[8pt] text-ink-600 font-mono">
+            Question coverage {report.coverageConfidence.questionCoverage.numerator}/{report.coverageConfidence.questionCoverage.denominator}
+            {' · '}
+            Answerability {report.coverageConfidence.answerability.numerator}/{report.coverageConfidence.answerability.denominator}
+            {' · '}
+            Claim grounding {report.coverageConfidence.claimGrounding
+              ? `${report.coverageConfidence.claimGrounding.numerator}/${report.coverageConfidence.claimGrounding.denominator}`
+              : 'not recorded'}
+            . These are three different ratios.
           </p>
 
           {/* Facets Grid */}

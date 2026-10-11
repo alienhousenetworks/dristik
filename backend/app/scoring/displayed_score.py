@@ -89,17 +89,55 @@ def grade_for_displayed(score: float) -> str:
     return "F"
 
 
+def _score_claim_pattern(token: Optional[str] = None) -> "re.Pattern[str]":
+    number = rf"{re.escape(token)}(?:\.0)?" if token else r"\d+(?:\.\d+)?"
+    return re.compile(
+        rf"{number}/100(?:\s*\([^)]*\))?(?:,?\s*grade\s+[A-F]\+?)?",
+        re.IGNORECASE,
+    )
+
+
+def first_story_score(story: str) -> Optional[float]:
+    """The first composite-shaped score in a sentence, if the prose states one."""
+    if not story:
+        return None
+    match = _score_claim_pattern().search(story)
+    if not match:
+        return None
+    raw = match.group(0).split("/100", 1)[0].strip()
+    try:
+        number = float(raw)
+    except ValueError:
+        return None
+    if math.isnan(number) or math.isinf(number):
+        return None
+    return number
+
+
+def story_matches_composite(story: str, composite: Optional[float], tolerance: float = 0.15) -> bool:
+    """A story with no score claim agrees. A stated score must be the dossier composite."""
+    claimed = first_story_score(story)
+    if claimed is None or composite is None:
+        return True
+    return abs(claimed - composite) <= tolerance
+
+
 def align_story_score(story: str, sealed_score: Any, composite: float) -> str:
-    """Replace the sealed overall sentence with the dossier composite and its grade."""
+    """Replace the headline score with the dossier composite and its grade.
+
+    The sealed overall and a synthesizer number are both rewritten. A later
+    pillar score in the same paragraph is left alone.
+    """
     if not story or composite is None:
         return story
-    sealed = _num(sealed_score)
-    if sealed is None:
-        return story
-    sealed_token = str(int(round(sealed)))
-    pattern = rf"{re.escape(sealed_token)}(?:\.0)?/100(?:\s*\([^)]*\))?"
     replacement = f"{composite:.1f}/100 (grade {grade_for_displayed(composite)})"
-    updated, count = re.subn(pattern, replacement, story, count=1)
+    sealed = _num(sealed_score)
+    if sealed is not None:
+        sealed_token = str(int(round(sealed)))
+        updated, count = _score_claim_pattern(sealed_token).subn(replacement, story, count=1)
+        if count:
+            return updated
+    updated, count = _score_claim_pattern().subn(replacement, story, count=1)
     return updated if count else story
 
 

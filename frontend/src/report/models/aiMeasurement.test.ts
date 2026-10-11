@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { answerabilityConfidence, buildLiveObservation } from './aiMeasurement';
+import { answerabilityConfidence, buildLiveObservation, questionDenominators } from './aiMeasurement';
 
 describe('live AI versus on-page answerability', () => {
   it('does not invent Claude query counts when no engine ran', () => {
@@ -69,5 +69,24 @@ describe('live AI versus on-page answerability', () => {
     });
     expect(judged.confidencePct).toBeNull();
     expect(judged.confidenceBasis).toMatch(/No supporting passage/);
+  });
+
+  it('keeps question coverage, answerability, and claim grounding apart', () => {
+    const metrics = questionDenominators([
+      { answerability_status: 'ANSWERABLE', evidence_url: 'https://example.com/a', grounding_ratio: 1 },
+      { answerability_status: 'UNANSWERABLE', grounding_ratio: 0 },
+      { answerability_status: 'PARTIAL', evidence_snippet: 'partial' },
+    ]);
+    expect(metrics.coverage).toEqual({ numerator: 3, denominator: 3 });
+    expect(metrics.answerability).toEqual({ numerator: 1, denominator: 3 });
+    expect(metrics.claimGrounding).toEqual({ numerator: 1, denominator: 2 });
+  });
+
+  it('does not invent claim grounding when no claim check was recorded', () => {
+    const metrics = questionDenominators([
+      { answerability_status: 'ANSWERABLE' },
+    ]);
+    expect(metrics.answerability).toEqual({ numerator: 0, denominator: 1 });
+    expect(metrics.claimGrounding).toBeNull();
   });
 });
