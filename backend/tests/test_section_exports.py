@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import pytest
 from app.reports.section_exports import section_report_generator
 from app.agents.deck.coordinator import generate_section_pptx_deck
@@ -61,6 +63,28 @@ def test_section_html_generation():
         assert "example.com" in html
         assert "<html" in html
         assert "</html>" in html
+
+
+def test_seo_section_pdf_includes_the_full_index():
+    html = section_report_generator.render_section_html(_mock_report(), "seo")
+    for title in (
+        "01. Executive summary",
+        "16. Core Web Vitals and page speed",
+        "47. AI search visibility and citation intelligence",
+        "55. Monitoring, governance and ongoing SEO operations",
+        "O. Glossary",
+    ):
+        assert title in html
+    assert "Largest Contentful Paint (LCP)" in html
+    assert "Googlebot and other crawler access differences" in html
+    assert "Google AI Overviews and AI Mode" in html
+    assert "representative sample" in html.lower()
+    assert html.count("<h4>") >= 70
+    crawl = section_report_generator.render_section_html(_mock_report(), "crawl")
+    assert "Complete SEO report index" not in crawl
+    frontend_index = Path(__file__).resolve().parents[2] / "frontend/src/report/auditIndex/catalog.json"
+    backend_index = Path(__file__).resolve().parents[1] / "app/reports/seo_audit_index.json"
+    assert frontend_index.read_text(encoding="utf-8") == backend_index.read_text(encoding="utf-8")
 
 
 def test_section_pptx_generation():

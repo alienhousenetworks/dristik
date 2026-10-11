@@ -21,6 +21,11 @@ describe('audit index', () => {
     expect(numbers.slice(0, 55)).toEqual(Array.from({ length: 55 }, (_, index) => String(index + 1).padStart(2, '0')));
     expect(numbers.slice(55)).toEqual(['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O']);
     expect(new Set(numbers).size).toBe(numbers.length);
+    const vitals = AUDIT_SECTIONS.find((item) => item.number === '16');
+    expect(vitals?.checks).toContain('Largest Contentful Paint (LCP)');
+    expect(vitals?.checks).toContain('Interaction to Next Paint (INP)');
+    expect(vitals?.checks).toContain('Cumulative Layout Shift (CLS)');
+    expect(AUDIT_SECTIONS.find((item) => item.number === '47')?.checks).toContain('Google AI Overviews and AI Mode');
   });
 
   it('does not turn a missing crawl or connector into a pass or a zero', () => {

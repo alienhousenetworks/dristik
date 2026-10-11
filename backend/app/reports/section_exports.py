@@ -9,8 +9,13 @@ across the 6 primary workspaces:
 5. CRO (Conversion Rate Optimization & UX Friction)
 6. Competitors (Competitor Analysis & Benchmark)
 """
+import html
+import json
+from pathlib import Path
 from typing import Dict, Any, List, Optional
 from app.domain.models import ExecutiveReport
+
+_SEO_INDEX_PATH = Path(__file__).with_name("seo_audit_index.json")
 
 
 class SectionReportGenerator:
@@ -40,6 +45,8 @@ class SectionReportGenerator:
 
         pages = report.crawl_manifest.pages if (report.crawl_manifest and report.crawl_manifest.pages) else (report.page_reports or [])
         score_val = self._get_section_score(report, section_key)
+        index_html = self._render_seo_master_index() if section_key == "seo" else ""
+        footer_mark = "FULL INDEX // SECTIONS 01–55 AND APPENDICES A–O" if section_key == "seo" else "PAGE 1 OF 1 // IMMUTABLE PROVENANCE SEAL"
 
         return f"""<!DOCTYPE html>
 <html lang="en">
@@ -279,12 +286,37 @@ class SectionReportGenerator:
 
     {self._render_extra_section_tables(report, section_key, pages)}
 
+    {index_html}
+
     <div class="footer">
         <div>DRISTIK AUTONOMOUS INTELLIGENCE SYSTEMS // {domain}</div>
-        <div>PAGE 1 OF 1 // IMMUTABLE PROVENANCE SEAL</div>
+        <div>{footer_mark}</div>
     </div>
 </body>
 </html>"""
+
+    def _render_seo_master_index(self) -> str:
+        """Print the 55-section SEO taxonomy. A checklist line is not a measured result."""
+        payload = json.loads(_SEO_INDEX_PATH.read_text(encoding="utf-8"))
+        blocks = [
+            "<h2>Complete SEO report index</h2>",
+            "<p>Sections 01–55 and appendices A–O. Dristik inspects a representative sample, not every URL on the site. "
+            "Each line is a checklist item. A line is not a measured result, and a missing connector is not a zero.</p>",
+        ]
+        for part in payload["parts"]:
+            owned = [section for section in payload["sections"] if section["part"] == part["id"]]
+            if not owned:
+                continue
+            blocks.append(f"<h3>Part {html.escape(part['id'])} — {html.escape(part['title'])}</h3>")
+            for section in owned:
+                checks = "".join(f"<li>{html.escape(check)}</li>" for check in section["checks"])
+                blocks.append(
+                    "<section>"
+                    f"<h4>{html.escape(section['number'])}. {html.escape(section['title'])}</h4>"
+                    f"<ul>{checks}</ul>"
+                    "</section>"
+                )
+        return "\n".join(blocks)
 
     def _matches_section(self, finding, section_key: str) -> bool:
         cat = str(getattr(finding, "category", "") or "").upper()

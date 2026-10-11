@@ -8,6 +8,7 @@ import { SeoCrawlArchitecture } from './seo/SeoCrawlArchitecture';
 import { SeoOnPageExperience } from './seo/SeoOnPageExperience';
 import { SeoMarketIntelligence } from './seo/SeoMarketIntelligence';
 import { SeoIssuesAndAppendix } from './seo/SeoIssuesAndAppendix';
+import { AuditIndex } from '../../report/auditIndex/AuditIndex';
 
 interface SeoWorkspaceViewProps {
   report: ExecutiveReport;
@@ -22,7 +23,8 @@ export type EnterpriseSeoTab =
   | 'onpage'
   | 'market'
   | 'gsc'
-  | 'issues';
+  | 'issues'
+  | 'index';
 
 export function SeoWorkspaceView({
   report,
@@ -65,6 +67,7 @@ export function SeoWorkspaceView({
       case 'market':
       case 'gsc':
       case 'issues':
+      case 'index':
         setActiveTab(rawId as EnterpriseSeoTab);
         break;
       default:
@@ -95,6 +98,7 @@ export function SeoWorkspaceView({
         { id: 'market', label: 'Local, Global & Peers' },
         { id: 'gsc', label: 'Search Console' },
         { id: 'issues', label: `Issues & URLs (${seoFindings.length})` },
+        { id: 'index', label: 'Full SEO index' },
       ]}
       activeTab={activeTab}
       onTab={handleTabChange}
@@ -152,6 +156,10 @@ export function SeoWorkspaceView({
           seoFindings={seoFindings}
           onSelectFinding={onSelectFinding}
         />
+      )}
+
+      {activeTab === 'index' && (
+        <AuditIndex report={report} expandChecks />
       )}
     </PillarShell>
   );
