@@ -179,9 +179,9 @@ def test_3_deck_agents_registered():
         assert len(defn.capabilities) >= 2
         assert len(defn.required_evidence) >= 2
 
-    # Core 35 specialist DAG must remain exactly 35
-    assert specialist_count() == 35
-    assert len(SPECIALIST_AGENTS_V3) == 35
+    # Core specialist DAG contains 50 specialists
+    assert specialist_count() == 50
+    assert len(SPECIALIST_AGENTS_V3) == 50
 
 
 def test_deck_task_cards_present():
@@ -230,8 +230,8 @@ def test_data_analyst_binds_charts_and_grounded_metrics():
     # Check specific charts
     pillar_slide = next(s for s in populated.slides if s.slide_id == "slide_13_pillars_radar")
     assert pillar_slide.chart is not None
-    assert len(pillar_slide.chart.categories) == 8
-    assert len(pillar_slide.chart.series[0]["values"]) == 8
+    assert pillar_slide.chart.categories == ["Discoverability", "Semantics", "Content", "GEO", "UX", "Competitive"]
+    assert pillar_slide.chart.series[0]["values"] == [82.0, 68.0, 74.0, 62.0, 79.0, 71.0]
 
     status_slide = next(s for s in populated.slides if s.slide_id == "slide_30_http_status_codes")
     assert status_slide.chart is not None

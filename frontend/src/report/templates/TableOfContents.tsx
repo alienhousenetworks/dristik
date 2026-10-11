@@ -43,20 +43,20 @@ export function getChapterDirectory(isRealCompetitorDataAvailable: boolean = fal
         ? 'Competitive Intelligence & Knowledge Graph'
         : 'Knowledge Graph & Entity Readiness',
       desc: isRealCompetitorDataAvailable
-        ? 'Head-to-head commercial query bake-off against verified competitors, Schema.org entity verification, and Social Graph attributes.'
-        : 'Schema.org JSON-LD structured entity verification, Social Graph attributes, and unprovisioned competitor benchmark status (Zero-Fake standard).',
+        ? 'Recorded competitor bake-off, schema types extracted from the sample, and social meta presence.'
+        : 'Schema types extracted from the sample, social meta presence, and the unmeasured competitor benchmark.',
       pageEst: 14,
     },
   {
     num: '05',
     title: 'Conversion Ergonomics & Production Copy',
-    desc: '5-second value proposition hook, form friction, WCAG accessibility, character-safe copy suite, and multi-surface contradiction register.',
+    desc: 'Crawled value-proposition copy, form screening when a form audit ran, and character counts on generated copy. Not a timed test or a WCAG certification.',
     pageEst: 16,
   },
   {
     num: '06',
     title: 'Page-by-Page Audit Review',
-    desc: 'Exhaustive inventory of sampled URLs: SERP metadata pairs, H1 outlines, copy rewrites, and AI citation snippet targets.',
+    desc: 'Sampled URL inventory only: SERP metadata, H1 outlines, and copy recommendations for the analyzed URLs.',
     pageEst: 18,
   },
   {

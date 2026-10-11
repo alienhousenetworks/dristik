@@ -702,6 +702,7 @@ async def run_patch_requery(
     Executes a real live-model evaluation against the proposed patch context using the active LLM engine.
     Returns updated before -> after citation readiness and genuine model-graded score deltas.
     """
+    from app.intelligence.citations.answer_change import settle_patch_scores
     from app.workers.simulator_worker import CANONICAL_COMMERCIAL_QUESTIONS
 
     run = _get_org_run(analysis_id, user)
@@ -788,9 +789,9 @@ async def run_patch_requery(
             task_contract=eval_prompt,
             evidence_list=[],
             rubric=(
-                "1. STRICT POST-PATCH FIDELITY: after_answer must reflect the factual contents of the candidate patch. "
-                "2. HONEST CALIBRATION: after_score should realistically range from 6 to 9 based on how completely the patch resolves the question. "
-                "3. If the patch does not address the question, keep after_score equal or close to before_score."
+                "1. STRICT POST-PATCH FIDELITY: after_answer must use only facts present in the candidate patch. "
+                "2. If the patch does not add a fact the current answer lacks, repeat the before answer, set after_score equal to before_score, and do not claim a citation gain. "
+                "3. Do not raise the score for restating that the fact cannot be determined, or for citing the current meta description or title."
             ),
             output_schema_desc=schema_desc,
             additional_context=f"Domain: {run.report.domain}"
@@ -806,10 +807,10 @@ async def run_patch_requery(
             k = q["key"]
             after_info = after_eval_map.get(k, {})
             b_sc = int(q["before_score"])
-            a_sc = int(after_info.get("after_score")) if after_info.get("after_score") is not None else min(10, b_sc + 4)
-            delta = a_sc - b_sc
-            gain = round(max(0, delta) / 10.0, 2)
-            
+            after_answer = after_info.get("after_answer") or q["before_answer"]
+            raw_after = int(after_info.get("after_score")) if after_info.get("after_score") is not None else None
+            a_sc, delta, gain = settle_patch_scores(b_sc, raw_after, q["before_answer"], after_answer, None)
+
             updated_eval = CommercialQueryEvaluation(
                 question_key=k,
                 question_title=q["title"],
@@ -818,7 +819,7 @@ async def run_patch_requery(
                 before_answer=q["before_answer"],
                 before_evidence_status=q["before_evidence_status"],
                 after_score=a_sc,
-                after_answer=after_info.get("after_answer") or f"Directly synthesized from structured metadata patch for {biz_name}.",
+                after_answer=after_answer,
                 delta=delta,
                 patch_citation_gain=gain,
                 evidence_snippet=after_info.get("evidence_snippet") or "",
@@ -833,9 +834,14 @@ async def run_patch_requery(
         avg_gain = round(((avg_after - avg_before) / max(1.0, avg_before)) * 100, 1)
 
         creds = settings.get_llm_credentials()
+        changed = any((e.delta or 0) > 0 for e in updated_evals)
         return {
-            "status": "verified",
-            "message": "Live model re-query verification successfully executed. Answers and scores synthesized live from candidate patch.",
+            "status": "updated" if changed else "unchanged",
+            "message": (
+                "The patch states a new fact for at least one question."
+                if changed
+                else "The patch does not change these answers. Scores were not raised."
+            ),
             "domain": run.report.domain,
             "commercial_evaluations": [e.model_dump() for e in updated_evals],
             "avg_before_score": avg_before,

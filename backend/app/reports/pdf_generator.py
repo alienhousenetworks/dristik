@@ -29,12 +29,12 @@ class ExecutiveDeckGenerator:
             score_display = "UNMEASURED"
 
         created_at = run_data.get("created_at") or "Measured on audit execution"
-        human_perspective = run_data.get("human_visitor_perspective") or "Value propositions require greater above-the-fold clarity to minimize bounce rates."
-        search_perspective = run_data.get("search_engine_perspective") or "Deterministic crawl hierarchy verified. Canonical routing and XML sitemaps operational."
-        ai_perspective = run_data.get("ai_answer_engine_perspective") or "Generative answer engines experience extraction ambiguity due to marketing-dense prose."
+        human_perspective = run_data.get("human_visitor_perspective") or "No visitor-perspective note was sealed for this run."
+        search_perspective = run_data.get("search_engine_perspective") or "No search-engine perspective was sealed for this run."
+        ai_perspective = run_data.get("ai_answer_engine_perspective") or "No answer-engine perspective was sealed for this run."
 
-        story_summary = run_data.get("story_summary") or "Comprehensive digital intelligence audit executed across primary origin nodes. Empirical findings indicate strong technical foundations coupled with generative AI extraction gaps."
-        lead_opp = run_data.get("primary_strategic_opportunity") or "Deploy deterministic JSON-LD entity graph schemas and publish /llms.txt crawler directives to convert crawl visits into authoritative generative citations."
+        story_summary = run_data.get("story_summary") or "No executive narrative was sealed for this run."
+        lead_opp = run_data.get("primary_strategic_opportunity") or "No next action was sealed for this run."
 
         html = f"""<!DOCTYPE html>
 <html lang="en">

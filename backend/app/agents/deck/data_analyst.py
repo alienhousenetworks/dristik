@@ -24,37 +24,41 @@ class DeckDataAnalystAgent:
     def populate_data(self, blueprint: DeckBlueprint, report: ExecutiveReport) -> DeckBlueprint:
         domain = report.domain or report.website_url.replace("https://", "").replace("http://", "").split("/")[0]
         scores = report.scores
-        overall_score = float(scores.overall_score) if scores and scores.overall_score is not None else 72.0
-        grade = scores.grade if scores and scores.grade else ("A" if overall_score >= 80 else ("B" if overall_score >= 70 else "C"))
+        measured_overall = float(scores.overall_score) if scores and scores.overall_score is not None else None
+        grade = scores.grade if scores and scores.grade else "—"
+        score_label = f"{measured_overall:.1f}/100" if measured_overall is not None else "Unmeasured"
         cat_scores = scores.category_scores if scores and scores.category_scores else {}
 
-        def _get_val(k, def_val):
-            val = cat_scores.get(k)
+        def _category_score(key: str) -> Optional[float]:
+            val = cat_scores.get(key)
             if val is None:
-                return def_val
+                return None
             if hasattr(val, "score") and val.score is not None:
                 return float(val.score)
-            if isinstance(val, (int, float)):
+            if isinstance(val, (int, float)) and not isinstance(val, bool):
                 return float(val)
-            return def_val
+            return None
 
-        # 8 normalized categories
-        cat_map = {
-            "discoverability": _get_val("TECHNICAL_SEO", 75.0),
-            "semantic_structure": _get_val("SCHEMA", 70.0),
-            "entity_schema": _get_val("SCHEMA", 68.0),
-            "content_eeat": _get_val("CONTENT", 74.0),
-            "geo_citability": _get_val("GEO", 62.0),
-            "ux_velocity": _get_val("UX_CONVERSION", 78.0),
-            "security_transport": _get_val("TECHNICAL_SEO", 82.0),
-            "commercial_transparency": _get_val("COMPETITIVE", 69.0),
-        }
+        pillar_defs = (
+            ("Discoverability", "TECHNICAL_SEO"),
+            ("Semantics", "SCHEMA"),
+            ("Content", "CONTENT"),
+            ("GEO", "GEO"),
+            ("UX", "UX_CONVERSION"),
+            ("Trust", "TRUST"),
+            ("Competitive", "COMPETITIVE"),
+            ("On-page", "ON_PAGE"),
+        )
+        measured_pillars = [
+            (label, score)
+            for label, key in pillar_defs
+            if (score := _category_score(key)) is not None
+        ]
 
         # Pages
         pages = (report.crawl_manifest.pages if report.crawl_manifest and report.crawl_manifest.pages else [])
         if not pages and report.page_reports:
             pages = []
-        page_urls = [p.url.replace("https://", "").replace("http://", "") for p in pages[:6]] or ["/ (Home)", "/pricing", "/features", "/about", "/contact"]
 
         # Findings
         findings = report.findings or []
@@ -72,8 +76,8 @@ class DeckDataAnalystAgent:
             # -----------------------------------------------------------------
             if s_id == "slide_01_cover":
                 s.cards = [
-                    CardSpec(kicker="DOMAIN UNDER AUDIT", title=domain, description=f"Audit execution: {report.generated_at}", metric_value=f"{int(overall_score)}/100", badge=f"GRADE {grade}", badge_color="sky"),
-                    CardSpec(kicker="EVIDENCE SAMPLES", title=f"{len(pages) or 1} Pages Verified", description="Deterministic AST parsing and answer-engine probe execution", metric_value=f"{len(findings)} Findings", badge="CERTIFIED", badge_color="emerald")
+                    CardSpec(kicker="DOMAIN UNDER AUDIT", title=domain, description=f"Audit execution: {report.generated_at}", metric_value=score_label, badge=f"GRADE {grade}", badge_color="sky"),
+                    CardSpec(kicker="EVIDENCE SAMPLES", title=f"{len(pages)} Pages sampled", description="Page count and finding count from this audit. Not a certification, and not proof that live answer engines were queried.", metric_value=f"{len(findings)} Findings", badge="RECORDED", badge_color="emerald")
                 ]
 
             # -----------------------------------------------------------------
@@ -92,25 +96,25 @@ class DeckDataAnalystAgent:
             # -----------------------------------------------------------------
             elif s_id == "slide_03_exec_summary":
                 s.cards = [
-                    CardSpec(kicker="COMPOSITE SCORE", title=f"Index: {int(overall_score)} / 100", description=f"Overall digital posture classified as Grade {grade} ({scores.health_label if scores else 'Calibrated'}).", metric_value=f"{int(overall_score)}", badge=f"GRADE {grade}", badge_color="sky"),
-                    CardSpec(kicker="VERIFIED STRENGTH", title="Technical Infrastructure", description=report.what_site_gets_right[0] if report.what_site_gets_right else "Deterministic crawl paths and core canonical routes are operational.", badge="STRENGTH", badge_color="emerald"),
-                    CardSpec(kicker="PRIMARY DEFICIT", title="Generative Extractability", description=report.what_is_holding_it_back[0] if report.what_is_holding_it_back else "Ambiguous marketing prose prevents generative answer engines from citing factual offerings.", badge="BOTTLENECK", badge_color="rose")
+                    CardSpec(kicker="SEALED OVERALL", title=f"Index: {score_label}", description=f"Sealed overall grade {grade} ({scores.health_label if scores else 'not labeled'}). This is the sealed overall, not the dossier composite.", metric_value=score_label, badge=f"GRADE {grade}", badge_color="sky"),
+                    CardSpec(kicker="RECORDED STRENGTH", title="From the audit", description=report.what_site_gets_right[0] if report.what_site_gets_right else "No strength was recorded for this run.", badge="RECORDED", badge_color="emerald"),
+                    CardSpec(kicker="RECORDED DEFICIT", title="From the audit", description=report.what_is_holding_it_back[0] if report.what_is_holding_it_back else "No deficit was recorded for this run.", badge="RECORDED", badge_color="rose")
                 ]
                 s.bullets = [
-                    report.story_summary or f"Comprehensive multi-agent audit executed for {domain}.",
-                    f"Identified {len(findings)} actionable technical defects ({crit_count} Critical, {high_count} High, {med_count} Medium).",
-                    "All metrics derived strictly from active AST DOM parsing and live answer-engine telemetry."
+                    report.story_summary or f"No executive narrative was sealed for {domain}.",
+                    f"Recorded findings: {len(findings)} ({crit_count} Critical, {high_count} High, {med_count} Medium).",
+                    "A finding count is not a live answer-engine measurement."
                 ]
 
             # -----------------------------------------------------------------
             # Slide 4: Primary Opportunity
             # -----------------------------------------------------------------
             elif s_id == "slide_04_primary_opportunity":
-                opp = report.primary_strategic_opportunity or "Deploy deterministic JSON-LD entity graph schemas and publish /llms.txt crawler directives."
+                opp = report.primary_strategic_opportunity or "No next action was sealed for this run."
                 s.cards = [
-                    CardSpec(kicker="HIGHEST-LEVERAGE OPPORTUNITY", title="Strategic Growth Catalyst", description=opp, badge="PRIORITY 1", badge_color="emerald"),
-                    CardSpec(kicker="TARGET IMPACT", title="Generative Answer Visibility", description="Enables direct verbatim citations in ChatGPT, Perplexity, and Google AI Overviews.", metric_value="+45%", badge="PROJECTED", badge_color="sky"),
-                    CardSpec(kicker="IMPLEMENTATION COMPLEXITY", title="Low Risk / High Yield", description="Requires schema injection and crawler manifest publishing without site redesign.", metric_value="1-2 Sprints", badge="FAST VALUE", badge_color="amber")
+                    CardSpec(kicker="RECORDED OPPORTUNITY", title="From the audit", description=opp, badge="RECORDED", badge_color="emerald"),
+                    CardSpec(kicker="CITATION LIFT", title="Not measured", description="No citation lift was measured for this recommendation. A projected percentage is not reported.", badge="UNMEASURED", badge_color="sky"),
+                    CardSpec(kicker="IMPLEMENTATION", title="Not estimated", description="This deck does not assign effort, sprint count, or risk to the recommendation.", badge="UNMEASURED", badge_color="amber")
                 ]
 
             # -----------------------------------------------------------------
@@ -129,9 +133,9 @@ class DeckDataAnalystAgent:
             # -----------------------------------------------------------------
             elif s_id == "slide_06_governance_standard":
                 s.cards = [
-                    CardSpec(kicker="ZERO SIMULATION", title="No Hallucinated Data", description="Every finding originates from live HTTP responses and DOM element inspection.", metric_value="100%", badge="GROUND TRUTH", badge_color="emerald"),
-                    CardSpec(kicker="CRYPTOGRAPHIC TOKENS", title="SHA-256 Provenance", description="Evidence observations are stamped with immutable SHA-256 content hashes.", metric_value="ev_xxx", badge="IMMUTABLE", badge_color="sky"),
-                    CardSpec(kicker="ADVERSARIAL VERIFICATION", title="Two-Sided Challenge", description="Specialist claims are challenged by verification agents to purge false positives.", metric_value="CERTAIN / LIKELY", badge="VERIFIED", badge_color="emerald"),
+                    CardSpec(kicker="MEASUREMENT RULE", title="No invented metrics", description="A missing measurement stays unmeasured. This deck does not fill a chart with a placeholder score.", badge="RULE", badge_color="emerald"),
+                    CardSpec(kicker="EVIDENCE HASH", title="Integrity, not correctness", description="A content hash checks that a stored snippet was not altered. It does not prove the analysis is correct.", badge="HASH", badge_color="sky"),
+                    CardSpec(kicker="CLAIMS", title="Recorded, not certified", description="A finding is recorded from the audit. It is not marked verified unless a recrawl confirmed the change.", badge="RECORDED", badge_color="sky"),
                     CardSpec(kicker="TRANSPARENT BOUNDS", title="Clear Unmeasured Labels", description="External integrations not connected are explicitly tagged NOT_CONFIGURED.", metric_value="NO GUESSES", badge="AUDITABLE", badge_color="sky")
                 ]
 
@@ -139,16 +143,28 @@ class DeckDataAnalystAgent:
             # Slide 7: Tri-Perspective Overview (Chart)
             # -----------------------------------------------------------------
             elif s_id == "slide_07_tri_overview":
-                s.chart = ChartDataSpec(
-                    title="Tri-Perspective Performance Alignment Index",
-                    chart_type=DeckChartType.COLUMN,
-                    categories=["Human Visitor", "Search Engine", "AI Answer Engine"],
-                    series=[{"name": "Performance Score", "values": [76.0, 84.0, 58.0]}],
-                    units="/ 100"
-                )
-                s.cards = [
-                    CardSpec(kicker="DIVERGENCE SUMMARY", title="Search vs AI Asymmetry", description="Site ranks decently in traditional search indexing (84) but experiences major extractability failure in AI answer engines (58).", badge="CRITICAL GAP", badge_color="rose")
-                ]
+                honest = getattr(report, "honest_scores", None)
+                perspective_scores = []
+                if honest is not None:
+                    for label, attr in (("Human", "human_score"), ("Search", "google_score"), ("On-page AI readiness", "ai_readiness_score")):
+                        raw = getattr(honest, attr, None)
+                        if isinstance(raw, (int, float)) and not isinstance(raw, bool):
+                            perspective_scores.append((label, float(raw)))
+                if perspective_scores:
+                    s.chart = ChartDataSpec(
+                        title="Recorded perspective scores",
+                        chart_type=DeckChartType.COLUMN,
+                        categories=[label for label, _score in perspective_scores],
+                        series=[{"name": "Score", "values": [score for _label, score in perspective_scores]}],
+                        units="/ 100"
+                    )
+                    s.cards = [
+                        CardSpec(kicker="RECORDED", title="Perspective scores", description="These are the honest-score fields present on this run. An absent perspective is omitted.", badge="RECORDED", badge_color="sky")
+                    ]
+                else:
+                    s.cards = [
+                        CardSpec(kicker="NOT SCORED", title="No perspective scores", description="This run did not record separate human, search, and answer-engine scores. No alignment index is shown.", badge="UNMEASURED", badge_color="amber")
+                    ]
 
             # -----------------------------------------------------------------
             # Slide 8-10: Tri-Perspective Deep-Dives
@@ -193,38 +209,31 @@ class DeckDataAnalystAgent:
             # -----------------------------------------------------------------
             elif s_id == "slide_12_tri_commercial_impact":
                 s.cards = [
-                    CardSpec(kicker="COMMERCIAL LEAK 01", title="Top-of-Funnel AI Exclusion", description="When prospective buyers research solutions in ChatGPT or Perplexity, the brand is omitted from consideration sets.", badge="AEO LEAK", badge_color="rose"),
-                    CardSpec(kicker="COMMERCIAL LEAK 02", title="Paid Traffic Drop-Off", description="Visitors arriving from paid campaigns bounce due to generic headline copy.", badge="CRO LEAK", badge_color="amber"),
-                    CardSpec(kicker="COMMERCIAL LEAK 03", title="SERP Click Depletion", description="Meta descriptions exceed character boundaries and get truncated on search result pages.", badge="SERP LEAK", badge_color="amber"),
-                    CardSpec(kicker="OPPORTUNITY UNLOCKED", title="Unified Organic Authority", description="Harmonizing on-page copy elevates performance across all three consumer classes simultaneously.", badge="CATALYST", badge_color="emerald")
+                    CardSpec(kicker="NOT MEASURED", title="No commercial-leak finding", description="This slide does not infer AI omission, paid-traffic bounce, or SERP truncation. Those require a completed measurement.", badge="UNMEASURED", badge_color="amber")
                 ]
 
             # -----------------------------------------------------------------
             # Slide 13: 8 Pillars Radar & Scoreboard (Chart)
             # -----------------------------------------------------------------
             elif s_id == "slide_13_pillars_radar":
-                s.chart = ChartDataSpec(
-                    title="8 Core Audit Pillars Performance Index",
-                    chart_type=DeckChartType.COLUMN,
-                    categories=[
-                        "Discoverability", "Semantics", "Entity Schema", "Content EEAT",
-                        "GEO Citability", "UX Velocity", "Security", "Commercial"
-                    ],
-                    series=[{
-                        "name": "Score",
-                        "values": [
-                            cat_map["discoverability"], cat_map["semantic_structure"],
-                            cat_map["entity_schema"], cat_map["content_eeat"],
-                            cat_map["geo_citability"], cat_map["ux_velocity"],
-                            cat_map["security_transport"], cat_map["commercial_transparency"]
-                        ]
-                    }],
-                    units="/ 100"
-                )
-                s.cards = [
-                    CardSpec(kicker="STRONGEST PILLAR", title="Security & Transport", description="Clean HTTPS and modern cipher suites ensure baseline communication security.", metric_value=f"{int(cat_map['security_transport'])}/100", badge="LEADER", badge_color="emerald"),
-                    CardSpec(kicker="WEAKEST PILLAR", title="GEO & AI Citability", description="Generative answer extraction requires structured schema and definition injection.", metric_value=f"{int(cat_map['geo_citability'])}/100", badge="LAGGARD", badge_color="rose")
-                ]
+                if measured_pillars:
+                    strongest = max(measured_pillars, key=lambda item: item[1])
+                    weakest = min(measured_pillars, key=lambda item: item[1])
+                    s.chart = ChartDataSpec(
+                        title="Measured category scores",
+                        chart_type=DeckChartType.COLUMN,
+                        categories=[label for label, _score in measured_pillars],
+                        series=[{"name": "Score", "values": [score for _label, score in measured_pillars]}],
+                        units="/ 100"
+                    )
+                    s.cards = [
+                        CardSpec(kicker="HIGHEST MEASURED CATEGORY", title=strongest[0], description="Highest category score recorded on this run. Not a security certification.", metric_value=f"{strongest[1]:.1f}/100", badge="RECORDED", badge_color="emerald"),
+                        CardSpec(kicker="LOWEST MEASURED CATEGORY", title=weakest[0], description="Lowest category score recorded on this run.", metric_value=f"{weakest[1]:.1f}/100", badge="RECORDED", badge_color="rose"),
+                    ]
+                else:
+                    s.cards = [
+                        CardSpec(kicker="NOT SCORED", title="No category scores", description="This run did not record category scores, so no pillar chart is shown.", badge="UNMEASURED", badge_color="amber")
+                    ]
 
             # -----------------------------------------------------------------
             # Slide 14-27: 8 Pillars Individual Deep-Dives
@@ -255,11 +264,11 @@ class DeckDataAnalystAgent:
                     title="Audit Findings Severity Concentration",
                     chart_type=DeckChartType.DOUGHNUT,
                     categories=["Critical Deficits", "High Severity", "Medium Issues", "Low / Info"],
-                    series=[{"name": "Count", "values": [float(crit_count or 1), float(high_count or 3), float(med_count or 5), float(low_count or 2)]}],
+                    series=[{"name": "Count", "values": [float(crit_count), float(high_count), float(med_count), float(low_count)]}],
                     units="findings"
                 )
                 s.cards = [
-                    CardSpec(kicker="DEFICIT PROFILE", title=f"{len(findings)} Total Issues", description="Prioritized findings cataloged and linked to exact DOM selectors and response headers.", metric_value=f"{crit_count} Critical", badge="SEVERITY PROFILE", badge_color="rose")
+                    CardSpec(kicker="FINDING COUNTS", title=f"{len(findings)} recorded findings", description="Counts by severity. A count does not by itself prove each finding is linked to the correct evidence.", metric_value=f"{crit_count} Critical", badge="RECORDED", badge_color="rose")
                 ]
 
             # -----------------------------------------------------------------
@@ -267,25 +276,59 @@ class DeckDataAnalystAgent:
             # -----------------------------------------------------------------
             elif s_id == "slide_29_infra_overview":
                 s.cards = [
-                    CardSpec(kicker="ROUTES DISCOVERED", title="Sampled URLs", description="Verified pages crawled across priority archetypes.", metric_value=str(len(pages) or 6), badge="AUDITED", badge_color="sky"),
-                    CardSpec(kicker="NETWORK PROTOCOL", title="TLS / Transport", description="Valid HTTPS transport with clean TLS handshake.", metric_value="TLS 1.3", badge="SECURE", badge_color="emerald"),
-                    CardSpec(kicker="SITEMAP DETECTION", title="Index Protocol", description="XML sitemaps registered and accessible to standard spiders.", metric_value="ACTIVE", badge="VERIFIED", badge_color="emerald"),
-                    CardSpec(kicker="ROBOTS DIRECTIVE", title="Crawler Governance", description="Standard robots.txt directives detected without blanket blocking.", metric_value="COMPLIANT", badge="VERIFIED", badge_color="emerald")
+                    CardSpec(kicker="ROUTES SAMPLED", title="Sampled URLs", description="Count of pages in this crawl sample. Not a site-wide inventory.", metric_value=str(len(pages)), badge="SAMPLED", badge_color="sky"),
+                    CardSpec(kicker="TRANSPORT", title="Not certified here", description="TLS version and handshake quality are not measured on this slide.", badge="NOT CHECKED", badge_color="amber"),
+                    CardSpec(kicker="SITEMAP", title="Sitemap flag", description=(
+                        "A sitemap was found." if report.crawl_manifest and report.crawl_manifest.sitemap_found
+                        else "No sitemap was recorded as found." if report.crawl_manifest and report.crawl_manifest.sitemap_found is False
+                        else "Sitemap presence was not recorded."
+                    ), badge="RECORDED", badge_color="sky"),
+                    CardSpec(kicker="ROBOTS", title="Robots flag", description=(
+                        "A robots.txt file was found. Its directives were not judged compliant on this slide."
+                        if report.crawl_manifest and report.crawl_manifest.robots_txt_found
+                        else "No robots.txt file was recorded as found." if report.crawl_manifest and report.crawl_manifest.robots_txt_found is False
+                        else "robots.txt presence was not recorded."
+                    ), badge="RECORDED", badge_color="sky")
                 ]
 
             # -----------------------------------------------------------------
             # Slide 30: HTTP Status Codes (Chart)
             # -----------------------------------------------------------------
             elif s_id == "slide_30_http_status_codes":
+                status_labels = ["200 OK", "301 Redirect", "302 Temp", "404 Not Found", "5xx Server Error"]
+                status_counts = {label: 0 for label in status_labels}
+                recorded_status = 0
+                for page in pages:
+                    code = getattr(page, "status_code", None)
+                    if code == 200:
+                        status_counts["200 OK"] += 1
+                        recorded_status += 1
+                    elif code == 301:
+                        status_counts["301 Redirect"] += 1
+                        recorded_status += 1
+                    elif code == 302:
+                        status_counts["302 Temp"] += 1
+                        recorded_status += 1
+                    elif code == 404:
+                        status_counts["404 Not Found"] += 1
+                        recorded_status += 1
+                    elif isinstance(code, int) and code >= 500:
+                        status_counts["5xx Server Error"] += 1
+                        recorded_status += 1
                 s.chart = ChartDataSpec(
                     title="HTTP Response Code Distribution Across Sampled Routes",
                     chart_type=DeckChartType.COLUMN,
-                    categories=["200 OK", "301 Redirect", "302 Temp", "404 Not Found", "5xx Server Error"],
-                    series=[{"name": "Routes", "values": [float(len(pages) or 5), 1.0, 0.0, 0.0, 0.0]}],
+                    categories=status_labels,
+                    series=[{"name": "Routes", "values": [float(status_counts[label]) for label in status_labels]}],
                     units="URLs"
                 )
+                status_note = (
+                    f"{status_counts['200 OK']} of {len(pages)} sampled URLs returned HTTP 200."
+                    if recorded_status
+                    else "Status codes were not recorded for the sampled URLs."
+                )
                 s.cards = [
-                    CardSpec(kicker="HEALTH SUMMARY", title="98%+ 200 OK Ratio", description="Origins return healthy response status codes with minimal intermediate hops.", badge="HEALTHY", badge_color="emerald")
+                    CardSpec(kicker="STATUS CODES", title="Sampled responses", description=status_note, badge="RECORDED", badge_color="sky")
                 ]
 
             # -----------------------------------------------------------------
@@ -293,9 +336,9 @@ class DeckDataAnalystAgent:
             # -----------------------------------------------------------------
             elif s_id == "slide_31_canonical_routing":
                 s.cards = [
-                    CardSpec(kicker="CANONICAL COMPLIANCE", title="Self-Referential Canonicals", description="Target URLs declare canonical tags matching the destination path.", metric_value="VERIFIED", badge="COMPLIANT", badge_color="emerald"),
-                    CardSpec(kicker="SLASH CONVENTION", title="Trailing Slash Routing", description="Enforce uniform trailing slash 301 consolidation to prevent split equity.", badge="MONITORED", badge_color="sky"),
-                    CardSpec(kicker="PROTOCOL CONSOLIDATION", title="HTTP to HTTPS Redirection", description="Insecure HTTP traffic cleanly redirects to secure HTTPS.", badge="ENFORCED", badge_color="emerald")
+                    CardSpec(kicker="CANONICAL TAGS", title="Not certified on this slide", description="This slide does not certify canonical tags, trailing-slash rules, or HTTP-to-HTTPS redirects.", badge="NOT CHECKED", badge_color="amber"),
+                    CardSpec(kicker="SLASH CONVENTION", title="Not checked here", description="A trailing-slash finding belongs in the crawl evidence, not as a default pass.", badge="NOT CHECKED", badge_color="sky"),
+                    CardSpec(kicker="PROTOCOL", title="Not checked here", description="HTTPS redirection is reported only when the crawl recorded it.", badge="NOT CHECKED", badge_color="sky")
                 ]
 
             # -----------------------------------------------------------------
@@ -312,32 +355,36 @@ class DeckDataAnalystAgent:
             # Slide 33: TTFB Latency (Chart)
             # -----------------------------------------------------------------
             elif s_id == "slide_33_ttfb_latency":
-                ttfbs = [float(getattr(p, "ttfb_ms", 185.0) or 185.0) for p in pages[:5]] or [180.0, 210.0, 165.0, 240.0, 195.0]
-                s.chart = ChartDataSpec(
-                    title="Time-to-First-Byte (TTFB) Latency per Audited URL",
-                    chart_type=DeckChartType.COLUMN,
-                    categories=[p[:18] for p in page_urls[:len(ttfbs)]],
-                    series=[{"name": "TTFB Latency", "values": ttfbs}],
-                    units="ms",
-                    target_value=200.0
-                )
-                s.cards = [
-                    CardSpec(kicker="LATENCY BENCHMARK", title="Average TTFB: ~195ms", description="Server response time complies with the 200ms excellence threshold.", metric_value="FAST", badge="SUB-200MS", badge_color="emerald")
-                ]
+                ttfb_pairs = []
+                for page in pages[:5]:
+                    raw_ttfb = getattr(page, "ttfb_ms", None)
+                    if raw_ttfb is None:
+                        continue
+                    label = (getattr(page, "url", "") or "URL").replace("https://", "").replace("http://", "")
+                    ttfb_pairs.append((label[:18], float(raw_ttfb)))
+                if ttfb_pairs:
+                    average_ttfb = sum(value for _label, value in ttfb_pairs) / len(ttfb_pairs)
+                    s.chart = ChartDataSpec(
+                        title="Time-to-First-Byte (TTFB) Latency per Audited URL",
+                        chart_type=DeckChartType.COLUMN,
+                        categories=[label for label, _value in ttfb_pairs],
+                        series=[{"name": "TTFB Latency", "values": [value for _label, value in ttfb_pairs]}],
+                        units="ms",
+                    )
+                    s.cards = [
+                        CardSpec(kicker="SAMPLED TTFB", title=f"Average {average_ttfb:.0f} ms", description=f"Average of {len(ttfb_pairs)} sampled URL(s) with a recorded TTFB. This is not a pass against a 200 ms rule.", badge="RECORDED", badge_color="sky")
+                    ]
+                else:
+                    s.cards = [
+                        CardSpec(kicker="TTFB", title="Not recorded", description="No sampled URL had a recorded TTFB.", badge="UNMEASURED", badge_color="amber")
+                    ]
 
             # -----------------------------------------------------------------
             # Slide 34: Click-Depth Distribution (Chart)
             # -----------------------------------------------------------------
             elif s_id == "slide_34_click_depth":
-                s.chart = ChartDataSpec(
-                    title="Internal Crawl Hop Distance (Click Depth)",
-                    chart_type=DeckChartType.BAR,
-                    categories=["Hop 0 (Origin)", "Hop 1 (Primary Nav)", "Hop 2 (Sub-sections)", "Hop 3+ (Deep)"],
-                    series=[{"name": "Pages", "values": [1.0, float(min(len(pages), 4)), float(max(len(pages)-5, 1)), 0.0]}],
-                    units="pages"
-                )
                 s.cards = [
-                    CardSpec(kicker="FLAT HIERARCHY", title="Maximum 2 Hops", description="High-priority commercial pages are discoverable within 1-2 clicks from homepage.", badge="OPTIMAL", badge_color="emerald")
+                    CardSpec(kicker="NOT MEASURED", title="Click depth not charted", description="This run does not invent a hop-distance distribution. Click depth is reported only when the crawl recorded it.", badge="UNMEASURED", badge_color="amber")
                 ]
 
             # -----------------------------------------------------------------
@@ -345,7 +392,7 @@ class DeckDataAnalystAgent:
             # -----------------------------------------------------------------
             elif s_id == "slide_35_orphan_pages":
                 s.cards = [
-                    CardSpec(kicker="ORPHAN RISK", title="Zero Disconnected Routes", description="All crawled pages are linked from primary navigation or internal footer links.", metric_value="0 ORPHANS", badge="CLEAN", badge_color="emerald"),
+                    CardSpec(kicker="ORPHAN PAGES", title="Not counted here", description="This slide does not report an orphan count. A missing count is not zero orphans.", badge="NOT CHECKED", badge_color="amber"),
                     CardSpec(kicker="ANCHOR SPECIFICITY", title="Descriptive Anchor Text", description="Replace generic 'click here' links with keyword-rich topical destination descriptions.", badge="ENHANCEMENT", badge_color="sky"),
                     CardSpec(kicker="INTERNAL EQUITY", title="Contextual Cross-Linking", description="Ensure product use cases link contextually to associated pricing and documentation.", badge="BEST PRACTICE", badge_color="sky")
                 ]
@@ -355,29 +402,39 @@ class DeckDataAnalystAgent:
             # -----------------------------------------------------------------
             elif s_id == "slide_36_heading_hierarchy":
                 s.cards = [
-                    CardSpec(kicker="H1 GOVERNANCE", title="Single H1 Discipline", description="Ensure exactly one descriptive H1 tag per page representing the core proposition.", metric_value="ENFORCED", badge="PASSED", badge_color="emerald"),
-                    CardSpec(kicker="H2-H3 NESTING", title="Semantic Hierarchy", description="Sub-sections correctly use H2 headings with nested H3s without skipping levels.", metric_value="STRUCTURED", badge="PASSED", badge_color="emerald"),
-                    CardSpec(kicker="HEADING CLARITY", title="Topical Relevance", description="Headings include target keyword phrases matching visitor search intent.", metric_value="ALIGNED", badge="VERIFIED", badge_color="sky"),
-                    CardSpec(kicker="CSS UTILITY OVERUSE", title="Pure Semantic Tags", description="Avoid using styled <div> tags for headings where native <h1>-<h6> belongs.", metric_value="CLEAN", badge="STANDARDS", badge_color="emerald")
+                    CardSpec(kicker="HEADINGS", title="Not certified here", description="Heading count and hierarchy are findings only when the crawl recorded them. This slide does not mark them passed.", badge="NOT CHECKED", badge_color="amber")
                 ]
 
             # -----------------------------------------------------------------
             # Slide 37: Meta Tag Compliance (Chart)
             # -----------------------------------------------------------------
             elif s_id == "slide_37_meta_tag_compliance":
-                s.chart = ChartDataSpec(
-                    title="Title & Meta Description Length Compliance (Characters)",
-                    chart_type=DeckChartType.COLUMN,
-                    categories=["Page 1", "Page 2", "Page 3", "Page 4", "Page 5"],
-                    series=[
-                        {"name": "Title Chars (Target: 50-60)", "values": [54.0, 58.0, 62.0, 48.0, 56.0]},
-                        {"name": "Meta Chars (Target: 140-160)", "values": [148.0, 155.0, 138.0, 162.0, 150.0]}
-                    ],
-                    units="chars"
-                )
-                s.cards = [
-                    CardSpec(kicker="SERP TRUNCATION", title="Zero Overflow Risk", description="Titles and descriptions fall within Google pixel width thresholds to avoid ellipses.", badge="OPTIMAL", badge_color="emerald")
-                ]
+                meta_rows = []
+                for page in pages[:5]:
+                    title = getattr(page, "title", None) or ""
+                    meta = getattr(page, "meta_description", None) or ""
+                    if not title and not meta:
+                        continue
+                    label = (getattr(page, "url", "") or "URL").replace("https://", "").replace("http://", "")[:18]
+                    meta_rows.append((label, float(len(title)), float(len(meta))))
+                if meta_rows:
+                    s.chart = ChartDataSpec(
+                        title="Recorded title and meta description lengths",
+                        chart_type=DeckChartType.COLUMN,
+                        categories=[label for label, _title, _meta in meta_rows],
+                        series=[
+                            {"name": "Title characters", "values": [title_len for _label, title_len, _meta in meta_rows]},
+                            {"name": "Meta characters", "values": [meta_len for _label, _title, meta_len in meta_rows]},
+                        ],
+                        units="chars"
+                    )
+                    s.cards = [
+                        CardSpec(kicker="LENGTHS", title="Character counts", description="Counts of the title and meta description stored for each sampled page. Not a pixel-width pass.", badge="RECORDED", badge_color="sky")
+                    ]
+                else:
+                    s.cards = [
+                        CardSpec(kicker="LENGTHS", title="Not recorded", description="No sampled page had a stored title or meta description.", badge="UNMEASURED", badge_color="amber")
+                    ]
 
             # -----------------------------------------------------------------
             # Slide 38: Media Assets
@@ -433,7 +490,7 @@ class DeckDataAnalystAgent:
 
             elif s_id == "slide_43_trust_about_pages":
                 s.cards = [
-                    CardSpec(kicker="EXECUTIVE BIOS", title="Verified Leadership", description="Named founders and executive team with verified LinkedIn entity anchors.", badge="EEAT", badge_color="emerald"),
+                    CardSpec(kicker="EXECUTIVE BIOS", title="Not verified here", description="This slide does not confirm named founders or LinkedIn profiles. Publish them only when the page states them.", badge="NOT CHECKED", badge_color="amber"),
                     CardSpec(kicker="CORPORATE ENTITY", title="Physical Address & Registration", description="Valid legal registration and headquarters location establish authenticity.", badge="ENTITY PROOF", badge_color="emerald"),
                     CardSpec(kicker="SECURITY ACCREDITATION", title="Compliance Badges", description="SOC 2, ISO 27001, and GDPR compliance statements provide enterprise assurance.", badge="COMPLIANCE", badge_color="sky")
                 ]
@@ -449,20 +506,28 @@ class DeckDataAnalystAgent:
             # Slide 45: Word Count vs Baselines (Chart)
             # -----------------------------------------------------------------
             elif s_id == "slide_45_word_count_distribution":
-                counts = [float(getattr(p, "word_count", 380) or 380) for p in pages[:4]] or [420.0, 290.0, 510.0, 340.0]
-                s.chart = ChartDataSpec(
-                    title="Observed Word Count vs Intent-Adjusted Baselines",
-                    chart_type=DeckChartType.COLUMN,
-                    categories=["Homepage", "Pricing", "Features", "About"],
-                    series=[
-                        {"name": "Observed Words", "values": counts[:4]},
-                        {"name": "Target Baseline", "values": [400.0, 250.0, 350.0, 300.0]}
-                    ],
-                    units="words"
-                )
-                s.cards = [
-                    CardSpec(kicker="CONTENT VOLUME", title="Healthy Information Gain", description="Page copy meets baseline depth requirements without unnecessary bloat.", badge="BALANCED", badge_color="emerald")
-                ]
+                word_rows = []
+                for page in pages[:6]:
+                    raw_words = getattr(page, "word_count", None)
+                    if raw_words is None:
+                        continue
+                    label = (getattr(page, "url", "") or "URL").replace("https://", "").replace("http://", "")[:18]
+                    word_rows.append((label, float(raw_words)))
+                if word_rows:
+                    s.chart = ChartDataSpec(
+                        title="Recorded word count on sampled pages",
+                        chart_type=DeckChartType.COLUMN,
+                        categories=[label for label, _count in word_rows],
+                        series=[{"name": "Words", "values": [count for _label, count in word_rows]}],
+                        units="words"
+                    )
+                    s.cards = [
+                        CardSpec(kicker="WORD COUNT", title="Sampled pages", description="Word counts stored for the sampled pages. No target baseline is plotted.", badge="RECORDED", badge_color="sky")
+                    ]
+                else:
+                    s.cards = [
+                        CardSpec(kicker="WORD COUNT", title="Not recorded", description="No sampled page had a stored word count.", badge="UNMEASURED", badge_color="amber")
+                    ]
 
             # -----------------------------------------------------------------
             # Slide 46: Modular Sections
@@ -489,37 +554,16 @@ class DeckDataAnalystAgent:
             # Slide 48: 6 Commercial Queries (Chart)
             # -----------------------------------------------------------------
             elif s_id == "slide_48_commercial_query_benchmark":
-                s.chart = ChartDataSpec(
-                    title="6 Commercial Intent Query Extractability Benchmark",
-                    chart_type=DeckChartType.BAR,
-                    categories=[
-                        "Q1: What is the core offering?",
-                        "Q2: Who is the target customer?",
-                        "Q3: What does the product cost?",
-                        "Q4: What are key technical features?",
-                        "Q5: How does it compare to peers?",
-                        "Q6: Who are verified customers?"
-                    ],
-                    series=[{"name": "Extractability %", "values": [85.0, 78.0, 60.0, 82.0, 52.0, 70.0]}],
-                    units="%"
-                )
                 s.cards = [
-                    CardSpec(kicker="EXTRACTION WEAKNESS", title="Pricing & Comparison Gap", description="Queries regarding pricing and peer comparison suffer lowest extraction rates.", badge="PRIORITY FIX", badge_color="rose")
+                    CardSpec(kicker="NOT MEASURED", title="No query extractability chart", description="Buyer-question scores are reported from the question ledger. This slide does not plot a fixed six-question benchmark.", badge="UNMEASURED", badge_color="amber")
                 ]
 
             # -----------------------------------------------------------------
             # Slide 49: Per-Engine Matrix (Chart)
             # -----------------------------------------------------------------
             elif s_id == "slide_49_per_engine_matrix":
-                s.chart = ChartDataSpec(
-                    title="Answer-Engine Citability Index Across Top LLMs",
-                    chart_type=DeckChartType.COLUMN,
-                    categories=["ChatGPT (GPT-4o)", "Perplexity Pro", "Google AI Overviews", "Claude 3.5 Sonnet"],
-                    series=[{"name": "Citability Score", "values": [64.0, 72.0, 58.0, 68.0]}],
-                    units="/ 100"
-                )
                 s.cards = [
-                    CardSpec(kicker="ENGINE DIVERGENCE", title="Perplexity Leads in Citation", description="Perplexity indexes live content most effectively; Google AI requires deeper schema markup.", badge="ENGINE INSIGHT", badge_color="sky")
+                    CardSpec(kicker="NOT MEASURED", title="No live engine scores", description="On-page extractability is not a citation rate. This slide does not assign scores to ChatGPT, Perplexity, Google AI Overviews, or Claude unless a live run recorded them.", badge="UNMEASURED", badge_color="amber")
                 ]
 
             # -----------------------------------------------------------------
@@ -555,23 +599,29 @@ class DeckDataAnalystAgent:
                 ]
 
             elif s_id == "slide_54_ai_readiness_benchmark":
-                s.chart = ChartDataSpec(
-                    title="AI Citability Score vs Enterprise Industry Average",
-                    chart_type=DeckChartType.COLUMN,
-                    categories=["Your Property", "Industry Average", "Top Quartile Cohort"],
-                    series=[{"name": "Readiness Index", "values": [float(cat_map["geo_citability"]), 54.0, 82.0]}],
-                    units="/ 100"
-                )
-                s.cards = [
-                    CardSpec(kicker="COHORT POSITION", title="Above Average, Below Top Quartile", description="Site outperforms median properties (54) but has a 20-point gap to category leaders (82).", badge="OPPORTUNITY", badge_color="sky")
-                ]
+                geo_score = _category_score("GEO")
+                if geo_score is None:
+                    s.cards = [
+                        CardSpec(kicker="NOT MEASURED", title="No industry benchmark", description="No industry average was measured, and this run has no GEO category score.", badge="UNMEASURED", badge_color="amber")
+                    ]
+                else:
+                    s.chart = ChartDataSpec(
+                        title="GEO category score from this audit",
+                        chart_type=DeckChartType.COLUMN,
+                        categories=["This audit"],
+                        series=[{"name": "GEO score", "values": [geo_score]}],
+                        units="/ 100"
+                    )
+                    s.cards = [
+                        CardSpec(kicker="THIS AUDIT", title="GEO category score", description="No industry average or top-quartile cohort was measured. The column is this audit's GEO category score.", metric_value=f"{geo_score:.1f}/100", badge="RECORDED", badge_color="sky")
+                    ]
 
             # -----------------------------------------------------------------
             # Slide 55-60: Conversion & UX Slides
             # -----------------------------------------------------------------
             elif s_id == "slide_55_value_prop_test":
                 s.cards = [
-                    CardSpec(kicker="5-SECOND RULE", title="Immediate Comprehension", description="Can a new visitor summarize the core offering in 5 seconds? Current copy is 70% clear.", badge="EVALUATION", badge_color="sky"),
+                    CardSpec(kicker="COMPREHENSION", title="Timed test not run", description="A five-second comprehension test was not run. No clarity percentage is reported.", badge="NOT RUN", badge_color="amber"),
                     CardSpec(kicker="AUDIENCE CALLOUT", title="Explicit Target Role", description="Directly address buyer persona in the hero sub-headline (e.g. 'Built for Engineering Leaders').", badge="TARGETING", badge_color="emerald"),
                     CardSpec(kicker="OUTCOME CLARITY", title="Quantified Benefit", description="Highlight measurable commercial outcome rather than generic capability features.", badge="VALUE HOOK", badge_color="sky")
                 ]
@@ -584,15 +634,8 @@ class DeckDataAnalystAgent:
                 ]
 
             elif s_id == "slide_57_funnel_friction_points":
-                s.chart = ChartDataSpec(
-                    title="Buyer Cognitive Friction Across Funnel Stages",
-                    chart_type=DeckChartType.COLUMN,
-                    categories=["Hero Landing", "Feature Review", "Pricing Evaluation", "Form Completion"],
-                    series=[{"name": "Friction Score (Lower is Better)", "values": [25.0, 35.0, 55.0, 40.0]}],
-                    units="/ 100"
-                )
                 s.cards = [
-                    CardSpec(kicker="PRIMARY FRICTION", title="Pricing Page Ambiguity", description="The pricing step produces highest cognitive friction due to non-transparent tiers.", badge="BOTTLENECK", badge_color="amber")
+                    CardSpec(kicker="NOT MEASURED", title="No funnel friction score", description="Form and funnel friction are reported only when a form audit or analytics run recorded them. No stage scores are plotted.", badge="UNMEASURED", badge_color="amber")
                 ]
 
             elif s_id == "slide_58_trust_signals":
@@ -621,25 +664,26 @@ class DeckDataAnalystAgent:
             # Slide 61-65: Competitive Parity Slides
             # -----------------------------------------------------------------
             elif s_id == "slide_61_positioning_matrix":
-                s.table_headers = ["Evaluation Dimension", f"{domain}", "Legacy Competitor", "Challenger Startup"]
-                s.table_rows = [
-                    ["Core Positioning", "Modern Developer Platform", "Legacy Enterprise Suite", "Niche Lightweight Utility"],
-                    ["Technical Foundations", "Grade A- (Sub-200ms TTFB)", "Grade C+ (Legacy Monolith)", "Grade B (SPA Routing)"],
-                    ["AI Citability", "Moderate (Improving with Schema)", "Low (Gated Marketing)", "Moderate (Thin Copy)"],
-                    ["Pricing Model", "Transparent Tiered Pricing", "Quote-Only Gated Sales", "Usage-Based Self-Serve"]
-                ]
+                s.table_headers = ["Evaluation", domain, "Other sites"]
+                s.table_rows = [["Competitor comparison", "Not measured in this run", "Not measured"]]
 
             elif s_id == "slide_62_competitor_seo_parity":
-                s.chart = ChartDataSpec(
-                    title="Discoverability & Technical Foundation Parity vs Sector Peers",
-                    chart_type=DeckChartType.COLUMN,
-                    categories=[f"{domain}", "Competitor A", "Competitor B", "Competitor C"],
-                    series=[{"name": "Technical Health Score", "values": [float(cat_map["discoverability"]), 72.0, 68.0, 81.0]}],
-                    units="/ 100"
-                )
-                s.cards = [
-                    CardSpec(kicker="SECTOR PARITY", title="Top-Tier Technical Posture", description="Technical SEO infrastructure matches or exceeds direct category rivals.", badge="COMPETITIVE ADVANTAGE", badge_color="emerald")
-                ]
+                technical_score = _category_score("TECHNICAL_SEO")
+                if technical_score is None:
+                    s.cards = [
+                        CardSpec(kicker="NOT MEASURED", title="No competitor technical scores", description="Competitor technical scores were not measured, and this run has no technical category score.", badge="UNMEASURED", badge_color="amber")
+                    ]
+                else:
+                    s.chart = ChartDataSpec(
+                        title="Technical category score from this audit",
+                        chart_type=DeckChartType.COLUMN,
+                        categories=[domain],
+                        series=[{"name": "Technical score", "values": [technical_score]}],
+                        units="/ 100"
+                    )
+                    s.cards = [
+                        CardSpec(kicker="THIS AUDIT", title="No peer scores", description="Competitor technical scores were not measured. The column is this audit's technical category score.", metric_value=f"{technical_score:.1f}/100", badge="RECORDED", badge_color="sky")
+                    ]
 
             elif s_id == "slide_63_content_depth_gap":
                 s.cards = [
@@ -650,21 +694,14 @@ class DeckDataAnalystAgent:
 
             elif s_id == "slide_64_external_authority":
                 s.cards = [
-                    CardSpec(kicker="DOMAIN PROVENANCE", title="Registered Entity Authority", description="Established domain registration and active DNS infrastructure verified.", badge="PROVENANCE", badge_color="emerald"),
-                    CardSpec(kicker="REPUTATION ECOSYSTEM", title="Clean Brand Profile", description="Zero security blacklisting or malicious transport warnings recorded.", badge="REPUTATION", badge_color="emerald"),
+                    CardSpec(kicker="EXTERNAL AUTHORITY", title="Not measured here", description="Domain registration, DNS, and blacklist status were not checked for this slide.", badge="UNMEASURED", badge_color="amber"),
+                    CardSpec(kicker="REPUTATION", title="Not measured here", description="No blacklist or transport-warning result is reported.", badge="UNMEASURED", badge_color="amber"),
                     CardSpec(kicker="ZERO INVENTED TAM", title="Disciplined Market Scope", description="Dristik strictly avoids speculative TAM or invented competitor figures.", badge="GOVERNANCE", badge_color="sky")
                 ]
 
             elif s_id == "slide_65_share_of_model":
-                s.chart = ChartDataSpec(
-                    title="Emerging Share-of-Model: Generative Brand Recommendation Share",
-                    chart_type=DeckChartType.DOUGHNUT,
-                    categories=[f"{domain}", "Competitor A", "Competitor B", "Unbranded Solutions"],
-                    series=[{"name": "Mention %", "values": [28.0, 34.0, 22.0, 16.0]}],
-                    units="%"
-                )
                 s.cards = [
-                    CardSpec(kicker="SHARE OF MODEL", title="28% Citation Presence", description="Deploying structured definitions can elevate recommendation presence above 40%.", badge="GROWTH RUNWAY", badge_color="emerald")
+                    CardSpec(kicker="NOT MEASURED", title="No share-of-model figure", description="Mention share is reported only from a completed live-engine run. No percentage is assigned here.", badge="UNMEASURED", badge_color="amber")
                 ]
 
             # -----------------------------------------------------------------

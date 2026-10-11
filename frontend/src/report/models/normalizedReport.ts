@@ -25,6 +25,7 @@ import { assignEvidenceHashes, EvidenceHashStatus } from './evidenceIntegrity';
 import { deriveRemediationClaim, RemediationClaim } from './remediationClaim';
 import { finiteNumber } from './scoreLedger';
 import { alignDisplayedStory, buildDisplayedScore } from '../../lib/displayedAuditScore';
+import { effectiveAfterScore } from '../../lib/patchAnswerDelta';
 import { GoogleChannelPayload } from '../../types';
 
 export interface NormalizedEvidenceItem {
@@ -276,7 +277,7 @@ export interface NormalizedReport {
   // Chapter 01: Discoverability & Technical SEO
   technicalSeo: {
     canonicalDestination: string;
-    is301Consolidated: boolean;
+    is301Consolidated: boolean | null;
     redirectChainsCount: number;
     robotsTxtStatus: string;
     sitemapStatus: string;
@@ -598,8 +599,9 @@ export function normalizeExecutiveReport(report: ExecutiveReport): NormalizedRep
     const beforeAvg = commEvals.reduce((acc, e) => acc + e.before_score, 0) / commEvals.length;
     const afterList = commEvals.filter((e) => e.after_score != null);
     if (afterList.length > 0) {
-      const afterAvg = afterList.reduce((acc, e) => acc + (e.after_score || 0), 0) / afterList.length;
-      requeryGainPct = Math.round((afterAvg - beforeAvg) * 10);
+      const afterAvg = afterList.reduce((acc, e) => acc + (effectiveAfterScore(e) ?? e.before_score), 0) / afterList.length;
+      const deltaPoints = Math.round((afterAvg - beforeAvg) * 10);
+      requeryGainPct = deltaPoints === 0 ? null : deltaPoints;
     }
   }
 
@@ -731,7 +733,7 @@ export function normalizeExecutiveReport(report: ExecutiveReport): NormalizedRep
     brief: {
       leadThesis: alignDisplayedStory(
         report.story_summary ||
-        `Independent technical assurance and discoverability diagnostic executed across ${rawPages.length} sampled URLs for ${brandName}. Comprehensive findings indicate strong digital surface foundations coupled with measurable generative AI extraction gaps.`,
+        `Audit of ${rawPages.length} sampled URL${rawPages.length === 1 ? '' : 's'} for ${brandName}. No executive narrative was sealed for this run.`,
         scores.overall_score,
         authoritative,
       ),
@@ -747,7 +749,7 @@ export function normalizeExecutiveReport(report: ExecutiveReport): NormalizedRep
       whatNeedsAttention: (report.what_is_holding_it_back || []).slice(0, 4),
       whatMattersNext:
         report.primary_strategic_opportunity ||
-        'Deploy deterministic JSON-LD entity graph schemas and publish /llms.txt crawler directives to convert crawl visits into authoritative generative citations.',
+        'No next action was sealed for this run.',
       consultantIgnoreAdvice: report.consultant_advice_what_to_ignore,
     },
 
@@ -765,13 +767,13 @@ export function normalizeExecutiveReport(report: ExecutiveReport): NormalizedRep
       perspectives: {
         human:
           report.three_way_comparison?.human_visitor_perspective ||
-          'Factual value propositions require greater clarity on the primary hero viewport to improve visitor conversion velocity.',
+          'No visitor-perspective note was sealed for this run.',
         searchSpider:
           report.three_way_comparison?.search_engine_perspective ||
-          'Deterministic crawl hierarchy verified. Canonical routing and XML sitemap declarations align with search engine standards.',
+          'No search-engine perspective was sealed for this run.',
         answerEngine:
           report.three_way_comparison?.ai_answer_engine_perspective ||
-          'Generative answer engines experience extraction ambiguity due to marketing-dense prose. Entity attribution patches required.',
+          'No answer-engine perspective was sealed for this run.',
       },
     },
 
@@ -803,7 +805,7 @@ export function normalizeExecutiveReport(report: ExecutiveReport): NormalizedRep
 
     technicalSeo: {
       canonicalDestination: report.host_and_redirects?.canonical_destination || report.website_url,
-      is301Consolidated: report.host_and_redirects?.proper_301_consolidation ?? true,
+      is301Consolidated: report.host_and_redirects?.proper_301_consolidation ?? null,
       redirectChainsCount: report.host_and_redirects?.chains_recorded?.length ?? 0,
       robotsTxtStatus: report.crawl_manifest?.robots_txt_found ? 'Accessible (Crawl Directives Active)' : 'Missing robots.txt directives',
       sitemapStatus: report.crawl_manifest?.sitemap_found ? `Discovered: ${report.crawl_manifest?.sitemap_url || 'Active'}` : 'Missing XML sitemap declaration in robots.txt',
@@ -874,12 +876,14 @@ export function normalizeExecutiveReport(report: ExecutiveReport): NormalizedRep
       notExecutedReason: hasLegitCompetitor ? undefined : 'Competitor crawl connector unavailable or unprovisioned for this audit execution run.',
       competitorName: hasLegitCompetitor ? bakeoff?.competitor_domain : undefined,
       bakeoffResults: hasLegitCompetitor ? bakeoff : undefined,
-      entitySummary: (report.geo_readiness?.schema_crosscheck as any)?.summary || 'Entity machine-readability evaluated across schema nodes.',
+      entitySummary: (report.geo_readiness?.schema_crosscheck as any)?.summary || 'No schema cross-check summary was recorded.',
       schemaTypes: report.geo_readiness?.schema_types || [],
       schemaAssessmentSummary: finiteNumber((report.geo_readiness?.schema_crosscheck as any)?.quality_score) == null
         ? 'Schema quality was not scored'
         : `${finiteNumber((report.geo_readiness?.schema_crosscheck as any)?.quality_score)}/100 Schema Integrity`,
-      socialMetaStatus: rawPages.some((p) => p.og_tags && Object.keys(p.og_tags).length > 0) ? 'OpenGraph & Twitter Card Attributes Verified' : 'Missing Social Graph Tags',
+      socialMetaStatus: rawPages.some((p) => p.og_tags && Object.keys(p.og_tags).length > 0)
+        ? 'Open Graph tags present on at least one sampled page'
+        : 'No Open Graph tags recorded on the sampled pages',
     },
 
     conversion: {

@@ -77,14 +77,18 @@ export function Chapter01TechnicalSeo({
                   <td className="py-2 px-3">
                     <span
                       className={`inline-flex items-center gap-1 px-2 py-0.5 rounded font-mono text-[8pt] font-bold ${
-                        technicalSeo.is301Consolidated
+                        technicalSeo.is301Consolidated === true
                           ? 'bg-good/10 text-good border border-good/30'
-                          : 'bg-warn/10 text-warn border border-warn/30'
+                          : technicalSeo.is301Consolidated === false
+                            ? 'bg-warn/10 text-warn border border-warn/30'
+                            : 'bg-paper-200 text-ink-700 border border-line'
                       }`}
                     >
-                      {technicalSeo.is301Consolidated
-                        ? 'PROPERLY CONSOLIDATED (301 PERMANENT)'
-                        : 'WARNING: MULTIPLE APEX/WWW VARIANTS ACTIVE'}
+                      {technicalSeo.is301Consolidated == null
+                        ? 'NOT RECORDED'
+                        : technicalSeo.is301Consolidated
+                          ? 'PROPERLY CONSOLIDATED (301 PERMANENT)'
+                          : 'MULTIPLE APEX/WWW VARIANTS RECORDED'}
                     </span>
                   </td>
                 </tr>
@@ -94,7 +98,7 @@ export function Chapter01TechnicalSeo({
                   </th>
                   <td className="py-2 px-3 text-ink-700">
                     {technicalSeo.redirectChainsCount === 0
-                      ? 'Zero redirect chains detected (Direct 200 OK delivery)'
+                      ? 'No multi-hop redirect chain was recorded in the sample.'
                       : `${technicalSeo.redirectChainsCount} multi-hop redirect chains observed`}
                   </td>
                 </tr>

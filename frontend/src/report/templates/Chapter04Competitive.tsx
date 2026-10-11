@@ -26,8 +26,12 @@ export function Chapter04Competitive({
         description={competitive.chapterDescription || (competitive.isRealCompetitorDataAvailable ? "Machine-readable entity graph crosscheck, structured data verification, and head-to-head evaluation on commercial buyer queries against verified industry peers." : "Machine-readable entity graph crosscheck, structured data verification, and first-party semantic knowledge extraction.")}
         domain={meta.domain}
         whyThisMatters="Answer engines and search algorithms resolve queries against semantic knowledge graphs. Unstructured or ambiguous entity declarations dilute domain authority."
-        howWeMeasuredIt="Schema.org JSON-LD AST extraction, knowledge graph reconciliation, and head-to-head empirical query bake-offs."
-        whatWasAnalyzed="Structured data types (Organization, WebSite, Service, FAQ), OpenGraph consistency, and verified commercial query winners."
+        howWeMeasuredIt={competitive.isRealCompetitorDataAvailable
+          ? 'Schema.org types extracted from the sampled pages, plus the recorded competitor bake-off.'
+          : 'Schema.org types extracted from the sampled pages. No competitor benchmark ran.'}
+        whatWasAnalyzed={competitive.isRealCompetitorDataAvailable
+          ? 'Structured data types on the sample and the recorded competitor bake-off.'
+          : 'Structured data types on the sampled pages. Competitor queries were not run.'}
         pageNumber={12}
       />
 
@@ -53,7 +57,7 @@ export function Chapter04Competitive({
           {/* 4.1 Schema.org Knowledge Graph Health */}
           <div className="space-y-2">
             <h3 className="font-mono text-[8.5pt] font-bold uppercase tracking-[0.04em] text-ink-700">
-              4.1 Schema.org Structured Entity Verification
+              4.1 Schema.org types on the sample
             </h3>
             <table className="w-full text-[8.5pt] border-collapse border border-line">
               <tbody>
@@ -104,7 +108,7 @@ export function Chapter04Competitive({
             {competitive.isRealCompetitorDataAvailable && competitive.bakeoffResults ? (
               <div className="space-y-3">
                 <p className="text-[8.5pt] text-ink-700 font-sans">
-                  Head-to-head empirical testing against verified market peer: <strong>{competitive.competitorName}</strong>
+                  Recorded competitor: <strong>{competitive.competitorName}</strong>. This bake-off is not a live citation measurement.
                 </p>
                 <div className="border border-line rounded divide-y divide-line text-[8pt]">
                   {(competitive.bakeoffResults.evaluations || []).slice(0, 4).map((row, i) => (
@@ -168,58 +172,51 @@ export function Chapter04Competitive({
               </thead>
               <tbody className="divide-y divide-line font-sans">
                 <tr>
-                  <td className="py-1.5 px-3 font-semibold text-ink">Legal Entity &amp; Brand</td>
-                  <td className="py-1.5 px-2 font-mono text-[7.5pt]">
-                    <span className="px-1.5 py-0.5 rounded bg-good/10 text-good border border-good/30 font-bold">
-                      VERIFIED
-                    </span>
-                  </td>
-                  <td className="py-1.5 px-3 text-ink-700 text-[7.5pt]">
-                    Origin hostname and primary organization schema declare exact corporate identity.
-                  </td>
-                </tr>
-                <tr>
-                  <td className="py-1.5 px-3 font-semibold text-ink">Service Taxonomy</td>
-                  <td className="py-1.5 px-2 font-mono text-[7.5pt]">
-                    <span className="px-1.5 py-0.5 rounded bg-warn/10 text-warn border border-warn/30 font-bold">
-                      PARTIAL
-                    </span>
-                  </td>
-                  <td className="py-1.5 px-3 text-ink-700 text-[7.5pt]">
-                    Service routes present in HTML but lack explicit schema.org/Service and qualification properties.
-                  </td>
-                </tr>
-                <tr>
-                  <td className="py-1.5 px-3 font-semibold text-ink">Pricing &amp; Commercial Terms</td>
+                  <td className="py-1.5 px-3 font-semibold text-ink">Organization schema</td>
                   <td className="py-1.5 px-2 font-mono text-[7.5pt]">
                     <span className="px-1.5 py-0.5 rounded bg-paper-200 text-ink-700 border border-line font-bold">
-                      NOT FOUND
+                      {competitive.schemaTypes.some((type) => /organization/i.test(type)) ? 'PRESENT' : 'NOT RECORDED'}
                     </span>
                   </td>
                   <td className="py-1.5 px-3 text-ink-700 text-[7.5pt]">
-                    No public pricing tables found on sampled origin pages. Commercial queries yield zero grounding.
+                    {competitive.schemaTypes.some((type) => /organization/i.test(type))
+                      ? 'Organization is among the schema types extracted from the sample. That is not an independent legal-identity verification.'
+                      : 'Organization was not in the schema types extracted from the sample.'}
                   </td>
                 </tr>
                 <tr>
-                  <td className="py-1.5 px-3 font-semibold text-ink">SOC 2 / Security Compliance</td>
+                  <td className="py-1.5 px-3 font-semibold text-ink">Service schema</td>
                   <td className="py-1.5 px-2 font-mono text-[7.5pt]">
-                    <span className="px-1.5 py-0.5 rounded bg-paper-100 text-ink-700 border border-line font-bold">
-                      NOT VERIFIED
+                    <span className="px-1.5 py-0.5 rounded bg-paper-200 text-ink-700 border border-line font-bold">
+                      {competitive.schemaTypes.some((type) => /service/i.test(type)) ? 'PRESENT' : 'NOT RECORDED'}
                     </span>
                   </td>
                   <td className="py-1.5 px-3 text-ink-700 text-[7.5pt]">
-                    No public compliance attestation observed. <em>This does NOT establish that the organization lacks SOC 2 certification</em>; only that it is absent from public DOM evidence.
+                    {competitive.schemaTypes.some((type) => /service/i.test(type))
+                      ? 'Service is among the schema types extracted from the sample.'
+                      : 'Service was not in the schema types extracted from the sample.'}
                   </td>
                 </tr>
                 <tr>
-                  <td className="py-1.5 px-3 font-semibold text-ink">External Backlink Authority</td>
+                  <td className="py-1.5 px-3 font-semibold text-ink">Pricing and compliance</td>
+                  <td className="py-1.5 px-2 font-mono text-[7.5pt]">
+                    <span className="px-1.5 py-0.5 rounded bg-paper-200 text-ink-700 border border-line font-bold">
+                      NOT ASSESSED
+                    </span>
+                  </td>
+                  <td className="py-1.5 px-3 text-ink-700 text-[7.5pt]">
+                    This register does not check pricing pages or compliance attestations. Absence here is not a finding.
+                  </td>
+                </tr>
+                <tr>
+                  <td className="py-1.5 px-3 font-semibold text-ink">Backlink authority</td>
                   <td className="py-1.5 px-2 font-mono text-[7.5pt]">
                     <span className="px-1.5 py-0.5 rounded bg-paper-200 text-ink-500 border border-line font-bold">
                       NOT MEASURED
                     </span>
                   </td>
                   <td className="py-1.5 px-3 text-ink-700 text-[7.5pt]">
-                    Third-party backlink connector unprovisioned for this audit execution run. Score is not affected.
+                    No backlink provider was read for this run. The score is not affected.
                   </td>
                 </tr>
               </tbody>

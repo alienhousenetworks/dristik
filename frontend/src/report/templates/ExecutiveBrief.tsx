@@ -295,7 +295,7 @@ export function ExecutiveBrief({ theme, report }: ExecutiveBriefProps) {
                   <li key={idx}>{item}</li>
                 ))
               ) : (
-                <li>Technical surface reachable with valid HTTP 200 responses.</li>
+                <li>No observed strengths were recorded for this run.</li>
               )}
             </ul>
           </div>
@@ -311,7 +311,7 @@ export function ExecutiveBrief({ theme, report }: ExecutiveBriefProps) {
                   <li key={idx}>{item}</li>
                 ))
               ) : (
-                <li>Entity extraction ambiguity in marketing body copy.</li>
+                <li>No attention items were recorded for this run.</li>
               )}
             </ul>
           </div>

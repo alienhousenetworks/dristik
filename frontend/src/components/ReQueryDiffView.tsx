@@ -4,13 +4,13 @@ import {
   ArrowRight,
   ShieldCheck,
   AlertTriangle,
-  XCircle,
   Zap,
   ChevronDown,
   ChevronUp,
   RefreshCw,
   Info,
 } from 'lucide-react';
+import { answersUnchanged, effectiveAfterScore, effectiveCitationGain } from '../lib/patchAnswerDelta';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers
@@ -109,17 +109,17 @@ export function ReQueryDiffView({
   const [expandedKey, setExpandedKey] = useState<string | null>(null);
 
   const hasEvals = evals.length > 0;
-  const hasAfterEvals = hasEvals && evals.some((e) => e.after_score != null);
+  const scoredAfter = evals
+    .map((item) => effectiveAfterScore(item))
+    .filter((score): score is number => score != null);
+  const hasAfterEvals = scoredAfter.length > 0;
 
-  // Score averages (Before / After)
+  // Score averages use the corrected after score. An unchanged answer does not raise the average.
   const avgBeforeScore = hasEvals
     ? Math.round(evals.reduce((acc, e) => acc + e.before_score, 0) / evals.length)
     : null;
   const avgAfterScore = hasAfterEvals
-    ? Math.round(
-        evals.filter((e) => e.after_score != null).reduce((acc, e) => acc + (e.after_score || 0), 0) /
-          evals.filter((e) => e.after_score != null).length
-      )
+    ? Math.round(scoredAfter.reduce((acc, score) => acc + score, 0) / scoredAfter.length)
     : null;
 
   // Grounding averages (KIE)
@@ -212,7 +212,9 @@ export function ReQueryDiffView({
                 {scoreDelta != null && (
                   <div className="border-l border-line pl-3 text-center">
                     <span className="text-[10px] font-medium text-ink-700 block mb-0.5">Score Δ</span>
-                    <span className="text-lg font-semibold text-ink-700 font-mono">+{scoreDelta}</span>
+                    <span className="text-lg font-semibold text-ink-700 font-mono">
+                      {scoreDelta > 0 ? `+${scoreDelta}` : scoreDelta === 0 ? 'No change' : scoreDelta}
+                    </span>
                   </div>
                 )}
               </>
@@ -263,6 +265,9 @@ export function ReQueryDiffView({
         <div className="space-y-4">
           {evals.map((item) => {
             const isExpanded = expandedKey === item.question_key;
+            const unchanged = answersUnchanged(item.before_answer, item.after_answer);
+            const shownAfter = effectiveAfterScore(item);
+            const shownGain = effectiveCitationGain(item);
             return (
               <div
                 key={item.question_key}
@@ -319,46 +324,47 @@ export function ReQueryDiffView({
                   </div>
 
                   {/* AFTER */}
-                  <div className="p-4 space-y-3 bg-good/10">
+                  <div className={`p-4 space-y-3 ${unchanged ? 'bg-paper-50' : 'bg-good/10'}`}>
                     <div className="flex items-center justify-between">
-                      <span className="label text-good flex items-center gap-1.5">
-                        <span className="w-2 h-2 rounded-full bg-good" />
-                        After Patch — Grounded Answer
+                      <span className={`label flex items-center gap-1.5 ${unchanged ? 'text-ink-600' : 'text-good'}`}>
+                        <span className={`w-2 h-2 rounded-full ${unchanged ? 'bg-ink-400' : 'bg-good'}`} />
+                        {unchanged ? 'After patch — same answer' : 'After patch — new fact'}
                       </span>
                       <div className="flex items-center gap-2">
-                        {item.after_grounding_ratio != null && (
+                        {!unchanged && item.after_grounding_ratio != null && (
                           <span className="font-mono text-[10px] text-good bg-good/10 border border-good/30 px-1.5 py-0.5 rounded">
                             {Math.round(item.after_grounding_ratio * 100)}% grounded
                           </span>
                         )}
-                        <span className="font-bold px-2 py-0.5 rounded bg-good/10 text-good border border-good/30 font-mono">
-                          {item.after_score != null ? `${item.after_score}/10` : 'Pending'}
+                        <span className={`font-bold px-2 py-0.5 rounded font-mono ${unchanged ? 'bg-paper-100 text-ink-700 border border-line' : 'bg-good/10 text-good border border-good/30'}`}>
+                          {shownAfter != null ? `${shownAfter}/10` : 'Pending'}
                         </span>
-                        {item.delta != null && item.delta > 0 && (
+                        {!unchanged && shownAfter != null && shownAfter > item.before_score && (
                           <span className="font-bold px-1.5 py-0.5 rounded bg-paper-200 text-ink-700 text-[10px] font-mono">
-                            +{item.delta}
+                            +{shownAfter - item.before_score}
                           </span>
                         )}
                       </div>
                     </div>
-                    <p className="text-ink-700 leading-relaxed bg-paper-50 p-2.5 rounded border border-good/30 font-mono text-[11px] shadow-2xs">
+                    <p className="text-ink-700 leading-relaxed bg-paper-50 p-2.5 rounded border border-line font-mono text-[11px]">
                       {item.after_answer || 'Pending patch application and re-query.'}
                     </p>
-                    {item.evidence_snippet && (
+                    {unchanged && (
+                      <p className="text-[11px] text-ink-600">
+                        This suggestion does not add a fact the current page lacks. The score is not raised.
+                      </p>
+                    )}
+                    {!unchanged && item.evidence_snippet && (
                       <blockquote className="text-[11px] text-good border-l-2 border-good/30 pl-2 font-mono">
                         "{item.evidence_snippet}"
                       </blockquote>
                     )}
-                    <div className="flex items-center justify-between text-[11px] text-good font-medium pt-1">
+                    <div className={`flex items-center justify-between text-[11px] font-medium pt-1 ${unchanged ? 'text-ink-600' : 'text-good'}`}>
                       <span className="flex items-center gap-1">
                         <ShieldCheck className="w-3 h-3" />
-                        Cites first-party entity graph
+                        {unchanged ? 'Not a new citation' : 'Cites a new fact'}
                       </span>
-                      <span>
-                        {item.patch_citation_gain != null
-                          ? `+${Math.round(item.patch_citation_gain * 100)}% Citation Readiness`
-                          : 'Pending Verification'}
-                      </span>
+                      <span>{unchanged || shownGain == null ? 'No citation gain' : 'Score change only. Not a measured citation rate'}</span>
                     </div>
                   </div>
                 </div>
@@ -372,10 +378,9 @@ export function ReQueryDiffView({
                     </div>
                     <p className="text-ink-600 leading-relaxed">
                       The <strong>Grounding Ratio</strong> measures what fraction of the synthesized answer
-                      is directly supported by first-party crawled evidence. A ratio below 35% means an AI
-                      answer engine can't reliably ground its response and will hallucinate — substituting
-                      competitor evidence or fabricating specifics. Applying the recommended patches
-                      (Schema.org markup, FAQ sections, pricing tables) directly increases this ratio.
+                      is directly supported by first-party crawled evidence. A higher after score is shown
+                      only when the after answer states a fact the before answer did not. Restating the
+                      same gap, or citing the current meta description, is not a citation gain.
                     </p>
                     <div className="flex items-center gap-1 text-[11px] text-ink-700 font-semibold">
                       <Zap className="w-3.5 h-3.5" />

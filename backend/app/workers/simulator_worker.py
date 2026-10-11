@@ -9,6 +9,7 @@ from app.workers.base_worker import BaseCognitiveWorker
 from app.cognition.blackboard import CognitiveBlackboard
 from app.domain.models import AiSearchQueryEvaluation, CommercialQueryEvaluation, DynamicSandboxQuestionEvaluation
 from app.intelligence.business.entity_resolver import UniversalEntityResolver
+from app.intelligence.citations.answer_change import settle_patch_scores
 from app.intelligence.geo.dynamic_sandbox import DynamicQuestionSandboxEngine
 
 # The Canonical 6 Commercial Questions that close why buyers buy or renew
@@ -144,9 +145,9 @@ class CognitiveSimulatorWorker(BaseCognitiveWorker):
             task_contract=contract,
             evidence_list=evidence_list,
             rubric=(
-                "1. STRICT BEFORE VS AFTER FIDELITY: Before evaluation must strictly reflect raw DOM. If pricing or ICP is not stated in crawled evidence, mark 'MISSING', before_score <= 3. After evaluation reflects the grounded Schema.org + FAQ patch.\n"
-                "2. NO FAKE 100% PROMISES: after_score should realistically range from 7 to 9 for patched dimensions, reflecting high probability without hallucinating absolute guarantees.\n"
-                "3. GROUNDED DELTA: delta must equal after_score - before_score.\n"
+                "1. STRICT BEFORE VS AFTER FIDELITY: Before evaluation must strictly reflect raw DOM. If pricing or ICP is not stated in crawled evidence, mark 'MISSING', before_score <= 3.\n"
+                "2. SAME ANSWER, NO GAIN: If the after answer repeats the before answer, still says the fact cannot be determined, or only cites the current meta description or title, set after_score equal to before_score, delta 0, and patch_citation_gain 0.\n"
+                "3. A higher after_score requires a new fact that is not already on the crawled page. delta must equal after_score - before_score.\n"
                 "4. 6 COMMERCIAL QUESTIONS: Must output exactly all 6 questions (identity, icp, pricing, alternatives, trust, roi)."
             ),
             output_schema_desc=schema_desc,
@@ -190,9 +191,15 @@ class CognitiveSimulatorWorker(BaseCognitiveWorker):
             # Single-question focused evaluation (e.g. unit test or targeted dimension query)
             item = raw_list[0]
             b_score = int(item.get("before_score")) if item.get("before_score") is not None else 3
-            a_score = int(item.get("after_score")) if item.get("after_score") is not None else 8
-            delta = (a_score - b_score) if (a_score is not None and b_score is not None) else (item.get("delta") or 5)
-            gain = float(item.get("patch_citation_gain")) if item.get("patch_citation_gain") is not None else round(max(0, delta) / 10.0, 2)
+            raw_after = int(item.get("after_score")) if item.get("after_score") is not None else None
+            proposed_gain = float(item.get("patch_citation_gain")) if item.get("patch_citation_gain") is not None else None
+            a_score, delta, gain = settle_patch_scores(
+                b_score,
+                raw_after,
+                item.get("before_answer"),
+                item.get("after_answer"),
+                proposed_gain,
+            )
             key = str(item.get("question_key") or "pricing")
             title = str(item.get("question_title") or "Pricing & Commercial Model")
             query_text = str(item.get("buyer_query") or item.get("query") or f"How is {biz_name} priced?")
@@ -263,22 +270,20 @@ class CognitiveSimulatorWorker(BaseCognitiveWorker):
 
                 if matched_item:
                     b_score = int(matched_item.get("before_score")) if matched_item.get("before_score") is not None else 3
-                    a_score = int(matched_item.get("after_score")) if matched_item.get("after_score") is not None else 8
-                    delta = (a_score - b_score) if (a_score is not None and b_score is not None) else (matched_item.get("delta") or 5)
-                    gain = float(matched_item.get("patch_citation_gain")) if matched_item.get("patch_citation_gain") is not None else round(max(0, delta) / 10.0, 2)
                     before_ans = str(matched_item.get("before_answer") or f"Information regarding {numbered_title} is not clearly stated on crawled pages.")
-                    after_ans = str(matched_item.get("after_answer") or f"Grounded {numbered_title} facts will be cited from Schema.org and llms.txt.")
+                    after_ans = str(matched_item.get("after_answer") or before_ans)
+                    raw_after = int(matched_item.get("after_score")) if matched_item.get("after_score") is not None else None
+                    proposed_gain = float(matched_item.get("patch_citation_gain")) if matched_item.get("patch_citation_gain") is not None else None
+                    a_score, delta, gain = settle_patch_scores(b_score, raw_after, before_ans, after_ans, proposed_gain)
                     ev_status = str(matched_item.get("before_evidence_status") or ("VERIFIED" if b_score >= 6 else "AMBIGUOUS" if b_score >= 4 else "MISSING")).upper()
                     ev_snip = matched_item.get("evidence_snippet") or None
                     gap = str(matched_item.get("gap_analysis") or f"No explicit, crawlable facts for {numbered_title}.")
                     query_text = str(matched_item.get("buyer_query") or matched_item.get("query") or canon_query)
                 else:
                     b_score = 2
-                    a_score = 8
-                    delta = 6
-                    gain = 0.60
-                    before_ans = f"Cannot answer definitively from crawled site pages. No direct statements found for {numbered_title.lower()}."
-                    after_ans = f"Grounded response will cite unambiguous {numbered_title} entity definitions from /public/llms.txt and Schema.org."
+                    before_ans = "Cannot determine from crawled site evidence."
+                    after_ans = before_ans
+                    a_score, delta, gain = settle_patch_scores(b_score, b_score, before_ans, after_ans, None)
                     ev_status = "MISSING"
                     ev_snip = None
                     gap = f"Raw crawled pages lack explicit, declarative facts answering '{canon_query}'."

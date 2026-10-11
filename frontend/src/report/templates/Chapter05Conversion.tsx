@@ -59,7 +59,7 @@ export function Chapter05Conversion({
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-[8.5pt]">
             <div className="p-4 rounded bg-paper-100 border border-line space-y-2">
               <span className="font-mono text-[8pt] font-bold uppercase tracking-[0.04em] text-ink-600 block">
-                5-Second First-Impression Value Proposition
+                Crawled value proposition
               </span>
               <p className="font-sans text-[11pt] font-normal italic text-ink leading-snug">
                 {conversion.fiveSecondHook ? `"${conversion.fiveSecondHook}"` : 'Not determinable from the crawled evidence.'}

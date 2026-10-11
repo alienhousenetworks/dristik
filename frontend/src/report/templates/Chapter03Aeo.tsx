@@ -1,5 +1,6 @@
 import React from 'react';
 import { formatPercentPoints } from '../../lib/format';
+import { effectiveAfterScore } from '../../lib/patchAnswerDelta';
 import { ReportTheme } from '../brandTheme';
 import { NormalizedReport } from '../models/normalizedReport';
 import { ChapterOpener } from './ChapterOpener';
@@ -241,7 +242,7 @@ export function Chapter03Aeo({
                   <div key={item.question_key} className="p-3 bg-paper-50 border border-line rounded text-[8pt] space-y-1.5">
                     <div className="flex items-center justify-between font-mono text-[7.5pt]">
                       <span className="font-bold text-ink">{item.question_title}</span>
-                      <span className="text-ink-500">Score: {item.before_score}/10 → {item.after_score ?? item.before_score}/10</span>
+                      <span className="text-ink-500">Score: {item.before_score}/10 → {effectiveAfterScore(item) ?? item.before_score}/10</span>
                     </div>
                     <p className="text-ink-600 italic font-sans">"{item.buyer_query}"</p>
                     <div className="pt-1 border-t border-line flex items-center justify-between text-[7.5pt] font-mono">
