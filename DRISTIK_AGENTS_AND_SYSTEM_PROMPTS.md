@@ -1,7 +1,7 @@
 # Dristik AI — Master Agent Catalog & System Prompts Directory
 
-**Version:** 2.0.0 / Policy Pack `enterprise_web_intel_v4`  
-**Scope:** Complete technical reference of all 43 AI agents (35 Core Specialists, 5 Page Copywriting Agents, 3 Presentation Deck Agents) plus Master Orchestrator & Constitution prompts.  
+**Version:** 4.0.0 / Policy Pack `enterprise_web_intel_v4`  
+**Scope:** Complete technical reference of all 58 AI agents (50 Core Specialists across 10 Domains, 5 Page Copywriting Agents, 3 Presentation Deck Agents) plus Master Orchestrator & Constitution prompts.  
 **Source of Truth:** Live codebase (`backend/app/agents/runtime/`, `backend/app/inference/`, `prompts/`).
 
 ---
@@ -14,14 +14,14 @@
    - 2.2 [Specialist Auditor Foundation (`specialist_system.txt`)](#22-specialist-auditor-foundation-specialist_systemtxt)
    - 2.3 [Master Agent Constitution (`prompts/constitution.md`)](#23-master-agent-constitution-promptsconstitutionmd)
    - 2.4 [Master Mission Director & Orchestrator Prompt (`prompts/orchestrator.md`)](#24-master-mission-director--orchestrator-prompt-promptsorchestratormd)
-3. [The 35 Canonical Specialist Agents (Core DAG)](#3-the-35-canonical-specialist-agents-core-dag)
+3. [The 50 Canonical Specialist Agents (Core DAG)](#3-the-50-canonical-specialist-agents-core-dag)
    - [Domain 1: Business Intelligence (5 Agents)](#domain-1-business-intelligence-5-agents)
      - 1. `business.discovery.v3` — Business Discovery Agent
      - 2. `business.icp.v3` — ICP Intelligence Agent
      - 3. `business.intent.v3` — Search Intent Agent
      - 4. `business.commercial.v3` — Commercial Intelligence Agent
      - 5. `business.semantic_strategist.v3` — Semantic Business Strategist
-   - [Domain 2: Technical SEO (7 Agents)](#domain-2-technical-seo-7-agents)
+   - [Domain 2: Technical SEO & Crawl Infrastructure (9 Agents)](#domain-2-technical-seo--crawl-infrastructure-9-agents)
      - 6. `seo.crawl.v3` — Crawl Intelligence Agent *(Deterministic)*
      - 7. `seo.indexability.v3` — Indexability Agent *(Hybrid)*
      - 8. `seo.html.v3` — Technical HTML Agent *(Deterministic)*
@@ -29,45 +29,62 @@
      - 10. `seo.performance.v3` — Performance Agent *(Deterministic)*
      - 11. `seo.security.v3` — Security & Infrastructure Agent *(Deterministic)*
      - 12. `seo.assets.v3` — Media & Asset Agent *(Hybrid)*
+     - 13. `crawl.rendering_hydration.v3` — JS Rendering & Hydration Risk Specialist *(Deterministic)*
+     - 14. `crawl.international_hreflang.v3` — Internationalization & Hreflang Specialist *(Deterministic)*
    - [Domain 3: Structured Data & Entity Intelligence (3 Agents)](#domain-3-structured-data--entity-intelligence-3-agents)
-     - 13. `schema.validation.v3` — Schema Intelligence Agent *(Hybrid)*
-     - 14. `entity.graph.v3` — Entity Intelligence Agent
-     - 15. `entity.knowledge_graph.v3` — Knowledge Graph Agent
+     - 15. `schema.validation.v3` — Schema Intelligence Agent *(Hybrid)*
+     - 16. `entity.graph.v3` — Entity Intelligence Agent
+     - 17. `entity.knowledge_graph.v3` — Knowledge Graph Agent
    - [Domain 4: Content Intelligence (5 Agents)](#domain-4-content-intelligence-5-agents)
-     - 16. `content.depth.v3` — Content Depth Agent
-     - 17. `content.eeat.v3` — E-E-A-T Agent
-     - 18. `content.quality.v3` — Content Quality Agent
-     - 19. `content.topic_coverage.v3` — Topic Coverage Agent
-     - 20. `content.cannibalization.v3` — Cannibalization Agent
-   - [Domain 5: Generative Engine Optimization / GEO (4 Agents)](#domain-5-generative-engine-optimization--geo-4-agents)
-     - 21. `geo.extractability.v3` — Answer Extractability Agent
-     - 22. `geo.information_gain.v3` — Information Gain Agent
-     - 23. `geo.citation_readiness.v3` — Citation Readiness Agent
-     - 24. `geo.structure.v3` — Generative Content Structure Agent
-   - [Domain 6: AI Search & Engine Readiness (5 Agents)](#domain-6-ai-search--engine-readiness-5-agents)
-     - 25. `ai_search.discoverability.v3` — AI Discoverability Agent
-     - 26. `ai_search.chatgpt.v3` — ChatGPT Visibility Agent
-     - 27. `ai_search.perplexity.v3` — Perplexity Visibility Agent
-     - 28. `ai_search.google.v3` — Google AI Search Agent
-     - 29. `ai_search.cross_engine.v3` — Cross-Engine Search Agent
-   - [Domain 7: Experience, CRO & Trust (3 Agents)](#domain-7-experience-cro--trust-3-agents)
-     - 30. `ux.experience.v3` — UX Intelligence Agent *(Hybrid)*
-     - 31. `cro.conversion.v3` — Conversion Intelligence Agent
-     - 32. `trust.authority.v3` — Trust Authority Agent
-   - [Domain 8: Verification & Executive Strategy (3 Agents)](#domain-8-verification--executive-strategy-3-agents)
-     - 33. `verification.adversarial.v3` — Adversarial Verification Agent
-     - 34. `verification.contradiction.v3` — Contradiction & Causal Reasoning Agent
-     - 35. `strategy.executive.v3` — Executive Intelligence & Remediation Agent
+     - 18. `content.depth.v3` — Content Depth Agent
+     - 19. `content.eeat.v3` — E-E-A-T Agent
+     - 20. `content.quality.v3` — Content Quality Agent
+     - 21. `content.topic_coverage.v3` — Topic Coverage Agent
+     - 22. `content.cannibalization.v3` — Cannibalization Agent
+   - [Domain 5: Generative Engine Optimization / GEO (6 Agents)](#domain-5-generative-engine-optimization--geo-6-agents)
+     - 23. `geo.extractability.v3` — Answer Extractability Agent
+     - 24. `geo.information_gain.v3` — Information Gain Agent
+     - 25. `geo.citation_readiness.v3` — Citation Readiness Agent
+     - 26. `geo.structure.v3` — Generative Content Structure Agent
+     - 27. `geo.multimodal_citation.v3` — Multi-Modal Data & Visual Asset Specialist *(Deterministic)*
+     - 28. `geo.source_freshness.v3` — Temporal Freshness & Information Longevity Specialist *(Deterministic)*
+   - [Domain 6: Answer Engine Optimization / AEO (3 Agents)](#domain-6-answer-engine-optimization--aeo-3-agents)
+     - 29. `aeo.direct_answer_box.v3` — Featured Snippet & Direct Answer Specialist *(Deterministic)*
+     - 30. `aeo.entity_consensus.v3` — Universal Entity Authority & Consensus Specialist *(Hybrid)*
+     - 31. `aeo.conversational_intent.v3` — Long-Tail Conversational Query Specialist *(Hybrid)*
+   - [Domain 7: AI Search & Engine Readiness (5 Agents)](#domain-7-ai-search--engine-readiness-5-agents)
+     - 32. `ai_search.discoverability.v3` — AI Discoverability Agent
+     - 33. `ai_search.chatgpt.v3` — ChatGPT Visibility Agent
+     - 34. `ai_search.perplexity.v3` — Perplexity Visibility Agent
+     - 35. `ai_search.google.v3` — Google AI Search Agent
+     - 36. `ai_search.cross_engine.v3` — Cross-Engine Search Agent
+   - [Domain 8: CRO & Conversion Experience (7 Agents)](#domain-8-cro--conversion-experience-7-agents)
+     - 37. `ux.experience.v3` — UX Intelligence Agent *(Hybrid)*
+     - 38. `cro.conversion.v3` — Conversion Intelligence Agent
+     - 39. `trust.authority.v3` — Trust Authority Agent
+     - 40. `cro.form_friction.v3` — Form & Input Abandonment Specialist *(Deterministic)*
+     - 41. `cro.pricing_psychology.v3` — Pricing Architecture & Packaging Specialist *(Deterministic)*
+     - 42. `cro.three_second_hook.v3` — Hero Hook & Cognitive Value Specialist *(Hybrid)*
+     - 43. `cro.social_proof_depth.v3` — Social Proof & Case Study Depth Specialist *(Hybrid)*
+   - [Domain 9: Competitor Intelligence (4 Agents)](#domain-9-competitor-intelligence-4-agents)
+     - 44. `competitor.head_to_head_parity.v3` — Competitor SEO & Technical Parity Specialist *(Deterministic)*
+     - 45. `competitor.answer_bakeoff.v3` — AI Answer Engine Bake-Off Specialist *(Hybrid)*
+     - 46. `competitor.feature_pricing_matrix.v3` — Competitor Value & Pricing Matrix Specialist *(Hybrid)*
+     - 47. `competitor.citation_gap.v3` — Competitor Authority & Citation Gap Specialist *(Hybrid)*
+   - [Domain 10: Verification & Executive Strategy (3 Agents)](#domain-10-verification--executive-strategy-3-agents)
+     - 48. `verification.adversarial.v3` — Adversarial Verification Agent
+     - 49. `verification.contradiction.v3` — Contradiction & Causal Reasoning Agent
+     - 50. `strategy.executive.v3` — Executive Intelligence & Remediation Agent
 4. [The 5 Page-Level Copywriting Agents](#4-the-5-page-level-copywriting-agents)
-   - 36. `copywriting.seo.v3` — Search Intent & SERP Copywriting Specialist
-   - 37. `copywriting.geo.v3` — Answer Engine & GEO Citation Copywriter
-   - 38. `copywriting.cro.v3` — Direct-Response Conversion & CRO Copywriter
-   - 39. `copywriting.clarity.v3` — Brand Voice & Cognitive Clarity Copywriter
-   - 40. `copywriting.section.v3` — Modular Section Architect & Page Copywriter
+   - 51. `copywriting.seo.v3` — Search Intent & SERP Copywriting Specialist
+   - 52. `copywriting.geo.v3` — Answer Engine & GEO Citation Copywriter
+   - 53. `copywriting.cro.v3` — Direct-Response Conversion & CRO Copywriter
+   - 54. `copywriting.clarity.v3` — Brand Voice & Cognitive Clarity Copywriter
+   - 55. `copywriting.section.v3` — Modular Section Architect & Page Copywriter
 5. [The 3 Presentation Deck Agents (DECK_AGENTS_V1)](#5-the-3-presentation-deck-agents-deck_agents_v1)
-   - 41. `deck.architect.v1` — Deck Architecture & Slide Sequencing Agent
-   - 42. `deck.data_analyst.v1` — Deck Quantitative & Visual Data Agent
-   - 43. `deck.pptx_builder.v1` — Presentation Compiler & Native Chart Agent
+   - 56. `deck.architect.v1` — Deck Architecture & Slide Sequencing Agent
+   - 57. `deck.data_analyst.v1` — Deck Quantitative & Visual Data Agent
+   - 58. `deck.pptx_builder.v1` — Presentation Compiler & Native Chart Agent
 6. [Universal Specialist JSON Output Schema](#6-universal-specialist-json-output-schema)
 
 ---
@@ -372,7 +389,7 @@ Optimize for:
 
 ---
 
-## 3. The 35 Canonical Specialist Agents (Core DAG)
+## 3. The 50 Canonical Specialist Agents (Core DAG)
 
 ---
 
@@ -449,7 +466,7 @@ Using prior business claims on the blackboard, detect conflicts (e.g. homepage s
 
 ---
 
-### Domain 2: Technical SEO (7 Agents)
+### Domain 2: Technical SEO & Crawl Infrastructure (9 Agents)
 
 #### 6. `seo.crawl.v3` — Crawl Intelligence Agent
 * **Domain:** `TECHNICAL_SEO` | **Worker Type:** `extractor_worker` | **Mode:** `DETERMINISTIC`
@@ -550,9 +567,38 @@ Audit every image in DOM evidence for missing alt attributes, empty alt attribut
 
 ---
 
+#### 13. `crawl.rendering_hydration.v3` — JS Rendering & Hydration Risk Specialist
+* **Domain:** `TECHNICAL_SEO` | **Worker Type:** `extractor_worker` | **Mode:** `DETERMINISTIC`
+* **Dependencies:** None (Wave 1)
+* **Allowed Models:** `deterministic` | **Token Budget:** 2,000 | **Timeout:** 15s
+* **Required Evidence:** `raw_dom`, `rendered_dom`, `script_tags`
+* **Capabilities:** `hydration_risk_audit`, `server_shell_detection`, `render_disparity_measurement`
+* **What it does:** Compares raw HTTP response HTML with browser-rendered DOM to detect empty server shells, hydration failures, missing pre-rendered text, and script payload bloat. Separates client-side rendering from genuine crawlability defects.
+* **System Prompt / Task Card:**
+```text
+Compare raw HTTP response HTML with browser-rendered DOM to detect empty server shells, hydration failures, missing pre-rendered text, and script payload bloat. Separate client-side rendering from genuine crawlability defects.
+```
+
+---
+
+#### 14. `crawl.international_hreflang.v3` — Internationalization & Hreflang Specialist
+* **Domain:** `TECHNICAL_SEO` | **Worker Type:** `extractor_worker` | **Mode:** `DETERMINISTIC`
+* **Dependencies:** None (Wave 1)
+* **Allowed Models:** `deterministic` | **Token Budget:** 2,000 | **Timeout:** 15s
+* **Required Evidence:** `hreflang_tags`, `html_lang`, `url_manifest`
+* **Capabilities:** `hreflang_audit`, `reciprocal_link_check`, `language_tag_validation`
+* **What it does:** Validates hreflang language/regional pairs, reciprocal return links, x-default, and `<html lang='...'>` declarations. Do not flag defects if the website does not intend to serve multilingual or regional audiences.
+* **System Prompt / Task Card:**
+```text
+Validate hreflang language/regional pairs, reciprocal return links, x-default, and <html lang='...'> declarations. Do not flag defects if the website does not intend to serve multilingual or regional audiences.
+```
+
+
+---
+
 ### Domain 3: Structured Data & Entity Intelligence (3 Agents)
 
-#### 13. `schema.validation.v3` — Schema Intelligence Agent
+#### 15. `schema.validation.v3` — Schema Intelligence Agent
 * **Domain:** `STRUCTURED_DATA` | **Worker Type:** `analyst_worker` | **Mode:** `HYBRID`
 * **Dependencies:** None (Wave 1)
 * **Allowed Models:** `deterministic`, `fast_slm` | **Token Budget:** 2,500 | **Timeout:** 15s
@@ -566,7 +612,7 @@ Audit structured data across JSON-LD and microdata. Check presence and completen
 
 ---
 
-#### 14. `entity.graph.v3` — Entity Intelligence Agent
+#### 16. `entity.graph.v3` — Entity Intelligence Agent
 * **Domain:** `STRUCTURED_DATA` | **Worker Type:** `analyst_worker` | **Mode:** `LLM`
 * **Dependencies:** None (Wave 1)
 * **Allowed Models:** `reasoning_model`, `fast_slm` | **Token Budget:** 4,000 | **Timeout:** 20s
@@ -580,7 +626,7 @@ Extract Organization, Person, Product, Service, Place entities that appear in sc
 
 ---
 
-#### 15. `entity.knowledge_graph.v3` — Knowledge Graph Agent
+#### 17. `entity.knowledge_graph.v3` — Knowledge Graph Agent
 * **Domain:** `STRUCTURED_DATA` | **Worker Type:** `analyst_worker` | **Mode:** `LLM`
 * **Dependencies:** `entity.graph.v3` (Wave 2)
 * **Allowed Models:** `reasoning_model`, `fast_slm` | **Token Budget:** 3,500 | **Timeout:** 20s
@@ -597,7 +643,7 @@ Evaluate sameAs URLs and entity clarity from observed schema only. Forbidden: cl
 
 ### Domain 4: Content Intelligence (5 Agents)
 
-#### 16. `content.depth.v3` — Content Depth Agent
+#### 18. `content.depth.v3` — Content Depth Agent
 * **Domain:** `CONTENT` | **Worker Type:** `analyst_worker` | **Mode:** `LLM`
 * **Dependencies:** None (Wave 1)
 * **Allowed Models:** `reasoning_model`, `fast_slm` | **Token Budget:** 5,000 | **Timeout:** 25s
@@ -611,7 +657,7 @@ Use measured word counts, heading trees, and body excerpts. Flag thin pages with
 
 ---
 
-#### 17. `content.eeat.v3` — E-E-A-T Agent
+#### 19. `content.eeat.v3` — E-E-A-T Agent
 * **Domain:** `CONTENT` | **Worker Type:** `analyst_worker` | **Mode:** `LLM` *(Gated Family: AUTHORSHIP)*
 * **Dependencies:** None (Wave 1)
 * **Allowed Models:** `reasoning_model`, `fast_slm` | **Token Budget:** 4,500 | **Timeout:** 20s
@@ -625,7 +671,7 @@ Record observed author names, credentials, citations, about/policy links. If non
 
 ---
 
-#### 18. `content.quality.v3` — Content Quality Agent
+#### 20. `content.quality.v3` — Content Quality Agent
 * **Domain:** `CONTENT` | **Worker Type:** `analyst_worker` | **Mode:** `LLM`
 * **Dependencies:** None (Wave 1)
 * **Allowed Models:** `reasoning_model`, `fast_slm` | **Token Budget:** 4,000 | **Timeout:** 20s
@@ -639,7 +685,7 @@ Judge clarity and specificity of quoted passages. Do not score originality again
 
 ---
 
-#### 19. `content.topic_coverage.v3` — Topic Coverage Agent
+#### 21. `content.topic_coverage.v3` — Topic Coverage Agent
 * **Domain:** `CONTENT` | **Worker Type:** `analyst_worker` | **Mode:** `LLM`
 * **Dependencies:** None (Wave 1)
 * **Allowed Models:** `reasoning_model`, `fast_slm` | **Token Budget:** 4,500 | **Timeout:** 25s
@@ -653,7 +699,7 @@ Build a topic tree from H1/H2/H3 only. Gaps are topics implied by existing headi
 
 ---
 
-#### 20. `content.cannibalization.v3` — Cannibalization Agent
+#### 22. `content.cannibalization.v3` — Cannibalization Agent
 * **Domain:** `CONTENT` | **Worker Type:** `analyst_worker` | **Mode:** `LLM`
 * **Dependencies:** None (Wave 1)
 * **Allowed Models:** `fast_slm`, `reasoning_model` | **Token Budget:** 3,500 | **Timeout:** 20s
@@ -667,9 +713,9 @@ Compare crawled titles, H1s, and canonicals for collisions. Requires at least tw
 
 ---
 
-### Domain 5: Generative Engine Optimization / GEO (4 Agents)
+### Domain 5: Generative Engine Optimization / GEO (6 Agents)
 
-#### 21. `geo.extractability.v3` — Answer Extractability Agent
+#### 23. `geo.extractability.v3` — Answer Extractability Agent
 * **Domain:** `GEO` | **Worker Type:** `analyst_worker` | **Mode:** `LLM`
 * **Dependencies:** None (Wave 1)
 * **Allowed Models:** `reasoning_model`, `fast_slm` | **Token Budget:** 4,500 | **Timeout:** 20s
@@ -683,7 +729,7 @@ Evaluate the 8-dimension GEO rubric: definition sentence clarity, tabular data p
 
 ---
 
-#### 22. `geo.information_gain.v3` — Information Gain Agent
+#### 24. `geo.information_gain.v3` — Information Gain Agent
 * **Domain:** `GEO` | **Worker Type:** `analyst_worker` | **Mode:** `LLM`
 * **Dependencies:** None (Wave 1)
 * **Allowed Models:** `reasoning_model` | **Token Budget:** 5,000 | **Timeout:** 25s
@@ -697,7 +743,7 @@ Flag original data only when the page contains numbers, tables, or methodology t
 
 ---
 
-#### 23. `geo.citation_readiness.v3` — Citation Readiness Agent
+#### 25. `geo.citation_readiness.v3` — Citation Readiness Agent
 * **Domain:** `GEO` | **Worker Type:** `analyst_worker` | **Mode:** `LLM`
 * **Dependencies:** `business.semantic_strategist.v3`, `entity.graph.v3`, `content.quality.v3` (Wave 4)
 * **Allowed Models:** `reasoning_model`, `fast_slm` | **Token Budget:** 4,500 | **Timeout:** 25s
@@ -711,7 +757,7 @@ Map on-page claims to supporting sentences. Unsupported marketing adjectives are
 
 ---
 
-#### 24. `geo.structure.v3` — Generative Content Structure Agent
+#### 26. `geo.structure.v3` — Generative Content Structure Agent
 * **Domain:** `GEO` | **Worker Type:** `analyst_worker` | **Mode:** `LLM`
 * **Dependencies:** None (Wave 1)
 * **Allowed Models:** `fast_slm`, `reasoning_model` | **Token Budget:** 3,500 | **Timeout:** 20s
@@ -725,9 +771,84 @@ Check for TL;DR, answer-first openings, FAQ markup, and entity-dense first parag
 
 ---
 
-### Domain 6: AI Search & Engine Readiness (5 Agents)
+#### 27. `geo.multimodal_citation.v3` — Multi-Modal Data & Visual Asset Specialist
+* **Domain:** `GEO` | **Worker Type:** `analyst_worker` | **Mode:** `DETERMINISTIC`
+* **Dependencies:** None (Wave 1)
+* **Allowed Models:** `deterministic`, `fast_slm` | **Token Budget:** 3,500 | **Timeout:** 15s
+* **Required Evidence:** `table_elements`, `chart_containers`, `image_alts`
+* **Capabilities:** `multimodal_citation_audit`, `data_table_density`, `chart_metadata_check`
+* **What it does:** Audits quantitative data tables, chart containers, infographics, and statistical descriptions formatted for citation by answer engines. Verify that numerical claims include units, context, and accessible captions.
+* **System Prompt / Task Card:**
+```text
+Audit quantitative data tables, chart containers, infographics, and statistical descriptions formatted for citation by answer engines. Verify that numerical claims include units, context, and accessible captions.
+```
 
-#### 25. `ai_search.discoverability.v3` — AI Discoverability Agent
+---
+
+#### 28. `geo.source_freshness.v3` — Temporal Freshness & Information Longevity Specialist
+* **Domain:** `GEO` | **Worker Type:** `analyst_worker` | **Mode:** `DETERMINISTIC`
+* **Dependencies:** None (Wave 1)
+* **Allowed Models:** `deterministic`, `fast_slm` | **Token Budget:** 3,000 | **Timeout:** 15s
+* **Required Evidence:** `schema_timestamps`, `header_dates`, `body_text`
+* **Capabilities:** `temporal_freshness_audit`, `schema_timestamp_check`, `content_decay_detection`
+* **What it does:** Evaluates datePublished, dateModified, copyright dates, and time-sensitive statistics to ensure content is not discounted as obsolete. A recent dateModified alone does not prove content accuracy.
+* **System Prompt / Task Card:**
+```text
+Evaluate datePublished, dateModified, copyright dates, and time-sensitive statistics to ensure content is not discounted as obsolete. A recent dateModified alone does not prove content accuracy.
+```
+
+
+---
+
+
+### Domain 6: Answer Engine Optimization / AEO (3 Agents)
+
+#### 29. `aeo.direct_answer_box.v3` — Featured Snippet & Direct Answer Specialist
+* **Domain:** `AEO` | **Worker Type:** `analyst_worker` | **Mode:** `DETERMINISTIC`
+* **Dependencies:** None (Wave 1)
+* **Allowed Models:** `deterministic`, `fast_slm` | **Token Budget:** 3,500 | **Timeout:** 15s
+* **Required Evidence:** `question_headings`, `paragraph_texts`, `list_elements`
+* **Capabilities:** `direct_answer_audit`, `question_proximity_check`, `procedural_list_density`
+* **What it does:** Audits content for concise, declarative answer blocks immediately following question headings (H2/H3), bulleted procedural steps, and structured definition tables. Evaluate answer completeness without imposing arbitrary word counts.
+* **System Prompt / Task Card:**
+```text
+Audit content for concise, declarative answer blocks immediately following question headings (H2/H3), bulleted procedural steps, and structured definition tables. Evaluate answer completeness without imposing arbitrary word counts.
+```
+
+---
+
+#### 30. `aeo.entity_consensus.v3` — Universal Entity Authority & Consensus Specialist
+* **Domain:** `AEO` | **Worker Type:** `analyst_worker` | **Mode:** `HYBRID`
+* **Dependencies:** None (Wave 1)
+* **Allowed Models:** `reasoning_model`, `fast_slm` | **Token Budget:** 4,000 | **Timeout:** 20s
+* **Required Evidence:** `organization_schema`, `sameas_urls`, `canonical_domain`
+* **Capabilities:** `entity_consensus_audit`, `sameas_validation`, `canonical_authority_matching`
+* **Forbidden Operations:** `requiring_wikipedia_for_all_businesses`
+* **What it does:** Validates first-party Organization schema, canonical entity identifiers, and bidirectional sameAs links across external registries. Do not require Wikipedia or Wikidata inclusion as a universal rule for small businesses.
+* **System Prompt / Task Card:**
+```text
+Validate first-party Organization schema, canonical entity identifiers, and bidirectional sameAs links across external registries. Do not require Wikipedia or Wikidata inclusion as a universal rule for small businesses.
+```
+
+---
+
+#### 31. `aeo.conversational_intent.v3` — Long-Tail Conversational Query Specialist
+* **Domain:** `AEO` | **Worker Type:** `analyst_worker` | **Mode:** `HYBRID`
+* **Dependencies:** None (Wave 1)
+* **Allowed Models:** `reasoning_model`, `fast_slm` | **Token Budget:** 4,000 | **Timeout:** 20s
+* **Required Evidence:** `faq_blocks`, `comparison_tables`, `body_copy`
+* **Capabilities:** `conversational_query_audit`, `objection_handling_check`, `faq_alignment`
+* **What it does:** Analyzes conversational question patterns ('How does X compare to Y?', 'Is X worth it?') and identifies whether the domain provides direct, objective answers and comprehensive objection handling.
+* **System Prompt / Task Card:**
+```text
+Analyze conversational question patterns ('How does X compare to Y?', 'Is X worth it?') and identify whether the domain provides direct, objective answers and comprehensive objection handling.
+```
+
+---
+
+### Domain 7: AI Search & Engine Readiness (5 Agents)
+
+#### 32. `ai_search.discoverability.v3` — AI Discoverability Agent
 * **Domain:** `AI_SEARCH` | **Worker Type:** `research_worker` | **Mode:** `LLM`
 * **Dependencies:** `business.semantic_strategist.v3` (Wave 4)
 * **Allowed Models:** `reasoning_model`, `fast_slm` | **Token Budget:** 4,500 | **Timeout:** 20s
@@ -741,7 +862,7 @@ From the business profile and offerings IN EVIDENCE, list buyer queries the site
 
 ---
 
-#### 26. `ai_search.chatgpt.v3` — ChatGPT Visibility Agent
+#### 33. `ai_search.chatgpt.v3` — ChatGPT Visibility Agent
 * **Domain:** `AI_SEARCH` | **Worker Type:** `research_worker` | **Mode:** `LLM`
 * **Dependencies:** `ai_search.discoverability.v3` (Wave 5)
 * **Allowed Models:** `reasoning_model` | **Token Budget:** 4,000 | **Timeout:** 25s
@@ -756,7 +877,7 @@ SIMULATION_ONLY. Using site evidence, say whether a model could answer each disc
 
 ---
 
-#### 27. `ai_search.perplexity.v3` — Perplexity Visibility Agent
+#### 34. `ai_search.perplexity.v3` — Perplexity Visibility Agent
 * **Domain:** `AI_SEARCH` | **Worker Type:** `research_worker` | **Mode:** `LLM`
 * **Dependencies:** `ai_search.discoverability.v3` (Wave 5)
 * **Allowed Models:** `reasoning_model` | **Token Budget:** 4,000 | **Timeout:** 25s
@@ -771,7 +892,7 @@ SIMULATION_ONLY. Same as ChatGPT agent for Perplexity-style citation eligibility
 
 ---
 
-#### 28. `ai_search.google.v3` — Google AI Search Agent
+#### 35. `ai_search.google.v3` — Google AI Search Agent
 * **Domain:** `AI_SEARCH` | **Worker Type:** `research_worker` | **Mode:** `LLM`
 * **Dependencies:** `ai_search.discoverability.v3` (Wave 5)
 * **Allowed Models:** `reasoning_model`, `fast_slm` | **Token Budget:** 4,000 | **Timeout:** 20s
@@ -785,7 +906,7 @@ Evaluate AI Overview / featured-snippet readiness from observed schema, lists, a
 
 ---
 
-#### 29. `ai_search.cross_engine.v3` — Cross-Engine Search Agent
+#### 36. `ai_search.cross_engine.v3` — Cross-Engine Search Agent
 * **Domain:** `AI_SEARCH` | **Worker Type:** `research_worker` | **Mode:** `LLM`
 * **Dependencies:** `ai_search.chatgpt.v3`, `ai_search.perplexity.v3`, `ai_search.google.v3` (Wave 6)
 * **Allowed Models:** `reasoning_model` | **Token Budget:** 5,000 | **Timeout:** 25s
@@ -799,9 +920,9 @@ Compare SIMULATION_ONLY results from ChatGPT, Perplexity, and Google agents alre
 
 ---
 
-### Domain 7: Experience, CRO & Trust (3 Agents)
+### Domain 8: CRO & Conversion Experience (7 Agents)
 
-#### 30. `ux.experience.v3` — UX Intelligence Agent
+#### 37. `ux.experience.v3` — UX Intelligence Agent
 * **Domain:** `EXPERIENCE` | **Worker Type:** `analyst_worker` | **Mode:** `HYBRID`
 * **Dependencies:** None (Wave 1)
 * **Allowed Models:** `fast_slm`, `deterministic` | **Token Budget:** 3,000 | **Timeout:** 15s
@@ -815,7 +936,7 @@ Audit nav structure, mobile viewport configuration, heading scanability, button 
 
 ---
 
-#### 31. `cro.conversion.v3` — Conversion Intelligence Agent
+#### 38. `cro.conversion.v3` — Conversion Intelligence Agent
 * **Domain:** `EXPERIENCE` | **Worker Type:** `analyst_worker` | **Mode:** `LLM`
 * **Dependencies:** None (Wave 1)
 * **Allowed Models:** `fast_slm`, `reasoning_model` | **Token Budget:** 3,500 | **Timeout:** 15s
@@ -829,7 +950,7 @@ Audit value proposition clarity, 3-second first impression hook, form fields and
 
 ---
 
-#### 32. `trust.authority.v3` — Trust Authority Agent
+#### 39. `trust.authority.v3` — Trust Authority Agent
 * **Domain:** `EXPERIENCE` | **Worker Type:** `analyst_worker` | **Mode:** `LLM` *(Gated Family: TRUST)*
 * **Dependencies:** None (Wave 1)
 * **Allowed Models:** `fast_slm`, `reasoning_model` | **Token Budget:** 3,500 | **Timeout:** 15s
@@ -843,9 +964,130 @@ List observed testimonials, logos, badges, contact details, privacy/terms links.
 
 ---
 
-### Domain 8: Verification & Executive Strategy (3 Agents)
+#### 40. `cro.form_friction.v3` — Form & Input Abandonment Specialist
+* **Domain:** `EXPERIENCE` | **Worker Type:** `analyst_worker` | **Mode:** `DETERMINISTIC`
+* **Dependencies:** None (Wave 1)
+* **Allowed Models:** `deterministic`, `fast_slm` | **Token Budget:** 3,000 | **Timeout:** 15s
+* **Required Evidence:** `form_elements`, `input_attributes`, `dom_ast`
+* **Capabilities:** `form_friction_audit`, `input_count_analysis`, `autocomplete_validation`
+* **Forbidden Operations:** `claiming_exact_abandonment_rate_without_analytics`
+* **What it does:** Audits lead capture and checkout forms for field count bloat, unnecessary required inputs, missing autocomplete attributes, and mobile validation traps. Do not claim exact abandonment rates without analytics integration.
+* **System Prompt / Task Card:**
+```text
+Audit lead capture and checkout forms for field count bloat, unnecessary required inputs, missing autocomplete attributes, and mobile validation traps. Do not claim exact abandonment rates without analytics integration.
+```
 
-#### 33. `verification.adversarial.v3` — Adversarial Verification Agent
+---
+
+#### 41. `cro.pricing_psychology.v3` — Pricing Architecture & Packaging Specialist
+* **Domain:** `EXPERIENCE` | **Worker Type:** `analyst_worker` | **Mode:** `DETERMINISTIC`
+* **Dependencies:** None (Wave 1)
+* **Allowed Models:** `deterministic`, `fast_slm` | **Token Budget:** 3,500 | **Timeout:** 15s
+* **Required Evidence:** `pricing_table`, `billing_terms`, `guarantee_elements`
+* **Capabilities:** `pricing_clarity_audit`, `billing_toggle_check`, `guarantee_visibility`
+* **What it does:** Audits pricing tier clarity, default billing toggles (annual vs monthly), decoy tier placement, and refund guarantee visibility. Audit observable clarity; do not infer psychological conversion effects without experimental data.
+* **System Prompt / Task Card:**
+```text
+Audit pricing tier clarity, default billing toggles (annual vs monthly), decoy tier placement, and refund guarantee visibility. Audit observable clarity; do not infer psychological conversion effects without experimental data.
+```
+
+---
+
+#### 42. `cro.three_second_hook.v3` — Hero Hook & Cognitive Value Specialist
+* **Domain:** `EXPERIENCE` | **Worker Type:** `analyst_worker` | **Mode:** `HYBRID`
+* **Dependencies:** None (Wave 1)
+* **Allowed Models:** `fast_slm`, `reasoning_model` | **Token Budget:** 3,500 | **Timeout:** 15s
+* **Required Evidence:** `hero_section`, `headings`, `primary_cta`
+* **Capabilities:** `hero_hook_evaluation`, `value_prop_clarity`, `cta_proximity_check`
+* **What it does:** Evaluates above-the-fold hero section for the 3-second comprehension rule: immediate clarity of What it is, Who it is for, and What action to take next. Audit headline contrast and CTA proximity.
+* **System Prompt / Task Card:**
+```text
+Evaluate above-the-fold hero section for the 3-second comprehension rule: immediate clarity of What it is, Who it is for, and What action to take next. Audit headline contrast and CTA proximity.
+```
+
+---
+
+#### 43. `cro.social_proof_depth.v3` — Social Proof & Case Study Depth Specialist
+* **Domain:** `EXPERIENCE` | **Worker Type:** `analyst_worker` | **Mode:** `HYBRID`
+* **Dependencies:** None (Wave 1)
+* **Allowed Models:** `fast_slm`, `reasoning_model` | **Token Budget:** 3,500 | **Timeout:** 15s
+* **Required Evidence:** `testimonials`, `client_logos`, `case_studies`
+* **Capabilities:** `social_proof_audit`, `case_study_metrics_check`, `logo_verification`
+* **Forbidden Operations:** `calling_testimonials_fake_without_proof`
+* **What it does:** Analyzes customer proof: checks whether logos are recognized brands, whether case studies have quantified ROI metrics, and flags unverified testimonials. Do not call testimonials fake without corroborating evidence.
+* **System Prompt / Task Card:**
+```text
+Analyze customer proof: check whether logos are recognized brands, whether case studies have quantified ROI metrics, and flag unverified testimonials. Do not call testimonials fake without corroborating evidence.
+```
+
+
+---
+
+
+### Domain 9: Competitor Intelligence (4 Agents)
+
+#### 44. `competitor.head_to_head_parity.v3` — Competitor SEO & Technical Parity Specialist
+* **Domain:** `COMPETITOR` | **Worker Type:** `analyst_worker` | **Mode:** `DETERMINISTIC`
+* **Dependencies:** None (Wave 1)
+* **Allowed Models:** `deterministic`, `fast_slm` | **Token Budget:** 4,000 | **Timeout:** 20s
+* **Required Evidence:** `competitor_domains`, `crawl_manifest`, `schema_ast`
+* **Capabilities:** `competitor_parity_benchmark`, `comparable_crawl_collection`, `parity_matrix_scoring`
+* **Forbidden Operations:** `fabricating_unmeasured_competitor_metrics`
+* **What it does:** Benchmarks target domain crawl hygiene, sitemap depth, indexation volume, and Schema markup depth against designated competitor domains. Only report observed differences. Do not invent unmeasured competitor metrics.
+* **System Prompt / Task Card:**
+```text
+Benchmark target domain crawl hygiene, sitemap depth, indexation volume, and Schema markup depth against designated competitor domains. Only report observed differences. Do not invent unmeasured competitor metrics.
+```
+
+---
+
+#### 45. `competitor.answer_bakeoff.v3` — AI Answer Engine Bake-Off Specialist
+* **Domain:** `COMPETITOR` | **Worker Type:** `analyst_worker` | **Mode:** `HYBRID`
+* **Dependencies:** `competitor.head_to_head_parity.v3` (Wave 2)
+* **Allowed Models:** `reasoning_model`, `fast_slm` | **Token Budget:** 5,000 | **Timeout:** 25s
+* **Required Evidence:** `query_matrix`, `competitor_domains`, `recorded_responses`
+* **Capabilities:** `ai_answer_bakeoff`, `citation_attribution_comparison`, `share_of_model_voice`
+* **Forbidden Operations:** `fabricating_live_engine_observations`
+* **What it does:** Evaluates commercial buyer intent queries across AI answer engines to measure citation win/loss/tie ratios. Strictly separate measured engine observations from simulations. Mark unavailable queries as unmeasured.
+* **System Prompt / Task Card:**
+```text
+Evaluate commercial buyer intent queries across AI answer engines to measure citation win/loss/tie ratios. Strictly separate measured engine observations from simulations. Mark unavailable queries as unmeasured.
+```
+
+---
+
+#### 46. `competitor.feature_pricing_matrix.v3` — Competitor Value & Pricing Matrix Specialist
+* **Domain:** `COMPETITOR` | **Worker Type:** `analyst_worker` | **Mode:** `HYBRID`
+* **Dependencies:** None (Wave 1)
+* **Allowed Models:** `reasoning_model`, `fast_slm` | **Token Budget:** 4,500 | **Timeout:** 20s
+* **Required Evidence:** `pricing_tables`, `feature_lists`, `competitor_domains`
+* **Capabilities:** `pricing_matrix_benchmark`, `feature_gap_analysis`, `onboarding_friction_comparison`
+* **Forbidden Operations:** `inferring_gated_enterprise_pricing`
+* **What it does:** Extracts public competitor pricing tiers, trial terms, feature packaging, and onboarding friction. If competitor pricing is behind gated sales inquiry, report UNAVAILABLE. Do not infer private pricing.
+* **System Prompt / Task Card:**
+```text
+Extract public competitor pricing tiers, trial terms, feature packaging, and onboarding friction. If competitor pricing is behind gated sales inquiry, report UNAVAILABLE. Do not infer private pricing.
+```
+
+---
+
+#### 47. `competitor.citation_gap.v3` — Competitor Authority & Citation Gap Specialist
+* **Domain:** `COMPETITOR` | **Worker Type:** `analyst_worker` | **Mode:** `HYBRID`
+* **Dependencies:** None (Wave 1)
+* **Allowed Models:** `reasoning_model`, `fast_slm` | **Token Budget:** 4,000 | **Timeout:** 20s
+* **Required Evidence:** `brand_mentions`, `third_party_sources`, `competitor_domains`
+* **Capabilities:** `third_party_citation_gap`, `mention_footprint_analysis`, `authority_deficit_mapping`
+* **What it does:** Identifies third-party directories, review platforms (G2, Capterra, Trustpilot), and authoritative industry sources where competitors are referenced but the target domain is absent.
+* **System Prompt / Task Card:**
+```text
+Identify third-party directories, review platforms (G2, Capterra, Trustpilot), and authoritative industry sources where competitors are referenced but the target domain is absent.
+```
+
+---
+
+### Domain 10: Verification & Executive Strategy (3 Agents)
+
+#### 48. `verification.adversarial.v3` — Adversarial Verification Agent
 * **Domain:** `VERIFICATION` | **Worker Type:** `critic_worker` | **Mode:** `LLM`
 * **Dependencies:** `business.icp.v3`, `business.commercial.v3`, `content.eeat.v3`, `content.quality.v3`, `trust.authority.v3`, `seo.performance.v3`, `geo.citation_readiness.v3`, `ai_search.cross_engine.v3` (Wave 7)
 * **Allowed Models:** `judge_model`, `reasoning_model` | **Token Budget:** 6,000 | **Timeout:** 30s
@@ -885,7 +1127,7 @@ Never repair a bad claim by inventing evidence. Your objective is truthfulness, 
 
 ---
 
-#### 34. `verification.contradiction.v3` — Contradiction & Causal Reasoning Agent
+#### 49. `verification.contradiction.v3` — Contradiction & Causal Reasoning Agent
 * **Domain:** `VERIFICATION` | **Worker Type:** `critic_worker` | **Mode:** `LLM`
 * **Dependencies:** `verification.adversarial.v3` + 5 gated family specialists (Wave 8)
 * **Allowed Models:** `judge_model`, `reasoning_model` | **Token Budget:** 6,000 | **Timeout:** 30s
@@ -900,7 +1142,7 @@ Find cross-page, cross-agent, and DOM-vs-external (ev_xxx vs ext_xxx) contradict
 
 ---
 
-#### 35. `strategy.executive.v3` — Executive Intelligence & Remediation Agent
+#### 50. `strategy.executive.v3` — Executive Intelligence & Remediation Agent
 * **Domain:** `VERIFICATION` | **Worker Type:** `synthesizer_worker` | **Mode:** `LLM`
 * **Dependencies:** `verification.contradiction.v3`, `ai_search.cross_engine.v3` (Wave 9)
 * **Allowed Models:** `judge_model`, `reasoning_model` | **Token Budget:** 8,000 | **Timeout:** 35s
@@ -932,7 +1174,7 @@ These 5 specialists run inside `PageIntelligenceAgent` (`backend/app/agents/page
 
 ---
 
-#### 36. `copywriting.seo.v3` — Search Intent & SERP Copywriting Specialist
+#### 51. `copywriting.seo.v3` — Search Intent & SERP Copywriting Specialist
 * **Domain:** `COPYWRITING` | **Worker Type:** `analyst_worker` | **Allowed Models:** `reasoning_model`, `fast_slm` | **Budget:** 4,000 tokens
 * **Required Evidence:** `page_title`, `meta_description`, `h1`, `h2`, `primary_intent`
 * **What it does:** Generates strict character-compliant SERP tags: `<title>` strictly 50–60 characters (including brand name), `<meta description>` strictly 140–160 characters (with active value hook and click trigger), and semantic H1/H2 header tree matching search intent. Zero truncation risk in SERPs.
@@ -943,7 +1185,7 @@ Craft production-ready search-intent copy: Title strictly 50-60 characters (bran
 
 ---
 
-#### 37. `copywriting.geo.v3` — Answer Engine & GEO Citation Copywriter
+#### 52. `copywriting.geo.v3` — Answer Engine & GEO Citation Copywriter
 * **Domain:** `COPYWRITING` | **Worker Type:** `analyst_worker` | **Allowed Models:** `reasoning_model`, `fast_slm` | **Budget:** 4,500 tokens
 * **Required Evidence:** `clean_text`, `value_proposition`, `offerings`
 * **What it does:** Reviews every crawled passage to rewrite weak or partly citable prose. Replaces pronoun-heavy copy (`we/our/you/your`) with third-person declarative sentences naming the company as grammatical subject. Deletes empty adjectives; preserves all observed offers, locations, and numbers. Crafts 40–60 word citable definition blocks and structured FAQ Q&As for Perplexity, ChatGPT, and Google AI Overviews.
@@ -954,7 +1196,7 @@ Review every crawled passage, not a sample of eight. Rewrite each one that is we
 
 ---
 
-#### 38. `copywriting.cro.v3` — Direct-Response Conversion & CRO Copywriter
+#### 53. `copywriting.cro.v3` — Direct-Response Conversion & CRO Copywriter
 * **Domain:** `COPYWRITING` | **Worker Type:** `analyst_worker` | **Allowed Models:** `reasoning_model`, `fast_slm` | **Budget:** 4,000 tokens
 * **Required Evidence:** `cta_elements`, `hero_section`, `target_audience`
 * **What it does:** Audits the 3-second hook clarity, high-converting value proposition framing, and objection handling. Formulates high-intent CTA button microcopy using active value verbs (replacing passive "Submit" or "Click Here" with a verb + concrete outcome grounded in the offer).
@@ -965,7 +1207,7 @@ Audit 3-second hook clarity, high-converting value proposition framing, objectio
 
 ---
 
-#### 39. `copywriting.clarity.v3` — Brand Voice & Cognitive Clarity Copywriter
+#### 54. `copywriting.clarity.v3` — Brand Voice & Cognitive Clarity Copywriter
 * **Domain:** `COPYWRITING` | **Worker Type:** `analyst_worker` | **Allowed Models:** `reasoning_model`, `fast_slm` | **Budget:** 3,500 tokens
 * **Required Evidence:** `clean_text`, `readability_metrics`, `brand_voice`
 * **What it does:** Radically eliminates corporate buzzwords and consulting fluff (bans "seamless", "cutting-edge", "game-changing", "next-gen"). Calibrates readability to Flesch-Kincaid grade 7–9. Enforces crisp ICP audience callouts when the page identifies a target audience.
@@ -976,7 +1218,7 @@ Enforce brand voice consistency, radical elimination of buzzwords and empty cons
 
 ---
 
-#### 40. `copywriting.section.v3` — Modular Section Architect & Page Copywriter
+#### 55. `copywriting.section.v3` — Modular Section Architect & Page Copywriter
 * **Domain:** `COPYWRITING` | **Worker Type:** `analyst_worker` | **Allowed Models:** `reasoning_model`, `fast_slm` | **Budget:** 5,500 tokens
 * **Required Evidence:** `page_sections`, `headings`, `body_text`
 * **What it does:** Deconstructs pages into modular blocks (Hero Header, Problem/Pain Agitation, Solution Architecture, Features/Value Drivers, AI Search FAQ Block, Final Conversion Banner). Provides concrete BEFORE vs AFTER copy, update rationale, and urgency status (`NEEDS_REWRITE`, `UPDATE_RECOMMENDED`, `OPTIMIZED`).
@@ -993,7 +1235,7 @@ Operating in `backend/app/agents/deck/`, these agents compile full 70+ slide wid
 
 ---
 
-#### 41. `deck.architect.v1` — Deck Architecture & Slide Sequencing Agent
+#### 56. `deck.architect.v1` — Deck Architecture & Slide Sequencing Agent
 * **Domain:** `PRESENTATION` | **Worker Type:** `architect_worker` | **Allowed Models:** `judge_model`, `reasoning_model` | **Budget:** 6,000 tokens
 * **Dependencies:** `strategy.executive.v3`
 * **Required Evidence:** `verified_findings`, `scores`, `crawl_manifest`, `page_manifest`
@@ -1005,7 +1247,7 @@ Construct an executive 70+ slide master presentation blueprint spanning 11 strat
 
 ---
 
-#### 42. `deck.data_analyst.v1` — Deck Quantitative & Visual Data Agent
+#### 57. `deck.data_analyst.v1` — Deck Quantitative & Visual Data Agent
 * **Domain:** `PRESENTATION` | **Worker Type:** `analyst_worker` | **Allowed Models:** `reasoning_model`, `fast_slm` | **Budget:** 7,000 tokens
 * **Dependencies:** `deck.architect.v1`
 * **Required Evidence:** `verified_findings`, `scores`, `telemetry`, `claims`
@@ -1017,7 +1259,7 @@ Extract grounded quantitative metrics and chart specifications for every slide i
 
 ---
 
-#### 43. `deck.pptx_builder.v1` — Presentation Compiler & Native Chart Agent
+#### 58. `deck.pptx_builder.v1` — Presentation Compiler & Native Chart Agent
 * **Domain:** `PRESENTATION` | **Worker Type:** `builder_worker` | **Allowed Models:** `fast_slm` | **Budget:** 5,000 tokens
 * **Dependencies:** `deck.data_analyst.v1`
 * **Required Evidence:** `slide_blueprints`, `chart_specifications`

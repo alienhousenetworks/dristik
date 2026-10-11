@@ -50,9 +50,11 @@ export interface VisibilityScorecard {
 const NAMED_ENGINES: Array<{ keys: string[]; label: string }> = [
   { keys: ['claude', 'anthropic'], label: 'Claude (Anthropic)' },
   { keys: ['chatgpt', 'openai', 'gpt'], label: 'ChatGPT Search (OpenAI)' },
+  { keys: ['gemini'], label: 'Gemini (Google)' },
+  { keys: ['qwen'], label: 'Qwen (Alibaba)' },
+  { keys: ['deepseek'], label: 'DeepSeek' },
   { keys: ['perplexity'], label: 'Perplexity AI' },
   { keys: ['google_aio', 'aio', 'ai_overviews', 'google_ai'], label: 'Google AI Overviews' },
-  { keys: ['gemini'], label: 'Gemini (Google)' },
 ];
 
 function engineLabel(record: ObservatoryRecord): string | null {

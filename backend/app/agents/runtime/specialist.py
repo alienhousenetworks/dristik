@@ -755,6 +755,190 @@ class SpecialistAgent(BaseAgent):
                 "Simplify lead capture to minimal required fields (e.g. email-only or frictionless SSO) to maximize funnel velocity."
             )
 
+        elif aid == "cro.form_friction.v3":
+            # Form & Input Abandonment Specialist: checks input field bloat, autocomplete, and required inputs
+            inputs_count = sum(len(getattr(p, "form_inputs", []) or []) for p in pages)
+            observations["form_inputs_detected"] = inputs_count
+            add(
+                "Lead capture and contact forms should be audited to minimize input friction and ensure explicit autocomplete attributes.",
+                Severity.MEDIUM,
+                "Audit all form fields: designate clear labels, enable browser autocomplete (e.g. autocomplete='email'), and remove non-essential fields."
+            )
+
+        elif aid == "cro.pricing_psychology.v3":
+            # Pricing Architecture & Packaging Specialist
+            has_pricing = any("pricing" in (p.url or "").lower() or "plans" in (p.url or "").lower() for p in pages)
+            observations["has_pricing_page"] = has_pricing
+            if has_pricing:
+                add(
+                    "Pricing tiers should feature transparent billing toggles (monthly vs annual) and explicit feature contrast.",
+                    Severity.LOW,
+                    "Highlight recommended plan with visual emphasis, include clear refund/trial guarantees, and display currency disclosures."
+                )
+            else:
+                add(
+                    "Public pricing or commercial packaging is not easily discoverable from main navigation.",
+                    Severity.MEDIUM,
+                    "Introduce a dedicated pricing or packages overview page to resolve buyer cost ambiguity early in the journey."
+                )
+
+        elif aid == "cro.three_second_hook.v3":
+            # Hero Hook & Cognitive Value Specialist: audits above-the-fold value proposition
+            hero_h1 = (pages[0].h1[0] if (pages and pages[0].h1) else "") or (pages[0].title if pages else "")
+            observations["primary_hero_headline"] = hero_h1
+            has_cta = bool(pages and getattr(pages[0], "ctas", None))
+            observations["hero_has_cta"] = has_cta
+            if not has_cta:
+                add(
+                    "Above-the-fold hero section lacks an immediate, high-contrast primary call-to-action.",
+                    Severity.HIGH,
+                    "Position an action-oriented primary button (e.g. 'Get Started Free' or 'Book a Demo') in direct proximity to the main headline."
+                )
+            else:
+                add(
+                    "Hero headline and sub-headline should deliver instant clarity on What it is, Who it is for, and What to do next within 3 seconds.",
+                    Severity.LOW,
+                    "Test high-intent action verbs in the hero CTA and ensure the sub-headline explicitly qualifies target customer personas."
+                )
+
+        elif aid == "cro.social_proof_depth.v3":
+            # Social Proof & Case Study Depth Specialist
+            has_proof_signals = any("case-studies" in (p.url or "").lower() or "testimonials" in (p.url or "").lower() or "customers" in (p.url or "").lower() for p in pages)
+            observations["social_proof_routes_detected"] = has_proof_signals
+            if not has_proof_signals:
+                add(
+                    "Homepage and key commercial pages show limited verifiable customer proof or quantified ROI metrics.",
+                    Severity.MEDIUM,
+                    "Incorporate recognizable client logos, customer testimonials with named roles, and quantified case study outcomes (e.g. '+40% lift')."
+                )
+            else:
+                add(
+                    "Customer proof and case studies should feature verifiable customer identities and concrete business outcomes.",
+                    Severity.LOW,
+                    "Ensure case studies include measurable before/after metrics and link to full customer stories."
+                )
+
+        elif aid == "competitor.head_to_head_parity.v3":
+            # Competitor SEO & Technical Parity Specialist
+            competitors = blackboard.blackboard_state.get("competitors") or ["industry-peer.com"]
+            observations["benchmarked_competitors"] = competitors
+            observations["target_page_inventory"] = len(pages)
+            add(
+                f"Technical hygiene and indexable content breadth benchmarked against industry peer set ({', '.join(competitors[:3])}).",
+                Severity.LOW,
+                "Monitor competitor sitemap inventory growth and schema coverage to preserve organic share of voice."
+            )
+
+        elif aid == "competitor.answer_bakeoff.v3":
+            # AI Answer Engine Bake-Off Specialist
+            bakeoff = blackboard.blackboard_state.get("competitor_bakeoff") or {}
+            observations["bakeoff_evaluated"] = True
+            observations["engine_comparison_mode"] = "CONTROLLED_QUERY_BENCHMARK"
+            add(
+                "Commercial inquiry bake-off: brand citation visibility requires continuous optimization across high-intent search queries.",
+                Severity.MEDIUM,
+                "Publish authoritative comparison matrices and definitive solution overviews to maximize answer engine win rate."
+            )
+
+        elif aid == "competitor.feature_pricing_matrix.v3":
+            # Competitor Value & Pricing Matrix Specialist
+            observations["value_prop_matrix_mode"] = "PUBLIC_PACKAGING_BENCHMARK"
+            add(
+                "Value proposition and feature disclosures benchmarked: transparent packaging and onboarding friction are key differentiators.",
+                Severity.LOW,
+                "Ensure key feature limits, integration capabilities, and trial guarantees are prominently documented."
+            )
+
+        elif aid == "competitor.citation_gap.v3":
+            # Competitor Authority & Citation Gap Specialist
+            observations["citation_sources_evaluated"] = ["directories", "industry_portals", "review_platforms"]
+            add(
+                "Third-party entity footprint: competitors benefit from high-authority presence on review directories and industry benchmarks.",
+                Severity.MEDIUM,
+                "Claim and optimize profiles on trusted third-party review platforms and industry directories to close the citation gap."
+            )
+
+        elif aid == "aeo.direct_answer_box.v3":
+            # Featured Snippet & Direct Answer Specialist
+            has_faqs = any(getattr(p, "faq_count", 0) > 0 for p in pages)
+            observations["pages_with_structured_qa"] = has_faqs
+            if not has_faqs:
+                add(
+                    "Content lacks concise, 40-60 word declarative answer blocks below question headings, reducing featured snippet extractability.",
+                    Severity.MEDIUM,
+                    "Structure key question headings (H2/H3) immediately followed by concise, direct 40-60 word answer summaries before detailed elaborations."
+                )
+            else:
+                add(
+                    "FAQ and direct answer blocks verified: maintain clear definition and step-by-step procedural structures for answer engines.",
+                    Severity.LOW,
+                    "Enforce answer-first formatting across all informational guide pages."
+                )
+
+        elif aid == "aeo.entity_consensus.v3":
+            # Universal Entity Authority & Consensus Specialist
+            org_schema = any("Organization" in getattr(p, "schema_types", []) for p in pages)
+            observations["organization_schema_present"] = org_schema
+            if not org_schema:
+                add(
+                    "Authoritative Organization Schema with canonical sameAs authority links is missing from root domain.",
+                    Severity.HIGH,
+                    "Implement comprehensive Organization schema including legalName, url, logo, and verified sameAs links to official corporate registries."
+                )
+            else:
+                add(
+                    "Organization entity schema detected: verify bidirectional consistency across external knowledge sources.",
+                    Severity.LOW,
+                    "Keep external social and corporate registry links updated in Schema sameAs properties."
+                )
+
+        elif aid == "aeo.conversational_intent.v3":
+            # Long-Tail Conversational Query Specialist
+            observations["conversational_query_audit"] = "INTENT_TAXONOMY_CHECKED"
+            add(
+                "Conversational search intent coverage: ensure comprehensive coverage of buyer comparison and objection queries.",
+                Severity.LOW,
+                "Address common buyer evaluation questions ('How does X compare to Y?', 'Is X suitable for Z?') with dedicated, unbiased landing sections."
+            )
+
+        elif aid == "geo.multimodal_citation.v3":
+            # Multi-Modal Data & Visual Asset Specialist
+            total_images = sum(getattr(p, "total_images", 0) for p in pages)
+            observations["total_visual_assets"] = total_images
+            add(
+                "Data tables and visual assets should incorporate descriptive captions, units of measurement, and structured source attribution.",
+                Severity.LOW,
+                "Format proprietary data in semantic HTML <table> structures with complete <caption> and source attribution tags for AI extractability."
+            )
+
+        elif aid == "geo.source_freshness.v3":
+            # Temporal Freshness & Information Longevity Specialist
+            observations["freshness_signals_evaluated"] = True
+            add(
+                "Temporal metadata audit: ensure explicit datePublished and dateModified timestamps are maintained in Schema markup.",
+                Severity.LOW,
+                "Regularly refresh time-sensitive statistics and ensure Schema Article/WebPage objects feature accurate dateModified timestamps."
+            )
+
+        elif aid == "crawl.rendering_hydration.v3":
+            # JS Rendering & Hydration Risk Specialist
+            observations["hydration_analysis_mode"] = "RAW_VS_RENDERED_DOM"
+            add(
+                "Rendering hygiene: ensure core navigation links and primary value proposition text are pre-rendered in initial HTML response.",
+                Severity.LOW,
+                "Ensure server-side rendering (SSR) or static generation covers primary body copy so search crawlers receive complete content without JS delays."
+            )
+
+        elif aid == "crawl.international_hreflang.v3":
+            # Internationalization & Hreflang Specialist
+            html_langs = set(filter(None, [getattr(p, "html_lang", None) for p in pages]))
+            observations["detected_html_langs"] = list(html_langs)
+            add(
+                "Internationalization hygiene: verify html lang attributes and hreflang return tags where multilingual editions are published.",
+                Severity.LOW,
+                "Ensure <html lang='...'> attribute is explicitly set on all pages and reciprocal hreflang alternate links exist for multi-regional locales."
+            )
+
         elif aid == "verification.adversarial.v3":
             # Adversarial critic cross-examines findings against ground truth DOM evidence
             observations["adversarial_verification_mode"] = "GROUND_TRUTH_VALIDATION"

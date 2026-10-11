@@ -650,7 +650,7 @@ export function LiveExecutionConsole({ run, onRefreshRun }: LiveExecutionConsole
                   : 'text-ink-600 hover:text-ink'
               }`}
             >
-              35-Agent Workforce
+              50-Agent Workforce
             </button>
             <button
               type="button"
@@ -1032,30 +1032,30 @@ export function LiveExecutionConsole({ run, onRefreshRun }: LiveExecutionConsole
           </div>
         </div>
       ) : activeTab === 'workforce' ? (
-        /* 35-AGENT SPECIALIST WORKFORCE INSPECTOR BOARD */
+        /* 50-AGENT SPECIALIST WORKFORCE INSPECTOR BOARD */
         <div className="p-4 sm:p-6 space-y-5 bg-paper-50/40">
           {/* Workforce Summary KPIs */}
           <div className="flex flex-wrap items-center justify-between gap-3 pb-2 border-b border-line">
             <div>
               <h4 className="text-sm font-sans font-bold text-ink flex items-center gap-2">
-                <span>35-Agent Autonomous Specialist Workforce</span>
+                <span>50-Agent Autonomous Specialist Workforce</span>
                 <span className="text-[11px] font-mono px-2 py-0.5 rounded-full bg-good/10 text-good border border-good/30 font-semibold">
                   100% Deterministic Fallback Guaranteed
                 </span>
               </h4>
               <p className="text-xs text-ink-500 mt-0.5">
-                Full-spectrum multi-agent workforce covering 8 audit domains. Every specialist possesses verified DOM AST audit logic to guarantee zero empty or unavailable reports.
+                Full-spectrum multi-agent workforce covering 10 audit domains. Every specialist possesses verified DOM AST audit logic to guarantee zero empty or unavailable reports.
               </p>
             </div>
 
             <div className="flex items-center gap-2 text-xs font-mono">
               <span className="px-2.5 py-1 rounded-md bg-paper-200 text-ink-700 border border-line">
-                Total Agents: <strong className="text-ink">{workforceData.length || 35}</strong>
+                Total Agents: <strong className="text-ink">{workforceData.length || 50}</strong>
               </span>
               <span className="px-2.5 py-1 rounded-md bg-good/10 text-good border border-good/30">
                 Completed:{' '}
                 <strong className="text-good">
-                  {workforceData.filter((a) => a.status === 'completed').length || (isCompleted ? 35 : 0)}
+                  {workforceData.filter((a) => a.status === 'completed').length || (isCompleted ? 50 : 0)}
                 </strong>
               </span>
               <span className="px-2.5 py-1 rounded-md bg-paper-200 text-ink-700 border border-line">
@@ -1081,15 +1081,17 @@ export function LiveExecutionConsole({ run, onRefreshRun }: LiveExecutionConsole
 
             <div className="flex items-center gap-1.5 flex-wrap">
               {[
-                { id: 'all', label: 'All (35)' },
-                { id: 'TECHNICAL_SEO', label: 'Technical SEO' },
-                { id: 'STRUCTURED_DATA', label: 'Schema' },
-                { id: 'CONTENT', label: 'Content' },
-                { id: 'GEO', label: 'GEO Citability' },
-                { id: 'CRO', label: 'CRO Friction' },
-                { id: 'AI_SEARCH', label: 'AI Search' },
-                { id: 'BUSINESS', label: 'Business Profile' },
-                { id: 'VERIFICATION', label: 'Integrity Gate' },
+                { id: 'all', label: 'All (50)' },
+                { id: 'COMPETITOR', label: 'Competitor (4)' },
+                { id: 'CRO', label: 'CRO (7)' },
+                { id: 'AEO', label: 'AEO (3)' },
+                { id: 'GEO', label: 'GEO (6)' },
+                { id: 'TECHNICAL_SEO', label: 'Technical SEO (9)' },
+                { id: 'STRUCTURED_DATA', label: 'Schema (3)' },
+                { id: 'CONTENT', label: 'Content (5)' },
+                { id: 'AI_SEARCH', label: 'AI Search (5)' },
+                { id: 'BUSINESS', label: 'Business (5)' },
+                { id: 'VERIFICATION', label: 'Integrity Gate (3)' },
               ].map((df) => (
                 <button
                   key={df.id}
@@ -1110,14 +1112,14 @@ export function LiveExecutionConsole({ run, onRefreshRun }: LiveExecutionConsole
           {/* Workforce Grid */}
           {isLoadingWorkforce && workforceData.length === 0 ? (
             <div className="py-12 text-center text-xs font-mono text-ink-400">
-              Loading 35 specialist agents telemetry...
+              Loading 50 specialist agents telemetry...
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
               {workforceData
                 .filter((ag) => {
                   const matchesDomain =
-                    selectedDomainFilter === 'all' || ag.domain === selectedDomainFilter;
+                    selectedDomainFilter === 'all' || ag.domain === selectedDomainFilter || (selectedDomainFilter === 'CRO' && ag.domain === 'EXPERIENCE');
                   const matchesSearch =
                     !workforceSearch ||
                     ag.agent_name.toLowerCase().includes(workforceSearch.toLowerCase()) ||
@@ -1134,7 +1136,9 @@ export function LiveExecutionConsole({ run, onRefreshRun }: LiveExecutionConsole
                   else if (ag.domain === 'STRUCTURED_DATA') domainBadgeStyle = 'bg-purple-500/10 text-purple-500 border-purple-500/20';
                   else if (ag.domain === 'CONTENT') domainBadgeStyle = 'bg-amber-500/10 text-amber-500 border-amber-500/20';
                   else if (ag.domain === 'GEO') domainBadgeStyle = 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20';
-                  else if (ag.domain === 'CRO') domainBadgeStyle = 'bg-rose-500/10 text-rose-500 border-rose-500/20';
+                  else if (ag.domain === 'AEO') domainBadgeStyle = 'bg-violet-500/10 text-violet-500 border-violet-500/20';
+                  else if (ag.domain === 'CRO' || ag.domain === 'EXPERIENCE') domainBadgeStyle = 'bg-rose-500/10 text-rose-500 border-rose-500/20';
+                  else if (ag.domain === 'COMPETITOR') domainBadgeStyle = 'bg-orange-500/10 text-orange-500 border-orange-500/20';
                   else if (ag.domain === 'AI_SEARCH') domainBadgeStyle = 'bg-indigo-500/10 text-indigo-500 border-indigo-500/20';
                   else if (ag.domain === 'BUSINESS') domainBadgeStyle = 'bg-cyan-500/10 text-cyan-500 border-cyan-500/20';
                   else if (ag.domain === 'VERIFICATION') domainBadgeStyle = 'bg-teal-500/10 text-teal-500 border-teal-500/20';

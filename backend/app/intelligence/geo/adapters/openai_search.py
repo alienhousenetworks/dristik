@@ -20,9 +20,22 @@ class OpenAISearchAdapter(BaseGeoEngineAdapter):
     display_name = "ChatGPT (OpenAI)"
     default_model = "gpt-4o-mini"
 
-    def __init__(self, api_key: str = "", model: str = "", base_url: str = ""):
+    def __init__(
+        self,
+        api_key: str = "",
+        model: str = "",
+        base_url: str = "",
+        extra_headers: Optional[Dict[str, str]] = None,
+        engine_id: str = "",
+        display_name: str = "",
+    ):
         super().__init__(api_key=api_key, model=model)
         self.base_url = (base_url or OPENAI_API_URL).rstrip("/")
+        self.extra_headers = extra_headers or {}
+        if engine_id:
+            self.engine_id = engine_id
+        if display_name:
+            self.display_name = display_name
 
     async def execute_query(
         self,
@@ -47,6 +60,7 @@ class OpenAISearchAdapter(BaseGeoEngineAdapter):
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json",
         }
+        headers.update(self.extra_headers)
         endpoint = self.base_url if "/chat/completions" in self.base_url else f"{self.base_url}/chat/completions"
 
         payload = {

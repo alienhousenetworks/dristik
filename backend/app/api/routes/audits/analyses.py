@@ -1025,7 +1025,7 @@ async def run_pipeline_section_endpoint(analysis_id: str, section_id: str, user:
 @router.get("/{analysis_id}/agent-workforce")
 async def get_agent_workforce_state(analysis_id: str, user: UserIdentity = Depends(get_current_user)):
     """
-    Returns live execution status, claims produced, and observations across all 35 specialist agents.
+    Returns live execution status, claims produced, and observations across all 50 specialist agents.
     """
     run = _get_org_run(analysis_id, user)
     blackboard = orchestrator.blackboards.get(analysis_id)

@@ -55,16 +55,16 @@ def _board(with_pages=True):
     return bb, ev
 
 
-def test_registry_has_exactly_35_specialists():
-    assert specialist_count() == 35
-    assert len(list_all_specialists()) == 35
-    assert len(TASK_CARDS) == 35
+def test_registry_has_exactly_50_specialists():
+    assert specialist_count() == 50
+    assert len(list_all_specialists()) == 50
+    assert len(TASK_CARDS) == 50
     assert set(TASK_CARDS) == set(SPECIALIST_AGENTS_V3)
 
 
-def test_pool_instantiates_all_35():
+def test_pool_instantiates_all_50():
     pool = AgentPool(_FakeRouter())
-    assert len(pool) == 35
+    assert len(pool) == 50
     assert set(pool.agents) == set(SPECIALIST_AGENTS_V3)
 
 
@@ -136,13 +136,13 @@ async def test_llm_claims_without_real_evidence_refs_are_dropped():
 
 
 @pytest.mark.asyncio
-async def test_execute_all_runs_35_agents():
+async def test_execute_all_runs_50_agents():
     bb, _ = _board()
     pool = AgentPool(_FakeRouter())
     summary = await pool.execute_all(bb)
-    assert summary["agents_declared"] == 35
-    assert summary["agents_ran"] + summary["errors"] == 35
-    assert len(bb.blackboard_state.get("agent_results") or {}) == 35
+    assert summary["agents_declared"] == 50
+    assert summary["agents_ran"] + summary["errors"] == 50
+    assert len(bb.blackboard_state.get("agent_results") or {}) == 50
 
 
 @pytest.mark.asyncio

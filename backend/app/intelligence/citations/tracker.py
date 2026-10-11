@@ -145,6 +145,92 @@ def _provider_family(provider: str) -> set:
     return {p} if p else set()
 
 
+# The six live-citation models. They share the admin's main gateway key.
+# OpenRouter and Together both speak the OpenAI chat API, so one key covers all six.
+GATEWAY_SIX = ("claude", "gemini", "chatgpt", "qwen", "deepseek", "perplexity")
+GATEWAY_MODEL_DEFAULTS = {
+    "claude": "anthropic/claude-haiku-4.5",
+    "gemini": "google/gemini-3.8-flash",
+    "chatgpt": "openai/gpt-6.1-sol",
+    "qwen": "qwen/qwen3.8-flash",
+    "deepseek": "deepseek/deepseek-v4.1-flash",
+    "perplexity": "perplexity/sonar",
+}
+
+
+def main_citation_gateway() -> Optional[Tuple[str, str]]:
+    """
+    The admin's main multi-model provider, when it can host all six citation models.
+    Returns (provider, api_key) for openrouter or together. A native vendor such as
+    Anthropic stays None so it is not asked to impersonate the other five.
+    """
+    env_llm = (os.environ.get("LLM_PROVIDER") or "").lower().strip()
+    settings_llm = (getattr(settings, "LLM_PROVIDER", None) or "").lower().strip()
+    # Match the provider filter below: a non-OpenRouter choice wins over a
+    # leftover OpenRouter value, and the process env wins over settings.
+    if env_llm and env_llm != "openrouter":
+        chosen = env_llm
+    elif settings_llm and settings_llm != "openrouter":
+        chosen = settings_llm
+    else:
+        chosen = env_llm or settings_llm
+    if chosen in ("", "auto"):
+        chosen = (settings.get_active_provider() or "").lower().strip()
+    if chosen not in ("openrouter", "together"):
+        citation = (
+            os.environ.get("AI_CITATION_PROVIDER")
+            or getattr(settings, "AI_CITATION_PROVIDER", "")
+            or ""
+        ).lower().strip()
+        cross = os.environ.get("AI_CITATION_CROSS_PROVIDER")
+        if cross is None and getattr(settings, "AI_CITATION_CROSS_PROVIDER", False):
+            cross = str(settings.AI_CITATION_CROSS_PROVIDER)
+        if citation in ("openrouter", "together") and _parse_bool(cross, default=False):
+            chosen = citation
+        else:
+            return None
+    if chosen == "openrouter":
+        key = settings.OPENROUTER_API_KEY or os.environ.get("OPENROUTER_API_KEY") or ""
+    else:
+        key = settings.TOGETHER_API_KEY or os.environ.get("TOGETHER_API_KEY") or ""
+    key = str(key or "").strip()
+    if not key:
+        return None
+    return chosen, key
+
+
+def _route_six_through_main_gateway(engines: List[Dict[str, Any]]) -> None:
+    """Point the six citation models at the one admin gateway. No per-engine key."""
+    gateway = main_citation_gateway()
+    if not gateway:
+        return
+    provider, api_key = gateway
+    for eng in engines:
+        eid = eng.get("id")
+        if eid not in GATEWAY_SIX:
+            continue
+        flag = f"AI_CITATION_{str(eid).upper()}_PROVIDER"
+        explicit_provider = (os.environ.get(flag) or getattr(settings, flag, None) or "").lower().strip()
+        explicit_key = (os.environ.get(f"AI_CITATION_{str(eid).upper()}_API_KEY") or "").strip()
+        # A filled native key is an intentional direct connection. Leave it alone.
+        if explicit_provider and explicit_provider not in ("openrouter", "together") and explicit_key:
+            continue
+        raw_model = (
+            os.environ.get(f"AI_CITATION_{str(eid).upper()}_MODEL")
+            or getattr(settings, f"AI_CITATION_{str(eid).upper()}_MODEL", None)
+            or ""
+        )
+        raw_model = str(raw_model).strip()
+        if raw_model and ("/" in raw_model or explicit_provider in ("openrouter", "together")):
+            model = raw_model
+        else:
+            model = GATEWAY_MODEL_DEFAULTS[eid]
+        eng["provider"] = provider
+        eng["api_key"] = api_key
+        eng["model"] = model
+        eng["active"] = _engine_active(f"AI_CITATION_{str(eid).upper()}_ACTIVE", True)
+
+
 def _engine_matches_active_provider(engine_provider: str) -> bool:
     """
     LLM_PROVIDER is the only live inference vendor unless
@@ -381,6 +467,7 @@ def get_configured_ai_engines() -> List[Dict[str, Any]]:
         {"id": "grok", "name": "xAI Grok", "category": "Real-Time Discovery & Public Signals", "active": grok_active, "provider": grok_provider, "api_key": grok_key, "model": grok_model},
         {"id": "llama", "name": "Meta Llama 3.3", "category": "Enterprise Open Weights Ecosystem", "active": llama_active, "provider": llama_provider, "api_key": llama_key, "model": llama_model},
     ]
+    _route_six_through_main_gateway(engines)
     for eng in engines:
         if eng.get("active") and not _engine_matches_active_provider(str(eng.get("provider") or "")):
             eng["active"] = False

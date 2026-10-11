@@ -118,6 +118,89 @@ def test_anthropic_provider_does_not_activate_groq_citation_engine():
         assert engines["llama"]["provider"] == "groq"
 
 
+def test_six_models_share_the_admin_gateway_key():
+    from app.core.config import settings
+    from app.intelligence.geo.adapters.registry import get_available_adapters
+
+    with patch.object(settings, "LLM_PROVIDER", "openrouter"), \
+         patch.object(settings, "OPENROUTER_API_KEY", "sk-or-v1-one-key"), \
+         patch.object(settings, "TOGETHER_API_KEY", None), \
+         patch.dict("os.environ", {
+             "LLM_PROVIDER": "openrouter",
+             "AI_CITATION_CROSS_PROVIDER": "false",
+             "AI_CITATION_PROVIDER": "",
+             "AI_CITATION_CLAUDE_PROVIDER": "",
+             "AI_CITATION_CLAUDE_API_KEY": "",
+             "AI_CITATION_GEMINI_PROVIDER": "",
+             "AI_CITATION_GEMINI_API_KEY": "",
+             "AI_CITATION_CHATGPT_PROVIDER": "",
+             "AI_CITATION_CHATGPT_API_KEY": "",
+             "AI_CITATION_QWEN_PROVIDER": "",
+             "AI_CITATION_QWEN_API_KEY": "",
+             "AI_CITATION_DEEPSEEK_PROVIDER": "",
+             "AI_CITATION_DEEPSEEK_API_KEY": "",
+             "AI_CITATION_PERPLEXITY_PROVIDER": "",
+             "AI_CITATION_PERPLEXITY_API_KEY": "",
+             "AI_CITATION_CLAUDE_ACTIVE": "true",
+             "AI_CITATION_GEMINI_ACTIVE": "true",
+             "AI_CITATION_CHATGPT_ACTIVE": "true",
+             "AI_CITATION_QWEN_ACTIVE": "true",
+             "AI_CITATION_DEEPSEEK_ACTIVE": "true",
+             "AI_CITATION_PERPLEXITY_ACTIVE": "true",
+             "AI_CITATION_CLAUDE_MODEL": "anthropic/claude-haiku-4.5",
+             "AI_CITATION_GEMINI_MODEL": "google/gemini-3.8-flash",
+             "AI_CITATION_CHATGPT_MODEL": "openai/gpt-6.1-sol",
+             "AI_CITATION_QWEN_MODEL": "qwen/qwen3.8-flash",
+             "AI_CITATION_DEEPSEEK_MODEL": "deepseek/deepseek-v4.1-flash",
+             "AI_CITATION_PERPLEXITY_MODEL": "perplexity/sonar",
+         }, clear=False):
+        engines = {e["id"]: e for e in get_configured_ai_engines()}
+        for eid in ("claude", "gemini", "chatgpt", "qwen", "deepseek", "perplexity"):
+            assert engines[eid]["active"] is True
+            assert engines[eid]["provider"] == "openrouter"
+            assert engines[eid]["api_key"] == "sk-or-v1-one-key"
+
+        adapters = get_available_adapters()
+        assert {ad.engine_id for ad in adapters} >= {
+            "claude", "gemini", "chatgpt", "qwen", "deepseek", "perplexity"
+        }
+        assert all(ad.api_key == "sk-or-v1-one-key" for ad in adapters if ad.engine_id in {
+            "claude", "gemini", "chatgpt", "qwen", "deepseek", "perplexity"
+        })
+        assert all("openrouter.ai" in ad.base_url for ad in adapters if ad.engine_id == "claude")
+
+
+def test_together_gateway_covers_the_same_six_models():
+    from app.core.config import settings
+
+    with patch.object(settings, "LLM_PROVIDER", "together"), \
+         patch.object(settings, "TOGETHER_API_KEY", "tg-one-key"), \
+         patch.object(settings, "OPENROUTER_API_KEY", None), \
+         patch.dict("os.environ", {
+             "LLM_PROVIDER": "together",
+             "AI_CITATION_CROSS_PROVIDER": "false",
+             "AI_CITATION_PROVIDER": "",
+             "AI_CITATION_CLAUDE_PROVIDER": "",
+             "AI_CITATION_CLAUDE_API_KEY": "",
+             "AI_CITATION_GEMINI_API_KEY": "",
+             "AI_CITATION_CHATGPT_API_KEY": "",
+             "AI_CITATION_QWEN_API_KEY": "",
+             "AI_CITATION_DEEPSEEK_API_KEY": "",
+             "AI_CITATION_PERPLEXITY_API_KEY": "",
+             "AI_CITATION_CLAUDE_ACTIVE": "true",
+             "AI_CITATION_GEMINI_ACTIVE": "true",
+             "AI_CITATION_CHATGPT_ACTIVE": "true",
+             "AI_CITATION_QWEN_ACTIVE": "true",
+             "AI_CITATION_DEEPSEEK_ACTIVE": "true",
+             "AI_CITATION_PERPLEXITY_ACTIVE": "true",
+         }, clear=False):
+        engines = {e["id"]: e for e in get_configured_ai_engines()}
+        for eid in ("claude", "gemini", "chatgpt", "qwen", "deepseek", "perplexity"):
+            assert engines[eid]["provider"] == "together"
+            assert engines[eid]["api_key"] == "tg-one-key"
+            assert engines[eid]["active"] is True
+
+
 def test_openrouter_frontier_models_configuration():
     from app.core.config import settings
 

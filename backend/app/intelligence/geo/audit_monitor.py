@@ -49,13 +49,12 @@ async def run_audit_visibility(
             not_measured_reason="No AI engine API key is configured.",
         )
 
-    max_queries, repeats, engine_cap = tier_budget(max_pages)
+    max_queries, repeats, _engine_cap = tier_budget(max_pages)
     repeat_override = os.environ.get("DRISTIK_AI_MONITOR_REPEATS")
     if repeat_override and repeat_override.isdigit():
         repeats = max(1, min(int(repeat_override), 5))
+    # The configured model list is the measurement. A page budget does not drop engines.
     engine_ids = [ad.engine_id for ad in adapters]
-    if engine_cap:
-        engine_ids = engine_ids[:engine_cap]
 
     try:
         report = await benchmark_runner.execute_benchmark(

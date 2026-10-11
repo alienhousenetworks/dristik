@@ -5,7 +5,7 @@ Dynamically resolves and provisions configured live engine adapters from setting
 from __future__ import annotations
 
 import os
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 from app.core.config import settings
 from app.intelligence.geo.adapters.base import BaseGeoEngineAdapter
 from app.intelligence.geo.adapters.perplexity import PerplexityAdapter
@@ -15,9 +15,56 @@ from app.intelligence.geo.adapters.claude import ClaudeAdapter
 from app.intelligence.geo.adapters.groq import GroqAdapter
 
 
+def _adapter_from_configured_engine(eng: Dict[str, Any]) -> Optional[BaseGeoEngineAdapter]:
+    """Build the live adapter for one engine row from the citation tracker."""
+    provider = (eng.get("provider") or "").lower()
+    api_key = eng.get("api_key") or ""
+    model = eng.get("model") or ""
+    eid = eng.get("id") or ""
+    name = eng.get("name") or eid
+    if provider in ("openrouter", "together"):
+        if provider == "openrouter":
+            base = "https://openrouter.ai/api/v1"
+            headers = {
+                "HTTP-Referer": getattr(settings, "OPENROUTER_SITE_URL", None) or "https://dristik.ai",
+                "X-Title": getattr(settings, "OPENROUTER_SITE_NAME", None) or "Dristik AI",
+            }
+        else:
+            base = getattr(settings, "TOGETHER_BASE_URL", None) or "https://api.together.xyz/v1"
+            headers = {}
+        return OpenAISearchAdapter(
+            api_key=api_key,
+            model=model,
+            base_url=base,
+            extra_headers=headers,
+            engine_id=eid,
+            display_name=name,
+        )
+    return None
+
+
+def _configured_live_adapters() -> List[BaseGeoEngineAdapter]:
+    """Active engines that share the admin's main OpenRouter or Together key."""
+    from app.intelligence.citations.tracker import get_configured_ai_engines
+
+    adapters: List[BaseGeoEngineAdapter] = []
+    for eng in get_configured_ai_engines():
+        if not eng.get("active") or not eng.get("api_key"):
+            continue
+        if (eng.get("provider") or "").lower() not in ("openrouter", "together"):
+            continue
+        adapter = _adapter_from_configured_engine(eng)
+        if adapter and adapter.is_configured():
+            adapters.append(adapter)
+    return adapters
+
+
 def get_adapter(engine_id: str) -> Optional[BaseGeoEngineAdapter]:
     """Resolves an adapter by ID with keys from settings/env."""
     eid = engine_id.lower().strip()
+    for adapter in _configured_live_adapters():
+        if adapter.engine_id == eid:
+            return adapter
 
     if eid in ["perplexity", "sonar"]:
         key = (
@@ -74,7 +121,10 @@ def get_adapter(engine_id: str) -> Optional[BaseGeoEngineAdapter]:
 
 
 def get_available_adapters() -> List[BaseGeoEngineAdapter]:
-    """Returns all engine adapters that have an API key configured."""
+    """Returns live engines. The six gateway models win over separate vendor keys."""
+    gateway = _configured_live_adapters()
+    if gateway:
+        return gateway
     all_adapters = [
         get_adapter("perplexity"),
         get_adapter("chatgpt"),
