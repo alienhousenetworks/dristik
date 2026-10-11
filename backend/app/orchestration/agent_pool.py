@@ -1,5 +1,5 @@
 """
-35-agent workforce pool and dependency DAG executor.
+50-agent workforce pool and dependency DAG executor.
 
 Instantiates every specialist in SPECIALIST_AGENTS_V3 and runs them in
 topological waves. Independent agents in a wave run concurrently.
@@ -66,7 +66,7 @@ def topological_waves(definitions: Dict[str, AgentDefinition]) -> List[List[str]
 
 
 class AgentPool:
-    """Creates and runs the full 35-agent specialist workforce."""
+    """Creates and runs the full 50-agent specialist workforce."""
 
     def __init__(self, model_router):
         self.model_router = model_router

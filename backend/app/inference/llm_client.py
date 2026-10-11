@@ -13,6 +13,8 @@ Includes:
 - Multi-provider cascade (Groq -> Together -> OpenRouter -> Deterministic Fallback)
 """
 import asyncio
+import copy
+import hashlib
 import logging
 import random
 import re
@@ -130,6 +132,34 @@ def get_provider_semaphore(provider: str) -> asyncio.Semaphore:
         _PROVIDER_SEMAPHORES[prov] = asyncio.Semaphore(concurrency)
     return _PROVIDER_SEMAPHORES[prov]
 
+# Global in-memory exact-match response cache for idempotent LLM completions
+_RESPONSE_CACHE: Dict[str, Tuple[float, Dict[str, Any]]] = {}
+_RESPONSE_CACHE_MAX_ENTRIES = 1000
+
+
+def _get_cached_response(key: str) -> Optional[Dict[str, Any]]:
+    ttl = float(getattr(settings, "LLM_CACHE_TTL_SECONDS", 3600))
+    if key in _RESPONSE_CACHE:
+        ts, data = _RESPONSE_CACHE[key]
+        if time.time() - ts < ttl:
+            res = copy.deepcopy(data)
+            res["cached"] = True
+            res["latency_ms"] = 0.0
+            return res
+        else:
+            _RESPONSE_CACHE.pop(key, None)
+    return None
+
+
+def _put_cached_response(key: str, data: Dict[str, Any]) -> None:
+    now = time.time()
+    if len(_RESPONSE_CACHE) >= _RESPONSE_CACHE_MAX_ENTRIES:
+        # Prune oldest 20%
+        oldest_keys = sorted(_RESPONSE_CACHE.keys(), key=lambda k: _RESPONSE_CACHE[k][0])[:200]
+        for k in oldest_keys:
+            _RESPONSE_CACHE.pop(k, None)
+    _RESPONSE_CACHE[key] = (now, copy.deepcopy(data))
+
 
 class LLMClient:
     def __init__(
@@ -198,7 +228,13 @@ class LLMClient:
             "messages": [{"role": "user", "content": user_prompt or " "}],
         }
         if system_prompt and system_prompt.strip():
-            kwargs["system"] = system_prompt
+            kwargs["system"] = [
+                {
+                    "type": "text",
+                    "text": system_prompt,
+                    "cache_control": {"type": "ephemeral"},
+                }
+            ]
 
         # Anthropic SDK 1.6.0+: 'temperature' is passed via extra_body
         if temperature is not None:
@@ -392,6 +428,16 @@ class LLMClient:
         with randomized jitter on HTTP 429/503, and multi-provider cascade fallback:
         Primary (e.g. Groq) -> Fallback 1 (Anthropic/Together) -> Fallback 2 (OpenRouter).
         """
+        # Check in-memory exact-match cache for idempotent completions (temperature <= 0.2)
+        cache_key = None
+        if temperature <= 0.2 and getattr(settings, "ENABLE_LLM_RESPONSE_CACHE", True):
+            cache_payload = f"{model}:{system_prompt}:{user_prompt}:{temperature}:{str(response_format)}"
+            cache_key = hashlib.sha256(cache_payload.encode("utf-8")).hexdigest()
+            cached_resp = _get_cached_response(cache_key)
+            if cached_resp is not None:
+                logger.debug("[LLMClient] Response cache HIT for model '%s' (hash: %s...)", model, cache_key[:12])
+                return cached_resp
+
         # Determine candidate provider sequence for cascade
         primary_prov = self.provider or "groq"
         cascade_chain: List[str] = [primary_prov]
@@ -499,7 +545,7 @@ class LLMClient:
                                     "Respond with a single valid JSON object only. "
                                     "No markdown fences, no preamble, no trailing commentary."
                                     ).strip()
-                            return await self._generate_anthropic(
+                            anthropic_res = await self._generate_anthropic(
                                 model=anthropic_model,
                                 system_prompt=anthropic_system,
                                 user_prompt=user_prompt,
@@ -507,8 +553,11 @@ class LLMClient:
                                 max_tokens=max_tokens,
                                 timeout=call_timeout,
                             )
+                            if cache_key and anthropic_res:
+                                _put_cached_response(cache_key, anthropic_res)
+                            return anthropic_res
 
-                        return await self._single_chat_completion(
+                        completion_res = await self._single_chat_completion(
                             provider=current_prov,
                             base_url=curr_base_url,
                             api_key=curr_api_key,
@@ -521,6 +570,9 @@ class LLMClient:
                             response_format=response_format,
                             timeout=call_timeout,
                         )
+                        if cache_key and completion_res:
+                            _put_cached_response(cache_key, completion_res)
+                        return completion_res
 
                 except RateLimitException as rle:
                     last_error = rle

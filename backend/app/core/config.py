@@ -176,6 +176,9 @@ class Settings(BaseSettings):
     ANTHROPIC_RPM: int = Field(default=15, description="Requests per minute limit for Anthropic Messages API")
     ANTHROPIC_TPM: int = Field(default=40000, description="Tokens per minute limit for Anthropic Messages API")
     ENABLE_CROSS_PROVIDER_CASCADE: bool = Field(default=True, description="Cascade to secondary provider if primary provider is exhausted")
+    ENABLE_LLM_RESPONSE_CACHE: bool = Field(default=True, description="Enable exact-match in-memory response cache for idempotent queries")
+    LLM_CACHE_TTL_SECONDS: int = Field(default=3600, description="TTL in seconds for cached LLM responses")
+    MAX_LLM_COPY_PAGES: int = Field(default=4, description="Max strategic high-priority pages to run deep LLM copywriting rewrites on")
     # Actual USD per 1M tokens you pay. Both must be set. They override the
     # published list price for every call the provider did not bill in-band.
     LLM_COST_INPUT_PER_MILLION: Optional[float] = None
@@ -584,7 +587,7 @@ class Settings(BaseSettings):
             api_key = self.OPENROUTER_API_KEY or self.LLM_API_KEY
             base_url = self.LLM_BASE_URL or "https://openrouter.ai/api/v1"
             model_override = self.LLM_MODEL or self.OPENROUTER_MODEL
-            fast_model = self.OPENROUTER_MODEL_FAST or self.LLM_MODEL_FAST or model_override or "openai/gpt-4o"
+            fast_model = self.OPENROUTER_MODEL_FAST or self.LLM_MODEL_FAST or model_override or "google/gemini-2.0-flash"
             reasoning_model = self.OPENROUTER_MODEL_REASONING or self.LLM_MODEL_REASONING or model_override or "openai/gpt-4o"
             site_url = self.OPENROUTER_SITE_URL or "https://dristik.ai"
             site_name = self.OPENROUTER_SITE_NAME or "Dristik AI"

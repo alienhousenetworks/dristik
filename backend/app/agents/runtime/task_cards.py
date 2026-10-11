@@ -1,5 +1,5 @@
 """
-Per-specialist task contracts for the 35-agent workforce.
+Per-specialist task contracts for the 50-agent core workforce (58 total agents).
 Each card is a single-task instruction. Shared anti-hallucination rules live in
 inference/prompts/specialist_system.txt and GLOBAL_POLICY.
 """

@@ -191,6 +191,10 @@ class SpecialistAgent(BaseAgent):
 
         if "deterministic" in (self.definition.allowed_models or []):
             det = self._deterministic_audit(blackboard, evidence_slice)
+            # Deterministic-first policy: if deterministic audit produced complete claims, skip LLM
+            if det.get("claims"):
+                self._store(blackboard, det)
+                return det
             llm_res = await self._llm_audit(blackboard, evidence_slice)
             result = self._merge(det, llm_res)
             self._store(blackboard, result)
@@ -213,6 +217,15 @@ class SpecialistAgent(BaseAgent):
         return len(missing) == len(deps) and len(deps) > 0 and not results
 
     async def _llm_audit(self, blackboard: CognitiveBlackboard, evidence_slice) -> Dict[str, Any]:
+        # Deduplication for business identity specialists: if Stage 6 already resolved business identity, reuse it
+        if self.agent_id.startswith("business.") and (
+            getattr(blackboard, "semantic_representation", None) is not None
+            or (getattr(blackboard, "business_profile", None) is not None and getattr(blackboard.business_profile, "business_name", None))
+        ):
+            det = self._deterministic_audit(blackboard, evidence_slice)
+            if det.get("claims"):
+                return det
+
         system_extra = load_prompt("specialist_system")
         card = task_card_for(self.agent_id)
         forbidden = self.definition.forbidden_operations or []

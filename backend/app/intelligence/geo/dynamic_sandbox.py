@@ -30,6 +30,8 @@ from app.intelligence.knowledge.grounded_simulator import (
     SIMULATION_DISCLAIMER,
 )
 from app.intelligence.retrieval.hybrid_retriever import QueryPlanner
+from app.core.config import settings
+
 
 # 10 Core Strategic Facets for Comprehensive Website & Business Intelligence
 SANDBOX_FACETS = [
@@ -475,8 +477,10 @@ class DynamicQuestionSandboxEngine:
         Dynamically synthesizes 10 bespoke inquiries per facet using active LLM or
         deep genre-and-content extraction from the crawled site (zero fixed templates).
         """
-        # If model_router is active, attempt generative synthesis for this facet
-        if self.model_router and hasattr(self.model_router, "generate_structured"):
+        # Deterministic genre-and-content synthesis is preferred for $0 token cost.
+        # LLM synthesis is opt-in via USE_LLM_SANDBOX_SYNTHESIS.
+        use_llm_synth = getattr(settings, "USE_LLM_SANDBOX_SYNTHESIS", False)
+        if use_llm_synth and self.model_router and hasattr(self.model_router, "generate_structured"):
             try:
                 prompt_schema = (
                     "{\n"

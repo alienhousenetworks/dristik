@@ -909,9 +909,29 @@ class PageIntelligenceAgent(BaseAgent):
         reports: List[PageReport] = []
         semaphore = asyncio.Semaphore(3)
 
+        # Identify top strategic pages for deep LLM copywriting
+        # Priority: Homepage first (0), then pricing (1), product/services (2), about/contact (3), other (4)
+        def _page_priority(p: PageEvidence) -> int:
+            u = (p.url or "").lower()
+            if u.rstrip("/").count("/") <= 2 or p.page_type == "homepage":
+                return 0
+            if any(k in u for k in ("pricing", "plans", "tier", "price")):
+                return 1
+            if any(k in u for k in ("product", "features", "solutions", "services")):
+                return 2
+            if any(k in u for k in ("about", "contact", "company")):
+                return 3
+            return 4
+
+        from app.core.config import settings
+        max_llm_pages = int(getattr(settings, "MAX_LLM_COPY_PAGES", 4))
+        sorted_pages = sorted(pages, key=_page_priority)
+        llm_eligible_urls = {p.url for p in sorted_pages[:max_llm_pages]}
+
         async def one(page: PageEvidence) -> PageReport:
             async with semaphore:
-                return await self._analyze_page(page, profile, blackboard)
+                enable_llm = page.url in llm_eligible_urls
+                return await self._analyze_page(page, profile, blackboard, enable_llm_copy=enable_llm)
 
         if pages:
             reports = await asyncio.gather(*[one(p) for p in pages])
@@ -1012,15 +1032,17 @@ class PageIntelligenceAgent(BaseAgent):
         page: PageEvidence,
         profile: BusinessProfile,
         blackboard: Optional[CognitiveBlackboard] = None,
+        enable_llm_copy: bool = True,
     ) -> PageReport:
         seo = audit_page_seo(page)
         ux = audit_page_ux(page)
         copy = fallback_copy_audit(page, profile, seo)
-        try:
-            copy = await self._llm_copy(page, profile, copy, blackboard)
-        except Exception as exc:
-            logger.warning("LLM page copy failed for %s: %s", page.url, exc)
-            copy = _fail_copy_audit(copy, seo, str(exc), "llm_exception")
+        if enable_llm_copy:
+            try:
+                copy = await self._llm_copy(page, profile, copy, blackboard)
+            except Exception as exc:
+                logger.warning("LLM page copy failed for %s: %s", page.url, exc)
+                copy = _fail_copy_audit(copy, seo, str(exc), "llm_exception")
         if copy.llm_status == "ok" and copy.score is not None:
             overall = round((seo.score * 0.45) + (copy.score * 0.4) + (min(100.0, 100 - min(ux.ttfb_ms / 20, 25)) * 0.15), 1)
         else:

@@ -450,7 +450,7 @@ class AnalysisOrchestrator:
             if await _check_pause():
                 return
 
-            # 6. Business identity (declared vs detected) before the 35-agent DAG
+            # 6. Business identity (declared vs detected) before the 50-agent DAG
             controller.mark_node_status("node_entity_resolution", GraphNodeStatus.RUNNING)
             controller.log_activity("node_entity_resolution", "running", "entity.resolve", f"Resolving canonical entity for {domain}...")
 
@@ -522,10 +522,10 @@ class AnalysisOrchestrator:
             except Exception as exc:
                 logger.info("Search demand was not attached: %s", exc)
 
-            # 7. Full 35-agent specialist DAG (dependency waves, no canned fallbacks)
-            model_router.set_active_stage("specialist_execution", "35-Agent Specialist DAG")
-            model_router.set_active_sub_stage("specialist_agents_dag", "35-Agent Multi-Disciplinary Analysis Waves")
+            # 7. Full specialist DAG (dependency waves, no canned fallbacks)
             agent_pool = AgentPool(model_router)
+            model_router.set_active_stage("specialist_execution", f"{len(agent_pool)}-Agent Specialist DAG")
+            model_router.set_active_sub_stage("specialist_agents_dag", f"{len(agent_pool)}-Agent Multi-Disciplinary Analysis Waves")
 
             for w_node in ["node_specialist_wave_1", "node_specialist_wave_2", "node_specialist_wave_3", "node_specialist_wave_4"]:
                 controller.mark_node_status(w_node, GraphNodeStatus.RUNNING)
@@ -563,7 +563,7 @@ class AnalysisOrchestrator:
                 "node_specialist_wave_4",
                 "success",
                 "specialists.complete",
-                f"35 specialists finished: {pool_summary['completed']} completed, {pool_summary['unavailable']} unavailable, {pool_summary['errors']} errors."
+                f"{len(agent_pool)} specialists finished: {pool_summary['completed']} completed, {pool_summary['unavailable']} unavailable, {pool_summary['errors']} errors."
             )
 
             await self._emit_event(
@@ -571,7 +571,7 @@ class AnalysisOrchestrator:
                 "specialist_execution",
                 78,
                 (
-                    f"35 specialists finished: {pool_summary['completed']} completed, "
+                    f"{len(agent_pool)} specialists finished: {pool_summary['completed']} completed, "
                     f"{pool_summary['unavailable']} unavailable (no invented fill), "
                     f"{pool_summary['errors']} errors."
                 ),
