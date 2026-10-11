@@ -106,6 +106,23 @@ def test_keyword_gap_engine(temp_store):
         "snapshot_date": "2026-10-01",
     }])
 
+    unmeasured = gap_engine.evaluate_gap(
+        target_domain="target.com",
+        competitor_domains=["competitor.com"],
+        project_id="proj_gap",
+    )
+    assert unmeasured.total_missing_keywords == 0
+    assert unmeasured.opportunities == []
+
+    temp_store.record_keyword_serp_history({
+        "keyword_id": kw.keyword_id,
+        "project_id": "proj_gap",
+        "domain": "target.com",
+        "position": None,
+        "snapshot_date": "2026-10-01",
+        "raw_serp_ref": "live_serp_provider",
+    })
+
     report = gap_engine.evaluate_gap(
         target_domain="target.com",
         competitor_domains=["competitor.com"],

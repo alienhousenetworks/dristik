@@ -599,6 +599,25 @@ class ExternalStore:
             )
         return keyword_id
 
+    def list_measured_keywords_for_domain(self, domain: str, limit: int = 50) -> List[Dict[str, Any]]:
+        """Keywords whose rank was stored for this domain. Unranked rows stay out."""
+        host = (domain or "").strip().lower().replace("www.", "")
+        if not host:
+            return []
+        with self._lock, self._connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT * FROM project_keywords
+                WHERE lower(replace(domain, 'www.', ''))=?
+                  AND is_active=1
+                  AND current_position IS NOT NULL
+                ORDER BY search_volume DESC
+                LIMIT ?
+                """,
+                (host, limit),
+            ).fetchall()
+        return [_keyword_dict(row) for row in rows]
+
     def list_project_keywords(self, project_id: str, active_only: bool = True) -> List[Dict[str, Any]]:
         query = "SELECT * FROM project_keywords WHERE project_id=?"
         params: List[Any] = [project_id]

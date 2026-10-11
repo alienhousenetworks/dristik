@@ -66,6 +66,12 @@ export function getChapterDirectory(isRealCompetitorDataAvailable: boolean = fal
     pageEst: 20,
   },
   {
+    num: '07b',
+    title: 'Master audit index',
+    desc: 'All 55 sections and appendices A–O. Each one is measured, inferred, unavailable, not tested, or not applicable. Missing data is not scored as zero.',
+    pageEst: 21,
+  },
+  {
     num: '08',
     title: 'Research Methodology & Sampling Parameters',
     desc: 'Audit scope, crawl depth boundaries, multi-engine testing protocol, confidence algorithms, and known operational limitations.',

@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Any, Callable, Dict, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -135,19 +135,48 @@ def map_search_console(report: Any) -> Dict[str, Any]:
     return _channel(SEARCH_CONSOLE, "NOT_CONNECTED")
 
 
-def _analytics_from_payload(property_id: str, payload: Dict[str, Any], period: str = "last 30 days") -> Dict[str, Any]:
-    headers = [item.get("name") for item in (payload.get("metricHeaders") or [])]
-    rows = payload.get("rows") or []
-    values = (rows[0].get("metricValues") if rows else []) or []
+def _metric_map(headers: List[Any], values: List[Any]) -> Dict[str, float]:
     parsed: Dict[str, float] = {}
     for name, cell in zip(headers, values):
         number = _num(cell.get("value") if isinstance(cell, dict) else None)
         if name and number is not None:
             parsed[str(name)] = number
+    return parsed
+
+
+def _analytics_from_payload(property_id: str, payload: Dict[str, Any], period: str = "last 30 days") -> Dict[str, Any]:
+    headers = [item.get("name") for item in (payload.get("metricHeaders") or [])]
+    dim_headers = [item.get("name") for item in (payload.get("dimensionHeaders") or [])]
+    rows = payload.get("rows") or []
+    page_idx = next((i for i, name in enumerate(dim_headers) if name in ("pagePath", "landingPagePlusQueryString")), None)
+    totals = payload.get("totals") or []
+    total_values = (totals[0].get("metricValues") if totals else None) or None
+    if total_values:
+        parsed = _metric_map(headers, total_values)
+    elif page_idx is None:
+        parsed = _metric_map(headers, (rows[0].get("metricValues") if rows else []) or [])
+    else:
+        parsed = {}
+        for row in rows:
+            for name, number in _metric_map(headers, row.get("metricValues") or []).items():
+                parsed[name] = parsed.get(name, 0) + number
+    landing_pages = []
+    if page_idx is not None:
+        for row in rows:
+            dims = row.get("dimensionValues") or []
+            metrics = _metric_map(headers, row.get("metricValues") or [])
+            page = dims[page_idx].get("value") if page_idx < len(dims) and isinstance(dims[page_idx], dict) else None
+            if not page:
+                continue
+            landing_pages.append({
+                "page": page,
+                "sessions": int(metrics.get("sessions") or 0),
+                "key_events": int(metrics["conversions"]) if "conversions" in metrics else None,
+            })
     if "sessions" not in parsed:
         return _channel(ANALYTICS, "NO_DATA", property=property_id, period=period)
     sessions = int(parsed["sessions"])
-    conversions = int(parsed["conversions"]) if "conversions" in parsed else 0
+    key_events = int(parsed["conversions"]) if "conversions" in parsed else None
     return _channel(
         ANALYTICS,
         "MEASURED",
@@ -157,7 +186,9 @@ def _analytics_from_payload(property_id: str, payload: Dict[str, Any], period: s
         engagement_rate_pct=_percent_points(parsed.get("engagementRate")),
         bounce_rate_pct=_percent_points(parsed.get("bounceRate")),
         average_session_duration_sec=_num(parsed.get("averageSessionDuration")),
-        conversions=conversions,
+        conversions=key_events if key_events is not None else 0,
+        key_events=key_events,
+        landing_pages=landing_pages or None,
     )
 
 
@@ -194,6 +225,16 @@ def map_analytics(summary: Any) -> Dict[str, Any]:
             bounce_rate_pct=_percent_points(_get(summary, "bounce_rate_pct") if _get(summary, "bounce_rate_pct") is not None else _get(summary, "bounce_rate")),
             average_session_duration_sec=_num(_get(summary, "avg_session_duration_sec") if _get(summary, "avg_session_duration_sec") is not None else _get(summary, "average_session_duration_sec")),
             conversions=int(_num(_get(summary, "conversions") if _get(summary, "conversions") is not None else _get(summary, "conversions_count")) or 0),
+            key_events=(
+                int(_num(_get(summary, "key_events")))
+                if _get(summary, "key_events") is not None
+                else (
+                    int(_num(_get(summary, "conversions") if _get(summary, "conversions") is not None else _get(summary, "conversions_count")))
+                    if (_get(summary, "conversions") is not None or _get(summary, "conversions_count") is not None)
+                    else None
+                )
+            ),
+            landing_pages=_get(summary, "landing_pages") or None,
         )
     if unauthorized:
         return _channel(ANALYTICS, "NOT_AUTHORIZED")

@@ -97,8 +97,8 @@ class KeywordGapEngine:
             )
         else:
             summary = (
-                f"No competitor keyword gaps recorded yet for {clean_target}. Add tracked keywords or connect "
-                f"DataForSEO to perform automated cross-domain search intersection."
+                f"No keyword gap for {clean_target}. A gap is reported only when the same provider "
+                f"measured both this domain and a competitor."
             )
 
         return KeywordGapReport(
@@ -124,20 +124,25 @@ class KeywordGapEngine:
             kw_id = kw["keyword_id"]
             kw_text = kw["keyword"]
             volume = int(kw.get("search_volume") or 0)
-            target_pos = kw.get("current_position")
+            measured, target_pos, provider = self._target_measurement(kw)
+            if not measured:
+                continue
             kd = kw.get("keyword_difficulty")
             cpc = float(kw.get("cpc_usd") or 0.0)
 
             comp_ranks = self.store.get_keyword_competitors(kw_id)
             for cr in comp_ranks:
-                comp_dom = cr.get("competitor_domain", "")
+                comp_dom = _clean_domain(cr.get("competitor_domain", ""))
+                if competitors and comp_dom not in competitors:
+                    continue
                 c_pos = cr.get("position")
                 if not c_pos:
                     continue
 
                 slug = _slugify(kw_text)
 
-                # Case 1: Competitor ranks in top 10, Target is unranked
+                # Case 1: Same provider measured the target as outside the top 100,
+                # or a live check recorded no rank, while the competitor ranks in the top 10.
                 if c_pos <= 10 and (target_pos is None or target_pos > 100):
                     opp_traffic = _estimate_opportunity(volume, c_pos)
                     items.append(KeywordGapItem(
@@ -152,6 +157,7 @@ class KeywordGapEngine:
                         estimated_monthly_visits_opportunity=opp_traffic,
                         recommended_action=f"Create dedicated landing page: {slug} to capture '{kw_text}'",
                         recommended_page_slug=slug,
+                        provider=provider,
                     ))
 
                 # Case 2: Competitor ranks in top 5, Target ranks on page 2-3 (11-30)
@@ -169,9 +175,24 @@ class KeywordGapEngine:
                         estimated_monthly_visits_opportunity=opp_traffic,
                         recommended_action=f"Optimize existing page {kw.get('target_url') or slug} with richer schema and entity depth to jump from #{target_pos} to top 5",
                         recommended_page_slug=kw.get("target_url") or slug,
+                        provider=provider,
                     ))
 
         return items
+
+    def _target_measurement(self, kw: Dict[str, Any]):
+        """Return (measured, position, provider). A missing rank is not a measurement."""
+        position = kw.get("current_position")
+        if position is not None:
+            return True, int(position), "serp_tracker"
+        history = self.store.get_keyword_serp_history(kw["keyword_id"], limit=1)
+        if not history:
+            return False, None, None
+        ref = str(history[0].get("raw_serp_ref") or "")
+        if not ref or ref == "unconfigured_provider":
+            return False, None, None
+        hist_pos = history[0].get("position")
+        return True, (int(hist_pos) if hist_pos is not None else None), ref
 
     def _query_dataforseo_domain_intersection(
         self,
@@ -231,6 +252,7 @@ class KeywordGapEngine:
                     estimated_monthly_visits_opportunity=traffic,
                     recommended_action=f"Create dedicated landing page: {slug} to target '{kw_text}' (competitor ranks #{comp_rank})",
                     recommended_page_slug=slug,
+                    provider="dataforseo",
                 ))
         except Exception as exc:
             logger.warning("DataForSEO domain intersection query failed: %s", exc)

@@ -6,6 +6,7 @@ import { finiteNumber } from '../report/models/scoreLedger';
 import { classifyFindingNature } from '../lib/findingClassifier';
 import { ScoringRubricModal } from './ScoringRubricModal';
 import { AdaptiveVisualIntelligence } from './VisualIntelligence/AdaptiveVisualIntelligence';
+import { AuditIndex } from '../report/auditIndex/AuditIndex';
 import { EvidenceModal } from './EvidenceModal';
 import { EvidenceText } from './EvidenceText';
 import { ExecutiveTopActions } from './ExecutiveTopActions';
@@ -755,6 +756,23 @@ export function Big4AuditReport({
         <div className="mt-8 pt-4 border-t border-line flex justify-between text-[10px] text-ink-400 font-mono">
           <span>{display(report.domain)} — Executive Audit Report</span>
           <span>Section 1.6 // Page 4</span>
+        </div>
+      </section>
+
+      <section className="big4-page-break p-8 md:p-14 border-b-2 border-line bg-paper-50">
+        <div className="border-b border-line pb-3 flex items-center justify-between text-xs text-ink-500 uppercase tracking-[0.04em] font-mono">
+          <span>Dristik Strategic Advisory // {display(report.domain)}</span>
+          <span>Section 1.7</span>
+        </div>
+        <div className="mt-8 space-y-1">
+          <span className="text-xs font-mono font-bold uppercase tracking-[0.04em] text-ink-700">1.7 Audit index</span>
+          <h2 className="text-2xl font-serif text-ink font-normal">Every audit section</h2>
+          <p className="text-xs text-ink-500 mt-1 max-w-3xl">
+            Sections 01–55 and appendices A–O. A missing source stays unavailable. It is not scored as zero.
+          </p>
+        </div>
+        <div className="mt-6">
+          <AuditIndex report={report} />
         </div>
       </section>
 

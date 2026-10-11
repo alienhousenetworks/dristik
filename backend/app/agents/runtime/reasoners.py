@@ -659,6 +659,57 @@ class CroExperienceReasonerAgent:
                     priority=priority,
                 ))
 
+            # 4. Passive & Generic CTA Friction Check
+            if p_ctas:
+                generic_ctas = [
+                    str(c).strip() for c in p_ctas
+                    if str(c).strip().lower() in ("submit", "click here", "learn more", "read more", "continue", "go")
+                ]
+                if generic_ctas:
+                    ev_hash = _compute_hash({"url": p.url, "generic_ctas": generic_ctas})
+                    ev_ref = EvidenceRef(
+                        source_type="crawl",
+                        source_id=f"cro_passive_cta_{hashlib.md5(p.url.encode()).hexdigest()[:8]}",
+                        evidence_hash=ev_hash,
+                        url=p.url,
+                        selector="button, a",
+                        snippet=f"Generic microcopy buttons: {', '.join(generic_ctas)}",
+                        observed_value=len(generic_ctas),
+                        collector_or_analyzer="CroExperienceReasonerAgent.cta_microcopy_analyzer",
+                        metadata={"generic_ctas": generic_ctas}
+                    )
+                    impact, effort, priority = derive_finding_metrics(
+                        severity=Severity.LOW,
+                        evidence_strength="dom_structure",
+                        scope_affected_urls=1,
+                        estimated_complexity="low"
+                    )
+                    findings.append(Finding(
+                        finding_id=f"finding_passive_cta_{ev_hash[:8]}",
+                        category=Category.UX_CONVERSION,
+                        severity=Severity.LOW,
+                        title=f"Passive CTA Microcopy ('{generic_ctas[0]}')",
+                        description=(
+                            f"Page '{p.url}' contains {len(generic_ctas)} CTA button(s) with generic microcopy ({', '.join(generic_ctas)}). "
+                            "Low-intent labels increase cognitive friction and deliver lower click-through conversion than outcome-driven verbs."
+                        ),
+                        recommendation="Replace generic button copy with outcome-driven action phrases (e.g., 'Claim Free Audit', 'Explore Plans').",
+                        why_it_matters="Outcome-driven CTAs clarify user benefit and reduce hesitation before clicking.",
+                        validation_criteria="All interactive CTA buttons must contain specific value-oriented verbs.",
+                        evidence=[FindingEvidence(
+                            url=p.url,
+                            element="button, a",
+                            value=f"{len(generic_ctas)} generic buttons",
+                            source="crawl",
+                            evidence_ref=ev_ref,
+                        )],
+                        evidence_refs=[ev_ref.source_id],
+                        evidence_ref_objects=[ev_ref],
+                        impact=impact,
+                        effort=effort,
+                        priority=priority,
+                    ))
+
         return findings
 
 

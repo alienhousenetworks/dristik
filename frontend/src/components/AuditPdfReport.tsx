@@ -18,6 +18,7 @@ import { Chapter05Conversion } from '../report/templates/Chapter05Conversion';
 import { Chapter06PageByPage } from '../report/templates/Chapter06PageByPage';
 import { Chapter07Roadmap } from '../report/templates/Chapter07Roadmap';
 import { MethodologyChapter } from '../report/templates/MethodologyChapter';
+import { AuditIndexChapter } from '../report/templates/AuditIndexChapter';
 import { AppendixLedger } from '../report/templates/AppendixLedger';
 
 export interface AuditPdfReportProps {
@@ -219,6 +220,8 @@ export function AuditPdfReport({
       {/* CHAPTER 07: STRATEGIC PRIORITIES & 90-DAY IMPLEMENTATION ROADMAP          */}
       {/* ========================================================================= */}
       <Chapter07Roadmap theme={theme} report={normalized} />
+
+      <AuditIndexChapter theme={theme} report={report} domain={normalized.meta.domain} />
 
       {/* ========================================================================= */}
       {/* CHAPTER 08: RESEARCH METHODOLOGY & SAMPLING PROTOCOL                      */}

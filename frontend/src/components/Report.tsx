@@ -94,9 +94,9 @@ export function Report({
                 if (id) window.open(`/api/v1/reports/${id}/aeo-report?format=html`, '_blank');
               }}
               className="btn-secondary px-3 py-2 text-sm flex items-center gap-1.5"
-              title="Open 20-Section Answer Engine Optimization (AEO) Master Report"
+              title="Open Complete 55-Section Answer Engine Optimization (AEO) Master Report (7 Parts, 15 Appendices)"
             >
-              AEO Report
+              AEO Report (55-Sec)
             </button>
             {onPreviewDeck && (
               <button

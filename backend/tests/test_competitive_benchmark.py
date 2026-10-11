@@ -59,7 +59,9 @@ def test_evaluate_page_to_pillar_scores():
 
     scores_poor = _evaluate_page_to_pillar_scores(ev_poor, is_https=False)
     assert scores_poor.search_seo <= 40
-    assert scores_poor.ai_search_geo <= 35
+    assert scores_poor.ai_search_geo == 0
+    assert scores_poor.conversion_cro == 0
+    assert scores_poor.brand_trust == 0
     assert scores_poor.experience_sxo <= 45
     assert scores_poor.overall_score <= 45
 

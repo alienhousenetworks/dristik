@@ -26,8 +26,8 @@ export function AdaptiveVisualIntelligence({ report, compact = false }: Adaptive
       title: item.title,
       subtitle: item.note,
       ai_insight: item.note,
-      category: 'OVERALL',
-      data: { bars: item.bars },
+      category: item.category || 'OVERALL',
+      data: { bars: item.bars, unit: item.unit, scaleMax: item.scaleMax },
       is_recommended: true,
       priority_order: 20 + index,
     }));

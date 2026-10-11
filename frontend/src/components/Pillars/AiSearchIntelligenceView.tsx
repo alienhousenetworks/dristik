@@ -244,7 +244,7 @@ export function AiSearchIntelligenceView({
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-line pb-4">
               <div className="flex items-center gap-2">
                 <AlertCircle className="w-5 h-5 text-warn" />
-                <h3 className="font-sans text-xl font-bold text-ink">Diagnostic Correlation: Why Is Answerability At {extractabilityScore ?? 74}%?</h3>
+                <h3 className="font-sans text-xl font-bold text-ink">Diagnostic Correlation: Why Is Answerability At {extractabilityScore != null ? `${extractabilityScore}%` : 'an unmeasured level'}?</h3>
               </div>
               <button
                 type="button"

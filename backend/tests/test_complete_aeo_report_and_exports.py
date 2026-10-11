@@ -254,6 +254,14 @@ def test_aeo_report_fastapi_endpoints():
     original_get_run = orchestrator.get_run
     orchestrator.get_run = MagicMock(return_value=mock_run)
 
+    from app.reports.export_service import (
+        generate_aeo_remediation_csv,
+        generate_aeo_question_dataset_csv,
+        generate_aeo_live_benchmark_csv,
+        generate_aeo_brand_facts_csv,
+        generate_aeo_evidence_ledger_csv,
+    )
+
     try:
         # 1. HTML AEO Report
         res_html = client.get("/api/v1/reports/analysis_aeo_test_001/aeo-report?format=html")
@@ -266,7 +274,9 @@ def test_aeo_report_fastapi_endpoints():
         assert res_json.status_code == 200
         data = res_json.json()
         assert data["report_type"] == "AEO_MASTER_AUDIT_2026"
-        assert len(data["sections"]) == 20
+        assert len(data["sections"]) >= 55
+        assert len(data["parts_7"]) == 7
+        assert len(data["appendices_15"]) == 15
 
         # 3. CSV AEO Remediation Tracker Export
         res_csv = client.get("/api/v1/reports/analysis_aeo_test_001/export/aeo-remediation-tracker.csv")
@@ -281,5 +291,143 @@ def test_aeo_report_fastapi_endpoints():
         assert "text/csv" in res_q_csv.headers["content-type"]
         assert "Q-DISC-01" in res_q_csv.text
         assert 'filename="acme.com_aeo_question_dataset.csv"' in res_q_csv.headers["content-disposition"]
+
+        # 5. CSV Live Benchmark Export
+        res_bm = client.get("/api/v1/reports/analysis_aeo_test_001/export/aeo-live-benchmark.csv")
+        assert res_bm.status_code == 200
+        assert "text/csv" in res_bm.headers["content-type"]
+        assert "Test Case ID" in res_bm.text
+
+        # 6. CSV Brand Facts Export
+        res_facts = client.get("/api/v1/reports/analysis_aeo_test_001/export/aeo-brand-facts.csv")
+        assert res_facts.status_code == 200
+        assert "text/csv" in res_facts.headers["content-type"]
+        assert "Fact ID" in res_facts.text
+
+        # 7. CSV Evidence Ledger Export
+        res_ledger = client.get("/api/v1/reports/analysis_aeo_test_001/export/aeo-evidence-ledger.csv")
+        assert res_ledger.status_code == 200
+        assert "text/csv" in res_ledger.headers["content-type"]
+        assert "Evidence ID" in res_ledger.text
     finally:
         orchestrator.get_run = original_get_run
+
+
+def test_aeo_55_sections_and_7_parts_coverage():
+    """Verify all 55 sections across 7 parts are present in both JSON and HTML."""
+    from app.intelligence.aeo.taxonomy_55 import AEO_SECTIONS_55, AEO_PARTS
+
+    report = _make_dummy_aeo_report()
+    json_data = aeo_report_generator.render_json_report(report)
+    html_output = aeo_report_generator.render_html_report(report)
+
+    assert len(AEO_SECTIONS_55) == 55
+    assert len(AEO_PARTS) == 7
+
+    # Check 7 parts in JSON
+    parts_json = json_data["parts_7"]
+    assert len(parts_json) == 7
+    part_ids = [p["part_id"] for p in parts_json]
+    assert part_ids == [f"part-{i}" for i in range(1, 8)]
+
+    # Check all 55 sections in aeo_report_generator.SECTIONS
+    assert len(aeo_report_generator.SECTIONS) == 55
+
+    # Check all 55 sections exist in HTML with anchor IDs and navigation links
+    for sec in AEO_SECTIONS_55:
+        assert f'id="{sec.sec_id}"' in html_output, f"Missing section id='{sec.sec_id}' in HTML."
+        assert f'href="#{sec.sec_id}"' in html_output, f"Missing nav link href='#{sec.sec_id}' in HTML."
+        assert sec.title in html_output, f"Missing title '{sec.title}' in HTML output."
+
+
+def test_aeo_15_appendices_coverage():
+    """Verify all 15 appendices (A through O) are generated in JSON and HTML."""
+    from app.intelligence.aeo.taxonomy_55 import AEO_APPENDICES_15
+
+    report = _make_dummy_aeo_report()
+    json_data = aeo_report_generator.render_json_report(report)
+    html_output = aeo_report_generator.render_html_report(report)
+
+    assert len(AEO_APPENDICES_15) == 15
+    appendices_json = json_data["appendices_15"]
+    assert len(appendices_json) == 15
+
+    for app in AEO_APPENDICES_15:
+        expected_key = f"appendix_{app.letter.lower()}_{app.title.lower().replace(' ', '_')}"
+        assert expected_key in appendices_json, f"Missing appendix '{expected_key}' in JSON."
+        assert f'id="app-{app.letter.lower()}"' in html_output, f"Missing anchor for Appendix {app.letter} in HTML."
+        assert app.title in html_output
+
+
+def test_aeo_four_pillars_decoupled_scoring():
+    """Verify that Content Readiness, Technical Eligibility, Observed Visibility, and Business Outcomes are decoupled."""
+    from app.intelligence.aeo.metrics_calculator import AeoMetricsCalculator, EvidenceState
+
+    report = _make_dummy_aeo_report()
+    scorecard = AeoMetricsCalculator.calculate(report)
+
+    # Pillar A: Content readiness computed from page passages
+    assert scorecard.pillar_a_content_readiness.composite_readiness_score is not None
+    assert scorecard.pillar_a_content_readiness.state in (EvidenceState.SAMPLE_VERIFIED, EvidenceState.VERIFIED)
+
+    # Pillar B: Technical eligibility
+    assert scorecard.pillar_b_technical_eligibility.composite_eligibility_score is not None
+    assert scorecard.pillar_b_technical_eligibility.state == EvidenceState.VERIFIED
+
+    # Pillar C: Observed visibility is NOT_TESTED when live APIs are disconnected (Zero fabrication!)
+    assert scorecard.pillar_c_observed_visibility.state == EvidenceState.NOT_TESTED
+    assert scorecard.pillar_c_observed_visibility.citation_rate_pct is None
+
+    # Pillar D: Business outcomes is DATA_UNAVAILABLE when GA4 is unauthenticated
+    assert scorecard.pillar_d_business_outcomes.state == EvidenceState.DATA_UNAVAILABLE
+
+    # Check 10 core formulas are present in metrics
+    metrics = scorecard.core_metrics
+    assert len(metrics) == 10
+    metric_codes = [m.code for m in metrics]
+    for i in range(1, 11):
+        assert f"AEO-MET-{i:02d}" in metric_codes
+
+
+def test_aeo_16_specialist_modules():
+    """Verify all 16 specialists run independently and return structured evidence states."""
+    from app.intelligence.aeo.specialist_registry import AeoSpecialistRegistry
+
+    report = _make_dummy_aeo_report()
+    specialist_results = AeoSpecialistRegistry.execute_all(report)
+
+    assert len(specialist_results) == 16
+    for idx, spec in enumerate(specialist_results, 1):
+        assert spec.specialist_id == f"SPEC-{idx:02d}"
+        assert spec.status in ("VERIFIED", "SAMPLE_VERIFIED", "NOT_TESTED", "DATA_UNAVAILABLE", "INFERRED")
+        assert spec.summary
+
+
+def test_all_new_csv_exports():
+    """Verify Live Benchmark, Brand Facts, and Evidence Ledger CSV exports."""
+    from app.reports.export_service import (
+        generate_aeo_live_benchmark_csv,
+        generate_aeo_brand_facts_csv,
+        generate_aeo_evidence_ledger_csv,
+    )
+
+    report = _make_dummy_aeo_report()
+
+    # Benchmark CSV
+    bm_csv = generate_aeo_live_benchmark_csv(report)
+    assert "Test Case ID,Engine / Platform,Target Question" in bm_csv
+    assert "TC-PLAN-001" in bm_csv or "TC-001" in bm_csv
+    assert "NOT_TESTED" in bm_csv or "VERIFIED" in bm_csv
+
+    # Brand Facts CSV
+    facts_csv = generate_aeo_brand_facts_csv(report)
+    assert "Fact ID,Entity Name,Fact Category" in facts_csv
+    assert "FACT-001" in facts_csv
+    assert "Acme Corp" in facts_csv
+
+    # Evidence Ledger CSV
+    ledger_csv = generate_aeo_evidence_ledger_csv(report)
+    assert "Evidence ID,Evidence Type,Source URL" in ledger_csv
+    assert "EV-DOM-0001" in ledger_csv
+    assert "FIRST_PARTY_CRAWL" in ledger_csv
+

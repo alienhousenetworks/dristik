@@ -1186,6 +1186,8 @@ export interface GoogleChannelPayload {
   bounce_rate_pct?: number | null;
   average_session_duration_sec?: number | null;
   conversions?: number;
+  key_events?: number | null;
+  landing_pages?: Array<{ page?: string; sessions?: number; key_events?: number | null }>;
 }
 
 export interface ExecutiveReport {
@@ -1241,6 +1243,9 @@ export interface ExecutiveReport {
     measurement_note?: string;
     engines_measured: number;
     engines_requested: number;
+    engines_queried?: string[];
+    surfaces_not_queried?: string[];
+    measurement_kind?: string;
     queries: number;
     repeats: number;
     successful_runs: number;
@@ -1329,6 +1334,7 @@ export interface ExecutiveReport {
   orphan_pages?: OrphanPageReport;
   anchor_text_audit?: AnchorTextAudit;
   form_audit?: FormAuditReport;
+  cro_audit?: CroAuditReport;
   media_assets?: MediaAssetAuditReport;
   per_engine_geo?: PerEngineAiMatrix;
   security_audit?: SecurityAuditReport;
@@ -1868,6 +1874,149 @@ export interface FormAuditReport {
   actionable_remedies: string[];
 }
 
+export interface CtaAuditItem {
+  page_url: string;
+  cta_text: string;
+  element_type: string;
+  target_url?: string | null;
+  intent_category: 'HIGH_INTENT' | 'EXPLORATORY' | 'PASSIVE_GENERIC';
+  placement_zone: 'HERO' | 'HEADER' | 'BODY' | 'FOOTER';
+  is_passive_friction: boolean;
+  suggested_rewrite?: string | null;
+}
+
+export interface CtaAnalysisRollup {
+  total_ctas_detected: number;
+  high_intent_count: number;
+  exploratory_count: number;
+  passive_generic_count: number;
+  pages_without_ctas: string[];
+  has_hero_cta: boolean;
+  hero_cta_text?: string | null;
+  ctas: CtaAuditItem[];
+  action_clarity_score: number;
+}
+
+export interface SocialProofAuditRollup {
+  total_testimonials: number;
+  client_logos_detected: number;
+  quantified_proof_claims: string[];
+  trust_badges_detected: string[];
+  has_privacy_policy: boolean;
+  has_terms_of_service: boolean;
+  trust_authority_score: number;
+  risk_level: 'LOW' | 'MEDIUM' | 'HIGH';
+}
+
+export interface PricingPsychologyRollup {
+  pricing_page_detected: boolean;
+  pricing_url?: string | null;
+  detected_tiers_count: number;
+  has_billing_toggle: boolean;
+  has_money_back_guarantee: boolean;
+  has_free_trial: boolean;
+  guarantee_signals: string[];
+  commercial_transparency_score: number;
+}
+
+export interface ValuePropClarityAudit {
+  hero_headline?: string | null;
+  hero_subhead?: string | null;
+  headline_word_count: number;
+  customer_centricity_ratio: number;
+  has_adjacent_cta: boolean;
+  clarity_grade: string;
+  observations: string[];
+}
+
+export interface CroDimensionScore {
+  id: string;
+  name: string;
+  status: string;
+  score?: number | null;
+  note: string;
+  passed_checks?: number;
+  failed_checks?: number;
+  excluded_checks?: number;
+}
+
+export interface CroMetricResult {
+  metric: string;
+  formula: string;
+  status: string;
+  value?: number | null;
+  display: string;
+  denominator?: string | null;
+  numerator?: string | null;
+  window?: string | null;
+  note: string;
+}
+
+export interface CroFindingRecord {
+  finding_id: string;
+  priority: string;
+  status: string;
+  finding: string;
+  evidence: string;
+  observed_scope: string;
+  hypothesis: string;
+  recommended_action: string;
+  primary_metric: string;
+  guardrail_metrics: string[];
+  validation: string;
+  impact_estimate: string;
+  owner: string;
+  evidence_state: string;
+  section: number;
+  specialist: string;
+  effort: string;
+}
+
+export interface CroCheckRecord {
+  check_id: string;
+  label: string;
+  evidence_state: string;
+  outcome: string;
+  summary: string;
+}
+
+export interface CroSectionRecord {
+  number: string;
+  part: string;
+  title: string;
+  specialist: string;
+  status: string;
+  checks: CroCheckRecord[];
+}
+
+export interface CroIntelligenceReport {
+  scope_note: string;
+  principle?: string;
+  business_model?: string;
+  model_basis?: string;
+  sample_size?: number;
+  discovered_urls?: number | null;
+  dimensions?: CroDimensionScore[];
+  metrics?: CroMetricResult[];
+  sections?: CroSectionRecord[];
+  findings?: CroFindingRecord[];
+  roadmap?: Record<string, string[]>;
+  appendices?: Array<{ id: string; title: string; contents: string; status: string; summary: string }>;
+  parts?: Array<{ id: string; title: string; sections?: string }>;
+}
+
+export interface CroAuditReport {
+  overall_cro_score: number;
+  cro_grade: string;
+  cta_analysis: CtaAnalysisRollup;
+  social_proof: SocialProofAuditRollup;
+  pricing_psychology: PricingPsychologyRollup;
+  value_prop: ValuePropClarityAudit;
+  form_friction?: FormAuditReport | null;
+  actionable_remedies: string[];
+  intelligence?: CroIntelligenceReport | null;
+}
+
 export interface MediaAssetItem {
   url: string;
   page_url: string;
@@ -1952,6 +2101,7 @@ export interface InformationGainReport {
 
 export interface AiBotDirectivesReport {
   robots_txt_status: string;
+  robots_measured?: boolean;
   gptbot_allowed: boolean;
   perplexitybot_allowed: boolean;
   claudebot_allowed: boolean;
@@ -1969,6 +2119,8 @@ export interface PerEngineAiMatrix {
   claude_gemini: PerEngineAiScore;
   overall_engine_score: number;
   overall_engine_grade: string;
+  measurement_mode?: string;
+  measurement_note?: string;
   information_gain: InformationGainReport;
   ai_bot_directives: AiBotDirectivesReport;
 }

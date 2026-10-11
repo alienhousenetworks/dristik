@@ -152,17 +152,21 @@ class PerEngineAiEvaluator:
         # Engine 1: ChatGPT / SearchGPT
         # Values conversational depth, clear entity definition, table formatting
         has_faq = any("faq" in (p.url or "").lower() or (p.h2 and any("faq" in h.lower() for h in p.h2)) for p in pages)
+        question_headings = any(
+            (h or "").strip().endswith("?") or (h or "").lower().startswith(("what ", "how ", "why ", "when "))
+            for p in pages for h in (p.h2 or [])
+        )
         has_tables = bool(re.search(r"\|.*\|.*\|", corpus))
-        chatgpt_score = 45.0
+        chatgpt_score = 0.0
         if profile.business_name and profile.business_name.lower() in corpus_lower:
-            chatgpt_score += 15.0
-        if has_faq:
-            chatgpt_score += 15.0
+            chatgpt_score += 30.0
+        if has_faq or question_headings:
+            chatgpt_score += 25.0
         if has_tables:
-            chatgpt_score += 15.0
+            chatgpt_score += 25.0
         if len(corpus.split()) > 1500:
-            chatgpt_score += 10.0
-        chatgpt_score = max(20.0, min(100.0, chatgpt_score))
+            chatgpt_score += 20.0
+        chatgpt_score = max(0.0, min(100.0, chatgpt_score))
 
         chatgpt_score_obj = PerEngineAiScore(
             engine_name="ChatGPT / SearchGPT",
@@ -191,16 +195,16 @@ class PerEngineAiEvaluator:
 
         # Engine 2: Perplexity
         # Values citation eligibility, primary numerical claims, clean attribution
-        perplexity_score = 40.0
+        perplexity_score = 0.0
         if has_prop_stats:
-            perplexity_score += 25.0
+            perplexity_score += 40.0
         if manifest and manifest.sitemap_found:
-            perplexity_score += 15.0
+            perplexity_score += 20.0
         if (website_url or "").startswith("https://"):
-            perplexity_score += 10.0
+            perplexity_score += 15.0
         if info_gain_score >= 65.0:
-            perplexity_score += 10.0
-        perplexity_score = max(20.0, min(100.0, perplexity_score))
+            perplexity_score += 15.0
+        perplexity_score = max(0.0, min(100.0, perplexity_score))
 
         perplexity_score_obj = PerEngineAiScore(
             engine_name="Perplexity",
@@ -228,15 +232,15 @@ class PerEngineAiEvaluator:
 
         # Engine 3: Google AI Overviews / SGE
         # Values Schema completeness (FAQPage, Article, Product, Organization) & 40-60 word definitions
-        google_score = 40.0
+        google_score = 0.0
         schema_count = len(schemas_present)
-        google_score += min(30.0, schema_count * 10.0)
+        google_score += min(40.0, schema_count * 15.0)
         has_direct_defs = any(len(p.h1 or []) > 0 and len(p.body_text or "") > 200 for p in pages)
         if has_direct_defs:
-            google_score += 15.0
+            google_score += 25.0
         if "FAQPage" in schemas_present or "Organization" in schemas_present:
-            google_score += 15.0
-        google_score = max(20.0, min(100.0, google_score))
+            google_score += 20.0
+        google_score = max(0.0, min(100.0, google_score))
 
         google_score_obj = PerEngineAiScore(
             engine_name="Google AI Overviews",
@@ -263,13 +267,16 @@ class PerEngineAiEvaluator:
 
         # Engine 4: Claude / Gemini
         # Values conceptual density, absence of marketing fluff, high factual rigor
-        claude_score = 50.0
-        claude_score -= (fluff_ratio * 0.4)
+        claude_score = 0.0
         if info_gain_score >= 60.0:
-            claude_score += 25.0
+            claude_score += 40.0
         if has_methodology or has_quotes:
+            claude_score += 25.0
+        if fluff_ratio < 25.0:
             claude_score += 15.0
-        claude_score = max(20.0, min(100.0, claude_score))
+        else:
+            claude_score -= min(40.0, fluff_ratio * 0.5)
+        claude_score = max(0.0, min(100.0, claude_score))
 
         claude_score_obj = PerEngineAiScore(
             engine_name="Claude / Gemini",
@@ -299,11 +306,18 @@ class PerEngineAiEvaluator:
         # -------------------------------------------------------------
         robots_txt = manifest.robots_txt_content if manifest and manifest.robots_txt_content else ""
         robots_lower = robots_txt.lower()
+        robots_measured = bool(robots_txt.strip())
 
-        gptbot_allowed = "user-agent: gptbot\ndisallow: /" not in robots_lower and "user-agent: *\ndisallow: /" not in robots_lower
-        perplexity_allowed = "user-agent: perplexitybot\ndisallow: /" not in robots_lower and "user-agent: *\ndisallow: /" not in robots_lower
-        claudebot_allowed = "user-agent: claudebot\ndisallow: /" not in robots_lower and "user-agent: *\ndisallow: /" not in robots_lower
-        google_ext_allowed = "user-agent: google-extended\ndisallow: /" not in robots_lower and "user-agent: *\ndisallow: /" not in robots_lower
+        def _bot_allowed(agent: str) -> bool:
+            if not robots_measured:
+                return False
+            blocked = f"user-agent: {agent}\ndisallow: /" in robots_lower or "user-agent: *\ndisallow: /" in robots_lower
+            return not blocked
+
+        gptbot_allowed = _bot_allowed("gptbot")
+        perplexity_allowed = _bot_allowed("perplexitybot")
+        claudebot_allowed = _bot_allowed("claudebot")
+        google_ext_allowed = _bot_allowed("google-extended")
 
         domain = urlparse(website_url).netloc or "example.com"
         clean_url = f"https://{domain}"
@@ -323,8 +337,15 @@ class PerEngineAiEvaluator:
             f"- [Pricing]({clean_url}/pricing): Subscription plans and enterprise licensing\n"
         )
 
+        if not robots_measured:
+            robots_status = "NOT_MEASURED"
+        elif gptbot_allowed and perplexity_allowed and claudebot_allowed:
+            robots_status = "PERMISSIVE"
+        else:
+            robots_status = "RESTRICTED"
         ai_bot_rep = AiBotDirectivesReport(
-            robots_txt_status="PERMISSIVE" if (gptbot_allowed and perplexity_allowed and claudebot_allowed) else "RESTRICTED",
+            robots_txt_status=robots_status,
+            robots_measured=robots_measured,
             gptbot_allowed=gptbot_allowed,
             perplexitybot_allowed=perplexity_allowed,
             claudebot_allowed=claudebot_allowed,

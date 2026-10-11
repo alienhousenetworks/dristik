@@ -630,6 +630,38 @@ async def get_complete_aeo_report(
     return Response(content=html_content, media_type="text/html")
 
 
+@router.get("/{analysis_id}/cro-report")
+async def get_complete_cro_report(
+    analysis_id: str,
+    format: str = "html",
+    user: UserIdentity = Depends(get_current_user)
+):
+    """
+    Renders the 55-section CRO audit.
+    format='html' returns the report. format='json' returns the same evidence payload.
+    The report is rebuilt from the stored crawl when pages are still on the sealed report.
+    """
+    run = require_analysis(analysis_id, user)
+    report = getattr(run, "report", None)
+    if not report:
+        raise HTTPException(status_code=400, detail="Executive report not yet synthesized for this analysis run.")
+
+    from app.intelligence.cro import build_from_executive_report
+    from app.reports.cro_report_generator import cro_report_generator
+
+    intel = build_from_executive_report(report)
+    kwargs = {
+        "domain": report.domain or "",
+        "website_url": report.website_url or "",
+        "generated_at": report.generated_at or "",
+        "analysis_id": analysis_id,
+    }
+    if format.lower() == "json":
+        return cro_report_generator.render_json_report(intel, **kwargs)
+    html_content = cro_report_generator.render_html_report(intel, **kwargs)
+    return Response(content=html_content, media_type="text/html")
+
+
 @router.get("/{analysis_id}/export/aeo-remediation-tracker.csv")
 async def export_aeo_remediation_tracker_csv(
     analysis_id: str,
@@ -676,6 +708,87 @@ async def export_aeo_question_dataset_csv(
     csv_data = generate_aeo_question_dataset_csv(report)
     domain_clean = (report.domain or "website").replace("https://", "").replace("http://", "").split("/")[0]
     filename = f"{domain_clean}_aeo_question_dataset.csv"
+
+    return Response(
+        content=csv_data,
+        media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+    )
+
+
+@router.get("/{analysis_id}/export/aeo-live-benchmark.csv")
+async def export_aeo_live_benchmark_csv(
+    analysis_id: str,
+    user: UserIdentity = Depends(get_current_user)
+):
+    """
+    Exports Appendix E: Live Benchmark Dataset in CSV format,
+    capturing tested engine queries, mentions, recommendations, citations, and status.
+    """
+    run = require_analysis(analysis_id, user)
+    report = getattr(run, "report", None)
+    if not report:
+        raise HTTPException(status_code=400, detail="Executive report not yet synthesized for this analysis run.")
+
+    from app.reports.export_service import generate_aeo_live_benchmark_csv
+
+    csv_data = generate_aeo_live_benchmark_csv(report)
+    domain_clean = (report.domain or "website").replace("https://", "").replace("http://", "").split("/")[0]
+    filename = f"{domain_clean}_aeo_live_benchmark.csv"
+
+    return Response(
+        content=csv_data,
+        media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+    )
+
+
+@router.get("/{analysis_id}/export/aeo-brand-facts.csv")
+async def export_aeo_brand_facts_csv(
+    analysis_id: str,
+    user: UserIdentity = Depends(get_current_user)
+):
+    """
+    Exports Appendix G: Brand Facts Registry in CSV format,
+    maintaining verified canonical business claims, pricing, and specs.
+    """
+    run = require_analysis(analysis_id, user)
+    report = getattr(run, "report", None)
+    if not report:
+        raise HTTPException(status_code=400, detail="Executive report not yet synthesized for this analysis run.")
+
+    from app.reports.export_service import generate_aeo_brand_facts_csv
+
+    csv_data = generate_aeo_brand_facts_csv(report)
+    domain_clean = (report.domain or "website").replace("https://", "").replace("http://", "").split("/")[0]
+    filename = f"{domain_clean}_aeo_brand_facts.csv"
+
+    return Response(
+        content=csv_data,
+        media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+    )
+
+
+@router.get("/{analysis_id}/export/aeo-evidence-ledger.csv")
+async def export_aeo_evidence_ledger_csv(
+    analysis_id: str,
+    user: UserIdentity = Depends(get_current_user)
+):
+    """
+    Exports Appendix M: Complete Evidence Ledger in CSV format,
+    providing immutable audit provenance for all findings and assertions.
+    """
+    run = require_analysis(analysis_id, user)
+    report = getattr(run, "report", None)
+    if not report:
+        raise HTTPException(status_code=400, detail="Executive report not yet synthesized for this analysis run.")
+
+    from app.reports.export_service import generate_aeo_evidence_ledger_csv
+
+    csv_data = generate_aeo_evidence_ledger_csv(report)
+    domain_clean = (report.domain or "website").replace("https://", "").replace("http://", "").split("/")[0]
+    filename = f"{domain_clean}_aeo_evidence_ledger.csv"
 
     return Response(
         content=csv_data,

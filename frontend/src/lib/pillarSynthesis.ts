@@ -96,7 +96,6 @@ export function synthesizePillars(report: ExecutiveReport | undefined | null): W
   // 2. GEO: GENERATIVE ENGINE OPTIMIZATION (Per-Engine, Citations, Information Gain)
   // ─────────────────────────────────────────────────────────────
   const perEngine = report.per_engine_geo;
-  const perEngineOverall = perEngine?.overall_engine_score;
   const liveCitations = honest?.ai_visibility_status === 'MEASURED' ? honest?.ai_visibility_score : null;
   const measuredExtractability = typeof report.geo_readiness?.extractability_score === 'number'
     ? report.geo_readiness.extractability_score
@@ -106,14 +105,9 @@ export function synthesizePillars(report: ExecutiveReport | undefined | null): W
     ? Math.round(100 - perEngine.information_gain.fluff_ratio_score)
     : null;
 
-  const geoParts = [perEngineOverall, liveCitations, geoCatScore, infoGainScore].filter(
-    (n): n is number => typeof n === 'number'
-  );
   const geoScore = measuredExtractability != null
     ? Math.round(measuredExtractability)
-    : (geoParts.length
-      ? Math.round(geoParts.reduce((sum, n) => sum + n, 0) / geoParts.length)
-      : (typeof perEngineOverall === 'number' ? Math.round(perEngineOverall) : (typeof geoCatScore === 'number' ? Math.round(geoCatScore) : null)));
+    : (typeof geoCatScore === 'number' ? Math.round(geoCatScore) : null);
 
   const geoFindings = findings.filter(f => f.category === 'GEO' || (f.category === 'AI_SEARCH' && f.title?.toLowerCase().includes('citation')));
 
@@ -126,12 +120,12 @@ export function synthesizePillars(report: ExecutiveReport | undefined | null): W
     grade: getGrade(geoScore),
     health: getHealth(geoScore),
     headline: geoScore == null
-      ? 'GEO was not scored on this crawl'
-      : (geoScore >= 75 ? 'Strong Multi-Engine Visibility & Citation Grounding' : 'Low Visibility in ChatGPT, Perplexity & AI Overviews'),
-    summary: 'Measures multi-engine generative presence across ChatGPT, Perplexity, Google SGE/AIO, and Claude/Gemini, benchmarked against original research and citations.',
+      ? 'On-page extractability was not scored on this crawl'
+      : (geoScore >= 75 ? 'Pages are structured for extraction' : 'Pages are hard for an answer engine to quote'),
+    summary: 'On-page extractability only. Live mention rate, citation rate, and competitor visibility stay on the visibility card and stay blank until a live run.',
     highlights: [
-      perEngine ? `Per-Engine Grade: ${perEngine.overall_engine_grade}` : 'Engine Benchmark: Calibrating',
-      liveCitations != null ? `Live AI Citations: ${Math.round(liveCitations)}/100` : 'Citations: Verified on-page signals',
+      perEngine?.measurement_note || 'Per-engine matrix is an on-page writing exercise, not a live query.',
+      liveCitations != null ? `Live citation score: ${Math.round(liveCitations)}/100` : 'Live visibility: not measured',
       `Original Information Gain: ${infoGainScore != null ? `${infoGainScore}/100` : 'Analyzed'}`,
       `Commercial Query Matrix: ${report.ai_search_matrix?.length || 0} queries monitored`,
     ],
@@ -180,7 +174,7 @@ export function synthesizePillars(report: ExecutiveReport | undefined | null): W
       typeof graphQuality === 'number'
         ? `Entity graph quality: ${Math.round(graphQuality)}/100 (${graphPresent ?? 0} of ${graphApplicable ?? 0} applicable properties)`
         : `JSON-LD types observed: ${report.geo_readiness?.schema_types?.length || 0}`,
-      `Agent Bot Access: ${botDirectives ? `${botPermissionCount}/4 major AI crawlers allowed` : 'Not measured'}`,
+      `Agent Bot Access: ${botDirectives?.robots_measured ? `${botPermissionCount}/4 major AI crawlers allowed` : 'Not measured'}`,
       `llms.txt Machine File: ${botDirectives?.llms_txt_found ? '✅ Detected' : '⚡ Generated ready'}`,
       `Q&A Extractability: ${report.geo_readiness?.questions_supported || 0} supported answers`,
     ],
@@ -190,14 +184,18 @@ export function synthesizePillars(report: ExecutiveReport | undefined | null): W
   // ─────────────────────────────────────────────────────────────
   // 4. CRO: CONVERSION RATE OPTIMIZATION & USER JOURNEY
   // ─────────────────────────────────────────────────────────────
-  const humanScore = honest?.human_score ?? catScores['UX_CONVERSION']?.score;
   const formAudit = report.form_audit;
-  const formScore = formAudit ? Math.max(0, 100 - (formAudit.friction_score || 0)) : null;
-
-  const croParts = [humanScore, formScore].filter((n): n is number => typeof n === 'number');
-  const croScore = croParts.length
-    ? Math.round(croParts.reduce((sum, n) => sum + n, 0) / croParts.length)
-    : (typeof humanScore === 'number' ? Math.round(humanScore) : null);
+  const analytics = report.google_performance?.analytics;
+  const ga4LandingPages = analytics?.landing_pages ?? [];
+  const ga4KeyEvents = analytics?.key_events;
+  const ga4Sessions = analytics?.sessions ?? 0;
+  const ga4Measured = analytics?.state === 'MEASURED'
+    && ga4LandingPages.length > 0
+    && ga4KeyEvents != null
+    && ga4Sessions > 0;
+  const ga4Rate = ga4Measured
+    ? Math.round((Number(ga4KeyEvents) / ga4Sessions) * 1000) / 10
+    : null;
 
   const croFindings = findings.filter(f => f.category === 'UX_CONVERSION');
 
@@ -206,15 +204,20 @@ export function synthesizePillars(report: ExecutiveReport | undefined | null): W
     name: 'Conversion Rate Optimization (CRO)',
     shortName: 'CRO',
     categoryTag: 'CRO',
-    score: croScore,
-    grade: getGrade(croScore),
-    health: getHealth(croScore),
-    headline: croScore == null
-      ? 'CRO was not scored on this crawl'
-      : (croScore >= 75 ? 'Clear Value Proposition & Frictionless Conversion Path' : 'Conversion Friction in Forms, CTAs & User Flow'),
-    summary: 'Audits form field complexity, missing labels, CTA action verbs, 5-second value proposition clarity, and visual UX friction barriers.',
+    score: null,
+    grade: '—',
+    health: getHealth(null),
+    headline: ga4Measured
+      ? `GA4 key-event rate ${ga4Rate}%`
+      : 'Heuristic from the crawled pages',
+    summary: ga4Measured
+      ? 'Google Analytics 4 landing pages and key events for this property. The rate is key events divided by sessions. It is not a 0–100 CRO grade.'
+      : 'Heuristic from the crawled pages. No conversion rate is shown until GA4 returns landing pages and key events.',
     highlights: [
-      `Form Friction: ${formAudit ? `Grade ${formAudit.cro_friction_grade} (${formAudit.total_forms_detected} forms)` : 'Evaluated'}`,
+      ga4Measured
+        ? `GA4: ${ga4KeyEvents} key events / ${ga4Sessions} sessions (${ga4Rate}%)`
+        : 'GA4 key-event rate: not measured',
+      `Form Friction: ${formAudit?.cro_friction_grade ? `Grade ${formAudit.cro_friction_grade} (${formAudit.total_forms_detected} forms)` : 'Not measured'}`,
       `Primary CTA: ${report.business_profile?.primary_cta ? `"${report.business_profile.primary_cta}"` : 'Not detected'}`,
       `Value Prop Clarity: ${report.business_profile?.value_proposition ? 'Extracted' : 'Missing clear hero'}`,
       `UX Friction Hazards: ${report.semantic_business?.friction_points?.length || 0} logged`,
@@ -252,9 +255,7 @@ export function synthesizePillars(report: ExecutiveReport | undefined | null): W
 
   // Experience / SXO bridging calculation for legacy compatibility
   const ttfb = report.crawl_manifest?.pages?.[0]?.ttfb_ms;
-  const sxoScore = (seoScore != null && croScore != null)
-    ? Math.round((seoScore + croScore) / 2)
-    : (seoScore ?? croScore ?? null);
+  const sxoScore = seoScore ?? null;
 
   const experiencePillar: PillarScoreData = {
     id: 'website_experience',

@@ -91,12 +91,19 @@ def _clean_domain(url: str) -> str:
     return parsed.netloc.replace("www.", "").split(":")[0]
 
 
+def _clamp_score(value: float) -> int:
+    return int(round(max(0, min(100, value))))
+
+
 def _evaluate_page_to_pillar_scores(ev: PageEvidence, is_https: bool = True) -> CompetitorPillarScores:
     """
-    Evaluates a scraped page across the 5 Website Intelligence Pillars
-    using the identical objective deterministic criteria.
+    Score a crawled homepage from signals on that page.
+
+    Points are added or removed only for something the fetch observed.
+    There is no baseline and no floor. A page that was not crawled never
+    reaches this function; the caller leaves the score blank.
     """
-    # 1. Search SEO (Crawlability, title, meta, H1)
+    # 1. Search SEO. The page was fetched, so missing title, meta, and H1 are observed.
     seo_score = 100
     if not ev.title or len(ev.title) < 15:
         seo_score -= 20
@@ -118,29 +125,22 @@ def _evaluate_page_to_pillar_scores(ev: PageEvidence, is_https: bool = True) -> 
 
     if ev.status_code != 200:
         seo_score -= 40
-    seo_score = max(20, min(100, seo_score))
+    seo_score = _clamp_score(seo_score)
 
-    # 2. AI Search (GEO) (Structured Schema, FAQ blocks, answer density)
-    geo_score = 40  # baseline for typical text
+    # 2. GEO extractability. Start at zero and add only observed schema and length.
     schema_types = ev.schema_types or []
-    if len(schema_types) >= 3:
-        geo_score += 35
-    elif len(schema_types) >= 1:
-        geo_score += 20
-
+    geo_score = min(60, len(schema_types) * 20)
     if any(st.lower() in ("faqpage", "qapage") for st in schema_types):
-        geo_score += 15
-
+        geo_score += 20
     if any(st.lower() in ("organization", "corporation") for st in schema_types):
         geo_score += 10
-
     if ev.word_count >= 600:
         geo_score += 10
-    elif ev.word_count < 200:
-        geo_score -= 15
-    geo_score = max(20, min(100, geo_score))
+    elif ev.word_count >= 200:
+        geo_score += 5
+    geo_score = _clamp_score(geo_score)
 
-    # 3. Experience (SXO) (TTFB latency, mobile viewport, DOM bloat)
+    # 3. Experience. Latency, viewport, and DOM size were measured on this fetch.
     sxo_score = 100
     if ev.ttfb_ms > 1200:
         sxo_score -= 35
@@ -156,39 +156,30 @@ def _evaluate_page_to_pillar_scores(ev: PageEvidence, is_https: bool = True) -> 
         sxo_score -= 15
     elif ev.dom_elements_count > 1500:
         sxo_score -= 8
-    sxo_score = max(20, min(100, sxo_score))
+    sxo_score = _clamp_score(sxo_score)
 
-    # 4. Conversion (CRO) (CTAs, clarity, friction)
-    cro_score = 50
+    # 4. Conversion. CTAs are counted. A page with none does not start at 50.
+    cro_score = 0
     ctas = ev.ctas or []
     if len(ctas) >= 2:
-        cro_score += 30
+        cro_score += 70
     elif len(ctas) == 1:
-        cro_score += 15
-    else:
-        cro_score -= 20
-
+        cro_score += 40
     if ev.word_count >= 400:
-        cro_score += 15
-    elif ev.word_count < 150:
-        cro_score -= 15
-    cro_score = max(20, min(100, cro_score))
+        cro_score += 20
+    elif ev.word_count >= 150:
+        cro_score += 10
+    cro_score = _clamp_score(cro_score)
 
-    # 5. Brand & Trust (SSL, Schema, Social proof signals)
-    trust_score = 60
-    if is_https:
-        trust_score += 20
-    else:
-        trust_score -= 30
-
+    # 5. Trust. HTTPS and organization schema are the observed signals.
+    trust_score = 70 if is_https else 0
     if any(st.lower() in ("organization", "brand") for st in schema_types):
-        trust_score += 15
-
+        trust_score += 20
     if ev.total_images > 0:
         alt_ratio = (ev.total_images - ev.images_without_alt) / max(1, ev.total_images)
         if alt_ratio > 0.8:
-            trust_score += 5
-    trust_score = max(20, min(100, trust_score))
+            trust_score += 10
+    trust_score = _clamp_score(trust_score)
 
     # Overall weighted average
     overall = int(round(
@@ -547,16 +538,20 @@ def _compute_profile_metrics(
                 modern_imgs += 1
     modern_img_pct = round((modern_imgs / max(1, total_imgs)) * 100, 1) if total_imgs > 0 else 0.0
 
-    tech_base = (http_200_pct * 0.6) + (40 if avg_ttfb < 600 else 20)
+    tech_base = http_200_pct * 0.7
+    if avg_ttfb < 600:
+        tech_base += 30
+    elif avg_ttfb < 1200:
+        tech_base += 10
     if is_target and manifest is not None:
         if not getattr(manifest, "robots_txt_found", True):
-            tech_base -= 20.0  # -20 for missing robots.txt
+            tech_base -= 20.0
         if not getattr(manifest, "sitemap_found", True):
-            tech_base -= 15.0  # -15 for missing XML sitemap
-    tech_score = int(round(max(20, min(100, tech_base))))
-    onpage_score = int(round(max(20, min(100, (title_opt_pct * 0.35) + (meta_opt_pct * 0.35) + (h1_health_pct * 0.30)))))
-    depth_score = int(round(max(20, min(100, min(100.0, (avg_words / 600.0) * 100.0)))))
-    schema_score = int(round(max(20, min(100, min(80.0, len(unique_schemas) * 20.0) + (20 if has_bc else 0)))))
+            tech_base -= 15.0
+    tech_score = _clamp_score(tech_base)
+    onpage_score = _clamp_score((title_opt_pct * 0.35) + (meta_opt_pct * 0.35) + (h1_health_pct * 0.30))
+    depth_score = _clamp_score(min(100.0, (avg_words / 600.0) * 100.0))
+    schema_score = _clamp_score(min(80.0, len(unique_schemas) * 20.0) + (20 if has_bc else 0))
     overall = int(round((tech_score * 0.30) + (onpage_score * 0.30) + (depth_score * 0.20) + (schema_score * 0.20)))
 
     return CompetitorSeoParityProfile(

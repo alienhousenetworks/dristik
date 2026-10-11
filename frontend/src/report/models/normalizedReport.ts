@@ -899,10 +899,14 @@ export function normalizeExecutiveReport(report: ExecutiveReport): NormalizedRep
           ? 'Analytics supplied visitor numbers for this run.'
           : 'GA4 was not connected, so conversion rate, funnel abandonment, and revenue were not measured.',
       ].join(' '),
-      formCount: (report as any).form_audit ? finiteNumber((report as any).form_audit.total_forms_found) : null,
-      formAccessibilityStatus: !(report as any).form_audit
+      formCount: (report as any).form_audit
+        ? finiteNumber((report as any).form_audit.total_forms_detected ?? (report as any).form_audit.total_forms_found)
+        : (report as any).cro_audit?.form_friction
+          ? finiteNumber((report as any).cro_audit.form_friction.total_forms_detected)
+          : null,
+      formAccessibilityStatus: !(report as any).form_audit && !(report as any).cro_audit?.form_friction
         ? 'Not measured'
-        : (report as any).form_audit.wcag_accessible
+        : (((report as any).form_audit?.forms_with_missing_labels === 0) || ((report as any).cro_audit?.form_friction?.forms_with_missing_labels === 0) || (report as any).form_audit?.wcag_accessible)
           ? 'Automated screening: labels present'
           : 'Automated screening: unlabeled inputs',
       characterSafeCopy: report.character_safe_copy,

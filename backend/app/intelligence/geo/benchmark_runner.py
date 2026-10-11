@@ -752,6 +752,28 @@ def _pct(hits: int, total: int) -> Optional[float]:
     return round((hits / total) * 100.0, 1)
 
 
+def _queried_engine_names(report: GeoBenchmarkReport, successes: List[EvaluatedQueryRun]) -> List[str]:
+    names: List[str] = []
+    seen = set()
+    for ev in successes:
+        label = (ev.engine_name or ev.engine_id or "").strip()
+        key = label.lower()
+        if label and key not in seen:
+            seen.add(key)
+            names.append(label)
+    if names:
+        return names
+    for agg in report.engine_aggregates.values():
+        if agg.queries_succeeded <= 0:
+            continue
+        label = (agg.engine_name or agg.engine_id or "").strip()
+        key = label.lower()
+        if label and key not in seen:
+            seen.add(key)
+            names.append(label)
+    return names
+
+
 def build_visibility_scorecard(
     report: GeoBenchmarkReport,
     services: Optional[List[str]] = None,
@@ -763,17 +785,31 @@ def build_visibility_scorecard(
 ):
     """Rates over successful responses only. Unchecked rates stay null."""
     from app.domain.models import AiVisibilityScorecard
+    from app.intelligence.geo.buyer_surfaces import surfaces_not_queried
 
     successes = [ev for ev in report.evaluations if ev.status == "SUCCESS"]
     failures = [ev for ev in report.evaluations if ev.status != "SUCCESS"]
+    engine_names = _queried_engine_names(report, successes)
+    missing_surfaces = surfaces_not_queried(engine_names)
+    surface_note = (
+        " These responses are model APIs. They are not "
+        + ", ".join(missing_surfaces)
+        + ", which were not queried."
+        if missing_surfaces
+        else ""
+    )
     if not successes:
         return AiVisibilityScorecard(
             status="NOT_MEASURED",
+            measurement_kind="NOT_MEASURED",
             engines_requested=len(report.engines_tested),
+            engines_queried=engine_names,
+            surfaces_not_queried=missing_surfaces,
             queries=report.total_queries,
             repeats=report.repeats,
             failed_runs=len(failures),
-            not_measured_reason="No successful engine responses. Errors are excluded rather than scored as omissions.",
+            not_measured_reason="No successful engine responses. Errors are excluded rather than scored as omissions."
+            + surface_note,
             matrix_grounding=matrix_grounding,
         )
 
@@ -857,8 +893,17 @@ def build_visibility_scorecard(
 
     return AiVisibilityScorecard(
         status="MEASURED",
+        measurement_kind="LIVE_MODEL_API",
+        measurement_note=(
+            "Rates use successful API or SERP responses only. "
+            "An API answer can differ from the consumer chat UI. "
+            "A timeout is an error, not a failure to mention the brand."
+            + surface_note
+        ),
         engines_measured=engines_live,
         engines_requested=len(report.engines_tested),
+        engines_queried=engine_names,
+        surfaces_not_queried=missing_surfaces,
         queries=report.total_queries,
         repeats=report.repeats,
         successful_runs=len(successes),

@@ -623,9 +623,12 @@ class SpecialistAgent(BaseAgent):
                 )
 
         elif aid == "content.cannibalization.v3":
-            dup = int(ch.get("duplicate_titles_count") or 0)
-            observations["duplicate_titles_count"] = dup
+            demand = (blackboard.blackboard_state or {}).get("search_demand") or {}
+            queries = list(demand.get("queries") or [])
+            observations["duplicate_titles_count"] = int(ch.get("duplicate_titles_count") or 0)
+            observations["query_level_status"] = demand.get("status") or "NOT_CONNECTED"
             if len(pages) < 2:
+                observations["query_level_cannibalization"] = "NOT_MEASURED"
                 return {
                     "agent_id": self.agent_id,
                     "status": "unavailable",
@@ -633,17 +636,37 @@ class SpecialistAgent(BaseAgent):
                     "claims": [],
                     "observations": observations,
                 }
+            dup = observations["duplicate_titles_count"]
             if dup:
-                add(f"{dup} duplicate title collision(s) across crawled pages.", Severity.HIGH, "Give each URL a distinct title.")
-            # Check for shared identical H1s
+                add(
+                    f"{dup} duplicate title(s) across crawled pages. This is title overlap, not confirmed search cannibalization.",
+                    Severity.MEDIUM,
+                    "Give each URL a distinct title. Do not consolidate URLs until query-level data shows they compete.",
+                )
             all_h1s = [h.lower().strip() for p in pages for h in (p.h1 or [])]
             h1_duplicates = len(all_h1s) - len(set(all_h1s))
             if h1_duplicates > 0:
                 add(
-                    f"{h1_duplicates} duplicate H1 heading(s) found across pages, creating keyword cannibalization risk.",
-                    Severity.HIGH,
-                    "Ensure every landing page features a unique primary H1 focused on a distinct user search intent.",
+                    f"{h1_duplicates} duplicate H1 heading(s) across crawled pages. This is potential topical overlap.",
+                    Severity.MEDIUM,
+                    "Give each page one distinct H1. Query-level cannibalization stays unmeasured until Search Console shows two URLs for one query.",
                 )
+            pages_by_query: Dict[str, set] = {}
+            for row in queries:
+                query = str(row.get("query") or "").strip().lower()
+                page = str(row.get("page") or "").strip()
+                if query and page:
+                    pages_by_query.setdefault(query, set()).add(page)
+            overlaps = [query for query, urls in pages_by_query.items() if len(urls) > 1]
+            if overlaps:
+                observations["query_level_cannibalization"] = "MEASURED"
+                add(
+                    f"Search Console shows {len(overlaps)} quer{'y' if len(overlaps) == 1 else 'ies'} sent to more than one URL.",
+                    Severity.HIGH,
+                    "Compare the URLs on those queries before merging or redirecting either page.",
+                )
+            else:
+                observations["query_level_cannibalization"] = "NOT_MEASURED"
 
         elif aid == "cro.conversion.v3":
             no_cta = [p.url for p in pages if not getattr(p, "ctas", None)]
@@ -697,6 +720,9 @@ class SpecialistAgent(BaseAgent):
                 else:
                     intents.add("NAVIGATIONAL")
             observations["intent_funnel_stages"] = list(intents)
+            demand = (blackboard.blackboard_state or {}).get("search_demand") or {}
+            observations["query_level_advice"] = "available" if demand.get("status") == "MEASURED" else "skipped"
+            observations["query_level_note"] = demand.get("note") or "Search Console and SERP rows were not measured."
             if "TRANSACTIONAL" not in intents and "COMMERCIAL_EVALUATION" not in intents:
                 add(
                     "Crawl detected primarily informational content without clear commercial conversion or pricing routes.",
@@ -719,11 +745,23 @@ class SpecialistAgent(BaseAgent):
             # Evaluates positioning coherence across titles, headings, and value propositions
             titles = [p.title for p in pages if p.title]
             observations["distinct_positioning_titles"] = len(set(titles))
+            demand = (blackboard.blackboard_state or {}).get("search_demand") or {}
+            observations["query_level_advice"] = "available" if demand.get("status") == "MEASURED" else "skipped"
             if len(titles) > 1 and len(set(titles)) < len(titles):
+                if demand.get("status") == "MEASURED":
+                    statement = (
+                        "Identical page titles across crawled URLs. Search Console or SERP rows are attached; "
+                        "compare those queries before treating the titles as a ranking conflict."
+                    )
+                else:
+                    statement = (
+                        "Identical page titles across crawled URLs. Query-level competition was not measured, "
+                        "so this is a title collision, not a ranking conflict."
+                    )
                 add(
-                    "Semantic positioning conflicts detected across identical page titles competing for overlapping user queries.",
+                    statement,
                     Severity.MEDIUM,
-                    "Differentiate sub-page value propositions with distinctive keyword modifiers and audience focus."
+                    "Give each URL a distinct title. Skip query-level rewrites until a provider measures the queries.",
                 )
 
         elif aid == "schema.entity_graph.v3":

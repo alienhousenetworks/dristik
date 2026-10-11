@@ -83,6 +83,9 @@ export function OperatingWorkflow({
               <p className="font-mono text-sm text-ink">Citation rate {visibility.citation_rate_pct}%</p>
             )}
             <p className="text-sm text-ink-500">
+              Not queried: {(visibility?.surfaces_not_queried || ['Google AI Overviews', 'Google AI Mode', 'Bing Copilot']).join(', ')}.
+            </p>
+            <p className="text-sm text-ink-500">
               {visibility?.measurement_note || visibility?.not_measured_reason || 'These rates stay separate. They are not folded into one score.'}
             </p>
             <button type="button" className="text-sm text-ink underline" onClick={() => onSelectTab('geo')}>

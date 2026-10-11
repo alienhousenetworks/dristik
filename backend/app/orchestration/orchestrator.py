@@ -508,6 +508,20 @@ class AnalysisOrchestrator:
             if await _check_pause():
                 return
 
+            # Search Console and SERP rows, when a provider already measured them.
+            # Query-level advice stays skipped when this payload is NOT_CONNECTED.
+            try:
+                from app.intelligence.search_demand import attach_search_demand
+                demand = attach_search_demand(blackboard, domain)
+                controller.log_activity(
+                    "node_specialist_wave_1",
+                    "info",
+                    "search_demand",
+                    demand.get("note") or "Search demand was not measured.",
+                )
+            except Exception as exc:
+                logger.info("Search demand was not attached: %s", exc)
+
             # 7. Full 35-agent specialist DAG (dependency waves, no canned fallbacks)
             model_router.set_active_stage("specialist_execution", "35-Agent Specialist DAG")
             model_router.set_active_sub_stage("specialist_agents_dag", "35-Agent Multi-Disciplinary Analysis Waves")
@@ -787,6 +801,12 @@ class AnalysisOrchestrator:
 
             meta_rollup_rep = analyze_meta_rollup(eval_pages)
             form_audit_rep = analyze_forms(eval_pages)
+            from app.analyzers.cro_analyzer import analyze_cro
+            cro_audit_rep, cro_findings = analyze_cro(
+                eval_pages,
+                raw_html_map=getattr(blackboard, "raw_html_map", None),
+                business_profile=blackboard.business_profile,
+            )
             schema_validation_rep = analyze_schema_rich_results(eval_pages)
             wcag_audit_rep, wcag_findings = DeepWcagAuditor.audit_pages(eval_pages)
 
@@ -828,7 +848,7 @@ class AnalysisOrchestrator:
                 raw_findings = [f for f in raw_findings if f.finding_id != "find_cro_001"]
                 raw_findings.append(cro_finding)
 
-            for f_group in (can_findings, http_findings, heading_findings, media_findings, link_findings, wcag_findings, local_findings, intl_findings, topical_findings, indexation_findings, ecom_findings, serp_findings):
+            for f_group in (can_findings, http_findings, heading_findings, media_findings, link_findings, wcag_findings, local_findings, intl_findings, topical_findings, indexation_findings, ecom_findings, serp_findings, cro_findings):
                 for f in f_group:
                     if not any(x.finding_id == f.finding_id for x in raw_findings):
                         raw_findings.append(f)
@@ -1417,6 +1437,26 @@ class AnalysisOrchestrator:
                     },
                 }
 
+            try:
+                from app.intelligence.cro import build_cro_intelligence
+                competitor_domains = []
+                if competitor_seo_parity_rep is not None:
+                    for competitor in getattr(competitor_seo_parity_rep, "competitors", []) or []:
+                        if not getattr(competitor, "is_target", False) and getattr(competitor, "domain", None):
+                            competitor_domains.append(competitor.domain)
+                cro_audit_rep.intelligence = build_cro_intelligence(
+                    pages=eval_pages,
+                    raw_html_map=getattr(blackboard, "raw_html_map", None),
+                    business_profile=blackboard.business_profile,
+                    analytics=google_performance.get("analytics") if isinstance(google_performance, dict) else None,
+                    search_console=google_performance.get("search_console") if isinstance(google_performance, dict) else None,
+                    wcag=wcag_audit_rep,
+                    competitor_domains=competitor_domains,
+                    discovered_urls=getattr(manifest, "total_pages_discovered", None) if manifest else None,
+                ).model_dump()
+            except Exception as cro_intel_err:
+                logger.info("CRO intelligence rebuild kept the pre-analytics snapshot: %s", cro_intel_err)
+
             report = ExecutiveReport(
                 report_id=report_uuid,
                 analysis_id=analysis_id,
@@ -1498,6 +1538,7 @@ class AnalysisOrchestrator:
                 orphan_pages=orphan_pages_rep,
                 anchor_text_audit=anchor_text_audit_rep,
                 form_audit=form_audit_rep,
+                cro_audit=cro_audit_rep,
                 media_assets=media_assets_rep,
                 per_engine_geo=per_engine_geo_rep,
                 security_audit=security_audit_rep,
@@ -1812,7 +1853,16 @@ class AnalysisOrchestrator:
                         await ag.run(blackboard)
 
             elif node_id == "node_specialist_wave_3":
-                wave_3_agents = ["cro.conversion.v3", "ux.experience.v3", "cro.trust_signals.v3", "cro.friction.v3", "business.commercial.v3"]
+                wave_3_agents = [
+                    "cro.conversion.v3",
+                    "ux.experience.v3",
+                    "cro.form_friction.v3",
+                    "cro.pricing_psychology.v3",
+                    "cro.three_second_hook.v3",
+                    "cro.social_proof_depth.v3",
+                    "trust.authority.v3",
+                    "business.commercial.v3",
+                ]
                 for aid in wave_3_agents:
                     ag = pool.get(aid)
                     if ag:

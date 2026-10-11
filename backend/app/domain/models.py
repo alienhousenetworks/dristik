@@ -856,6 +856,15 @@ class AiVisibilityScorecard(BaseModel):
     )
     engines_measured: int = 0
     engines_requested: int = 0
+    engines_queried: List[str] = Field(default_factory=list)
+    surfaces_not_queried: List[str] = Field(
+        default_factory=lambda: [
+            "Google AI Overviews",
+            "Google AI Mode",
+            "Bing Copilot",
+        ]
+    )
+    measurement_kind: str = "NOT_MEASURED"
     queries: int = 0
     repeats: int = 1
     successful_runs: int = 0
@@ -1641,6 +1650,68 @@ class FormAuditReport(BaseModel):
     friction_score: float = 0.0
     actionable_remedies: List[str] = Field(default_factory=list)
 
+class CtaAuditItem(BaseModel):
+    page_url: str
+    cta_text: str
+    element_type: str = "a"  # "a" | "button" | "input"
+    target_url: Optional[str] = None
+    intent_category: str = "HIGH_INTENT"  # "HIGH_INTENT" | "EXPLORATORY" | "PASSIVE_GENERIC"
+    placement_zone: str = "BODY"  # "HERO" | "HEADER" | "BODY" | "FOOTER"
+    is_passive_friction: bool = False
+    suggested_rewrite: Optional[str] = None
+
+class CtaAnalysisRollup(BaseModel):
+    total_ctas_detected: int = 0
+    high_intent_count: int = 0
+    exploratory_count: int = 0
+    passive_generic_count: int = 0
+    pages_without_ctas: List[str] = Field(default_factory=list)
+    has_hero_cta: bool = False
+    hero_cta_text: Optional[str] = None
+    ctas: List[CtaAuditItem] = Field(default_factory=list)
+    action_clarity_score: float = 0.0
+
+class SocialProofAuditRollup(BaseModel):
+    total_testimonials: int = 0
+    client_logos_detected: int = 0
+    quantified_proof_claims: List[str] = Field(default_factory=list)
+    trust_badges_detected: List[str] = Field(default_factory=list)
+    has_privacy_policy: bool = False
+    has_terms_of_service: bool = False
+    trust_authority_score: float = 0.0
+    risk_level: str = "LOW"
+
+class PricingPsychologyRollup(BaseModel):
+    pricing_page_detected: bool = False
+    pricing_url: Optional[str] = None
+    detected_tiers_count: int = 0
+    has_billing_toggle: bool = False
+    has_money_back_guarantee: bool = False
+    has_free_trial: bool = False
+    guarantee_signals: List[str] = Field(default_factory=list)
+    commercial_transparency_score: float = 0.0
+
+class ValuePropClarityAudit(BaseModel):
+    hero_headline: Optional[str] = None
+    hero_subhead: Optional[str] = None
+    headline_word_count: int = 0
+    customer_centricity_ratio: float = 0.0
+    has_adjacent_cta: bool = False
+    clarity_grade: str = "B"
+    observations: List[str] = Field(default_factory=list)
+
+class CroAuditReport(BaseModel):
+    overall_cro_score: float = 75.0
+    cro_grade: str = "B"
+    cta_analysis: CtaAnalysisRollup = Field(default_factory=CtaAnalysisRollup)
+    social_proof: SocialProofAuditRollup = Field(default_factory=SocialProofAuditRollup)
+    pricing_psychology: PricingPsychologyRollup = Field(default_factory=PricingPsychologyRollup)
+    value_prop: ValuePropClarityAudit = Field(default_factory=ValuePropClarityAudit)
+    form_friction: Optional[FormAuditReport] = None
+    actionable_remedies: List[str] = Field(default_factory=list)
+    # Separate from overall_cro_score. The four CRO dimensions live here and are not blended into the sealed category score.
+    intelligence: Optional[Dict[str, Any]] = None
+
 class MediaAssetItem(BaseModel):
     url: str
     page_url: str
@@ -1757,11 +1828,12 @@ class InformationGainReport(BaseModel):
     recommendations: List[str] = Field(default_factory=list)
 
 class AiBotDirectivesReport(BaseModel):
-    robots_txt_status: str = "VALIDATED"
-    gptbot_allowed: bool = True
-    perplexitybot_allowed: bool = True
-    claudebot_allowed: bool = True
-    google_extended_allowed: bool = True
+    robots_txt_status: str = "NOT_MEASURED"
+    robots_measured: bool = False
+    gptbot_allowed: bool = False
+    perplexitybot_allowed: bool = False
+    claudebot_allowed: bool = False
+    google_extended_allowed: bool = False
     llms_txt_found: bool = False
     llms_txt_url: Optional[str] = None
     llms_txt_generated: Optional[str] = None
@@ -1774,6 +1846,11 @@ class PerEngineAiMatrix(BaseModel):
     claude_gemini: PerEngineAiScore
     overall_engine_score: float = 0.0
     overall_engine_grade: str = "B"
+    measurement_mode: str = "SIMULATION_ONLY"
+    measurement_note: str = (
+        "On-page writing exercise. These scores are not live queries. "
+        "Google AI Overviews, Google AI Mode, and Bing Copilot were not queried."
+    )
     information_gain: InformationGainReport
     ai_bot_directives: AiBotDirectivesReport
 
@@ -2098,6 +2175,7 @@ class ExecutiveReport(BaseModel):
     orphan_pages: Optional[OrphanPageReport] = None
     anchor_text_audit: Optional[AnchorTextAudit] = None
     form_audit: Optional[FormAuditReport] = None
+    cro_audit: Optional[CroAuditReport] = None
     media_assets: Optional[MediaAssetAuditReport] = None
     per_engine_geo: Optional[PerEngineAiMatrix] = None
     security_audit: Optional[SecurityAuditReport] = None
@@ -2239,6 +2317,7 @@ class KeywordGapItem(BaseModel):
     competitor_domain: str
     competitor_rank: int
     target_rank: Optional[int] = None
+    provider: Optional[str] = None
     gap_type: str = "MISSING_OPPORTUNITY"  # MISSING_OPPORTUNITY, WEAK_PAGE_2, SHARED_BEHIND
     estimated_monthly_visits_opportunity: int = 0
     recommended_action: str

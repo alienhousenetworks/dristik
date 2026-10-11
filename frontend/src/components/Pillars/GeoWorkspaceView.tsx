@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ExecutiveReport, AiSearchQueryEvaluation, TabId, AnalyzedChunk, ControlledRetrievalReport } from '../../types';
+import { ExecutiveReport, AiSearchQueryEvaluation, TabId, AnalyzedChunk, ControlledRetrievalReport, AiBotDirectivesReport } from '../../types';
 import { RealAiCitationTracker } from '../RealAiCitationTracker';
 import { GeoAeoTrendTracker } from '../GeoAeoTrendTracker';
 import { PillarShell, Card } from '../ui';
@@ -28,6 +28,76 @@ import {
   Info,
 } from 'lucide-react';
 
+const UNQUERIED_SURFACES = ['Google AI Overviews', 'Google AI Mode', 'Bing Copilot'];
+
+function rateText(value: number | null | undefined): string {
+  return value == null ? 'Not measured' : `${value}%`;
+}
+
+function LiveVisibilityCard({ scorecard }: { scorecard: ExecutiveReport['ai_visibility_scorecard'] }) {
+  const measured = scorecard?.status === 'MEASURED';
+  const engines = scorecard?.engines_queried?.length
+    ? scorecard.engines_queried.join(', ')
+    : 'None';
+  const missing = scorecard?.surfaces_not_queried?.length
+    ? scorecard.surfaces_not_queried
+    : UNQUERIED_SURFACES;
+  const rows = [
+    ['Engines queried', engines],
+    ['Not queried', missing.join(', ')],
+    ['Prompts', scorecard ? String(scorecard.queries) : 'Not measured'],
+    ['Repeats', scorecard ? String(scorecard.repeats) : 'Not measured'],
+    ['Successful responses', scorecard ? String(scorecard.successful_runs) : 'Not measured'],
+    ['Mention rate', measured ? rateText(scorecard?.mention_rate_pct) : 'Not measured'],
+    ['Citation rate', measured ? rateText(scorecard?.citation_rate_pct) : 'Not measured'],
+    ['Citation accuracy', measured ? rateText(scorecard?.citation_accuracy_pct) : 'Not measured'],
+    ['Competitor visibility', measured ? rateText(scorecard?.competitor_visibility_pct) : 'Not measured'],
+  ];
+  return (
+    <Card className="p-5 space-y-4">
+      <div className="space-y-1">
+        <h3 className="font-sans text-lg text-ink font-semibold">Live visibility</h3>
+        <p className="text-xs text-ink-600">
+          {scorecard?.measurement_note
+            || scorecard?.not_measured_reason
+            || 'Live visibility stays blank until an engine returns a response. Model APIs are not Google AI Overviews, AI Mode, or Bing Copilot.'}
+        </p>
+      </div>
+      <dl className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        {rows.map(([label, value]) => (
+          <div key={label} className="p-3 rounded border border-line bg-paper-50">
+            <dt className="text-[10px] font-mono uppercase tracking-[0.04em] text-ink-500">{label}</dt>
+            <dd className="mt-1 text-sm font-medium text-ink">{value}</dd>
+          </div>
+        ))}
+      </dl>
+    </Card>
+  );
+}
+
+function BotDirectiveGrid({ directives }: { directives?: AiBotDirectivesReport }) {
+  const measured = directives?.robots_measured === true;
+  const cells = [
+    ['GPTBot (OpenAI)', directives?.gptbot_allowed],
+    ['PerplexityBot', directives?.perplexitybot_allowed],
+    ['ClaudeBot (Anthropic)', directives?.claudebot_allowed],
+    ['Google-Extended', directives?.google_extended_allowed],
+  ] as const;
+  return (
+    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+      {cells.map(([label, allowed]) => (
+        <div key={label} className="p-3 bg-ink-50/50 rounded border border-ink/5 space-y-1">
+          <span className="font-mono text-ink-500 font-semibold">{label}</span>
+          <p className={`font-mono font-bold flex items-center gap-1 ${measured && allowed ? 'text-good' : 'text-ink-600'}`}>
+            {measured ? (allowed ? <CheckCircle2 className="w-3.5 h-3.5" /> : <AlertCircle className="w-3.5 h-3.5" />) : null}
+            {measured ? (allowed ? 'Allowed' : 'Blocked') : 'Not measured'}
+          </p>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 interface GeoWorkspaceViewProps {
   report: ExecutiveReport;
   analysisId?: string;
@@ -37,6 +107,7 @@ interface GeoWorkspaceViewProps {
 }
 
 type GeoSubTab =
+  | 'visibility'
   | 'engines'
   | 'som'
   | 'sentiment'
@@ -55,7 +126,7 @@ export function GeoWorkspaceView({
   onNavigateToTab,
   onEvaluationsUpdated,
 }: GeoWorkspaceViewProps) {
-  const [activeSubTab, setActiveSubTab] = useState<GeoSubTab>('engines');
+  const [activeSubTab, setActiveSubTab] = useState<GeoSubTab>('visibility');
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
   // Controlled Retrieval Analysis interactive state
@@ -180,11 +251,11 @@ export function GeoWorkspaceView({
     <PillarShell
       kicker="Discipline 2 · Generative Engine Optimization"
       title="Generative Engine Optimization (GEO)"
-      description="Controlled Semantic Retrieval Analysis & Evidence-Driven Visibility: On-page RAG extractability, empirical benchmark observations, and citation provenance."
-      scoreLabel="GEO Readiness"
+      description="On-page extractability is separate from live measurement. The visibility tab lists only engines that returned a response. Google AI Overviews, AI Mode, and Bing Copilot stay not queried unless a run names them."
+      scoreLabel="On-page extractability"
       score={geoScore ?? '—'}
-      metaLabel="On-page grade"
-      meta={perEngine?.overall_engine_grade || 'Not measured'}
+      metaLabel="Live visibility"
+      meta={scorecard?.status === 'MEASURED' ? 'Measured' : 'Not measured'}
       actions={
         <SectionExportButtons
           analysisId={analysisId || report.analysis_id || report.report_id}
@@ -193,7 +264,8 @@ export function GeoWorkspaceView({
         />
       }
       tabs={[
-        { id: 'engines', label: 'Per-Engine AI Matrix' },
+        { id: 'visibility', label: 'Live visibility' },
+        { id: 'engines', label: 'Appendix · writing exercise' },
         { id: 'som', label: 'Share of Model & Displacement' },
         { id: 'sentiment', label: 'Sentiment & Hallucinations' },
         { id: 'retrieval_analysis', label: 'Controlled Retrieval Analysis' },
@@ -207,11 +279,20 @@ export function GeoWorkspaceView({
       activeTab={activeSubTab}
       onTab={(id) => setActiveSubTab(id as GeoSubTab)}
     >
-      {/* ─────────────────────────────────────────────────────────────
-          SUB-TAB 1: PER-ENGINE AI MATRIX
-          ───────────────────────────────────────────────────────────── */}
+      {activeSubTab === 'visibility' && (
+        <LiveVisibilityCard scorecard={scorecard} />
+      )}
+
+      {/* Appendix: on-page writing exercise. Not a live engine query. */}
       {activeSubTab === 'engines' && (
         <div className="space-y-6">
+          <Card className="p-4 space-y-1 border-l-2 border-l-warn">
+            <p className="text-sm font-semibold text-ink">Appendix · on-page writing exercise</p>
+            <p className="text-xs text-ink-600">
+              {perEngine?.measurement_note
+                || 'These scores read the crawled pages. They are not live queries. Google AI Overviews, Google AI Mode, and Bing Copilot were not queried.'}
+            </p>
+          </Card>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             {/* ChatGPT */}
             <Card className="p-4 space-y-2 border-t-4 border-t-good/30">
@@ -295,32 +376,7 @@ export function GeoWorkspaceView({
             <h3 className="font-sans font-bold text-ink text-base flex items-center gap-2">
               <Bot className="w-4 h-4 text-ink-700" /> AI Search Crawler Directives (`robots.txt`)
             </h3>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
-              <div className="p-3 bg-ink-50/50 rounded border border-ink/5 space-y-1">
-                <span className="font-mono text-ink-500 font-semibold">GPTBot (OpenAI)</span>
-                <p className="font-mono font-bold text-good flex items-center gap-1">
-                  <CheckCircle2 className="w-3.5 h-3.5" /> Allowed
-                </p>
-              </div>
-              <div className="p-3 bg-ink-50/50 rounded border border-ink/5 space-y-1">
-                <span className="font-mono text-ink-500 font-semibold">PerplexityBot</span>
-                <p className="font-mono font-bold text-good flex items-center gap-1">
-                  <CheckCircle2 className="w-3.5 h-3.5" /> Allowed
-                </p>
-              </div>
-              <div className="p-3 bg-ink-50/50 rounded border border-ink/5 space-y-1">
-                <span className="font-mono text-ink-500 font-semibold">ClaudeBot (Anthropic)</span>
-                <p className="font-mono font-bold text-good flex items-center gap-1">
-                  <CheckCircle2 className="w-3.5 h-3.5" /> Allowed
-                </p>
-              </div>
-              <div className="p-3 bg-ink-50/50 rounded border border-ink/5 space-y-1">
-                <span className="font-mono text-ink-500 font-semibold">Google-Extended</span>
-                <p className="font-mono font-bold text-good flex items-center gap-1">
-                  <CheckCircle2 className="w-3.5 h-3.5" /> Allowed
-                </p>
-              </div>
-            </div>
+            <BotDirectiveGrid directives={perEngine?.ai_bot_directives} />
           </Card>
         </div>
       )}
