@@ -1,11 +1,21 @@
 import React, { useState } from 'react';
 import { CrawlManifest, PageEvidence, PageReport, CopySection, CopyFaqItem } from '../types';
 import { asNumber, asString, display, scoreTone } from '../lib/format';
+import { PageGenreAnalytics, detectPageGenre, GENRE_CONFIGS, PageGenre } from './PageGenreAnalytics';
 
 interface PagesProps {
   manifest?: CrawlManifest;
   summary: Record<string, unknown>;
   pageReports?: PageReport[];
+  ga4LandingPages?: Array<{
+    path: string;
+    sessions: number;
+    bounce_rate: number;
+    engagement_rate?: number;
+    avg_duration_sec?: number;
+    conversions: number;
+    conversion_rate?: number;
+  }>;
 }
 
 function CopyButton({ text, label = 'Copy' }: { text: string; label?: string }) {
@@ -325,7 +335,23 @@ function FaqBlock({ faqs }: { faqs?: CopyFaqItem[] }) {
   );
 }
 
-function PageDetail({ page, report }: { page: PageEvidence; report?: PageReport }) {
+function PageDetail({
+  page,
+  report,
+  ga4LandingPages,
+}: {
+  page: PageEvidence;
+  report?: PageReport;
+  ga4LandingPages?: Array<{
+    path: string;
+    sessions: number;
+    bounce_rate: number;
+    engagement_rate?: number;
+    avg_duration_sec?: number;
+    conversions: number;
+    conversion_rate?: number;
+  }>;
+}) {
   const [showTechnical, setShowTechnical] = useState(false);
   const seo = report?.seo;
   const copy = report?.copywriting;
@@ -356,6 +382,9 @@ function PageDetail({ page, report }: { page: PageEvidence; report?: PageReport 
           <dd className="mt-1 capitalize text-ink font-medium">{display(page.page_type)}</dd>
         </div>
       </dl>
+
+      {/* 2. Genre-Specific Analytics & Vector Visualizations */}
+      <PageGenreAnalytics page={page} report={report} ga4LandingPages={ga4LandingPages} />
 
       {copy?.llm_status === 'failed' && (
         <div className="p-4 rounded-lg border border-bad/40 bg-bad/10 space-y-2">
@@ -588,8 +617,9 @@ function PageDetail({ page, report }: { page: PageEvidence; report?: PageReport 
   );
 }
 
-export function Pages({ manifest, summary, pageReports = [] }: PagesProps) {
+export function Pages({ manifest, summary, pageReports = [], ga4LandingPages }: PagesProps) {
   const [openScrapedUrls, setOpenScrapedUrls] = useState<Set<string>>(new Set());
+  const [selectedGenre, setSelectedGenre] = useState<string>('all');
   const pages = manifest?.pages || [];
   const reportsByUrl = new Map(pageReports.map((item) => [item.url, item]));
   const recordedDiscovered = [manifest?.total_pages_discovered, summary.total_pages_discovered]
@@ -597,6 +627,23 @@ export function Pages({ manifest, summary, pageReports = [] }: PagesProps) {
   const sitemap = manifest?.sitemap_found ?? Boolean(summary.sitemap_found);
   const robots = manifest?.robots_txt_found ?? Boolean(summary.robots_txt_found);
   const health = manifest?.crawl_health || summary || {};
+
+  const resolvedGa4Pages =
+    ga4LandingPages ||
+    (summary?.ga4 as any)?.landing_pages ||
+    (summary?.top_landing_pages as any) ||
+    [];
+
+  const genreCounts = pages.reduce((acc, p) => {
+    const g = detectPageGenre(p.page_type, p.url, p.title);
+    acc[g] = (acc[g] || 0) + 1;
+    return acc;
+  }, {} as Record<string, number>);
+
+  const filteredPages =
+    selectedGenre === 'all'
+      ? pages
+      : pages.filter((p) => detectPageGenre(p.page_type, p.url, p.title) === selectedGenre);
 
   const toggleScraped = (url: string) => {
     setOpenScrapedUrls((prev) => {
@@ -630,11 +677,51 @@ export function Pages({ manifest, summary, pageReports = [] }: PagesProps) {
         ))}
       </dl>
 
+      {pages.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-line">
+          <span className="text-xs font-semibold text-ink-500 mr-1">Filter by Genre:</span>
+          <button
+            type="button"
+            onClick={() => setSelectedGenre('all')}
+            className={`px-2.5 py-1 rounded-md text-xs font-medium border transition cursor-pointer ${
+              selectedGenre === 'all'
+                ? 'bg-paper-50 text-ink border-line font-bold shadow-xs'
+                : 'bg-paper-100 text-ink-500 border-transparent hover:text-ink'
+            }`}
+          >
+            All Genres ({pages.length})
+          </button>
+          {Object.entries(GENRE_CONFIGS).map(([gKey, gConfig]) => {
+            const count = genreCounts[gKey] || 0;
+            if (count === 0) return null;
+            return (
+              <button
+                key={gKey}
+                type="button"
+                onClick={() => setSelectedGenre(gKey)}
+                className={`px-2.5 py-1 rounded-md text-xs font-medium border transition cursor-pointer flex items-center gap-1.5 ${
+                  selectedGenre === gKey
+                    ? 'bg-paper-50 text-ink border-line font-bold shadow-xs'
+                    : 'bg-paper-100 text-ink-500 border-transparent hover:text-ink'
+                }`}
+              >
+                <span>{gConfig.name.split('/')[0].trim()}</span>
+                <span className="font-mono text-[10px] px-1.5 py-0.2 rounded bg-paper-200 text-ink-700">
+                  {count}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+
       {pages.length === 0 ? (
         <p className="text-ink-400">No pages in this crawl.</p>
+      ) : filteredPages.length === 0 ? (
+        <p className="text-ink-400 py-6">No crawled pages match the selected "{selectedGenre}" genre.</p>
       ) : (
         <ul className="divide-y divide-line border-y border-line">
-          {pages.map((page) => {
+          {filteredPages.map((page) => {
             const report = reportsByUrl.get(page.url);
             const isScrapedOpen = openScrapedUrls.has(page.url);
 
@@ -661,7 +748,7 @@ export function Pages({ manifest, summary, pageReports = [] }: PagesProps) {
                 </div>
 
                 {/* Main Content: Copywriting Intelligence & Section-Wise Highlights (Shown by Default) */}
-                <PageDetail page={page} report={report} />
+                <PageDetail page={page} report={report} ga4LandingPages={resolvedGa4Pages} />
 
                 {/* Raw Extracted Scraped Content: Hidden Behind Toggle Button */}
                 <div className="pt-2 border-t border-line">

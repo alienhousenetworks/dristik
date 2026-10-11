@@ -5,15 +5,14 @@ import { SectionExportButtons } from '../ui/SectionExportButtons';
 import {
   Bot,
   FileCode,
-  HelpCircle,
   Network,
   CheckCircle2,
   XCircle,
   Copy,
   Check,
   ShieldCheck,
-  Sparkles,
 } from 'lucide-react';
+import { DynamicQuestionSandboxView } from '../DynamicQuestionSandboxView';
 
 interface AeoWorkspaceViewProps {
   report: ExecutiveReport;
@@ -93,25 +92,16 @@ export function resolveQuestionCategory(q: any): string {
 
 export function AeoWorkspaceView({ report, analysisId, onOpenPatchPack }: AeoWorkspaceViewProps) {
   const [activeSubTab, setActiveSubTab] = useState<AeoSubTab>('directives');
-  const [selectedQuestionCategory, setSelectedQuestionCategory] = useState<string>('All');
   const [copiedLlms, setCopiedLlms] = useState(false);
 
   const geo = report.geo_readiness;
   const perEngine = report.per_engine_geo;
   const botDirectives = perEngine?.ai_bot_directives;
   const qGraph = geo?.question_graph_50;
-  const questionItems = qGraph?.questions || geo?.questions || [];
-
-  const resolveCategory = resolveQuestionCategory;
-
-  const rawCategories: string[] = Array.from(
-    new Set<string>(questionItems.map((q: any) => resolveCategory(q)))
-  );
-  const categories: string[] = ['All', ...rawCategories];
-
-  const filteredQuestions = selectedQuestionCategory === 'All'
-    ? questionItems
-    : questionItems.filter((q: any) => resolveCategory(q) === selectedQuestionCategory);
+  const sandboxEvals = report.dynamic_sandbox_evaluations || [];
+  const answerableCount = sandboxEvals.filter(
+    (q) => q.answerability_status === 'ANSWERABLE' || q.is_answerable
+  ).length;
 
   const schemaTypes = geo?.schema_types || [];
   const schemaCrosscheck = geo?.schema_crosscheck;
@@ -145,8 +135,12 @@ export function AeoWorkspaceView({ report, analysisId, onOpenPatchPack }: AeoWor
       description="Deterministic on-page machine extractability, JSON-LD structured data graphs, AI bot permissions, and llms.txt directives."
       scoreLabel="AEO Score"
       score={aeoScore}
-      metaLabel="Q&A Answers"
-      meta={`${qGraph?.supported_count ?? geo?.questions_supported ?? '—'} / ${qGraph?.total_questions ?? geo?.questions_total ?? '50'}`}
+      metaLabel={sandboxEvals.length > 0 ? 'Sandbox Grounding' : 'Q&A Answers'}
+      meta={
+        sandboxEvals.length > 0
+          ? `${answerableCount} / ${sandboxEvals.length} Answerable`
+          : `${qGraph?.supported_count ?? geo?.questions_supported ?? '—'} / ${qGraph?.total_questions ?? geo?.questions_total ?? '50'}`
+      }
       actions={
         <SectionExportButtons
           analysisId={analysisId || report.analysis_id || report.report_id}
@@ -157,7 +151,7 @@ export function AeoWorkspaceView({ report, analysisId, onOpenPatchPack }: AeoWor
       tabs={[
         { id: 'directives', label: 'AI Bots & llms.txt' },
         { id: 'schema', label: `Schema Graph (${schemaTypes.length})` },
-        { id: 'questions', label: `50-Question Graph (${questionItems.length})` },
+        { id: 'questions', label: `AI Question Sandbox (${sandboxEvals.length > 0 ? sandboxEvals.length : '100'})` },
         { id: 'triples', label: 'Entity Triples & Grounding' },
       ]}
       activeTab={activeSubTab}
@@ -348,168 +342,17 @@ export function AeoWorkspaceView({ report, analysisId, onOpenPatchPack }: AeoWor
       )}
 
       {/* ─────────────────────────────────────────────────────────────
-          SUB-TAB 3: 50-QUESTION DETERMINISTIC GRAPH
+          SUB-TAB 3: DYNAMIC 100-QUESTION AI SANDBOX & GROUNDED AUDIT
           ───────────────────────────────────────────────────────────── */}
       {activeSubTab === 'questions' && (
         <div className="space-y-4">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <h3 className="font-sans text-lg text-ink font-semibold">50-Question Extraction Graph</h3>
-              <p className="text-xs text-ink-500">
-                Deterministic questions tested against on-page content to verify what LLM agents can factually answer.
-              </p>
-            </div>
-
-            {/* Category Filter */}
-            <div className="flex flex-wrap items-center gap-1.5 text-xs">
-              {categories.map((cat) => (
-                <button
-                  key={cat}
-                  type="button"
-                  onClick={() => setSelectedQuestionCategory(cat)}
-                  className={`px-2.5 py-1 rounded font-medium transition-colors ${
-                    selectedQuestionCategory === cat
-                      ? 'bg-pine text-paper-100 font-bold'
-                      : 'bg-paper-100 text-ink-600 hover:bg-paper-200'
-                  }`}
-                >
-                  {cat}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="space-y-3">
-            {filteredQuestions.map((q: any, idx: number) => {
-              const category = resolveCategory(q);
-              const rawStatus = (q.status || (q.supported === true ? 'SUPPORTED' : (q.supported === false ? 'UNSUPPORTED' : ''))).toUpperCase();
-              const isSupported = rawStatus === 'SUPPORTED' || q.supported === true;
-              const isPartial = rawStatus === 'PARTIAL';
-              const isConflicting = rawStatus === 'CONFLICTING';
-              const isUnsupported = rawStatus === 'UNSUPPORTED' || (!isSupported && !isPartial && !isConflicting);
-
-              const excerpt = q.answer_snippet || q.evidence_snippet;
-              const directAnswer = q.answer || (
-                isSupported && excerpt
-                  ? `According to crawled pages: "${excerpt.trim()}"`
-                  : isPartial && excerpt
-                    ? `Partially addressed on-page: "${excerpt.trim()}" (lacks complete standalone explanation).`
-                    : isUnsupported
-                      ? 'No direct answer found on crawled pages. AI agents cannot answer this question from first-party evidence.'
-                      : q.why || null
-              );
-              const sourceUrl = q.evidence_url;
-              const recommendedAnswer = q.recommended_answer || (!isSupported && q.why ? q.why : null);
-
-              let pathname = '/';
-              if (sourceUrl) {
-                try {
-                  pathname = new URL(sourceUrl, 'https://localhost').pathname || '/';
-                } catch {
-                  pathname = sourceUrl;
-                }
-              }
-
-              return (
-                <Card key={idx} className="p-4 space-y-3 border border-line">
-                  <div className="flex flex-wrap items-start justify-between gap-2">
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-2">
-                        <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-paper-200 text-ink-700 font-medium">
-                          {category}
-                        </span>
-                        <span className={`text-[10px] font-mono px-2 py-0.5 rounded font-bold ${
-                          isSupported
-                            ? 'bg-good/10 text-good border border-good/20'
-                            : isPartial
-                              ? 'bg-warn/10 text-warn dark:text-warn border border-warn/30'
-                              : isConflicting
-                                ? 'bg-paper-100 text-ink-700 dark:text-ink-700 border border-line'
-                                : 'bg-bad/10 text-bad border border-bad/20'
-                        }`}>
-                          {isSupported
-                            ? '✓ Supported Answer'
-                            : isPartial
-                              ? '◐ Partial Evidence'
-                              : isConflicting
-                                ? ' Conflicting Data'
-                                : '✗ Unanswered On-Page'}
-                        </span>
-                      </div>
-                      <h4 className="text-sm font-semibold text-ink leading-snug">{q.question}</h4>
-                    </div>
-                  </div>
-
-                  {/* Direct Answer Block */}
-                  {directAnswer && (
-                    <div className={`p-3 rounded-md text-xs leading-relaxed ${
-                      isSupported
-                        ? 'bg-good/5 border border-good/20 text-ink-900'
-                        : isPartial
-                          ? 'bg-warn/10 border border-warn/30 text-ink-900'
-                          : isConflicting
-                            ? 'bg-paper-100 border border-line text-ink-900'
-                            : 'bg-paper-100 dark:bg-ink-900/50 border border-line text-ink-700'
-                    }`}>
-                      <div className="flex items-center gap-1.5 font-bold mb-1 text-[11px]">
-                        {isSupported ? (
-                          <span className="text-good flex items-center gap-1">
-                            <CheckCircle2 className="w-3.5 h-3.5" /> Answer
-                          </span>
-                        ) : isPartial ? (
-                          <span className="text-warn dark:text-warn flex items-center gap-1">
-                            <Sparkles className="w-3.5 h-3.5" /> Partial Answer
-                          </span>
-                        ) : isConflicting ? (
-                          <span className="text-ink-700 dark:text-ink-700 flex items-center gap-1">
-                            <XCircle className="w-3.5 h-3.5" /> Conflicting Answer
-                          </span>
-                        ) : (
-                          <span className="text-ink-500 flex items-center gap-1">
-                            <HelpCircle className="w-3.5 h-3.5" /> Unanswered On-Page
-                          </span>
-                        )}
-                      </div>
-                      <p className="text-xs text-ink-700 dark:text-paper-100">{directAnswer}</p>
-                    </div>
-                  )}
-
-                  {/* Verbatim Crawl Evidence Snippet */}
-                  {excerpt && (
-                    <div className="p-2.5 rounded bg-paper-50 dark:bg-ink-900/60 border border-line text-xs font-mono text-ink-700 space-y-1">
-                      <div className="flex items-center justify-between text-[10px] text-ink-500">
-                        <span className="text-ink-700 font-bold uppercase tracking-[0.04em]">Verbatim Crawl Evidence</span>
-                        {sourceUrl && (
-                          <a
-                            href={sourceUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-ink-700 hover:underline truncate max-w-[200px]"
-                            title={sourceUrl}
-                          >
-                            Source: {pathname}
-                          </a>
-                        )}
-                      </div>
-                      <p className="italic text-ink-700 dark:text-paper-200">"{excerpt}"</p>
-                    </div>
-                  )}
-
-                  {/* Recommended Answer / Fix for Unanswered or Partial Questions */}
-                  {(isUnsupported || isPartial || isConflicting) && recommendedAnswer && (
-                    <div className="p-2.5 rounded bg-paper-100 border border-line text-xs space-y-1">
-                      <span className="text-ink-700 font-bold text-[11px] block">
-                         Recommended Content to Add:
-                      </span>
-                      <p className="text-xs text-ink-700 dark:text-paper-200 leading-relaxed">
-                        {recommendedAnswer}
-                      </p>
-                    </div>
-                  )}
-                </Card>
-              );
-            })}
-          </div>
+          <DynamicQuestionSandboxView
+            analysisId={analysisId || report.analysis_id || report.report_id || ''}
+            initialEvaluations={report.dynamic_sandbox_evaluations}
+            initialKieGraphSummary={report.kie_graph_summary}
+            initialFiveDimensions={report.five_dimension_ai_visibility}
+            onEvaluationsUpdate={() => {}}
+          />
         </div>
       )}
 

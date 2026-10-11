@@ -272,10 +272,23 @@ export const ConnectorsModal: React.FC<ConnectorsModalProps> = ({
       payload.target_url = siteUrl;
       payload.name = `Google Analytics (${ga4PropertyId || ga4MeasurementId || siteUrl})`;
       let apiKeyPayload = ga4ApiKey;
-      if (!apiKeyPayload && (ga4PropertyId || ga4MeasurementId)) {
+      if (apiKeyPayload && apiKeyPayload.trim().startsWith('{')) {
+        try {
+          const parsed = JSON.parse(apiKeyPayload);
+          if (ga4PropertyId && !parsed.property_id) {
+            parsed.property_id = ga4PropertyId.trim();
+          }
+          if (ga4MeasurementId && !parsed.measurement_id) {
+            parsed.measurement_id = ga4MeasurementId.trim();
+          }
+          apiKeyPayload = JSON.stringify(parsed);
+        } catch {
+          // keep original
+        }
+      } else if (!apiKeyPayload && (ga4PropertyId || ga4MeasurementId)) {
         apiKeyPayload = JSON.stringify({
-          property_id: ga4PropertyId,
-          measurement_id: ga4MeasurementId,
+          property_id: ga4PropertyId.trim(),
+          measurement_id: ga4MeasurementId.trim(),
         });
       }
       payload.api_key = apiKeyPayload;

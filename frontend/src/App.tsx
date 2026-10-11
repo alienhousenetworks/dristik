@@ -578,6 +578,11 @@ export function App() {
                       manifest={report.crawl_manifest}
                       summary={report.crawl_summary}
                       pageReports={report.page_reports}
+                      ga4LandingPages={
+                        (report as any).analytics?.ga4?.top_landing_pages ||
+                        (report as any).lifecycle_revenue?.ga4?.landing_pages ||
+                        []
+                      }
                     />
                   )}
 

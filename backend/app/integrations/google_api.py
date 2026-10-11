@@ -19,9 +19,19 @@ _GSC_SCOPE = "https://www.googleapis.com/auth/webmasters.readonly"
 _GA4_SCOPE = "https://www.googleapis.com/auth/analytics.readonly"
 
 
-def load_service_account(credentials_path: str) -> Dict[str, Any]:
-    with open(credentials_path, "r", encoding="utf-8") as handle:
-        data = json.load(handle)
+def load_service_account(credentials_source: str | Dict[str, Any]) -> Dict[str, Any]:
+    if isinstance(credentials_source, dict):
+        data = credentials_source
+    elif isinstance(credentials_source, str):
+        trimmed = credentials_source.strip()
+        if trimmed.startswith("{"):
+            data = json.loads(trimmed)
+        else:
+            with open(credentials_source, "r", encoding="utf-8") as handle:
+                data = json.load(handle)
+    else:
+        raise ValueError("Invalid credentials source type.")
+
     if data.get("type") != "service_account" or not data.get("private_key") or not data.get("client_email"):
         raise ValueError("Credentials file is not a Google service account JSON with client_email and private_key.")
     return data
@@ -31,9 +41,9 @@ def _b64(raw: bytes) -> str:
     return urlsafe_b64encode(raw).decode("ascii").rstrip("=")
 
 
-def service_account_access_token(credentials_path: str, scopes: List[str], timeout: float = 15.0) -> str:
+def service_account_access_token(credentials_source: str | Dict[str, Any], scopes: List[str], timeout: float = 15.0) -> str:
     """Exchange a service-account JWT for an OAuth access token. Raises on failure."""
-    account = load_service_account(credentials_path)
+    account = load_service_account(credentials_source)
     try:
         from cryptography.hazmat.primitives import hashes, serialization
         from cryptography.hazmat.primitives.asymmetric import padding
@@ -164,7 +174,12 @@ def query_search_analytics_token(
     raise RuntimeError(last_error)
 
 
-def query_ga4_with_token(access_token: str, property_id: str, timeout: float = 20.0) -> Dict[str, Any]:
+def query_ga4_with_token(
+    access_token: str,
+    property_id: str,
+    include_pages: bool = True,
+    timeout: float = 20.0,
+) -> Dict[str, Any]:
     """Run a 30-day GA4 report with a user OAuth token. Raises unless the Data API returns HTTP 200."""
     clean = (property_id or "").strip()
     if clean.startswith("properties/"):
@@ -172,47 +187,43 @@ def query_ga4_with_token(access_token: str, property_id: str, timeout: float = 2
     if not clean or not clean.isdigit():
         raise RuntimeError("GA4 property id is missing.")
     url = f"https://analyticsdata.googleapis.com/v1beta/properties/{clean}:runReport"
-    body = {
+    metrics = [
+        {"name": "sessions"},
+        {"name": "bounceRate"},
+        {"name": "averageSessionDuration"},
+        {"name": "conversions"},
+        {"name": "engagementRate"},
+    ]
+    body: Dict[str, Any] = {
         "dateRanges": [{"startDate": "30daysAgo", "endDate": "today"}],
-        "metrics": [
-            {"name": "sessions"},
-            {"name": "bounceRate"},
-            {"name": "averageSessionDuration"},
-            {"name": "conversions"},
-            {"name": "engagementRate"},
-        ],
-        "limit": 1,
+        "metrics": metrics,
     }
+    if include_pages:
+        body["dimensions"] = [{"name": "pagePath"}]
+        body["metricAggregations"] = ["TOTAL"]
+        body["limit"] = 50
+    else:
+        body["limit"] = 1
+
     with httpx.Client(timeout=timeout) as client:
         response = client.post(url, json=body, headers={"Authorization": f"Bearer {access_token}"})
     if response.status_code == 401:
         raise RuntimeError(f"401 {response.text[:200]}")
+    if response.status_code != 200 and include_pages:
+        # Fallback to sitewide totals if dimensions query is restricted
+        return query_ga4_with_token(access_token, property_id, include_pages=False, timeout=timeout)
     if response.status_code != 200:
         raise RuntimeError(f"GA4 Data API failed ({response.status_code}): {response.text[:300]}")
     payload = response.json()
     return payload if isinstance(payload, dict) else {}
 
 
-def query_ga4(credentials_path: str, property_id: str, timeout: float = 20.0) -> Dict[str, Any]:
+def query_ga4(
+    credentials_source: str | Dict[str, Any],
+    property_id: str,
+    include_pages: bool = True,
+    timeout: float = 20.0,
+) -> Dict[str, Any]:
     """Run a 30-day GA4 report. Raises unless the Data API returns HTTP 200."""
-    token = service_account_access_token(credentials_path, [_GA4_SCOPE], timeout=timeout)
-    clean = property_id.strip()
-    if clean.startswith("properties/"):
-        clean = clean.split("/", 1)[1]
-    url = f"https://analyticsdata.googleapis.com/v1beta/properties/{clean}:runReport"
-    body = {
-        "dateRanges": [{"startDate": "30daysAgo", "endDate": "today"}],
-        "metrics": [
-            {"name": "sessions"},
-            {"name": "bounceRate"},
-            {"name": "averageSessionDuration"},
-            {"name": "conversions"},
-            {"name": "engagementRate"},
-        ],
-        "limit": 1,
-    }
-    with httpx.Client(timeout=timeout) as client:
-        response = client.post(url, json=body, headers={"Authorization": f"Bearer {token}"})
-    if response.status_code != 200:
-        raise RuntimeError(f"GA4 Data API failed ({response.status_code}): {response.text[:300]}")
-    return response.json()
+    token = service_account_access_token(credentials_source, [_GA4_SCOPE], timeout=timeout)
+    return query_ga4_with_token(token, property_id, include_pages=include_pages, timeout=timeout)

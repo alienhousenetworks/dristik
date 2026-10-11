@@ -3,7 +3,6 @@ import { ExecutiveReport } from '../types';
 import { categoryLabel, display, formatPercent, humanize, scoreTone } from '../lib/format';
 import { alignDisplayedStory, buildDisplayedScore } from '../lib/displayedAuditScore';
 import { ReQueryDiffView } from './ReQueryDiffView';
-import { DynamicQuestionSandboxView } from './DynamicQuestionSandboxView';
 import { OutcomeTrackingView } from './OutcomeTrackingView';
 import { CommercialBakeoffView } from './CommercialBakeoffView';
 import { DeveloperPatchPackModal } from './DeveloperPatchPackModal';
@@ -238,19 +237,6 @@ export function Report({
           analysisId={targetAnalysisId}
           evaluations={commEvals}
           onRequerySuccess={() => {}}
-        />
-      </section>
-
-      {/* ========================================================================= */}
-      {/* FEATURE: DYNAMIC 100-QUESTION AI SANDBOX & GROUNDED ANSWER CHECK         */}
-      {/* ========================================================================= */}
-      <section>
-        <DynamicQuestionSandboxView
-          analysisId={targetAnalysisId}
-          initialEvaluations={report.dynamic_sandbox_evaluations}
-          initialKieGraphSummary={report.kie_graph_summary}
-          initialFiveDimensions={report.five_dimension_ai_visibility}
-          onEvaluationsUpdate={() => {}}
         />
       </section>
 

@@ -157,8 +157,8 @@ def connect_gsc(payload: GscConnectRequest):
 
 
 @router.post("/ga4/connect")
-def connect_ga4(payload: Ga4ConnectRequest):
-    """Configures GA4 property ID with format verification."""
+def connect_ga4(payload: Ga4ConnectRequest, user: Optional[UserIdentity] = Depends(get_current_user_optional)):
+    """Configures GA4 property ID with format verification across OAuth, service account, and environment credentials."""
     if not payload.property_id or not payload.property_id.strip():
         raise HTTPException(status_code=400, detail="property_id is required")
     clean_prop = payload.property_id.strip()
@@ -167,24 +167,93 @@ def connect_ga4(payload: Ga4ConnectRequest):
             status_code=400,
             detail="Invalid GA4 property ID format. Must be numeric ID (e.g. 123456789) or properties/123456789"
         )
-    credentials_path = ga4_connector.credentials_path()
-    if not credentials_path or not ga4_connector.verify_credentials(credentials_path):
-        raise HTTPException(
-            status_code=400,
-            detail="GA4 requires GOOGLE_APPLICATION_CREDENTIALS pointing at a service-account JSON. A property ID alone is not a connection.",
-        )
-    try:
-        from app.integrations.google_api import query_ga4
-        query_ga4(credentials_path, clean_prop)
-    except Exception as exc:
-        raise HTTPException(status_code=400, detail=f"GA4 Data API probe failed: {exc}")
+
+    from app.connectors.store import connector_store
+    from app.domain.enums import ConnectorType, ConnectorHealthStatus
+    from app.integrations.google_api import query_ga4_with_token, query_ga4, refresh_google_access_token
+
+    org_id = user.org_id if user else "org_default"
+    integrations = connector_store.list_integrations(org_id)
+    ga4_integs = [i for i in integrations if i.provider in (ConnectorType.GOOGLE_ANALYTICS_4, ConnectorType.GOOGLE_ANALYTICS)]
+
+    probe_success = False
+    error_msg = None
+
+    if ga4_integs:
+        for integ in ga4_integs:
+            connector = connector_store.get_connector(integ.integration_id)
+            creds = getattr(connector, "credentials", None)
+            raw = getattr(creds, "api_key", None) or getattr(creds, "app_password", None) or ""
+            parsed = {}
+            if raw:
+                try:
+                    parsed = json.loads(raw) if isinstance(raw, str) else raw
+                except Exception:
+                    parsed = {}
+            if isinstance(parsed, dict) and (parsed.get("access_token") or parsed.get("refresh_token")):
+                token = parsed.get("access_token")
+                refresh = parsed.get("refresh_token")
+                try:
+                    query_ga4_with_token(token, clean_prop)
+                    probe_success = True
+                except Exception as exc:
+                    if refresh and ("401" in str(exc) or "expired" in str(exc).lower()):
+                        try:
+                            token = refresh_google_access_token(refresh)
+                            query_ga4_with_token(token, clean_prop)
+                            probe_success = True
+                            parsed["access_token"] = token
+                        except Exception as ref_exc:
+                            error_msg = str(ref_exc)
+                    else:
+                        error_msg = str(exc)
+                if probe_success:
+                    parsed["property_id"] = clean_prop
+                    if creds:
+                        creds.api_key = json.dumps(parsed)
+                    integ.settings = integ.settings or {}
+                    integ.settings["property_id"] = clean_prop
+                    integ.status = ConnectorHealthStatus.CONNECTED
+                    connector_store.persist(integ)
+                    break
+            elif isinstance(parsed, dict) and parsed.get("type") == "service_account":
+                try:
+                    query_ga4(parsed, clean_prop)
+                    probe_success = True
+                    parsed["property_id"] = clean_prop
+                    if creds:
+                        creds.api_key = json.dumps(parsed)
+                    integ.settings = integ.settings or {}
+                    integ.settings["property_id"] = clean_prop
+                    integ.status = ConnectorHealthStatus.CONNECTED
+                    connector_store.persist(integ)
+                    break
+                except Exception as exc:
+                    error_msg = str(exc)
+
+    if not probe_success:
+        credentials_path = ga4_connector.credentials_path()
+        if credentials_path and ga4_connector.verify_credentials(credentials_path):
+            try:
+                query_ga4(credentials_path, clean_prop)
+                probe_success = True
+            except Exception as exc:
+                raise HTTPException(status_code=400, detail=f"GA4 Data API probe failed: {exc}")
+        elif error_msg:
+            raise HTTPException(status_code=400, detail=f"GA4 Data API probe failed: {error_msg}")
+        else:
+            raise HTTPException(
+                status_code=400,
+                detail="GA4 requires Google OAuth authorization or a Google Service Account key. Please click 'Sign in with Google' or upload your service account credentials.",
+            )
+
     ga4_connector.property_id = clean_prop
     ga4_connector._connected = True
     return {
         "status": "authenticated",
         "property_id": ga4_connector.property_id,
         "provenance": MetricProvenanceState.MEASURED,
-        "detail": "GA4 Data API probe succeeded.",
+        "detail": "GA4 Data API probe succeeded and property connected.",
     }
 
 

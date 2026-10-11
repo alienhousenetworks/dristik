@@ -5,7 +5,6 @@ import { GeoAeoTrendTracker } from '../GeoAeoTrendTracker';
 import { PillarShell, Card } from '../ui';
 import { SectionExportButtons } from '../ui/SectionExportButtons';
 import { ControlledRetrievalVisualizer } from './RagChunkVisualizer';
-import { DynamicQuestionSandboxView } from '../DynamicQuestionSandboxView';
 import {
   Sparkles,
   Bot,
@@ -19,7 +18,6 @@ import {
   Copy,
   Check,
   ArrowUpRight,
-  Layers,
   ShieldAlert,
   Network,
   Crosshair,
@@ -40,7 +38,6 @@ interface GeoWorkspaceViewProps {
 
 type GeoSubTab =
   | 'engines'
-  | 'sandbox'
   | 'som'
   | 'sentiment'
   | 'retrieval_analysis'
@@ -197,7 +194,6 @@ export function GeoWorkspaceView({
       }
       tabs={[
         { id: 'engines', label: 'Per-Engine AI Matrix' },
-        { id: 'sandbox', label: '100-Question Sandbox (On-Page AEO)' },
         { id: 'som', label: 'Share of Model & Displacement' },
         { id: 'sentiment', label: 'Sentiment & Hallucinations' },
         { id: 'retrieval_analysis', label: 'Controlled Retrieval Analysis' },
@@ -326,38 +322,6 @@ export function GeoWorkspaceView({
               </div>
             </div>
           </Card>
-        </div>
-      )}
-
-      {/* ─────────────────────────────────────────────────────────────
-          SUB-TAB 2: 100-QUESTION DYNAMIC SANDBOX (ON-PAGE AEO)
-          ───────────────────────────────────────────────────────────── */}
-      {activeSubTab === 'sandbox' && (
-        <div className="space-y-6">
-          {/* AEO Diagnostic Cross-Link Comparison Panel */}
-          <Card className="p-4 bg-paper-50/80 border border-line space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="font-semibold text-ink text-xs flex items-center gap-1.5">
-                <Layers className="w-3.5 h-3.5 text-pine" /> AEO Diagnostic Cross-Link: On-Page Readiness vs. Live Telemetry
-              </span>
-              <span className="font-mono text-[10px] text-ink-500 bg-paper px-2 py-0.5 rounded border border-line">
-                2 Independent Measurement Modes
-              </span>
-            </div>
-            <p className="text-[11px] text-ink-600 leading-relaxed">
-              <strong>Layer 1 (Here):</strong> Measures whether your crawled pages contain extractable, defensible facts.
-              {' '}<strong>Layer 2 (Live AI Citations):</strong> Measures whether external AI answer engines actually cite those pages or recommend competitors.
-              A page can have 100% extractability and still lack external citations if third-party authority hubs dominate the topic.
-            </p>
-          </Card>
-
-          <DynamicQuestionSandboxView
-            analysisId={analysisId || report.analysis_id || report.report_id || ''}
-            initialEvaluations={report.dynamic_sandbox_evaluations}
-            initialKieGraphSummary={report.kie_graph_summary}
-            initialFiveDimensions={report.five_dimension_ai_visibility}
-            onEvaluationsUpdate={() => {}}
-          />
         </div>
       )}
 
