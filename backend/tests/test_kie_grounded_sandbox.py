@@ -65,6 +65,9 @@ def test_hybrid_retriever_zero_evidence_on_unanswerable_pricing():
     assert sim.answer_risk.value == "HIGH"
     assert sim.assessment_status == "INSUFFICIENT"
     assert "not published" in sim.candidate_answer.lower() or "not disclosed" in sim.candidate_answer.lower()
+    assert "not published" in sim.rag_answer.lower() or "not disclosed" in sim.rag_answer.lower()
+    assert "json-ld" not in sim.rag_answer.lower()
+    assert "schema.org" not in (sim.section_update_recommendation or "").lower()
 
 
 def test_hybrid_retriever_retrieves_clean_evidence_for_services():
@@ -97,6 +100,12 @@ def test_hybrid_retriever_retrieves_clean_evidence_for_services():
     assert sim.grounding_ratio >= 0.50
     assert sim.assessment_status == "SUFFICIENT"
     assert sim.retrieval_evidence_count >= 1
+    assert "marketing" in sim.retrieved_extract.lower() or "seo" in sim.retrieved_extract.lower()
+    assert "source:" in sim.rag_answer.lower()
+    assert sim.retrieved_extract.strip() != sim.rag_answer.strip()
+    assert "json-ld" not in sim.rag_answer.lower()
+    assert "schema.org" not in sim.rag_answer.lower()
+    assert "to accelerate ai answer engine citations" not in (sim.section_update_recommendation or "").lower()
 
 
 def test_evidence_sufficiency_detects_partial_questions():

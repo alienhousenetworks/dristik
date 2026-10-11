@@ -8,6 +8,7 @@ import {
   AiThinkingStep,
   SystemExecutionLogEntry,
 } from '../types';
+import { sandboxAnswers } from '../lib/sandboxAnswers';
 import {
   Sparkles,
   Search,
@@ -21,7 +22,6 @@ import {
   HelpCircle,
   Quote,
   Target,
-  Zap,
   Database,
   GitBranch,
   ShieldCheck,
@@ -30,6 +30,7 @@ import {
   Link2,
   Terminal,
   Cpu,
+  Zap,
   X,
 } from 'lucide-react';
 
@@ -40,7 +41,7 @@ import {
 function GroundingBar({ ratio, size = 'sm' }: { ratio: number; size?: 'sm' | 'lg' }) {
   const pct = Math.round(ratio * 100);
   const color =
-    pct >= 60 ? 'bg-good/10' : pct >= 30 ? 'bg-warn/10' : 'bg-bad/10';
+    pct >= 60 ? 'bg-good' : pct >= 30 ? 'bg-warn' : 'bg-bad';
   const h = size === 'lg' ? 'h-2.5' : 'h-1.5';
   return (
     <div className={`flex items-center gap-2`}>
@@ -337,75 +338,223 @@ function AiThinkingPanel({ steps }: { steps?: AiThinkingStep[] | null }) {
 // Source Attribution & Section Remediation Update Panel
 // ─────────────────────────────────────────────────────────────────────────────
 
-function SourceAndSectionUpdatePanel({ item }: { item: DynamicSandboxQuestionEvaluation }) {
-  const hasSource = item.source_url || item.evidence_url || item.source_page_title || item.source_section;
-  const hasUpdate = item.target_update_page || item.target_update_section || item.section_update_recommendation;
+// ─────────────────────────────────────────────────────────────────────────────
+// 4-Pillar Unified Inquiry Audit Panel
+// ─────────────────────────────────────────────────────────────────────────────
 
-  if (!hasSource && !hasUpdate) return null;
+function FourPillarInquiryAuditPanel({ item }: { item: DynamicSandboxQuestionEvaluation }) {
+  const answers = sandboxAnswers(item);
+  const sourceUrl = item.source_url || item.evidence_url;
+  const retrievalCount = item.retrieval_evidence_count ?? (item.is_answerable ? 1 : 0);
+  const retrievalStatus = item.retrieval_status || (retrievalCount > 0 ? (item.answerability_status === 'PARTIAL' ? 'PARTIAL' : 'RETRIEVED') : 'NOT_RETRIEVED');
+  const grounding = item.grounding_ratio ?? null;
+  const requiresOwner = item.requires_owner_confirmation || (
+    (item.facet?.toLowerCase().includes('pricing') || item.facet?.toLowerCase().includes('trust') || item.buyer_intent?.toLowerCase().includes('pricing')) &&
+    !item.is_answerable
+  );
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
-      {/* ── Source Attribution ── */}
-      <div className="p-3 bg-paper border border-line rounded-md space-y-1.5">
-        <div className="flex items-center gap-1.5 font-semibold text-ink text-[11px]">
-          <Link2 className="w-3.5 h-3.5 text-pine" />
-          <span>Verified Source Attribution</span>
-        </div>
-        <div className="space-y-1 text-[11px] text-ink-700">
-          <div>
-            <span className="font-medium text-ink-500">Page: </span>
-            <span className="font-semibold text-ink">{item.source_page_title || 'Crawled Site Documentation'}</span>
+    <div className="space-y-4 font-sans text-xs">
+      {/* ── PILLAR 1: Semantic Search & Retrieval ── */}
+      <div className="p-3.5 bg-paper border border-line rounded-md space-y-2">
+        <div className="flex items-center justify-between border-b border-line pb-2">
+          <div className="flex items-center gap-2">
+            <span className="font-mono text-[10px] font-bold px-1.5 py-0.5 rounded bg-pine/10 text-pine border border-pine/30 uppercase">
+              Pillar 1
+            </span>
+            <span className="font-semibold text-ink text-xs flex items-center gap-1.5">
+              <Search className="w-3.5 h-3.5 text-pine" /> Semantic Search &amp; Retrieval
+            </span>
           </div>
-          {item.source_section && (
-            <div>
-              <span className="font-medium text-ink-500">Section: </span>
-              <span className="font-mono text-ink-600 bg-paper-100 px-1.5 py-0.5 rounded border border-line">
-                {item.source_section}
-              </span>
-            </div>
-          )}
-          {(item.source_url || item.evidence_url) && (
-            <div className="pt-1">
-              <a
-                href={item.source_url || item.evidence_url || '#'}
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex items-center gap-1 text-[11px] text-pine underline hover:opacity-80"
-              >
-                <span>{item.source_url || item.evidence_url}</span>
-                <ExternalLink className="w-3 h-3" />
-              </a>
-            </div>
-          )}
+          <div className="flex items-center gap-2">
+            <span className={`font-mono text-[10px] font-bold px-2 py-0.5 rounded border ${
+              retrievalStatus === 'RETRIEVED'
+                ? 'bg-good/10 text-good border-good/30'
+                : retrievalStatus === 'PARTIAL'
+                ? 'bg-warn/10 text-warn border-warn/30'
+                : 'bg-bad/10 text-bad border-bad/30'
+            }`}>
+              {retrievalStatus}
+            </span>
+            <span className="font-mono text-[10px] text-ink-500">
+              {retrievalCount} evidence chunk{retrievalCount === 1 ? '' : 's'}
+            </span>
+          </div>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] text-ink-600">
+          <div>
+            <span className="text-ink-400">Classified Intent: </span>
+            <span className="font-medium text-ink">{item.buyer_intent || 'General buyer intent'}</span>
+          </div>
+          <div>
+            <span className="text-ink-400">Retrieval Target: </span>
+            <span className="font-mono text-ink-700 bg-paper-100 px-1.5 py-0.5 rounded border border-line">
+              {item.facet}
+            </span>
+          </div>
         </div>
       </div>
 
-      {/* ── Page & Section Remediation Update ── */}
-      <div className="p-3 bg-pine/5 border border-pine/20 rounded-md space-y-1.5">
-        <div className="flex items-center gap-1.5 font-semibold text-pine text-[11px]">
-          <Zap className="w-3.5 h-3.5 text-pine" />
-          <span>Recommended Page & Section Update</span>
+      {/* ── PILLAR 2: Verified Source Attribution ── */}
+      <div className="p-3.5 bg-paper border border-line rounded-md space-y-2">
+        <div className="flex items-center justify-between border-b border-line pb-2">
+          <div className="flex items-center gap-2">
+            <span className="font-mono text-[10px] font-bold px-1.5 py-0.5 rounded bg-ink/10 text-ink border border-ink/20 uppercase">
+              Pillar 2
+            </span>
+            <span className="font-semibold text-ink text-xs flex items-center gap-1.5">
+              <Link2 className="w-3.5 h-3.5 text-ink-700" /> Verified Source Attribution
+            </span>
+          </div>
+          <span className="font-mono text-[10px] text-ink-500">
+            {sourceUrl ? 'First-Party Crawl Snapshot' : 'Unattributed'}
+          </span>
         </div>
-        <div className="space-y-1 text-[11px] text-ink-700">
-          {item.target_update_page && (
-            <div>
-              <span className="font-medium text-ink-500">Target Page: </span>
-              <span className="font-mono text-pine font-semibold">{item.target_update_page}</span>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] text-ink-700">
+          <div>
+            <span className="text-ink-400">Observed Page: </span>
+            <span className="font-semibold text-ink">{item.source_page_title || (sourceUrl ? 'Crawled Domain Page' : 'No first-party page')}</span>
+          </div>
+          <div>
+            <span className="text-ink-400">Observed Heading: </span>
+            <span className={`font-mono px-1.5 py-0.5 rounded border ${
+              item.source_section ? 'bg-paper-100 text-ink-700 border-line' : 'bg-paper-200 text-ink-500 border-dashed border-line'
+            }`}>
+              {item.source_section || 'No heading detected (body flow)'}
+            </span>
+          </div>
+        </div>
+        {sourceUrl && (
+          <div className="pt-1">
+            <a
+              href={sourceUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1 text-[11px] text-pine underline hover:opacity-80"
+            >
+              <span>{sourceUrl}</span>
+              <ExternalLink className="w-3 h-3" />
+            </a>
+          </div>
+        )}
+      </div>
+
+      {/* ── PILLAR 3: Grounded Answer vs. Raw Extract ── */}
+      <div className="p-3.5 bg-paper border border-line rounded-md space-y-3">
+        <div className="flex items-center justify-between border-b border-line pb-2">
+          <div className="flex items-center gap-2">
+            <span className="font-mono text-[10px] font-bold px-1.5 py-0.5 rounded bg-pine/10 text-pine border border-pine/30 uppercase">
+              Pillar 3
+            </span>
+            <span className="font-semibold text-ink text-xs flex items-center gap-1.5">
+              <BookOpen className="w-3.5 h-3.5 text-ink-700" /> Grounded Answer vs. Raw Extract
+            </span>
+          </div>
+          {grounding !== null && (
+            <div className="flex items-center gap-2">
+              <span className="font-mono text-[10px] text-ink-500">Claim Grounding:</span>
+              <span className="font-mono font-bold text-xs text-ink">{Math.round(grounding * 100)}%</span>
             </div>
           )}
-          {item.target_update_section && (
-            <div>
-              <span className="font-medium text-ink-500">Target Section: </span>
-              <span className="font-mono text-ink-700 bg-paper px-1.5 py-0.5 rounded border border-pine/30">
-                {item.target_update_section}
-              </span>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          {/* Current Page Extract */}
+          <div className="p-3 bg-paper-50 rounded border border-line space-y-1.5">
+            <div className="flex items-center gap-1.5 font-semibold text-ink text-[11px]">
+              <Quote className="w-3 h-3 text-ink-600" /> Current Crawled Page Extract
             </div>
-          )}
-          {item.section_update_recommendation && (
-            <p className="text-[11px] text-ink-700 pt-1 leading-relaxed">
-              {item.section_update_recommendation}
+            <p className="text-[10px] text-ink-400">Verbatim passage as captured by the crawl.</p>
+            <blockquote className="text-ink-700 leading-relaxed border-l-2 border-line pl-2.5 italic">
+              {answers.currentExtract}
+            </blockquote>
+          </div>
+
+          {/* Knowledge-Base Constrained Answer */}
+          <div className="p-3 bg-paper-50 rounded border border-line space-y-1.5">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-1.5 font-semibold text-ink text-[11px]">
+                <Target className="w-3 h-3 text-pine" /> Knowledge-Base Constrained Answer
+              </div>
+              {answers.abstained && (
+                <span className="text-[10px] font-semibold uppercase tracking-wide text-bad">Unanswered</span>
+              )}
+            </div>
+            <p className="text-[10px] text-ink-400">
+              {answers.abstained
+                ? 'Explicit abstention: crawled pages do not state this fact.'
+                : 'Strict synthesis constrained solely to retrieved evidence chunks.'}
             </p>
+            <p className="text-ink leading-relaxed font-medium">{answers.ragAnswer}</p>
+          </div>
+        </div>
+
+        {/* Claim Decomposition */}
+        {item.claim_decomposition && item.claim_decomposition.length > 0 && (
+          <ClaimDecompositionPanel claims={item.claim_decomposition} />
+        )}
+      </div>
+
+      {/* ── PILLAR 4: Actionable Content Remediation ── */}
+      <div className="p-3.5 bg-paper border border-line rounded-md space-y-2.5">
+        <div className="flex items-center justify-between border-b border-line pb-2">
+          <div className="flex items-center gap-2">
+            <span className="font-mono text-[10px] font-bold px-1.5 py-0.5 rounded bg-warn/10 text-warn border border-warn/30 uppercase">
+              Pillar 4
+            </span>
+            <span className="font-semibold text-ink text-xs flex items-center gap-1.5">
+              <Zap className="w-3.5 h-3.5 text-warn" /> Actionable Content Remediation
+            </span>
+          </div>
+          {requiresOwner ? (
+            <span className="font-mono text-[9px] font-bold px-2 py-0.5 rounded bg-amber-500/10 text-amber-600 border border-amber-500/30">
+              Owner Confirmation Required
+            </span>
+          ) : (
+            <span className="font-mono text-[9px] font-bold px-2 py-0.5 rounded bg-good/10 text-good border border-good/30">
+              Ready for Copywriting Patch
+            </span>
           )}
+        </div>
+
+        {/* Owner Confirmation Alert if fact is sensitive and unstated */}
+        {requiresOwner && (
+          <div className="p-2.5 rounded border border-amber-500/30 bg-amber-500/5 text-amber-800 text-[11px] space-y-1">
+            <div className="font-semibold flex items-center gap-1.5">
+              <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />
+              <span>Anti-Fabrication Policy: Authoritative Business Confirmation Required</span>
+            </div>
+            <p className="leading-relaxed text-[10.5px]">
+              {item.owner_confirmation_brief ||
+                'Pricing tiers, security accreditations, or service SLAs cannot be fabricated. Obtain verified values from the business owner before publishing.'}
+            </p>
+          </div>
+        )}
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] text-ink-700">
+          <div>
+            <span className="text-ink-400">Target Page: </span>
+            <span className="font-mono text-pine font-semibold">{item.target_update_page || '/services'}</span>
+          </div>
+          <div>
+            <span className="text-ink-400">Target Heading: </span>
+            <span className="font-mono text-ink-700 bg-paper-100 px-1.5 py-0.5 rounded border border-line">
+              {item.target_update_section || '## Core Overview & Specifications'}
+            </span>
+          </div>
+        </div>
+
+        <div className="p-2.5 bg-paper-50 rounded border border-line text-[11px] space-y-1">
+          <span className="font-medium text-ink-500 block text-[10px] uppercase tracking-wide">
+            Recommended Patch Content Brief
+          </span>
+          <p className="text-ink-700 leading-relaxed">
+            {item.section_update_recommendation || answers.contentBrief || (
+              item.is_answerable
+                ? 'The crawled passages already answer this question. No new fact is required.'
+                : `Add authoritative, machine-extractable content on ${item.target_update_page || 'the target page'} addressing this inquiry.`
+            )}
+          </p>
         </div>
       </div>
     </div>
@@ -573,6 +722,7 @@ export function DynamicQuestionSandboxView({
         if (
           !item.generated_question.toLowerCase().includes(q) &&
           !(item.crawled_answer || '').toLowerCase().includes(q) &&
+          !(item.rag_answer || '').toLowerCase().includes(q) &&
           !(item.buyer_intent || '').toLowerCase().includes(q) &&
           !item.question_id.toLowerCase().includes(q)
         )
@@ -653,12 +803,10 @@ export function DynamicQuestionSandboxView({
             </h3>
           </div>
           <p className="text-xs text-ink-500 max-w-3xl">
-            {totalCount > 0 ? totalCount : '100'} bespoke buyer inquiries synthesized from the{' '}
-            <strong>Website Knowledge Graph</strong>, evaluated via{' '}
-            <strong>Hybrid Retrieval + Claim-Level Grounding Verification</strong>.
-            Each question reports a <strong>Grounding Ratio</strong> (supported claims / total claims)
-            and an <strong>Answer Risk</strong> label (HIGH / MEDIUM / LOW) indicating whether
-            an AI answer engine would hallucinate or cite competitors to fill this gap.
+            {totalCount > 0 ? totalCount : '100'} buyer questions answered from the crawled pages as the knowledge base.
+            Each question shows the passage retrieved from the crawl and an answer written only from that passage.
+            When the crawl does not state the fact, the answer is left unanswered.
+            Grounding is the share of answer claims that match a retrieved passage.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -729,7 +877,7 @@ export function DynamicQuestionSandboxView({
                 100-Question Dynamic AI Sandbox & Grounding Check
               </h4>
               <p className="text-xs text-ink-600 max-w-2xl leading-relaxed">
-                Synthesize 100 bespoke commercial buyer inquiries across 10 strategic facets (Identity, ICP, Pricing, Core Capabilities, Tech Stack, Competitive Moat, Enterprise Trust, Customer Proof, Onboarding, Purchase Flow). Each inquiry is evaluated using <strong>Hybrid Retrieval + Claim Grounding Verification</strong> to audit how AI engines (ChatGPT, Perplexity, Claude, Gemini) cite or hallucinate answers.
+                Synthesize 100 buyer questions across 10 facets. Each question is answered from the crawled pages. The card shows the retrieved passage and the knowledge-base answer, then checks whether each claim in that answer appears in the passage.
               </p>
             </div>
             <button
@@ -903,6 +1051,7 @@ export function DynamicQuestionSandboxView({
           {filteredEvaluations.map((item) => {
             const isExpanded = expandedId === item.question_id;
             const grounding = item.grounding_ratio ?? null;
+            const answers = sandboxAnswers(item);
             return (
               <div key={item.question_id} className="border border-line rounded-md bg-paper transition-shadow hover:shadow-sm">
                 {/* ── Collapsed Header ── */}
@@ -935,131 +1084,28 @@ export function DynamicQuestionSandboxView({
                   </button>
                 </div>
 
-                {/* ── Expanded Details ── */}
+                {/* ── Expanded Details: 4-Pillar Unified Inquiry Audit ── */}
                 {isExpanded && (
                   <div className="border-t border-line bg-paper-50 p-4 space-y-4 text-xs">
-                    {/* Grounding Ratio (prominent) */}
-                    {grounding !== null && (
-                      <div className="p-3 bg-paper border border-line rounded-md space-y-2">
-                        <div className="flex items-center justify-between text-[11px]">
-                          <span className="font-semibold text-ink flex items-center gap-1.5">
-                            <Target className="w-3.5 h-3.5 text-ink-700" /> Grounding Ratio
-                          </span>
-                          <span className="font-mono font-bold text-ink">{Math.round(grounding * 100)}%</span>
-                        </div>
-                        <GroundingBar ratio={grounding} size="lg" />
-                        <p className="text-[10px] text-ink-500">
-                          Proportion of synthesized answer claims supported by first-party crawled evidence.
-                          A ratio below 35% signals HIGH hallucination risk for AI answer engines.
-                        </p>
-                      </div>
-                    )}
-
-                    {/* Retrieved Answer */}
-                    <div className="space-y-2">
-                      <div className="flex items-center gap-1.5 text-ink font-semibold">
-                        <Quote className="w-3.5 h-3.5 text-ink-700" />
-                        <span>KIE Retrieved Answer (from first-party evidence)</span>
-                        {item.retrieval_evidence_count != null && (
-                          <span className="ml-auto font-mono text-[10px] text-ink-500">
-                            {item.retrieval_evidence_count} evidence chunks retrieved
-                          </span>
-                        )}
-                      </div>
-                      <div className="p-3 bg-paper border border-line rounded-md text-ink-700 leading-relaxed font-sans">
-                        {item.crawled_answer || 'No sufficient first-party evidence found.'}
-                      </div>
-                    </div>
-
-                    {/* Source Attribution & Recommended Section Update */}
-                    <SourceAndSectionUpdatePanel item={item} />
+                    <FourPillarInquiryAuditPanel item={item} />
 
                     {/* Antigravity AI Thinking & Cognitive Trace */}
                     <AiThinkingPanel steps={item.ai_thinking_steps} />
 
-                    {/* Missing Inquiry Aspects for Partials or Gaps */}
-                    {item.missing_aspects && item.missing_aspects.length > 0 && (
-                      <div className="p-3 bg-warn/10 border border-warn/30 rounded-md space-y-1.5">
-                        <div className="text-[11px] font-semibold text-warn flex items-center gap-1.5">
-                          <AlertTriangle className="w-3.5 h-3.5 text-warn" />
-                          <span>Missing Inquiry Aspects (Unsubstantiated by Crawled Copy)</span>
-                        </div>
-                        <ul className="list-disc list-inside text-[11px] text-warn space-y-0.5">
-                          {item.missing_aspects.map((asp, idx) => (
-                            <li key={idx} className="font-mono text-[10px]">{asp}</li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
-
-                    {/* Evidence Source */}
-                    {item.evidence_snippet && (
-                      <div className="space-y-1 bg-paper/60 p-3 rounded-md border border-line/60">
-                        <div className="flex items-center justify-between text-[11px] text-ink-500">
-                          <span className="font-medium text-ink-600">Primary Evidence Snippet:</span>
-                          {item.evidence_url && (
-                            <a href={item.evidence_url} target="_blank" rel="noreferrer"
-                              className="text-ink-700 hover:underline flex items-center gap-1 text-[11px]">
-                              View Source <ExternalLink className="w-3 h-3" />
-                            </a>
-                          )}
-                        </div>
-                        <blockquote className="font-mono text-[11px] text-ink-600 border-l-2 border-line pl-2.5 py-0.5">
-                          "{item.evidence_snippet}"
-                        </blockquote>
-                      </div>
-                    )}
-
-                    {/* Claim-Level Decomposition */}
-                    {item.claim_decomposition && item.claim_decomposition.length > 0 && (
-                      <ClaimDecompositionPanel claims={item.claim_decomposition} />
-                    )}
-
-                    {/* Gap Analysis */}
-                    {item.gap_analysis && (
-                      <div className={`p-3 rounded-md border space-y-1 ${
-                        item.answer_risk === 'HIGH'
-                          ? 'bg-bad/10 border-bad/30'
-                          : item.answer_risk === 'MEDIUM'
-                          ? 'bg-warn/10 border-warn/30'
-                          : 'bg-warn/10 border-warn/30'
-                      }`}>
-                        <div className="flex items-center gap-1.5 font-semibold text-[11px] text-warn">
-                          <AlertTriangle className="w-3.5 h-3.5 text-warn" />
-                          <span>Evidence Gap & Answer Risk</span>
-                        </div>
-                        <p className="text-warn leading-relaxed">{item.gap_analysis}</p>
-                      </div>
-                    )}
-
-                    {/* Recommended Answer */}
-                    {item.recommended_answer && (
-                      <div className="p-3 bg-good/10 border border-good/30 rounded-md space-y-1">
-                        <div className="flex items-center gap-1.5 font-semibold text-good text-[11px]">
-                          <Zap className="w-3.5 h-3.5 text-good" />
-                          <span>Recommended Content Action (Post-Remediation)</span>
-                        </div>
-                        <p className="text-good leading-relaxed">{item.recommended_answer}</p>
-                      </div>
-                    )}
-
-                    {/* Score Bar & Gain */}
-                    <div className="flex items-center justify-between pt-2 border-t border-line/50 text-[11px]">
+                    <div className="flex items-center justify-between pt-2 border-t border-line/50 text-[11px] gap-3">
                       <div className="flex items-center gap-2">
                         <span className="font-medium text-ink">Citability Score:</span>
                         <div className="w-24 bg-paper-200 h-2 rounded-full overflow-hidden">
                           <div
-                            className={`h-full ${item.citability_score >= 7 ? 'bg-good/10' : item.citability_score >= 4 ? 'bg-warn/10' : 'bg-bad/10'}`}
+                            className={`h-full ${item.citability_score >= 7 ? 'bg-good' : item.citability_score >= 4 ? 'bg-warn' : 'bg-bad'}`}
                             style={{ width: `${item.citability_score * 10}%` }}
                           />
                         </div>
                         <span className="font-mono font-bold text-ink">{item.citability_score}/10</span>
                       </div>
-                      {item.projected_patch_gain > 0 && (
-                        <div className="text-good font-mono font-medium">
-                          Expected Gain: +{Math.round(item.projected_patch_gain * 100)}%
-                        </div>
-                      )}
+                      <p className="text-[10px] text-ink-500 text-right max-w-xs">
+                        Share of this answer supported by the crawl. Not a live citation rate.
+                      </p>
                     </div>
                   </div>
                 )}

@@ -75,7 +75,11 @@ async def test_dynamic_sandbox_generates_exact_100_questions_from_zero():
         assert resolved_entity.name.lower() in ev.generated_question.lower() or "acme" in ev.generated_question.lower()
         assert ev.answerability_status in ["ANSWERABLE", "PARTIAL", "UNANSWERABLE", "EVIDENCE_GAP", "CONFLICTING"]
         assert ev.crawled_answer is not None and len(ev.crawled_answer) > 5
+        assert ev.rag_answer is not None and len(ev.rag_answer) > 5
         assert ev.recommended_answer is not None and len(ev.recommended_answer) > 5
+        assert "schema.org" not in (ev.recommended_answer or "").lower()
+        assert "json-ld" not in (ev.recommended_answer or "").lower()
+        assert "to accelerate ai answer engine citations" not in (ev.section_update_recommendation or "").lower()
         assert 1 <= ev.citability_score <= 10
         # Phase 1: Verify serialized telemetry fields are populated
         assert ev.grounding_ratio is not None
@@ -99,6 +103,9 @@ async def test_dynamic_sandbox_generates_exact_100_questions_from_zero():
     assert identity_eval.evidence_snippet is not None
     assert identity_eval.citability_score >= 5
     assert identity_eval.source_page_title is not None
+    assert identity_eval.rag_answer is not None
+    assert "source:" in identity_eval.rag_answer.lower()
+    assert identity_eval.crawled_answer.strip() != identity_eval.rag_answer.strip()
 
     pricing_eval = next(e for e in evaluations if "starting price" in e.generated_question.lower() or "how much" in e.generated_question.lower() or "entry-level" in e.generated_question.lower())
     assert pricing_eval.is_answerable is True

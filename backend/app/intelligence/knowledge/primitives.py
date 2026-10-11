@@ -238,6 +238,10 @@ class GroundedAnswerSimulation(BaseModel):
     """
     question_id: str
     candidate_answer: str
+    retrieved_extract: str = ""
+    """Verbatim passage from the crawl. This is the current page, not the written answer."""
+    rag_answer: str = ""
+    """Answer composed only from retrieved passages, with a source line. Abstains when the crawl has no fact."""
     claim_decomposition: List[ClaimGroundingResult] = Field(default_factory=list)
     grounding_ratio: float = 0.0    # Supported Claims / Total Claims
     retrieval_evidence_count: int = 0

@@ -592,6 +592,7 @@ export function AiSearchIntelligenceView({
             bizName={report.business_profile?.business_name}
             niche={report.business_profile?.industry}
             analysisId={analysisId}
+            initialData={(report as any).ai_citation_dashboard}
           />
 
           <GeoAeoTrendTracker

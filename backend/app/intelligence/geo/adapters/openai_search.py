@@ -97,16 +97,52 @@ class OpenAISearchAdapter(BaseGeoEngineAdapter):
                         status_code=200,
                         latency_ms=latency,
                     )
-                else:
-                    return EngineRawResponse(
-                        engine_id=self.engine_id,
-                        engine_name=self.display_name,
-                        model_version=self.model,
-                        raw_content="",
-                        status_code=res.status_code,
-                        latency_ms=latency,
-                        error=f"HTTP {res.status_code}: {res.text[:200]}",
-                    )
+                elif res.status_code in (400, 404) and "openrouter" in self.base_url:
+                    fallback_map = {
+                        "google": "google/gemini-2.0-flash-001",
+                        "gemini": "google/gemini-2.0-flash-001",
+                        "openai": "openai/gpt-4o-mini",
+                        "chatgpt": "openai/gpt-4o-mini",
+                        "anthropic": "anthropic/claude-3.5-haiku",
+                        "claude": "anthropic/claude-3.5-haiku",
+                        "qwen": "qwen/qwen-2.5-72b-instruct",
+                        "deepseek": "deepseek/deepseek-chat",
+                        "perplexity": "perplexity/sonar",
+                        "meta": "meta-llama/llama-3.3-70b-instruct",
+                        "llama": "meta-llama/llama-3.3-70b-instruct",
+                    }
+                    key_lookup = self.engine_id.lower()
+                    if "/" in self.model:
+                        key_lookup = self.model.split("/")[0].lower()
+                    fallback_model = fallback_map.get(key_lookup) or fallback_map.get(self.engine_id.lower())
+                    if fallback_model and fallback_model != self.model:
+                        fb_payload = dict(payload)
+                        fb_payload["model"] = fallback_model
+                        fb_res = await c.post(endpoint, headers=headers, json=fb_payload, timeout=DEFAULT_TIMEOUT_SECONDS)
+                        if fb_res.status_code == 200:
+                            fb_data = fb_res.json()
+                            fb_choices = fb_data.get("choices", [])
+                            fb_content = fb_choices[0].get("message", {}).get("content", "") if fb_choices else ""
+                            fb_citations = re.findall(r"https?://[^\s\)\],>'\"]+", fb_content)
+                            return EngineRawResponse(
+                                engine_id=self.engine_id,
+                                engine_name=self.display_name,
+                                model_version=fallback_model,
+                                raw_content=fb_content,
+                                citations=fb_citations,
+                                status_code=200,
+                                latency_ms=round((time.perf_counter() - start_time) * 1000, 1),
+                            )
+
+                return EngineRawResponse(
+                    engine_id=self.engine_id,
+                    engine_name=self.display_name,
+                    model_version=self.model,
+                    raw_content="",
+                    status_code=res.status_code,
+                    latency_ms=latency,
+                    error=f"HTTP {res.status_code}: {res.text[:200]}",
+                )
             except httpx.TimeoutException:
                 latency = round((time.perf_counter() - start_time) * 1000, 1)
                 return EngineRawResponse(

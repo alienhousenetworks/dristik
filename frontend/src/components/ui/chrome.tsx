@@ -60,12 +60,21 @@ export function Card({
   children,
   className,
   padding = true,
+  onClick,
 }: {
   children: React.ReactNode;
   className?: string;
   padding?: boolean;
+  onClick?: React.MouseEventHandler<HTMLDivElement>;
 }) {
-  return <div className={cn('card', padding && 'p-4', className)}>{children}</div>;
+  return (
+    <div
+      onClick={onClick}
+      className={cn('card', padding && 'p-4', className)}
+    >
+      {children}
+    </div>
+  );
 }
 
 export function SubNav<T extends string>({

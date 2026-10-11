@@ -961,18 +961,27 @@ class AnalysisOrchestrator:
             visibility_detail = None
             live_citation_score = None
             ai_visibility_scorecard = None
+            geo_bench_report = None
+            ai_citation_dash = None
             try:
                 from app.intelligence.geo.audit_monitor import run_audit_visibility
                 profile = blackboard.business_profile
-                monitored = await run_audit_visibility(
+                b_name = getattr(profile, "business_name", None) or domain
+                b_ind = getattr(profile, "industry", None) or getattr(profile, "niche", None) or "Software & Technology"
+                vis_res = await run_audit_visibility(
                     domain=domain,
-                    brand_name=getattr(profile, "business_name", None),
-                    industry=getattr(profile, "industry", None) or getattr(profile, "niche", None),
+                    brand_name=b_name,
+                    industry=b_ind,
                     services=list(getattr(profile, "services", None) or []) or list(getattr(profile, "products", None) or []),
                     locations=[profile.geography] if getattr(profile, "geography", None) else None,
                     audience=getattr(profile, "target_audience", None),
                     max_pages=max_pages,
                 )
+                if isinstance(vis_res, tuple):
+                    monitored, geo_bench_obj = vis_res
+                else:
+                    monitored, geo_bench_obj = vis_res, None
+
                 if monitored is not None:
                     ai_visibility_scorecard = monitored
                     if monitored.status == "MEASURED" and monitored.citation_rate_pct is not None:
@@ -985,8 +994,33 @@ class AnalysisOrchestrator:
                             f"{monitored.queries} queries, {monitored.repeats} run(s). "
                             "This is not the on-page GEO Readiness score."
                         )
-            except Exception:
+                if geo_bench_obj is not None:
+                    geo_bench_report = geo_bench_obj.model_dump() if hasattr(geo_bench_obj, "model_dump") else geo_bench_obj
+            except Exception as e:
+                logger.warning("run_audit_visibility error: %s", e)
                 ai_visibility_scorecard = None
+                geo_bench_report = None
+
+            # Run Hero Real AI Citation Tracker at audit runtime
+            try:
+                from app.intelligence.citations.tracker import ai_citation_tracker
+                profile = blackboard.business_profile
+                b_name = getattr(profile, "business_name", None) or domain
+                b_ind = getattr(profile, "industry", None) or getattr(profile, "niche", None) or "Software & Technology"
+                ai_citation_dash_obj = await ai_citation_tracker.track_buyer_queries(
+                    domain=domain,
+                    biz_name=b_name,
+                    niche=b_ind,
+                    analysis_id=analysis_id,
+                )
+                if ai_citation_dash_obj is not None:
+                    ai_citation_dash = ai_citation_dash_obj.model_dump() if hasattr(ai_citation_dash_obj, "model_dump") else ai_citation_dash_obj
+            except Exception as cit_e:
+                logger.warning("ai_citation_tracker runtime execution note: %s", cit_e)
+                ai_citation_dash = None
+
+            blackboard.blackboard_state["geo_benchmark_report"] = geo_bench_report
+            blackboard.blackboard_state["ai_citation_dashboard"] = ai_citation_dash
 
             # A previous GEO snapshot is not this run. Leave the citation unmeasured
             # unless this run recorded successful engine responses.
@@ -1035,6 +1069,8 @@ class AnalysisOrchestrator:
                     live_bench["overall_mention_rate_pct"] = float(ai_visibility_scorecard.mention_rate_pct)
                 if ai_visibility_scorecard.citation_rate_pct is not None:
                     live_bench["overall_first_party_citation_rate_pct"] = float(ai_visibility_scorecard.citation_rate_pct)
+                if geo_bench_report and isinstance(geo_bench_report, dict) and "share_of_model" in geo_bench_report:
+                    live_bench["share_of_model"] = geo_bench_report["share_of_model"]
 
             # Human, Google, and on-page AI readiness. Live citation stays null unless a snapshot exists.
             honest_scores = self.scoring_engine.calculate_honest_scores(
@@ -1483,6 +1519,8 @@ class AnalysisOrchestrator:
                 ecommerce_seo=ecom_seo_rep,
                 serp_appearance=serp_app_rep,
                 derived_intelligence=derived_intel_metrics,
+                geo_benchmark_report=geo_bench_report,
+                ai_citation_dashboard=ai_citation_dash,
             )
 
             # Phase 2 — Build Claim Ledger with strict source provenance

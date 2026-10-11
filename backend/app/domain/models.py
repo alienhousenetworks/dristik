@@ -606,7 +606,8 @@ class DynamicSandboxQuestionEvaluation(BaseModel):
     buyer_intent: str                   # rationale why buyers or AI engines ask this
     is_answerable: bool                 # whether crawled pages supply enough evidence
     answerability_status: str = "ANSWERABLE"  # ANSWERABLE | PARTIAL | UNANSWERABLE | CONFLICTING
-    crawled_answer: str                 # synthesized answer from KIE retrieval
+    crawled_answer: str                 # passage retrieved from the crawl, or an abstention when none exists
+    rag_answer: Optional[str] = None    # answer written only from crawled passages
     evidence_url: Optional[str] = None
     evidence_snippet: Optional[str] = None
     gap_analysis: Optional[str] = None  # KIE-generated gap explanation with answer risk label
@@ -627,6 +628,9 @@ class DynamicSandboxQuestionEvaluation(BaseModel):
     target_update_page: Optional[str] = None
     target_update_section: Optional[str] = None
     section_update_recommendation: Optional[str] = None
+    requires_owner_confirmation: Optional[bool] = False
+    owner_confirmation_brief: Optional[str] = None
+    retrieval_status: Optional[str] = "RETRIEVED"
     ai_thinking_steps: Optional[List[Dict[str, Any]]] = None
 
 
@@ -2117,6 +2121,8 @@ class ExecutiveReport(BaseModel):
     serp_appearance: Optional[SerpAppearanceReport] = None
     derived_intelligence: List[DerivedMetric] = Field(default_factory=list)
     claim_ledger: Optional[ClaimLedger] = None
+    geo_benchmark_report: Optional[Dict[str, Any]] = None
+    ai_citation_dashboard: Optional[Dict[str, Any]] = None
 
 class AnalysisRequest(BaseModel):
     website_url: str

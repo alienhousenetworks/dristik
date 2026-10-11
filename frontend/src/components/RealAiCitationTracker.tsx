@@ -66,6 +66,7 @@ interface RealAiCitationTrackerProps {
   bizName?: string;
   niche?: string;
   analysisId?: string;
+  initialData?: AiCitationData | null;
 }
 
 function FailurePanel({
@@ -132,13 +133,16 @@ export function RealAiCitationTracker({
   domain,
   bizName = 'Target Brand',
   niche = 'Software & Technology',
-  analysisId
+  analysisId,
+  initialData,
 }: RealAiCitationTrackerProps) {
-  const [data, setData] = useState<AiCitationData | null>(null);
+  const [data, setData] = useState<AiCitationData | null>(initialData || null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [errorCode, setErrorCode] = useState<string | null>(null);
-  const [selectedQuery, setSelectedQuery] = useState<BuyerQueryEvaluation | null>(null);
+  const [selectedQuery, setSelectedQuery] = useState<BuyerQueryEvaluation | null>(
+    initialData?.tracked_queries?.[0] || null
+  );
 
   const fetchCitations = async () => {
     setLoading(true);
@@ -205,8 +209,13 @@ export function RealAiCitationTracker({
   };
 
   useEffect(() => {
+    if (initialData && initialData.tracked_queries && initialData.tracked_queries.length > 0) {
+      setData(initialData);
+      setSelectedQuery(initialData.tracked_queries[0]);
+      return;
+    }
     fetchCitations();
-  }, [domain, bizName, niche, analysisId]);
+  }, [domain, bizName, niche, analysisId, initialData]);
 
   if (loading) {
     return (

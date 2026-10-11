@@ -5,6 +5,7 @@ import { GeoAeoTrendTracker } from '../GeoAeoTrendTracker';
 import { PillarShell, Card } from '../ui';
 import { SectionExportButtons } from '../ui/SectionExportButtons';
 import { ControlledRetrievalVisualizer } from './RagChunkVisualizer';
+import { DynamicQuestionSandboxView } from '../DynamicQuestionSandboxView';
 import {
   Sparkles,
   Bot,
@@ -39,6 +40,7 @@ interface GeoWorkspaceViewProps {
 
 type GeoSubTab =
   | 'engines'
+  | 'sandbox'
   | 'som'
   | 'sentiment'
   | 'retrieval_analysis'
@@ -95,11 +97,42 @@ export function GeoWorkspaceView({
   const scorecard = report.ai_visibility_scorecard;
   const brandName = report.business_profile?.business_name || report.domain.split('.')[0];
 
-  // Live observations if measured
-  const liveBenchReport = (report as any).geo_benchmark_report;
+  // Live observations if measured (stored locally so on-demand run can update it immediately)
+  const [liveBenchReport, setLiveBenchReport] = useState<any>(
+    (report as any).geo_benchmark_report || null
+  );
+  const [benchLoading, setBenchLoading] = useState(false);
+  const [benchError, setBenchError] = useState<string | null>(null);
+
   const somMetric = liveBenchReport?.share_of_model;
   const sentimentAudit = liveBenchReport?.sentiment_audit;
   const offpageReport = liveBenchReport?.offpage_citation_summary;
+
+  // Execute on-demand live multi-engine benchmark
+  const handleRunLiveBenchmark = async () => {
+    setBenchLoading(true);
+    setBenchError(null);
+    try {
+      const params = new URLSearchParams({
+        domain: report.domain,
+        biz_name: brandName,
+        industry: report.business_profile?.industry || '',
+      });
+      if (analysisId) params.append('analysis_id', analysisId);
+
+      const res = await fetch(`/api/v1/intelligence/geo-benchmark?${params.toString()}`);
+      if (!res.ok) {
+        const errText = await res.text();
+        throw new Error(`Benchmark responded with HTTP ${res.status}: ${errText.slice(0, 100)}`);
+      }
+      const data = await res.json();
+      setLiveBenchReport(data);
+    } catch (err: any) {
+      setBenchError(err.message || 'Failed to execute live benchmark.');
+    } finally {
+      setBenchLoading(false);
+    }
+  };
 
   // Execute Controlled Retrieval Analysis over actual crawled text
   const handleRunControlledRetrieval = async () => {
@@ -164,11 +197,12 @@ export function GeoWorkspaceView({
       }
       tabs={[
         { id: 'engines', label: 'Per-Engine AI Matrix' },
+        { id: 'sandbox', label: '100-Question Sandbox (On-Page AEO)' },
         { id: 'som', label: 'Share of Model & Displacement' },
         { id: 'sentiment', label: 'Sentiment & Hallucinations' },
         { id: 'retrieval_analysis', label: 'Controlled Retrieval Analysis' },
         { id: 'offpage', label: 'Off-Page Citation Network' },
-        { id: 'citations', label: 'Live AI Citations' },
+        { id: 'citations', label: 'Live AI Citations (50 Queries)' },
         { id: 'infogain', label: 'Information Gain & Fluff' },
         { id: 'queries', label: `Query Matrix (${queries.length})` },
         { id: 'rewrites', label: 'LLM Passage Rewrites' },
@@ -296,7 +330,39 @@ export function GeoWorkspaceView({
       )}
 
       {/* ─────────────────────────────────────────────────────────────
-          SUB-TAB 2: SHARE OF MODEL (SoM) & DISPLACEMENT
+          SUB-TAB 2: 100-QUESTION DYNAMIC SANDBOX (ON-PAGE AEO)
+          ───────────────────────────────────────────────────────────── */}
+      {activeSubTab === 'sandbox' && (
+        <div className="space-y-6">
+          {/* AEO Diagnostic Cross-Link Comparison Panel */}
+          <Card className="p-4 bg-paper-50/80 border border-line space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="font-semibold text-ink text-xs flex items-center gap-1.5">
+                <Layers className="w-3.5 h-3.5 text-pine" /> AEO Diagnostic Cross-Link: On-Page Readiness vs. Live Telemetry
+              </span>
+              <span className="font-mono text-[10px] text-ink-500 bg-paper px-2 py-0.5 rounded border border-line">
+                2 Independent Measurement Modes
+              </span>
+            </div>
+            <p className="text-[11px] text-ink-600 leading-relaxed">
+              <strong>Layer 1 (Here):</strong> Measures whether your crawled pages contain extractable, defensible facts.
+              {' '}<strong>Layer 2 (Live AI Citations):</strong> Measures whether external AI answer engines actually cite those pages or recommend competitors.
+              A page can have 100% extractability and still lack external citations if third-party authority hubs dominate the topic.
+            </p>
+          </Card>
+
+          <DynamicQuestionSandboxView
+            analysisId={analysisId || report.analysis_id || report.report_id || ''}
+            initialEvaluations={report.dynamic_sandbox_evaluations}
+            initialKieGraphSummary={report.kie_graph_summary}
+            initialFiveDimensions={report.five_dimension_ai_visibility}
+            onEvaluationsUpdate={() => {}}
+          />
+        </div>
+      )}
+
+      {/* ─────────────────────────────────────────────────────────────
+          SUB-TAB 3: SHARE OF MODEL (SoM) & DISPLACEMENT
           ───────────────────────────────────────────────────────────── */}
       {activeSubTab === 'som' && (
         <div className="space-y-6">
@@ -363,13 +429,31 @@ export function GeoWorkspaceView({
               )}
             </>
           ) : (
-            <Card className="p-8 text-center space-y-3">
+            <Card className="p-8 text-center space-y-4">
               <Crosshair className="w-8 h-8 text-ink-400 mx-auto" />
               <h4 className="font-sans font-bold text-ink text-base">Share of Model: Not Measured</h4>
               <p className="text-xs text-ink-500 max-w-md mx-auto">
                 Live multi-engine Share of Model (SoM) is computed exclusively from successful live engine responses.
                 To observe real brand presence across AI answer engines, run a live benchmark with configured engine keys.
               </p>
+              {benchError && <p className="text-xs text-bad font-mono">{benchError}</p>}
+              <button
+                type="button"
+                onClick={handleRunLiveBenchmark}
+                disabled={benchLoading}
+                className="inline-flex items-center gap-2 px-4 py-2 bg-pine text-white text-xs font-semibold rounded-md hover:bg-pine/90 disabled:opacity-50 transition-colors shadow-sm"
+              >
+                {benchLoading ? (
+                  <>
+                    <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    Benchmarking AI Answer Engines…
+                  </>
+                ) : (
+                  <>
+                    <Zap className="w-3.5 h-3.5" /> Run Live Multi-Engine Benchmark Now
+                  </>
+                )}
+              </button>
             </Card>
           )}
         </div>
@@ -412,13 +496,31 @@ export function GeoWorkspaceView({
               </Card>
             </div>
           ) : (
-            <Card className="p-8 text-center space-y-3">
+            <Card className="p-8 text-center space-y-4">
               <ShieldAlert className="w-8 h-8 text-ink-400 mx-auto" />
               <h4 className="font-sans font-bold text-ink text-base">Brand Sentiment & Hallucinations: Not Measured</h4>
               <p className="text-xs text-ink-500 max-w-md mx-auto">
                 Sentiment polarity and factual hallucination detection require verbatim responses from live AI engines.
-                Run the Live AI Citation Tracker to evaluate how AI models represent your brand.
+                Run the Live AI Citation Tracker or benchmark to evaluate how AI models represent your brand.
               </p>
+              {benchError && <p className="text-xs text-bad font-mono">{benchError}</p>}
+              <button
+                type="button"
+                onClick={handleRunLiveBenchmark}
+                disabled={benchLoading}
+                className="inline-flex items-center gap-2 px-4 py-2 bg-pine text-white text-xs font-semibold rounded-md hover:bg-pine/90 disabled:opacity-50 transition-colors shadow-sm"
+              >
+                {benchLoading ? (
+                  <>
+                    <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    Auditing Brand Sentiment Across Engines…
+                  </>
+                ) : (
+                  <>
+                    <Zap className="w-3.5 h-3.5" /> Run Live Brand Sentiment Audit Now
+                  </>
+                )}
+              </button>
             </Card>
           )}
         </div>
@@ -490,13 +592,31 @@ export function GeoWorkspaceView({
               </div>
             </Card>
           ) : (
-            <Card className="p-8 text-center space-y-3">
+            <Card className="p-8 text-center space-y-4">
               <Network className="w-8 h-8 text-ink-400 mx-auto" />
               <h4 className="font-sans font-bold text-ink text-base">Off-Page Citation Network: Not Measured</h4>
               <p className="text-xs text-ink-500 max-w-md mx-auto">
                 Off-page citation networks are aggregated strictly from external URLs observed in live benchmark responses.
-                Run the Live AI Citation Tracker to inspect third-party authority domains cited in engine responses.
+                Run the Live AI Citation Tracker or benchmark to inspect third-party authority domains cited in engine responses.
               </p>
+              {benchError && <p className="text-xs text-bad font-mono">{benchError}</p>}
+              <button
+                type="button"
+                onClick={handleRunLiveBenchmark}
+                disabled={benchLoading}
+                className="inline-flex items-center gap-2 px-4 py-2 bg-pine text-white text-xs font-semibold rounded-md hover:bg-pine/90 disabled:opacity-50 transition-colors shadow-sm"
+              >
+                {benchLoading ? (
+                  <>
+                    <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    Analyzing External Citation Hubs…
+                  </>
+                ) : (
+                  <>
+                    <Zap className="w-3.5 h-3.5" /> Run Live Off-Page Citation Analysis Now
+                  </>
+                )}
+              </button>
             </Card>
           )}
         </div>
@@ -510,6 +630,7 @@ export function GeoWorkspaceView({
           domain={report.domain}
           bizName={brandName}
           analysisId={analysisId}
+          initialData={(report as any).ai_citation_dashboard}
         />
       )}
 

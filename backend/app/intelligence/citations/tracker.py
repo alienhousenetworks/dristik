@@ -696,7 +696,7 @@ class AiCitationTracker:
         api_key: str,
         client: Optional[httpx.AsyncClient] = None
     ) -> Dict[str, Any]:
-        return await self._query_openai_compatible_engine(
+        res = await self._query_openai_compatible_engine(
             query=query,
             model=model,
             api_key=api_key,
@@ -707,6 +707,37 @@ class AiCitationTracker:
             },
             client=client
         )
+        if res.get("status_code") in (400, 404):
+            fallback_map = {
+                "google": "google/gemini-2.0-flash-001",
+                "gemini": "google/gemini-2.0-flash-001",
+                "openai": "openai/gpt-4o-mini",
+                "chatgpt": "openai/gpt-4o-mini",
+                "anthropic": "anthropic/claude-3.5-haiku",
+                "claude": "anthropic/claude-3.5-haiku",
+                "qwen": "qwen/qwen-2.5-72b-instruct",
+                "deepseek": "deepseek/deepseek-chat",
+                "perplexity": "perplexity/sonar",
+                "meta": "meta-llama/llama-3.3-70b-instruct",
+                "llama": "meta-llama/llama-3.3-70b-instruct",
+            }
+            prefix = model.split("/")[0].lower() if "/" in model else model.lower()
+            fallback = fallback_map.get(prefix)
+            if fallback and fallback != model:
+                fb_res = await self._query_openai_compatible_engine(
+                    query=query,
+                    model=fallback,
+                    api_key=api_key,
+                    base_url="https://openrouter.ai/api/v1",
+                    extra_headers={
+                        "HTTP-Referer": "https://dristik.ai",
+                        "X-Title": "Dristik AI Live Citation Tracker"
+                    },
+                    client=client
+                )
+                if fb_res.get("status_code") == 200 or not fb_res.get("error"):
+                    return fb_res
+        return res
 
     async def _dispatch_engine_call(
         self,

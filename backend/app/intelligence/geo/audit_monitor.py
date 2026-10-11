@@ -9,11 +9,15 @@ from __future__ import annotations
 
 import logging
 import os
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 from app.domain.models import AiVisibilityScorecard
 from app.intelligence.geo.adapters.registry import get_available_adapters
-from app.intelligence.geo.benchmark_runner import benchmark_runner, build_visibility_scorecard
+from app.intelligence.geo.benchmark_runner import (
+    benchmark_runner,
+    build_visibility_scorecard,
+    GeoBenchmarkReport,
+)
 from app.intelligence.geo.pipeline_store import GeoQueryRecord, geo_pipeline_store
 
 logger = logging.getLogger(__name__)
@@ -38,15 +42,18 @@ async def run_audit_visibility(
     locations: Optional[List[str]] = None,
     audience: Optional[str] = None,
     max_pages: Optional[int] = None,
-) -> Optional[AiVisibilityScorecard]:
+) -> Tuple[Optional[AiVisibilityScorecard], Optional[GeoBenchmarkReport]]:
     if os.environ.get("PYTEST_CURRENT_TEST") and os.environ.get("DRISTIK_AI_MONITOR_IN_TESTS") != "1":
-        return None
+        return None, None
 
     adapters = get_available_adapters()
     if not adapters:
-        return AiVisibilityScorecard(
-            status="NOT_MEASURED",
-            not_measured_reason="No AI engine API key is configured.",
+        return (
+            AiVisibilityScorecard(
+                status="NOT_MEASURED",
+                not_measured_reason="No AI engine API key is configured.",
+            ),
+            None,
         )
 
     max_queries, repeats, _engine_cap = tier_budget(max_pages)
@@ -71,9 +78,12 @@ async def run_audit_visibility(
         )
     except Exception as exc:
         logger.warning("Live AI visibility monitor failed open: %s", exc)
-        return AiVisibilityScorecard(
-            status="NOT_MEASURED",
-            not_measured_reason=f"Live monitor failed: {exc}",
+        return (
+            AiVisibilityScorecard(
+                status="NOT_MEASURED",
+                not_measured_reason=f"Live monitor failed: {exc}",
+            ),
+            None,
         )
 
     scorecard = build_visibility_scorecard(
@@ -86,7 +96,7 @@ async def run_audit_visibility(
         matrix_grounding=getattr(report, "matrix_grounding", None),
     )
     if scorecard.status != "MEASURED":
-        return scorecard
+        return scorecard, report
 
     try:
         records = []
@@ -125,4 +135,4 @@ async def run_audit_visibility(
     except Exception as exc:
         logger.warning("Could not persist AI visibility snapshot: %s", exc)
 
-    return scorecard
+    return scorecard, report

@@ -17,7 +17,7 @@ IMPORTANT DEFINITION — printed clearly for auditors:
 from __future__ import annotations
 
 import re
-from typing import List, Optional
+from typing import Any, List, Optional
 
 from app.intelligence.knowledge.primitives import (
     AtomicClaim,
@@ -135,53 +135,73 @@ from app.intelligence.retrieval.hybrid_retriever import QueryIntent
 # Answer Synthesizer (from Evidence)
 # ─────────────────────────────────────────────────────────────────────────────
 
-def _synthesize_from_evidence(
-    question: str,
-    brand: str,
-    plan: Any,
-    evidence_chunks: List[RetrievedEvidenceChunk],
-    assessment: EvidenceAssessment,
-) -> str:
-    """
-    Synthesizes an authoritative candidate answer strictly from relevance-gated evidence.
-    If evidence is missing or insufficient, produces an explicit gap statement rather
-    than concatenating irrelevant marketing paragraphs.
-    """
-    if not evidence_chunks or assessment.status == "INSUFFICIENT":
-        if plan.intent == QueryIntent.COMMERCIAL:
-            return f"Pricing information, tier rates, and commercial packages for {brand} are not published on crawled website pages."
-        elif plan.intent == QueryIntent.COMPLIANCE:
-            return f"Security compliance certifications (such as SOC 2, ISO 27001, or HIPAA) are not published on crawled pages for {brand}."
-        elif plan.intent == QueryIntent.PROOF:
-            return f"Customer logos, verified client case studies, and quantified ROI results are not published on crawled pages for {brand}."
-        elif plan.intent == QueryIntent.ONBOARDING:
-            return f"Support SLAs, guaranteed ticket response times, and onboarding procedures for {brand} are not disclosed on crawled pages."
-        elif plan.intent == QueryIntent.COMPETITIVE:
-            return f"Competitive comparisons, alternative benchmarking, and explicit moat claims are not published on crawled pages for {brand}."
-        elif plan.intent == QueryIntent.ICP:
-            return f"Explicit buyer criteria and target audience personas for {brand} are not declared on crawled pages."
-        return f"Information regarding this inquiry was not discovered in crawled website evidence for {brand}."
-
-    # Substantive synthesis from qualified evidence
+def _passage_sentences(evidence_chunks: List[RetrievedEvidenceChunk]) -> List[str]:
+    """Verbatim sentences from the retrieved chunks, in retrieval order."""
     sentences: List[str] = []
     seen = set()
-    for chunk in evidence_chunks[:2]:
+    for chunk in evidence_chunks[:3]:
         ev = chunk.claim.evidence
         sentence = ev.exact_sentence.strip() if ev and ev.exact_sentence else f"{chunk.claim.predicate} {chunk.claim.object}"
-        sentence = sentence.rstrip(".")
-        if sentence and sentence.lower() not in seen:
+        sentence = re.sub(r"\s+", " ", sentence).strip().rstrip(".")
+        if sentence and len(sentence) > 12 and sentence.lower() not in seen:
             seen.add(sentence.lower())
             sentences.append(sentence)
+    return sentences
 
-    primary = ". ".join(sentences) + "."
-    if not primary.strip("."):
-        return f"Insufficient evidence found to answer: {question}"
 
-    base_answer = f"According to {brand}'s crawled pages: \"{primary}\""
+def _abstain(plan: Any, brand: str) -> str:
+    """State that the crawl does not contain the fact. Do not invent one."""
+    if plan.intent == QueryIntent.COMMERCIAL:
+        return f"Pricing information, tier rates, and commercial packages for {brand} are not published on crawled website pages."
+    if plan.intent == QueryIntent.COMPLIANCE:
+        return f"Security compliance certifications (such as SOC 2, ISO 27001, or HIPAA) are not published on crawled pages for {brand}."
+    if plan.intent == QueryIntent.PROOF:
+        return f"Customer logos, verified client case studies, and quantified ROI results are not published on crawled pages for {brand}."
+    if plan.intent == QueryIntent.ONBOARDING:
+        return f"Support SLAs, guaranteed ticket response times, and onboarding procedures for {brand} are not disclosed on crawled pages."
+    if plan.intent == QueryIntent.COMPETITIVE:
+        return f"Competitive comparisons, alternative benchmarking, and explicit moat claims are not published on crawled pages for {brand}."
+    if plan.intent == QueryIntent.ICP:
+        return f"Explicit buyer criteria and target audience personas for {brand} are not declared on crawled pages."
+    return f"Information regarding this inquiry was not discovered in crawled website evidence for {brand}."
+
+
+def _citation_line(title: Optional[str], section: Optional[str], url: Optional[str]) -> str:
+    place_bits = []
+    if title:
+        place_bits.append(title.strip())
+    if section:
+        place_bits.append(f"section {section.strip()}")
+    place = ", ".join(place_bits)
+    if place and url:
+        return f"Source: {place} ({url})."
+    if place:
+        return f"Source: {place}."
+    if url:
+        return f"Source: {url}."
+    return ""
+
+
+def _compose_rag_answer(
+    body: str,
+    assessment: EvidenceAssessment,
+    title: Optional[str],
+    section: Optional[str],
+    url: Optional[str],
+) -> str:
+    """
+    Extractive answer: the retrieved sentences, the aspects the crawl does not state,
+    and the source. The citation is not part of the claim text that gets verified.
+    """
+    text = body.strip()
     if assessment.status == "PARTIAL" and assessment.missing_aspects:
-        base_answer += f" However, crawled evidence does not provide details for: {', '.join(assessment.missing_aspects)}."
-
-    return base_answer[:500]
+        missing = ", ".join(a.strip() for a in assessment.missing_aspects[:4] if a and a.strip())
+        if missing:
+            text += f" The crawl does not state: {missing}."
+    cite = _citation_line(title, section, url)
+    if cite:
+        text += f" {cite}"
+    return text[:700]
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -218,13 +238,13 @@ class GroundedAnswerSimulator:
             brand=self.graph.brand,
         )
 
-        candidate_answer = _synthesize_from_evidence(
-            question=question,
-            brand=self.graph.brand,
-            plan=plan,
-            evidence_chunks=evidence_chunks,
-            assessment=assessment,
-        )
+        passages = _passage_sentences(evidence_chunks)
+        if assessment.status == "INSUFFICIENT" or not evidence_chunks or not passages:
+            candidate_answer = _abstain(plan, self.graph.brand)
+        else:
+            candidate_answer = ". ".join(passages) + "."
+        candidate_answer = candidate_answer[:500]
+        retrieved_extract = candidate_answer
 
         if assessment.status == "INSUFFICIENT" or not evidence_chunks:
             grounding_ratio = 0.0
@@ -292,7 +312,9 @@ class GroundedAnswerSimulator:
             ("/", "## Core Solutions & Value Proposition", "Expand authoritative on-page documentation addressing this inquiry.")
         )
         if assessment.status == "SUFFICIENT" and grounding_ratio >= 0.70:
-            section_update_recommendation = f"Add Schema.org JSON-LD structured data markup to {target_update_page} ({target_update_section}) to accelerate AI answer engine citations."
+            section_update_recommendation = (
+                "The retrieved passages already answer this question. No new fact is required."
+            )
         else:
             missing_hint = f" Specifically clarify: {', '.join(assessment.missing_aspects)}." if assessment.missing_aspects else ""
             section_update_recommendation = f"Update {target_update_page} under section '{target_update_section}': {section_rec_base}{missing_hint}"
@@ -344,7 +366,8 @@ class GroundedAnswerSimulator:
                 "title": "Grounded Answer Synthesis",
                 "status": "complete",
                 "thought": (
-                    f"Synthesized candidate answer strictly constrained to first-party facts. "
+                    f"Kept the retrieved passage as the current page extract. "
+                    f"Wrote the knowledge-base answer from those sentences only. "
                     f"Computed grounding ratio: {round(grounding_ratio * 100)}%. "
                     f"Assigned Answer Risk: {answer_risk.value}."
                 ),
@@ -369,9 +392,22 @@ class GroundedAnswerSimulator:
             },
         ]
 
+        if assessment.status == "INSUFFICIENT" or not evidence_chunks or not passages:
+            rag_answer = candidate_answer
+        else:
+            rag_answer = _compose_rag_answer(
+                candidate_answer,
+                assessment,
+                source_page_title,
+                source_section,
+                source_url,
+            )
+
         return GroundedAnswerSimulation(
             question_id=question_id,
             candidate_answer=candidate_answer,
+            retrieved_extract=retrieved_extract,
+            rag_answer=rag_answer,
             claim_decomposition=grounding_results,
             grounding_ratio=grounding_ratio,
             retrieval_evidence_count=len(evidence_chunks),

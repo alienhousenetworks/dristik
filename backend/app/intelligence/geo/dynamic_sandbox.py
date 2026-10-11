@@ -229,9 +229,10 @@ class DynamicQuestionSandboxEngine:
                     else:
                         citability_score = 1 if sim.grounding_ratio == 0 else 2
 
-                    crawled_answer = sim.candidate_answer[:450]
+                    crawled_answer = (sim.retrieved_extract or sim.candidate_answer)[:450]
+                    rag_answer = (sim.rag_answer or sim.candidate_answer)[:700]
                     gap_analysis = self._build_gap_analysis(sim, brand, facet_id)
-                    recommended_answer = self._build_recommended_answer(brand, val_prop, q_text, sim)
+                    recommended_answer = rag_answer or self._build_recommended_answer(brand, val_prop, q_text, sim)
                     projected_patch_gain = self._compute_projected_gain(sim.answer_risk, sim.grounding_ratio)
 
                     grounding_ratio = sim.grounding_ratio
@@ -257,6 +258,20 @@ class DynamicQuestionSandboxEngine:
                     section_update_recommendation = sim.section_update_recommendation
                     ai_thinking_steps = sim.ai_thinking_steps
 
+                    retrieval_status = "RETRIEVED" if sim.retrieval_evidence_count > 0 else "NOT_RETRIEVED"
+                    if sim.assessment_status == "PARTIAL":
+                        retrieval_status = "PARTIAL"
+
+                    is_sensitive = facet_id in {"pricing", "trust_security"} or any(
+                        w in q_text.lower() for w in ["price", "cost", "tier", "soc 2", "iso 27001", "sla", "uptime", "refund"]
+                    )
+                    requires_owner_confirmation = is_sensitive and not is_answerable
+                    owner_confirmation_brief = (
+                        f"Business owner must confirm authoritative factual specifications for '{q_text}'. "
+                        "Do not publish placeholder pricing tiers, uncertified compliance badges, or unverified SLAs."
+                        if requires_owner_confirmation else None
+                    )
+
                 else:
                     # ── Fallback: legacy string-window evaluator ──────────────────
                     eval_res = self._evaluate_question_answerability(
@@ -267,10 +282,11 @@ class DynamicQuestionSandboxEngine:
                     raw_status = eval_res["answerability_status"]
                     answerability_status = "EVIDENCE_GAP" if raw_status == "UNANSWERABLE" else raw_status
                     crawled_answer = eval_res["crawled_answer"]
+                    rag_answer = eval_res.get("rag_answer") or eval_res["crawled_answer"]
                     evidence_url = eval_res["evidence_url"]
                     evidence_snippet = eval_res["evidence_snippet"]
                     gap_analysis = eval_res["gap_analysis"]
-                    recommended_answer = eval_res["recommended_answer"]
+                    recommended_answer = rag_answer
                     citability_score = eval_res["citability_score"]
                     projected_patch_gain = eval_res["projected_patch_gain"]
                     grounding_ratio = 0.85 if answerability_status == "ANSWERABLE" else (0.45 if answerability_status == "PARTIAL" else 0.0)
@@ -290,6 +306,17 @@ class DynamicQuestionSandboxEngine:
                     section_update_recommendation = eval_res.get("section_update_recommendation")
                     ai_thinking_steps = eval_res.get("ai_thinking_steps", [])
 
+                    retrieval_status = "RETRIEVED" if is_answerable else ("PARTIAL" if answerability_status == "PARTIAL" else "NOT_RETRIEVED")
+                    is_sensitive = facet_id in {"pricing", "trust_security"} or any(
+                        w in q_text.lower() for w in ["price", "cost", "tier", "soc 2", "iso 27001", "sla", "uptime", "refund"]
+                    )
+                    requires_owner_confirmation = is_sensitive and not is_answerable
+                    owner_confirmation_brief = (
+                        f"Business owner must confirm authoritative factual specifications for '{q_text}'. "
+                        "Do not publish placeholder pricing tiers, uncertified compliance badges, or unverified SLAs."
+                        if requires_owner_confirmation else None
+                    )
+
                 eval_obj = DynamicSandboxQuestionEvaluation(
                     question_id=q_id,
                     facet=facet_title,
@@ -298,6 +325,7 @@ class DynamicQuestionSandboxEngine:
                     is_answerable=is_answerable,
                     answerability_status=answerability_status,
                     crawled_answer=crawled_answer,
+                    rag_answer=rag_answer,
                     evidence_url=evidence_url,
                     source_url=evidence_url,
                     evidence_snippet=evidence_snippet,
@@ -316,6 +344,9 @@ class DynamicQuestionSandboxEngine:
                     target_update_page=target_update_page,
                     target_update_section=target_update_section,
                     section_update_recommendation=section_update_recommendation,
+                    requires_owner_confirmation=requires_owner_confirmation,
+                    owner_confirmation_brief=owner_confirmation_brief,
+                    retrieval_status=retrieval_status,
                     ai_thinking_steps=ai_thinking_steps,
                 )
                 all_evaluations.append(eval_obj)
@@ -333,13 +364,18 @@ class DynamicQuestionSandboxEngine:
 
     def _build_gap_analysis(self, sim, brand: str, facet_id: str) -> str:
         unsupported = [r for r in sim.claim_decomposition if r.status == "UNSUPPORTED"]
+        missing = [a for a in (sim.missing_aspects or []) if a]
         if not unsupported:
-            if sim.grounding_ratio >= 0.7:
+            if sim.grounding_ratio >= 0.7 and not missing:
                 return (
-                    f"Strong first-party evidence found for {brand}. "
-                    f"Adding structured JSON-LD Schema.org markup will further elevate extractability."
+                    f"Every claim in the knowledge-base answer matches a retrieved passage for {brand}."
                 )
-            return f"Partial evidence present for {brand}. Expanding dedicated page copy will improve retrievability."
+            if missing:
+                return (
+                    f"The crawl answers only part of this question for {brand}. "
+                    f"It does not state: {', '.join(missing[:4])}."
+                )
+            return f"Retrieved passages for {brand} support part of this answer."
         risk_label = {
             KieAnswerRisk.HIGH: "HIGH ANSWER RISK",
             KieAnswerRisk.MEDIUM: "MODERATE ANSWER RISK",
@@ -352,15 +388,16 @@ class DynamicQuestionSandboxEngine:
         )
 
     def _build_recommended_answer(self, brand: str, val_prop: str, question: str, sim) -> str:
-        if sim.grounding_ratio >= 0.65:
-            return f"{brand} is well-positioned to answer this inquiry with existing content. Schema markup will improve structured citation."
-        return (
-            f"{brand} should publish a dedicated, authoritative section addressing this question. "
-            f"Current value proposition: {val_prop[:120]}. "
-            f"Publish as a standalone FAQ, dedicated landing page, or structured JSON-LD entity."
-        )
+        rag = (getattr(sim, "rag_answer", None) or "").strip()
+        if rag:
+            return rag[:700]
+        if sim.candidate_answer:
+            return sim.candidate_answer[:700]
+        return f"The crawled pages do not state an answer to this question for {brand}."
 
     def _compute_projected_gain(self, risk: KieAnswerRisk, grounding_ratio: float) -> float:
+        if grounding_ratio >= 0.70:
+            return 0.0
         base_gain = {
             KieAnswerRisk.HIGH: 0.65,
             KieAnswerRisk.MEDIUM: 0.40,
@@ -703,10 +740,11 @@ class DynamicQuestionSandboxEngine:
                     "is_answerable": False,
                     "answerability_status": "UNANSWERABLE",
                     "crawled_answer": ans,
+                    "rag_answer": ans,
                     "evidence_url": corpus_pages[0]["url"] if corpus_pages else None,
                     "evidence_snippet": None,
-                    "gap_analysis": f"Pricing transparency gap: {brand} does not publish public pricing tiers, forcing AI answer engines to report 'Contact sales for custom quote' or risk competitor substitution.",
-                    "recommended_answer": f"{brand} offers structured packaging starting from a published base tier, with custom enterprise plans available on request.",
+                    "gap_analysis": f"Pricing transparency gap: {brand} does not publish public pricing tiers on the crawled pages.",
+                    "recommended_answer": ans,
                     "citability_score": 2,
                     "projected_patch_gain": 0.65,
                     "source_page_title": f"{brand} Official",
@@ -725,10 +763,11 @@ class DynamicQuestionSandboxEngine:
                     "is_answerable": False,
                     "answerability_status": "UNANSWERABLE",
                     "crawled_answer": ans,
+                    "rag_answer": ans,
                     "evidence_url": corpus_pages[0]["url"] if corpus_pages else None,
                     "evidence_snippet": None,
-                    "gap_analysis": f"Enterprise trust gap: Absence of dedicated security credentials or compliance badges leaves security reviews unanswerable in generative search.",
-                    "recommended_answer": f"{brand} enforces enterprise data protection with industry-standard encryption in transit and at rest, maintaining compliance with global privacy standards.",
+                    "gap_analysis": f"The crawled pages do not state security certifications for {brand}.",
+                    "recommended_answer": ans,
                     "citability_score": 3,
                     "projected_patch_gain": 0.55,
                     "source_page_title": f"{brand} Official",
@@ -744,34 +783,42 @@ class DynamicQuestionSandboxEngine:
         src_sec = "Overview & Key Capabilities"
 
         if match_score >= 3 and best_snippet:
-            crawled_ans = f"According to {brand}'s crawled pages: \"{best_snippet[:200]}...\""
+            crawled_ans = best_snippet[:400].strip()
+            source_note = f" Source: {src_title}." if src_title else ""
+            rag_ans = f"{crawled_ans}{source_note}"
             return {
                 "is_answerable": True,
                 "answerability_status": "ANSWERABLE",
                 "crawled_answer": crawled_ans,
+                "rag_answer": rag_ans,
                 "evidence_url": best_page["url"] if best_page else None,
                 "evidence_snippet": best_snippet[:300],
-                "gap_analysis": "Evidence present on crawled pages. Structured JSON-LD schema can further elevate extractability for AI search engines.",
-                "recommended_answer": f"{brand} provides {val_prop}, fully answering this inquiry with first-party authority.",
+                "gap_analysis": f"Every claim in the knowledge-base answer matches a retrieved passage for {brand}.",
+                "recommended_answer": rag_ans,
                 "citability_score": 8,
-                "projected_patch_gain": 0.20,
+                "projected_patch_gain": 0.0,
                 "source_page_title": src_title,
                 "source_section": src_sec,
                 "target_update_page": target_update_page,
                 "target_update_section": target_update_section,
-                "section_update_recommendation": f"Add Schema.org JSON-LD structured data markup to {target_update_page} ({target_update_section}) to accelerate AI answer engine citations.",
+                "section_update_recommendation": "The retrieved passage already answers this question. No new fact is required.",
                 "ai_thinking_steps": _make_thinking_steps("ANSWERABLE", crawled_ans, best_page["url"] if best_page else None, 8),
             }
         elif match_score >= 1 and best_snippet:
-            crawled_ans = f"Partially referenced on {brand}'s website: \"{best_snippet[:150]}...\" but lacks full standalone explanatory depth."
+            crawled_ans = best_snippet[:300].strip()
+            rag_ans = (
+                f"{crawled_ans} The crawl does not state a complete answer to this question."
+                + (f" Source: {src_title}." if src_title else "")
+            )
             return {
                 "is_answerable": True,
                 "answerability_status": "PARTIAL",
                 "crawled_answer": crawled_ans,
+                "rag_answer": rag_ans,
                 "evidence_url": best_page["url"] if best_page else None,
                 "evidence_snippet": best_snippet[:200],
-                "gap_analysis": f"Partial information density: {brand} mentions related terminology but does not provide a definitive, self-contained answer block.",
-                "recommended_answer": f"{brand} should publish an explicit, authoritative section detailing this capability to secure full AI answer citations.",
+                "gap_analysis": f"The crawl mentions related terminology for {brand} and does not state a complete answer.",
+                "recommended_answer": rag_ans,
                 "citability_score": 5,
                 "projected_patch_gain": 0.40,
                 "source_page_title": src_title,
@@ -787,10 +834,11 @@ class DynamicQuestionSandboxEngine:
                 "is_answerable": False,
                 "answerability_status": "UNANSWERABLE",
                 "crawled_answer": ans,
+                "rag_answer": ans,
                 "evidence_url": corpus_pages[0]["url"] if corpus_pages else None,
                 "evidence_snippet": None,
-                "gap_analysis": f"Informational void: Answer engines cannot cite {brand} for this topic due to zero on-page evidence across the crawl sample.",
-                "recommended_answer": f"Deploy structured FAQ and dedicated documentation for {brand} addressing this core topic.",
+                "gap_analysis": f"The crawled pages do not state an answer for {brand} on this question.",
+                "recommended_answer": ans,
                 "citability_score": 2,
                 "projected_patch_gain": 0.50,
                 "source_page_title": f"{brand} Official Website",

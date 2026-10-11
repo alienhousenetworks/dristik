@@ -450,6 +450,8 @@ export interface DynamicSandboxQuestionEvaluation {
   is_answerable: boolean;
   answerability_status: 'ANSWERABLE' | 'PARTIAL' | 'UNANSWERABLE' | 'CONFLICTING' | string;
   crawled_answer: string;
+  /** Answer written only from the crawled passages. Absent on reports sealed before this field. */
+  rag_answer?: string | null;
   evidence_url?: string | null;
   evidence_snippet?: string | null;
   gap_analysis?: string | null;
@@ -470,6 +472,9 @@ export interface DynamicSandboxQuestionEvaluation {
   target_update_page?: string | null;
   target_update_section?: string | null;
   section_update_recommendation?: string | null;
+  requires_owner_confirmation?: boolean | null;
+  owner_confirmation_brief?: string | null;
+  retrieval_status?: 'RETRIEVED' | 'PARTIAL' | 'NOT_RETRIEVED' | 'NOT_EVALUATED' | string | null;
   ai_thinking_steps?: AiThinkingStep[] | null;
 }
 
@@ -1341,6 +1346,8 @@ export interface ExecutiveReport {
   local_seo?: LocalSeoAuditReport;
   international_seo?: InternationalSeoAuditReport;
   topical_authority?: TopicalAuthorityAuditReport;
+  geo_benchmark_report?: any;
+  ai_citation_dashboard?: any;
 }
 
 export type CompetitorType =
