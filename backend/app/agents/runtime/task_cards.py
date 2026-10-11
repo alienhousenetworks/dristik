@@ -3955,8 +3955,94 @@ Produce a coherent business representation downstream Dristik specialists can tr
     "than generating false-positive findings. If applicable checks reveal no material defects, return an empty "
     "findings array and the appropriate completion status supported by the output schema. Optimize for valid "
     "international targeting, consistent alternate relationships, and defensible technical SEO findings."
-),
+    ),
 
+    "seo.specialized.video.v3": (
+        "TASK CONTRACT: VIDEO & MULTIMODAL SEO SPECIALIST\n"
+        "Audit VideoObject structured data, video landing page quality, thumbnail accessibility, and watch-page indexability.\n"
+        "Verify: (1) Valid VideoObject schema syntax (name, description, thumbnailUrl, uploadDate, contentUrl/embedUrl); "
+        "(2) Video prominence and viewport priority on the host page; (3) Discoverable and accessible thumbnail image URIs; "
+        "(4) Availability of closed captions, subtitles, and text transcripts for search accessibility; "
+        "(5) Embed player responsiveness without blocking core page rendering or violating mobile viewports.\n"
+        "Do not flag missing video schema if no video player or media element is present on the page. Ground all findings in ev_xxx references."
+    ),
+
+    "seo.specialized.policy_compliance.v3": (
+        "TASK CONTRACT: SEARCH POLICY COMPLIANCE & ANTI-SPAM SPECIALIST\n"
+        "Audit compliance with Google Search Essentials and detect high-risk search spam practices without false alarms.\n"
+        "Evaluate: (1) Cloaking or sneaky redirects (discrepancy between crawler user-agent response and browser DOM); "
+        "(2) Scaled low-value or programmatic content abuse patterns (near-duplicate template spam with zero unique value); "
+        "(3) Excessive hidden text or hidden links intended to manipulate ranking algorithms; "
+        "(4) Site reputation abuse and parasitic third-party content hosting; "
+        "(5) Keyword stuffing patterns in title tags, headings, and anchor text.\n"
+        "Never claim a confirmed manual action without Search Console evidence. Clearly distinguish observed risk patterns from established violations."
+    ),
+
+    "seo.specialized.news.v3": (
+        "TASK CONTRACT: PUBLISHER & NEWS SEO SPECIALIST\n"
+        "Audit editorial transparency, news freshness, and journalistic indexing integrity for editorial publications.\n"
+        "Verify: (1) NewsArticle and Article JSON-LD markup completeness (headline, datePublished, dateModified, author, publisher); "
+        "(2) Author bylines, editorial masthead transparency, and verified credentials; "
+        "(3) Date modification integrity (ensuring dateModified reflects substantive updates, not cosmetic cache busts); "
+        "(4) News sitemap eligibility, freshness within 48-hour discovery windows, and correct namespace tags; "
+        "(5) Paywalled or gated content markup (isAccessibleForFree and cssSelector) conforming to schema specifications.\n"
+        "If the audited property is an e-commerce store or corporate SaaS tool without an active news publication, report NOT_APPLICABLE."
+    ),
+
+    "seo.specialized.programmatic.v3": (
+        "TASK CONTRACT: PROGRAMMATIC SEO & LARGE-SCALE URL SPECIALIST\n"
+        "Audit large-scale template generation, faceted search navigation, and index bloat across extensive URL spaces.\n"
+        "Inspect: (1) Parameter-driven and faceted navigation URL explosions (multi-filter combinations causing crawl waste); "
+        "(2) Unique value threshold per generated template (ensuring location/category pages have substantive unique data, not just swapped tokens); "
+        "(3) Internal linking depth and crawl budget allocation for deep programmatic nodes; "
+        "(4) Proper canonicalization of parameterized filter states to clean hub roots; "
+        "(5) Pagination cleanliness (rel=canonical pointing to self, consistent query structure, absence of infinite crawl traps).\n"
+        "Ground all template evaluations in observed URL patterns from the crawl manifest."
+    ),
+
+    "seo.specialized.saas_b2b.v3": (
+        "TASK CONTRACT: SAAS & B2B LEAD-GENERATION SEO SPECIALIST\n"
+        "Audit high-intent commercial landing pages, feature hubs, and conversion funnels for B2B and SaaS properties.\n"
+        "Evaluate: (1) Solution and use-case page topical depth and commercial keyword alignment; "
+        "(2) Integration and ecosystem landing pages (checking partner descriptions and API documentation search discoverability); "
+        "(3) Competitor comparison and alternative pages (ensuring objective feature matrices and transparent claims); "
+        "(4) Pricing page architecture, transparent tier descriptions, and FAQ objection handling; "
+        "(5) Lead-generation assets (case studies, whitepapers, demo booking funnels) discoverability and index hygiene.\n"
+        "Identify commercial gaps where target enterprise buyers would expect decision-making criteria."
+    ),
+
+    "seo.specialized.accessibility.v3": (
+        "TASK CONTRACT: SEMANTIC EXPERIENCE & ACCESSIBILITY SPECIALIST\n"
+        "Audit HTML semantic structure and accessibility ergonomics where they intersect with search engine document parsing.\n"
+        "Check: (1) Semantic landmark tags (<main>, <nav>, <header>, <footer>, <article>, <aside>) enabling assistive and search parsing; "
+        "(2) Accessible heading hierarchy without skipped levels or empty heading nodes; "
+        "(3) Accessible names for interactive links and buttons (flagging unlabelled icon buttons or generic 'Click here' triggers); "
+        "(4) Image text alternatives matching the descriptive context of the surrounding document; "
+        "(5) Viewport and responsive layout configurations preventing mobile zoom restrictions or horizontal overflow.\n"
+        "Do not issue a blanket WCAG compliance certificate. Report only observed semantic HTML defects with exact element selectors."
+    ),
+
+    "seo.specialized.forecasting.v3": (
+        "TASK CONTRACT: OPPORTUNITY MODELING & TRAFFIC FORECASTING SPECIALIST\n"
+        "Model addressable organic search demand and estimate realistic business impact scenarios for identified remediation initiatives.\n"
+        "Calculate: (1) Addressable search demand baseline from target commercial queries and current rankings; "
+        "(2) Three-tier opportunity scenarios: Conservative (modest indexation lift), Base (rank improvement on core commercial pages), Upside (expanded rich snippets and citation dominance); "
+        "(3) Engineering and content production effort requirements alongside anticipated time-to-impact; "
+        "(4) Cannibalization risks and seasonal volatility considerations; "
+        "(5) Explicit assumptions and uncertainty confidence intervals.\n"
+        "Explicitly label all forecasts as modeled estimates, not guaranteed traffic or revenue outcomes."
+    ),
+
+    "seo.specialized.governance.v3": (
+        "TASK CONTRACT: REMEDIATION GOVERNANCE & REGRESSION TESTING SPECIALIST\n"
+        "Structure enterprise issue governance, team ownership, verification acceptance tests, and continuous monitoring protocols.\n"
+        "Establish: (1) Defect severity triage matrix with explicit SLA resolution windows (Critical P0: 48h, High P1: 14d, Medium P2: 30d, Low P3: 90d); "
+        "(2) Multi-disciplinary team assignment (Engineering, DevOps, Editorial, Product Marketing); "
+        "(3) Template-level regression test suites for pre-deployment CI/CD pipeline verification; "
+        "(4) 'Fixed vs. Verified' lifecycle gates ensuring fixes are validated via automated re-crawl before ticket closure; "
+        "(5) Continuous monitoring cadences (scheduled crawls, anomaly alerting, and monthly audit diff tracking).\n"
+        "Ensure every remediation finding has an actionable owner, dependency list, and unambiguous validation criterion."
+    ),
 }
 
 # COPYWRITING_TASK_CARDS: Dict[str, str] = {

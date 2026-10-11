@@ -11,7 +11,10 @@ Evaluates multi-page conversion friction adhering strictly to the Zero-Fake Evid
 import re
 import hashlib
 from typing import List, Dict, Any, Optional, Tuple
-from bs4 import BeautifulSoup
+try:
+    from bs4 import BeautifulSoup
+except ImportError:
+    BeautifulSoup = None
 
 from app.domain.models import (
     PageEvidence,

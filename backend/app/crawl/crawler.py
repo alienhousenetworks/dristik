@@ -12,7 +12,10 @@ import xml.etree.ElementTree as ET
 from urllib.parse import urlparse, urljoin, urldefrag
 from typing import List, Dict, Any, Set, Tuple, Optional, Callable
 import httpx
-from bs4 import BeautifulSoup
+try:
+    from bs4 import BeautifulSoup
+except ImportError:
+    BeautifulSoup = None
 
 logger = logging.getLogger("dristik.crawler")
 

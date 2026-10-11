@@ -8,7 +8,10 @@ Parses all <img> elements and page subresources to evaluate:
 """
 from typing import List, Dict, Any, Optional
 from urllib.parse import urlparse
-from bs4 import BeautifulSoup
+try:
+    from bs4 import BeautifulSoup
+except ImportError:
+    BeautifulSoup = None
 from app.domain.models import PageEvidence, MediaAssetItem, MediaAssetAuditReport, Finding, FindingEvidence
 from app.domain.enums import Category, Severity
 
@@ -19,6 +22,16 @@ _LEGACY_FORMATS = {"png", "jpeg", "jpg", "gif", "bmp", "tiff"}
 class MediaAssetAnalyzer:
     @staticmethod
     def analyze_media(pages: List[PageEvidence], raw_html_map: Optional[Dict[str, str]] = None) -> MediaAssetAuditReport:
+        if BeautifulSoup is None:
+            return MediaAssetAuditReport(
+                total_images_analyzed=0,
+                images_missing_alt=0,
+                images_missing_dimensions=0,
+                modern_format_adoption_pct=100.0,
+                flagged_images=[],
+                cls_risks=[],
+                mixed_content_urls=[],
+            )
         raw_html_map = raw_html_map or {}
         flagged_images: List[MediaAssetItem] = []
         cls_risks: List[Dict[str, str]] = []

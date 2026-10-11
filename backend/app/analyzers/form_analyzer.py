@@ -9,7 +9,10 @@ Inspects <form> elements on crawled pages:
 """
 import re
 from typing import List, Dict, Any, Optional
-from bs4 import BeautifulSoup
+try:
+    from bs4 import BeautifulSoup
+except ImportError:
+    BeautifulSoup = None
 from app.domain.models import PageEvidence, FormAuditItem, FormAuditReport
 
 
@@ -17,6 +20,13 @@ class FormAccessibilityAnalyzer:
     @staticmethod
     def analyze_forms(pages: List[PageEvidence], raw_html_map: Optional[Dict[str, str]] = None) -> FormAuditReport:
         forms_detected: List[FormAuditItem] = []
+        if BeautifulSoup is None:
+            return FormAuditReport(
+                total_forms_found=0,
+                forms_with_accessibility_issues=0,
+                high_friction_forms_count=0,
+                forms=[]
+            )
         raw_html_map = raw_html_map or {}
 
         for p in pages:

@@ -179,9 +179,9 @@ def test_3_deck_agents_registered():
         assert len(defn.capabilities) >= 2
         assert len(defn.required_evidence) >= 2
 
-    # Core specialist DAG contains 50 specialists
-    assert specialist_count() == 50
-    assert len(SPECIALIST_AGENTS_V3) == 50
+    # Core specialist DAG contains 58 specialists
+    assert specialist_count() == 58
+    assert len(SPECIALIST_AGENTS_V3) == 58
 
 
 def test_deck_task_cards_present():

@@ -13,6 +13,7 @@ import {
   ShieldCheck,
 } from 'lucide-react';
 import { DynamicQuestionSandboxView } from '../DynamicQuestionSandboxView';
+import { AeoAuditBook } from '../../report/aeoIndex/AeoAuditBook';
 
 interface AeoWorkspaceViewProps {
   report: ExecutiveReport;
@@ -20,7 +21,7 @@ interface AeoWorkspaceViewProps {
   onOpenPatchPack?: () => void;
 }
 
-type AeoSubTab = 'directives' | 'schema' | 'questions' | 'triples';
+type AeoSubTab = 'audit' | 'directives' | 'schema' | 'questions' | 'triples';
 
 export const QUESTION_KEY_CATEGORY_MAP: Record<string, string> = {
   identity_what: 'Entity Identity',
@@ -91,17 +92,17 @@ export function resolveQuestionCategory(q: any): string {
 }
 
 export function AeoWorkspaceView({ report, analysisId, onOpenPatchPack }: AeoWorkspaceViewProps) {
-  const [activeSubTab, setActiveSubTab] = useState<AeoSubTab>('directives');
+  const [activeSubTab, setActiveSubTab] = useState<AeoSubTab>('audit');
   const [copiedLlms, setCopiedLlms] = useState(false);
 
   const geo = report.geo_readiness;
   const perEngine = report.per_engine_geo;
   const botDirectives = perEngine?.ai_bot_directives;
-  const qGraph = geo?.question_graph_50;
   const sandboxEvals = report.dynamic_sandbox_evaluations || [];
   const answerableCount = sandboxEvals.filter(
-    (q) => q.answerability_status === 'ANSWERABLE' || q.is_answerable
+    (q) => q.answerability_status === 'ANSWERABLE' && q.is_answerable !== false
   ).length;
+  const botsMeasured = botDirectives?.robots_measured === true;
 
   const schemaTypes = geo?.schema_types || [];
   const schemaCrosscheck = geo?.schema_crosscheck;
@@ -132,14 +133,16 @@ export function AeoWorkspaceView({ report, analysisId, onOpenPatchPack }: AeoWor
     <PillarShell
       kicker="Discipline 3 · Answer Engine & Agent Optimization"
       title="Answer Engine & Agent Optimization (AEO)"
-      description="Deterministic on-page machine extractability, JSON-LD structured data graphs, AI bot permissions, and llms.txt directives."
-      scoreLabel="AEO Score"
+      description="Question coverage, answer quality, source eligibility, and observed answer visibility. The header figure is stored schema quality or on-page extractability. It is not a live visibility rate."
+      scoreLabel="Schema / extractability"
       score={aeoScore}
       metaLabel={sandboxEvals.length > 0 ? 'Sandbox Grounding' : 'Q&A Answers'}
       meta={
         sandboxEvals.length > 0
-          ? `${answerableCount} / ${sandboxEvals.length} Answerable`
-          : `${qGraph?.supported_count ?? geo?.questions_supported ?? '—'} / ${qGraph?.total_questions ?? geo?.questions_total ?? '50'}`
+          ? `${answerableCount} of ${sandboxEvals.length} usable`
+          : geo?.questions?.length
+            ? `${geo.questions_supported} of ${geo.questions.length} supported`
+            : 'No question set stored'
       }
       actions={
         <SectionExportButtons
@@ -149,14 +152,17 @@ export function AeoWorkspaceView({ report, analysisId, onOpenPatchPack }: AeoWor
         />
       }
       tabs={[
+        { id: 'audit', label: 'Full AEO audit' },
         { id: 'directives', label: 'AI Bots & llms.txt' },
         { id: 'schema', label: `Schema Graph (${schemaTypes.length})` },
-        { id: 'questions', label: `AI Question Sandbox (${sandboxEvals.length > 0 ? sandboxEvals.length : '100'})` },
+        { id: 'questions', label: `AI Question Sandbox (${sandboxEvals.length})` },
         { id: 'triples', label: 'Entity Triples & Grounding' },
       ]}
       activeTab={activeSubTab}
       onTab={(id) => setActiveSubTab(id as AeoSubTab)}
     >
+      {activeSubTab === 'audit' && <AeoAuditBook report={report} />}
+
       {/* ─────────────────────────────────────────────────────────────
           SUB-TAB 1: AI BOTS & LLMS.TXT DIRECTIVES
           ───────────────────────────────────────────────────────────── */}
@@ -167,29 +173,33 @@ export function AeoWorkspaceView({ report, analysisId, onOpenPatchPack }: AeoWor
             {[
               {
                 bot: 'GPTBot (OpenAI)',
-                allowed: botDirectives?.gptbot_allowed ?? true,
+                allowed: botsMeasured ? botDirectives?.gptbot_allowed === true : null,
                 purpose: 'ChatGPT Search & Answers',
               },
               {
                 bot: 'PerplexityBot',
-                allowed: botDirectives?.perplexitybot_allowed ?? true,
+                allowed: botsMeasured ? botDirectives?.perplexitybot_allowed === true : null,
                 purpose: 'Perplexity Search Indexing',
               },
               {
                 bot: 'ClaudeBot (Anthropic)',
-                allowed: botDirectives?.claudebot_allowed ?? true,
+                allowed: botsMeasured ? botDirectives?.claudebot_allowed === true : null,
                 purpose: 'Claude Artifacts & Research',
               },
               {
                 bot: 'Google-Extended',
-                allowed: botDirectives?.google_extended_allowed ?? true,
+                allowed: botsMeasured ? botDirectives?.google_extended_allowed === true : null,
                 purpose: 'Gemini & Google AI Overviews',
               },
             ].map((item, idx) => (
               <Card key={idx} className="p-4 space-y-2">
                 <div className="flex items-center justify-between">
                   <span className="font-semibold text-ink text-xs">{item.bot}</span>
-                  {item.allowed ? (
+                  {item.allowed == null ? (
+                    <span className="inline-flex items-center gap-1 font-mono text-[10px] px-2 py-0.5 rounded bg-paper-200 text-ink-500 font-bold">
+                      Not measured
+                    </span>
+                  ) : item.allowed ? (
                     <span className="inline-flex items-center gap-1 font-mono text-[10px] px-2 py-0.5 rounded bg-good/10 text-good font-bold">
                       <CheckCircle2 className="w-3 h-3" /> Allowed
                     </span>

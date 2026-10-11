@@ -1153,7 +1153,10 @@
       "part": "A",
       "title": "Audit scope",
       "checks": [
-        "Domain, subdomains, URL scope, languages, locations, crawl limits and exclusions"
+        "Domain and subdomain architecture",
+        "Crawled URL scope and boundaries",
+        "Target languages and regional markets",
+        "Crawl limits, depth thresholds and robot exclusions"
       ]
     },
     {
@@ -1161,7 +1164,10 @@
       "part": "A",
       "title": "Methodology",
       "checks": [
-        "Crawling methods, tools, test conditions and scoring rules"
+        "Headless DOM crawling and rendering methods",
+        "Evidence collection tools and telemetry",
+        "Testing conditions, device emulation and user agents",
+        "11-dimension scoring rubric and weighting rules"
       ]
     },
     {
@@ -1169,7 +1175,10 @@
       "part": "A",
       "title": "URL inventory",
       "checks": [
-        "Discovered, crawled, indexable, excluded and untested URLs"
+        "Discovered URL inventory",
+        "Crawled URL routing and status codes",
+        "Indexable vs non-indexable URL ledger",
+        "Excluded, redirected and untested URLs"
       ]
     },
     {
@@ -1177,7 +1186,10 @@
       "part": "A",
       "title": "Page-level audit",
       "checks": [
-        "Individual page findings, evidence and recommendations"
+        "Page-level findings and observations",
+        "DOM evidence and snippet proof",
+        "URL-specific prescriptive fixes",
+        "Validation acceptance criteria per page"
       ]
     },
     {
@@ -1185,7 +1197,10 @@
       "part": "A",
       "title": "Keyword inventory",
       "checks": [
-        "Keywords, intent, rankings, volume sources and mapped URLs"
+        "Target keyword and query inventory",
+        "Search intent categorization",
+        "Current rank baseline and SERP features",
+        "Keyword-to-landing-page mapping"
       ]
     },
     {
@@ -1193,7 +1208,10 @@
       "part": "A",
       "title": "Competitor inventory",
       "checks": [
-        "Selected competitors and justification for selection"
+        "Direct business competitors",
+        "Organic search and SERP rivals",
+        "AI citation competitors",
+        "Competitor selection methodology and justification"
       ]
     },
     {
@@ -1201,7 +1219,10 @@
       "part": "A",
       "title": "Backlink inventory",
       "checks": [
-        "Referring domains, link sources, anchors and provenance"
+        "Referring domain inventory and authority",
+        "Backlink provenance and link context",
+        "Anchor text distribution and follow attributes",
+        "Live provider integration and gap status"
       ]
     },
     {
@@ -1209,7 +1230,10 @@
       "part": "A",
       "title": "Structured data results",
       "checks": [
-        "Schema types, validation errors and eligible features"
+        "Detected Schema.org entity types",
+        "JSON-LD syntax and property validation",
+        "Rich result eligibility and enhancement warnings",
+        "Entity graph completeness"
       ]
     },
     {
@@ -1217,7 +1241,10 @@
       "part": "A",
       "title": "Performance evidence",
       "checks": [
-        "Field versus lab metrics, devices and testing dates"
+        "Field Core Web Vitals (CrUX LCP, INP, CLS)",
+        "Laboratory Lighthouse diagnostics",
+        "Device segmentation (Mobile vs Desktop)",
+        "Template-level performance ledger"
       ]
     },
     {
@@ -1225,7 +1252,10 @@
       "part": "A",
       "title": "Search Console evidence",
       "checks": [
-        "Connected property, date range and available reports"
+        "Connected Search Console property",
+        "Date range and historical comparison window",
+        "Clicks, impressions, CTR and query coverage",
+        "Index coverage and crawl statistics"
       ]
     },
     {
@@ -1233,7 +1263,10 @@
       "part": "A",
       "title": "AI benchmark evidence",
       "checks": [
-        "Engines, prompts, runs, responses, citations and measurement limitations"
+        "AI search engines tested (ChatGPT, Perplexity, Gemini, Copilot, AI Overviews)",
+        "Buyer inquiry prompt panel and execution runs",
+        "Citation frequency, destination URLs and share of voice",
+        "Measurement limitations and confidence intervals"
       ]
     },
     {
@@ -1241,7 +1274,10 @@
       "part": "A",
       "title": "Remediation backlog",
       "checks": [
-        "Finding IDs, priorities, effort, owners and statuses"
+        "Master finding register (Finding IDs)",
+        "Severity, priority and effort triage",
+        "Assigned team ownership (Engineering, Content, DevOps)",
+        "Remediation lifecycle status and acceptance criteria"
       ]
     },
     {
@@ -1249,7 +1285,10 @@
       "part": "A",
       "title": "Change log",
       "checks": [
-        "Previous audit comparison and changes since last scan"
+        "Historical audit comparison baseline",
+        "Resolved defects and regression alerts",
+        "New findings and status delta",
+        "Audit version changelog"
       ]
     },
     {
@@ -1257,7 +1296,10 @@
       "part": "A",
       "title": "Limitations",
       "checks": [
-        "Missing integrations, sampling, unavailable data and uncertain conclusions"
+        "Missing external integrations (GSC, GA4, Backlinks)",
+        "Crawl sampling scope and uninspected URLs",
+        "Data gaps and measurement limitations",
+        "Inference disclosures and uncertainty parameters"
       ]
     },
     {
@@ -1265,7 +1307,10 @@
       "part": "A",
       "title": "Glossary",
       "checks": [
-        "SEO terminology, metric definitions and scoring interpretation"
+        "Technical SEO terminology glossary",
+        "Core Web Vitals metrics and threshold definitions",
+        "Answer Engine Optimization (AEO) and GEO concepts",
+        "Scorecard interpretation and confidence grading"
       ]
     }
   ]
