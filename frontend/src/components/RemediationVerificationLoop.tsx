@@ -273,9 +273,9 @@ export function RemediationVerificationLoop({
                   <span className={`font-bold text-sm ${isResolved ? 'text-good' : 'text-warn'}`}>
                     {verificationReport.status}
                   </span>
-                  {isResolved && verificationReport.score_delta ? (
+                  {isResolved && verificationReport.score_delta_is_measured && typeof verificationReport.score_delta === 'number' ? (
                     <span className="text-good text-[11px] font-bold">
-                      (+{verificationReport.score_delta} pts recovered)
+                      (measured change {verificationReport.score_delta}; not an AI citation result)
                     </span>
                   ) : (
                     <span className="text-ink-400 text-[11px]">
@@ -293,6 +293,9 @@ export function RemediationVerificationLoop({
               </div>
               <div className="text-[10px] text-ink-400">
                 Tested against {websiteUrl} · {verificationReport.certified_by || 'Dristik Continuous Assurance'}
+              </div>
+              <div className="text-[10px] text-ink-400">
+                The seal is a content hash. It does not prove the analysis is correct, and it is not an AI citation or revenue result.
               </div>
             </div>
           </div>

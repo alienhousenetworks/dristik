@@ -108,8 +108,9 @@ def test_oauth_sso_signup_and_login_flow():
         assert data["user"]["email"] == "sarah.connor@cyberdyne-audit.com"
         assert data["user"]["full_name"] == "Sarah Connor"
         assert data["user"]["role"] == UserRole.OWNER.value
-        assert "token" in data
-        session_token = data["token"]
+        assert "token" not in data
+        session_token = res.cookies.get(SESSION_COOKIE)
+        assert session_token
 
         # Verify session is valid via /me
         me_res = client.get("/api/v1/auth/me", cookies={SESSION_COOKIE: session_token})
@@ -186,6 +187,14 @@ def test_connectors_oauth_providers_status():
 
 def test_search_console_authorize_uses_registered_google_redirect():
     """Search Console must send the redirect URI registered on the Google client."""
+    import uuid
+    signup = client.post("/api/v1/auth/signup", json={
+        "full_name": "Search Owner",
+        "email": f"gsc_{uuid.uuid4().hex[:8]}@example.com",
+        "password": "OwnerPass1",
+        "organization_name": "Search Org",
+    })
+    assert signup.status_code == 200, signup.text
     registered = "https://octaos.org/api/v1/external-authority/oauth/callback"
     with patch.object(settings, "GOOGLE_CLIENT_ID", "mock-google-id"), \
          patch.object(settings, "GOOGLE_CLIENT_SECRET", "mock-google-sec"), \
@@ -277,9 +286,19 @@ def test_oauth_sso_callback_format_redirect():
 
 def test_ga4_connector_oauth_hosted_redirect_and_connect():
     """Verify GA4 1-click OAuth flow on hosted server preserves host, saves connected status, and updates status endpoint."""
+    import uuid
     from app.connectors.oauth_providers import _sign
     from app.connectors.store import connector_store
     from app.domain.enums import ConnectorType, ConnectorHealthStatus
+
+    signup = client.post("/api/v1/auth/signup", json={
+        "full_name": "GA4 Owner",
+        "email": f"ga4_{uuid.uuid4().hex[:8]}@example.com",
+        "password": "OwnerPass1",
+        "organization_name": "GA4 Org",
+    })
+    assert signup.status_code == 200, signup.text
+    org_id = signup.json()["user"]["org_id"]
 
     # 1. Authorize on a hosted domain with X-Forwarded-Host
     with patch.object(settings, "GOOGLE_CLIENT_ID", "mock-ga4-id"), \
@@ -325,7 +344,7 @@ def test_ga4_connector_oauth_hosted_redirect_and_connect():
         assert "window.location.replace" in html_text
 
         # 3. Verify saved integration in connector_store has CONNECTED status
-        integrations = connector_store.list_integrations()
+        integrations = connector_store.list_integrations(org_id)
         ga4_integs = [i for i in integrations if i.provider == ConnectorType.GOOGLE_ANALYTICS_4]
         assert len(ga4_integs) > 0
         latest_ga4 = ga4_integs[-1]

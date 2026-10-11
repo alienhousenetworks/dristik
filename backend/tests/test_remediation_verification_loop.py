@@ -79,7 +79,11 @@ async def test_sitemap_verification_with_real_xml():
         assert check.passed is True
         assert len(check.detail) > 0
 
-    assert report.score_delta > 0
+    assert report.score_delta is None
+    assert report.score_delta_is_measured is False
+    assert report.technical_verification == "condition_resolved"
+    assert report.visibility_verification == "not_measured"
+    assert report.business_verification == "not_measured"
     assert report.evidence_seal.startswith("sha256:")
 
     # Verify finding state mutated
@@ -118,7 +122,7 @@ async def test_sitemap_verification_fails_without_content():
     robots_check = next(c for c in report.checks if "robots.txt" in c.name)
     assert robots_check.passed is False
 
-    assert report.score_delta == 0.0  # No score recovered for unresolved
+    assert report.score_delta is None
 
 
 # ── Schema JSON-LD Tests ────────────────────────────────────────────────
@@ -189,7 +193,7 @@ async def test_schema_verification_fails_without_jsonld():
     assert report.status != "RESOLVED"
     ld_check = next(c for c in report.checks if "JSON-LD" in c.name)
     assert ld_check.passed is False
-    assert report.score_delta == 0.0
+    assert report.score_delta is None
 
 
 # ── H1 / Positioning Tests ─────────────────────────────────────────────
@@ -358,7 +362,7 @@ async def test_crawl_failure_returns_failed_recrawl():
     assert report.status == "FAILED_RECRAWL"
     assert report.stage == "RECRAWL"
     assert len(report.checks) == 0
-    assert report.score_delta == 0.0
+    assert report.score_delta is None
     assert "unreachable" in report.after_state.lower() or "failed" in report.after_state.lower()
 
 
@@ -386,22 +390,12 @@ def test_live_citation_engine_returns_honest_not_available():
 # ── API Endpoint Tests ──────────────────────────────────────────────────
 
 @pytest.mark.asyncio
-async def test_api_verify_finding_endpoint():
+async def test_api_verify_finding_endpoint_requires_a_session():
+    """The HTTP route does not accept caller-supplied HTML. Parsing is covered by the service tests."""
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         res = await ac.post("/api/v1/remediation/verify-finding", json={
             "finding_id": "find_005",
             "website_url": "https://example.com",
-            "mock_live_html": (
-                '<?xml version="1.0" encoding="UTF-8"?>'
-                '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'
-                '<url><loc>https://example.com/</loc></url>'
-                '</urlset>'
-            )
         })
-        assert res.status_code == 200
-        data = res.json()
-        assert data["finding_id"] == "find_005"
-        assert data["evidence_seal"].startswith("sha256:")
-        # Should have real checks, not hardcoded
-        assert len(data["checks"]) >= 1
+        assert res.status_code == 401

@@ -13,7 +13,7 @@ import urllib.parse
 import logging
 from typing import Any, Dict, Optional
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 import httpx
 
@@ -21,6 +21,10 @@ from app.connectors.base.models import ConnectorCredentials
 from app.connectors.store import connector_store
 from app.core.config import settings
 from app.domain.enums import ConnectorType, ConnectorHealthStatus
+from app.identity.authorizer import UserIdentity
+from app.identity.deps import get_current_user
+from app.identity.security import SESSION_COOKIE
+from app.identity.store import get_store
 
 logger = logging.getLogger(__name__)
 
@@ -109,6 +113,16 @@ PROVIDERS: Dict[str, Dict[str, Any]] = {
         "extra": {"access_type": "offline", "prompt": "consent"},
     },
     "google_analytics_4": {
+        "label": "Google Analytics 4",
+        "connector": ConnectorType.GOOGLE_ANALYTICS_4,
+        "client_id": "GOOGLE_CLIENT_ID",
+        "client_secret": "GOOGLE_CLIENT_SECRET",
+        "authorize": "https://accounts.google.com/o/oauth2/v2/auth",
+        "token": "https://oauth2.googleapis.com/token",
+        "scope": "https://www.googleapis.com/auth/analytics.readonly openid email",
+        "extra": {"access_type": "offline", "prompt": "consent"},
+    },
+    "google_analytics": {
         "label": "Google Analytics",
         "connector": ConnectorType.GOOGLE_ANALYTICS_4,
         "client_id": "GOOGLE_CLIENT_ID",
@@ -418,6 +432,7 @@ def oauth_authorize(
     shop: str = "",
     property_id: str = "",
     repository: str = "",
+    user: UserIdentity = Depends(get_current_user),
 ):
     spec = PROVIDERS.get(provider)
     if spec is None:
@@ -435,6 +450,7 @@ def oauth_authorize(
         "property_id": property_id,
         "repository": repository,
         "redirect_uri": redirect_uri,
+        "org_id": user.org_id,
     })
     return RedirectResponse(_authorize_url(provider, state, shop, redirect_uri))
 
@@ -478,7 +494,7 @@ async def oauth_callback(
     target = saved.get("domain") or shop_host or saved.get("repository") or spec["label"]
 
     discovered_prop = saved.get("property_id") or ""
-    if provider == "google_analytics_4" and not discovered_prop:
+    if provider in ("google_analytics_4", "google_analytics") and not discovered_prop:
         # Auto-discover GA4 property ID via Google Analytics Admin API
         try:
             async with httpx.AsyncClient(timeout=10) as client:
@@ -500,6 +516,16 @@ async def oauth_callback(
                                 break
         except Exception as exc:
             logger.warning("[GA4] Could not auto-discover properties via Admin API: %s", exc)
+
+    token = request.cookies.get(SESSION_COOKIE)
+    session_user = get_store().user_from_session(token) if token else None
+    org_id = saved.get("org_id") or (session_user.org_id if session_user else "")
+    if not org_id:
+        return _page(
+            "Sign-in required",
+            "Connect a site from a signed-in workspace. Dristik did not store this token.",
+            success=False,
+        )
 
     stored = {
         "type": "oauth2",
@@ -524,13 +550,14 @@ async def oauth_callback(
         credentials=creds,
         repository=saved.get("repository") or None,
         settings={"auth_mode": "oauth2", "oauth_provider": provider, "property_id": discovered_prop},
+        org_id=org_id,
     )
     # Zero-Fake: Authenticated tokens elevate status to CONNECTED
     integration.status = ConnectorHealthStatus.CONNECTED
     connector_store.persist(integration)
 
     # Sync singleton connector references if applicable
-    if provider == "google_analytics_4":
+    if provider in ("google_analytics_4", "google_analytics"):
         try:
             from app.integrations.google_connectors import ga4_connector
             ga4_connector._connected = True

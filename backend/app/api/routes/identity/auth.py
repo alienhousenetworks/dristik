@@ -63,7 +63,7 @@ def signup(body: SignupBody, response: Response):
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     _set_session_cookie(response, token)
-    return {"user": service.public_user(user), "token": token}
+    return {"user": service.public_user(user)}
 
 
 @router.post("/login")
@@ -73,7 +73,7 @@ def login(body: LoginBody, response: Response):
     except ValueError as exc:
         raise HTTPException(status_code=401, detail=str(exc)) from exc
     _set_session_cookie(response, token)
-    return {"user": service.public_user(user), "token": token}
+    return {"user": service.public_user(user)}
 
 
 @router.post("/logout")
@@ -285,7 +285,7 @@ async def oauth_sso_callback(
     _set_session_cookie(response, token)
 
     if format == "json":
-        return {"user": service.public_user(user), "token": token, "redirect": redirect_target}
+        return {"user": service.public_user(user), "redirect": redirect_target}
 
     if format == "redirect":
         from fastapi.responses import RedirectResponse

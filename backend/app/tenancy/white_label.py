@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from app.identity.authorizer import UserIdentity
-from app.identity.deps import get_current_user_optional, require_permission
+from app.identity.deps import get_current_user, require_permission
 
 router = APIRouter(prefix="/tenancy/white-label", tags=["Agency White-Labeling"])
 
@@ -26,9 +26,9 @@ class WhiteLabelConfigRequest(BaseModel):
 
 @router.get("")
 async def get_white_label_config(
-    user: Optional[UserIdentity] = Depends(get_current_user_optional)
+    user: UserIdentity = Depends(get_current_user)
 ):
-    org_id = user.org_id if user else "org_default"
+    org_id = user.org_id
     config = _WHITE_LABEL_CONFIGS.get(org_id)
     if not config:
         config = {
@@ -46,9 +46,9 @@ async def get_white_label_config(
 @router.put("")
 async def update_white_label_config(
     req: WhiteLabelConfigRequest,
-    user: Optional[UserIdentity] = Depends(get_current_user_optional)
+    user: UserIdentity = Depends(require_permission("org:manage"))
 ):
-    org_id = user.org_id if user else "org_default"
+    org_id = user.org_id
     cfg = {
         "org_id": org_id,
         "brand_name": req.brand_name,

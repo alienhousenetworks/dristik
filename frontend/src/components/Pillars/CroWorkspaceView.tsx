@@ -4,6 +4,7 @@ import { VisualUxInspectionView } from '../VisualUxInspectionView';
 import { LifecycleRevenueIntelligenceView } from '../LifecycleRevenueIntelligenceView';
 import { LeadGenOpportunitiesView } from '../LeadGenOpportunitiesView';
 import { PillarShell, Card } from '../ui';
+import { SectionExportButtons } from '../ui/SectionExportButtons';
 import {
   Zap,
   FormInput,
@@ -49,6 +50,13 @@ export function CroWorkspaceView({
       score={croScore}
       metaLabel="Form Grade"
       meta={formAudit ? `Grade ${formAudit.cro_friction_grade}` : 'Grade A-'}
+      actions={
+        <SectionExportButtons
+          analysisId={analysisId || report.analysis_id || report.report_id}
+          sectionKey="cro"
+          sectionLabel="CRO"
+        />
+      }
       tabs={[
         { id: 'forms', label: 'Form Friction Audit' },
         { id: 'valueprop', label: 'Value Proposition Clarity' },

@@ -773,7 +773,7 @@ export function normalizeExecutiveReport(report: ExecutiveReport): NormalizedRep
               value: ttfbMean == null ? 'Not measured' : `${ttfbMean} ms`,
               significance: ttfbQualifier(ttfbSamples.length),
             },
-            { label: 'Evidence Ledger', value: `${evidenceList.length} items`, significance: 'Cryptographically sealed AST facts' },
+            { label: 'Evidence Ledger', value: `${evidenceList.length} items`, significance: 'Source-linked audit facts. A content hash checks integrity, not correctness.' },
           ]
       ).slice(0, 4),
     },

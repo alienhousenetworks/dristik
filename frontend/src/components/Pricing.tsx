@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { PricingPlan } from '../types';
+import { PricingPlan, SubscriptionHypothesis } from '../types';
 import { getPlans } from '../services/api';
 
 interface PricingProps {
@@ -82,6 +82,8 @@ export function Pricing({ onSelectPlan }: PricingProps) {
   const [planType, setPlanType] = useState<'sprints' | 'monitoring'>('sprints');
   const [audits, setAudits] = useState<PricingPlan[]>([]);
   const [monitoring, setMonitoring] = useState<PricingPlan[]>([]);
+  const [hypotheses, setHypotheses] = useState<SubscriptionHypothesis[]>([]);
+  const [hypothesisNote, setHypothesisNote] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [openFaq, setOpenFaq] = useState<number | null>(null);
 
@@ -90,6 +92,8 @@ export function Pricing({ onSelectPlan }: PricingProps) {
       .then((catalog) => {
         setAudits(catalog.one_time_audits || []);
         setMonitoring(catalog.continuous_monitoring || []);
+        setHypotheses(catalog.subscription_hypotheses || []);
+        setHypothesisNote(catalog.subscription_hypotheses_note || null);
       })
       .catch((err: unknown) => {
         setError(err instanceof Error ? err.message : 'Could not load plans.');
@@ -638,6 +642,36 @@ export function Pricing({ onSelectPlan }: PricingProps) {
           </table>
         </div>
       </section>
+
+      {hypotheses.length > 0 && (
+        <section className="border-t border-line pt-12 space-y-4">
+          <div>
+            <span className="label">Planning ranges</span>
+            <h2 className="font-sans text-3xl text-ink mt-1">Subscription hypotheses</h2>
+          </div>
+          {hypothesisNote && <p className="text-sm text-ink-500 max-w-3xl">{hypothesisNote}</p>}
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            {hypotheses.map((plan) => {
+              const range = plan.price_inr_monthly_range || plan.price_inr_annual_range;
+              const suffix = plan.price_inr_annual_range ? '/yr' : '/mo';
+              const label = range
+                ? `₹${range[0].toLocaleString('en-IN')}–₹${range[1].toLocaleString('en-IN')}${suffix}`
+                : 'Not priced';
+              return (
+                <article key={plan.id} className="card p-5 space-y-2">
+                  <p className="label">{plan.buyer}</p>
+                  <h3 className="text-xl text-ink">{plan.name}</h3>
+                  <p className="font-mono text-sm text-ink">{label}</p>
+                  <p className="text-xs text-ink-400">Not a checkout price</p>
+                  <ul className="text-sm text-ink-600 space-y-1">
+                    {plan.includes.map((item) => <li key={item}>{item}</li>)}
+                  </ul>
+                </article>
+              );
+            })}
+          </div>
+        </section>
+      )}
 
       {/* Indian Market Context & FAQ */}
       <section className="border-t border-line pt-12 space-y-8">

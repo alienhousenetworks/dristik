@@ -129,6 +129,7 @@ export function AppShell(props: AppShellProps) {
   const actions = useMemo<CommandAction[]>(() => {
     const items: CommandAction[] = [
       { id: 'home', label: 'New audit', group: 'Workspace', onSelect: onNewAudit },
+      { id: 'grader', label: 'Public grader', group: 'Workspace', onSelect: () => onNavigate('grader') },
       { id: 'pricing', label: 'Pricing', group: 'Workspace', onSelect: () => onNavigate('pricing') },
       { id: 'contact', label: 'Contact', group: 'Workspace', onSelect: () => onNavigate('contact') },
       { id: 'plans', label: 'Pay for an audit', group: 'Tools', onSelect: onOpenPlans },
@@ -152,12 +153,17 @@ export function AppShell(props: AppShellProps) {
     }
     if (report) {
       items.push(
+        { id: 'discover', label: 'Discover', group: 'Audit', onSelect: () => onSelectTab('discover') },
+        { id: 'decide', label: 'Decide', group: 'Audit', onSelect: () => onSelectTab('decide') },
+        { id: 'execute', label: 'Execute', group: 'Audit', onSelect: () => onSelectTab('execute') },
+        { id: 'prove', label: 'Prove', group: 'Audit', onSelect: () => onSelectTab('prove') },
         { id: 'overview', label: 'Overview', group: 'Audit', onSelect: () => onSelectTab('overview') },
-        { id: 'seo', label: 'SEO', group: 'Audit', onSelect: () => onSelectTab('seo') },
+        { id: 'crawl', label: 'Website Crawl', group: 'Audit', onSelect: () => onSelectTab('crawl') },
+        { id: 'seo', label: 'SEO Space', group: 'Audit', onSelect: () => onSelectTab('seo') },
         { id: 'geo', label: 'GEO', group: 'Audit', onSelect: () => onSelectTab('geo') },
         { id: 'aeo', label: 'AEO', group: 'Audit', onSelect: () => onSelectTab('aeo') },
         { id: 'cro', label: 'CRO', group: 'Audit', onSelect: () => onSelectTab('cro') },
-        { id: 'competitors', label: 'Competitors', group: 'Audit', onSelect: () => onSelectTab('competitors') },
+        { id: 'competitors', label: 'Competitor Analysis', group: 'Audit', onSelect: () => onSelectTab('competitors') },
         { id: 'authority', label: 'External authority report', group: 'Audit', onSelect: () => onSelectTab('external_authority') },
         { id: 'pages', label: 'Page inspector', group: 'Audit', onSelect: () => onSelectTab('pages') },
         { id: 'findings', label: 'Evidence ledger', group: 'Audit', onSelect: () => onSelectTab('findings') },

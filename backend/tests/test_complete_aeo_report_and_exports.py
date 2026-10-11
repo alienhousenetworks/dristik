@@ -234,9 +234,19 @@ def test_aeo_report_fastapi_endpoints():
     from app.main import app
     from app.orchestration.orchestrator import orchestrator
 
+    import uuid
     client = TestClient(app)
+    signup = client.post("/api/v1/auth/signup", json={
+        "full_name": "AEO Owner",
+        "email": f"aeo_{uuid.uuid4().hex[:8]}@example.com",
+        "password": "OwnerPass1",
+        "organization_name": "AEO Org",
+    })
+    assert signup.status_code == 200, signup.text
     mock_run = MagicMock()
     mock_run.report = _make_dummy_aeo_report()
+    mock_run.org_id = signup.json()["user"]["org_id"]
+    mock_run.analysis_id = "analysis_aeo_test_001"
     mock_run.created_at = "2026-10-10"
     mock_run.domain = "acme.com"
     mock_run.website_url = "https://acme.com"

@@ -276,5 +276,5 @@ class LighthouseRunner:
             "speed_index_ms": round(speed_index_ms, 1),
             "raw_vs_rendered_diff": dom_diff,
             "accessibility_issues": a11y_issues,
-            "lighthouse_audit_version": "Lighthouse v10.4 (Lab CWV Engine)",
+            "lighthouse_audit_version": "Estimated from response timing. Not a Google Lighthouse run.",
         }

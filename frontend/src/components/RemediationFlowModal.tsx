@@ -120,12 +120,16 @@ export const RemediationFlowModal: React.FC<RemediationFlowModalProps> = ({
       if (res.ok) {
         const vData: VerificationResult = await res.json();
         setVerificationResult(vData);
-        setActionMessage(`✓ Resolution Verified! Score gain: +${vData.score_delta} points`);
-        // Refresh local state
+        const measured = vData.score_delta_is_measured === true && typeof vData.score_delta === 'number';
+        setActionMessage(
+          measured
+            ? `Technical check recorded. Measured score change: ${vData.score_delta}. This is not an AI citation or revenue result.`
+            : 'Technical check recorded. No measured score change was stored. AI citations and revenue were not measured.'
+        );
         setPatches((prev) =>
           prev.map((p) =>
             p.patch_id === patchId
-              ? { ...p, verification_status: 'verified', citation_score_delta: vData.score_delta }
+              ? { ...p, verification_status: 'verified' }
               : p
           )
         );
@@ -298,9 +302,9 @@ export const RemediationFlowModal: React.FC<RemediationFlowModalProps> = ({
                           {isVerified ? 'VERIFIED ✓' : patch.approval_status}
                         </strong>
                       </span>
-                      {patch.citation_score_delta && (
-                        <span className="text-good font-bold font-mono">
-                          +{patch.citation_score_delta} Score Gain
+                      {typeof patch.citation_score_delta === 'number' && (
+                        <span className="text-ink-500 font-mono">
+                          Stored citation delta {patch.citation_score_delta}. Not a new measurement.
                         </span>
                       )}
                     </div>
@@ -366,8 +370,10 @@ export const RemediationFlowModal: React.FC<RemediationFlowModalProps> = ({
                       <span className="text-sm font-bold text-good flex items-center gap-1.5">
                         <span>✓ Remediation Live & Verified</span>
                       </span>
-                      <span className="text-xs font-mono text-good font-bold px-2 py-0.5 rounded bg-good/20">
-                        AI Citation Score: {verificationResult.before_score} → {verificationResult.after_score} (+{verificationResult.score_delta})
+                      <span className="text-xs font-mono text-ink-700 px-2 py-0.5 rounded bg-paper-100 border border-line">
+                        {verificationResult.score_delta_is_measured === true && typeof verificationResult.score_delta === 'number'
+                          ? `Measured score change ${verificationResult.score_delta}. Not an AI citation result.`
+                          : 'Technical check only. AI citations and revenue were not measured.'}
                       </span>
                     </div>
                     <p className="text-xs text-ink-700">{verificationResult.details}</p>

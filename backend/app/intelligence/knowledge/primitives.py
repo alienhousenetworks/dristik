@@ -245,6 +245,13 @@ class GroundedAnswerSimulation(BaseModel):
     assessment_status: str = "INSUFFICIENT"  # SUFFICIENT | PARTIAL | INSUFFICIENT | CONFLICTING
     missing_aspects: List[str] = Field(default_factory=list)
     supported_aspects: List[str] = Field(default_factory=list)
+    source_url: Optional[str] = None
+    source_page_title: Optional[str] = None
+    source_section: Optional[str] = None
+    target_update_page: Optional[str] = None
+    target_update_section: Optional[str] = None
+    section_update_recommendation: Optional[str] = None
+    ai_thinking_steps: List[Dict[str, Any]] = Field(default_factory=list)
 
 
 # ─────────────────────────────────────────────────────────────────────────────

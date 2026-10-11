@@ -7,9 +7,11 @@ an application factory.
 from fastapi import FastAPI
 
 from app.api.routes.audits.analyses import router as analyses_router
+from app.api.routes.audits.public_grader import router as public_grader_router
 from app.api.routes.audits.stream import router as stream_router
 from app.api.routes.identity.auth import router as auth_router
 from app.api.routes.identity.orgs import router as orgs_router
+from app.api.routes.platform.commercial import router as commercial_router
 from app.api.routes.platform.contact import router as contact_router
 from app.api.routes.platform.meta import router as meta_router
 from app.api.routes.platform.payments import router as payments_router
@@ -25,16 +27,19 @@ from app.api.routes.integrations.external_authority import router as external_au
 from app.api.routes.integrations.google import router as integrations_router
 from app.api.routes.remediation.patches import router as remediation_router
 from app.core.security.enterprise_audit_logger import router as audit_logs_router
-from app.identity.sso_scim import router as sso_scim_router
 from app.intelligence.citations.live import router as live_ai_citation_router
 from app.remediation.sync_engine import router as developer_sync_router
 from app.reports.pdf_generator import router as reports_router
 from app.tenancy.white_label import router as white_label_router
 
-# Mounted at both /api/v1 and /api. SSO/SCIM paths are absolute and mounted once.
+# Mounted at both /api/v1 and /api.
+# The in-memory SCIM and SAML configure routes stay unmounted until they
+# verify a real identity provider and a SCIM bearer token.
 _PREFIXED_ROUTERS = (
     analyses_router,
+    public_grader_router,
     stream_router,
+    commercial_router,
     payments_router,
     auth_router,
     orgs_router,
@@ -63,4 +68,3 @@ def mount_http(app: FastAPI) -> None:
     for prefix in ("/api/v1", "/api"):
         for router in _PREFIXED_ROUTERS:
             app.include_router(router, prefix=prefix)
-    app.include_router(sso_scim_router)

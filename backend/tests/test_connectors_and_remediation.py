@@ -1,6 +1,9 @@
 """
 Comprehensive Test Suite for Dristik Universal Patch Engine, Connectors SDK, Verification, and ROI
 """
+import uuid
+from datetime import datetime, timezone
+
 import pytest
 from httpx import AsyncClient, ASGITransport
 
@@ -222,6 +225,9 @@ async def test_github_connector_flow():
 @pytest.mark.asyncio
 async def test_api_connectors_and_remediation_routes():
     from app.api.routes.remediation.patches import _PATCH_REGISTRY
+    from app.domain.enums import AnalysisStage
+    from app.domain.models import AnalysisRun
+    from app.orchestration.orchestrator import orchestrator
     from app.remediation.patch_engine import patch_engine
 
     # Generate and register patches for test_run_123
@@ -266,6 +272,28 @@ async def test_api_connectors_and_remediation_routes():
 
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        anonymous = await ac.get("/api/v1/connectors")
+        assert anonymous.status_code == 401
+        signup = await ac.post("/api/v1/auth/signup", json={
+            "full_name": "Connector Owner",
+            "email": f"conn_{uuid.uuid4().hex[:8]}@example.com",
+            "password": "OwnerPass1",
+            "organization_name": "Connector Org",
+        })
+        assert signup.status_code == 200, signup.text
+        user = signup.json()["user"]
+        now = datetime.now(timezone.utc).isoformat()
+        orchestrator.runs["test_run_123"] = AnalysisRun(
+            analysis_id="test_run_123",
+            org_id=user["org_id"],
+            website_url="https://example.com",
+            status=AnalysisStage.COMPLETED,
+            created_at=now,
+            updated_at=now,
+        )
+        for patch in generated:
+            patch.metadata_payload["org_id"] = user["org_id"]
+
         # 1. Connectors List (zero fake seeded integrations)
         res1 = await ac.get("/api/v1/connectors")
         assert res1.status_code == 200

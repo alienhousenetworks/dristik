@@ -161,7 +161,8 @@ class CognitiveSimulatorWorker(BaseCognitiveWorker):
         if not raw_evals:
             blackboard.commercial_evaluations = []
             blackboard.ai_search_evaluations = []
-            # Synthesize 100 Dynamic Business Inquiries from first-party knowledge & evidence
+            # Grounded page questions can still be built from the crawl. They are
+            # not a substitute for the model citation simulation, which stays unavailable.
             sandbox_engine = DynamicQuestionSandboxEngine(model_router=self.model_router)
             dynamic_evals = await sandbox_engine.generate_and_evaluate_100_questions(
                 pages=blackboard.pages,
@@ -170,16 +171,17 @@ class CognitiveSimulatorWorker(BaseCognitiveWorker):
                 profile=blackboard.business_profile
             )
             blackboard.dynamic_sandbox_evaluations = dynamic_evals
-            blackboard.log_step("Commercial Simulation (Dynamic Inquiries Synthesized)", self.worker_id, {
-                "questions_evaluated": len(dynamic_evals),
+            blackboard.log_step("Commercial Simulation Unavailable", self.worker_id, {
+                "questions_evaluated": 0,
                 "dynamic_sandbox_questions_evaluated": len(dynamic_evals),
-                "status": "AVAILABLE"
+                "status": "UNAVAILABLE"
             })
             return {
                 "commercial_evaluations": [],
                 "scenarios": [],
                 "dynamic_sandbox_evaluations": [d.model_dump() for d in dynamic_evals],
-                "status": "AVAILABLE"
+                "status": "UNAVAILABLE",
+                "notes": "AI search query simulation is unavailable when the model returns no evaluations. Scores kept null.",
             }
 
         raw_list = raw_evals if isinstance(raw_evals, list) else []

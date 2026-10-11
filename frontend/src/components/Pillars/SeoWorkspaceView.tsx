@@ -3,6 +3,7 @@ import { ExecutiveReport, Finding, PageEvidence } from '../../types';
 import { SearchConsoleAttributionView } from '../SearchConsoleAttributionView';
 import { UrlLevelTechnicalAppendix } from '../UrlLevelTechnicalAppendix';
 import { PillarShell, Card } from '../ui';
+import { SectionExportButtons } from '../ui/SectionExportButtons';
 import {
   Globe,
   FileCode,
@@ -92,6 +93,13 @@ export function SeoWorkspaceView({
       score={seoScore != null ? Math.round(seoScore) : '—'}
       metaLabel="Issues"
       meta={`${seoFindings.length} flagged`}
+      actions={
+        <SectionExportButtons
+          analysisId={analysisId || report.analysis_id || report.report_id}
+          sectionKey="seo"
+          sectionLabel="SEO"
+        />
+      }
       tabs={[
         { id: 'crawl', label: 'Crawl & Architecture' },
         { id: 'onpage', label: 'On-Page & SERP' },

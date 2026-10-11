@@ -104,12 +104,18 @@ class OutcomeStore:
             })
         return jobs
 
-    def due_jobs(self, now: Optional[datetime] = None) -> List[Dict[str, Any]]:
+    def due_jobs(self, now: Optional[datetime] = None, org_id: Optional[str] = None) -> List[Dict[str, Any]]:
         ts = (now or datetime.now(timezone.utc)).timestamp()
-        rows = self._query(
-            "SELECT * FROM outcome_jobs WHERE status='scheduled' AND due_at <= ? ORDER BY due_at",
-            (ts,),
-        )
+        if org_id:
+            rows = self._query(
+                "SELECT * FROM outcome_jobs WHERE status='scheduled' AND due_at <= ? AND org_id = ? ORDER BY due_at",
+                (ts, org_id),
+            )
+        else:
+            rows = self._query(
+                "SELECT * FROM outcome_jobs WHERE status='scheduled' AND due_at <= ? ORDER BY due_at",
+                (ts,),
+            )
         return [dict(r) for r in rows]
 
     def list_jobs(self, analysis_id: str) -> List[Dict[str, Any]]:
@@ -169,8 +175,17 @@ class OutcomeStore:
             out.append(item)
         return out
 
-    def benchmark(self) -> List[Dict[str, Any]]:
-        rows = self._query("SELECT * FROM outcome_records")
+    def benchmark(self, org_id: Optional[str] = None) -> List[Dict[str, Any]]:
+        if org_id:
+            rows = self._query(
+                """SELECT * FROM outcome_records
+                   WHERE analysis_id IN (
+                       SELECT analysis_id FROM outcome_jobs WHERE org_id = ?
+                   )""",
+                (org_id,),
+            )
+        else:
+            rows = self._query("SELECT * FROM outcome_records")
         records = []
         for r in rows:
             records.append(OutcomeRecord(

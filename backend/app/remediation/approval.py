@@ -16,10 +16,14 @@ class PatchApprovalManager:
 
     def can_auto_approve(self, patch: RemediationPatch) -> bool:
         """
-        Level 1 SAFE_AUTO patches can be auto-approved without manual human signoff.
-        Level 2 & Level 3 strictly require explicit human or developer approval.
+        Level 1 SAFE_AUTO patches can be queued without manual signoff.
+        Factual schema, pricing, reviews, and hallucination-driven changes
+        still require a person. Auto-approval is not a production deploy.
         """
-        return patch.risk_level == PatchRiskLevel.SAFE_AUTO
+        if patch.risk_level != PatchRiskLevel.SAFE_AUTO:
+            return False
+        from app.commercial.remediation_policy import patch_requires_human_approval
+        return not patch_requires_human_approval(patch)
 
     def approve_patch(
         self,

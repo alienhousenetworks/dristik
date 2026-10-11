@@ -4,11 +4,14 @@ Manages Universal Remediation Patches, HITL approvals, multi-platform deployment
 closed-loop verification, and ROI estimation.
 """
 from typing import List, Optional, Dict, Any
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 
 from app.domain.models import RemediationPatch, RoiInput, RoiEstimate, VerificationResult, RemediationVerificationReport
 from app.domain.enums import PatchRiskLevel, PatchApprovalStatus
+from app.identity.access import require_analysis
+from app.identity.authorizer import Authorizer, UserIdentity
+from app.identity.deps import get_current_user, require_permission
 from app.remediation.patch_engine import patch_engine
 from app.remediation.diff_engine import diff_engine
 from app.remediation.approval import approval_manager
@@ -42,45 +45,58 @@ class RejectPatchRequest(BaseModel):
 class ApplyPatchRequest(BaseModel):
     integration_id: str = Field(..., description="ID of the connected platform (WordPress, GitHub, etc.)")
 
-def _get_or_generate_patches(analysis_id: str) -> List[RemediationPatch]:
-    # Check if we already have them in memory
-    existing = [p for p in _PATCH_REGISTRY.values() if p.metadata_payload.get("analysis_id") == analysis_id]
+def _owned_patch(patch_id: str, user: UserIdentity) -> RemediationPatch:
+    patch = _PATCH_REGISTRY.get(patch_id)
+    org_id = (patch.metadata_payload or {}).get("org_id") if patch else None
+    if not patch or not org_id or not Authorizer.can_access_org(user, org_id):
+        raise HTTPException(status_code=404, detail="Patch not found")
+    return patch
+
+
+def _stamp_patch(patch: RemediationPatch, analysis_id: str, org_id: str) -> None:
+    patch.metadata_payload["analysis_id"] = analysis_id
+    patch.metadata_payload["org_id"] = org_id
+
+
+def _get_or_generate_patches(analysis_id: str, user: UserIdentity) -> List[RemediationPatch]:
+    run = require_analysis(analysis_id, user)
+    existing = [
+        p for p in _PATCH_REGISTRY.values()
+        if p.metadata_payload.get("analysis_id") == run.analysis_id
+        and p.metadata_payload.get("org_id") == run.org_id
+    ]
     if existing:
         return existing
 
-    # Find analysis run
-    run = orchestrator.get_run(analysis_id)
-    if not run or not run.report:
+    if not run.report:
         raise HTTPException(
             status_code=404,
             detail=f"Analysis run '{analysis_id}' not found or report not yet generated."
         )
 
-    # Check report for existing patches
     if run.report.remediation_patches:
-        for p in run.report.remediation_patches:
-            p.metadata_payload["analysis_id"] = analysis_id
-            _PATCH_REGISTRY[p.patch_id] = p
+        for patch in run.report.remediation_patches:
+            _stamp_patch(patch, run.analysis_id, run.org_id)
+            _PATCH_REGISTRY[patch.patch_id] = patch
         return run.report.remediation_patches
 
-    # Generate from report findings
     patches = patch_engine.generate_patches(
         findings=run.report.findings or [],
         business_profile=run.report.business_profile,
         website_url=run.website_url,
         commercial_evals=run.report.commercial_evaluations
     )
-    for p in patches:
-        p.metadata_payload["analysis_id"] = analysis_id
-        _PATCH_REGISTRY[p.patch_id] = p
-    
+    for patch in patches:
+        _stamp_patch(patch, run.analysis_id, run.org_id)
+        _PATCH_REGISTRY[patch.patch_id] = patch
+
     run.report.remediation_patches = patches
     return patches
 
 @router.get("/patches/{analysis_id}", response_model=PatchesResponse)
-async def get_remediation_patches(analysis_id: str):
-    """Retrieve all Universal Remediation Patches generated for an audit run."""
-    patches = _get_or_generate_patches(analysis_id)
+async def get_remediation_patches(analysis_id: str, user: UserIdentity = Depends(get_current_user)):
+    """Retrieve remediation patches for an audit the caller owns."""
+    patches = _get_or_generate_patches(analysis_id, user)
 
     safe_count = sum(1 for p in patches if p.risk_level == PatchRiskLevel.SAFE_AUTO)
     human_count = sum(1 for p in patches if p.risk_level == PatchRiskLevel.HUMAN_APPROVAL)
@@ -99,31 +115,46 @@ async def get_remediation_patches(analysis_id: str):
     )
 
 @router.post("/patches/{patch_id}/approve", response_model=RemediationPatch)
-async def approve_patch(patch_id: str, req: ApprovePatchRequest):
-    """Human-in-the-Loop approval for Level 2 or Level 3 patch."""
-    patch = _PATCH_REGISTRY.get(patch_id)
-    if not patch:
-        raise HTTPException(status_code=404, detail="Patch not found")
-    return approval_manager.approve_patch(patch, approver=req.approver, notes=req.notes)
+async def approve_patch(
+    patch_id: str,
+    req: ApprovePatchRequest,
+    user: UserIdentity = Depends(require_permission("patches:approve")),
+):
+    """Record approval by the signed-in owner or admin. The request body cannot name the approver."""
+    patch = _owned_patch(patch_id, user)
+    return approval_manager.approve_patch(patch, approver=user.email, notes=req.notes)
 
 @router.post("/patches/{patch_id}/reject", response_model=RemediationPatch)
-async def reject_patch(patch_id: str, req: RejectPatchRequest):
-    """Reject a patch."""
-    patch = _PATCH_REGISTRY.get(patch_id)
-    if not patch:
-        raise HTTPException(status_code=404, detail="Patch not found")
-    return approval_manager.reject_patch(patch, rejector=req.rejector, reason=req.reason)
+async def reject_patch(
+    patch_id: str,
+    req: RejectPatchRequest,
+    user: UserIdentity = Depends(require_permission("patches:approve")),
+):
+    """Reject a patch as the signed-in owner or admin."""
+    patch = _owned_patch(patch_id, user)
+    return approval_manager.reject_patch(patch, rejector=user.email, reason=req.reason)
+
+def _owned_connector(integration_id: str, user: UserIdentity):
+    integration = connector_store.get_integration(integration_id)
+    if not integration or not Authorizer.can_access_org(user, integration.org_id):
+        raise HTTPException(status_code=404, detail="Integration not found")
+    connector = connector_store.get_connector(integration_id)
+    if not connector:
+        raise HTTPException(status_code=404, detail="Integration not found")
+    return connector
+
 
 @router.post("/patches/{patch_id}/apply")
-async def apply_patch(patch_id: str, req: ApplyPatchRequest):
-    """Deploy patch via target integration (WordPress direct or GitHub PR)."""
-    patch = _PATCH_REGISTRY.get(patch_id)
-    if not patch:
-        raise HTTPException(status_code=404, detail="Patch not found")
-
-    connector = connector_store.get_connector(req.integration_id)
-    if not connector:
-        raise HTTPException(status_code=404, detail=f"Integration {req.integration_id} not found")
+async def apply_patch(
+    patch_id: str,
+    req: ApplyPatchRequest,
+    user: UserIdentity = Depends(require_permission("patches:export_pr")),
+):
+    """Deploy an approved patch through an integration in the same organization."""
+    patch = _owned_patch(patch_id, user)
+    if patch.approval_status != PatchApprovalStatus.APPROVED:
+        raise HTTPException(status_code=403, detail="Approve the patch before deploying it.")
+    connector = _owned_connector(req.integration_id, user)
 
     result = await connector.apply_patch(patch)
     return {
@@ -137,15 +168,14 @@ async def apply_patch(patch_id: str, req: ApplyPatchRequest):
     }
 
 @router.post("/patches/{patch_id}/rollback")
-async def rollback_patch(patch_id: str, req: ApplyPatchRequest):
-    """Rollback an applied patch."""
-    patch = _PATCH_REGISTRY.get(patch_id)
-    if not patch:
-        raise HTTPException(status_code=404, detail="Patch not found")
-
-    connector = connector_store.get_connector(req.integration_id)
-    if not connector:
-        raise HTTPException(status_code=404, detail="Integration not found")
+async def rollback_patch(
+    patch_id: str,
+    req: ApplyPatchRequest,
+    user: UserIdentity = Depends(require_permission("patches:export_pr")),
+):
+    """Rollback an applied patch through an integration in the same organization."""
+    patch = _owned_patch(patch_id, user)
+    connector = _owned_connector(req.integration_id, user)
 
     result = await connector.rollback_patch(patch)
     return {
@@ -156,14 +186,9 @@ async def rollback_patch(patch_id: str, req: ApplyPatchRequest):
     }
 
 @router.post("/patches/{patch_id}/verify", response_model=VerificationResult)
-async def verify_patch(patch_id: str):
-    """Trigger automated verification scan: Detect -> Explain -> Fix -> Verify."""
-    patch = _PATCH_REGISTRY.get(patch_id)
-    if not patch:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Remediation patch '{patch_id}' not found. Cannot verify an ungenerated patch."
-        )
+async def verify_patch(patch_id: str, user: UserIdentity = Depends(get_current_user)):
+    """Re-check a patch the caller is allowed to see."""
+    patch = _owned_patch(patch_id, user)
 
     return await verification_engine.verify_remediation(patch)
  
@@ -177,11 +202,12 @@ class VerifyFindingRequest(BaseModel):
     finding_text: Optional[str] = None
     finding_description: Optional[str] = None
     finding_recommendation: Optional[str] = None
-    mock_live_html: Optional[str] = None  # retained solely for test fixture compatibility
-    override_html_for_testing: Optional[str] = None
 
 @router.post("/verify-finding", response_model=RemediationVerificationReport)
-async def verify_finding_remediation(req: VerifyFindingRequest):
+async def verify_finding_remediation(
+    req: VerifyFindingRequest,
+    user: UserIdentity = Depends(get_current_user),
+):
     """
     Executes the continuous remediation verification loop:
     FIX -> RECRAWL -> RECHECK -> COMPARE -> CERTIFY
@@ -191,8 +217,8 @@ async def verify_finding_remediation(req: VerifyFindingRequest):
     target_url = req.target_url or req.website_url or ""
 
     if req.analysis_id:
-        run = orchestrator.get_run(req.analysis_id)
-        if run and run.report:
+        run = require_analysis(req.analysis_id, user)
+        if run.report:
             target_url = req.target_url or req.website_url or run.website_url
             for f in (run.report.findings or []):
                 if f.finding_id == req.finding_id or f.id == req.finding_id:
@@ -224,23 +250,23 @@ async def verify_finding_remediation(req: VerifyFindingRequest):
             recommendation=req.finding_recommendation or ""
         )
 
-    test_html = req.override_html_for_testing or req.mock_live_html
-
     report = await verification_loop_service.verify_finding(
         finding=finding,
         website_url=target_url or "https://example.com",
-        live_html=test_html,
         analysis_id=req.analysis_id,
     )
     return report
 
 @router.post("/verify-all/{analysis_id}", response_model=List[RemediationVerificationReport])
-async def verify_all_findings_remediation(analysis_id: str):
+async def verify_all_findings_remediation(
+    analysis_id: str,
+    user: UserIdentity = Depends(get_current_user),
+):
     """
     Runs the verification loop across all findings in an analysis run using live original URLs.
     """
-    run = orchestrator.get_run(analysis_id)
-    if not run or not run.report:
+    run = require_analysis(analysis_id, user)
+    if not run.report:
         raise HTTPException(status_code=404, detail="Analysis run or report not found")
 
     results: List[RemediationVerificationReport] = []
@@ -259,7 +285,8 @@ async def verify_all_findings_remediation(analysis_id: str):
     return results
 
 @router.post("/roi-estimate", response_model=RoiEstimate)
-async def calculate_roi_estimate(inp: RoiInput):
+async def calculate_roi_estimate(inp: RoiInput, user: UserIdentity = Depends(get_current_user)):
+    del user
     """
     Computes commercial revenue upside based on client deal size, traffic, and conversion rates.
     Connects: Technical problem -> Search visibility -> Traffic -> Conversion opportunity.
@@ -306,7 +333,7 @@ async def calculate_roi_estimate(inp: RoiInput):
     )
 
 @router.get("/download-pack/{analysis_id}")
-async def download_remediation_patch_pack(analysis_id: str):
+async def download_remediation_patch_pack(analysis_id: str, user: UserIdentity = Depends(get_current_user)):
     """
     Downloads the 1-click deployable code fixes packaging:
     - schema.jsonld
@@ -316,8 +343,8 @@ async def download_remediation_patch_pack(analysis_id: str):
     - geo_definitions.html
     into a single downloadable 'dristik-remediation-patches.zip'.
     """
-    run = orchestrator.get_run(analysis_id)
-    if not run or not run.report:
+    run = require_analysis(analysis_id, user)
+    if not run.report:
         raise HTTPException(status_code=404, detail="Analysis run or report not found")
 
     from app.remediation.patch_pack import generate_patch_pack_zip

@@ -497,6 +497,11 @@ class GeoBenchmarkRunner:
             f"Estimated cost: ${total_cost_usd:.4f}. {len(blindspots)} category blindspots identified."
         )
 
+        from app.commercial.measurement import assess_proportion
+
+        mention_reliability = None
+        if total_succeeded > 0:
+            mention_reliability = assess_proportion(total_mentions, total_succeeded).model_dump()
         run_metadata = {
             "sampling_runs": repeat_count,
             "confidence_level": 0.95,
@@ -505,6 +510,12 @@ class GeoBenchmarkRunner:
             "cost_tracking_enabled": True,
             "budget_cap_usd": budget_cap_usd,
             "cost_cap_exceeded": cost_cap_exceeded,
+            "fixed_run_count_is_statistically_sufficient": False,
+            "sampling_note": (
+                "The repeat count is a measurement budget. It is not a claim that the "
+                "sample meets a precision target. Repeated runs of the same prompt are correlated."
+            ),
+            "mention_reliability": mention_reliability,
         }
 
         # Compute Share of Model (SoM) and Competitor Displacement

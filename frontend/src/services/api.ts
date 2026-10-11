@@ -71,3 +71,33 @@ export async function runGraphNode(
     `Could not execute step '${nodeId}'`,
   );
 }
+
+export async function runGraphSection(
+  analysisId: string,
+  sectionId: string
+): Promise<{ success: boolean; section_id: string; title: string }> {
+  return api(
+    `/api/v1/analyses/${analysisId}/sections/${sectionId}/run`,
+    { method: 'POST' },
+    `Could not execute section '${sectionId}'`,
+  );
+}
+
+export async function getAgentWorkforce(
+  analysisId: string
+): Promise<{ analysis_id: string; total_agents: number; agents: any[] }> {
+  return api(
+    `/api/v1/analyses/${analysisId}/agent-workforce`,
+    {},
+    'Could not fetch agent workforce state',
+  );
+}
+
+export function getSectionPdfUrl(analysisId: string, sectionKey: string): string {
+  return `/api/v1/reports/${analysisId}/sections/${sectionKey}/pdf`;
+}
+
+export function getSectionPptxUrl(analysisId: string, sectionKey: string): string {
+  return `/api/v1/reports/${analysisId}/sections/${sectionKey}/pptx`;
+}
+

@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from app.domain.models import CrawlManifest, Finding
+from app.identity.access import require_analysis
 from app.identity.authorizer import UserIdentity
 from app.identity.deps import get_current_user, require_permission
 from app.intelligence.outcomes.tracking import (
@@ -13,7 +14,6 @@ from app.intelligence.outcomes.tracking import (
     snapshot_from_manifest,
 )
 from app.intelligence.outcomes.store import get_outcome_store
-from app.orchestration.orchestrator import orchestrator
 
 router = APIRouter(prefix="/outcomes", tags=["Outcome Tracking"])
 _agent = OutcomeTrackingAgent()
@@ -35,8 +35,8 @@ async def schedule_outcomes(
     analysis_id: str,
     user: UserIdentity = Depends(require_permission("mission:create")),
 ):
-    run = orchestrator.runs.get(analysis_id)
-    if not run or not run.report:
+    run = require_analysis(analysis_id, user, permission="mission:create")
+    if not run.report:
         raise HTTPException(status_code=404, detail="Completed analysis not found.")
     jobs = get_outcome_store().schedule(
         analysis_id=analysis_id,
@@ -48,7 +48,7 @@ async def schedule_outcomes(
 
 @router.get("/due")
 async def list_due_jobs(user: UserIdentity = Depends(get_current_user)):
-    return {"jobs": get_outcome_store().due_jobs()}
+    return {"jobs": get_outcome_store().due_jobs(org_id=user.org_id)}
 
 
 @router.post("/run")
@@ -56,8 +56,8 @@ async def run_outcome_check(
     payload: RunOutcomeRequest,
     user: UserIdentity = Depends(require_permission("mission:create")),
 ):
-    run = orchestrator.runs.get(payload.analysis_id)
-    if not run or not run.report:
+    run = require_analysis(payload.analysis_id, user, permission="mission:create")
+    if not run.report:
         raise HTTPException(status_code=404, detail="Completed analysis not found.")
     report = run.report
     baseline = snapshot_from_manifest(
@@ -108,6 +108,7 @@ async def get_analysis_outcomes(
     analysis_id: str,
     user: UserIdentity = Depends(get_current_user),
 ):
+    require_analysis(analysis_id, user)
     store = get_outcome_store()
     return {
         "analysis_id": analysis_id,
@@ -119,4 +120,4 @@ async def get_analysis_outcomes(
 @router.get("/benchmark/table")
 async def get_benchmark_table(user: UserIdentity = Depends(get_current_user)):
     """Calibration table: finding_type × predicted_impact → observed outcomes."""
-    return {"rows": get_outcome_store().benchmark()}
+    return {"rows": get_outcome_store().benchmark(org_id=user.org_id)}

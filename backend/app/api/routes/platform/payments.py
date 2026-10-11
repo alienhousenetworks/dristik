@@ -445,9 +445,13 @@ async def get_payment_config():
 @router.get("/plans")
 async def get_plans():
     """Returns the full catalog of Dristik audit and continuous monitoring tiers."""
+    from app.commercial.plans import PLANNING_NOTE, SUBSCRIPTION_HYPOTHESES
+
     return {
         "one_time_audits": AUDIT_PLANS,
         "continuous_monitoring": MONITORING_PLANS,
+        "subscription_hypotheses": SUBSCRIPTION_HYPOTHESES,
+        "subscription_hypotheses_note": PLANNING_NOTE,
         "default_flagship": "diagnostic",
         "currency": "INR",
         "gst_rate": 0.0,

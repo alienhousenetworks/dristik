@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import re
+import time
 from typing import Optional, Tuple
 
 from app.core.config import settings
@@ -11,6 +12,22 @@ from app.identity.security import new_token, password_errors
 from app.identity.store import get_store
 
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+_LOGIN_WINDOW_SECONDS = 15 * 60
+_LOGIN_MAX_FAILURES = 5
+_login_failures: dict[str, list[float]] = {}
+
+
+def _recent_failures(email: str, now: float) -> list[float]:
+    recent = [stamp for stamp in _login_failures.get(email, []) if now - stamp < _LOGIN_WINDOW_SECONDS]
+    if recent:
+        _login_failures[email] = recent
+    else:
+        _login_failures.pop(email, None)
+    return recent
+
+
+def reset_login_failures() -> None:
+    _login_failures.clear()
 
 
 def public_user(user: UserIdentity) -> dict:
@@ -130,9 +147,17 @@ def signup(full_name: str, email: str, password: str, organization_name: str) ->
 
 def login(email: str, password: str) -> Tuple[UserIdentity, str]:
     store = get_store()
-    user = store.authenticate(email, password)
+    mail = (email or "").strip().lower()
+    now = time.time()
+    recent = _recent_failures(mail, now)
+    if len(recent) >= _LOGIN_MAX_FAILURES:
+        raise ValueError("Too many attempts. Try again in 15 minutes.")
+    user = store.authenticate(mail, password)
     if not user:
+        recent.append(now)
+        _login_failures[mail] = recent
         raise ValueError("Incorrect email or password.")
+    _login_failures.pop(mail, None)
     token = new_token()
     store.create_session(user.user_id, token, settings.SESSION_DAYS)
     return user, token
@@ -165,6 +190,29 @@ def reset_password(token: str, password: str) -> None:
     store.revoke_user_sessions(user_id)
 
 
+def purge_organization_customer_data(org_id: str) -> None:
+    """Delete audits, snapshot directories, and connector credentials for one organization."""
+    import shutil
+
+    from app.audit.snapshots import SnapshotStore
+    from app.connectors.store import connector_store
+    from app.orchestration.orchestrator import orchestrator
+
+    runs = orchestrator.repository.list_runs(org_id=org_id, limit=1000)
+    analysis_ids = {row["analysis_id"] for row in runs}
+    for analysis_id, run in list(orchestrator.runs.items()):
+        if getattr(run, "org_id", None) == org_id:
+            analysis_ids.add(analysis_id)
+    for analysis_id in analysis_ids:
+        orchestrator.repository.delete_run(analysis_id, org_id=org_id)
+        orchestrator.runs.pop(analysis_id, None)
+        snapshot_root = SnapshotStore(analysis_id).root
+        if snapshot_root.exists():
+            shutil.rmtree(snapshot_root, ignore_errors=True)
+    for integration in list(connector_store.list_integrations(org_id)):
+        connector_store.delete_integration(integration.integration_id)
+
+
 def delete_account(user: UserIdentity, password: str) -> None:
     store = get_store()
     if not store.verify_user_password(user.user_id, password):
@@ -172,6 +220,7 @@ def delete_account(user: UserIdentity, password: str) -> None:
     if Authorizer.is_system(user):
         raise ValueError("The Dristik system admin account cannot be deleted from the app.")
     if user.role == UserRole.OWNER and store.owner_count(user.org_id) <= 1:
+        purge_organization_customer_data(user.org_id)
         store.deactivate_org(user.org_id)
         return
     store.deactivate_user(user.user_id)

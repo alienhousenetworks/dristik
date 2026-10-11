@@ -159,10 +159,8 @@ class RemediationVerificationService:
             after_state = f"All {total_count} checks failed. Remediation not detected."
 
         # ── Stage 5: CERTIFY ──────────────────────────────────────────
+        # A passed re-check is a technical result. It is not a citation or revenue delta.
         is_resolved = status == "RESOLVED"
-        severity_score_map = {"CRITICAL": 15.0, "HIGH": 10.0, "MEDIUM": 5.0, "LOW": 2.5}
-        score_recovered = severity_score_map.get(str(finding.severity).upper(), 5.0) if is_resolved else 0.0
-
         return self._build_report(
             finding=finding,
             website_url=website_url,
@@ -176,7 +174,6 @@ class RemediationVerificationService:
             recrawl_status_code=http_code,
             recrawl_ttfb_ms=recrawl_ttfb_ms,
             recrawl_content_type=recrawl_content_type,
-            score_delta=score_recovered,
         )
 
     # ── Assertion Suites ──────────────────────────────────────────────
@@ -497,17 +494,23 @@ class RemediationVerificationService:
         recrawl_ttfb_ms: Optional[float],
         recrawl_content_type: Optional[str],
         score_delta: Optional[float] = None,
+        score_delta_is_measured: bool = False,
     ) -> RemediationVerificationReport:
         passed_count = sum(1 for c in checks if c.passed)
         total_count = len(checks)
 
-        # Cryptographic seal over actual results
+        # Content hash of this verification record. Not a correctness certificate.
         raw_seal = f"dristik_cert:{finding.finding_id}:{website_url}:{now}:{passed_count}/{total_count}:{status}"
         evidence_seal = f"sha256:{hashlib.sha256(raw_seal.encode('utf-8')).hexdigest()[:24]}"
-
-        if score_delta is None:
-            severity_score_map = {"CRITICAL": 15.0, "HIGH": 10.0, "MEDIUM": 5.0, "LOW": 2.5}
-            score_delta = severity_score_map.get(str(finding.severity).upper(), 5.0) if status == "RESOLVED" else 0.0
+        if score_delta is not None and not score_delta_is_measured:
+            score_delta = None
+        technical_status = {
+            "RESOLVED": "condition_resolved",
+            "PARTIALLY_RESOLVED": "partial",
+            "FAILED_RECHECK": "not_resolved",
+            "FAILED_RECRAWL": "not_resolved",
+            "INCONCLUSIVE": "inconclusive",
+        }.get(status, "not_measured")
 
         report = RemediationVerificationReport(
             verification_id=f"cert_{finding.finding_id}_{datetime.now().strftime('%Y%m%d%H%M%S')}",
@@ -522,6 +525,10 @@ class RemediationVerificationService:
             passed_checks_count=passed_count,
             total_checks_count=total_count,
             score_delta=score_delta,
+            score_delta_is_measured=score_delta_is_measured and score_delta is not None,
+            technical_verification=technical_status,
+            visibility_verification="not_measured",
+            business_verification="not_measured",
             verified_at=now,
             evidence_seal=evidence_seal,
             certified_by="Dristik Continuous Assurance Engine v4",

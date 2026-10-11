@@ -1,7 +1,8 @@
 """
 Dristik AI Connector Integration Store
 Stores configured integrations, manages encrypted credentials, and provides active connector instances.
-Credentials are persisted in SQLite and encrypted with an HMAC-SHA256 keystream from AUTH_SECRET.
+Credentials are persisted in SQLite and encrypted with AES-GCM.
+The key is a hash of AUTH_SECRET. Older HMAC-keystream rows still decrypt.
 """
 import base64
 import hashlib
@@ -12,6 +13,8 @@ import sqlite3
 import uuid
 from datetime import datetime, timezone
 from typing import Dict, Any, List, Optional
+
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 from app.core.config import settings
 from app.domain.models import Integration
@@ -35,18 +38,23 @@ def _keystream(key: bytes, nonce: bytes, size: int) -> bytes:
     return bytes(output[:size])
 
 
+def _secret_key() -> bytes:
+    secret = (settings.AUTH_SECRET or "").encode("utf-8")
+    return hashlib.sha256(secret).digest()
+
+
 def _encrypt(plaintext: str) -> str:
-    secret = (settings.AUTH_SECRET or "dristik").encode("utf-8")
-    key = hashlib.sha256(secret).digest()
-    nonce = os.urandom(16)
-    raw = plaintext.encode("utf-8")
-    cipher = bytes(a ^ b for a, b in zip(raw, _keystream(key, nonce, len(raw))))
-    return base64.b64encode(nonce + cipher).decode("ascii")
+    nonce = os.urandom(12)
+    ciphertext = AESGCM(_secret_key()).encrypt(nonce, plaintext.encode("utf-8"), b"dristik-connector-v1")
+    return "aesgcm:" + base64.b64encode(nonce + ciphertext).decode("ascii")
 
 
 def _decrypt(payload: str) -> str:
-    secret = (settings.AUTH_SECRET or "dristik").encode("utf-8")
-    key = hashlib.sha256(secret).digest()
+    key = _secret_key()
+    if payload.startswith("aesgcm:"):
+        blob = base64.b64decode(payload[len("aesgcm:"):].encode("ascii"))
+        nonce, ciphertext = blob[:12], blob[12:]
+        return AESGCM(key).decrypt(nonce, ciphertext, b"dristik-connector-v1").decode("utf-8")
     blob = base64.b64decode(payload.encode("ascii"))
     nonce, cipher = blob[:16], blob[16:]
     raw = bytes(a ^ b for a, b in zip(cipher, _keystream(key, nonce, len(cipher))))
@@ -192,7 +200,7 @@ class ConnectorStore:
             return WebflowConnector(creds)
         elif integ.provider == ConnectorType.GOOGLE_SEARCH_CONSOLE:
             return GoogleSearchConsoleConnector(creds)
-        elif integ.provider == ConnectorType.GOOGLE_ANALYTICS_4:
+        elif integ.provider in (ConnectorType.GOOGLE_ANALYTICS_4, ConnectorType.GOOGLE_ANALYTICS):
             from app.connectors.google.ga4_connector import GoogleAnalytics4Connector
             return GoogleAnalytics4Connector(creds)
         elif integ.provider == ConnectorType.CRM:
@@ -226,7 +234,7 @@ class ConnectorStore:
             creds = self._credentials.get(integ_id, ConnectorCredentials(provider=integ.provider))
             if integ.provider == ConnectorType.GOOGLE_SEARCH_CONSOLE and not gsc:
                 gsc = GoogleSearchConsoleConnector(creds)
-            elif integ.provider == ConnectorType.GOOGLE_ANALYTICS_4 and not ga4:
+            elif integ.provider in (ConnectorType.GOOGLE_ANALYTICS_4, ConnectorType.GOOGLE_ANALYTICS) and not ga4:
                 ga4 = GoogleAnalytics4Connector(creds)
             elif integ.provider == ConnectorType.CRUX and not crux:
                 crux = CruxConnector(creds)

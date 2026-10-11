@@ -200,6 +200,7 @@ export function PillarShell({
   tabs,
   activeTab,
   onTab,
+  actions,
   children,
 }: {
   kicker: string;
@@ -212,6 +213,7 @@ export function PillarShell({
   tabs: Array<{ id: string; label: string }>;
   activeTab: string;
   onTab: (id: string) => void;
+  actions?: React.ReactNode;
   children: React.ReactNode;
 }) {
   return (
@@ -222,17 +224,20 @@ export function PillarShell({
           <h2 className="text-2xl font-semibold text-ink tracking-tight">{title}</h2>
           <p className="text-sm text-ink-500 leading-relaxed">{description}</p>
         </div>
-        <div className="flex items-stretch card overflow-hidden shrink-0 self-start">
-          <div className="px-4 py-3 min-w-[112px]">
-            <p className="label">{scoreLabel}</p>
-            <p className="font-mono text-2xl font-semibold text-ink leading-none mt-1">{score}</p>
-          </div>
-          {metaLabel && (
-            <div className="px-4 py-3 border-l border-line min-w-[128px]">
-              <p className="label">{metaLabel}</p>
-              <p className="text-sm font-medium text-ink mt-1.5">{meta}</p>
+        <div className="flex flex-wrap items-center gap-4 self-start">
+          {actions && <div className="flex items-center gap-2">{actions}</div>}
+          <div className="flex items-stretch card overflow-hidden shrink-0">
+            <div className="px-4 py-3 min-w-[112px]">
+              <p className="label">{scoreLabel}</p>
+              <p className="font-mono text-2xl font-semibold text-ink leading-none mt-1">{score}</p>
             </div>
-          )}
+            {metaLabel && (
+              <div className="px-4 py-3 border-l border-line min-w-[128px]">
+                <p className="label">{metaLabel}</p>
+                <p className="text-sm font-medium text-ink mt-1.5">{meta}</p>
+              </div>
+            )}
+          </div>
         </div>
       </div>
       <SubNav items={tabs} value={activeTab} onChange={(id) => onTab(id)} label={title} />

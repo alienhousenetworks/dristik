@@ -58,12 +58,55 @@ class DeckOrchestrator:
         return pptx_bytes, blueprint
 
     def generate_html_deck(self, report: ExecutiveReport) -> Tuple[str, DeckBlueprint]:
+        """Renders the same linted blueprint as an interactive HTML deck."""
+        blueprint = self.build_blueprint(report)
+        return self.html_renderer.render_deck_html(blueprint), blueprint
+
+    def generate_section_deck(self, report: ExecutiveReport, section_key: str) -> Tuple[bytes, DeckBlueprint]:
         """
-        Compiles the interactive 16:9 Vector HTML presentation from the linted blueprint.
+        Compiles a dedicated, modular PowerPoint (.pptx) binary filtered for a specific section:
+        'crawl', 'seo', 'geo', 'aeo', 'cro', or 'competitors'.
         """
         blueprint = self.build_blueprint(report)
-        html_content = self.html_renderer.render_deck_html(blueprint)
-        return html_content, blueprint
+        section_key = (section_key or "").lower().strip()
+
+        SECTION_MODULE_MAP = {
+            "crawl": {"mod_04"},
+            "seo": {"mod_04", "mod_05"},
+            "geo": {"mod_06"},
+            "aeo": {"mod_03", "mod_06"},
+            "cro": {"mod_07"},
+            "competitors": {"mod_08"},
+            "competitor": {"mod_08"},
+        }
+        target_mods = SECTION_MODULE_MAP.get(section_key, {"mod_01", "mod_02"})
+
+        from app.agents.deck.models import SlideLayoutType
+        filtered_slides = []
+        for s in blueprint.slides:
+            if s.layout == SlideLayoutType.COVER:
+                copy_s = s.model_copy(deep=True)
+                copy_s.subtitle = f"{section_key.upper()} SPECIFICATION & STRATEGIC EXECUTIVE AUDIT"
+                filtered_slides.append(copy_s)
+            elif s.module_id in target_mods:
+                filtered_slides.append(s.model_copy(deep=True))
+            elif s.layout == SlideLayoutType.GOVERNANCE_SEAL:
+                filtered_slides.append(s.model_copy(deep=True))
+
+        if len(filtered_slides) <= 2:
+            # Fallback if specific module didn't match: include first 10 slides
+            filtered_slides = [s.model_copy(deep=True) for s in blueprint.slides[:12]]
+
+        # Re-number slides sequentially
+        for idx, slide in enumerate(filtered_slides, 1):
+            slide.slide_number = idx
+
+        section_blueprint = blueprint.model_copy(deep=True)
+        section_blueprint.slides = filtered_slides
+        section_blueprint.total_slides = len(filtered_slides)
+
+        pptx_bytes = self.builder.compile_pptx(section_blueprint)
+        return pptx_bytes, section_blueprint
 
 
 _deck_orchestrator = DeckOrchestrator()
@@ -79,3 +122,7 @@ def generate_executive_pptx_deck(report: ExecutiveReport) -> Tuple[bytes, DeckBl
 
 def generate_executive_html_deck(report: ExecutiveReport) -> Tuple[str, DeckBlueprint]:
     return get_deck_orchestrator().generate_html_deck(report)
+
+
+def generate_section_pptx_deck(report: ExecutiveReport, section_key: str) -> Tuple[bytes, DeckBlueprint]:
+    return get_deck_orchestrator().generate_section_deck(report, section_key)

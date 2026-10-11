@@ -4,8 +4,12 @@ Exposes Competitor Discovery, Search Console Attribution, Real AI Citation Track
 Commercial Lead-Gen Opportunities, and Agency Multi-Client Workspaces.
 """
 from typing import Optional, List
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
+
+from app.identity.access import require_analysis
+from app.identity.authorizer import UserIdentity
+from app.identity.deps import get_current_user, get_current_user_optional
 
 from app.intelligence.competitive.discovery import competitor_discovery_engine, CompetitorBenchmarkMatrix
 from app.intelligence.competitive.resolution.rejection_store import rejection_store
@@ -21,9 +25,16 @@ from app.intelligence.citations.tracker import ai_citation_tracker, AiCitationTr
 from app.intelligence.geo.benchmark_runner import benchmark_runner, GeoBenchmarkReport
 from app.intelligence.business.lead_gen import lead_gen_engine, CommercialOpportunity
 from app.tenancy.agency import agency_manager, AgencyWorkspaceSummary, AgencyClientAccount
-from app.orchestration.orchestrator import orchestrator
-
 router = APIRouter(prefix="/intelligence", tags=["Strategic Commercial Intelligence"])
+
+
+def _owned_analysis(analysis_id: Optional[str], user: Optional[UserIdentity]):
+    """Load a stored audit only for the organization that owns it."""
+    if not analysis_id:
+        return None
+    if user is None:
+        raise HTTPException(status_code=401, detail="Sign in to continue.")
+    return require_analysis(analysis_id, user)
 
 class AddAgencyClientRequest(BaseModel):
     client_name: str = Field(..., description="Legal or display name of the client")
@@ -37,7 +48,8 @@ class CompetitorRejectionRequest(BaseModel):
 async def get_competitor_benchmark(
     analysis_id: Optional[str] = None,
     website_url: Optional[str] = None,
-    competitor_urls: Optional[List[str]] = Query(None)
+    competitor_urls: Optional[List[str]] = Query(None),
+    user: Optional[UserIdentity] = Depends(get_current_user_optional),
 ):
     """
     Automated Competitor Discovery & 7-Vector Benchmark Matrix.
@@ -48,7 +60,7 @@ async def get_competitor_benchmark(
     honest_scores = None
     url = website_url
     if analysis_id:
-        run = orchestrator.get_run(analysis_id)
+        run = _owned_analysis(analysis_id, user)
         if run and run.report:
             bp = run.report.business_profile
             honest_scores = run.report.honest_scores
@@ -82,7 +94,8 @@ async def record_competitor_rejection(req: CompetitorRejectionRequest):
 async def get_unified_competitive_report(
     analysis_id: Optional[str] = None,
     domain: Optional[str] = None,
-    competitors: Optional[List[str]] = Query(None)
+    competitors: Optional[List[str]] = Query(None),
+    user: Optional[UserIdentity] = Depends(get_current_user_optional),
 ):
     """
     Returns the evidence-backed Dristik Competitive Intelligence Report.
@@ -96,7 +109,7 @@ async def get_unified_competitive_report(
     resolved_domain = domain or ""
 
     if analysis_id:
-        run = orchestrator.get_run(analysis_id)
+        run = _owned_analysis(analysis_id, user)
         if run and run.report:
             # Check cached report first
             if getattr(run.report, "competitive_report", None):
@@ -142,7 +155,10 @@ class CompetitiveBenchmarkRequest(BaseModel):
     analysis_id: Optional[str] = Field(None, description="Optional active audit run ID")
 
 @router.post("/competitors/benchmark", response_model=CompetitiveBenchmarkResult)
-async def run_live_competitor_benchmark(req: CompetitiveBenchmarkRequest):
+async def run_live_competitor_benchmark(
+    req: CompetitiveBenchmarkRequest,
+    user: Optional[UserIdentity] = Depends(get_current_user_optional),
+):
     """
     Live Scrapes 2 Competitor Homepages with the identical CrawlerService pipeline.
     Calculates side-by-side 5-pillar scores, relative ranks, peer average deltas,
@@ -152,7 +168,7 @@ async def run_live_competitor_benchmark(req: CompetitiveBenchmarkRequest):
     target_scores = None
 
     if req.analysis_id:
-        run = orchestrator.get_run(req.analysis_id)
+        run = _owned_analysis(req.analysis_id, user)
         if run and run.report:
             if run.report.crawl_manifest and run.report.crawl_manifest.pages:
                 target_ev = run.report.crawl_manifest.pages[0]
@@ -170,13 +186,14 @@ async def run_live_competitor_benchmark(req: CompetitiveBenchmarkRequest):
 async def get_competitor_suggestions(
     domain: str = Query(..., description="Target domain"),
     niche: Optional[str] = Query(None, description="Industry niche"),
-    analysis_id: Optional[str] = Query(None, description="Optional active audit run ID")
+    analysis_id: Optional[str] = Query(None, description="Optional active audit run ID"),
+    user: Optional[UserIdentity] = Depends(get_current_user_optional),
 ):
     """Suggests 2-3 direct competitor peers based on domain, business profile, and scale parity."""
     clean = domain.lower().replace("https://", "").replace("http://", "").split("/")[0]
     bp = None
     if analysis_id:
-        run = orchestrator.get_run(analysis_id)
+        run = _owned_analysis(analysis_id, user)
         if run and run.report:
             bp = run.report.business_profile
 
@@ -223,7 +240,8 @@ async def get_competitor_suggestions(
 @router.get("/search-console", response_model=SearchConsoleAttributionReport)
 async def get_search_console_attribution(
     domain: Optional[str] = None,
-    analysis_id: Optional[str] = None
+    analysis_id: Optional[str] = None,
+    user: Optional[UserIdentity] = Depends(get_current_user_optional),
 ):
     """
     Google Search Console & Analytics Attribution Report.
@@ -231,6 +249,8 @@ async def get_search_console_attribution(
     """
     if not domain and not analysis_id:
         raise HTTPException(status_code=400, detail="Either domain or analysis_id must be provided.")
+    if analysis_id:
+        _owned_analysis(analysis_id, user)
     return search_console_engine.generate_search_attribution(domain=domain or "", analysis_id=analysis_id)
 
 @router.get("/ai-citations", response_model=AiCitationTrackingDashboard)
@@ -238,7 +258,8 @@ async def get_real_ai_citations(
     domain: Optional[str] = None,
     biz_name: Optional[str] = None,
     niche: Optional[str] = None,
-    analysis_id: Optional[str] = None
+    analysis_id: Optional[str] = None,
+    user: Optional[UserIdentity] = Depends(get_current_user_optional),
 ):
     """
     Hero Real AI Citation Tracker.
@@ -250,7 +271,7 @@ async def get_real_ai_citations(
     resolved_niche = niche
 
     if analysis_id:
-        run = orchestrator.get_run(analysis_id)
+        run = _owned_analysis(analysis_id, user)
         if run and run.report and run.report.business_profile:
             bp = run.report.business_profile
             resolved_domain = resolved_domain or bp.primary_domain or run.website_url
@@ -274,7 +295,8 @@ async def run_live_geo_benchmark(
     industry: Optional[str] = None,
     locale: str = "en-US",
     mode: str = "concise",
-    analysis_id: Optional[str] = None
+    analysis_id: Optional[str] = None,
+    user: Optional[UserIdentity] = Depends(get_current_user_optional),
 ):
     """
     Live AI Retrieval Benchmark (Layer 2).
@@ -286,7 +308,7 @@ async def run_live_geo_benchmark(
     resolved_industry = industry
 
     if analysis_id:
-        run = orchestrator.get_run(analysis_id)
+        run = _owned_analysis(analysis_id, user)
         if run and run.report and run.report.business_profile:
             bp = run.report.business_profile
             resolved_domain = resolved_domain or bp.primary_domain or run.website_url
@@ -310,7 +332,8 @@ async def get_commercial_opportunities(
     domain: Optional[str] = None,
     biz_name: Optional[str] = None,
     niche: Optional[str] = None,
-    analysis_id: Optional[str] = None
+    analysis_id: Optional[str] = None,
+    user: Optional[UserIdentity] = Depends(get_current_user_optional),
 ):
     """
     Commercial Lead-Generation Void Detector & 1-Click Landing Page Generator.
@@ -321,7 +344,7 @@ async def get_commercial_opportunities(
     resolved_niche = niche
 
     if analysis_id:
-        run = orchestrator.get_run(analysis_id)
+        run = _owned_analysis(analysis_id, user)
         if run and run.report and run.report.business_profile:
             bp = run.report.business_profile
             resolved_domain = resolved_domain or bp.primary_domain or run.website_url
@@ -339,21 +362,27 @@ async def get_commercial_opportunities(
     )
 
 @router.get("/agency", response_model=AgencyWorkspaceSummary)
-async def get_agency_workspace():
+async def get_agency_workspace(user: UserIdentity = Depends(get_current_user)):
     """
     Agency Mode Workspace: Manage Client A, B, C, D, E with white-label reports & client dashboards.
     """
-    return agency_manager.get_workspace_summary()
+    return agency_manager.get_workspace_summary(agency_id=user.org_id)
 
 @router.post("/agency/clients", response_model=AgencyClientAccount)
-async def add_agency_client(req: AddAgencyClientRequest):
+async def add_agency_client(
+    req: AddAgencyClientRequest,
+    user: UserIdentity = Depends(get_current_user),
+):
     """Add a new client domain to the Agency Workspace."""
-    return agency_manager.add_client(client_name=req.client_name, domain=req.domain)
+    return agency_manager.add_client(client_name=req.client_name, domain=req.domain, org_id=user.org_id)
 
 @router.delete("/agency/clients/{client_id}")
-async def delete_agency_client(client_id: str):
+async def delete_agency_client(
+    client_id: str,
+    user: UserIdentity = Depends(get_current_user),
+):
     """Remove a managed client domain from the Agency Workspace."""
-    success = agency_manager.remove_client(client_id)
+    success = agency_manager.remove_client(client_id, org_id=user.org_id)
     if not success:
         raise HTTPException(status_code=404, detail="Client not found")
     return {"deleted": True, "client_id": client_id}

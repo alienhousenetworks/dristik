@@ -113,24 +113,42 @@ def test_audit_db_restoration_with_full_report():
     assert len(matching) == 1
     assert matching[0]["domain"] == "acme-test.org"
 
-def test_analyses_api_endpoints_without_and_with_auth():
+def test_analyses_api_requires_the_owning_organization():
+    import uuid
     from fastapi.testclient import TestClient
     from app.main import app
 
-    client = TestClient(app)
-    
-    # 1. Test GET /api/v1/analyses
-    res = client.get("/api/v1/analyses")
-    assert res.status_code == 200
-    analyses = res.json()
-    assert isinstance(analyses, list)
-    assert len(analyses) > 0
+    owner = TestClient(app)
+    other = TestClient(app)
+    anonymous = owner.get("/api/v1/analyses")
+    assert anonymous.status_code == 401
 
-    # 2. Test GET /api/v1/analyses/{analysis_id} for guest/anonymous
-    first_id = analyses[0]["analysis_id"]
-    single_res = client.get(f"/api/v1/analyses/{first_id}")
-    assert single_res.status_code == 200
-    run_data = single_res.json()
-    assert run_data["analysis_id"] == first_id
-    if run_data.get("report"):
-        assert "scores" in run_data["report"]
+    email = f"persist_{uuid.uuid4().hex[:8]}@example.com"
+    signup = owner.post("/api/v1/auth/signup", json={
+        "full_name": "Persist Owner",
+        "email": email,
+        "password": "OwnerPass1",
+        "organization_name": "Persist Org",
+    })
+    assert signup.status_code == 200, signup.text
+    user = signup.json()["user"]
+    run = orchestrator.create_run("https://acme-owned.example", org_id=user["org_id"], created_by=user["user_id"])
+
+    listed = owner.get("/api/v1/analyses")
+    assert listed.status_code == 200
+    ids = [item["analysis_id"] for item in listed.json()]
+    assert run.analysis_id in ids
+
+    single = owner.get(f"/api/v1/analyses/{run.analysis_id}")
+    assert single.status_code == 200
+    assert single.json()["analysis_id"] == run.analysis_id
+
+    other_signup = other.post("/api/v1/auth/signup", json={
+        "full_name": "Other Owner",
+        "email": f"other_{uuid.uuid4().hex[:8]}@example.com",
+        "password": "OwnerPass1",
+        "organization_name": "Other Org",
+    })
+    assert other_signup.status_code == 200, other_signup.text
+    hidden = other.get(f"/api/v1/analyses/{run.analysis_id}")
+    assert hidden.status_code == 404

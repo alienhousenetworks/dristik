@@ -14,6 +14,8 @@ import { ContactForm } from './components/ContactForm';
 import { ConnectorsModal } from './components/ConnectorsModal';
 import { ExternalAuthorityPanel } from './components/ExternalAuthorityPanel';
 import { AuditDataSources } from './components/AuditDataSources';
+import { OperatingWorkflow } from './components/OperatingWorkflow';
+import { PublicGrader } from './components/PublicGrader';
 import { RemediationFlowModal } from './components/RemediationFlowModal';
 import { AgencyWorkspaceModal } from './components/AgencyWorkspaceModal';
 import { ScoringRubricModal } from './components/ScoringRubricModal';
@@ -32,6 +34,7 @@ const AuditPdfReport = lazyWithRetry(() => import('./components/AuditPdfReport')
 const Pricing = lazyWithRetry(() => import('./components/Pricing').then((m) => ({ default: m.Pricing })));
 const SystemPanel = lazyWithRetry(() => import('./components/SystemPanel').then((m) => ({ default: m.SystemPanel })));
 const ExternalAuthorityView = lazyWithRetry(() => import('./components/ExternalAuthorityView').then((m) => ({ default: m.ExternalAuthorityView })));
+const CrawlWorkspaceView = lazyWithRetry(() => import('./components/Pillars/CrawlWorkspaceView').then((m) => ({ default: m.CrawlWorkspaceView })));
 const SeoWorkspaceView = lazyWithRetry(() => import('./components/Pillars/SeoWorkspaceView').then((m) => ({ default: m.SeoWorkspaceView })));
 const GeoWorkspaceView = lazyWithRetry(() => import('./components/Pillars/GeoWorkspaceView').then((m) => ({ default: m.GeoWorkspaceView })));
 const AeoWorkspaceView = lazyWithRetry(() => import('./components/Pillars/AeoWorkspaceView').then((m) => ({ default: m.AeoWorkspaceView })));
@@ -167,6 +170,7 @@ export function App() {
     const labels: Record<string, string> = {
       google_search_console: 'Google Search Console',
       google_analytics_4: 'Google Analytics 4',
+      google_analytics: 'Google Analytics',
       crux: 'Google CrUX',
     };
     const label = labels[provider] || provider.replace(/_/g, ' ') || 'Connector';
@@ -175,6 +179,7 @@ export function App() {
       const known: ConnectorType[] = [
         'google_search_console',
         'google_analytics_4',
+        'google_analytics',
         'crux',
         'dataforseo',
         'crm',
@@ -461,6 +466,10 @@ export function App() {
                 <ErrorBoundary key={tab}>
                 <Suspense fallback={<LoadingBlock label="Loading this section" />}>
                 <div className="space-y-8">
+                  {(tab === 'discover' || tab === 'decide' || tab === 'execute' || tab === 'prove') && (
+                    <OperatingWorkflow stage={tab} report={report} onSelectTab={setTab} />
+                  )}
+
                   {tab === 'overview' && (
                     <Overview
                       scores={report.scores}
@@ -486,6 +495,14 @@ export function App() {
                         setConnectorsInitialTab((connectorTab as ConnectorType) || 'google_search_console');
                         setConnectorsOpen(true);
                       }}
+                    />
+                  )}
+
+                  {/* 0. WEBSITE CRAWL WORKSPACE */}
+                  {tab === 'crawl' && (
+                    <CrawlWorkspaceView
+                      report={report}
+                      analysisId={run?.analysis_id}
                     />
                   )}
 
@@ -682,6 +699,10 @@ export function App() {
               <SystemPanel />
             </Suspense>
           )}
+          {view === 'grader' && (
+            <PublicGrader onStartAudit={() => go('home')} />
+          )}
+
           {view === 'pricing' && (
             <Suspense fallback={<LoadingBlock label="Loading pricing" />}>
               <Pricing
@@ -702,7 +723,10 @@ export function App() {
               >
                 {user ? (
                   <p className="text-sm text-ink-500">
-                    Signed in as {user.full_name} · {user.role_label} · {user.org_name}
+                    Signed in as {user.full_name} · {user.role_label} · {user.org_name}.{' '}
+                    <button type="button" className="text-ink underline" onClick={() => go('grader')}>
+                      Grade a public domain
+                    </button>
                   </p>
                 ) : (
                   <p className="text-sm text-ink-500">
@@ -710,6 +734,11 @@ export function App() {
                     <button type="button" className="text-ink underline" onClick={() => go('signup')}>
                       Create a workspace
                     </button>
+                    {' '}or{' '}
+                    <button type="button" className="text-ink underline" onClick={() => go('grader')}>
+                      grade a public domain
+                    </button>
+                    .
                   </p>
                 )}
               </PageHeader>

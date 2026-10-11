@@ -25,7 +25,7 @@ export function VerificationWorkspaceView({ report, analysisId }: VerificationWo
         </span>
         <h2 className="font-sans text-3xl text-ink font-semibold">Verification & Regression Testing</h2>
         <p className="text-xs text-ink-500 mt-1">
-          Cryptographically sealed DOM evidence verification and automated regression testing loop.
+          Re-check recorded page conditions, keep the evidence hash, and separate that result from AI citations and revenue.
         </p>
       </div>
 

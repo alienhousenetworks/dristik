@@ -81,6 +81,16 @@ async def test_dynamic_sandbox_generates_exact_100_questions_from_zero():
         assert ev.grounding_ratio is not None
         assert ev.answer_risk in ["LOW", "MEDIUM", "HIGH"]
         assert ev.retrieval_evidence_count is not None
+        # RAG Knowledge Base and Antigravity-style thinking steps
+        assert ev.ai_thinking_steps is not None and len(ev.ai_thinking_steps) >= 3
+        for step in ev.ai_thinking_steps:
+            assert "step" in step and "title" in step and "thought" in step
+        assert ev.target_update_page is not None
+        assert ev.target_update_section is not None
+        assert ev.section_update_recommendation is not None
+
+    # Verify overall system execution log was populated
+    assert len(sandbox.system_execution_log) >= 4
 
     # 4. Verify that pricing and identity questions find answers from the evidence
     identity_eval = next(e for e in evaluations if "core commercial solution" in e.generated_question.lower() or "what exactly is" in e.generated_question.lower())
@@ -88,10 +98,12 @@ async def test_dynamic_sandbox_generates_exact_100_questions_from_zero():
     assert identity_eval.answerability_status in ["ANSWERABLE", "PARTIAL"]
     assert identity_eval.evidence_snippet is not None
     assert identity_eval.citability_score >= 5
+    assert identity_eval.source_page_title is not None
 
     pricing_eval = next(e for e in evaluations if "starting price" in e.generated_question.lower() or "how much" in e.generated_question.lower() or "entry-level" in e.generated_question.lower())
     assert pricing_eval.is_answerable is True
     assert "$" in pricing_eval.crawled_answer or "99" in pricing_eval.crawled_answer or pricing_eval.evidence_snippet is not None
+    assert pricing_eval.source_url is not None or pricing_eval.evidence_url is not None
 
 
 @pytest.mark.asyncio

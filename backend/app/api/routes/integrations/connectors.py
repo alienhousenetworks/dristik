@@ -7,13 +7,15 @@ import os
 import json
 import urllib.parse
 from typing import List, Optional, Dict, Any
-from fastapi import APIRouter, HTTPException, status, Request
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, StreamingResponse
 from pydantic import BaseModel, Field
 import httpx
 
 from app.domain.models import Integration
 from app.domain.enums import ConnectorType, ConnectorHealthStatus
+from app.identity.authorizer import Authorizer, UserIdentity
+from app.identity.deps import get_current_user, require_permission
 from app.connectors.base.models import ConnectorCredentials, ConnectorHealth
 from app.core.config import settings
 from app.connectors.store import connector_store
@@ -43,14 +45,27 @@ class ConnectPlatformResponse(BaseModel):
     health: ConnectorHealth
     message: str
 
+def _owned_integration(integration_id: str, user: UserIdentity) -> Integration:
+    integration = connector_store.get_integration(integration_id)
+    if not integration or not Authorizer.can_access_org(user, integration.org_id):
+        raise HTTPException(status_code=404, detail="Integration not found")
+    return integration
+
+
 @router.get("", response_model=List[Integration])
-async def list_integrations(org_id: str = "org_default"):
-    """List all registered platform connectors for an organization."""
-    return connector_store.list_integrations(org_id=org_id)
+async def list_integrations(user: UserIdentity = Depends(get_current_user)):
+    """List platform connectors for the caller's organization."""
+    if not Authorizer.can_perform(user, "mission:read"):
+        raise HTTPException(status_code=403, detail="You do not have permission to view connectors.")
+    return connector_store.list_integrations(org_id=user.org_id)
 
 @router.post("/connect", response_model=ConnectPlatformResponse)
-async def connect_platform(req: ConnectPlatformRequest):
-    """Register and verify a new platform connector."""
+async def connect_platform(
+    req: ConnectPlatformRequest,
+    user: UserIdentity = Depends(require_permission("patches:generate")),
+):
+    """Register and verify a new platform connector for the caller's organization."""
+    req.org_id = user.org_id
     api_key = req.api_key
     if req.provider == ConnectorType.CRUX and not (api_key and str(api_key).strip()):
         api_key = (
@@ -99,6 +114,19 @@ async def connect_platform(req: ConnectPlatformRequest):
     integration.status = health.status
     connector_store.persist(integration)
 
+    if health.authenticated and req.provider in (ConnectorType.GOOGLE_ANALYTICS_4, ConnectorType.GOOGLE_ANALYTICS):
+        try:
+            from app.integrations.google_connectors import ga4_connector
+            ga4_connector._connected = True
+        except Exception:
+            pass
+    elif health.authenticated and req.provider == ConnectorType.GOOGLE_SEARCH_CONSOLE:
+        try:
+            from app.integrations.google_connectors import gsc_connector
+            gsc_connector._connected = True
+        except Exception:
+            pass
+
     return ConnectPlatformResponse(
         success=health.authenticated,
         integration=integration,
@@ -107,24 +135,27 @@ async def connect_platform(req: ConnectPlatformRequest):
     )
 
 @router.get("/{integration_id}/health", response_model=ConnectorHealth)
-async def check_integration_health(integration_id: str):
+async def check_integration_health(integration_id: str, user: UserIdentity = Depends(get_current_user)):
     """Test live connectivity and health of a specific integration."""
+    _owned_integration(integration_id, user)
     connector = connector_store.get_connector(integration_id)
     if not connector:
         raise HTTPException(status_code=404, detail="Integration not found")
     return await connector.test_connection()
 
 @router.get("/{integration_id}/discover", response_model=Dict[str, Any])
-async def discover_integration_structure(integration_id: str):
+async def discover_integration_structure(integration_id: str, user: UserIdentity = Depends(get_current_user)):
     """Discover site hierarchy, detected SEO plugins, or repo framework."""
+    _owned_integration(integration_id, user)
     connector = connector_store.get_connector(integration_id)
     if not connector:
         raise HTTPException(status_code=404, detail="Integration not found")
     return await connector.discover_site_structure()
 
 @router.delete("/{integration_id}")
-async def delete_integration(integration_id: str):
-    """Disconnect and remove an integration."""
+async def delete_integration(integration_id: str, user: UserIdentity = Depends(require_permission("patches:generate"))):
+    """Disconnect and remove an integration owned by the caller's organization."""
+    _owned_integration(integration_id, user)
     success = connector_store.delete_integration(integration_id)
     if not success:
         raise HTTPException(status_code=404, detail="Integration not found")
@@ -248,7 +279,8 @@ def _get_gsc_redirect_uri(request: Optional[Request] = None) -> str:
 
 
 @router.get("/google/oauth/status")
-async def google_oauth_status(request: Request):
+async def google_oauth_status(request: Request, user: UserIdentity = Depends(get_current_user)):
+    del user
     """Returns whether Google OAuth credentials are configured on the server."""
     client_id = os.environ.get("GOOGLE_CLIENT_ID") or settings.GOOGLE_CLIENT_ID
     redirect_uri = _get_gsc_redirect_uri(request)
@@ -259,11 +291,16 @@ async def google_oauth_status(request: Request):
     }
 
 @router.get("/google/oauth/authorize")
-async def google_oauth_authorize(request: Request, domain: str = "example.com"):
+async def google_oauth_authorize(
+    request: Request,
+    domain: str = "example.com",
+    service: str = "search_console",
+    provider: Optional[str] = None,
+    user: UserIdentity = Depends(get_current_user),
+):
+    del user
     """
-    Search Console sign-in uses the shared Google authorize route.
-
-    That route sends Google the redirect URI registered on this OAuth client.
+    Shared Google OAuth authorize route for Search Console and Google Analytics.
     """
     client_id = os.environ.get("GOOGLE_CLIENT_ID") or settings.GOOGLE_CLIENT_ID
     if not client_id:
@@ -272,8 +309,33 @@ async def google_oauth_authorize(request: Request, domain: str = "example.com"):
             detail="Google OAuth is not configured. Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET. Mock consent codes are not issued.",
         )
     clean_domain = domain.replace("https://", "").replace("http://", "").split("/")[0]
+    target_provider = provider or ("google_analytics_4" if service in ("analytics", "ga4", "google_analytics", "google_analytics_4") else "google_search_console")
     return RedirectResponse(
-        url=f"/api/v1/connectors/oauth/google_search_console/authorize?domain={urllib.parse.quote(clean_domain)}",
+        url=f"/api/v1/connectors/oauth/{target_provider}/authorize?domain={urllib.parse.quote(clean_domain)}",
+        status_code=302,
+    )
+
+@router.get("/google_analytics/oauth/authorize")
+async def google_analytics_oauth_authorize(
+    request: Request,
+    domain: str = "example.com",
+    property_id: str = "",
+    user: UserIdentity = Depends(get_current_user),
+):
+    del user
+    client_id = os.environ.get("GOOGLE_CLIENT_ID") or settings.GOOGLE_CLIENT_ID
+    if not client_id:
+        raise HTTPException(
+            status_code=503,
+            detail="Google OAuth is not configured. Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET. Mock consent codes are not issued.",
+        )
+    clean_domain = domain.replace("https://", "").replace("http://", "").split("/")[0]
+    query_params = {"domain": clean_domain}
+    if property_id:
+        query_params["property_id"] = property_id
+    query_str = urllib.parse.urlencode(query_params)
+    return RedirectResponse(
+        url=f"/api/v1/connectors/oauth/google_analytics_4/authorize?{query_str}",
         status_code=302,
     )
 

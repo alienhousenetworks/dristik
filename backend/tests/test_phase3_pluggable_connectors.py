@@ -295,8 +295,21 @@ async def test_external_telemetry_service_aggregation():
 # ------------------------------------------------------------------------------
 # 6. REST API Endpoints Tests
 # ------------------------------------------------------------------------------
-def test_integrations_telemetry_endpoint():
+def _signed_client():
+    import uuid
     client = TestClient(app)
+    signup = client.post("/api/v1/auth/signup", json={
+        "full_name": "Telemetry Owner",
+        "email": f"tele_{uuid.uuid4().hex[:8]}@example.com",
+        "password": "OwnerPass1",
+        "organization_name": "Telemetry Org",
+    })
+    assert signup.status_code == 200, signup.text
+    return client
+
+
+def test_integrations_telemetry_endpoint():
+    client = _signed_client()
     resp = client.get("/api/v1/integrations/telemetry/example.com")
     assert resp.status_code == 200
     data = resp.json()
@@ -310,7 +323,7 @@ def test_integrations_telemetry_endpoint():
 
 
 def test_integrations_crux_endpoint():
-    client = TestClient(app)
+    client = _signed_client()
     resp = client.get("/api/v1/integrations/crux/example.com")
     assert resp.status_code == 200
     data = resp.json()

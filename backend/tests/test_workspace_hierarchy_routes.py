@@ -8,6 +8,16 @@ client = TestClient(app)
 
 
 def test_workspace_hierarchy_lifecycle():
+    import uuid
+    anonymous = client.get("/api/v1/workspaces")
+    assert anonymous.status_code == 401
+    signup = client.post("/api/v1/auth/signup", json={
+        "full_name": "Workspace Owner",
+        "email": f"ws_{uuid.uuid4().hex[:8]}@example.com",
+        "password": "OwnerPass1",
+        "organization_name": "Workspace Org",
+    })
+    assert signup.status_code == 200, signup.text
     # 1. List workspaces (returns default if none)
     res = client.get("/api/v1/workspaces")
     assert res.status_code == 200

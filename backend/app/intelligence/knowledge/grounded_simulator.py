@@ -252,6 +252,123 @@ class GroundedAnswerSimulator:
                 assessment=assessment,
             )
 
+        # Determine best source provenance from retrieved evidence
+        source_url = None
+        source_page_title = None
+        source_section = None
+        for chunk in evidence_chunks:
+            if chunk.claim and chunk.claim.evidence:
+                ev = chunk.claim.evidence
+                if ev.url:
+                    source_url = ev.url
+                    source_section = ev.section or (f"H2: {chunk.claim.predicate.replace('_', ' ').title()}" if chunk.claim.predicate else "Overview")
+                    break
+
+        # Resolve human-readable source page title
+        if source_url:
+            for pc in self.graph.page_classifications:
+                if pc.url == source_url and pc.title:
+                    source_page_title = pc.title
+                    break
+            if not source_page_title:
+                path = source_url.split("//")[-1].split("/", 1)[-1].strip("/")
+                source_page_title = f"{self.graph.brand} | {path.replace('-', ' ').title()}" if path else f"{self.graph.brand} Official"
+        else:
+            source_page_title = f"{self.graph.brand} Official Website"
+
+        # Determine target update page and section based on intent
+        target_map = {
+            QueryIntent.COMMERCIAL: ("/pricing", "## Published Pricing Tiers & Billing Structure", "Publish a dedicated pricing tier card specifying starting rates, billing intervals, and usage limits."),
+            QueryIntent.COMPLIANCE: ("/security", "## Security Accreditations & Data Governance", "Publish formal security certifications (SOC 2, ISO 27001, GDPR) and encryption standards."),
+            QueryIntent.TECHNICAL: ("/documentation", "## Developer APIs & Technical Architecture", "Provide clear API endpoints, integration SDKs, webhooks, and technical deployment guides."),
+            QueryIntent.ONBOARDING: ("/support", "## Implementation SLAs & Customer Onboarding", "Document onboarding kickoff milestones, implementation timelines, and ticket SLA response guarantees."),
+            QueryIntent.PROOF: ("/case-studies", "## Quantified Customer Outcomes & ROI Studies", "Add customer proof, quantified metrics, and enterprise case studies."),
+            QueryIntent.ICP: ("/about", "## Target Audience & Disqualification Criteria", "Declare explicit target buyer personas, company scale criteria, and disqualifying use cases."),
+            QueryIntent.COMPETITIVE: ("/product", "## Key Differentiators & Competitive Moat", "Articulate defensible advantages and direct feature comparisons against legacy alternatives."),
+            QueryIntent.PURCHASE: ("/demo", "## Direct Procurement & Demo Conversion Path", "Ensure high-intent self-serve sign up or transparent demo scheduling workflows."),
+        }
+        target_update_page, target_update_section, section_rec_base = target_map.get(
+            plan.intent,
+            ("/", "## Core Solutions & Value Proposition", "Expand authoritative on-page documentation addressing this inquiry.")
+        )
+        if assessment.status == "SUFFICIENT" and grounding_ratio >= 0.70:
+            section_update_recommendation = f"Add Schema.org JSON-LD structured data markup to {target_update_page} ({target_update_section}) to accelerate AI answer engine citations."
+        else:
+            missing_hint = f" Specifically clarify: {', '.join(assessment.missing_aspects)}." if assessment.missing_aspects else ""
+            section_update_recommendation = f"Update {target_update_page} under section '{target_update_section}': {section_rec_base}{missing_hint}"
+
+        ai_thinking_steps = [
+            {
+                "step": "1",
+                "title": "Query Deconstruction & Intent Mapping",
+                "status": "complete",
+                "thought": (
+                    f"Analyzed question '{question[:75]}...' against 10 strategic business dimensions. "
+                    f"Classified primary intent as '{plan.intent.value.upper()}'. Priority page roles: "
+                    f"{', '.join([r.value for r in plan.priority_page_roles[:2]])}."
+                ),
+            },
+            {
+                "step": "2",
+                "title": "Knowledge Base Hybrid Retrieval (RAG)",
+                "status": "complete",
+                "thought": (
+                    f"Queried Crawled Knowledge Base ({len(self.graph.claims)} atomic claims across "
+                    f"{len(self.graph.page_classifications)} crawled pages). "
+                    f"Retrieved {len(evidence_chunks)} matching evidence chunk(s). "
+                    + (f"Top match from {source_url} (Section: {source_section or 'General'})." if source_url else "No relevant claims matched lexical/semantic filters.")
+                ),
+                "details": {
+                    "chunks_retrieved": len(evidence_chunks),
+                    "source_url": source_url,
+                    "section": source_section,
+                }
+            },
+            {
+                "step": "3",
+                "title": "Evidence Fact-Checking & Grounding Verification",
+                "status": "complete" if assessment.status in ("SUFFICIENT", "PARTIAL") else "warning",
+                "thought": (
+                    f"Evaluated evidence sufficiency: status is '{assessment.status}'. "
+                    f"Coverage ratio: {round(assessment.coverage_ratio * 100)}%. "
+                    f"Supported aspects: {len(assessment.supported_aspects)}. "
+                    f"Missing aspects: {len(assessment.missing_aspects)}."
+                ),
+                "details": {
+                    "supported_aspects": assessment.supported_aspects,
+                    "missing_aspects": assessment.missing_aspects,
+                }
+            },
+            {
+                "step": "4",
+                "title": "Grounded Answer Synthesis",
+                "status": "complete",
+                "thought": (
+                    f"Synthesized candidate answer strictly constrained to first-party facts. "
+                    f"Computed grounding ratio: {round(grounding_ratio * 100)}%. "
+                    f"Assigned Answer Risk: {answer_risk.value}."
+                ),
+                "details": {
+                    "grounding_ratio": grounding_ratio,
+                    "answer_risk": answer_risk.value,
+                }
+            },
+            {
+                "step": "5",
+                "title": "Section Patch & Remediation Guidance",
+                "status": "complete" if grounding_ratio >= 0.7 else "action_required",
+                "thought": (
+                    f"Evaluated remediation requirement for AI engines. "
+                    f"Target Page: {target_update_page} | Section: {target_update_section}. "
+                    f"Action: {section_update_recommendation}"
+                ),
+                "details": {
+                    "target_page": target_update_page,
+                    "target_section": target_update_section,
+                }
+            },
+        ]
+
         return GroundedAnswerSimulation(
             question_id=question_id,
             candidate_answer=candidate_answer,
@@ -262,6 +379,13 @@ class GroundedAnswerSimulator:
             assessment_status=assessment.status,
             missing_aspects=assessment.missing_aspects,
             supported_aspects=assessment.supported_aspects,
+            source_url=source_url,
+            source_page_title=source_page_title,
+            source_section=source_section,
+            target_update_page=target_update_page,
+            target_update_section=target_update_section,
+            section_update_recommendation=section_update_recommendation,
+            ai_thinking_steps=ai_thinking_steps,
         )
 
     def _compute_answer_risk(

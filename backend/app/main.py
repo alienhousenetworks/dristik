@@ -230,19 +230,10 @@ mount_http(app)
 
 @app.get("/health", tags=["Health"])
 async def health_check():
-    creds = settings.get_llm_credentials()
     return {
         "status": "healthy",
         "app": settings.APP_NAME,
         "version": settings.APP_VERSION,
-        "environment": settings.ENVIRONMENT,
-        "active_provider": creds.get("provider", "none"),
-        "provider_display_name": creds.get("display_name", "None"),
-        "configured_providers": settings.get_configured_providers(),
-        "has_active_llm_key": settings.has_active_llm_key,
-        "model_fast": creds.get("model_fast"),
-        "model_reasoning": creds.get("model_reasoning"),
-        "has_together_api_key": bool(settings.TOGETHER_API_KEY)  # backward compat
     }
 
 

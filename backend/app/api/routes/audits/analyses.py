@@ -16,8 +16,9 @@ from app.domain.models import (
     CommercialQueryEvaluation,
     CompetitorBakeoffResult,
 )
+from app.identity.access import require_analysis
 from app.identity.authorizer import Authorizer, UserIdentity
-from app.identity.deps import get_current_user, get_current_user_optional, require_permission
+from app.identity.deps import get_current_user, require_permission
 from app.identity.store import get_store
 from app.payments.store import get_payment_store
 from app.orchestration.orchestrator import orchestrator
@@ -76,40 +77,29 @@ class CompetitorBakeoffRequest(BaseModel):
 
 
 def _get_org_run(analysis_id: str, user: Optional[UserIdentity] = None) -> AnalysisRun:
-    run = orchestrator.get_run(analysis_id)
-    if not run:
-        # Check if analysis_id matches a report_id or report.analysis_id
-        for r in orchestrator.runs.values():
-            if r.report and (r.report.report_id == analysis_id or getattr(r.report, "analysis_id", None) == analysis_id):
-                run = r
-                break
-    if not run:
-        raise HTTPException(status_code=404, detail=f"Analysis run or report '{analysis_id}' not found.")
-    if user:
-        if not Authorizer.can_access_org(user, run.org_id):
-            raise HTTPException(status_code=404, detail="Analysis run not found.")
-        if not Authorizer.can_perform(user, "mission:read"):
-            raise HTTPException(status_code=403, detail="You do not have permission to view audits.")
-    return run
+    if user is None:
+        raise HTTPException(status_code=401, detail="Sign in to continue.")
+    return require_analysis(analysis_id, user)
 
 @router.get("", response_model=List[Dict[str, Any]])
 async def list_analyses(
     limit: int = 25,
-    user: Optional[UserIdentity] = Depends(get_current_user_optional),
+    user: UserIdentity = Depends(get_current_user),
 ):
     """
     Lists recent audit summaries for the organization.
     Enables users to revisit previous audits and switch between them.
     """
-    org_id = user.org_id if user else "org_default"
+    if not Authorizer.can_perform(user, "mission:read"):
+        raise HTTPException(status_code=403, detail="You do not have permission to view audits.")
+    org_id = user.org_id
     repo = orchestrator.repository
     runs = repo.list_runs(org_id=org_id, limit=limit)
     seen_ids = set()
     summaries = []
 
-    # Include active in-memory runs first
     for r in orchestrator.runs.values():
-        if not user or Authorizer.can_access_org(user, r.org_id):
+        if Authorizer.can_access_org(user, r.org_id):
             seen_ids.add(r.analysis_id)
             summaries.append({
                 "analysis_id": r.analysis_id,
@@ -150,25 +140,17 @@ async def list_analyses(
 @router.delete("/{analysis_id}")
 async def delete_analysis(
     analysis_id: str,
-    user: Optional[UserIdentity] = Depends(get_current_user_optional),
+    user: UserIdentity = Depends(get_current_user),
 ):
-    """Deletes a stored audit. The open report is removed from memory as well."""
-    org_id = user.org_id if user else "org_default"
-    row = orchestrator.repository.get_run(analysis_id)
-    memory_run = orchestrator.runs.get(analysis_id)
-    if row and row.get("org_id") != org_id:
-        if not user or not Authorizer.can_access_org(user, row.get("org_id") or ""):
-            raise HTTPException(status_code=404, detail="Analysis run not found.")
-    if memory_run and getattr(memory_run, "org_id", org_id) != org_id:
-        if not user or not Authorizer.can_access_org(user, memory_run.org_id):
-            raise HTTPException(status_code=404, detail="Analysis run not found.")
-    if not row and not memory_run:
-        raise HTTPException(status_code=404, detail="Analysis run not found.")
-    removed = orchestrator.repository.delete_run(analysis_id, org_id=row.get("org_id") if row else None)
-    orchestrator.runs.pop(analysis_id, None)
-    if not removed and not memory_run:
-        raise HTTPException(status_code=404, detail="Analysis run not found.")
-    return {"deleted": analysis_id}
+    """Deletes a stored audit owned by the caller's organization."""
+    if not Authorizer.can_perform(user, "mission:delete"):
+        raise HTTPException(status_code=403, detail="You do not have permission to delete audits.")
+    run = require_analysis(analysis_id, user, permission="mission:read")
+    removed = orchestrator.repository.delete_run(run.analysis_id, org_id=run.org_id)
+    orchestrator.runs.pop(run.analysis_id, None)
+    if not removed and run.analysis_id not in orchestrator.runs:
+        return {"deleted": run.analysis_id}
+    return {"deleted": run.analysis_id}
 
 @router.post("", response_model=AnalysisRun)
 async def start_analysis(
@@ -268,11 +250,11 @@ async def start_analysis(
 
 
 @router.get("/{analysis_id}", response_model=AnalysisRun)
-async def get_analysis_status(analysis_id: str, user: Optional[UserIdentity] = Depends(get_current_user_optional)):
+async def get_analysis_status(analysis_id: str, user: UserIdentity = Depends(get_current_user)):
     return _get_org_run(analysis_id, user)
 
 @router.get("/{analysis_id}/report", response_model=ExecutiveReport)
-async def get_analysis_report(analysis_id: str, user: Optional[UserIdentity] = Depends(get_current_user_optional)):
+async def get_analysis_report(analysis_id: str, user: UserIdentity = Depends(get_current_user)):
     run = _get_org_run(analysis_id, user)
     if not run.report:
         raise HTTPException(status_code=400, detail="Report is not ready yet or analysis is still in progress.")
@@ -283,37 +265,19 @@ async def get_analysis_report(analysis_id: str, user: Optional[UserIdentity] = D
 async def get_analysis_manifest(analysis_id: str, user: UserIdentity = Depends(get_current_user)):
     """Return the sealed run manifest used to reconstruct this audit."""
     from app.audit.manifest import load_manifest
-    run = orchestrator.runs.get(analysis_id)
-    if run and run.report:
-        disk = load_manifest(run.analysis_id)
-        if disk:
-            return disk.model_dump()
-    disk = load_manifest(analysis_id)
-    if disk:
-        return disk.model_dump()
-    # Also try report UUID lookup
-    for r in orchestrator.runs.values():
-        if r.report and (r.report.report_id == analysis_id or r.manifest_id == analysis_id):
-            found = load_manifest(r.analysis_id)
-            if found:
-                return found.model_dump()
-    raise HTTPException(status_code=404, detail="Run manifest not found.")
+    run = _get_org_run(analysis_id, user)
+    disk = load_manifest(run.analysis_id)
+    if not disk:
+        raise HTTPException(status_code=404, detail="Run manifest not found.")
+    return disk.model_dump()
 
 
 @router.get("/{analysis_id}/snapshots/{snapshot_id}")
 async def get_analysis_snapshot(analysis_id: str, snapshot_id: str, user: UserIdentity = Depends(get_current_user)):
     """Return a raw immutable snapshot (page body or API payload) by content-addressed ID."""
     from app.audit.snapshots import SnapshotStore
-    run_id = analysis_id
-    run = orchestrator.runs.get(analysis_id)
-    if run:
-        run_id = run.analysis_id
-    else:
-        for r in orchestrator.runs.values():
-            if r.report and r.report.report_id == analysis_id:
-                run_id = r.analysis_id
-                break
-    store = SnapshotStore(run_id)
+    run = _get_org_run(analysis_id, user)
+    store = SnapshotStore(run.analysis_id)
     record = store.get(snapshot_id)
     if not record:
         raise HTTPException(status_code=404, detail="Snapshot not found.")
@@ -379,7 +343,7 @@ async def get_analysis_timeline(analysis_id: str, user: UserIdentity = Depends(g
     }
 
 @router.get("/{analysis_id}/patch-pack/zip")
-async def download_patch_pack_zip(analysis_id: str, user: Optional[UserIdentity] = Depends(get_current_user_optional)):
+async def download_patch_pack_zip(analysis_id: str, user: UserIdentity = Depends(get_current_user)):
     """Downloads a developer-ready ZIP containing schema.jsonld, metadata.html, faq.html, llms.txt, robots.txt."""
     run = _get_org_run(analysis_id, user)
     if not run.report:
@@ -400,7 +364,7 @@ async def download_patch_pack_zip(analysis_id: str, user: Optional[UserIdentity]
     )
 
 @router.get("/{analysis_id}/patch-pack/files")
-async def get_patch_pack_files(analysis_id: str, user: Optional[UserIdentity] = Depends(get_current_user_optional)):
+async def get_patch_pack_files(analysis_id: str, user: UserIdentity = Depends(get_current_user)):
     """Returns individual text contents of the patch pack files for in-browser preview."""
     run = _get_org_run(analysis_id, user)
     if not run.report:
@@ -418,7 +382,7 @@ async def get_patch_pack_files(analysis_id: str, user: Optional[UserIdentity] = 
     }
 
 @router.get("/{analysis_id}/patch-pack/notion")
-async def get_patch_pack_notion(analysis_id: str, user: Optional[UserIdentity] = Depends(get_current_user_optional)):
+async def get_patch_pack_notion(analysis_id: str, user: UserIdentity = Depends(get_current_user)):
     """Returns a single clean Markdown block formatted for 1-click copy into Notion or Jira."""
     run = _get_org_run(analysis_id, user)
     if not run.report:
@@ -437,7 +401,7 @@ async def get_patch_pack_notion(analysis_id: str, user: Optional[UserIdentity] =
 @router.post("/{analysis_id}/simulate-ai-search")
 async def simulate_ai_search(
     analysis_id: str,
-    user: Optional[UserIdentity] = Depends(get_current_user_optional)
+    user: UserIdentity = Depends(get_current_user)
 ):
     """
     Executes or refreshes the 6 Canonical Commercial Inquiries simulation using the active LLM (Claude).
@@ -485,7 +449,7 @@ async def simulate_ai_search(
 @router.post("/{analysis_id}/dynamic-sandbox")
 async def generate_audit_dynamic_sandbox(
     analysis_id: str,
-    user: Optional[UserIdentity] = Depends(get_current_user_optional)
+    user: UserIdentity = Depends(get_current_user)
 ):
     """
     Synthesizes and evaluates 100 bespoke business questions across 10 strategic facets
@@ -611,13 +575,14 @@ async def generate_audit_dynamic_sandbox(
         "average_grounding_ratio": avg_grounding,
         "kie_graph_summary": run.report.kie_graph_summary,
         "five_dimension_ai_visibility": run.report.five_dimension_ai_visibility,
+        "system_execution_log": getattr(sandbox_engine, "system_execution_log", []),
         "evaluations": [e.model_dump() for e in evaluations]
     }
 
 @router.get("/{analysis_id}/ki-graph")
 async def get_ki_graph(
     analysis_id: str,
-    user: Optional[UserIdentity] = Depends(get_current_user_optional)
+    user: UserIdentity = Depends(get_current_user)
 ):
     """
     Returns the Knowledge Intelligence Engine (KIE) graph for a completed audit.
@@ -730,7 +695,7 @@ async def get_ki_graph(
 async def run_patch_requery(
     analysis_id: str,
     req: ReQueryRequest,
-    user: Optional[UserIdentity] = Depends(get_current_user_optional)
+    user: UserIdentity = Depends(get_current_user)
 ):
     """
     Re-runs the 6 Commercial Buyer Questions after applying the patch (or custom pasted schema/FAQ).
@@ -898,7 +863,7 @@ async def run_patch_requery(
 async def run_competitor_bakeoff(
     analysis_id: str,
     req: CompetitorBakeoffRequest,
-    user: Optional[UserIdentity] = Depends(get_current_user_optional)
+    user: UserIdentity = Depends(get_current_user)
 ):
     """
     Runs the 1-Competitor Bake-off across the 6 Commercial Questions.
@@ -919,7 +884,7 @@ async def run_competitor_bakeoff(
     return bakeoff_result
 
 @router.get("/{analysis_id}/whatsapp-summary")
-async def get_whatsapp_summary(analysis_id: str, user: Optional[UserIdentity] = Depends(get_current_user_optional)):
+async def get_whatsapp_summary(analysis_id: str, user: UserIdentity = Depends(get_current_user)):
     """Returns formatted plain text for WhatsApp sharing plus direct wa.me link."""
     run = _get_org_run(analysis_id, user)
     if not run.report:
@@ -954,7 +919,7 @@ async def get_evidence_graph(analysis_id: str, user: UserIdentity = Depends(get_
 
 
 @router.get("/{analysis_id}/evidence-explorer")
-async def get_evidence_explorer(analysis_id: str, user: Optional[UserIdentity] = Depends(get_current_user_optional)):
+async def get_evidence_explorer(analysis_id: str, user: UserIdentity = Depends(get_current_user)):
     """
     Enterprise Evidence Explorer: Returns deep end-to-end provenance traces connecting
     every Finding -> Claim -> Evidence Item -> Selector -> Snapshot -> Captured Timestamp.
@@ -971,7 +936,7 @@ async def get_evidence_explorer(analysis_id: str, user: Optional[UserIdentity] =
 
 
 @router.get("/{analysis_id}/score-explanation")
-async def get_score_explanation(analysis_id: str, user: Optional[UserIdentity] = Depends(get_current_user_optional)):
+async def get_score_explanation(analysis_id: str, user: UserIdentity = Depends(get_current_user)):
     """
     Score Explainability ('Why this score?'): Decomposes overall index into
     exact contributing dimensions, specific evidence tokens, and deduction reasons.
@@ -986,7 +951,7 @@ async def get_score_explanation(analysis_id: str, user: Optional[UserIdentity] =
 
 
 @router.get("/{analysis_id}/checkpoints")
-async def get_analysis_checkpoints(analysis_id: str, user: Optional[UserIdentity] = Depends(get_current_user_optional)):
+async def get_analysis_checkpoints(analysis_id: str, user: UserIdentity = Depends(get_current_user)):
     """
     Returns all durable stage checkpoints for the analysis run.
     """
@@ -1002,7 +967,7 @@ async def get_analysis_checkpoints(analysis_id: str, user: Optional[UserIdentity
 
 
 @router.get("/{analysis_id}/graph")
-async def get_analysis_graph(analysis_id: str, user: Optional[UserIdentity] = Depends(get_current_user_optional)):
+async def get_analysis_graph(analysis_id: str, user: UserIdentity = Depends(get_current_user)):
     """
     Returns the full DAG execution topology, node statuses, dependency prerequisites,
     and recent activity events for the analysis.
@@ -1045,8 +1010,52 @@ async def run_single_graph_node(analysis_id: str, node_id: str, user: UserIdenti
     return res
 
 
+@router.post("/{analysis_id}/sections/{section_id}/run")
+async def run_pipeline_section_endpoint(analysis_id: str, section_id: str, user: UserIdentity = Depends(require_permission("mission:create"))):
+    """
+    Executes all DAG nodes belonging to an entire phase / section sequentially.
+    """
+    _get_org_run(analysis_id, user)
+    res = await orchestrator.run_pipeline_section(analysis_id, section_id)
+    if not res.get("success"):
+        raise HTTPException(status_code=400, detail=res.get("error", f"Section '{section_id}' execution failed."))
+    return res
+
+
+@router.get("/{analysis_id}/agent-workforce")
+async def get_agent_workforce_state(analysis_id: str, user: UserIdentity = Depends(get_current_user)):
+    """
+    Returns live execution status, claims produced, and observations across all 35 specialist agents.
+    """
+    run = _get_org_run(analysis_id, user)
+    blackboard = orchestrator.blackboards.get(analysis_id)
+    agent_results = (blackboard.blackboard_state.get("agent_results") if blackboard else {}) or {}
+    
+    from app.agents.runtime.registry import SPECIALIST_AGENTS_V3
+    workforce = []
+    for agent_id, defn in SPECIALIST_AGENTS_V3.items():
+        res = agent_results.get(agent_id) or {}
+        workforce.append({
+            "agent_id": agent_id,
+            "agent_name": defn.agent_name,
+            "domain": defn.domain,
+            "description": defn.description,
+            "status": res.get("status") or ("completed" if run.status == "completed" else "pending"),
+            "mode": res.get("mode") or ("DETERMINISTIC" if "deterministic" in defn.allowed_models else "HYBRID"),
+            "claims_count": len(res.get("claims") or []),
+            "claims": res.get("claims") or [],
+            "observations": res.get("observations") or {},
+            "unavailable_reason": res.get("unavailable_reason"),
+        })
+    return {
+        "analysis_id": analysis_id,
+        "total_agents": len(SPECIALIST_AGENTS_V3),
+        "agents": workforce,
+    }
+
+
 @router.get("/{analysis_id}/visual_intelligence")
-async def get_visual_intelligence(analysis_id: str, user: Optional[UserIdentity] = Depends(get_current_user_optional)):
+async def get_visual_intelligence(analysis_id: str, user: UserIdentity = Depends(get_current_user)):
     """
     Returns the AI-adaptive visual intelligence payload (tailored charts, graphs, and spotlight numbers).
     If not yet generated, dynamically evaluates the report context and synthesizes it on-the-fly.

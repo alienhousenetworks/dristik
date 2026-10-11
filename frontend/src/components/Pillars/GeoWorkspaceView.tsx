@@ -3,6 +3,7 @@ import { ExecutiveReport, AiSearchQueryEvaluation, TabId, AnalyzedChunk, Control
 import { RealAiCitationTracker } from '../RealAiCitationTracker';
 import { GeoAeoTrendTracker } from '../GeoAeoTrendTracker';
 import { PillarShell, Card } from '../ui';
+import { SectionExportButtons } from '../ui/SectionExportButtons';
 import { ControlledRetrievalVisualizer } from './RagChunkVisualizer';
 import {
   Sparkles,
@@ -154,6 +155,13 @@ export function GeoWorkspaceView({
       score={geoScore ?? '—'}
       metaLabel="On-page grade"
       meta={perEngine?.overall_engine_grade || 'Not measured'}
+      actions={
+        <SectionExportButtons
+          analysisId={analysisId || report.analysis_id || report.report_id}
+          sectionKey="geo"
+          sectionLabel="GEO"
+        />
+      }
       tabs={[
         { id: 'engines', label: 'Per-Engine AI Matrix' },
         { id: 'som', label: 'Share of Model & Displacement' },

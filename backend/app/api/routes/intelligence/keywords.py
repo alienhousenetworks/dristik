@@ -3,8 +3,11 @@ Keyword Intelligence & SERP Tracking API Endpoints
 Manages continuous tracked keywords, daily SERP rank history, SERP features, and competitor ranks.
 """
 from typing import Any, Dict, List, Optional
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
+
+from app.identity.authorizer import UserIdentity
+from app.identity.deps import get_current_user
 
 from app.domain.models import (
     KeywordGapReport,
@@ -24,12 +27,27 @@ class SyncKeywordsRequest(BaseModel):
     competitor_domains: List[str] = []
 
 
+def _project(user: UserIdentity) -> str:
+    return user.org_id
+
+
+def _owned_keyword(user: UserIdentity, keyword_id: str):
+    keywords = serp_tracking_engine.list_keywords(_project(user), active_only=False)
+    match = next((item for item in keywords if item.keyword_id == keyword_id), None)
+    if match is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Keyword not found")
+    return match
+
+
 @router.post("", response_model=TrackedKeyword, status_code=status.HTTP_201_CREATED)
-def add_tracked_keyword(payload: TrackedKeywordCreate) -> TrackedKeyword:
-    """Add a new keyword to continuous daily SERP tracking."""
+def add_tracked_keyword(
+    payload: TrackedKeywordCreate,
+    user: UserIdentity = Depends(get_current_user),
+) -> TrackedKeyword:
+    """Add a new keyword to continuous daily SERP tracking for the signed-in organization."""
     try:
         return serp_tracking_engine.add_keyword(
-            project_id=payload.project_id,
+            project_id=_project(user),
             domain=payload.domain,
             keyword=payload.keyword,
             target_url=payload.target_url,
@@ -45,20 +63,25 @@ def add_tracked_keyword(payload: TrackedKeywordCreate) -> TrackedKeyword:
 
 @router.get("", response_model=List[TrackedKeyword])
 def list_tracked_keywords(
-    project_id: str = Query(..., description="Project ID"),
+    project_id: str = Query("", description="Ignored. Keywords are scoped to the signed-in organization."),
     active_only: bool = Query(True, description="Filter only active keywords"),
+    user: UserIdentity = Depends(get_current_user),
 ) -> List[TrackedKeyword]:
-    """List all continuous tracked keywords for a project with current rank and 24h delta."""
-    return serp_tracking_engine.list_keywords(project_id, active_only=active_only)
+    """List tracked keywords for the signed-in organization."""
+    del project_id
+    return serp_tracking_engine.list_keywords(_project(user), active_only=active_only)
 
 
 @router.delete("/{keyword_id}")
 def remove_tracked_keyword(
     keyword_id: str,
-    project_id: str = Query(..., description="Project ID"),
+    project_id: str = Query("", description="Ignored. Keywords are scoped to the signed-in organization."),
+    user: UserIdentity = Depends(get_current_user),
 ) -> Dict[str, Any]:
     """Remove a keyword from active tracking."""
-    deleted = serp_tracking_engine.remove_keyword(project_id, keyword_id)
+    del project_id
+    _owned_keyword(user, keyword_id)
+    deleted = serp_tracking_engine.remove_keyword(_project(user), keyword_id)
     if not deleted:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Keyword not found")
     return {"ok": True, "keyword_id": keyword_id}
@@ -68,8 +91,10 @@ def remove_tracked_keyword(
 def get_keyword_history(
     keyword_id: str,
     days: int = Query(30, ge=1, le=365, description="Number of historical days"),
+    user: UserIdentity = Depends(get_current_user),
 ) -> List[KeywordSerpSnapshot]:
     """Retrieve daily SERP position timeline and feature snapshots for a keyword."""
+    _owned_keyword(user, keyword_id)
     return serp_tracking_engine.get_history(keyword_id, days=days)
 
 
@@ -77,19 +102,24 @@ def get_keyword_history(
 def get_keyword_competitors(
     keyword_id: str,
     snapshot_date: Optional[str] = Query(None, description="Optional YYYY-MM-DD date"),
+    user: UserIdentity = Depends(get_current_user),
 ) -> List[Dict[str, Any]]:
     """Retrieve competitor rank positions for this keyword on the SERP."""
+    _owned_keyword(user, keyword_id)
     return serp_tracking_engine.get_competitor_ranks(keyword_id, snapshot_date=snapshot_date)
 
 
 @router.post("/sync")
-def sync_project_keywords(payload: SyncKeywordsRequest) -> Dict[str, Any]:
+def sync_project_keywords(
+    payload: SyncKeywordsRequest,
+    user: UserIdentity = Depends(get_current_user),
+) -> Dict[str, Any]:
     """
     Trigger on-demand or daily SERP sync for all active keywords of a project.
     Captures live Google positions, AI Overviews, Snippets, and competitor ranks.
     """
     return serp_tracking_engine.sync_keyword_serp(
-        project_id=payload.project_id,
+        project_id=_project(user),
         domain=payload.domain,
         competitor_domains=payload.competitor_domains,
     )
@@ -97,10 +127,12 @@ def sync_project_keywords(payload: SyncKeywordsRequest) -> Dict[str, Any]:
 
 @router.get("/movement-summary", response_model=KeywordMovementSummary)
 def get_keyword_movement_summary(
-    project_id: str = Query(..., description="Project ID"),
+    project_id: str = Query("", description="Ignored. Keywords are scoped to the signed-in organization."),
+    user: UserIdentity = Depends(get_current_user),
 ) -> KeywordMovementSummary:
     """Returns high-level movement metrics: Page 1 breakouts, Top 3 dominance, drops, and AI overview presence."""
-    keywords = serp_tracking_engine.list_keywords(project_id, active_only=True)
+    del project_id
+    keywords = serp_tracking_engine.list_keywords(_project(user), active_only=True)
     return serp_tracking_engine.calculate_movement_summary(keywords)
 
 
@@ -111,7 +143,10 @@ class KeywordGapRequest(BaseModel):
 
 
 @router.post("/gap", response_model=KeywordGapReport)
-def evaluate_keyword_gap(payload: KeywordGapRequest) -> KeywordGapReport:
+def evaluate_keyword_gap(
+    payload: KeywordGapRequest,
+    user: UserIdentity = Depends(get_current_user),
+) -> KeywordGapReport:
     """
     Evaluates competitor keyword gaps and computes traffic opportunity.
     Identifies missing top-10 keywords and weak page-2 keywords with recommended page creations.
@@ -120,6 +155,6 @@ def evaluate_keyword_gap(payload: KeywordGapRequest) -> KeywordGapReport:
     return keyword_gap_engine.evaluate_gap(
         target_domain=payload.target_domain,
         competitor_domains=payload.competitor_domains,
-        project_id=payload.project_id,
+        project_id=_project(user),
     )
 

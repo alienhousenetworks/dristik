@@ -8,6 +8,7 @@ import { CompetitiveLandscapeMap } from '../CompetitiveLandscapeMap';
 import { CompetitiveEvidenceTable } from '../CompetitiveEvidenceTable';
 import { Perspectives } from '../Perspectives';
 import { PillarShell, Card } from '../ui';
+import { SectionExportButtons } from '../ui/SectionExportButtons';
 import { Compass, Loader2 } from 'lucide-react';
 
 interface CompetitorWorkspaceViewProps {
@@ -74,6 +75,13 @@ export function CompetitorWorkspaceView({
       score={winRate != null ? `${winRate}%` : '—'}
       metaLabel="Competitors"
       meta={bakeoff?.competitor_domain || compReport?.competitors?.[0]?.company_name || 'Market rivals'}
+      actions={
+        <SectionExportButtons
+          analysisId={analysisId || report.analysis_id || report.report_id}
+          sectionKey="competitors"
+          sectionLabel="Competitors"
+        />
+      }
       tabs={[
         { id: 'landscape_gaps', label: 'Landscape & Evidence Matrix' },
         { id: 'bakeoff', label: 'Commercial Query Bake-off' },

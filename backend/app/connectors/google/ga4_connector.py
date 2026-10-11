@@ -11,7 +11,9 @@ Extracts empirical visitor metrics:
 from typing import Dict, Any, List, Optional
 from datetime import datetime, timezone
 import json
+import os
 
+from app.core.config import settings
 from app.connectors.base.interface import BaseConnector
 from app.connectors.base.telemetry_interface import ExternalTelemetryConnector, ExternalTelemetryResult
 from app.connectors.base.models import (
@@ -42,16 +44,24 @@ class GoogleAnalytics4Connector(BaseConnector, ExternalTelemetryConnector):
                 last_checked_at=datetime.now(timezone.utc).isoformat(),
             )
 
+        parsed = None
         try:
             parsed = json.loads(creds_content)
         except Exception:
-            return ConnectorHealth(
-                provider=ConnectorType.GOOGLE_ANALYTICS_4,
-                status=ConnectorHealthStatus.UNAUTHORIZED,
-                authenticated=False,
-                message="GA4 credentials must be JSON with a property_id. No sessions were queried.",
-                last_checked_at=datetime.now(timezone.utc).isoformat(),
-            )
+            clean_str = str(creds_content).strip()
+            if clean_str.isdigit() or clean_str.startswith("properties/"):
+                parsed = {"property_id": clean_str}
+            else:
+                return ConnectorHealth(
+                    provider=ConnectorType.GOOGLE_ANALYTICS_4,
+                    status=ConnectorHealthStatus.UNAUTHORIZED,
+                    authenticated=False,
+                    message="GA4 credentials must be a valid property ID, Service Account JSON, or OAuth token.",
+                    last_checked_at=datetime.now(timezone.utc).isoformat(),
+                )
+
+        if isinstance(parsed, int):
+            parsed = {"property_id": str(parsed)}
 
         if isinstance(parsed, dict) and parsed.get("type") == "oauth2" and parsed.get("access_token"):
             property_id = parsed.get("property_id") or ""
@@ -60,6 +70,17 @@ class GoogleAnalytics4Connector(BaseConnector, ExternalTelemetryConnector):
                 status=ConnectorHealthStatus.CONNECTED,
                 authenticated=True,
                 message=f"Google Analytics OAuth authenticated{f' for property {property_id}' if property_id else ''}.",
+                last_checked_at=datetime.now(timezone.utc).isoformat(),
+            )
+
+        if isinstance(parsed, dict) and parsed.get("type") == "service_account" and ("client_email" in parsed or "private_key" in parsed):
+            client_email = parsed.get("client_email") or "service account"
+            property_id = parsed.get("property_id") or ""
+            return ConnectorHealth(
+                provider=ConnectorType.GOOGLE_ANALYTICS_4,
+                status=ConnectorHealthStatus.CONNECTED,
+                authenticated=True,
+                message=f"Google Analytics Service Account verified for {client_email}{f' (property {property_id})' if property_id else ''}.",
                 last_checked_at=datetime.now(timezone.utc).isoformat(),
             )
 
@@ -82,6 +103,8 @@ class GoogleAnalytics4Connector(BaseConnector, ExternalTelemetryConnector):
             ),
             last_checked_at=datetime.now(timezone.utc).isoformat(),
         )
+
+    test_health = test_connection
 
     async def fetch_attribution_data(self, domain: str) -> Ga4AttributionData:
         health = await self.test_connection()

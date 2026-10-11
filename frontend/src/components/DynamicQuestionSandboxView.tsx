@@ -5,6 +5,8 @@ import {
   KieGraphSummary,
   KieClaimGroundingResult,
   KieAnswerRisk,
+  AiThinkingStep,
+  SystemExecutionLogEntry,
 } from '../types';
 import {
   Sparkles,
@@ -26,6 +28,9 @@ import {
   BarChart3,
   BookOpen,
   Link2,
+  Terminal,
+  Cpu,
+  X,
 } from 'lucide-react';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -244,6 +249,254 @@ function KieGraphSummaryPanel({ summary }: { summary: KieGraphSummary }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Antigravity-Style AI Thinking Process Panel
+// ─────────────────────────────────────────────────────────────────────────────
+
+function AiThinkingPanel({ steps }: { steps?: AiThinkingStep[] | null }) {
+  const [isOpen, setIsOpen] = useState(false);
+  if (!steps || steps.length === 0) return null;
+
+  return (
+    <div className="rounded-md border border-line bg-paper-100/70 overflow-hidden">
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        className="w-full px-3.5 py-2 flex items-center justify-between text-left hover:bg-paper-200/50 transition-colors"
+      >
+        <div className="flex items-center gap-2">
+          <div className="p-1 rounded bg-pine/10 text-pine">
+            <Cpu className="w-3.5 h-3.5" />
+          </div>
+          <span className="font-semibold text-xs text-ink flex items-center gap-1.5">
+            AI Thinking Process (System Log)
+          </span>
+          <span className="text-[10px] font-mono bg-paper border border-line px-1.5 py-0.2 rounded text-ink-600">
+            {steps.length} cognitive steps
+          </span>
+        </div>
+        <div className="flex items-center gap-1 text-xs text-ink-500">
+          <span className="text-[10px] font-mono">{isOpen ? 'Hide Trace' : 'View Trace'}</span>
+          {isOpen ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+        </div>
+      </button>
+
+      {isOpen && (
+        <div className="p-3.5 pt-1 space-y-2 border-t border-line/60 bg-paper-50 font-mono text-xs">
+          <div className="text-[10px] text-ink-500 flex items-center gap-1 mb-2 font-sans">
+            <Terminal className="w-3 h-3 text-pine" />
+            <span>Agent Cognitive Execution Trace & Evidence Verification</span>
+          </div>
+          {steps.map((st, idx) => {
+            const isLast = idx === steps.length - 1;
+            const statusConfig = {
+              complete: { dot: 'bg-emerald-500', text: 'text-good' },
+              warning: { dot: 'bg-amber-500', text: 'text-warn' },
+              action_required: { dot: 'bg-rose-500', text: 'text-bad' },
+            }[st.status || 'complete'] || { dot: 'bg-pine', text: 'text-pine' };
+
+            return (
+              <div key={idx} className="relative pl-6 pb-2 last:pb-0">
+                {!isLast && (
+                  <div className="absolute left-2.5 top-3.5 bottom-0 w-px bg-line" />
+                )}
+                <div className={`absolute left-1 top-1 w-3 h-3 rounded-full border-2 border-paper ${statusConfig.dot}`} />
+                <div className="bg-paper p-2.5 rounded border border-line space-y-1">
+                  <div className="flex items-center justify-between text-[11px] font-semibold">
+                    <span className="text-ink flex items-center gap-1.5">
+                      <span className="text-[10px] font-mono opacity-60">Step {st.step}:</span>
+                      {st.title}
+                    </span>
+                    <span className={`text-[10px] font-mono uppercase ${statusConfig.text}`}>
+                      {st.status || 'complete'}
+                    </span>
+                  </div>
+                  <p className="text-[11px] font-sans text-ink-700 leading-relaxed">
+                    {st.thought}
+                  </p>
+                  {st.details && Object.keys(st.details).length > 0 && (
+                    <div className="pt-1 flex flex-wrap gap-1.5 text-[10px] text-ink-600 font-mono">
+                      {Object.entries(st.details).map(([k, v]) => (
+                        v !== null && v !== undefined && v !== '' ? (
+                          <span key={k} className="bg-paper-100 border border-line/80 px-1.5 py-0.5 rounded">
+                            {k}: {typeof v === 'object' ? JSON.stringify(v) : String(v)}
+                          </span>
+                        ) : null
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Source Attribution & Section Remediation Update Panel
+// ─────────────────────────────────────────────────────────────────────────────
+
+function SourceAndSectionUpdatePanel({ item }: { item: DynamicSandboxQuestionEvaluation }) {
+  const hasSource = item.source_url || item.evidence_url || item.source_page_title || item.source_section;
+  const hasUpdate = item.target_update_page || item.target_update_section || item.section_update_recommendation;
+
+  if (!hasSource && !hasUpdate) return null;
+
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+      {/* ── Source Attribution ── */}
+      <div className="p-3 bg-paper border border-line rounded-md space-y-1.5">
+        <div className="flex items-center gap-1.5 font-semibold text-ink text-[11px]">
+          <Link2 className="w-3.5 h-3.5 text-pine" />
+          <span>Verified Source Attribution</span>
+        </div>
+        <div className="space-y-1 text-[11px] text-ink-700">
+          <div>
+            <span className="font-medium text-ink-500">Page: </span>
+            <span className="font-semibold text-ink">{item.source_page_title || 'Crawled Site Documentation'}</span>
+          </div>
+          {item.source_section && (
+            <div>
+              <span className="font-medium text-ink-500">Section: </span>
+              <span className="font-mono text-ink-600 bg-paper-100 px-1.5 py-0.5 rounded border border-line">
+                {item.source_section}
+              </span>
+            </div>
+          )}
+          {(item.source_url || item.evidence_url) && (
+            <div className="pt-1">
+              <a
+                href={item.source_url || item.evidence_url || '#'}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-1 text-[11px] text-pine underline hover:opacity-80"
+              >
+                <span>{item.source_url || item.evidence_url}</span>
+                <ExternalLink className="w-3 h-3" />
+              </a>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* ── Page & Section Remediation Update ── */}
+      <div className="p-3 bg-pine/5 border border-pine/20 rounded-md space-y-1.5">
+        <div className="flex items-center gap-1.5 font-semibold text-pine text-[11px]">
+          <Zap className="w-3.5 h-3.5 text-pine" />
+          <span>Recommended Page & Section Update</span>
+        </div>
+        <div className="space-y-1 text-[11px] text-ink-700">
+          {item.target_update_page && (
+            <div>
+              <span className="font-medium text-ink-500">Target Page: </span>
+              <span className="font-mono text-pine font-semibold">{item.target_update_page}</span>
+            </div>
+          )}
+          {item.target_update_section && (
+            <div>
+              <span className="font-medium text-ink-500">Target Section: </span>
+              <span className="font-mono text-ink-700 bg-paper px-1.5 py-0.5 rounded border border-pine/30">
+                {item.target_update_section}
+              </span>
+            </div>
+          )}
+          {item.section_update_recommendation && (
+            <p className="text-[11px] text-ink-700 pt-1 leading-relaxed">
+              {item.section_update_recommendation}
+            </p>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Global System Execution Log Viewer Modal (Antigravity Style)
+// ─────────────────────────────────────────────────────────────────────────────
+
+function SystemExecutionLogModal({
+  isOpen,
+  onClose,
+  logs,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  logs: SystemExecutionLogEntry[];
+}) {
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
+      <div className="w-full max-w-3xl max-h-[85vh] bg-paper rounded-lg shadow-xl border border-line flex flex-col overflow-hidden">
+        {/* Header */}
+        <div className="p-4 border-b border-line flex items-center justify-between bg-paper-50">
+          <div className="flex items-center gap-2">
+            <Terminal className="w-4 h-4 text-pine" />
+            <h3 className="font-semibold text-sm text-ink">
+              AI Question Sandbox — System Execution Log
+            </h3>
+            <span className="text-[10px] font-mono bg-paper border border-line px-2 py-0.5 rounded text-ink-600">
+              Antigravity Trace
+            </span>
+          </div>
+          <button
+            onClick={onClose}
+            className="p-1 rounded text-ink-500 hover:text-ink hover:bg-paper-100"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        {/* Log stream */}
+        <div className="p-4 overflow-y-auto space-y-2 font-mono text-xs bg-paper-100/50 flex-1">
+          {logs.length === 0 ? (
+            <div className="text-center py-8 text-ink-400">
+              No active execution logs recorded yet. Click "Synthesize 100 Questions" to generate a live trace.
+            </div>
+          ) : (
+            logs.map((log, i) => {
+              const levelColor = {
+                SUCCESS: 'text-good bg-good/10 border-good/20',
+                WARNING: 'text-warn bg-warn/10 border-warn/20',
+                ERROR: 'text-bad bg-bad/10 border-bad/20',
+                INFO: 'text-ink-700 bg-paper border-line',
+              }[log.level] || 'text-ink-700 bg-paper border-line';
+
+              return (
+                <div
+                  key={i}
+                  className="p-2.5 rounded border bg-paper flex items-start gap-3 transition-colors hover:border-pine/40"
+                >
+                  <span className="text-[10px] text-ink-400 shrink-0 font-mono mt-0.5">
+                    {log.timestamp}
+                  </span>
+                  <span className={`text-[9px] px-1.5 py-0.5 rounded border uppercase shrink-0 font-bold ${levelColor}`}>
+                    {log.phase}
+                  </span>
+                  <p className="text-[11px] font-sans text-ink flex-1 leading-relaxed">
+                    {log.message}
+                  </p>
+                </div>
+              );
+            })
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="p-3 border-t border-line bg-paper-50 flex items-center justify-between text-xs text-ink-500">
+          <span>{logs.length} logged system events</span>
+          <button onClick={onClose} className="btn-secondary text-xs px-3 py-1.5 rounded">
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Main Component
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -272,6 +525,8 @@ export function DynamicQuestionSandboxView({
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [showDimensions, setShowDimensions] = useState<boolean>(true);
+  const [systemLogs, setSystemLogs] = useState<SystemExecutionLogEntry[]>([]);
+  const [showSystemLogModal, setShowSystemLogModal] = useState<boolean>(false);
 
   const facets = useMemo(() => {
     const list = Array.from(new Set(evaluations.map((e) => e.facet))).filter(Boolean);
@@ -347,6 +602,9 @@ export function DynamicQuestionSandboxView({
       }
       if (data.kie_graph_summary) setKieGraphSummary(data.kie_graph_summary);
       if (data.five_dimension_ai_visibility) setFiveDimensions(data.five_dimension_ai_visibility);
+      if (data.system_execution_log && Array.isArray(data.system_execution_log)) {
+        setSystemLogs(data.system_execution_log);
+      }
     } catch (err: any) {
       setError(err.message || 'Error executing dynamic sandbox evaluation');
     } finally {
@@ -403,15 +661,30 @@ export function DynamicQuestionSandboxView({
             an AI answer engine would hallucinate or cite competitors to fill this gap.
           </p>
         </div>
-        <button
-          id="sandbox-generate-btn"
-          onClick={handleGenerateOrRefresh}
-          disabled={isLoading}
-          className="btn-secondary text-xs flex items-center gap-2 px-3 py-2 rounded-md transition-colors"
-        >
-          <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin text-ink-700' : ''}`} />
-          {isLoading ? 'Building Knowledge Graph...' : totalCount > 0 ? 'Re-Evaluate Inquiries' : 'Synthesize 100 Questions'}
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowSystemLogModal(true)}
+            className="btn-secondary text-xs flex items-center gap-1.5 px-3 py-2 rounded-md transition-colors border border-line hover:border-pine/50"
+            title="View Antigravity AI Agent System Execution Trace"
+          >
+            <Terminal className="w-3.5 h-3.5 text-pine" />
+            <span>AI System Log</span>
+            {systemLogs.length > 0 && (
+              <span className="font-mono text-[10px] bg-paper-200 px-1.5 py-0.2 rounded text-ink-700">
+                {systemLogs.length}
+              </span>
+            )}
+          </button>
+          <button
+            id="sandbox-generate-btn"
+            onClick={handleGenerateOrRefresh}
+            disabled={isLoading}
+            className="btn-secondary text-xs flex items-center gap-2 px-3 py-2 rounded-md transition-colors"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin text-ink-700' : ''}`} />
+            {isLoading ? 'Building Knowledge Graph...' : totalCount > 0 ? 'Re-Evaluate Inquiries' : 'Synthesize 100 Questions'}
+          </button>
+        </div>
       </div>
 
       {error && (
@@ -698,6 +971,12 @@ export function DynamicQuestionSandboxView({
                       </div>
                     </div>
 
+                    {/* Source Attribution & Recommended Section Update */}
+                    <SourceAndSectionUpdatePanel item={item} />
+
+                    {/* Antigravity AI Thinking & Cognitive Trace */}
+                    <AiThinkingPanel steps={item.ai_thinking_steps} />
+
                     {/* Missing Inquiry Aspects for Partials or Gaps */}
                     {item.missing_aspects && item.missing_aspects.length > 0 && (
                       <div className="p-3 bg-warn/10 border border-warn/30 rounded-md space-y-1.5">
@@ -791,6 +1070,13 @@ export function DynamicQuestionSandboxView({
       )}
         </>
       )}
+
+      {/* ── Global System Execution Log Modal ── */}
+      <SystemExecutionLogModal
+        isOpen={showSystemLogModal}
+        onClose={() => setShowSystemLogModal(false)}
+        logs={systemLogs}
+      />
     </div>
   );
 }

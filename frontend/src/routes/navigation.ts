@@ -2,6 +2,7 @@ import { AppView, TabId } from '../types';
 
 export const VIEWS = new Set<AppView>([
   'home',
+  'grader',
   'pricing',
   'login',
   'signup',
@@ -15,6 +16,7 @@ export const VIEWS = new Set<AppView>([
 
 export const VIEW_LABELS: Record<AppView, string> = {
   home: 'Audits',
+  grader: 'Public grader',
   pricing: 'Pricing',
   login: 'Sign in',
   signup: 'Create workspace',
@@ -27,10 +29,12 @@ export const VIEW_LABELS: Record<AppView, string> = {
 };
 
 export const TAB_LABELS: Record<string, string> = {
+  workflow: 'Workflow Engine',
   overview: 'Overview',
-  seo: 'SEO',
-  search_intelligence: 'SEO',
-  search_console: 'SEO',
+  crawl: 'Website Crawl',
+  seo: 'SEO Space',
+  search_intelligence: 'SEO Space',
+  search_console: 'SEO Space',
   geo: 'GEO',
   ai_search_intelligence: 'GEO',
   ai_citations: 'GEO',
@@ -40,9 +44,9 @@ export const TAB_LABELS: Record<string, string> = {
   cro: 'CRO',
   conversion_intelligence: 'CRO',
   website_experience: 'CRO',
-  competitors: 'Competitors',
-  perspectives: 'Competitors',
-  lead_gen: 'Competitors',
+  competitors: 'Competitor Analysis',
+  perspectives: 'Competitor Analysis',
+  lead_gen: 'Competitor Analysis',
   external_authority: 'External authority',
   pages: 'Page inspector',
   findings: 'Evidence ledger',
@@ -51,6 +55,10 @@ export const TAB_LABELS: Record<string, string> = {
   patches: 'Patch pack',
   roadmap: 'Roadmap',
   verification: 'Verification',
+  discover: 'Discover',
+  decide: 'Decide',
+  execute: 'Execute',
+  prove: 'Prove',
   report: 'Report',
   plans: 'Plans',
 };

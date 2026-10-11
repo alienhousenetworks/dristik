@@ -1,4 +1,5 @@
 import io
+import uuid
 import zipfile
 import pytest
 from httpx import AsyncClient, ASGITransport
@@ -10,8 +11,20 @@ from app.domain.models import BusinessProfile, CommercialQueryEvaluation
 async def test_patch_pack_routes_and_aliases():
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        denied = await ac.get("/api/v1/analyses/missing/patch-pack/files")
+        assert denied.status_code == 401
+
+        signup = await ac.post("/api/v1/auth/signup", json={
+            "full_name": "Patch Owner",
+            "email": f"patch_{uuid.uuid4().hex[:8]}@example.com",
+            "password": "OwnerPass1",
+            "organization_name": "Patch Org",
+        })
+        assert signup.status_code == 200, signup.text
+        user = signup.json()["user"]
+
         # 1. Create a dummy run with report
-        run = orchestrator.create_run("https://example.com")
+        run = orchestrator.create_run("https://example.com", org_id=user["org_id"], created_by=user["user_id"])
         run_id = run.analysis_id
         rep_id = "rep_test_patch123"
 

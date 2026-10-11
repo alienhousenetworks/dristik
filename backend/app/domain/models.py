@@ -177,6 +177,14 @@ class RemediationVerificationReport(BaseModel):
     passed_checks_count: int = 0
     total_checks_count: int = 0
     score_delta: Optional[float] = None
+    score_delta_is_measured: bool = False
+    technical_verification: str = "not_measured"
+    visibility_verification: str = "not_measured"
+    business_verification: str = "not_measured"
+    verification_scope_note: str = (
+        "A resolved technical check is not a change in AI citations, search traffic, or revenue. "
+        "The evidence seal is a content hash of this verification record, not proof that the analysis is correct."
+    )
     verified_at: str
     evidence_seal: str
     certified_by: str = "Dristik Continuous Assurance Engine v4"
@@ -600,6 +608,14 @@ class DynamicSandboxQuestionEvaluation(BaseModel):
     retrieval_evidence_count: Optional[int] = None   # how many evidence chunks were retrieved
     missing_aspects: Optional[List[str]] = None      # unanswered question aspects for partials
     evaluation_trace: Optional[Dict[str, Any]] = None  # transparent evaluation debug trace
+    # Granular Source & Section Update Attribution
+    source_url: Optional[str] = None
+    source_page_title: Optional[str] = None
+    source_section: Optional[str] = None
+    target_update_page: Optional[str] = None
+    target_update_section: Optional[str] = None
+    section_update_recommendation: Optional[str] = None
+    ai_thinking_steps: Optional[List[Dict[str, Any]]] = None
 
 
 class CompetitorBakeoffItem(BaseModel):

@@ -70,8 +70,13 @@ class GenericWebsiteConnector(BaseConnector):
 
     async def verify_patch(self, patch: RemediationPatch) -> Dict[str, Any]:
         return {
-            "verified": True,
+            "verified": False,
+            "status": "NOT_MEASURED",
             "patch_id": patch.patch_id,
-            "citation_score_delta": 10,
-            "notes": "Verified via public HTTP GET crawl."
+            "citation_score_delta": None,
+            "notes": (
+                "A downloaded patch is not a live verification. "
+                "Technical, visibility, and business outcomes are recorded separately "
+                "after a re-crawl or a connected analytics source."
+            ),
         }

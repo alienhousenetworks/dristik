@@ -23,7 +23,7 @@ export interface ConnectorDefinition {
 
 export const ALL_CONNECTORS: ConnectorDefinition[] = [
   { id: 'google_search_console', label: 'Search Console', icon: 'GSC', category: 'ANALYTICS', desc: 'Queries, CTR, Pos', tag: 'Google Search Console' },
-  { id: 'google_analytics_4', label: 'Google Analytics 4', icon: 'GA4', category: 'ANALYTICS', desc: 'Funnels, Visitors', tag: 'GA4 Data API' },
+  { id: 'google_analytics_4', label: 'Google Analytics', icon: 'GA4', category: 'ANALYTICS', desc: 'Funnels, Visitors', tag: 'Google Analytics 4' },
   { id: 'dataforseo', label: 'DataForSEO Index', icon: 'SEO', category: 'ANALYTICS', desc: 'SERP & Backlinks', tag: 'DataForSEO v3' },
   { id: 'crux', label: 'Google CrUX', icon: 'CWV', category: 'ANALYTICS', desc: 'Real User Vitals', tag: 'Chrome UX Report' },
   { id: 'crm', label: 'CRM & Revenue', icon: 'CRM', category: 'CRM', desc: 'HubSpot, SF, Stripe', tag: 'Pipeline Attribution' },
@@ -93,6 +93,7 @@ export const ConnectorsModal: React.FC<ConnectorsModalProps> = ({
   const [wpAuthMode, setWpAuthMode] = useState<'app_password' | 'plugin'>('app_password');
 
   // GA4 states
+  const [ga4AuthMode, setGa4AuthMode] = useState<'oauth' | 'manual'>('oauth');
   const [ga4PropertyId, setGa4PropertyId] = useState('');
   const [ga4MeasurementId, setGa4MeasurementId] = useState('');
   const [ga4ApiKey, setGa4ApiKey] = useState('');
@@ -195,7 +196,7 @@ export const ConnectorsModal: React.FC<ConnectorsModalProps> = ({
     fetch('/api/v1/connectors/oauth/providers')
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
-        if (data?.providers) setOauthProviders(data.providers);
+        if (data) setOauthProviders(data.providers || data);
       })
       .catch(() => {});
   }, [isOpen]);
@@ -269,8 +270,15 @@ export const ConnectorsModal: React.FC<ConnectorsModalProps> = ({
     } else if (activeTab === 'google_analytics_4') {
       payload.provider = 'google_analytics_4';
       payload.target_url = siteUrl;
-      payload.name = `Google Analytics 4 (${ga4PropertyId || ga4MeasurementId || siteUrl})`;
-      payload.api_key = ga4PropertyId || ga4ApiKey || ga4MeasurementId;
+      payload.name = `Google Analytics (${ga4PropertyId || ga4MeasurementId || siteUrl})`;
+      let apiKeyPayload = ga4ApiKey;
+      if (!apiKeyPayload && (ga4PropertyId || ga4MeasurementId)) {
+        apiKeyPayload = JSON.stringify({
+          property_id: ga4PropertyId,
+          measurement_id: ga4MeasurementId,
+        });
+      }
+      payload.api_key = apiKeyPayload;
     } else if (activeTab === 'crm') {
       payload.provider = 'crm';
       payload.target_url = siteUrl;
@@ -337,7 +345,11 @@ export const ConnectorsModal: React.FC<ConnectorsModalProps> = ({
   const isConnectorConnected = (connId: ConnectorType) => {
     return integrations.some((integration) => {
       const status = String(integration.status || '').toLowerCase();
-      return integration.provider === connId && status === 'connected';
+      const match =
+        integration.provider === connId ||
+        (connId === 'google_analytics_4' && (integration.provider as string) === 'google_analytics') ||
+        (connId === 'google_analytics' && (integration.provider as string) === 'google_analytics_4');
+      return match && status === 'connected';
     });
   };
 
@@ -528,63 +540,124 @@ export const ConnectorsModal: React.FC<ConnectorsModalProps> = ({
                 </div>
               )}
 
-              {/* Google Analytics 4 Form */}
+              {/* Google Analytics Form */}
               {activeTab === 'google_analytics_4' && (
                 <div className="space-y-4">
                   <div className="text-xs text-ink-700 leading-relaxed bg-paper-100 p-3 rounded border border-line">
-                    <span className="text-ink font-semibold">GA4 Analytics Connector:</span> Measures landing pages, visitor engagement, bounce rates, custom event tags, and conversion funnels. Directly grounds CRO hypotheses into empirical percentages.
+                    <span className="text-ink font-semibold">Google Analytics (GA4) Connector:</span> Measures landing pages, visitor engagement, bounce rates, custom event tags, and conversion funnels. Directly grounds CRO hypotheses into empirical percentages.
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => startOauth('google_analytics_4', { domain: siteUrl || targetUrl, property_id: ga4PropertyId })}
-                    className="w-full py-2.5 px-4 rounded border border-line bg-paper-50 text-sm font-semibold hover:bg-paper-100 transition"
-                  >
-                    Sign in with Google Analytics
-                  </button>
-                  <div>
-                    <label className="text-xs text-ink-700 font-medium block mb-1">Target Website URL</label>
-                    <input
-                      type="url"
-                      value={siteUrl}
-                      onChange={(e) => setSiteUrl(e.target.value)}
-                      placeholder="https://example.com"
-                      className="w-full bg-paper-50 border border-line rounded px-3 py-2 text-sm text-ink placeholder:text-ink-500 focus:outline-none focus:border-pine font-mono"
-                      required
-                    />
+
+                  {/* Auth mode selector */}
+                  <div className="flex items-center gap-2 p-1 bg-paper-100 rounded-lg border border-line w-fit">
+                    <button
+                      type="button"
+                      onClick={() => setGa4AuthMode('oauth')}
+                      className={`px-3 py-1 text-xs rounded font-medium transition ${
+                        ga4AuthMode === 'oauth'
+                          ? 'bg-paper-50 text-ink shadow-xs border border-line font-semibold'
+                          : 'text-ink-500 hover:text-ink'
+                      }`}
+                    >
+                      1-Click Google OAuth
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setGa4AuthMode('manual')}
+                      className={`px-3 py-1 text-xs rounded font-medium transition ${
+                        ga4AuthMode === 'manual'
+                          ? 'bg-paper-50 text-ink shadow-xs border border-line font-semibold'
+                          : 'text-ink-500 hover:text-ink'
+                      }`}
+                    >
+                      Property ID / Service Account
+                    </button>
                   </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="text-xs text-ink-700 font-medium block mb-1">GA4 Property ID</label>
-                      <input
-                        type="text"
-                        value={ga4PropertyId}
-                        onChange={(e) => setGa4PropertyId(e.target.value)}
-                        placeholder="properties/123456789"
-                        className="w-full bg-paper-50 border border-line rounded px-3 py-2 text-sm text-ink placeholder:text-ink-500 focus:outline-none focus:border-pine font-mono"
-                        required
-                      />
+
+                  {ga4AuthMode === 'oauth' ? (
+                    <div className="space-y-3 pt-2">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div>
+                          <label className="text-xs text-ink-700 font-medium block mb-1">Target Website URL</label>
+                          <input
+                            type="url"
+                            value={siteUrl}
+                            onChange={(e) => setSiteUrl(e.target.value)}
+                            placeholder="https://example.com"
+                            className="w-full bg-paper-50 border border-line rounded px-3 py-2 text-sm text-ink placeholder:text-ink-500 focus:outline-none focus:border-pine font-mono"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-xs text-ink-700 font-medium block mb-1">GA4 Property ID (Optional)</label>
+                          <input
+                            type="text"
+                            value={ga4PropertyId}
+                            onChange={(e) => setGa4PropertyId(e.target.value)}
+                            placeholder="properties/123456789"
+                            className="w-full bg-paper-50 border border-line rounded px-3 py-2 text-sm text-ink placeholder:text-ink-500 focus:outline-none focus:border-pine font-mono"
+                          />
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => startOauth('google_analytics_4', { domain: siteUrl || targetUrl, property_id: ga4PropertyId })}
+                        disabled={loading}
+                        className="w-full py-2.5 px-4 bg-paper-50 hover:bg-paper-100 text-ink font-semibold rounded border border-line text-sm transition flex items-center justify-center gap-2 shadow-xs cursor-pointer"
+                      >
+                        <GoogleIcon />
+                        Sign in with Google Analytics
+                      </button>
+                      <p className="text-[11px] text-ink-500 text-center">
+                        Requires read-only access to verify visitor telemetry, sessions, and conversions.
+                      </p>
                     </div>
-                    <div>
-                      <label className="text-xs text-ink-700 font-medium block mb-1">Measurement ID (Optional)</label>
-                      <input
-                        type="text"
-                        value={ga4MeasurementId}
-                        onChange={(e) => setGa4MeasurementId(e.target.value)}
-                        placeholder="G-XXXXXXXXXX"
-                        className="w-full bg-paper-50 border border-line rounded px-3 py-2 text-sm text-ink placeholder:text-ink-500 focus:outline-none focus:border-pine font-mono"
-                      />
+                  ) : (
+                    <div className="space-y-4">
+                      <div>
+                        <label className="text-xs text-ink-700 font-medium block mb-1">Target Website URL</label>
+                        <input
+                          type="url"
+                          value={siteUrl}
+                          onChange={(e) => setSiteUrl(e.target.value)}
+                          placeholder="https://example.com"
+                          className="w-full bg-paper-50 border border-line rounded px-3 py-2 text-sm text-ink placeholder:text-ink-500 focus:outline-none focus:border-pine font-mono"
+                          required
+                        />
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="text-xs text-ink-700 font-medium block mb-1">GA4 Property ID</label>
+                          <input
+                            type="text"
+                            value={ga4PropertyId}
+                            onChange={(e) => setGa4PropertyId(e.target.value)}
+                            placeholder="properties/123456789"
+                            className="w-full bg-paper-50 border border-line rounded px-3 py-2 text-sm text-ink placeholder:text-ink-500 focus:outline-none focus:border-pine font-mono"
+                            required
+                          />
+                        </div>
+                        <div>
+                          <label className="text-xs text-ink-700 font-medium block mb-1">Measurement ID (Optional)</label>
+                          <input
+                            type="text"
+                            value={ga4MeasurementId}
+                            onChange={(e) => setGa4MeasurementId(e.target.value)}
+                            placeholder="G-XXXXXXXXXX"
+                            className="w-full bg-paper-50 border border-line rounded px-3 py-2 text-sm text-ink placeholder:text-ink-500 focus:outline-none focus:border-pine font-mono"
+                          />
+                        </div>
+                      </div>
+                      <div>
+                        <label className="text-xs text-ink-700 font-medium block mb-1">Service Account JSON / API Key</label>
+                        <textarea
+                          value={ga4ApiKey}
+                          onChange={(e) => setGa4ApiKey(e.target.value)}
+                          placeholder='{"type": "service_account", "property_id": "123456789", ...}'
+                          rows={3}
+                          className="w-full bg-paper-50 border border-line rounded px-3 py-2 text-xs text-ink font-mono placeholder:text-ink-500 focus:outline-none focus:border-pine"
+                        />
+                      </div>
                     </div>
-                  </div>
-                  <div>
-                    <label className="text-xs text-ink-700 font-medium block mb-1">Service Account JSON / API Key</label>
-                    <textarea
-                      value={ga4ApiKey}
-                      onChange={(e) => setGa4ApiKey(e.target.value)}
-                      placeholder='{"type": "service_account", "property_id": "123456789", ...}'
-                      rows={3}
-                      className="w-full bg-paper-50 border border-line rounded px-3 py-2 text-xs text-ink font-mono placeholder:text-ink-500 focus:outline-none focus:border-pine"
-                    />
-                  </div>
+                  )}
                 </div>
               )}
 
@@ -1034,7 +1107,7 @@ export const ConnectorsModal: React.FC<ConnectorsModalProps> = ({
                 </div>
               )}
 
-              {!(activeTab === 'google_search_console' && gscAuthMode === 'oauth') && (
+              {!(activeTab === 'google_search_console' && gscAuthMode === 'oauth') && !(activeTab === 'google_analytics_4' && ga4AuthMode === 'oauth') && (
                 <button
                   type="submit"
                   disabled={loading}

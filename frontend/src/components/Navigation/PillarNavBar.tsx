@@ -20,6 +20,10 @@ import {
   FileText,
   PlusCircle,
   Coins,
+  Compass,
+  ListOrdered,
+  Wrench,
+  BadgeCheck,
 } from 'lucide-react';
 
 interface PillarNavBarProps {
@@ -46,6 +50,13 @@ export function PillarNavBar({
   const rollup = synthesizePillars(report);
   const displayedOverall = report ? buildDisplayedScore(report).composite : null;
   const patchesCount = (report?.code_patches?.length || 0) + (report?.remediation_patches?.length || 0);
+
+  const workflowItems = [
+    { id: 'discover' as TabId, label: 'Discover', icon: Compass },
+    { id: 'decide' as TabId, label: 'Decide', icon: ListOrdered },
+    { id: 'execute' as TabId, label: 'Execute', icon: Wrench },
+    { id: 'prove' as TabId, label: 'Prove', icon: BadgeCheck },
+  ];
 
   // Group 1: Executive
   const executiveItems = [
@@ -192,6 +203,10 @@ export function PillarNavBar({
 
   const nav = (
     <nav className={cn('flex flex-col gap-5', !embedded && 'px-3 py-3 lg:px-4 lg:py-5')} aria-label="Audit sections">
+      <div className="space-y-1">
+        {groupLabel('Workflow')}
+        {workflowItems.map(renderItem)}
+      </div>
       <div className="space-y-1">
         {groupLabel('Executive')}
         {executiveItems.map(renderItem)}

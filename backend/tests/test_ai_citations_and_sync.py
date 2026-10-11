@@ -46,8 +46,29 @@ def test_live_ai_citation_single_query():
     assert data["notice"] is not None
 
 
+def _signed_in_client():
+    import uuid
+    signed = TestClient(app)
+    res = signed.post("/api/v1/auth/signup", json={
+        "full_name": "Sync Owner",
+        "email": f"sync_{uuid.uuid4().hex[:8]}@example.com",
+        "password": "OwnerPass1",
+        "organization_name": "Sync Org",
+    })
+    assert res.status_code == 200, res.text
+    return signed, res.json()["user"]
+
+
 def test_developer_sync_github_pr():
-    res = client.post("/api/v1/remediation/github/create-pr", json={
+    anonymous = client.post("/api/v1/remediation/github/create-pr", json={
+        "repo": "linear/web",
+        "finding_id": "find_schema_01",
+        "target_file": "app/layout.tsx",
+        "patch_code": "<Script type='application/ld+json'>{...}</Script>",
+    })
+    assert anonymous.status_code == 401
+    signed, _user = _signed_in_client()
+    res = signed.post("/api/v1/remediation/github/create-pr", json={
         "repo": "linear/web",
         "finding_id": "find_schema_01",
         "target_file": "app/layout.tsx",
@@ -55,13 +76,24 @@ def test_developer_sync_github_pr():
     })
     assert res.status_code == 200, res.text
     data = res.json()
-    assert data["status"] == "PR_CREATED"
-    assert "pull" in data["pr_url"]
+    assert data["status"] == "not_submitted"
+    assert data["submitted"] is False
+    assert data.get("pr_url") in (None, "")
     assert data["files"][0]["path"] == "app/layout.tsx"
 
 
 def test_developer_sync_jira_issue():
-    res = client.post("/api/v1/remediation/jira/create-issue", json={
+    anonymous = client.post("/api/v1/remediation/jira/create-issue", json={
+        "project_key": "SEO",
+        "finding_id": "find_schema_01",
+        "title": "Missing Schema Markup",
+        "severity": "critical",
+        "impact_explanation": "Impedes AI search comprehension.",
+        "remediation_advice": "Inject Organization Schema.",
+    })
+    assert anonymous.status_code == 401
+    signed, _user = _signed_in_client()
+    res = signed.post("/api/v1/remediation/jira/create-issue", json={
         "project_key": "SEO",
         "finding_id": "find_schema_01",
         "title": "Missing Schema Markup",
@@ -71,13 +103,24 @@ def test_developer_sync_jira_issue():
     })
     assert res.status_code == 200, res.text
     data = res.json()
-    assert data["status"] == "ISSUE_CREATED"
-    assert data["issue_key"].startswith("SEO-")
+    assert data["status"] == "not_submitted"
+    assert data["submitted"] is False
+    assert data["issue_key"] is None
     assert "[CRITICAL]" in data["summary"]
 
 
 def test_developer_sync_linear_issue():
-    res = client.post("/api/v1/remediation/linear/create-issue", json={
+    anonymous = client.post("/api/v1/remediation/linear/create-issue", json={
+        "project_key": "LIN",
+        "finding_id": "find_canonical_01",
+        "title": "Canonical Link Dropped",
+        "severity": "high",
+        "impact_explanation": "Causes index dilution.",
+        "remediation_advice": "Restore canonical link tag.",
+    })
+    assert anonymous.status_code == 401
+    signed, _user = _signed_in_client()
+    res = signed.post("/api/v1/remediation/linear/create-issue", json={
         "project_key": "LIN",
         "finding_id": "find_canonical_01",
         "title": "Canonical Link Dropped",
@@ -87,8 +130,9 @@ def test_developer_sync_linear_issue():
     })
     assert res.status_code == 200, res.text
     data = res.json()
-    assert data["status"] == "ISSUE_CREATED"
-    assert data["issue_id"].startswith("LIN-")
+    assert data["status"] == "not_submitted"
+    assert data["submitted"] is False
+    assert data["issue_id"] is None
     assert data["priority"] == 2  # high priority mapped to 2
 
 
@@ -103,15 +147,19 @@ def test_executive_deck_report():
         created_at=now,
         updated_at=now,
     )
+    signed, user = _signed_in_client()
+    run.org_id = user["org_id"]
     orchestrator.runs[analysis_id] = run
+    anonymous = client.get(f"/api/v1/reports/{analysis_id}/executive-deck")
+    assert anonymous.status_code == 401
 
     # 1. HTML deck
-    res_html = client.get(f"/api/v1/reports/{analysis_id}/executive-deck")
+    res_html = signed.get(f"/api/v1/reports/{analysis_id}/executive-deck")
     assert res_html.status_code == 200
     assert "text/html" in res_html.headers["content-type"]
     assert "DRISTIK // DIGITAL INTELLIGENCE PUBLICATION" in res_html.text or "DRISTIK AI // ENTERPRISE INTELLIGENCE" in res_html.text
 
     # 2. JSON deck metadata
-    res_json = client.get(f"/api/v1/reports/{analysis_id}/executive-deck?format=json")
+    res_json = signed.get(f"/api/v1/reports/{analysis_id}/executive-deck?format=json")
     assert res_json.status_code == 200
     assert res_json.json()["status"] == "READY"

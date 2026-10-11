@@ -2,29 +2,22 @@
 Dristik AI SSE Real-Time Streaming Route
 Streams live agent DAG execution progress, step logs, and live findings to the UI.
 """
-from typing import Optional
 import json
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 from fastapi.responses import StreamingResponse
-from app.identity.authorizer import Authorizer, UserIdentity
-from app.identity.deps import get_current_user_optional
+from app.identity.access import require_analysis
+from app.identity.authorizer import UserIdentity
+from app.identity.deps import get_current_user
 from app.orchestration.orchestrator import orchestrator
 
 router = APIRouter(prefix="/analyses", tags=["Streaming"])
 
 @router.get("/{analysis_id}/stream")
-async def stream_analysis_progress(analysis_id: str, user: Optional[UserIdentity] = Depends(get_current_user_optional)):
+async def stream_analysis_progress(analysis_id: str, user: UserIdentity = Depends(get_current_user)):
     """
     Server-Sent Events endpoint streaming real-time agent execution events.
     """
-    run = orchestrator.runs.get(analysis_id)
-    if not run:
-        raise HTTPException(status_code=404, detail="Analysis run not found.")
-    if user:
-        if not Authorizer.can_access_org(user, run.org_id):
-            raise HTTPException(status_code=404, detail="Analysis run not found.")
-        if not Authorizer.can_perform(user, "mission:read"):
-            raise HTTPException(status_code=403, detail="You do not have permission to view audits.")
+    require_analysis(analysis_id, user)
 
     def _json_default(obj):
         if hasattr(obj, "isoformat"):

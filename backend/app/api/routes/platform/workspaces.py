@@ -14,7 +14,7 @@ from pydantic import BaseModel, Field
 
 from app.audit.regression_engine import get_regression_engine
 from app.identity.authorizer import UserIdentity
-from app.identity.deps import get_current_user_optional, require_permission
+from app.identity.deps import get_current_user, require_permission
 
 router = APIRouter(prefix="/workspaces", tags=["Enterprise Workspaces"])
 
@@ -37,20 +37,35 @@ _DOMAINS_STORE = {}
 _DOMAIN_RUNS_STORE = {}
 
 
+def _owned_workspace(workspace_id: str, user: UserIdentity) -> dict:
+    workspace = _WORKSPACES_STORE.get(workspace_id)
+    if not workspace or workspace.get("org_id") != user.org_id:
+        raise HTTPException(status_code=404, detail="Workspace not found.")
+    return workspace
+
+
+def _owned_domain(workspace_id: str, domain_id: str, user: UserIdentity) -> dict:
+    _owned_workspace(workspace_id, user)
+    domain = _DOMAINS_STORE.get(domain_id)
+    if not domain or domain.get("workspace_id") != workspace_id:
+        raise HTTPException(status_code=404, detail="Domain not found.")
+    return domain
+
+
 @router.get("")
-async def list_workspaces(user: Optional[UserIdentity] = Depends(get_current_user_optional)):
-    org_id = user.org_id if user else "org_default"
+async def list_workspaces(user: UserIdentity = Depends(get_current_user)):
+    org_id = user.org_id
     org_workspaces = [w for w in _WORKSPACES_STORE.values() if w.get("org_id") == org_id]
     if not org_workspaces:
-        # Default workspace if none exist yet
+        default_id = f"ws_default_{org_id}"
         default_ws = {
-            "id": "ws_default",
+            "id": default_id,
             "org_id": org_id,
             "name": "Default Workspace",
             "slug": "default",
             "created_at": datetime.now(timezone.utc).isoformat(),
         }
-        _WORKSPACES_STORE["ws_default"] = default_ws
+        _WORKSPACES_STORE[default_id] = default_ws
         org_workspaces = [default_ws]
     return {"workspaces": org_workspaces}
 
@@ -58,9 +73,9 @@ async def list_workspaces(user: Optional[UserIdentity] = Depends(get_current_use
 @router.post("")
 async def create_workspace(
     req: WorkspaceCreateRequest,
-    user: Optional[UserIdentity] = Depends(get_current_user_optional)
+    user: UserIdentity = Depends(require_permission("org:manage"))
 ):
-    org_id = user.org_id if user else "org_default"
+    org_id = user.org_id
     ws_id = f"ws_{uuid.uuid4().hex[:8]}"
     slug = req.slug or req.name.lower().replace(" ", "-")
     ws = {
@@ -77,10 +92,9 @@ async def create_workspace(
 @router.get("/{workspace_id}/domains")
 async def list_domains(
     workspace_id: str,
-    user: Optional[UserIdentity] = Depends(get_current_user_optional)
+    user: UserIdentity = Depends(get_current_user)
 ):
-    if workspace_id not in _WORKSPACES_STORE and workspace_id != "ws_default":
-        raise HTTPException(status_code=404, detail="Workspace not found.")
+    _owned_workspace(workspace_id, user)
     domains = [d for d in _DOMAINS_STORE.values() if d.get("workspace_id") == workspace_id]
     return {"workspace_id": workspace_id, "domains": domains}
 
@@ -89,10 +103,9 @@ async def list_domains(
 async def add_domain(
     workspace_id: str,
     req: DomainCreateRequest,
-    user: Optional[UserIdentity] = Depends(get_current_user_optional)
+    user: UserIdentity = Depends(require_permission("org:manage"))
 ):
-    if workspace_id not in _WORKSPACES_STORE and workspace_id != "ws_default":
-        raise HTTPException(status_code=404, detail="Workspace not found.")
+    _owned_workspace(workspace_id, user)
     
     clean_host = req.hostname.replace("https://", "").replace("http://", "").split("/")[0]
     dom_id = f"dom_{uuid.uuid4().hex[:8]}"
@@ -115,10 +128,9 @@ async def add_domain(
 async def get_domain_history(
     workspace_id: str,
     domain_id: str,
-    user: Optional[UserIdentity] = Depends(get_current_user_optional)
+    user: UserIdentity = Depends(get_current_user)
 ):
-    if domain_id not in _DOMAINS_STORE:
-        raise HTTPException(status_code=404, detail="Domain not found.")
+    _owned_domain(workspace_id, domain_id, user)
     runs = _DOMAIN_RUNS_STORE.get(domain_id, [])
     return {"domain_id": domain_id, "total_runs": len(runs), "runs": runs}
 
@@ -129,10 +141,9 @@ async def get_domain_regression_diff(
     domain_id: str,
     audit_id: Optional[str] = None,
     baseline_id: Optional[str] = None,
-    user: Optional[UserIdentity] = Depends(get_current_user_optional)
+    user: UserIdentity = Depends(get_current_user)
 ):
-    if domain_id not in _DOMAINS_STORE:
-        raise HTTPException(status_code=404, detail="Domain not found.")
+    _owned_domain(workspace_id, domain_id, user)
     
     runs = _DOMAIN_RUNS_STORE.get(domain_id, [])
     if len(runs) < 2 and not (audit_id and baseline_id):

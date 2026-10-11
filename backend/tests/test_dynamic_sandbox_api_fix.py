@@ -3,7 +3,7 @@ Test suite for Dynamic Question Sandbox API fixes and resilience.
 Verifies that:
 1. `generate_audit_dynamic_sandbox` handles `page_reports` safely without AttributeError.
 2. `generate_audit_dynamic_sandbox` uses `crawl_manifest.pages` directly when available.
-3. `CognitiveSimulatorWorker` synthesizes 100 dynamic sandbox questions even when commercial eval LLM response is empty.
+3. `CognitiveSimulatorWorker` still builds grounded sandbox questions when the commercial model response is empty, and reports the citation simulation as unavailable.
 """
 import pytest
 from unittest.mock import AsyncMock, MagicMock
@@ -138,8 +138,8 @@ async def test_generate_audit_dynamic_sandbox_with_crawl_manifest_pages(monkeypa
 @pytest.mark.asyncio
 async def test_simulator_worker_generates_sandbox_when_raw_evals_empty():
     """
-    Verifies that CognitiveSimulatorWorker generates 100 dynamic sandbox questions
-    even if the model router returns empty commercial evaluations.
+    An empty model response does not invent commercial citation scores.
+    Grounded sandbox questions from crawled pages are still attached.
     """
     mock_router = MagicMock()
     mock_router.generate_structured = AsyncMock(return_value={})  # Empty LLM response
@@ -157,7 +157,7 @@ async def test_simulator_worker_generates_sandbox_when_raw_evals_empty():
 
     res = await worker.execute_task("ai_search_simulation", blackboard)
 
-    # Dynamic sandbox evaluations should STILL be generated!
+    assert res["status"] == "UNAVAILABLE"
+    assert blackboard.commercial_evaluations == []
     assert len(blackboard.dynamic_sandbox_evaluations) == 100
     assert len(res["dynamic_sandbox_evaluations"]) == 100
-    assert res["status"] == "AVAILABLE"

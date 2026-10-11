@@ -116,14 +116,12 @@ def test_post_analysis_voucher_entitlement_enforcement(monkeypatch):
         "organization_name": "Supabase Test Org",
     })
     assert signup_res.status_code == 200, signup_res.text
-    token = signup_res.json()["token"]
-    headers = {"Authorization": f"Bearer {token}"}
+    assert "token" not in signup_res.json()
 
     # 1. Non-existent voucher must return 403 Forbidden
     resp_fake = client.post(
         "/api/v1/analyses",
         json={"website_url": "https://supabase.com", "voucher_code": "DRISTIK-FAKE-12345", "max_crawl_pages": 5},
-        headers=headers
     )
     assert resp_fake.status_code == 403
     assert "ENTITLEMENT_VIOLATION" in resp_fake.json()["detail"]
@@ -143,7 +141,6 @@ def test_post_analysis_voucher_entitlement_enforcement(monkeypatch):
     resp_mismatch = client.post(
         "/api/v1/analyses",
         json={"website_url": "https://attacker.com", "voucher_code": voucher.voucher_code, "max_crawl_pages": 5},
-        headers=headers
     )
     assert resp_mismatch.status_code == 403
     assert "ENTITLEMENT_VIOLATION" in resp_mismatch.json()["detail"]

@@ -20,6 +20,11 @@ describe('navigation', () => {
     expect(parsed.analysisId).toBe('from-query');
   });
 
+  it('opens the public grader from the hash', () => {
+    const parsed = parseNavigation({ hash: '#/grader', search: '' }, null);
+    expect(parsed.view).toBe('grader');
+  });
+
   it('treats legacy tab ids as their current section', () => {
     expect(tabMatches('ai_citations', 'geo')).toBe(true);
     expect(tabMatches('website_experience', 'cro')).toBe(true);

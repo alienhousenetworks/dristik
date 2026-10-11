@@ -11,7 +11,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from app.identity.authorizer import UserIdentity
-from app.identity.deps import get_current_user_optional, require_permission
+from app.identity.deps import get_current_user
 
 router = APIRouter(prefix="/audit-logs", tags=["Enterprise Audit Logs"])
 
@@ -105,14 +105,14 @@ def get_enterprise_audit_logger() -> EnterpriseAuditLogger:
 
 @router.get("")
 async def get_audit_logs(
-    org_id: Optional[str] = None,
     limit: int = 50,
-    user: Optional[UserIdentity] = Depends(get_current_user_optional)
+    user: UserIdentity = Depends(get_current_user)
 ):
     """
-    Returns immutable audit log records for the requesting organization.
+    Returns immutable audit log records for the signed-in organization.
+    A caller cannot choose another organization's id.
     """
-    target_org = org_id or (user.org_id if user else "org_default")
+    target_org = user.org_id
     logger = get_enterprise_audit_logger()
     logs = logger.list_logs(org_id=target_org, limit=limit)
     return {

@@ -4,10 +4,12 @@ Manages first-party Google Search Console, Google Analytics 4, and external keyw
 Fail-closed authentication and zero synthetic fallbacks.
 """
 import os
-from fastapi import APIRouter, Query, Body, HTTPException
+from fastapi import APIRouter, Depends, Query, Body, HTTPException
 from typing import Dict, Any, Optional
 from pydantic import BaseModel
 from app.core.config import settings
+from app.identity.authorizer import UserIdentity
+from app.identity.deps import get_current_user, get_current_user_optional
 from app.integrations.google_connectors import (
     gsc_connector,
     ga4_connector,
@@ -16,7 +18,11 @@ from app.integrations.google_connectors import (
 )
 from app.domain.enums import MetricProvenanceState
 
-router = APIRouter(prefix="/integrations", tags=["First-Party Analytics & External Connectors"])
+router = APIRouter(
+    prefix="/integrations",
+    tags=["First-Party Analytics & External Connectors"],
+    dependencies=[Depends(get_current_user_optional)],
+)
 
 
 class Ga4ConnectRequest(BaseModel):
@@ -29,24 +35,24 @@ class GscConnectRequest(BaseModel):
 
 
 @router.get("/status")
-def get_integrations_status() -> Dict[str, Any]:
-    """Returns the operational and connection status of all analytics and keyword providers."""
+def get_integrations_status(user: Optional[UserIdentity] = Depends(get_current_user_optional)) -> Dict[str, Any]:
+    """Returns provider status for the signed-in organization."""
     from app.connectors.store import connector_store
     from app.domain.enums import ConnectorType, ConnectorHealthStatus
 
-    integrations = connector_store.list_integrations()
+    org_id = user.org_id if user else "org_default"
+    integrations = connector_store.list_integrations(org_id)
     ga4_integ = [i for i in integrations if i.provider == ConnectorType.GOOGLE_ANALYTICS_4]
-    ga4_connected = bool(ga4_connector.is_connected or any(i.status == ConnectorHealthStatus.CONNECTED for i in ga4_integ))
-    ga4_prop = ga4_connector.property_id
-    if not ga4_prop and ga4_integ:
-        for i in ga4_integ:
-            p = i.settings.get("property_id")
-            if p:
-                ga4_prop = p
-                break
+    ga4_connected = any(i.status == ConnectorHealthStatus.CONNECTED for i in ga4_integ)
+    ga4_prop = None
+    for integration in ga4_integ:
+        property_id = (integration.settings or {}).get("property_id")
+        if property_id:
+            ga4_prop = property_id
+            break
 
     gsc_integ = [i for i in integrations if i.provider == ConnectorType.GOOGLE_SEARCH_CONSOLE]
-    gsc_connected = bool(gsc_connector.is_connected or any(i.status == ConnectorHealthStatus.CONNECTED for i in gsc_integ))
+    gsc_connected = any(i.status == ConnectorHealthStatus.CONNECTED for i in gsc_integ)
 
     return {
         "google_search_console": {

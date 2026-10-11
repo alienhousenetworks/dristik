@@ -44,7 +44,15 @@ def test_integrations_api_router_zero_synthetic():
     from fastapi.testclient import TestClient
     from app.main import app
 
+    import uuid
     client = TestClient(app)
+    signup = client.post("/api/v1/auth/signup", json={
+        "full_name": "Integrations Owner",
+        "email": f"integ_{uuid.uuid4().hex[:8]}@example.com",
+        "password": "OwnerPass1",
+        "organization_name": "Integrations Org",
+    })
+    assert signup.status_code == 200, signup.text
     status_resp = client.get("/api/v1/integrations/status")
     assert status_resp.status_code == 200
     data = status_resp.json()
@@ -76,3 +84,53 @@ def test_integrations_api_router_zero_synthetic():
 
     invalid_ga4 = client.post("/api/v1/integrations/ga4/connect", json={"property_id": "   "})
     assert invalid_ga4.status_code == 400
+
+
+def test_google_analytics_connector_alias_and_oauth_routes():
+    from unittest.mock import patch
+    from fastapi.testclient import TestClient
+    from app.main import app
+    from app.core.config import settings
+    from app.domain.enums import ConnectorType
+    from app.connectors.store import connector_store
+    from app.connectors.base.models import ConnectorCredentials
+    import uuid
+
+    client = TestClient(app)
+    signup = client.post("/api/v1/auth/signup", json={
+        "full_name": "GA User",
+        "email": f"ga_{uuid.uuid4().hex[:8]}@example.com",
+        "password": "Password123",
+        "organization_name": "GA Org",
+    })
+    assert signup.status_code == 200
+
+    # 1. Authorize routes for google_analytics and google_analytics_4
+    with patch.object(settings, "GOOGLE_CLIENT_ID", "mock-client-id"), \
+         patch.object(settings, "GOOGLE_CLIENT_SECRET", "mock-client-sec"):
+        resp_ga = client.get(
+            "/api/v1/connectors/oauth/google_analytics/authorize?domain=example.com",
+            follow_redirects=False,
+        )
+        assert resp_ga.status_code in (302, 307)
+        assert "accounts.google.com" in resp_ga.headers["location"]
+        assert "analytics.readonly" in resp_ga.headers["location"]
+
+        resp_shared = client.get(
+            "/api/v1/connectors/google/oauth/authorize?domain=example.com&service=analytics",
+            follow_redirects=False,
+        )
+        assert resp_shared.status_code in (302, 307)
+        assert "google_analytics_4/authorize" in resp_shared.headers["location"]
+
+    # 2. Store instantiate connector with GOOGLE_ANALYTICS enum
+    integ = connector_store.add_integration(
+        provider=ConnectorType.GOOGLE_ANALYTICS,
+        name="Google Analytics (example.com)",
+        target_url="https://example.com",
+        credentials=ConnectorCredentials(provider=ConnectorType.GOOGLE_ANALYTICS, api_key="123456789"),
+    )
+    conn = connector_store.get_connector(integ.integration_id)
+    assert conn is not None
+    from app.connectors.google.ga4_connector import GoogleAnalytics4Connector
+    assert isinstance(conn, GoogleAnalytics4Connector)

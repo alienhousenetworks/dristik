@@ -21,6 +21,15 @@ from app.scoring.curves import log_normal_curve, wilson_interval, audience_reada
 from app.cognition.finding_registry import _canonical_id
 
 
+_SEVERITY_RANK = {"CRITICAL": 5, "HIGH": 4, "MEDIUM": 3, "LOW": 2, "INFO": 1}
+
+
+def severity_rank(finding: Finding) -> int:
+    """Rank severity by impact. Enum names are not alphabetical: MEDIUM would otherwise beat CRITICAL."""
+    raw = finding.severity.value if hasattr(finding.severity, "value") else finding.severity
+    return _SEVERITY_RANK.get(str(raw).upper(), 0)
+
+
 def measured_category_score(cat_scores: Dict[str, CategoryScore], category: Category) -> Optional[float]:
     """Return a measured category score. Zero stays zero. Missing and NOT_MEASURED stay None."""
     cat = cat_scores.get(category.value)
@@ -281,6 +290,7 @@ class ScoringEngine:
                 continue
 
             total_cat_budget = 0.0
+            measured_cat_budget = 0.0
             weighted_subsection_sum = 0.0
             total_cat_weight_possible = 0.0
             total_cat_weight_measured = 0.0
@@ -361,7 +371,7 @@ class ScoringEngine:
                             failed = sample_size
                             evidence_list.append({"url": "sitemap.xml", "status": "FAIL", "detail": "XML Sitemap is missing or unreferenced in robots.txt."})
                         elif check_findings:
-                            top_f = max(check_findings, key=lambda f: f.severity.value)
+                            top_f = max(check_findings, key=severity_rank)
                             s = 0.0 if top_f.severity in (Severity.CRITICAL, Severity.HIGH) else 0.5
                             passed = int(round(s * sample_size))
                             failed = sample_size - passed
@@ -384,13 +394,22 @@ class ScoringEngine:
                             s = log_normal_curve(lcp_val, p10=check_def.p10 or 2.5, median=check_def.median or 4.0, higher_is_better=False)
                             evidence_list.append({"metric": "LCP", "value": f"{lcp_val:.2f}s", "status": "PASS" if s >= 0.75 else "FAIL"})
                         else:
-                            s = 1.0
+                            is_measured = False
                     elif cid == "cwv_inp":
-                        s = log_normal_curve(inp_val, p10=check_def.p10 or 200.0, median=check_def.median or 500.0, higher_is_better=False) if inp_val is not None else 1.0
+                        if inp_val is not None:
+                            s = log_normal_curve(inp_val, p10=check_def.p10 or 200.0, median=check_def.median or 500.0, higher_is_better=False)
+                        else:
+                            is_measured = False
                     elif cid == "cwv_cls":
-                        s = log_normal_curve(cls_val, p10=check_def.p10 or 0.10, median=check_def.median or 0.25, higher_is_better=False) if cls_val is not None else 1.0
+                        if cls_val is not None:
+                            s = log_normal_curve(cls_val, p10=check_def.p10 or 0.10, median=check_def.median or 0.25, higher_is_better=False)
+                        else:
+                            is_measured = False
                     elif cid == "cwv_ttfb":
-                        s = log_normal_curve(ttfb_val, p10=check_def.p10 or 0.8, median=check_def.median or 1.8, higher_is_better=False) if ttfb_val is not None else 1.0
+                        if ttfb_val is not None:
+                            s = log_normal_curve(ttfb_val, p10=check_def.p10 or 0.8, median=check_def.median or 1.8, higher_is_better=False)
+                        else:
+                            is_measured = False
                     elif cid == "audience_flesch_reading_ease":
                         s = audience_readability_score(readability, audience=business_profile.target_audience or "b2b")
                         evidence_list.append({"readability": readability, "status": "PASS" if s >= 0.7 else "PARTIAL"})
@@ -505,7 +524,7 @@ class ScoringEngine:
                                     "detail": f"Displacement resistance {s*100:.1f}% ({len(displacements)} competitor displacement events)."
                                 })
                         elif check_findings:
-                            top_f = max(check_findings, key=lambda f: f.severity.value)
+                            top_f = max(check_findings, key=severity_rank)
                             s = 0.20 if top_f.severity in (Severity.CRITICAL, Severity.HIGH) else 0.50
                             passed = int(round(s * sample_size))
                             failed = sample_size - passed
@@ -536,7 +555,7 @@ class ScoringEngine:
                                 "detail": f"Mentioned in {dec_mentioned}/{sample_size} high-intent decision prompts."
                             })
                         elif check_findings:
-                            top_f = max(check_findings, key=lambda f: f.severity.value)
+                            top_f = max(check_findings, key=severity_rank)
                             s = 0.20 if top_f.severity in (Severity.CRITICAL, Severity.HIGH) else 0.50
                             passed = int(round(s * sample_size))
                             failed = sample_size - passed
@@ -572,7 +591,7 @@ class ScoringEngine:
                                 passed = 7
                                 failed = 3
                         elif check_findings:
-                            top_f = max(check_findings, key=lambda f: f.severity.value)
+                            top_f = max(check_findings, key=severity_rank)
                             s = 0.20 if top_f.severity in (Severity.CRITICAL, Severity.HIGH) else 0.60
                             passed = int(round(s * sample_size))
                             failed = sample_size - passed
@@ -595,7 +614,7 @@ class ScoringEngine:
                                 passed = 0
                                 failed = 1
                             elif check_def.check_type == "graded":
-                                top_f = max(check_findings, key=lambda f: f.severity.value)
+                                top_f = max(check_findings, key=severity_rank)
                                 if top_f.severity == Severity.CRITICAL:
                                     s = 0.0
                                 elif top_f.severity == Severity.HIGH:
@@ -704,8 +723,20 @@ class ScoringEngine:
                     elif is_measured:
                         cat_strengths.append(check_def.name)
 
-                # Subsection Score
-                sub_score = (100.0 * (sub_score_accum / sub_weight_measured)) if sub_weight_measured > 0 else 0.0
+                # Subsection Score. A subsection with no measured checks is omitted
+                # from the category total. Missing Core Web Vitals are not a zero.
+                if sub_weight_measured <= 0:
+                    subsections_breakdown.append({
+                        "component": sub_def.name,
+                        "points_earned": 0.0,
+                        "points_possible": sub_budget,
+                        "status": "NOT_MEASURED",
+                        "coverage": 0.0,
+                        "provenance": "NOT_MEASURED",
+                    })
+                    continue
+                sub_score = 100.0 * (sub_score_accum / sub_weight_measured)
+                measured_cat_budget += sub_budget
                 weighted_subsection_sum += (sub_budget / 100.0) * sub_score
                 subsections_breakdown.append({
                     "component": sub_def.name,
@@ -730,7 +761,7 @@ class ScoringEngine:
                         "why_it_matters": getattr(df, "why_it_matters", None) or df.title
                     })
 
-            raw_cat_score = (weighted_subsection_sum / (total_cat_budget / 100.0)) if total_cat_budget > 0 else 0.0
+            raw_cat_score = (weighted_subsection_sum / (measured_cat_budget / 100.0)) if measured_cat_budget > 0 else 0.0
             cat_coverage = (total_cat_weight_measured / total_cat_weight_possible) if total_cat_weight_possible > 0 else 1.0
 
             # Dynamic Gates from JSON Rubric
@@ -762,17 +793,34 @@ class ScoringEngine:
             final_cat_score = round(raw_cat_score, 1) if cat_status != "NOT_MEASURED" else None
 
             if final_cat_score is not None and subsections_breakdown:
-                total_earned = sum(comp["points_earned"] for comp in subsections_breakdown)
-                if abs(final_cat_score - total_earned) > 0.05:
-                    if total_earned > 0:
-                        scale = final_cat_score / total_earned
-                        running = 0.0
-                        for comp in subsections_breakdown[:-1]:
-                            comp["points_earned"] = round(comp["points_earned"] * scale, 1)
-                            running += comp["points_earned"]
-                        subsections_breakdown[-1]["points_earned"] = max(0.0, round(final_cat_score - running, 1))
-                    else:
-                        subsections_breakdown[0]["points_earned"] = final_cat_score
+                scored_components = [comp for comp in subsections_breakdown if comp.get("status") != "NOT_MEASURED"]
+                for comp in subsections_breakdown:
+                    if comp.get("status") == "NOT_MEASURED":
+                        comp["points_earned"] = 0.0
+                total_earned = sum(comp["points_earned"] for comp in scored_components)
+                total_possible = sum(comp["points_possible"] for comp in scored_components)
+                # Measured rows are renormalized onto the 0-100 category scale.
+                # An omitted subsection stays at 0 earned and is not given leftover points.
+                if scored_components and total_possible > 0 and abs(final_cat_score - total_earned) > 0.05:
+                    possible_scale = 100.0 / total_possible
+                    running_possible = 0.0
+                    running_earned = 0.0
+                    for comp in scored_components[:-1]:
+                        ratio = (comp["points_earned"] / comp["points_possible"]) if comp["points_possible"] else 0.0
+                        comp["points_possible"] = round(comp["points_possible"] * possible_scale, 1)
+                        comp["points_earned"] = min(comp["points_possible"], round(comp["points_possible"] * ratio, 1))
+                        running_possible += comp["points_possible"]
+                        running_earned += comp["points_earned"]
+                    last = scored_components[-1]
+                    last_ratio = (last["points_earned"] / last["points_possible"]) if last["points_possible"] else 0.0
+                    last["points_possible"] = max(0.0, round(100.0 - running_possible, 1))
+                    last["points_earned"] = min(last["points_possible"], round(last["points_possible"] * last_ratio, 1))
+                    running_earned += last["points_earned"]
+                    drift = round(final_cat_score - running_earned, 1)
+                    if drift:
+                        room = round(last["points_possible"] - last["points_earned"], 1)
+                        applied = min(drift, room) if drift > 0 else drift
+                        last["points_earned"] = max(0.0, round(last["points_earned"] + applied, 1))
 
             category_scores[cat_key] = CategoryScore(
                 category=cat_enum,

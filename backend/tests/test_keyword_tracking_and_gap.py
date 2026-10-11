@@ -142,7 +142,17 @@ async def test_scheduler_lifecycle():
 
 
 def test_keywords_fastapi_endpoints():
+    import uuid
     with TestClient(app) as client:
+        anonymous = client.get("/api/v1/intelligence/keywords?project_id=test_e2e_proj")
+        assert anonymous.status_code == 401
+        signup = client.post("/api/v1/auth/signup", json={
+            "full_name": "Keyword Owner",
+            "email": f"kw_{uuid.uuid4().hex[:8]}@example.com",
+            "password": "OwnerPass1",
+            "organization_name": "Keyword Org",
+        })
+        assert signup.status_code == 200, signup.text
         # Add keyword
         res = client.post("/api/v1/intelligence/keywords", json={
             "project_id": "test_e2e_proj",

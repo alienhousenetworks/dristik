@@ -505,18 +505,28 @@ def test_external_category_does_not_change_the_composite_score(env):
 def test_http_api_hides_secrets_and_reports_not_connected(env, tmp_path, monkeypatch):
     service, _transport = _service(tmp_path)
     _install(monkeypatch, service)
+    import uuid
     from app.main import app
     with TestClient(app) as client:
-        report = client.get("/api/v1/external-authority/report", params={"domain": DOMAIN, "project_id": PROJECT})
+        anonymous = client.get("/api/v1/external-authority/report", params={"domain": DOMAIN, "project_id": PROJECT})
+        assert anonymous.status_code == 401
+        signup = client.post("/api/v1/auth/signup", json={
+            "full_name": "Authority Owner",
+            "email": f"authz_{uuid.uuid4().hex[:8]}@example.com",
+            "password": "OwnerPass1",
+            "organization_name": "Authority Org",
+        })
+        assert signup.status_code == 200, signup.text
+        report = client.get("/api/v1/external-authority/report", params={"domain": DOMAIN})
         assert report.status_code == 200
         body = report.json()
         assert body["universal_authority_score"] is None
         assert any(row["data_state"] == "NOT_CONNECTED" for row in body["coverage"])
-        health = client.get("/api/v1/external-authority/health", params={"project_id": PROJECT})
+        health = client.get("/api/v1/external-authority/health")
         assert health.status_code == 200
         assert "token_ciphertext" not in health.text
         monkeypatch.setattr(settings, "EXTERNAL_INTEGRATION_ENCRYPTION_KEY", None)
-        denied = client.post("/api/v1/external-authority/connect", json={"provider": "majestic", "api_key": API_KEY, "project_id": PROJECT, "domain": DOMAIN})
+        denied = client.post("/api/v1/external-authority/connect", json={"provider": "majestic", "api_key": API_KEY, "domain": DOMAIN})
         assert denied.status_code == 503
         assert API_KEY not in denied.text
 

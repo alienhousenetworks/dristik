@@ -25,9 +25,9 @@ export function VerificationProofCard({
     return null;
   }
 
-  // Generate deterministic proof seal if missing
-  const seal = report?.evidence_seal || (finding ? `dristik:seal:${finding.finding_id}` : 'dristik:seal:unverified');
+  const seal = report?.evidence_seal || 'No evidence seal recorded';
   const verifiedAt = report?.verified_at ? new Date(report.verified_at).toLocaleString() : 'Pending Live Run';
+  const measuredDelta = report?.score_delta_is_measured === true && typeof report.score_delta === 'number';
 
   return (
     <div
@@ -47,7 +47,7 @@ export function VerificationProofCard({
                 : 'bg-paper-200 text-ink-700'
             }`}
           >
-            {isVerified ? '✓ Cryptographically Certified' : 'Verification Pending'}
+            {isVerified ? 'Technical condition resolved' : 'Verification pending'}
           </span>
           {finding?.finding_id && (
             <span className="font-mono text-xs text-ink-500">
@@ -57,9 +57,9 @@ export function VerificationProofCard({
         </div>
 
         <div className="flex items-center gap-2 font-mono text-[11px]">
-          {report?.score_delta && report.score_delta > 0 && (
-            <span className="font-bold text-good bg-good/10 px-2 py-0.5 rounded border border-good/30">
-              +{report.score_delta} pts recovered
+          {measuredDelta && (
+            <span className="font-bold text-ink bg-paper-100 px-2 py-0.5 rounded border border-line">
+              Measured change {report?.score_delta}. Not an AI citation result.
             </span>
           )}
           <span className="text-ink-400 text-[10px]">
@@ -87,7 +87,7 @@ export function VerificationProofCard({
               <span></span>
               <span>BEFORE (AUDIT BASELINE)</span>
             </span>
-            <span className="text-[10px] text-bad uppercase">FAILS COMPLIANCE</span>
+            <span className="text-[10px] text-bad uppercase">Recorded condition</span>
           </div>
           <p className="text-bad font-sans text-xs mb-2 leading-relaxed">
             {report?.before_state || finding?.description || 'Detected non-compliant configuration.'}
@@ -146,16 +146,25 @@ export function VerificationProofCard({
         </div>
       )}
 
-      {/* Cryptographic Proof Footer */}
+      {(report?.technical_verification || report?.verification_scope_note) && (
+        <p className="mt-4 text-[11px] text-ink-600 leading-relaxed">
+          Technical: {report.technical_verification || 'not recorded'}.
+          {' '}Visibility: {report.visibility_verification || 'not measured'}.
+          {' '}Business: {report.business_verification || 'not measured'}.
+          {report.verification_scope_note ? ` ${report.verification_scope_note}` : ''}
+        </p>
+      )}
+
+      {/* Evidence seal footer */}
       <div className="mt-4 pt-3 border-t border-line/60 flex flex-wrap items-center justify-between gap-2 text-[10px] font-mono text-ink-500">
         <div className="flex items-center gap-1.5 truncate max-w-full">
-          <span className="text-ink-400">PROOF SEAL:</span>
+          <span className="text-ink-400">EVIDENCE SEAL:</span>
           <span className="font-bold text-ink-700 bg-paper-50 px-1.5 py-0.5 border border-line rounded truncate">
             {seal}
           </span>
         </div>
         <span>
-          Auditor: <strong className="text-ink-700">Dristik Zero-Fake Engine v2.1</strong>
+          Recorded by: <strong className="text-ink-700">{report?.certified_by || 'Dristik verification record'}</strong>
         </span>
       </div>
     </div>

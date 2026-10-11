@@ -6,9 +6,9 @@ from typing import Dict, Any, Optional
 import logging
 from fastapi import APIRouter, Depends, HTTPException, Response
 
+from app.identity.access import require_analysis
 from app.identity.authorizer import UserIdentity
-from app.identity.deps import get_current_user_optional
-from app.orchestration.orchestrator import orchestrator
+from app.identity.deps import get_current_user
 
 logger = logging.getLogger("dristik.reports")
 router = APIRouter(prefix="/reports", tags=["Executive Reports"])
@@ -341,11 +341,9 @@ def get_executive_deck_generator() -> ExecutiveDeckGenerator:
 async def get_executive_deck(
     analysis_id: str,
     format: str = "html",
-    user: Optional[UserIdentity] = Depends(get_current_user_optional)
+    user: UserIdentity = Depends(get_current_user)
 ):
-    run = orchestrator.get_run(analysis_id)
-    if not run:
-        raise HTTPException(status_code=404, detail=f"Analysis run '{analysis_id}' not found.")
+    run = require_analysis(analysis_id, user)
     report = getattr(run, "report", None)
     p = getattr(report, "three_way_comparison", None) or getattr(report, "perspective", None) if report else None
     human_p = getattr(p, "human_visitor_perspective", None) if p else None
@@ -415,15 +413,13 @@ async def get_executive_deck(
 @router.get("/{analysis_id}/deck.pptx")
 async def get_presentation_deck_pptx(
     analysis_id: str,
-    user: Optional[UserIdentity] = Depends(get_current_user_optional)
+    user: UserIdentity = Depends(get_current_user)
 ):
     """
     Generates and streams the 76-slide PowerPoint (.pptx) presentation deck
     created by the dedicated deck generation orchestrator.
     """
-    run = orchestrator.get_run(analysis_id)
-    if not run:
-        raise HTTPException(status_code=404, detail=f"Analysis run '{analysis_id}' not found.")
+    run = require_analysis(analysis_id, user)
     report = getattr(run, "report", None)
     if not report:
         raise HTTPException(status_code=400, detail="Executive report not yet synthesized for this analysis run.")
@@ -448,15 +444,13 @@ async def get_presentation_deck_pptx(
 @router.get("/{analysis_id}/deck-manifest")
 async def get_presentation_deck_manifest(
     analysis_id: str,
-    user: Optional[UserIdentity] = Depends(get_current_user_optional)
+    user: UserIdentity = Depends(get_current_user)
 ):
     """
     Returns the structured slide blueprint manifest, chart specifications,
     lint results, and non-repetition verification proof for the presentation deck.
     """
-    run = orchestrator.get_run(analysis_id)
-    if not run:
-        raise HTTPException(status_code=404, detail=f"Analysis run '{analysis_id}' not found.")
+    run = require_analysis(analysis_id, user)
     report = getattr(run, "report", None)
     if not report:
         raise HTTPException(status_code=400, detail="Executive report not yet synthesized for this analysis run.")
@@ -485,16 +479,14 @@ async def get_presentation_deck_manifest(
 async def get_complete_seo_report(
     analysis_id: str,
     format: str = "html",
-    user: Optional[UserIdentity] = Depends(get_current_user_optional)
+    user: UserIdentity = Depends(get_current_user)
 ):
     """
     Renders the dedicated, complete 20-Section SEO Master Audit and Remediation Report.
     format='html': returns modern responsive HTML report.
     format='json': returns structured 20-section JSON payload.
     """
-    run = orchestrator.get_run(analysis_id)
-    if not run:
-        raise HTTPException(status_code=404, detail=f"Analysis run '{analysis_id}' not found.")
+    run = require_analysis(analysis_id, user)
     report = getattr(run, "report", None)
     if not report:
         raise HTTPException(status_code=400, detail="Executive report not yet synthesized for this analysis run.")
@@ -511,14 +503,12 @@ async def get_complete_seo_report(
 @router.get("/{analysis_id}/export/urls.csv")
 async def export_urls_csv(
     analysis_id: str,
-    user: Optional[UserIdentity] = Depends(get_current_user_optional)
+    user: UserIdentity = Depends(get_current_user)
 ):
     """
     Exports full URL-level crawl dataset in CSV format.
     """
-    run = orchestrator.get_run(analysis_id)
-    if not run:
-        raise HTTPException(status_code=404, detail=f"Analysis run '{analysis_id}' not found.")
+    run = require_analysis(analysis_id, user)
     report = getattr(run, "report", None)
     if not report:
         raise HTTPException(status_code=400, detail="Executive report not yet synthesized for this analysis run.")
@@ -539,15 +529,13 @@ async def export_urls_csv(
 @router.get("/{analysis_id}/export/remediation-tracker.csv")
 async def export_remediation_tracker_csv(
     analysis_id: str,
-    user: Optional[UserIdentity] = Depends(get_current_user_optional)
+    user: UserIdentity = Depends(get_current_user)
 ):
     """
     Exports comprehensive Remediation Tracker CSV with all 14 finding fields,
     ownership, priority, and 'Fixed vs Verified' lifecycle states.
     """
-    run = orchestrator.get_run(analysis_id)
-    if not run:
-        raise HTTPException(status_code=404, detail=f"Analysis run '{analysis_id}' not found.")
+    run = require_analysis(analysis_id, user)
     report = getattr(run, "report", None)
     if not report:
         raise HTTPException(status_code=400, detail="Executive report not yet synthesized for this analysis run.")
@@ -569,16 +557,14 @@ async def export_remediation_tracker_csv(
 async def get_complete_geo_report(
     analysis_id: str,
     format: str = "html",
-    user: Optional[UserIdentity] = Depends(get_current_user_optional)
+    user: UserIdentity = Depends(get_current_user)
 ):
     """
     Renders the dedicated, complete 20-Section GEO Master Audit and AI Citability Report.
     format='html': returns modern responsive standalone HTML report with sticky 20-section navigation.
     format='json': returns structured 20-section JSON payload.
     """
-    run = orchestrator.get_run(analysis_id)
-    if not run:
-        raise HTTPException(status_code=404, detail=f"Analysis run '{analysis_id}' not found.")
+    run = require_analysis(analysis_id, user)
     report = getattr(run, "report", None)
     if not report:
         raise HTTPException(status_code=400, detail="Executive report not yet synthesized for this analysis run.")
@@ -595,15 +581,13 @@ async def get_complete_geo_report(
 @router.get("/{analysis_id}/export/geo-remediation-tracker.csv")
 async def export_geo_remediation_tracker_csv(
     analysis_id: str,
-    user: Optional[UserIdentity] = Depends(get_current_user_optional)
+    user: UserIdentity = Depends(get_current_user)
 ):
     """
     Exports comprehensive GEO Remediation Tracker CSV formatted to the 14-field
     Generative Engine Optimization issue schema.
     """
-    run = orchestrator.get_run(analysis_id)
-    if not run:
-        raise HTTPException(status_code=404, detail=f"Analysis run '{analysis_id}' not found.")
+    run = require_analysis(analysis_id, user)
     report = getattr(run, "report", None)
     if not report:
         raise HTTPException(status_code=400, detail="Executive report not yet synthesized for this analysis run.")
@@ -625,16 +609,14 @@ async def export_geo_remediation_tracker_csv(
 async def get_complete_aeo_report(
     analysis_id: str,
     format: str = "html",
-    user: Optional[UserIdentity] = Depends(get_current_user_optional)
+    user: UserIdentity = Depends(get_current_user)
 ):
     """
     Renders the dedicated, complete 20-Section AEO Master Audit and Answer Engine Optimization Report.
     format='html': returns modern responsive standalone HTML report with sticky 20-section navigation.
     format='json': returns structured 20-section JSON payload.
     """
-    run = orchestrator.get_run(analysis_id)
-    if not run:
-        raise HTTPException(status_code=404, detail=f"Analysis run '{analysis_id}' not found.")
+    run = require_analysis(analysis_id, user)
     report = getattr(run, "report", None)
     if not report:
         raise HTTPException(status_code=400, detail="Executive report not yet synthesized for this analysis run.")
@@ -651,15 +633,13 @@ async def get_complete_aeo_report(
 @router.get("/{analysis_id}/export/aeo-remediation-tracker.csv")
 async def export_aeo_remediation_tracker_csv(
     analysis_id: str,
-    user: Optional[UserIdentity] = Depends(get_current_user_optional)
+    user: UserIdentity = Depends(get_current_user)
 ):
     """
     Exports comprehensive AEO Remediation Tracker CSV formatted to the 14-field
     Answer Engine Optimization issue schema with verification acceptance criteria.
     """
-    run = orchestrator.get_run(analysis_id)
-    if not run:
-        raise HTTPException(status_code=404, detail=f"Analysis run '{analysis_id}' not found.")
+    run = require_analysis(analysis_id, user)
     report = getattr(run, "report", None)
     if not report:
         raise HTTPException(status_code=400, detail="Executive report not yet synthesized for this analysis run.")
@@ -680,15 +660,13 @@ async def export_aeo_remediation_tracker_csv(
 @router.get("/{analysis_id}/export/aeo-question-dataset.csv")
 async def export_aeo_question_dataset_csv(
     analysis_id: str,
-    user: Optional[UserIdentity] = Depends(get_current_user_optional)
+    user: UserIdentity = Depends(get_current_user)
 ):
     """
     Exports Deliverable B: Question-to-Page Evidence Dataset in CSV format,
     mapping target user queries to pages, status, and verified answer passages.
     """
-    run = orchestrator.get_run(analysis_id)
-    if not run:
-        raise HTTPException(status_code=404, detail=f"Analysis run '{analysis_id}' not found.")
+    run = require_analysis(analysis_id, user)
     report = getattr(run, "report", None)
     if not report:
         raise HTTPException(status_code=400, detail="Executive report not yet synthesized for this analysis run.")
@@ -704,5 +682,58 @@ async def export_aeo_question_dataset_csv(
         media_type="text/csv",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'}
     )
+
+
+@router.get("/{analysis_id}/sections/{section_key}/pdf")
+async def get_section_pdf_report(
+    analysis_id: str,
+    section_key: str,
+    user: UserIdentity = Depends(get_current_user)
+):
+    """
+    Renders the dedicated, print-ready editorial HTML report for a specific section:
+    crawl, seo, geo, aeo, cro, or competitors.
+    """
+    run = require_analysis(analysis_id, user)
+    report = getattr(run, "report", None)
+    if not report:
+        raise HTTPException(status_code=400, detail="Executive report not yet synthesized for this analysis run.")
+
+    from app.reports.section_exports import section_report_generator
+    html_content = section_report_generator.render_section_html(report, section_key)
+    return Response(content=html_content, media_type="text/html")
+
+
+@router.get("/{analysis_id}/sections/{section_key}/pptx")
+async def get_section_pptx_deck(
+    analysis_id: str,
+    section_key: str,
+    user: UserIdentity = Depends(get_current_user)
+):
+    """
+    Generates and streams the dedicated PowerPoint (.pptx) presentation deck for a specific section:
+    crawl, seo, geo, aeo, cro, or competitors.
+    """
+    run = require_analysis(analysis_id, user)
+    report = getattr(run, "report", None)
+    if not report:
+        raise HTTPException(status_code=400, detail="Executive report not yet synthesized for this analysis run.")
+
+    from app.agents.deck.coordinator import generate_section_pptx_deck
+    pptx_bytes, blueprint = generate_section_pptx_deck(report, section_key)
+
+    domain_clean = (report.domain or "website").replace("https://", "").replace("http://", "").split("/")[0]
+    filename = f"{domain_clean}_{section_key.lower()}_audit_deck.pptx"
+
+    return Response(
+        content=pptx_bytes,
+        media_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "X-Dristik-Slide-Count": str(blueprint.total_slides),
+            "X-Dristik-Section": section_key,
+        }
+    )
+
 
 

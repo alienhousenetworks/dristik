@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { ExecutiveReport } from '../../types';
 import { PillarShell, Card } from '../ui';
+import { SectionExportButtons } from '../ui/SectionExportButtons';
 import {
   Bot,
   FileCode,
@@ -90,7 +91,7 @@ export function resolveQuestionCategory(q: any): string {
   return q?.category || 'General';
 }
 
-export function AeoWorkspaceView({ report, onOpenPatchPack }: AeoWorkspaceViewProps) {
+export function AeoWorkspaceView({ report, analysisId, onOpenPatchPack }: AeoWorkspaceViewProps) {
   const [activeSubTab, setActiveSubTab] = useState<AeoSubTab>('directives');
   const [selectedQuestionCategory, setSelectedQuestionCategory] = useState<string>('All');
   const [copiedLlms, setCopiedLlms] = useState(false);
@@ -146,6 +147,13 @@ export function AeoWorkspaceView({ report, onOpenPatchPack }: AeoWorkspaceViewPr
       score={aeoScore}
       metaLabel="Q&A Answers"
       meta={`${qGraph?.supported_count ?? geo?.questions_supported ?? '—'} / ${qGraph?.total_questions ?? geo?.questions_total ?? '50'}`}
+      actions={
+        <SectionExportButtons
+          analysisId={analysisId || report.analysis_id || report.report_id}
+          sectionKey="aeo"
+          sectionLabel="AEO"
+        />
+      }
       tabs={[
         { id: 'directives', label: 'AI Bots & llms.txt' },
         { id: 'schema', label: `Schema Graph (${schemaTypes.length})` },

@@ -50,11 +50,10 @@ def test_docs_blocked_for_normal_customer_role(client: TestClient):
         "organization_name": "Customer Inc",
     })
     assert signup.status_code == 200
-    token = signup.json()["token"]
+    assert "token" not in signup.json()
 
-    # In our implementation, system admin, org owners, admins, and staff can access docs,
-    # but unauthenticated / non-existent users cannot.
-    res = client.get("/docs", headers={"Authorization": f"Bearer {token}"})
+    # The session cookie is the credential. The response body does not carry it.
+    res = client.get("/docs")
     # Since customer org owner is an admin/owner role, they have access:
     assert res.status_code == 200
 

@@ -188,6 +188,16 @@ def test_lead_gen_opportunities_endpoint():
     assert opportunities == []
 
 def test_agency_workspace_endpoint():
+    import uuid
+    anonymous = client.get("/api/v1/intelligence/agency")
+    assert anonymous.status_code == 401
+    signup = client.post("/api/v1/auth/signup", json={
+        "full_name": "Agency Owner",
+        "email": f"agency_{uuid.uuid4().hex[:8]}@example.com",
+        "password": "OwnerPass1",
+        "organization_name": "Agency Org",
+    })
+    assert signup.status_code == 200, signup.text
     response = client.get("/api/v1/intelligence/agency")
     assert response.status_code == 200
     data = response.json()

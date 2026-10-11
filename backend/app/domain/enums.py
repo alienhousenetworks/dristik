@@ -488,6 +488,7 @@ class ConnectorType(str, Enum):
     WEBFLOW = "webflow"
     GOOGLE_SEARCH_CONSOLE = "google_search_console"
     GOOGLE_ANALYTICS_4 = "google_analytics_4"
+    GOOGLE_ANALYTICS = "google_analytics"
     GOOGLE_BUSINESS_PROFILE = "google_business_profile"
     AHREFS = "ahrefs"
     SEMRUSH = "semrush"

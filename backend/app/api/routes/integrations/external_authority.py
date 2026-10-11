@@ -13,7 +13,7 @@ from pydantic import BaseModel, Field
 
 from app.core.config import settings
 from app.external_authority.crypto import EncryptionKeyMissing
-from app.identity.authorizer import UserIdentity
+from app.identity.authorizer import Authorizer, UserIdentity
 from app.identity.deps import get_current_user_optional
 
 router = APIRouter(prefix="/external-authority", tags=["External Authority"])
@@ -88,9 +88,17 @@ def _service():
 
 
 def _project(user: Optional[UserIdentity], requested: Optional[str]) -> str:
-    if user is not None and user.org_id:
-        return user.org_id
-    return requested or "proj_default"
+    """Stored connector data belongs to the signed-in organization.
+
+    A caller-supplied project id cannot select another organization's records.
+    """
+    if user is None or not user.org_id:
+        raise HTTPException(status_code=401, detail="Sign in to continue.")
+    if requested and requested != user.org_id:
+        if not Authorizer.can_access_org(user, requested):
+            raise HTTPException(status_code=404, detail="Project not found.")
+        return requested
+    return user.org_id
 
 
 def _guard(exc: Exception) -> None:

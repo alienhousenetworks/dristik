@@ -220,6 +220,11 @@ export interface RemediationVerificationReport {
   passed_checks_count: number;
   total_checks_count: number;
   score_delta?: number | null;
+  score_delta_is_measured?: boolean;
+  technical_verification?: string;
+  visibility_verification?: string;
+  business_verification?: string;
+  verification_scope_note?: string;
   verified_at: string;
   evidence_seal: string;
   certified_by?: string;
@@ -458,6 +463,29 @@ export interface DynamicSandboxQuestionEvaluation {
   retrieval_evidence_count?: number | null;
   missing_aspects?: string[] | null;
   evaluation_trace?: Record<string, any> | null;
+  // Granular Source & Section Update Attribution
+  source_url?: string | null;
+  source_page_title?: string | null;
+  source_section?: string | null;
+  target_update_page?: string | null;
+  target_update_section?: string | null;
+  section_update_recommendation?: string | null;
+  ai_thinking_steps?: AiThinkingStep[] | null;
+}
+
+export interface AiThinkingStep {
+  step: string;
+  title: string;
+  thought: string;
+  status?: 'complete' | 'warning' | 'action_required' | string;
+  details?: Record<string, any>;
+}
+
+export interface SystemExecutionLogEntry {
+  timestamp: string;
+  phase: string;
+  level: 'INFO' | 'SUCCESS' | 'WARNING' | 'ERROR' | string;
+  message: string;
 }
 
 export interface CompetitorBakeoffItem {
@@ -2087,9 +2115,22 @@ export interface PricingPlan {
   billing_period?: string;
 }
 
+export interface SubscriptionHypothesis {
+  id: string;
+  name: string;
+  purchasable: boolean;
+  status: string;
+  buyer: string;
+  includes: string[];
+  price_inr_monthly_range?: number[];
+  price_inr_annual_range?: number[];
+}
+
 export interface PlansCatalog {
   one_time_audits: PricingPlan[];
   continuous_monitoring: PricingPlan[];
+  subscription_hypotheses?: SubscriptionHypothesis[];
+  subscription_hypotheses_note?: string;
   default_flagship: string;
   currency: string;
   gst_rate: number;
@@ -2161,6 +2202,8 @@ export interface ExternalAuthorityReport {
 
 export type TabId =
   | 'overview'
+  | 'crawl'
+  | 'workflow'
   | 'seo'
   | 'geo'
   | 'aeo'
@@ -2172,6 +2215,10 @@ export type TabId =
   | 'patches'
   | 'roadmap'
   | 'verification'
+  | 'discover'
+  | 'decide'
+  | 'execute'
+  | 'prove'
   | 'report'
   | 'plans'
   | 'costing'
@@ -2221,6 +2268,7 @@ export interface WebsiteIntelligenceRollup {
 
 export type AppView =
   | 'home'
+  | 'grader'
   | 'pricing'
   | 'login'
   | 'signup'
@@ -2354,6 +2402,7 @@ export type ConnectorType =
   | 'webflow'
   | 'google_search_console'
   | 'google_analytics_4'
+  | 'google_analytics'
   | 'google_business_profile'
   | 'ahrefs'
   | 'semrush'
@@ -2438,9 +2487,11 @@ export interface VerificationResult {
   is_resolved: boolean;
   verified_at: string;
   details: string;
-  before_score: number;
-  after_score: number;
-  score_delta: number;
+  status?: string;
+  before_score?: number | null;
+  after_score?: number | null;
+  score_delta?: number | null;
+  score_delta_is_measured?: boolean;
 }
 
 export interface BrandPerceptionScore {

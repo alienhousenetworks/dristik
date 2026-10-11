@@ -4,13 +4,12 @@ Converts Dristik audit findings into:
 1. Automated GitHub / GitLab Pull Requests (Next.js / JSON-LD / Meta patches)
 2. 1-Click Jira Software / Linear Issue Tickets
 """
-import uuid
 from typing import Dict, Any, List, Optional
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from app.identity.authorizer import UserIdentity
-from app.identity.deps import get_current_user_optional, require_permission
+from app.identity.deps import get_current_user
 
 router = APIRouter(prefix="/remediation", tags=["Developer Sync Engine"])
 
@@ -53,12 +52,10 @@ class DeveloperSyncEngine:
             f"- [ ] Verified Core Web Vitals impact.\n"
             f"- [ ] Triggered Dristik verification re-crawl.\n"
         )
-        pr_id = f"pr_{uuid.uuid4().hex[:8]}"
-        pr_url = f"https://github.com/{req.repo}/pull/{pr_id}"
         return {
-            "status": "PR_CREATED",
-            "pr_id": pr_id,
-            "pr_url": pr_url,
+            "status": "not_submitted",
+            "submitted": False,
+            "note": "This is a local payload preview. Dristik did not open a pull request.",
             "repo": req.repo,
             "branch": branch,
             "title": title,
@@ -70,12 +67,11 @@ class DeveloperSyncEngine:
         }
 
     def generate_jira_issue_payload(self, req: CreateIssueRequest) -> Dict[str, Any]:
-        issue_id = f"{req.project_key}-{uuid.uuid4().hex[:4].upper()}"
-        issue_url = f"https://jira.enterprise.local/browse/{issue_id}"
         return {
-            "status": "ISSUE_CREATED",
-            "issue_key": issue_id,
-            "issue_url": issue_url,
+            "status": "not_submitted",
+            "submitted": False,
+            "note": "This is a local issue preview. Dristik did not create a Jira issue.",
+            "issue_key": None,
             "summary": f"[{req.severity.upper()}] {req.title}",
             "priority": "High" if req.severity.lower() in ("critical", "high") else "Medium",
             "description": (
@@ -86,13 +82,12 @@ class DeveloperSyncEngine:
         }
 
     def generate_linear_issue_payload(self, req: CreateIssueRequest) -> Dict[str, Any]:
-        issue_id = f"{req.project_key.upper()}-{uuid.uuid4().hex[:3].upper()}"
-        issue_url = f"https://linear.app/workspace/issue/{issue_id}"
         priority_map = {"critical": 1, "high": 2, "medium": 3, "low": 4}
         return {
-            "status": "ISSUE_CREATED",
-            "issue_id": issue_id,
-            "issue_url": issue_url,
+            "status": "not_submitted",
+            "submitted": False,
+            "note": "This is a local issue preview. Dristik did not create a Linear issue.",
+            "issue_id": None,
             "title": req.title,
             "priority": priority_map.get(req.severity.lower(), 3),
             "description": (
@@ -120,7 +115,7 @@ def get_developer_sync_engine() -> DeveloperSyncEngine:
 @router.post("/github/create-pr")
 async def create_github_pr_endpoint(
     req: CreatePRRequest,
-    user: Optional[UserIdentity] = Depends(get_current_user_optional)
+    user: UserIdentity = Depends(get_current_user)
 ):
     engine = get_developer_sync_engine()
     return engine.generate_github_pr_payload(req)
@@ -129,7 +124,7 @@ async def create_github_pr_endpoint(
 @router.post("/jira/create-issue")
 async def create_jira_issue_endpoint(
     req: CreateIssueRequest,
-    user: Optional[UserIdentity] = Depends(get_current_user_optional)
+    user: UserIdentity = Depends(get_current_user)
 ):
     engine = get_developer_sync_engine()
     return engine.generate_jira_issue_payload(req)
@@ -138,7 +133,7 @@ async def create_jira_issue_endpoint(
 @router.post("/linear/create-issue")
 async def create_linear_issue_endpoint(
     req: CreateIssueRequest,
-    user: Optional[UserIdentity] = Depends(get_current_user_optional)
+    user: UserIdentity = Depends(get_current_user)
 ):
     engine = get_developer_sync_engine()
     return engine.generate_linear_issue_payload(req)

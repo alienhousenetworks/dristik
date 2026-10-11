@@ -42,9 +42,19 @@ def test_gsc_bad_credentials_file_is_not_measured(tmp_path):
 
 
 def test_oauth_does_not_issue_mock_codes(monkeypatch):
+    import uuid
     monkeypatch.delenv("GOOGLE_CLIENT_ID", raising=False)
     monkeypatch.setattr(settings, "GOOGLE_CLIENT_ID", None)
     client = TestClient(app)
+    anonymous = client.get("/api/v1/connectors/google/oauth/authorize?domain=example.com", follow_redirects=False)
+    assert anonymous.status_code == 401
+    signup = client.post("/api/v1/auth/signup", json={
+        "full_name": "OAuth Owner",
+        "email": f"oauth_{uuid.uuid4().hex[:8]}@example.com",
+        "password": "OwnerPass1",
+        "organization_name": "OAuth Org",
+    })
+    assert signup.status_code == 200, signup.text
     response = client.get("/api/v1/connectors/google/oauth/authorize?domain=example.com", follow_redirects=False)
     assert response.status_code == 503
     assert "mock" not in response.text.lower() or "not issued" in response.text.lower()

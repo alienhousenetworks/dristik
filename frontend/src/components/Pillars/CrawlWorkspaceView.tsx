@@ -1,0 +1,195 @@
+import React, { useState } from 'react';
+import { ExecutiveReport } from '../../types';
+import { getSectionPdfUrl, getSectionPptxUrl } from '../../services/api';
+import { Globe, FileText, Download, CheckCircle, AlertTriangle, XCircle, ArrowUpRight, Search, ShieldCheck } from 'lucide-react';
+
+interface CrawlWorkspaceViewProps {
+  report: ExecutiveReport;
+  analysisId?: string;
+}
+
+export function CrawlWorkspaceView({ report, analysisId }: CrawlWorkspaceViewProps) {
+  const [search, setSearch] = useState('');
+  const manifest = report.crawl_manifest;
+  const pages: any[] = (manifest?.pages && manifest.pages.length > 0) ? manifest.pages : (report.page_reports || []);
+  const health = (manifest?.crawl_health || {}) as Record<string, any>;
+
+  const id = analysisId || report.analysis_id || report.report_id;
+  const pdfUrl = id ? getSectionPdfUrl(id, 'crawl') : '#';
+  const pptxUrl = id ? getSectionPptxUrl(id, 'crawl') : '#';
+
+  const filteredPages = pages.filter((p: any) =>
+    (p.url || '').toLowerCase().includes(search.toLowerCase()) ||
+    (p.title || '').toLowerCase().includes(search.toLowerCase())
+  );
+
+  const avgTtfb = typeof health.avg_ttfb_ms === 'number' ? Math.round(health.avg_ttfb_ms) : null;
+  const llmsTxtFound = Boolean((manifest as any)?.llms_txt_found);
+
+  return (
+    <div className="space-y-6">
+      {/* Top Banner / Actions */}
+      <div className="bg-paper-100 dark:bg-dark-surface border border-line rounded-xl p-6 shadow-sm">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div>
+            <div className="flex items-center gap-2 text-xs font-mono font-bold tracking-wider uppercase text-sky-600 dark:text-sky-400">
+              <Globe className="w-4 h-4" />
+              01 // Technical Ingestion & Network Topology
+            </div>
+            <h2 className="text-2xl font-bold text-ink dark:text-light mt-1">
+              Website Crawl & Infrastructure
+            </h2>
+            <p className="text-sm text-ink-muted dark:text-dark-muted mt-1 max-w-2xl">
+              Deterministic crawl manifest verifying HTTP status codes, TTFB server latencies, robots.txt crawler permissions, and canonical URI consistency.
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3">
+            <a
+              href={pdfUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 px-4 py-2 text-xs font-semibold rounded-lg bg-sky-50 dark:bg-sky-950/40 text-sky-700 dark:text-sky-300 border border-sky-200 dark:border-sky-800 hover:bg-sky-100 transition-colors shadow-xs"
+            >
+              <FileText className="w-4 h-4" />
+              Export Crawl PDF
+            </a>
+            <a
+              href={pptxUrl}
+              download
+              className="inline-flex items-center gap-2 px-4 py-2 text-xs font-semibold rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white shadow-xs transition-colors"
+            >
+              <Download className="w-4 h-4" />
+              Export Crawl PPT
+            </a>
+          </div>
+        </div>
+
+        {/* Quick Stats Grid */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-3 mt-6 pt-6 border-t border-line">
+          <div className="p-3 bg-paper-50 dark:bg-dark-surface/50 rounded-lg border border-line">
+            <div className="text-[11px] font-mono text-ink-muted dark:text-dark-muted uppercase">Pages Crawled</div>
+            <div className="text-xl font-bold text-ink dark:text-light mt-0.5">{pages.length}</div>
+          </div>
+          <div className="p-3 bg-paper-50 dark:bg-dark-surface/50 rounded-lg border border-line">
+            <div className="text-[11px] font-mono text-ink-muted dark:text-dark-muted uppercase">Avg TTFB</div>
+            <div className="text-xl font-bold text-ink dark:text-light mt-0.5">
+              {avgTtfb ? `${avgTtfb}ms` : '—'}
+            </div>
+          </div>
+          <div className="p-3 bg-paper-50 dark:bg-dark-surface/50 rounded-lg border border-line">
+            <div className="text-[11px] font-mono text-ink-muted dark:text-dark-muted uppercase">Robots.txt</div>
+            <div className="text-sm font-bold text-emerald-600 dark:text-emerald-400 mt-1 flex items-center gap-1">
+              {manifest?.robots_txt_found ? <CheckCircle className="w-3.5 h-3.5" /> : <XCircle className="w-3.5 h-3.5 text-rose-500" />}
+              {manifest?.robots_txt_found ? 'Verified' : 'Missing'}
+            </div>
+          </div>
+          <div className="p-3 bg-paper-50 dark:bg-dark-surface/50 rounded-lg border border-line">
+            <div className="text-[11px] font-mono text-ink-muted dark:text-dark-muted uppercase">XML Sitemap</div>
+            <div className="text-sm font-bold text-emerald-600 dark:text-emerald-400 mt-1 flex items-center gap-1">
+              {manifest?.sitemap_found ? <CheckCircle className="w-3.5 h-3.5" /> : <XCircle className="w-3.5 h-3.5 text-rose-500" />}
+              {manifest?.sitemap_found ? 'Discovered' : 'Missing'}
+            </div>
+          </div>
+          <div className="p-3 bg-paper-50 dark:bg-dark-surface/50 rounded-lg border border-line">
+            <div className="text-[11px] font-mono text-ink-muted dark:text-dark-muted uppercase">/llms.txt</div>
+            <div className="text-sm font-bold text-sky-600 dark:text-sky-400 mt-1 flex items-center gap-1">
+              {llmsTxtFound ? <CheckCircle className="w-3.5 h-3.5" /> : <AlertTriangle className="w-3.5 h-3.5 text-amber-500" />}
+              {llmsTxtFound ? 'Active' : 'Missing'}
+            </div>
+          </div>
+          <div className="p-3 bg-paper-50 dark:bg-dark-surface/50 rounded-lg border border-line">
+            <div className="text-[11px] font-mono text-ink-muted dark:text-dark-muted uppercase">Protocol</div>
+            <div className="text-sm font-bold text-ink dark:text-light mt-1 flex items-center gap-1">
+              <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" />
+              {report.website_url.startsWith('https') ? 'HTTPS / TLS' : 'HTTP'}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Pages Table */}
+      <div className="bg-paper-100 dark:bg-dark-surface border border-line rounded-xl shadow-sm overflow-hidden">
+        <div className="p-4 border-b border-line flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="font-semibold text-ink dark:text-light text-sm">
+            Discovered Crawl Inventory ({filteredPages.length})
+          </div>
+          <div className="relative w-full sm:w-64">
+            <Search className="w-4 h-4 text-ink-muted dark:text-dark-muted absolute left-3 top-2.5" />
+            <input
+              type="text"
+              placeholder="Search crawled URLs..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full pl-9 pr-3 py-1.5 text-xs bg-paper-50 dark:bg-dark-surface/80 border border-line rounded-lg focus:outline-none focus:ring-1 focus:ring-sky-500 text-ink dark:text-light"
+            />
+          </div>
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-xs">
+            <thead className="bg-paper-50 dark:bg-dark-surface/50 border-b border-line text-ink-muted dark:text-dark-muted uppercase font-mono text-[11px]">
+              <tr>
+                <th className="py-2.5 px-4">URL</th>
+                <th className="py-2.5 px-3">Status</th>
+                <th className="py-2.5 px-3">Depth</th>
+                <th className="py-2.5 px-4">Title Tag</th>
+                <th className="py-2.5 px-4">H1 Heading</th>
+                <th className="py-2.5 px-3">Words</th>
+                <th className="py-2.5 px-3">Canonical</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-line">
+              {filteredPages.map((p: any, idx: number) => {
+                const statusCode = p.status_code || 200;
+                const statusOk = statusCode < 400;
+                const h1Val = Array.isArray(p.h1) ? p.h1[0] : (typeof p.h1 === 'string' ? p.h1 : '—');
+                return (
+                  <tr key={idx} className="hover:bg-paper-50 dark:hover:bg-dark-surface/40 transition-colors">
+                    <td className="py-2.5 px-4 font-mono font-medium text-ink dark:text-light max-w-xs truncate">
+                      <a
+                        href={p.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="hover:text-sky-600 dark:hover:text-sky-400 inline-flex items-center gap-1"
+                      >
+                        {(p.url || '').replace(/^https?:\/\/[^/]+/, '') || '/'}
+                        <ArrowUpRight className="w-3 h-3 opacity-60" />
+                      </a>
+                    </td>
+                    <td className="py-2.5 px-3">
+                      <span className={`inline-block px-2 py-0.5 rounded text-[11px] font-mono font-bold ${
+                        statusOk ? 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300' : 'bg-rose-100 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300'
+                      }`}>
+                        {statusCode}
+                      </span>
+                    </td>
+                    <td className="py-2.5 px-3 font-mono text-ink-muted dark:text-dark-muted">
+                      {p.click_depth ?? 1}
+                    </td>
+                    <td className="py-2.5 px-4 text-ink-muted dark:text-dark-muted max-w-xs truncate" title={p.title}>
+                      {p.title || '—'}
+                    </td>
+                    <td className="py-2.5 px-4 text-ink-muted dark:text-dark-muted max-w-xs truncate" title={h1Val}>
+                      {h1Val || '—'}
+                    </td>
+                    <td className="py-2.5 px-3 font-mono text-ink dark:text-light">
+                      {p.word_count || '—'}
+                    </td>
+                    <td className="py-2.5 px-3">
+                      {p.canonical_url ? (
+                        <span className="text-emerald-600 dark:text-emerald-400 font-mono text-[10px]">OK</span>
+                      ) : (
+                        <span className="text-amber-500 font-mono text-[10px]">None</span>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}
