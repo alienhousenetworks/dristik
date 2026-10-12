@@ -366,10 +366,17 @@ class ScoringEngine:
                             s = 1.0
                     elif cid == "sitemap_urls_valid_200":
                         if manifest is not None and not getattr(manifest, "sitemap_found", True):
-                            s = 0.0
-                            passed = 0
-                            failed = sample_size
-                            evidence_list.append({"url": "sitemap.xml", "status": "FAIL", "detail": "XML Sitemap is missing or unreferenced in robots.txt."})
+                            site_size = len(manifest.pages) if getattr(manifest, "pages", None) else sample_size
+                            if site_size <= 25:
+                                s = 0.8
+                                passed = int(round(s * sample_size))
+                                failed = sample_size - passed
+                                evidence_list.append({"url": "sitemap.xml", "status": "ADVISORY", "detail": "XML Sitemap not discovered; on small sites (<= 25 pages) with complete internal linking, impact is advisory."})
+                            else:
+                                s = 0.0
+                                passed = 0
+                                failed = sample_size
+                                evidence_list.append({"url": "sitemap.xml", "status": "FAIL", "detail": "XML Sitemap is missing or unreferenced in robots.txt."})
                         elif check_findings:
                             top_f = max(check_findings, key=severity_rank)
                             s = 0.0 if top_f.severity in (Severity.CRITICAL, Severity.HIGH) else 0.5
@@ -381,7 +388,10 @@ class ScoringEngine:
                     elif cid == "https_on_all_urls":
                         s = 1.0 if is_https else 0.0
                         domain_lbl = getattr(business_profile, "domain", None) or getattr(business_profile, "business_name", "") or "homepage"
-                        evidence_list.append({"url": domain_lbl, "status": "FAIL", "detail": "Homepage requested over insecure HTTP."})
+                        if is_https:
+                            evidence_list.append({"url": domain_lbl, "status": "PASS", "detail": "All inspected pages served securely over HTTPS."})
+                        else:
+                            evidence_list.append({"url": domain_lbl, "status": "FAIL", "detail": "Homepage requested over insecure HTTP."})
                     elif cid == "tls_version_valid":
                         s = 1.0 if is_https else 0.0
                     elif cid == "security_headers_hardening":

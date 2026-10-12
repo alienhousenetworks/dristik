@@ -366,6 +366,17 @@ class Finding(BaseModel):
         default_factory=list,
         description="Consolidated surfaces affected by this root-cause defect (e.g. [{'surface': 'H1 Heading', 'url': '/', 'selector': 'h1'}])"
     )
+    # Zero-Fabrication Evidence Contract (v3)
+    scope: Optional[str] = None
+    affected_url_count: Optional[int] = None
+    observed_value: Optional[str] = None
+    diagnosis: Optional[str] = None
+    recommended_action: Optional[str] = None
+    first_detected_at: Optional[str] = None
+    last_verified_at: Optional[str] = None
+    source_method: Optional[str] = None
+    limitations: Optional[str] = None
+    deduplication_key: Optional[str] = None
     # v2: Lifecycle and display fields
     lifecycle_state: FindingLifecycle = Field(
         default=FindingLifecycle.OPEN,
@@ -396,6 +407,23 @@ class Finding(BaseModel):
             self.evidence_refs = list(self.evidence_ids)
         elif self.evidence_refs and not self.evidence_ids:
             self.evidence_ids = list(self.evidence_refs)
+        if self.scope and not self.evidence_scope:
+            self.evidence_scope = self.scope
+        elif self.evidence_scope and not self.scope:
+            self.scope = self.evidence_scope
+        if self.recommended_action and not self.recommendation:
+            self.recommendation = self.recommended_action
+        elif self.recommendation and not self.recommended_action:
+            self.recommended_action = self.recommendation
+        if self.diagnosis and not self.description:
+            self.description = self.diagnosis
+        elif self.description and not self.diagnosis:
+            self.diagnosis = self.description
+        if self.affected_url_count is None:
+            self.affected_url_count = len(self.affected_urls)
+        if not self.deduplication_key:
+            cat_name = self.category.value if hasattr(self.category, "value") else str(self.category)
+            self.deduplication_key = f"{cat_name}:{self.title.lower().strip()}"
         return self
 
     def to_layer2_json(self) -> dict[str, Any]:
@@ -1477,6 +1505,13 @@ class CrawlManifest(BaseModel):
     sitemap_urls: List[str] = Field(default_factory=list)
     orphan_urls: List[str] = Field(default_factory=list)
     indexation_rollup: Optional[IndexationAuditRollup] = None
+    crawl_inventory: Dict[str, Any] = Field(default_factory=dict)
+    url_coverage_pct: float = 100.0
+    sampling_status: str = "FULL_CRAWL"  # "FULL_CRAWL" | "SAMPLED_AUDIT" | "INTERRUPTED" | "PARTIAL"
+    discovered_urls: List[str] = Field(default_factory=list)
+    discovered_via_links: List[str] = Field(default_factory=list)
+    discovered_via_sitemap: List[str] = Field(default_factory=list)
+    untested_discovered_urls: List[str] = Field(default_factory=list)
 
 class UntrustedObservation(BaseModel):
     id: str

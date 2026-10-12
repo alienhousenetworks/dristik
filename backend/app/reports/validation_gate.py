@@ -626,6 +626,107 @@ class ValidationGate:
             f"Contradictory findings against crawl ground truth: {'; '.join(contradictory_findings[:2])}"
         )
 
+        # -------------------------------------------------------------
+        # 11. ZERO-PLACEHOLDER EVIDENCE TOKENS (ELIMINATE [ev_xxx])
+        # -------------------------------------------------------------
+        placeholder_regex = re.compile(r"\[?(?:ev|ext)_[xX]{3,}\]?", re.IGNORECASE)
+        placeholder_violations = []
+        for field_name, text in [
+            ("story_summary", report.story_summary or ""),
+            ("primary_strategic_opportunity", report.primary_strategic_opportunity or ""),
+            ("consultant_advice_what_to_ignore", report.consultant_advice_what_to_ignore or ""),
+        ]:
+            if placeholder_regex.search(text):
+                placeholder_violations.append(f"Placeholder token in {field_name}")
+
+        for f in (report.findings or []):
+            f_blob = f"{f.title or ''} {f.description or ''} {getattr(f, 'diagnosis', '') or ''} {getattr(f, 'observed_value', '') or ''}"
+            if placeholder_regex.search(f_blob):
+                placeholder_violations.append(f"Finding {f.finding_id} contains placeholder token in narrative")
+            for ev_ref in (getattr(f, "evidence_refs", None) or getattr(f, "evidence_ids", None) or []):
+                if placeholder_regex.search(str(ev_ref)):
+                    placeholder_violations.append(f"Finding {f.finding_id} references placeholder evidence ref '{ev_ref}'")
+
+        for item in (report.roadmap_7_days or []) + (report.roadmap_30_days or []) + (report.roadmap_90_days or []):
+            if placeholder_regex.search(f"{item.title or ''} {item.description or ''}"):
+                placeholder_violations.append(f"Roadmap item '{item.title}' contains placeholder token")
+
+        for patch in (report.code_patches or []):
+            if placeholder_regex.search(f"{patch.explanation or ''} {patch.after_snippet or ''}"):
+                placeholder_violations.append(f"Code patch {patch.patch_id} contains placeholder token")
+
+        record(
+            "zero_placeholder_evidence_tokens",
+            len(placeholder_violations) == 0,
+            f"Placeholder evidence tokens detected: {'; '.join(placeholder_violations[:3])}"
+        )
+
+        # -------------------------------------------------------------
+        # 12. ZERO-FABRICATION EVIDENCE CONTRACT ENFORCEMENT
+        # -------------------------------------------------------------
+        unbacked_findings = []
+        cross_site_leaks = []
+        report_domain = (report.domain or "").lower().replace("www.", "")
+        for f in (report.findings or []):
+            if getattr(f, "held_from_executive", False):
+                continue
+            ev_items = getattr(f, "evidence", None) or []
+            ev_refs = getattr(f, "evidence_refs", None) or getattr(f, "evidence_ids", None) or []
+            has_evidence = len(ev_items) > 0 or len(ev_refs) > 0
+            valid_refs = [r for r in ev_refs if not placeholder_regex.search(str(r)) and str(r).strip() not in ["", "none", "null"]]
+            if not has_evidence or (len(ev_refs) > 0 and len(valid_refs) == 0 and len(ev_items) == 0):
+                unbacked_findings.append(f"{f.finding_id}: '{f.title}' lacks valid evidence")
+
+            if report_domain:
+                for ev in ev_items:
+                    ev_url = getattr(ev, "url", "") or ""
+                    if ev_url and ev_url.startswith("http"):
+                        from urllib.parse import urlparse
+                        parsed_host = urlparse(ev_url).netloc.lower().replace("www.", "")
+                        if parsed_host and report_domain not in parsed_host and parsed_host not in report_domain:
+                            ev_type = getattr(ev, "evidence_type", None) or getattr(ev, "source_type", None) or ""
+                            if "external" not in str(ev_type).lower() and "competitor" not in str(ev_type).lower():
+                                cross_site_leaks.append(f"{f.finding_id}: evidence URL '{ev_url}' does not match site domain '{report_domain}'")
+
+        record(
+            "every_finding_has_valid_evidence",
+            len(unbacked_findings) == 0 and len(cross_site_leaks) == 0,
+            f"Findings failing evidence contract: {'; '.join((unbacked_findings + cross_site_leaks)[:3])}"
+        )
+
+        # -------------------------------------------------------------
+        # 13. CRAWL INVENTORY & COVERAGE RECONCILIATION
+        # -------------------------------------------------------------
+        inventory_discrepancies = []
+        active_manifest = manifest or getattr(report, "crawl_manifest", None)
+        if active_manifest and not hasattr(active_manifest, "_mock_return_value"):
+            inv = getattr(active_manifest, "crawl_inventory", None)
+            if isinstance(inv, dict):
+                disc_total = inv.get("discovered_total", 0)
+                tested_pages = inv.get("tested_pages", 0)
+            else:
+                disc_urls = getattr(active_manifest, "discovered_urls", None)
+                disc_total = len(disc_urls) if isinstance(disc_urls, (list, set, tuple)) else 0
+                pages = getattr(active_manifest, "pages", None)
+                tested_pages = len(pages) if isinstance(pages, (list, set, tuple)) else 0
+
+            if isinstance(disc_total, int) and isinstance(tested_pages, int):
+                if disc_total > 0 and tested_pages > disc_total:
+                    inventory_discrepancies.append(f"Tested pages ({tested_pages}) exceeds discovered URLs ({disc_total})")
+
+                sampling_status = str(getattr(active_manifest, "sampling_status", ""))
+                is_sampled = (sampling_status == "SAMPLED_AUDIT" or (disc_total > tested_pages and tested_pages > 0))
+                if is_sampled:
+                    all_prose_low = f"{report.story_summary or ''} {report.primary_strategic_opportunity or ''}".lower()
+                    if "audited every url" in all_prose_low or "all urls tested" in all_prose_low or "comprehensive audit of all pages" in all_prose_low:
+                        inventory_discrepancies.append("Narrative claims comprehensive audit of all pages despite sampled crawl")
+
+        record(
+            "crawl_and_url_inventory_reconciled",
+            len(inventory_discrepancies) == 0,
+            "; ".join(inventory_discrepancies) if inventory_discrepancies else ""
+        )
+
         is_valid = len(failed) == 0
         return ValidationResult(
             is_valid=is_valid,
@@ -934,6 +1035,81 @@ class ValidationGate:
                 if not is_contradiction:
                     non_contradictory_findings.append(f)
             report.findings = non_contradictory_findings
+
+        # 11b. Strip placeholder evidence tokens from narrative, findings, roadmap, and code patches
+        placeholder_pat = re.compile(r"\s*\[?(?:ev|ext)_[xX]{3,}\]?", re.IGNORECASE)
+        for field_name in ["story_summary", "primary_strategic_opportunity", "consultant_advice_what_to_ignore"]:
+            val = getattr(report, field_name, "") or ""
+            if placeholder_pat.search(val):
+                cleaned = placeholder_pat.sub("", val).strip()
+                setattr(report, field_name, cleaned)
+                repairs_made.append(f"Stripped placeholder evidence tokens from {field_name}.")
+
+        for f in report.findings:
+            if placeholder_pat.search(f.title or ""):
+                f.title = placeholder_pat.sub("", f.title).strip()
+                repairs_made.append(f"Stripped placeholder tokens from finding {f.finding_id} title.")
+            if placeholder_pat.search(f.description or ""):
+                f.description = placeholder_pat.sub("", f.description).strip()
+                repairs_made.append(f"Stripped placeholder tokens from finding {f.finding_id} description.")
+            if getattr(f, "evidence_refs", None):
+                clean_refs = [r for r in f.evidence_refs if not re.search(r"^(?:ev|ext)_[xX]{3,}$", str(r), re.I)]
+                if len(clean_refs) != len(f.evidence_refs):
+                    f.evidence_refs = clean_refs
+                    repairs_made.append(f"Removed placeholder evidence refs from finding {f.finding_id}.")
+            if getattr(f, "evidence_ids", None):
+                clean_ids = [r for r in f.evidence_ids if not re.search(r"^(?:ev|ext)_[xX]{3,}$", str(r), re.I)]
+                if len(clean_ids) != len(f.evidence_ids):
+                    f.evidence_ids = clean_ids
+                    repairs_made.append(f"Removed placeholder evidence IDs from finding {f.finding_id}.")
+
+        for item in (report.roadmap_7_days or []) + (report.roadmap_30_days or []) + (report.roadmap_90_days or []):
+            if placeholder_pat.search(item.title or ""):
+                item.title = placeholder_pat.sub("", item.title).strip()
+            if placeholder_pat.search(item.description or ""):
+                item.description = placeholder_pat.sub("", item.description).strip()
+
+        for patch in (report.code_patches or []):
+            if placeholder_pat.search(patch.explanation or ""):
+                patch.explanation = placeholder_pat.sub("", patch.explanation).strip()
+
+        # 11c. Quarantine unbacked findings or findings that only possessed placeholder evidence
+        clean_backed_findings = []
+        for f in report.findings:
+            ev_cnt = len(getattr(f, "evidence", None) or [])
+            valid_refs = [r for r in (getattr(f, "evidence_refs", None) or getattr(f, "evidence_ids", None) or []) if not placeholder_pat.search(str(r)) and str(r).strip() not in ["", "none", "null"]]
+            if ev_cnt == 0 and len(valid_refs) == 0:
+                repairs_made.append(f"Quarantined unbacked finding {f.finding_id} ('{f.title}') lacking valid evidence.")
+            else:
+                clean_backed_findings.append(f)
+        report.findings = clean_backed_findings
+
+        # 11d. Reconcile sampled crawl claims
+        active_manifest = manifest or getattr(report, "crawl_manifest", None)
+        if active_manifest and not hasattr(active_manifest, "_mock_return_value"):
+            inv = getattr(active_manifest, "crawl_inventory", None)
+            if isinstance(inv, dict):
+                disc_total = inv.get("discovered_total", 0)
+                tested_pages = inv.get("tested_pages", 0)
+            else:
+                disc_urls = getattr(active_manifest, "discovered_urls", None)
+                disc_total = len(disc_urls) if isinstance(disc_urls, (list, set, tuple)) else 0
+                pages = getattr(active_manifest, "pages", None)
+                tested_pages = len(pages) if isinstance(pages, (list, set, tuple)) else 0
+
+            if isinstance(disc_total, int) and isinstance(tested_pages, int):
+                sampling_status = str(getattr(active_manifest, "sampling_status", ""))
+                is_sampled = sampling_status == "SAMPLED_AUDIT" or (disc_total > tested_pages and tested_pages > 0)
+                if is_sampled and report.story_summary:
+                    for overclaim in ["audited every url", "all urls tested", "comprehensive audit of all pages"]:
+                        if overclaim in report.story_summary.lower():
+                            report.story_summary = re.sub(
+                                re.escape(overclaim),
+                                f"sampled audit of {tested_pages} representative pages out of {disc_total} discovered",
+                                report.story_summary,
+                                flags=re.IGNORECASE
+                            )
+                            repairs_made.append("Reconciled sampled crawl coverage claims in story_summary.")
 
         # 12. Pre-Render Donut & Visual Intelligence Re-synchronization
         # Re-synthesize visual intelligence using post-gate finalized findings

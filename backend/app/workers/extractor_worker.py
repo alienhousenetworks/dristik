@@ -73,7 +73,7 @@ class CognitiveExtractorWorker(BaseCognitiveWorker):
             evidence_list=evidence_list,
             rubric=(
                 "1. STRICT DOM ATTRIBUTION: Zero hallucination of company names or features. Capture verbatim branding and text.\n"
-                "2. EVIDENCE SELECTOR PROVENANCE: Every claim must cite verified evidence IDs [ev_xxx] with observable DOM selectors.\n"
+                "2. EVIDENCE SELECTOR PROVENANCE: Every claim must cite verified evidence IDs from the evidence pack with observable DOM selectors.\n"
                 "3. ACCURATE BUSINESS TAXONOMY: Correctly distinguish self-serve SaaS, sales-led enterprise software, agency services, and ecommerce.\n"
                 "4. EXHAUSTIVE CTA CAPTURE: Extract actual button text (e.g. 'Book a Demo', 'Start Free Trial') rather than generic descriptions."
             ),

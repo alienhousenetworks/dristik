@@ -771,6 +771,7 @@ class CrawlerService:
             sitemap_urls=sitemap_urls,
             target_max_pages=target_max_pages,
             discovery_truncated=discovery_truncated,
+            discovered_urls=list(discovered_urls_pool),
         )
 
         # Step D: Index page chunks into VectorStore using E5-Large
@@ -838,6 +839,7 @@ class CrawlerService:
         sitemap_urls: Optional[List[str]] = None,
         target_max_pages: int = 10,
         discovery_truncated: bool = False,
+        discovered_urls: Optional[List[str]] = None,
     ) -> CrawlManifest:
         title_map: Dict[str, List[str]] = {}
         desc_map: Dict[str, List[str]] = {}
@@ -877,15 +879,41 @@ class CrawlerService:
             for p in crawled_pages if p.redirect_chain
         ]
 
-        # Crawl budget accounting
+        # Crawl budget and inventory accounting
         urls_discovered_cnt = max(total_discovered, len(crawled_pages))
         urls_crawled_cnt = len(crawled_pages)
         urls_skipped_cnt = max(0, urls_discovered_cnt - urls_crawled_cnt)
+        crawled_urls_set = {p.url for p in crawled_pages}
+        all_discovered = list(discovered_urls or []) if discovered_urls else list(crawled_urls_set)
+        untested_urls = [u for u in all_discovered if u not in crawled_urls_set]
+        url_cov_pct = round((urls_crawled_cnt / max(urls_discovered_cnt, 1)) * 100.0, 1)
+        samp_status = "FULL_CRAWL" if urls_crawled_cnt >= urls_discovered_cnt else "SAMPLED_AUDIT"
+
+        crawl_inventory = {
+            "seed_urls": [base_url],
+            "discovered_via_sitemap": list(s_urls),
+            "discovered_via_sitemap_count": len(s_urls),
+            "total_unique_discovered": urls_discovered_cnt,
+            "total_queued": urls_discovered_cnt,
+            "total_attempted": urls_crawled_cnt + len(broken_links),
+            "total_crawled_tested": urls_crawled_cnt,
+            "total_rendered": sum(1 for p in crawled_pages if p.render_mode in ("playwright_js", "firecrawl_js")),
+            "total_untested": len(untested_urls),
+            "total_redirects": len(all_redirect_chains),
+            "total_errors": len(broken_links),
+            "url_coverage_pct": url_cov_pct,
+            "sampling_status": samp_status,
+            "tested_urls": [p.url for p in crawled_pages],
+            "untested_urls": untested_urls[:100],
+        }
+
         crawl_budget = {
             "urls_discovered": urls_discovered_cnt,
             "urls_allowed": target_max_pages,
             "urls_crawled": urls_crawled_cnt,
             "urls_skipped": urls_skipped_cnt,
+            "url_coverage_pct": url_cov_pct,
+            "sampling_status": samp_status,
             "skip_reasons": {
                 "budget_cap_reached": max(0, urls_skipped_cnt - len(broken_links)),
                 "failed_or_broken": len(broken_links)
@@ -921,11 +949,12 @@ class CrawlerService:
         sampling_note = (
             f"This run analyzed {len(crawled_pages)} URL"
             f"{'' if len(crawled_pages) == 1 else 's'}"
-            f" of {urls_discovered_cnt} discovered.{floor_note} "
+            f" of {urls_discovered_cnt} discovered ({url_cov_pct}% URL coverage).{floor_note} "
+            f"Sampling status: {samp_status}. "
             f"Pages were selected for these roles: {', '.join(seen_roles) or 'general pages'}. "
             f"Sitemap listed {sitemap_count} URL{'' if sitemap_count == 1 else 's'}. "
             f"Findings are page-verified, sample-verified, origin-verified, or site-inferred. "
-            f"This run does not claim every URL was rendered."
+            f"This run does not claim untested URLs were rendered."
         )
         if missing_roles:
             sampling_note += f" Roles not fetched in this budget: {', '.join(missing_roles)}."
@@ -933,6 +962,9 @@ class CrawlerService:
         crawl_health = {
             "total_pages_crawled": len(crawled_pages),
             "sampling_note": sampling_note,
+            "sampling_status": samp_status,
+            "url_coverage_pct": url_cov_pct,
+            "crawl_inventory": crawl_inventory,
             "roles_filled": seen_roles,
             "roles_missing": missing_roles,
             "sitemap_url_count": sitemap_count,
@@ -988,5 +1020,11 @@ class CrawlerService:
             redirect_chains=all_redirect_chains,
             crawl_budget=crawl_budget,
             sitemap_urls=s_urls,
-            orphan_urls=orphan_urls
+            orphan_urls=orphan_urls,
+            crawl_inventory=crawl_inventory,
+            url_coverage_pct=url_cov_pct,
+            sampling_status=samp_status,
+            discovered_urls=all_discovered,
+            discovered_via_sitemap=s_urls,
+            untested_discovered_urls=untested_urls[:100],
         )

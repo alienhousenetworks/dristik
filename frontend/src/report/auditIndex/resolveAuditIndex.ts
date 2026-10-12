@@ -121,6 +121,7 @@ function sectionForFinding(finding: Finding): string {
   if (/videoobject|\bvideo\b/.test(text)) return '29';
   if (/cloaking|doorway|keyword stuffing|hidden text|link spam/.test(text)) return '37';
   if (/merchant center|faceted|out of stock|product schema/.test(text)) return '38';
+  if (/http 5\d\d|5xx|\b500\b|\b502\b|\b503\b|\b504\b|server error|server reliability|ttfb|response latency|latency spike/.test(text)) return '14';
   if (category === 'GEO') return '46';
   if (category === 'AI_SEARCH') return '45';
   if (category === 'CONTENT') return '23';
@@ -130,7 +131,7 @@ function sectionForFinding(finding: Finding): string {
   if (category === 'TRUST_AUTHORITY') return '18';
   if (category === 'COMPETITIVE') return '33';
   if (category === 'EXTERNAL_AUTHORITY') return '31';
-  if (category === 'TECHNICAL_SEO') return '14';
+  if (category === 'TECHNICAL_SEO') return '53';
   return '53';
 }
 

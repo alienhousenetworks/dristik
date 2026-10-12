@@ -12,6 +12,7 @@ across the 6 primary workspaces:
 from typing import Dict, Any, List, Optional
 from app.domain.models import ExecutiveReport
 from app.reports.aeo_audit_book import aeo_cover_figure, render_aeo_audit_book
+from app.reports.geo_audit_book import geo_cover_figure, render_geo_audit_book
 from app.reports.seo_audit_book import render_seo_audit_book
 
 
@@ -43,20 +44,28 @@ class SectionReportGenerator:
         pages = report.crawl_manifest.pages if (report.crawl_manifest and report.crawl_manifest.pages) else (report.page_reports or [])
         is_seo = section_key == "seo"
         is_aeo = section_key == "aeo"
+        is_geo = section_key == "geo"
         if is_aeo:
             score_val = aeo_cover_figure(report)
+        elif is_geo:
+            score_val = geo_cover_figure(report)
         else:
             score_val = self._get_section_score(report, section_key)
-        if is_seo or is_aeo:
+        if is_seo or is_aeo or is_geo:
             findings = list(report.findings or [])
-            book_html = render_seo_audit_book(report) if is_seo else render_aeo_audit_book(report)
+            if is_seo:
+                book_html = render_seo_audit_book(report)
+            elif is_aeo:
+                book_html = render_aeo_audit_book(report)
+            else:
+                book_html = render_geo_audit_book(report)
             findings_html = ""
             extra_html = ""
             badge = "EVIDENCE-GROUNDED // REPRESENTATIVE SAMPLE"
             assurance_label = "SAMPLE SCOPE"
             assurance_value = "REPRESENTATIVE"
             standard_label = "EVIDENCE BASIS"
-            standard_value = "STORED CRAWL"
+            standard_value = "STORED CRAWL & BENCHMARK" if is_geo else "STORED CRAWL"
             if is_aeo:
                 score_label = "STORED EXTRACTABILITY"
                 score_note = (
@@ -66,6 +75,14 @@ class SectionReportGenerator:
                     "An unmeasured chapter is not a zero.</div>"
                 )
                 footer_mark = "FULL AEO INDEX // SECTIONS 01–55 AND APPENDICES A–O"
+            elif is_geo:
+                score_label = "STORED EXTRACTABILITY"
+                score_note = (
+                    "<div class=\"score-note\">This figure is on-page extractability or technical readiness. "
+                    "Observed AI visibility, citation rate, and business impact are reported as separate dimensions. "
+                    "An unmeasured chapter or platform is NOT_TESTED, not a zero.</div>"
+                )
+                footer_mark = "FULL GEO INDEX // SECTIONS 01–50 AND APPENDICES A–O"
             else:
                 score_label = "SECTION HEALTH SCORE"
                 score_note = (

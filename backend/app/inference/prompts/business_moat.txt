@@ -13,7 +13,7 @@ EVALUATION RUBRIC:
    - Default to "weak" or "unknown" unless evidence states a real barrier. A tagline is not a moat.
 3. VERIFIABLE VALUE PROPOSITION:
    - Synthesize the exact value proposition grounded in author meta description and verified hero evidence.
-   - Write at most 3 claims with verified evidence_refs [ev_xxx].
+   - Write at most 3 claims with verified evidence_refs from the evidence pack. Never output placeholder tokens like [ev_xxx].
 4. COMPETITORS:
    - Do not invent a competitive set. If the page names rivals, quote them. Otherwise omit names.
    - Never invent market size.

@@ -79,7 +79,7 @@ class CognitiveAnalystWorker(BaseCognitiveWorker):
                     "3. ICP SHARPNESS: Heavily penalize broad, vague target descriptions. Require specific commercial buyer personas.\n"
                     "4. DIFFERENTIATION TEST: Evaluate whether the value prop clearly answers 'Why choose this over alternatives?' without empty jargon.\n"
                     "5. SEVERITY BENCHMARK: Critical = Value proposition entirely incomprehensible; High = ICP misaligned or hidden monetization model; Medium = Unoptimized secondary CTA copy.\n"
-                    "6. EVIDENCE BINDING: Every claim must cite verified evidence IDs [ev_xxx] or explicit page routes."
+                    "6. EVIDENCE BINDING: Every claim must cite verified evidence IDs from the evidence pack or explicit page routes."
                 ),
                 output_schema_desc=schema_desc,
                 additional_context=f"Multi-Page Crawl Topology:\n{pages_summary}{user_context}"
@@ -165,7 +165,7 @@ class CognitiveAnalystWorker(BaseCognitiveWorker):
                     "1. KNOWLEDGE GRAPH BENCHMARK: Heavily penalize absence of structured Schema.org JSON-LD entity graph (< 40 score).\n"
                     "2. AI SCRAPING ACCESSIBILITY: Deduct points when key factual offerings are buried in unindexed client JS or ambiguous marketing jargon.\n"
                     "3. CITATION READINESS: High citation scores (80+) require structured FAQ blocks, clear semantic heading hierarchy (H1->H2->H3), and concise factual definitions.\n"
-                    "4. EVIDENCE GROUNDING: Every audit claim must cite explicit evidence IDs [ev_xxx] from page DOM or crawl artifacts."
+                    "4. EVIDENCE GROUNDING: Every audit claim must cite explicit verified evidence IDs from page DOM or crawl artifacts."
                 ),
                 output_schema_desc=schema_desc,
                 additional_context=f"Multi-Page Crawl Topology:\n{pages_summary}"
@@ -226,7 +226,7 @@ class CognitiveAnalystWorker(BaseCognitiveWorker):
                     "1. DEPTH THRESHOLD: Flag pages under 300 words as thin content risk unless intentionally minimalist transactional landing pages.\n"
                     "2. VERIFIABLE PROOF: Require demonstrable evidence of expertise (metrics, real client logos, customer outcomes) rather than unsupported assertions.\n"
                     "3. READABILITY CALIBRATION: Evaluate Flesch Reading Ease; balance executive professional tone with skimmable formatting (bullet points, clear subheads).\n"
-                    "4. EVIDENCE GROUNDING: Cite verified evidence IDs [ev_xxx] or page URLs."
+                    "4. EVIDENCE GROUNDING: Cite verified evidence IDs from the evidence pack or page URLs."
                 ),
                 output_schema_desc=schema_desc,
                 additional_context=f"Multi-Page Crawl Topology:\n{pages_summary}"
@@ -289,7 +289,7 @@ class CognitiveAnalystWorker(BaseCognitiveWorker):
                     "2. CTA CLARITY: Flag generic, passive, or hidden CTA buttons (e.g. 'Submit', 'Learn More') as HIGH severity.\n"
                     "3. TRUST DEFICIT: Flag absence of verifiable social proof, security credentials, or clear contact details as MEDIUM/HIGH severity.\n"
                     "4. PRESCRIPTIVE REMEDIATION: Recommendations must include specific visual, copy, or structural UI changes.\n"
-                    "5. EVIDENCE GROUNDING: Cite verified evidence IDs [ev_xxx] or explicit page selectors."
+                    "5. EVIDENCE GROUNDING: Cite verified evidence IDs from the evidence pack or explicit page selectors."
                 ),
                 output_schema_desc=schema_desc,
                 additional_context=f"Multi-Page Crawl Topology:\n{pages_summary}"

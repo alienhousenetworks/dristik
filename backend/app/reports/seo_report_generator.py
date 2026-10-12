@@ -53,6 +53,13 @@ class CompleteSeoReportGenerator:
         p2_findings = [f for f in report.findings if (f.priority in (5, 6)) and f not in p0_findings and f not in p1_findings]
         p3_findings = [f for f in report.findings if f not in p0_findings and f not in p1_findings and f not in p2_findings]
 
+        manifest = getattr(report, "crawl_manifest", None)
+        crawl_inv = getattr(manifest, "crawl_inventory", None) or {} if manifest else {}
+        disc_total = crawl_inv.get("discovered_total", len(report.page_reports))
+        tested_pages = crawl_inv.get("tested_pages", len(report.page_reports))
+        cov_pct = crawl_inv.get("url_coverage_pct", 100.0 if tested_pages >= disc_total else round((tested_pages / max(1, disc_total)) * 100.0, 1))
+        sampling_status = getattr(manifest, "sampling_status", "SAMPLED_AUDIT" if disc_total > tested_pages else "FULL_CRAWL")
+
         return {
             "report_id": report.report_id,
             "analysis_id": analysis_id,
@@ -74,10 +81,16 @@ class CompleteSeoReportGenerator:
                     "what_is_holding_it_back": report.what_is_holding_it_back,
                     "primary_strategic_opportunity": report.primary_strategic_opportunity,
                     "total_findings": len(report.findings),
+                    "sampling_status": sampling_status,
+                    "url_coverage_pct": cov_pct,
+                    "crawl_inventory": crawl_inv,
                 },
                 "02_methodology_and_scope": {
                     "total_pages_crawled": len(report.page_reports),
                     "crawl_summary": report.crawl_summary,
+                    "crawl_inventory": crawl_inv,
+                    "sampling_status": sampling_status,
+                    "url_coverage_pct": cov_pct,
                     "disclaimer": "All metrics are deterministically derived from live DOM crawls and authenticated APIs. Zero unmeasured fabrication.",
                 },
                 "03_indexability_and_canonicalization": {
@@ -174,6 +187,14 @@ class CompleteSeoReportGenerator:
         
         pages_crawled = len(report.page_reports)
         findings_count = len(report.findings)
+
+        manifest = getattr(report, "crawl_manifest", None)
+        crawl_inv = getattr(manifest, "crawl_inventory", None) or {} if manifest else {}
+        disc_total = crawl_inv.get("discovered_total", pages_crawled)
+        tested_pages = crawl_inv.get("tested_pages", pages_crawled)
+        cov_pct = crawl_inv.get("url_coverage_pct", 100.0 if tested_pages >= disc_total else round((tested_pages / max(1, disc_total)) * 100.0, 1))
+        sampling_status = getattr(manifest, "sampling_status", "SAMPLED_AUDIT" if disc_total > tested_pages else "FULL_CRAWL")
+        is_sampled = sampling_status == "SAMPLED_AUDIT" or disc_total > tested_pages
 
         # Nav items HTML
         nav_items_html = "\n".join(
@@ -868,8 +889,13 @@ class CompleteSeoReportGenerator:
                 </div>
                 <div class="kpi-card">
                     <div class="kpi-label">Audited Pages</div>
-                    <div class="kpi-val">{pages_crawled}</div>
-                    <div class="kpi-sub">Full DOM & header crawl sample</div>
+                    <div class="kpi-val">{tested_pages} / {disc_total}</div>
+                    <div class="kpi-sub">Tested / Discovered URLs</div>
+                </div>
+                <div class="kpi-card">
+                    <div class="kpi-label">Crawl Coverage</div>
+                    <div class="kpi-val" style="color: {'#f59e0b' if is_sampled else '#10b981'};">{cov_pct}%</div>
+                    <div class="kpi-sub">{'Sampled Audit (Untested Disclosed)' if is_sampled else 'Full Inventory Verified'}</div>
                 </div>
                 <div class="kpi-card">
                     <div class="kpi-label">Defects & Opportunities</div>
@@ -893,7 +919,38 @@ class CompleteSeoReportGenerator:
                 <h2>02. Methodology, Crawl Scope & Limitations</h2>
                 <span class="section-badge">MASTER INDEX #02</span>
             </div>
+            {f'''<div class="lifecycle-alert" style="background: #2a1b06; border-color: #b45309; border-left-color: #f59e0b; color: #fef3c7;">
+                <strong>⚠️ SAMPLED AUDIT DISCLOSURE:</strong> {tested_pages} tested pages out of {disc_total} discovered URLs ({cov_pct}% coverage). 
+                {crawl_inv.get("untested_pages", max(0, disc_total - tested_pages))} discovered URLs were not fetched in this crawl run. Untested URLs remain unverified and are not represented as clean or passed.
+            </div>''' if is_sampled else ''}
             <div class="status-summary-card">
+                <h4>Crawl Inventory & URL Accounting</h4>
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; margin-top: 12px; margin-bottom: 16px;">
+                    <div style="background: #0a0f1d; padding: 12px; border-radius: 6px; border: 1px solid #1a2234;">
+                        <span style="font-size: 11px; color: #64748b; text-transform: uppercase;">Seed URLs</span>
+                        <p style="font-size: 16px; font-weight: 700; color: #f8fafc;">{crawl_inv.get("seed_urls_count", 1)}</p>
+                    </div>
+                    <div style="background: #0a0f1d; padding: 12px; border-radius: 6px; border: 1px solid #1a2234;">
+                        <span style="font-size: 11px; color: #64748b; text-transform: uppercase;">Via Internal Links</span>
+                        <p style="font-size: 16px; font-weight: 700; color: #f8fafc;">{crawl_inv.get("discovered_via_links", 0)}</p>
+                    </div>
+                    <div style="background: #0a0f1d; padding: 12px; border-radius: 6px; border: 1px solid #1a2234;">
+                        <span style="font-size: 11px; color: #64748b; text-transform: uppercase;">Via Sitemap</span>
+                        <p style="font-size: 16px; font-weight: 700; color: #f8fafc;">{crawl_inv.get("discovered_via_sitemap", 0)}</p>
+                    </div>
+                    <div style="background: #0a0f1d; padding: 12px; border-radius: 6px; border: 1px solid #1a2234;">
+                        <span style="font-size: 11px; color: #64748b; text-transform: uppercase;">Total Discovered</span>
+                        <p style="font-size: 16px; font-weight: 700; color: #38bdf8;">{disc_total}</p>
+                    </div>
+                    <div style="background: #0a0f1d; padding: 12px; border-radius: 6px; border: 1px solid #1a2234;">
+                        <span style="font-size: 11px; color: #64748b; text-transform: uppercase;">Successfully Tested</span>
+                        <p style="font-size: 16px; font-weight: 700; color: #10b981;">{tested_pages}</p>
+                    </div>
+                    <div style="background: #0a0f1d; padding: 12px; border-radius: 6px; border: 1px solid #1a2234;">
+                        <span style="font-size: 11px; color: #64748b; text-transform: uppercase;">Coverage</span>
+                        <p style="font-size: 16px; font-weight: 700; color: {'#f59e0b' if is_sampled else '#10b981'};">{cov_pct}%</p>
+                    </div>
+                </div>
                 <h4>Deterministic Evidence Architecture</h4>
                 <p>This audit follows Dristik's 4-Layer Epistemic Integrity Architecture:
                    <strong>Layer 1 (Machine Observations)</strong> -> 

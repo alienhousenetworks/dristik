@@ -43,6 +43,12 @@ class VerificationStatus(str, Enum):
     PENDING_VERIFICATION = "pending_verification"
     UNSUPPORTED = "unsupported"
     SINGLE_SOURCE_UNVERIFIED = "single_source_unverified"
+    VALIDATED = "validated"
+    VERIFIED_FIXED = "verified_fixed"
+    UNRESOLVED = "unresolved"
+    NOT_APPLICABLE = "not_applicable"
+    NOT_TESTED = "not_tested"
+    UNAVAILABLE = "unavailable"
 
 
 class SourceIntegrityLabel(str, Enum):
@@ -562,6 +568,11 @@ class FindingStatus(str, Enum):
     IN_PROGRESS = "IN_PROGRESS"
     FIXED = "FIXED"               # Code deployed by developer
     VERIFIED = "VERIFIED"         # Confirmed resolved by re-crawl / automated retest
+    VERIFIED_FIXED = "VERIFIED_FIXED"
+    UNRESOLVED = "UNRESOLVED"
+    NOT_APPLICABLE = "NOT_APPLICABLE"
+    NOT_TESTED = "NOT_TESTED"
+    UNAVAILABLE = "UNAVAILABLE"
     ACCEPTED_RISK = "ACCEPTED_RISK"
 
 

@@ -43,11 +43,13 @@ class CapabilityRouter:
         if capability_id == "01_discovery":
             # Sitemap & Robots.txt health
             if not manifest.sitemap_found:
+                page_count = len(manifest.pages) if getattr(manifest, "pages", None) else 0
+                sev = Severity.LOW if page_count <= 25 else Severity.MEDIUM
                 results.append({
                     "statement": "XML Sitemap is missing or unreferenced in robots.txt / /sitemap.xml.",
                     "category": Category.TECHNICAL_SEO,
-                    "severity": Severity.HIGH,
-                    "confidence": 0.98,
+                    "severity": sev,
+                    "confidence": 0.95,
                     "recommendation": "Generate an automated XML sitemap and reference it in robots.txt."
                 })
             if not manifest.robots_txt_found:

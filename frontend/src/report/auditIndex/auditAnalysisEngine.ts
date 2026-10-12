@@ -46,8 +46,8 @@ export function assignFindingsToChecks(
   for (const finding of findings) {
     const fText = `${finding.title || ''} ${finding.description || ''} ${finding.finding_id || ''}`.toLowerCase();
     const fTokens = tokens(fText);
-    let bestCheck = checks[0] || '';
-    let bestScore = -1;
+    let bestCheck: string | null = null;
+    let bestScore = 0;
 
     for (const check of checks) {
       const cLower = check.toLowerCase();
@@ -71,13 +71,13 @@ export function assignFindingsToChecks(
       if (/security|hsts|csp|https/.test(fText) && /security|https|header/.test(cLower)) score += 5;
       if (/thin|word count/.test(fText) && /thin|quality|completeness/.test(cLower)) score += 4;
 
-      if (score > bestScore) {
+      if (score >= 2 && score > bestScore) {
         bestScore = score;
         bestCheck = check;
       }
     }
 
-    if (bestCheck && assigned.has(bestCheck)) {
+    if (bestCheck && bestScore >= 2 && assigned.has(bestCheck)) {
       assigned.get(bestCheck)!.push(finding);
     }
   }

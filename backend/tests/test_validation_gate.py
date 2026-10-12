@@ -377,4 +377,69 @@ def test_validation_gate_handles_unmeasured_ai_citation_and_matrix_reconciliatio
     assert "composite_scores_derivable" in gate_result.passed_checks
 
 
+def test_validation_gate_catches_and_repairs_placeholder_evidence_tokens():
+    """Verify ValidationGate detects placeholder tokens like [ev_xxx] and strips them on repair."""
+    report = create_sample_report()
+    report.story_summary = "Enterprise Platform demonstrates solid performance [ev_xxx]."
+    report.primary_strategic_opportunity = "Optimize schema graphs [ext_xxx]."
+    
+    res = ValidationGate.validate_report(report)
+    assert "zero_placeholder_evidence_tokens" in res.failed_checks
 
+    repaired, gate_res = ValidationGate.enforce_gate(report)
+    assert "zero_placeholder_evidence_tokens" in gate_res.passed_checks
+    assert "[ev_xxx]" not in repaired.story_summary
+    assert "[ext_xxx]" not in repaired.primary_strategic_opportunity
+
+
+def test_validation_gate_quarantines_unbacked_findings_and_cross_site_leaks():
+    """Verify findings with 0 evidence or cross-site evidence URLs are caught and unbacked findings quarantined."""
+    report = create_sample_report()
+    unbacked = Finding(
+        finding_id="f_ghost",
+        title="Unsubstantiated ghost issue",
+        description="Ghost issue description with no backing evidence.",
+        recommendation="Investigate and provide evidence.",
+        category=Category.TECHNICAL_SEO,
+        severity=Severity.HIGH,
+        evidence=[],
+        evidence_refs=[],
+    )
+    report.findings.append(unbacked)
+
+    res = ValidationGate.validate_report(report)
+    assert "every_finding_has_valid_evidence" in res.failed_checks
+
+    repaired, gate_res = ValidationGate.enforce_gate(report)
+    # The ghost finding should be quarantined
+    assert not any(f.finding_id == "f_ghost" for f in repaired.findings)
+    assert "every_finding_has_valid_evidence" in gate_res.passed_checks
+
+
+def test_validation_gate_reconciles_crawl_inventory_and_sampling_disclosure():
+    """Verify that sampled audits overclaiming comprehensive coverage are caught and reconciled."""
+    from app.domain.models import CrawlManifest
+    report = create_sample_report()
+    report.story_summary = "We audited every URL on the domain comprehensively."
+    manifest = CrawlManifest(
+        crawl_id="c_test",
+        domain="example.com",
+        seed_urls=["https://example.com"],
+        pages=[],
+        discovered_urls=["https://example.com/p1", "https://example.com/p2", "https://example.com/p3"],
+        crawl_inventory={
+            "seed_urls_count": 1,
+            "discovered_total": 14,
+            "tested_pages": 5,
+            "untested_pages": 9,
+            "url_coverage_pct": 35.7,
+        },
+        sampling_status="SAMPLED_AUDIT",
+    )
+
+    res = ValidationGate.validate_report(report, manifest=manifest)
+    assert "crawl_and_url_inventory_reconciled" in res.failed_checks
+
+    repaired, gate_res = ValidationGate.enforce_gate(report, manifest=manifest)
+    assert "crawl_and_url_inventory_reconciled" in gate_res.passed_checks
+    assert "sampled audit of 5 representative pages out of 14 discovered" in repaired.story_summary.lower()

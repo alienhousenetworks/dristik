@@ -4427,4 +4427,4 @@ ALL_TASK_CARDS: Dict[str, str] = {**TASK_CARDS, **COPYWRITING_TASK_CARDS, **DECK
 
 
 def task_card_for(agent_id: str) -> str:
-    return ALL_TASK_CARDS.get(agent_id, TASK_CARDS.get(agent_id, "Audit only what the evidence pack contains. Cite [ev_xxx]. Invent nothing."))
+    return ALL_TASK_CARDS.get(agent_id, TASK_CARDS.get(agent_id, "Audit only what the evidence pack contains. Cite verified evidence IDs from the pack. Never output literal [ev_xxx] placeholders. Invent nothing."))

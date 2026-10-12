@@ -360,7 +360,7 @@ def _section_for_finding(finding: Any) -> str:
     if category == "EXTERNAL_AUTHORITY":
         return "31"
     if "TECHNICAL" in category:
-        return "14"
+        return "53"
     return "53"
 
 
@@ -392,10 +392,8 @@ def _assign(findings: Sequence[Any], checks: Sequence[str]) -> Dict[str, List[An
             if score > best_score:
                 best = check
                 best_score = score
-        if best and best_score >= 1:
+        if best and best_score >= 2:
             assigned[best].append(finding)
-        elif checks:
-            assigned[checks[0]].append(finding)
     return assigned
 
 

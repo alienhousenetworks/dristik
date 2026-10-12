@@ -5,6 +5,7 @@ import { GeoAeoTrendTracker } from '../GeoAeoTrendTracker';
 import { PillarShell, Card } from '../ui';
 import { SectionExportButtons } from '../ui/SectionExportButtons';
 import { ControlledRetrievalVisualizer } from './RagChunkVisualizer';
+import { GeoAuditBook } from '../../report/geoIndex/GeoAuditBook';
 import {
   Sparkles,
   Bot,
@@ -107,6 +108,7 @@ interface GeoWorkspaceViewProps {
 }
 
 type GeoSubTab =
+  | 'audit'
   | 'visibility'
   | 'engines'
   | 'som'
@@ -264,6 +266,7 @@ export function GeoWorkspaceView({
         />
       }
       tabs={[
+        { id: 'audit', label: 'Full GEO audit (50 Chapters)' },
         { id: 'visibility', label: 'Live visibility' },
         { id: 'engines', label: 'Appendix · writing exercise' },
         { id: 'som', label: 'Share of Model & Displacement' },
@@ -279,6 +282,8 @@ export function GeoWorkspaceView({
       activeTab={activeSubTab}
       onTab={(id) => setActiveSubTab(id as GeoSubTab)}
     >
+      {activeSubTab === 'audit' && <GeoAuditBook report={report} />}
+
       {activeSubTab === 'visibility' && (
         <LiveVisibilityCard scorecard={scorecard} />
       )}

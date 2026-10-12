@@ -359,7 +359,7 @@ class ModelRouter:
         # 1. Reason Pass
         reason_prompts = self.prompt_compiler.compile(
             agent_role=agent_role,
-            task_contract=f"{reason_contract}\n\nDeliver your analysis in dense, analytical prose. Cite evidence IDs [ev_xxx]. Do NOT output JSON.",
+            task_contract=f"{reason_contract}\n\nDeliver your analysis in dense, analytical prose. Cite verified evidence IDs from the evidence pack. Never output literal placeholder tokens like [ev_xxx] or [ext_xxx]. Do NOT output JSON.",
             evidence_list=evidence_list,
             site_facts=site_facts,
             task_card=task_card

@@ -50,8 +50,8 @@ ROOT_CAUSE_CLUSTERS = [
         "id": "RC_SECURITY_HEADERS",
         "title": "HTTP Security Header Hardening & Transport Protection (HSTS & CSP)",
         "category": Category.TECHNICAL_SEO,
-        "severity": Severity.HIGH,
-        "impact": ImpactLevel.MEDIUM,
+        "severity": Severity.MEDIUM,
+        "impact": ImpactLevel.LOW,
         "classification": FindingClassification.VERIFIED_DEFECT,
         "keywords": [
             "hsts", "strict-transport-security", "content-security-policy", "csp", "security header",

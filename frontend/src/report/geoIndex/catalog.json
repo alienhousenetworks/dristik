@@ -1,0 +1,962 @@
+{
+  "parts": [
+    {
+      "id": "I",
+      "title": "Executive GEO Intelligence"
+    },
+    {
+      "id": "II",
+      "title": "AI Search Landscape and Query Intelligence"
+    },
+    {
+      "id": "III",
+      "title": "Brand Presence and Recommendation Intelligence"
+    },
+    {
+      "id": "IV",
+      "title": "Citation and Source Authority Intelligence"
+    },
+    {
+      "id": "V",
+      "title": "Competitive GEO Intelligence"
+    },
+    {
+      "id": "VI",
+      "title": "Website and Content GEO Readiness"
+    },
+    {
+      "id": "VII",
+      "title": "Technical Discoverability and Machine Readability"
+    },
+    {
+      "id": "VIII",
+      "title": "Off-Site GEO and Brand Evidence"
+    },
+    {
+      "id": "IX",
+      "title": "GEO Measurement and Business Impact"
+    },
+    {
+      "id": "X",
+      "title": "Remediation, Prioritization, and Verification"
+    },
+    {
+      "id": "A",
+      "title": "Appendices and Technical Evidence"
+    }
+  ],
+  "sections": [
+    {
+      "number": "01",
+      "part": "I",
+      "title": "Executive GEO Summary",
+      "checks": [
+        "Overall GEO readiness and evidence coverage",
+        "AI search visibility overview",
+        "Brand mention and citation performance",
+        "Major opportunities and critical risks",
+        "Priority actions for the next 30, 60, and 90 days",
+        "Differences between technical readiness and measured visibility"
+      ]
+    },
+    {
+      "number": "02",
+      "part": "I",
+      "title": "Generative Search Visibility Scorecard",
+      "checks": [
+        "Brand appearance rate across tested prompts",
+        "Citation rate across eligible responses",
+        "Recommendation and shortlist inclusion rate",
+        "Visibility by AI platform, query category, and intent",
+        "Competitive share of mentions and citations",
+        "Trend comparisons across comparable measurement periods"
+      ]
+    },
+    {
+      "number": "03",
+      "part": "I",
+      "title": "GEO Opportunity and Risk Assessment",
+      "checks": [
+        "High-value queries where competitors appear but the brand does not",
+        "Unsupported or incorrect AI-generated claims about the brand",
+        "Important pages that lack useful, citable evidence",
+        "Weak third-party corroboration",
+        "Content and technical bottlenecks",
+        "Expected impact, implementation cost, confidence, and validation plan"
+      ]
+    },
+    {
+      "number": "04",
+      "part": "II",
+      "title": "Generative Search Platform Coverage",
+      "checks": [
+        "Google AI Overviews and AI Mode",
+        "ChatGPT search and relevant web-grounded experiences",
+        "Perplexity",
+        "Microsoft Copilot and Bing generative search",
+        "Gemini",
+        "Claude, where applicable to the research methodology",
+        "Regional, language, device, and market-specific differences",
+        "Platform access limitations, unsupported features, and collection method"
+      ]
+    },
+    {
+      "number": "05",
+      "part": "II",
+      "title": "GEO Query Universe and Prompt Discovery",
+      "checks": [
+        "Branded and non-branded queries",
+        "Informational, commercial, transactional, and navigational intent",
+        "Problem-aware and solution-aware questions",
+        "Category discovery and product-comparison prompts",
+        "‘Best,’ ‘top,’ ‘alternatives,’ and ‘versus’ prompts",
+        "Local and regional recommendation prompts",
+        "Industry-specific and use-case queries",
+        "Conversational, follow-up, and multi-step prompts",
+        "Query source, selection method, deduplication, and sampling coverage"
+      ]
+    },
+    {
+      "number": "06",
+      "part": "II",
+      "title": "Query-to-Intent and Journey Mapping",
+      "checks": [
+        "Awareness, consideration, evaluation, and decision",
+        "Questions about problems, solutions, categories, and specific brands",
+        "Buying criteria and objections",
+        "Comparison and vendor-shortlist prompts",
+        "Post-purchase and support-related prompts",
+        "Missing prompt clusters and underserved user needs",
+        "Priority by business value, query relevance, and competitive opportunity"
+      ]
+    },
+    {
+      "number": "07",
+      "part": "II",
+      "title": "Prompt Benchmark Design and Reproducibility",
+      "checks": [
+        "Standardized prompt set and version history",
+        "Platform-specific prompt adaptations",
+        "Run count per prompt and engine",
+        "Date, locale, language, and device context",
+        "Personalization and session-state controls where possible",
+        "Repeatability and variance between runs",
+        "Inclusion and exclusion rules",
+        "Failed, incomplete, blocked, and unobservable runs"
+      ]
+    },
+    {
+      "number": "08",
+      "part": "III",
+      "title": "Brand Mention Analysis",
+      "checks": [
+        "Explicit brand mentions",
+        "Product, service, and company name recognition",
+        "Brand inclusion in generated answers",
+        "Mention frequency and prominence",
+        "Positive, neutral, negative, and mixed framing",
+        "Context of mention and user intent",
+        "First-mentioned brand versus subsequent mentions",
+        "Correct naming, spelling, and product attribution"
+      ]
+    },
+    {
+      "number": "09",
+      "part": "III",
+      "title": "Brand Recommendation and Shortlist Analysis",
+      "checks": [
+        "Inclusion in ‘best provider’ recommendations",
+        "Inclusion in vendor shortlists",
+        "Recommendations for specific use cases",
+        "Position within ranked or ordered lists, when explicitly present",
+        "Recommendation rationale",
+        "Qualification criteria and buyer objections",
+        "Competitors recommended instead",
+        "Missing recommendation opportunities",
+        "Evidence supporting each recommendation"
+      ]
+    },
+    {
+      "number": "10",
+      "part": "III",
+      "title": "Brand Positioning and Entity Understanding",
+      "checks": [
+        "AI's description of the company",
+        "Category and industry classification",
+        "Core products, services, and differentiators",
+        "Target customer and use-case association",
+        "Geographic and market association",
+        "Pricing, feature, and capability understanding",
+        "Brand attributes and perceived positioning",
+        "Outdated, ambiguous, or conflicting descriptions"
+      ]
+    },
+    {
+      "number": "11",
+      "part": "III",
+      "title": "Brand Accuracy and Hallucination Audit",
+      "checks": [
+        "Incorrect product or company information",
+        "Fabricated features, prices, and guarantees",
+        "Incorrect ownership or company relationships",
+        "False availability, geographic coverage, or integrations",
+        "Outdated facts presented as current",
+        "Confusion with similarly named entities",
+        "Unsupported claims about certifications or customers",
+        "Severity, recurrence, source traceability, and correction route"
+      ]
+    },
+    {
+      "number": "12",
+      "part": "III",
+      "title": "Brand Sentiment and Narrative Consistency",
+      "checks": [
+        "Sentiment and tone in relevant generated responses",
+        "Recurring positive and negative narratives",
+        "Consistency across engines and prompts",
+        "Misleading comparisons and inaccurate caveats",
+        "Brand positioning versus intended positioning",
+        "Unsupported negative associations",
+        "Confidence and limits of automated sentiment classification"
+      ]
+    },
+    {
+      "number": "13",
+      "part": "IV",
+      "title": "AI Citation Performance",
+      "checks": [
+        "Citation frequency and rate",
+        "Number of distinct cited URLs",
+        "Citation distribution by domain and page",
+        "Brand-owned versus third-party citations",
+        "Citation presence in answer text versus source panels",
+        "Citation prominence and relevance",
+        "Citation coverage by intent and prompt cluster",
+        "Citations that are missing, inaccessible, or irrelevant"
+      ]
+    },
+    {
+      "number": "14",
+      "part": "IV",
+      "title": "Citation Share and Competitive Share of Voice",
+      "checks": [
+        "Brand citation share within the defined benchmark",
+        "Competitor citation share",
+        "Brand mention share",
+        "Recommendation inclusion share",
+        "Share by engine, query cluster, and market",
+        "Citation overlap and exclusive citation opportunities",
+        "Period-over-period change",
+        "Sample size and uncertainty alongside every comparison"
+      ]
+    },
+    {
+      "number": "15",
+      "part": "IV",
+      "title": "Cited-Source and URL Intelligence",
+      "checks": [
+        "Most frequently cited brand-owned pages",
+        "Third-party URLs cited for the brand",
+        "Page types that earn citations",
+        "Content topics associated with citations",
+        "Pages that rank organically but are not cited in tested responses",
+        "Pages cited despite weak or outdated content",
+        "Source accessibility and redirect behavior",
+        "Citation persistence across repeated runs",
+        "Citation freshness and update frequency, when verifiable"
+      ]
+    },
+    {
+      "number": "16",
+      "part": "IV",
+      "title": "Citation Gap and Source Opportunity Analysis",
+      "checks": [
+        "Competitor-cited pages missing from the brand's source footprint",
+        "Queries where competitors have corroborating references",
+        "Relevant authoritative publications and industry sources",
+        "Missing original data, research, documentation, or case studies",
+        "Topics where the brand lacks a citable primary source",
+        "Source opportunities grouped by effort and strategic value",
+        "Outreach opportunities versus content improvements",
+        "Evidence required to validate each opportunity"
+      ]
+    },
+    {
+      "number": "17",
+      "part": "IV",
+      "title": "Source Reliability and Evidence Quality",
+      "checks": [
+        "Primary versus secondary source classification",
+        "Source relevance to the question",
+        "Author, publisher, and expertise signals where verifiable",
+        "Publication and update dates",
+        "Evidence quality supporting the claim",
+        "Cross-source corroboration",
+        "Conflicts between sources",
+        "Broken, inaccessible, or low-quality references",
+        "Limits of inferring source influence from observed citations"
+      ]
+    },
+    {
+      "number": "18",
+      "part": "IV",
+      "title": "Third-Party Brand Footprint",
+      "checks": [
+        "Industry publications and specialist websites",
+        "Independent reviews and comparison pages",
+        "Partner, supplier, and customer references",
+        "Professional associations and relevant directories",
+        "News coverage and interviews",
+        "Community discussions and public forums",
+        "Public documentation and knowledge resources",
+        "Inconsistent business descriptions across sources"
+      ]
+    },
+    {
+      "number": "19",
+      "part": "V",
+      "title": "Competitor Discovery and Validation",
+      "checks": [
+        "Direct business competitors",
+        "Search competitors",
+        "AI-recommended alternatives",
+        "Category leaders",
+        "Emerging or niche competitors",
+        "Competitors selected manually by the user",
+        "Evidence supporting competitor relevance",
+        "False-positive competitor exclusions"
+      ]
+    },
+    {
+      "number": "20",
+      "part": "V",
+      "title": "Competitor Visibility Benchmark",
+      "checks": [
+        "Brand mentions by competitor",
+        "Recommendation inclusion by competitor",
+        "Citation frequency and citation share",
+        "Visibility by query cluster and engine",
+        "Product and service coverage",
+        "Brand accuracy and positioning",
+        "Trend and volatility comparisons",
+        "Comparable sample sizes and test conditions"
+      ]
+    },
+    {
+      "number": "21",
+      "part": "V",
+      "title": "Competitor Citation and Content Gap Analysis",
+      "checks": [
+        "Competitor pages cited for priority prompts",
+        "Topic coverage and content format differences",
+        "Unique data and evidence competitors provide",
+        "Strong third-party references",
+        "Missing comparison pages and use-case content",
+        "Competitor source advantages",
+        "Opportunities for original, more useful evidence",
+        "Implementation and validation priorities"
+      ]
+    },
+    {
+      "number": "22",
+      "part": "V",
+      "title": "Competitive Narrative and Differentiation",
+      "checks": [
+        "Reasons AI systems give for recommending competitors",
+        "Attributes used to distinguish competing products",
+        "Features or benefits incorrectly attributed",
+        "Brand differentiators absent from responses",
+        "Unsupported competitive claims",
+        "Missing comparison evidence",
+        "Gaps between intended and observed positioning"
+      ]
+    },
+    {
+      "number": "23",
+      "part": "V",
+      "title": "Competitive Displacement Opportunities",
+      "checks": [
+        "High-intent prompts with competitor-only recommendations",
+        "Queries where the brand appears but is not cited",
+        "Queries where the brand is cited but poorly represented",
+        "Queries where competitors are recommended on weak evidence",
+        "Pages or sources that could address the gap",
+        "Opportunity value, confidence, and validation method"
+      ]
+    },
+    {
+      "number": "24",
+      "part": "VI",
+      "title": "Content Extractability and Answer Usability",
+      "checks": [
+        "Whether important facts are directly accessible in page content",
+        "Clear definitions and concise explanations",
+        "Explicit relationships between entities, products, and concepts",
+        "Descriptive headings and coherent page structure",
+        "Tables, lists, specifications, and comparison information",
+        "Important claims buried in images or inaccessible UI",
+        "Ambiguous pronouns and context-dependent statements",
+        "Excessive boilerplate relative to useful information"
+      ]
+    },
+    {
+      "number": "25",
+      "part": "VI",
+      "title": "Topical Coverage and Entity Completeness",
+      "checks": [
+        "Core topics, subtopics, and related concepts",
+        "Product and service attributes",
+        "Use cases and customer problems",
+        "Comparisons, alternatives, and limitations",
+        "Definitions and supporting explanations",
+        "Missing supporting pages",
+        "Topic overlap and content cannibalization",
+        "Gaps in contextual links between related resources"
+      ]
+    },
+    {
+      "number": "26",
+      "part": "VI",
+      "title": "Originality and Information Gain",
+      "checks": [
+        "Original research and first-party data",
+        "Proprietary insights and documented methods",
+        "Specific examples and real-world case studies",
+        "Quantitative claims with traceable sources",
+        "Useful comparisons and decision frameworks",
+        "Generic or repetitive content",
+        "Claims that merely repeat existing sources",
+        "Opportunities to create genuinely distinctive evidence"
+      ]
+    },
+    {
+      "number": "27",
+      "part": "VI",
+      "title": "Factual Support and Claim Verifiability",
+      "checks": [
+        "Material claims supported by evidence",
+        "Primary sources for important assertions",
+        "Citation and reference quality within content",
+        "Claims that conflict with other site pages",
+        "Outdated statistics or product details",
+        "Unsupported superlatives and guarantees",
+        "Missing dates, units, definitions, and context",
+        "Claim-to-source traceability"
+      ]
+    },
+    {
+      "number": "28",
+      "part": "VI",
+      "title": "Content Freshness and Maintenance",
+      "checks": [
+        "Last-modified metadata and actual content changes",
+        "Time-sensitive prices, features, policies, and statistics",
+        "Outdated comparisons and screenshots",
+        "Expired offers and discontinued products",
+        "Conflicting information across pages",
+        "Review cadence based on content risk",
+        "Refresh recommendations and post-update verification"
+      ]
+    },
+    {
+      "number": "29",
+      "part": "VI",
+      "title": "Content Format and GEO Suitability",
+      "checks": [
+        "Product and service pages",
+        "Comparison and alternatives pages",
+        "Guides and explanatory articles",
+        "Research, reports, and original datasets",
+        "FAQs and support documentation",
+        "Case studies and customer stories",
+        "Glossaries, specifications, and reference pages",
+        "Content format suitability for the question being answered"
+      ]
+    },
+    {
+      "number": "30",
+      "part": "VI",
+      "title": "Internal Linking and Contextual Discovery",
+      "checks": [
+        "Links connecting related entities and concepts",
+        "Links between overview and detailed pages",
+        "Orphaned or weakly connected important pages",
+        "Descriptive anchor text",
+        "Navigational clarity",
+        "Internal links to original evidence and supporting documentation",
+        "Excessive or irrelevant linking"
+      ]
+    },
+    {
+      "number": "31",
+      "part": "VII",
+      "title": "Crawlability and Indexability",
+      "checks": [
+        "Robots directives and robots.txt",
+        "XML sitemap inclusion",
+        "Canonical URL correctness",
+        "HTTP status and redirect chains",
+        "Noindex and access restrictions",
+        "Duplicate and parameterized URLs",
+        "Important content blocked from crawling",
+        "Differences between discovered, crawlable, and indexed URLs"
+      ]
+    },
+    {
+      "number": "32",
+      "part": "VII",
+      "title": "Rendering and Content Accessibility",
+      "checks": [
+        "Raw HTML versus rendered DOM",
+        "JavaScript-dependent critical content",
+        "Hydration and rendering failures",
+        "Lazy-loaded content",
+        "Content hidden behind interactions or login",
+        "Image-only text and inaccessible specifications",
+        "Browser and crawler differences",
+        "Evidence from actual fetches or browser rendering"
+      ]
+    },
+    {
+      "number": "33",
+      "part": "VII",
+      "title": "Structured Data and Entity Markup",
+      "checks": [
+        "Organization and relevant business markup",
+        "Product and service structured data, where applicable",
+        "Article, author, and publication metadata",
+        "Breadcrumb and website markup",
+        "Structured data consistency with visible content",
+        "Required and recommended properties",
+        "Validation errors and warnings",
+        "Unsupported assumptions about whether markup causes AI citations"
+      ]
+    },
+    {
+      "number": "34",
+      "part": "VII",
+      "title": "Entity Identity and Knowledge Consistency",
+      "checks": [
+        "Consistent company and product names",
+        "Clear relationships between brand, products, and organization",
+        "Stable URLs for important entities",
+        "Consistent contact, location, and company details",
+        "Author and subject attribution",
+        "Conflicting entity information on the website",
+        "Relevant corroboration from external sources",
+        "Disambiguation of similarly named brands"
+      ]
+    },
+    {
+      "number": "35",
+      "part": "VII",
+      "title": "HTTP, Security, and Technical Reliability",
+      "checks": [
+        "HTTPS and certificate validity",
+        "Server errors and intermittent availability",
+        "Response latency and timeouts",
+        "Redirect and canonical consistency",
+        "Access-control issues affecting public content",
+        "Content negotiation and response headers",
+        "Server-side rendering reliability",
+        "Infrastructure issues that affect content retrieval"
+      ]
+    },
+    {
+      "number": "36",
+      "part": "VII",
+      "title": "AI Crawler and Bot Access Diagnostics",
+      "checks": [
+        "Observed access by identifiable AI-related crawlers",
+        "Relevant robots.txt rules",
+        "WAF, CDN, firewall, and rate-limit behavior",
+        "Bot-blocking and challenge responses",
+        "Server-log evidence where available",
+        "Differences between verified bots and spoofed user agents",
+        "Crawl access versus confirmed indexing or retrieval",
+        "Engine-specific limitations and policy changes"
+      ]
+    },
+    {
+      "number": "37",
+      "part": "VIII",
+      "title": "External Reputation and Corroboration",
+      "checks": [
+        "Independent references to the brand",
+        "Credible third-party descriptions",
+        "Product and company reviews",
+        "Industry coverage",
+        "Relevant expert and practitioner discussions",
+        "Partner and customer references",
+        "Conflicting or outdated public facts",
+        "Quality and relevance of corroboration"
+      ]
+    },
+    {
+      "number": "38",
+      "part": "VIII",
+      "title": "Reviews and Customer Evidence",
+      "checks": [
+        "Public review presence and distribution",
+        "Review recency and relevance",
+        "Repeated customer use cases",
+        "Consistency of product and service descriptions",
+        "Unsupported review claims",
+        "Review-source accessibility",
+        "Verified versus unverified review data",
+        "Evidence gaps in customer outcomes"
+      ]
+    },
+    {
+      "number": "39",
+      "part": "VIII",
+      "title": "Digital PR and Citation Acquisition Opportunities",
+      "checks": [
+        "Publications relevant to the target audience",
+        "Topics suitable for original research",
+        "Expert commentary and data-led stories",
+        "Missing industry references",
+        "Relevant partnerships and source relationships",
+        "Existing coverage that could be updated",
+        "Ethical outreach and editorial independence",
+        "Success criteria based on verified outcomes rather than outreach volume"
+      ]
+    },
+    {
+      "number": "40",
+      "part": "VIII",
+      "title": "Brand Information Consistency Across the Web",
+      "checks": [
+        "Business name and description",
+        "Product and service details",
+        "Pricing and availability",
+        "Company history and ownership",
+        "Geographic coverage",
+        "Contact and support information",
+        "Product capabilities and limitations",
+        "Conflicting descriptions with source URLs and timestamps"
+      ]
+    },
+    {
+      "number": "41",
+      "part": "IX",
+      "title": "Visibility Metrics and Definitions",
+      "checks": [
+        "Brand mention rate (eligible mentions ÷ eligible tested)",
+        "Citation rate (eligible brand citations ÷ eligible tested)",
+        "Recommendation rate (eligible recommendations ÷ eligible tested)",
+        "Citation share (brand citations ÷ all citations in benchmark)",
+        "Share of mentions (brand mentions ÷ all brand mentions in benchmark)",
+        "Source diversity (distinct cited URLs and domains)",
+        "Brand accuracy (correct material claims ÷ evaluated claims)",
+        "Visibility consistency (variation across repeated runs)",
+        "Competitor overlap (query clusters with shared appearances)",
+        "AI referral sessions (attributed visits from AI referrers)"
+      ]
+    },
+    {
+      "number": "42",
+      "part": "IX",
+      "title": "Cross-Engine and Cross-Query Analysis",
+      "checks": [
+        "Visibility by platform",
+        "Visibility by query intent",
+        "Visibility by topic and product",
+        "Visibility by language and region",
+        "Results for branded versus non-branded prompts",
+        "Repeated-run variance",
+        "Platform-specific citation behavior",
+        "Comparability limitations between platforms"
+      ]
+    },
+    {
+      "number": "43",
+      "part": "IX",
+      "title": "Statistical Confidence and Benchmark Reliability",
+      "checks": [
+        "Number of tested prompts and runs",
+        "Confidence intervals for observed rates",
+        "Variation between repeated responses",
+        "Missing and failed run handling",
+        "Prompt-selection bias",
+        "Engine updates and measurement drift",
+        "Changes in sampling methodology",
+        "Rules for comparing periods and competitors"
+      ]
+    },
+    {
+      "number": "44",
+      "part": "IX",
+      "title": "AI Referral Traffic and Conversion Attribution",
+      "checks": [
+        "Identifiable AI referral sessions",
+        "Landing pages receiving AI referral traffic",
+        "Engagement and conversion behavior",
+        "Lead, trial, and purchase outcomes where measured",
+        "Revenue attribution where supported",
+        "Referral-source classification quality",
+        "Server-log and analytics reconciliation",
+        "Direct and untracked visits that cannot be reliably attributed"
+      ]
+    },
+    {
+      "number": "45",
+      "part": "IX",
+      "title": "GEO-to-Revenue Intelligence",
+      "checks": [
+        "High-intent query clusters aligned with business goals",
+        "Qualified leads associated with AI referrals",
+        "Revenue from traceable AI-originated sessions",
+        "Conversion quality compared with other channels",
+        "Customer acquisition outcomes where data supports them",
+        "Cost of content and source development",
+        "Incremental impact only when a credible measurement design exists"
+      ]
+    },
+    {
+      "number": "46",
+      "part": "X",
+      "title": "GEO Findings and Evidence Ledger",
+      "checks": [
+        "Finding ID and affected URL, query, engine, or source",
+        "Observed condition and date",
+        "Exact evidence or response excerpt",
+        "Source URL or raw response reference",
+        "Measurement method and scope",
+        "Evidence status and confidence",
+        "Business relevance and severity",
+        "Recommended action and validation method"
+      ]
+    },
+    {
+      "number": "47",
+      "part": "X",
+      "title": "Prioritized GEO Remediation Roadmap",
+      "checks": [
+        "Critical factual and brand-representation risks",
+        "Technical discoverability fixes",
+        "High-intent content gaps",
+        "Original evidence and research opportunities",
+        "Third-party corroboration opportunities",
+        "Competitor citation gaps",
+        "Analytics and measurement improvements",
+        "30/60/90-day plan with owners and dependencies"
+      ]
+    },
+    {
+      "number": "48",
+      "part": "X",
+      "title": "Content and Source Improvement Plans",
+      "checks": [
+        "Page-level content briefs",
+        "Missing factual evidence",
+        "Original research and data requirements",
+        "Comparison and use-case content plans",
+        "Supporting internal links",
+        "Source attribution and editorial review",
+        "Publication and refresh priorities",
+        "Acceptance criteria for each improvement"
+      ]
+    },
+    {
+      "number": "49",
+      "part": "X",
+      "title": "GEO Experimentation and Validation",
+      "checks": [
+        "Baseline measurement before changes",
+        "Defined target prompts and engines",
+        "Repeat-run strategy",
+        "Post-change crawl and content verification",
+        "Visibility and citation changes",
+        "Brand accuracy checks",
+        "Guardrail metrics for factual quality",
+        "Limits on causal conclusions",
+        "Rollback or revision criteria"
+      ]
+    },
+    {
+      "number": "50",
+      "part": "X",
+      "title": "Continuous Monitoring and Governance",
+      "checks": [
+        "Scheduled prompt benchmarks",
+        "New and disappearing citations",
+        "Brand hallucination alerts",
+        "Competitor visibility changes",
+        "Content freshness alerts",
+        "Engine and methodology change logs",
+        "Evidence retention and audit trails",
+        "Ownership, approval, and review workflows"
+      ]
+    },
+    {
+      "number": "A",
+      "part": "A",
+      "title": "Full prompt and query inventory",
+      "checks": [
+        "Branded prompts",
+        "Non-branded category prompts",
+        "Comparison and versus queries",
+        "Platform variations",
+        "Query intent classifications"
+      ]
+    },
+    {
+      "number": "B",
+      "part": "A",
+      "title": "Engine-by-engine raw benchmark results",
+      "checks": [
+        "Google AI Overviews raw responses",
+        "ChatGPT Search raw responses",
+        "Perplexity raw responses",
+        "Bing Copilot raw responses",
+        "Gemini raw responses",
+        "Claude research notes"
+      ]
+    },
+    {
+      "number": "C",
+      "part": "A",
+      "title": "Citation URL and domain inventory",
+      "checks": [
+        "Brand-owned cited URLs",
+        "Third-party cited domains",
+        "Citation status codes and headers",
+        "Source anchor text and context"
+      ]
+    },
+    {
+      "number": "D",
+      "part": "A",
+      "title": "Competitor benchmark and methodology",
+      "checks": [
+        "Selected competitors",
+        "Comparative prompt set",
+        "Observed share of model",
+        "Competitor citation overlaps"
+      ]
+    },
+    {
+      "number": "E",
+      "part": "A",
+      "title": "Brand factual-accuracy cases",
+      "checks": [
+        "Verified brand facts",
+        "Evaluated claims",
+        "Hallucinated attributes",
+        "Resolution and correction routes"
+      ]
+    },
+    {
+      "number": "F",
+      "part": "A",
+      "title": "Content and technical crawl inventory",
+      "checks": [
+        "Discovered vs crawled URLs",
+        "HTTP status code distribution",
+        "Indexability and canonical consistency",
+        "Schema JSON-LD graph inventory"
+      ]
+    },
+    {
+      "number": "G",
+      "part": "A",
+      "title": "External source and corroboration inventory",
+      "checks": [
+        "Industry directories",
+        "Review platform citations",
+        "Digital PR & editorial coverage",
+        "Independent author citations"
+      ]
+    },
+    {
+      "number": "H",
+      "part": "A",
+      "title": "Metric definitions and calculation examples",
+      "checks": [
+        "Mention rate calculation",
+        "Citation rate calculation",
+        "Recommendation rate calculation",
+        "Share of voice calculation",
+        "Extractability index formulas"
+      ]
+    },
+    {
+      "number": "I",
+      "part": "A",
+      "title": "Statistical confidence and sampling methodology",
+      "checks": [
+        "Prompt sample size",
+        "Variance across repeat runs",
+        "Confidence intervals",
+        "Sampling bias mitigations"
+      ]
+    },
+    {
+      "number": "J",
+      "part": "A",
+      "title": "AI referral analytics and attribution limitations",
+      "checks": [
+        "Referrer string taxonomy",
+        "Direct traffic misattribution risks",
+        "UTM parameter tracking integrity",
+        "Assisted conversion lag"
+      ]
+    },
+    {
+      "number": "K",
+      "part": "A",
+      "title": "Finding-level evidence ledger",
+      "checks": [
+        "Finding identifiers (GEO-xxx)",
+        "Evidence hashes",
+        "Observation timestamps",
+        "Severity and priority scores"
+      ]
+    },
+    {
+      "number": "L",
+      "part": "A",
+      "title": "Remediation backlog and ownership",
+      "checks": [
+        "Engineering tickets (P0-P3)",
+        "Content briefs",
+        "Editorial assigned owners",
+        "Sprint scheduling"
+      ]
+    },
+    {
+      "number": "M",
+      "part": "A",
+      "title": "Post-remediation verification results",
+      "checks": [
+        "Baseline vs post-fix diffs",
+        "Re-crawl status",
+        "Repeat query execution outcomes",
+        "Regression clearance"
+      ]
+    },
+    {
+      "number": "N",
+      "part": "A",
+      "title": "Platform access and collection limitations",
+      "checks": [
+        "Unqueried surfaces",
+        "Rate limit and blocking events",
+        "Model version shifts",
+        "Geo-location boundaries"
+      ]
+    },
+    {
+      "number": "O",
+      "part": "A",
+      "title": "Change history and audit reproducibility manifest",
+      "checks": [
+        "Audit configuration hash",
+        "Agent version manifest",
+        "Crawl engine parameters",
+        "Immutability seal"
+      ]
+    }
+  ]
+}
