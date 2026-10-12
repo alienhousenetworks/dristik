@@ -508,7 +508,10 @@ export interface CompetitorBakeoffItem {
 
 export interface CompetitorBakeoffResult {
   competitor_domain: string;
+  status?: string;
+  message?: string;
   evaluations: CompetitorBakeoffItem[];
+  competitors?: any[];
   target_wins: number;
   competitor_wins: number;
   ties: number;
@@ -2244,6 +2247,7 @@ export interface AnalysisRun {
   current_step: string;
   created_at: string;
   updated_at: string;
+  target_pillars?: string[];
   error?: string;
   report?: ExecutiveReport;
   telemetry: TelemetryData;

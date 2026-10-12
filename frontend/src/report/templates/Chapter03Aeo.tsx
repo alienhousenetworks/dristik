@@ -13,6 +13,8 @@ interface Chapter03AeoProps {
   report: NormalizedReport;
   engineChart?: ChartSpecification | null;
   exhaustiveMode?: boolean;
+  pageNumber?: number | string;
+  chapterNumber?: string;
 }
 
 export function Chapter03Aeo({
@@ -20,30 +22,37 @@ export function Chapter03Aeo({
   report,
   engineChart,
   exhaustiveMode = false,
+  pageNumber,
+  chapterNumber = '03',
 }: Chapter03AeoProps) {
   const { aeo, meta, remediation } = report;
   const { liveObservation, readiness, auditedQuestions } = aeo;
   const displayQuestions = auditedQuestions.slice(0, 8);
   const questionCount = aeo.totalSandboxQuestions;
+  const page2 = typeof pageNumber === 'number' ? pageNumber + 1 : pageNumber;
+  const page3 = typeof pageNumber === 'number' ? pageNumber + 2 : pageNumber;
 
   return (
     <>
       {/* 1. Full-Page Chapter Opener */}
       <ChapterOpener
         theme={theme}
-        chapterNumber="03"
+        chapterNumber={chapterNumber}
         subtitle="LAYER 2 LIVE CITATION TELEMETRY &amp; DOM EXTRACTABILITY"
-        title="Answer Engine Visibility &amp; AI Citations"
-        description="Rigorous empirical diagnostic distinguishing live citation observation (real query executions, brand mentions, brand citation links) from generative DOM extractability and citation readiness."
+        title="Answer Engine Visibility (AEO) &amp; AI Citations"
+        description="Comprehensive audit measuring direct answers, question extractability, and live citation visibility across ChatGPT, Perplexity, Gemini, Claude, and Google AIO."
         domain={meta.domain}
-        whyThisMatters="Conversational answer engines intercept high-intent buyers before traditional search. If an engine cannot ground your value proposition, competitors capture the recommendation."
-        howWeMeasuredIt="Live citation counts come only from engines that were queried. On-page answerability is a separate check of whether the crawled pages contain a passage that answers the question."
-        whatWasAnalyzed="Live mention and citation rates, listed per engine, kept apart from on-page answerability."
-        pageNumber={9}
+        whyThisMatters="When prospects search for solutions in conversational answer engines, visibility depends on concise entity answers and verifiable primary sources."
+        howWeMeasuredIt="Evaluated dynamic query intents against target URLs and measured real engine responses where configured."
+        whatWasAnalyzed="Direct answer quality, question clustering, citation attribution, and multi-model competitive presence."
+        pageNumber={typeof pageNumber === 'number' ? pageNumber : undefined}
       />
-
       {/* 2. Analytical Data Page - Live Telemetry vs Extractability Matrix */}
-      <section className="report-page-break p-8 md:p-14 min-h-[960px] flex flex-col justify-between bg-paper-50 border-b-2 border-line">
+      <section
+        id="ch_aeo"
+        data-chapter-id="ch_aeo"
+        className="report-page-break p-8 md:p-14 min-h-[960px] flex flex-col justify-between bg-paper-50 border-b-2 border-line text-ink"
+      >
         <PageHeader
           theme={theme}
           domain={meta.domain}
@@ -261,7 +270,7 @@ export function Chapter03Aeo({
         <PageFooter
           theme={theme}
           domain={meta.domain}
-          pageNumber={10}
+          pageNumber={page2}
           reportId={meta.analysisId}
           dateStr={meta.generatedAt}
         />
@@ -407,7 +416,7 @@ export function Chapter03Aeo({
         <PageFooter
           theme={theme}
           domain={meta.domain}
-          pageNumber={11}
+          pageNumber={page3}
           reportId={meta.analysisId}
           dateStr={meta.generatedAt}
         />

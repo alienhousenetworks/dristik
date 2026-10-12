@@ -10,22 +10,27 @@ interface Chapter01TechnicalSeoProps {
   theme: ReportTheme;
   report: NormalizedReport;
   latencyChart?: ChartSpecification | null;
+  pageNumber?: number | string;
+  chapterNumber?: string;
 }
 
 export function Chapter01TechnicalSeo({
   theme,
   report,
   latencyChart,
+  pageNumber,
+  chapterNumber = '01',
 }: Chapter01TechnicalSeoProps) {
   const { technicalSeo, meta, coverageConfidence } = report;
   const ttfbSamples = coverageConfidence.performancePagesCount;
+  const detailsPageNumber = typeof pageNumber === 'number' ? pageNumber + 1 : pageNumber;
 
   return (
     <>
       {/* 1. Full-Page Chapter Opener */}
       <ChapterOpener
         theme={theme}
-        chapterNumber="01"
+        chapterNumber={chapterNumber}
         subtitle="SEARCH ENGINE TOPOLOGY &amp; DIRECTIVES"
         title="Discoverability &amp; Technical SEO Architecture"
         description="Comprehensive evaluation of how search crawlers navigate, parse, and allocate crawl budget across target origin surfaces. Assesses canonical routing, indexability directives, and server response latency."
@@ -33,11 +38,15 @@ export function Chapter01TechnicalSeo({
         whyThisMatters="Unconsolidated canonical domains, redirect loops, and slow server latency actively degrade organic crawl frequency and divide PageRank equity."
         howWeMeasuredIt="Deterministic AST crawler parsing, canonical header crosscheck, and one server time-to-first-byte measurement per sampled URL. This is not a Core Web Vitals field study and it is not a full page-load time."
         whatWasAnalyzed="Apex vs WWW consolidation, 301 redirect chains, robots.txt permissions, XML sitemaps, and HTTP status code distribution."
-        pageNumber={5}
+        pageNumber={typeof pageNumber === 'number' ? pageNumber : undefined}
       />
 
       {/* 2. Analytical Data Page */}
-      <section className="report-page-break p-8 md:p-14 min-h-[960px] flex flex-col justify-between bg-paper-50 border-b-2 border-line">
+      <section
+        id="ch_seo"
+        data-chapter-id="ch_seo"
+        className="report-page-break p-8 md:p-14 min-h-[960px] flex flex-col justify-between bg-paper-50 border-b-2 border-line text-ink"
+      >
         <PageHeader
           theme={theme}
           domain={meta.domain}
@@ -164,7 +173,7 @@ export function Chapter01TechnicalSeo({
         <PageFooter
           theme={theme}
           domain={meta.domain}
-          pageNumber={6}
+          pageNumber={detailsPageNumber}
           reportId={meta.analysisId}
           dateStr={meta.generatedAt}
         />

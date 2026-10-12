@@ -193,7 +193,7 @@ def apply_ground_truth_to_claim(
         }:
             claim.verification_status = VerificationStatus.SINGLE_SOURCE_UNVERIFIED
         claim.claim_state = ClaimState.SINGLE_SOURCE_UNVERIFIED
-        note = "SINGLE_SOURCE_UNVERIFIED: no usable ext_xxx for this claim family; DOM-only, confidence capped at MEDIUM."
+        note = "SINGLE_SOURCE_UNVERIFIED: no usable external ground truth for this claim family; DOM-only, confidence capped at MEDIUM."
         claim.verification_notes = _merge_note(claim.verification_notes, note)
         from app.cognition.finding_rubric import apply_rubric_to_claim
         apply_rubric_to_claim(claim, store)
@@ -214,7 +214,7 @@ def apply_ground_truth_to_claim(
         claim.claim_state = ClaimState.SOURCE_VALIDATED
         claim.verification_notes = _merge_note(
             claim.verification_notes,
-            f"CORROBORATED by external feed {ext_ids}; cite ev_xxx + ext_xxx; confidence HIGH.",
+            f"CORROBORATED by external feed {ext_ids}; confidence HIGH.",
         )
         from app.cognition.finding_rubric import apply_rubric_to_claim
         apply_rubric_to_claim(claim, store)

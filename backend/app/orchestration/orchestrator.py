@@ -51,6 +51,8 @@ from app.orchestration.pipeline_dag import (
     ActivityEvent,
     NODES_REGISTRY,
     SECTIONS_REGISTRY,
+    PILLAR_TO_SECTION,
+    SECTION_TO_PILLAR,
 )
 
 class AnalysisOrchestrator:
@@ -79,9 +81,16 @@ class AnalysisOrchestrator:
         self.repository = get_audit_repository()
         self.model_router = ModelRouter()
 
-    def create_run(self, website_url: str, org_id: str = "org_default", created_by: Optional[str] = None) -> AnalysisRun:
+    def create_run(
+        self,
+        website_url: str,
+        org_id: str = "org_default",
+        created_by: Optional[str] = None,
+        target_pillars: Optional[List[str]] = None,
+    ) -> AnalysisRun:
         analysis_id = f"run_{uuid.uuid4().hex[:10]}"
         now_str = datetime.now().isoformat()
+        norm_pillars = [p.strip().lower() for p in target_pillars if p and p.strip().lower() in PILLAR_TO_SECTION] if target_pillars else None
 
         run = AnalysisRun(
             analysis_id=analysis_id,
@@ -91,7 +100,8 @@ class AnalysisOrchestrator:
             progress_percentage=0,
             current_step="Analysis Queued",
             created_at=now_str,
-            updated_at=now_str
+            updated_at=now_str,
+            target_pillars=norm_pillars,
         )
         self.runs[analysis_id] = run
         self.event_queues[analysis_id] = asyncio.Queue()
@@ -201,16 +211,38 @@ class AnalysisOrchestrator:
         declared_site_type_notes: Optional[str] = None,
         country: Optional[str] = None,
         language: Optional[str] = None,
+        target_pillars: Optional[List[str]] = None,
     ):
         """
         Cognitive OS mission execution across all 4 cognitive levels.
         """
         run = self.runs.get(analysis_id)
+        if target_pillars is None and run and run.target_pillars:
+            target_pillars = run.target_pillars
+
+        effective_pillars: Optional[Set[str]] = (
+            {p.strip().lower() for p in target_pillars if p and p.strip().lower() in PILLAR_TO_SECTION}
+            if target_pillars
+            else None
+        )
         telemetry_tracker = TelemetryTracker()
         model_router = ModelRouter(telemetry_tracker=telemetry_tracker)
         if run:
             run.telemetry = telemetry_tracker.telemetry
         controller = get_pipeline_controller(analysis_id)
+
+        # Mark unselected pillar nodes as SKIPPED right away
+        all_pillars = {"seo", "geo", "aeo", "cro"}
+        if effective_pillars is not None and effective_pillars != all_pillars:
+            skipped_pillars = all_pillars - effective_pillars
+            for sp in skipped_pillars:
+                sp_sec_id = PILLAR_TO_SECTION.get(sp)
+                sp_sec = next((s for s in SECTIONS_REGISTRY if s.section_id == sp_sec_id), None)
+                if sp_sec:
+                    for nid in sp_sec.node_ids:
+                        controller.mark_node_status(nid, GraphNodeStatus.SKIPPED)
+                        controller.log_activity(nid, "info", f"{sp}.skipped", f"{sp.upper()} pillar skipped in selective execution")
+
         if analysis_id in self.blackboards:
             blackboard = self.blackboards[analysis_id]
         else:
@@ -527,18 +559,58 @@ class AnalysisOrchestrator:
             model_router.set_active_stage("specialist_execution", f"{len(agent_pool)}-Agent Specialist DAG")
             model_router.set_active_sub_stage("specialist_agents_dag", f"{len(agent_pool)}-Agent Multi-Disciplinary Analysis Waves")
 
+            active_pillars_set = effective_pillars if effective_pillars is not None else all_pillars
+            # Mark active pillar nodes as RUNNING
+            for ap in active_pillars_set:
+                ap_sec_id = PILLAR_TO_SECTION.get(ap)
+                ap_sec = next((s for s in SECTIONS_REGISTRY if s.section_id == ap_sec_id), None)
+                if ap_sec:
+                    for nid in ap_sec.node_ids:
+                        if nid not in ("node_seo_page_intelligence", "node_aeo_search_simulation"):
+                            controller.mark_node_status(nid, GraphNodeStatus.RUNNING)
+
             for w_node in ["node_specialist_wave_1", "node_specialist_wave_2", "node_specialist_wave_3", "node_specialist_wave_4"]:
                 controller.mark_node_status(w_node, GraphNodeStatus.RUNNING)
 
-            controller.log_activity("node_specialist_wave_1", "running", "specialists.start", f"Deploying all {len(agent_pool)} specialist agents across {len(agent_pool.waves)} waves...")
+            controller.log_activity("node_specialist_wave_1", "running", "specialists.start", f"Deploying specialist agents across active pillars ({', '.join(sorted(active_pillars_set)).upper()})...")
 
             await self._emit_event(
                 analysis_id,
                 "specialist_execution",
                 46,
-                f"Deploying all {len(agent_pool)} specialist agents across {len(agent_pool.waves)} dependency waves...",
-                {"agents": len(agent_pool), "waves": len(agent_pool.waves)},
+                f"Deploying specialist agents across active pillars ({', '.join(sorted(active_pillars_set)).upper()})...",
+                {"agents": len(agent_pool), "waves": len(agent_pool.waves), "active_pillars": list(active_pillars_set)},
             )
+
+            def _map_agent_to_node(aid: Optional[str]) -> Optional[str]:
+                if not aid:
+                    return None
+                aid_low = aid.lower()
+                if "seo.crawl" in aid_low or "seo.indexability" in aid_low:
+                    return "node_seo_crawl_indexing"
+                if "seo.security" in aid_low or "seo.performance" in aid_low or "seo.assets" in aid_low:
+                    return "node_seo_technical_health"
+                if "seo.html" in aid_low or "seo.internal_links" in aid_low or aid_low.startswith("content."):
+                    return "node_seo_onpage_content"
+                if aid_low.startswith("schema."):
+                    return "node_seo_schema_ast"
+                if "geo.brand_identity" in aid_low or "geo.wikidata" in aid_low or "geo.entity" in aid_low:
+                    return "node_geo_entity_grounding"
+                if "geo.local" in aid_low or "geo.citations" in aid_low or "geo.extractability" in aid_low:
+                    return "node_geo_local_signals"
+                if "geo.llms_txt" in aid_low or "geo.synthesis" in aid_low:
+                    return "node_geo_llm_footprint"
+                if "ai_search.citability" in aid_low:
+                    return "node_aeo_citability_matrix"
+                if "ai_search.query_coverage" in aid_low or "ai_search.faq" in aid_low or "ai_search.competitor" in aid_low:
+                    return "node_aeo_qa_readiness"
+                if "cro.three_second_hook" in aid_low or "cro.conversion" in aid_low or aid_low.startswith("ux."):
+                    return "node_cro_cta_visibility"
+                if "cro.pricing_psychology" in aid_low or aid_low.startswith("business."):
+                    return "node_cro_value_clarity"
+                if "cro.form_friction" in aid_low or "cro.social_proof" in aid_low or aid_low.startswith("trust."):
+                    return "node_cro_trust_and_forms"
+                return None
 
             async def _agent_progress(stage: str, progress: int, message: str, data: Dict[str, Any]):
                 if run and telemetry_tracker:
@@ -547,6 +619,9 @@ class AnalysisOrchestrator:
                 wave = data.get("wave", 1)
                 w_node = f"node_specialist_wave_{min(max(wave, 1), 4)}"
                 controller.log_activity(w_node, "info", f"specialist.{aid or 'agent'}", message, details=data)
+                sub_node = _map_agent_to_node(aid)
+                if sub_node:
+                    controller.log_activity(sub_node, "info", f"specialist.{aid or 'agent'}", message, details=data)
                 await self._emit_event(analysis_id, stage, progress, message, data)
 
             pool_summary = await agent_pool.execute_all(
@@ -554,16 +629,25 @@ class AnalysisOrchestrator:
                 progress_cb=_agent_progress,
                 base_progress=46,
                 end_progress=78,
+                active_pillars=effective_pillars,
             )
 
             for w_node in ["node_specialist_wave_1", "node_specialist_wave_2", "node_specialist_wave_3", "node_specialist_wave_4"]:
                 controller.mark_node_status(w_node, GraphNodeStatus.COMPLETED, claims_count=len(blackboard.claim_registry.get_all()))
 
+            for ap in active_pillars_set:
+                ap_sec_id = PILLAR_TO_SECTION.get(ap)
+                ap_sec = next((s for s in SECTIONS_REGISTRY if s.section_id == ap_sec_id), None)
+                if ap_sec:
+                    for nid in ap_sec.node_ids:
+                        if nid not in ("node_seo_page_intelligence", "node_aeo_search_simulation"):
+                            controller.mark_node_status(nid, GraphNodeStatus.COMPLETED, claims_count=len(blackboard.claim_registry.get_all()))
+
             controller.log_activity(
                 "node_specialist_wave_4",
                 "success",
                 "specialists.complete",
-                f"{len(agent_pool)} specialists finished: {pool_summary['completed']} completed, {pool_summary['unavailable']} unavailable, {pool_summary['errors']} errors."
+                f"{len(agent_pool)} specialists finished: {pool_summary['completed']} completed, {pool_summary.get('skipped', 0)} skipped, {pool_summary['unavailable']} unavailable, {pool_summary['errors']} errors."
             )
 
             await self._emit_event(
@@ -572,6 +656,7 @@ class AnalysisOrchestrator:
                 78,
                 (
                     f"{len(agent_pool)} specialists finished: {pool_summary['completed']} completed, "
+                    f"{pool_summary.get('skipped', 0)} skipped, "
                     f"{pool_summary['unavailable']} unavailable (no invented fill), "
                     f"{pool_summary['errors']} errors."
                 ),
@@ -596,21 +681,28 @@ class AnalysisOrchestrator:
                 return
 
             # 7b. Per-page SEO, copywriting, and suggested copy
-            controller.mark_node_status("node_page_intelligence", GraphNodeStatus.RUNNING)
-            controller.log_activity("node_page_intelligence", "running", "page.rewrites", f"Writing detailed SEO and copy reports for {len(manifest.pages)} crawled page(s)...")
+            if effective_pillars is None or "seo" in effective_pillars:
+                controller.mark_node_status("node_seo_page_intelligence", GraphNodeStatus.RUNNING)
+                controller.mark_node_status("node_page_intelligence", GraphNodeStatus.RUNNING)
+                controller.log_activity("node_seo_page_intelligence", "running", "page.rewrites", f"Writing detailed SEO and copy reports for {len(manifest.pages)} crawled page(s)...")
 
-            model_router.set_active_stage("page_intelligence", "Page-Level SEO & Copywriting")
-            model_router.set_active_sub_stage("page_copy_and_hero", "Page-by-Page SEO & Copywriting Rewrites")
-            await self._emit_event(
-                analysis_id,
-                "specialist_execution",
-                80,
-                f"Writing detailed SEO and copy reports for {len(manifest.pages)} crawled page(s)...",
-            )
-            page_agent = PageIntelligenceAgent(model_router)
-            await page_agent.run(blackboard)
-            controller.mark_node_status("node_page_intelligence", GraphNodeStatus.COMPLETED)
-            controller.log_activity("node_page_intelligence", "success", "page.complete", f"Completed page-level intelligence for {len(manifest.pages)} page(s)")
+                model_router.set_active_stage("page_intelligence", "Page-Level SEO & Copywriting")
+                model_router.set_active_sub_stage("page_copy_and_hero", "Page-by-Page SEO & Copywriting Rewrites")
+                await self._emit_event(
+                    analysis_id,
+                    "specialist_execution",
+                    80,
+                    f"Writing detailed SEO and copy reports for {len(manifest.pages)} crawled page(s)...",
+                )
+                page_agent = PageIntelligenceAgent(model_router)
+                await page_agent.run(blackboard)
+                controller.mark_node_status("node_seo_page_intelligence", GraphNodeStatus.COMPLETED)
+                controller.mark_node_status("node_page_intelligence", GraphNodeStatus.COMPLETED)
+                controller.log_activity("node_seo_page_intelligence", "success", "page.complete", f"Completed page-level intelligence for {len(manifest.pages)} page(s)")
+            else:
+                controller.mark_node_status("node_seo_page_intelligence", GraphNodeStatus.SKIPPED)
+                controller.mark_node_status("node_page_intelligence", GraphNodeStatus.SKIPPED)
+                controller.log_activity("node_seo_page_intelligence", "info", "page.skipped", "SEO page intelligence skipped by selective execution")
 
             if await _check_pause():
                 return
@@ -706,26 +798,34 @@ class AnalysisOrchestrator:
                 return
 
             # 10. AI Answer Engine Discoverability & Commercial Query Simulation
-            controller.mark_node_status("node_ai_search_simulation", GraphNodeStatus.RUNNING)
-            controller.log_activity("node_ai_search_simulation", "running", "ai_sim.eval", "Simulating AI Answer Engine evaluations across 6 Canonical Commercial Inquiries...")
+            if effective_pillars is None or "aeo" in effective_pillars:
+                controller.mark_node_status("node_aeo_search_simulation", GraphNodeStatus.RUNNING)
+                controller.mark_node_status("node_ai_search_simulation", GraphNodeStatus.RUNNING)
+                controller.log_activity("node_aeo_search_simulation", "running", "ai_sim.eval", "Simulating AI Answer Engine evaluations across 6 Canonical Commercial Inquiries...")
 
-            model_router.set_active_stage("ai_search_simulation", "AI Answer Engine Simulation")
-            model_router.set_active_sub_stage("buyer_query_simulation", "Synthetic Commercial Query Simulation")
-            await self._emit_event(
-                analysis_id,
-                "specialist_execution",
-                85,
-                "Simulating AI Answer Engine evaluations across 6 Canonical Commercial Inquiries (ChatGPT, Perplexity, Gemini, Claude)...",
-                {"evaluating_queries": 6}
-            )
-            try:
-                await team_orchestrator.worker_simulator.execute_task("ai_search_simulation", blackboard)
-                controller.mark_node_status("node_ai_search_simulation", GraphNodeStatus.COMPLETED)
-                controller.log_activity("node_ai_search_simulation", "success", "ai_sim.complete", "Completed AI search queries simulation with citations")
-            except Exception as sim_err:
-                logger.error("AI Search simulation error: %s", sim_err)
-                controller.mark_node_status("node_ai_search_simulation", GraphNodeStatus.FAILED, error_message=str(sim_err))
-                controller.log_activity("node_ai_search_simulation", "warning", "ai_sim.error", f"Simulation note: {sim_err}")
+                model_router.set_active_stage("ai_search_simulation", "AI Answer Engine Simulation")
+                model_router.set_active_sub_stage("buyer_query_simulation", "Synthetic Commercial Query Simulation")
+                await self._emit_event(
+                    analysis_id,
+                    "specialist_execution",
+                    85,
+                    "Simulating AI Answer Engine evaluations across 6 Canonical Commercial Inquiries (ChatGPT, Perplexity, Gemini, Claude)...",
+                    {"evaluating_queries": 6}
+                )
+                try:
+                    await team_orchestrator.worker_simulator.execute_task("ai_search_simulation", blackboard)
+                    controller.mark_node_status("node_aeo_search_simulation", GraphNodeStatus.COMPLETED)
+                    controller.mark_node_status("node_ai_search_simulation", GraphNodeStatus.COMPLETED)
+                    controller.log_activity("node_aeo_search_simulation", "success", "ai_sim.complete", "Completed AI search queries simulation with citations")
+                except Exception as sim_err:
+                    logger.error("AI Search simulation error: %s", sim_err)
+                    controller.mark_node_status("node_aeo_search_simulation", GraphNodeStatus.FAILED, error_message=str(sim_err))
+                    controller.mark_node_status("node_ai_search_simulation", GraphNodeStatus.FAILED, error_message=str(sim_err))
+                    controller.log_activity("node_aeo_search_simulation", "warning", "ai_sim.error", f"Simulation note: {sim_err}")
+            else:
+                controller.mark_node_status("node_aeo_search_simulation", GraphNodeStatus.SKIPPED)
+                controller.mark_node_status("node_ai_search_simulation", GraphNodeStatus.SKIPPED)
+                controller.log_activity("node_aeo_search_simulation", "info", "ai_sim.skipped", "AEO search simulation skipped by selective execution")
 
             if await _check_pause():
                 return
@@ -1875,9 +1975,91 @@ class AnalysisOrchestrator:
                     if ag:
                         await ag.run(blackboard)
 
-            elif node_id == "node_page_intelligence":
+            # --- 3. SEO Pillar Nodes ---
+            elif node_id == "node_seo_crawl_indexing":
+                for aid in ["seo.crawl.v3", "seo.indexability.v3"]:
+                    ag = pool.get(aid)
+                    if ag:
+                        await ag.run(blackboard)
+
+            elif node_id == "node_seo_technical_health":
+                for aid in ["seo.security.v3", "seo.performance.v3", "seo.assets.v3"]:
+                    ag = pool.get(aid)
+                    if ag:
+                        await ag.run(blackboard)
+
+            elif node_id == "node_seo_onpage_content":
+                for aid in ["seo.html.v3", "seo.internal_links.v3", "content.depth.v3", "content.topic_coverage.v3", "content.cannibalization.v3"]:
+                    ag = pool.get(aid)
+                    if ag:
+                        await ag.run(blackboard)
+
+            elif node_id == "node_seo_schema_ast":
+                for aid in ["schema.validation.v3", "schema.entity_graph.v3"]:
+                    ag = pool.get(aid)
+                    if ag:
+                        await ag.run(blackboard)
+
+            elif node_id in ("node_seo_page_intelligence", "node_page_intelligence"):
                 page_agent = PageIntelligenceAgent(ModelRouter())
                 await page_agent.run(blackboard)
+
+            # --- 4. GEO Pillar Nodes ---
+            elif node_id == "node_geo_entity_grounding":
+                for aid in ["geo.brand_identity.v3", "schema.entity_graph.v3"]:
+                    ag = pool.get(aid)
+                    if ag:
+                        await ag.run(blackboard)
+
+            elif node_id == "node_geo_local_signals":
+                for aid in ["geo.extractability.v3"]:
+                    ag = pool.get(aid)
+                    if ag:
+                        await ag.run(blackboard)
+
+            elif node_id == "node_geo_llm_footprint":
+                for aid in ["geo.llms_txt.v3", "geo.synthesis.v3"]:
+                    ag = pool.get(aid)
+                    if ag:
+                        await ag.run(blackboard)
+
+            # --- 5. AEO Pillar Nodes ---
+            elif node_id == "node_aeo_citability_matrix":
+                for aid in ["ai_search.citability.v3"]:
+                    ag = pool.get(aid)
+                    if ag:
+                        await ag.run(blackboard)
+
+            elif node_id == "node_aeo_qa_readiness":
+                for aid in ["ai_search.query_coverage.v3", "ai_search.competitor_displacement.v3"]:
+                    ag = pool.get(aid)
+                    if ag:
+                        await ag.run(blackboard)
+
+            elif node_id in ("node_aeo_search_simulation", "node_ai_search_simulation"):
+                telemetry_tracker = TelemetryTracker()
+                model_router = ModelRouter(telemetry_tracker=telemetry_tracker)
+                team_orchestrator = TeamOrchestrator(model_router)
+                await team_orchestrator.worker_simulator.execute_task("ai_search_simulation", blackboard)
+
+            # --- 6. CRO Pillar Nodes ---
+            elif node_id == "node_cro_cta_visibility":
+                for aid in ["cro.three_second_hook.v3", "cro.conversion.v3", "ux.experience.v3"]:
+                    ag = pool.get(aid)
+                    if ag:
+                        await ag.run(blackboard)
+
+            elif node_id == "node_cro_value_clarity":
+                for aid in ["cro.pricing_psychology.v3", "business.commercial.v3"]:
+                    ag = pool.get(aid)
+                    if ag:
+                        await ag.run(blackboard)
+
+            elif node_id == "node_cro_trust_and_forms":
+                for aid in ["cro.form_friction.v3", "cro.social_proof_depth.v3", "trust.authority.v3"]:
+                    ag = pool.get(aid)
+                    if ag:
+                        await ag.run(blackboard)
 
             elif node_id == "node_adversarial_critic":
                 adv = pool.get("verification.adversarial.v3")
@@ -1900,16 +2082,11 @@ class AnalysisOrchestrator:
                 )
                 blackboard.blackboard_state["root_causes"] = [b.model_dump() for b in bottlenecks]
 
-            elif node_id == "node_ai_search_simulation":
-                telemetry_tracker = TelemetryTracker()
-                model_router = ModelRouter(telemetry_tracker=telemetry_tracker)
-                team_orchestrator = TeamOrchestrator(model_router)
-                await team_orchestrator.worker_simulator.execute_task("ai_search_simulation", blackboard)
-
             elif node_id == "node_honest_scoring":
                 eval_pages = blackboard.pages or []
                 scores = self.scoring_engine.calculate_scores(
                     manifest=blackboard.crawl_manifest,
+                    findings=blackboard.findings or [],
                     claims=blackboard.claim_registry.get_all(),
                     evidence_store=blackboard.evidence_store,
                     pages=eval_pages,
@@ -1940,6 +2117,7 @@ class AnalysisOrchestrator:
 
     async def run_pipeline_section(self, analysis_id: str, section_id: str) -> Dict[str, Any]:
         """Executes all DAG nodes in a section sequentially, ensuring prerequisites are satisfied."""
+        section_id = PILLAR_TO_SECTION.get(section_id.lower(), section_id)
         controller = get_pipeline_controller(analysis_id)
         sec_def = next((s for s in SECTIONS_REGISTRY if s.section_id == section_id), None)
         if not sec_def:

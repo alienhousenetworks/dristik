@@ -379,10 +379,39 @@ def test_validation_gate_handles_unmeasured_ai_citation_and_matrix_reconciliatio
 
 def test_validation_gate_catches_and_repairs_placeholder_evidence_tokens():
     """Verify ValidationGate detects placeholder tokens like [ev_xxx] and strips them on repair."""
+    from app.domain.models import FindingEvidence
     report = create_sample_report()
     report.story_summary = "Enterprise Platform demonstrates solid performance [ev_xxx]."
     report.primary_strategic_opportunity = "Optimize schema graphs [ext_xxx]."
-    
+    report.what_site_gets_right = ["Clean architecture [ev_xxx]."]
+
+    fe = FindingEvidence(evidence_id="ev_001", url="https://example.com", element="title")
+    f_with_placeholder = Finding(
+        finding_id="f_placeholders",
+        title="Meta tag finding [ev_xxx]",
+        description="Observed issue with [ext_xxx]",
+        diagnosis="Diagnosed via [ev_xxx]",
+        observed_value="Observed value with [ev_xxx]",
+        recommendation="Fix it",
+        category=Category.TECHNICAL_SEO,
+        severity=Severity.HIGH,
+        evidence=[fe],
+        evidence_refs=["ev_001", "[ev_xxx]", "ext_xxx"],
+    )
+    report.findings.append(f_with_placeholder)
+
+    patch = CodePatch(
+        patch_id="patch_ph",
+        finding_id="f_placeholders",
+        title="Patch test",
+        category=Category.TECHNICAL_SEO,
+        target_file="index.html",
+        explanation="Explanation with [ev_xxx]",
+        after_snippet="<meta name='test' content='[ev_xxx]'>",
+        confidence=0.9,
+    )
+    report.code_patches.append(patch)
+
     res = ValidationGate.validate_report(report)
     assert "zero_placeholder_evidence_tokens" in res.failed_checks
 
@@ -390,6 +419,19 @@ def test_validation_gate_catches_and_repairs_placeholder_evidence_tokens():
     assert "zero_placeholder_evidence_tokens" in gate_res.passed_checks
     assert "[ev_xxx]" not in repaired.story_summary
     assert "[ext_xxx]" not in repaired.primary_strategic_opportunity
+    assert "[ev_xxx]" not in repaired.what_site_gets_right[0]
+
+    rf = next(f for f in repaired.findings if f.finding_id == "f_placeholders")
+    assert rf.evidence_refs == ["ev_001"]
+    assert rf.evidence_ids == ["ev_001"]
+    assert "[ev_xxx]" not in rf.title
+    assert "[ext_xxx]" not in rf.description
+    assert "[ev_xxx]" not in rf.diagnosis
+    assert "[ev_xxx]" not in rf.observed_value
+
+    rp = next(p for p in repaired.code_patches if p.patch_id == "patch_ph")
+    assert "[ev_xxx]" not in rp.explanation
+    assert "[ev_xxx]" not in rp.after_snippet
 
 
 def test_validation_gate_quarantines_unbacked_findings_and_cross_site_leaks():

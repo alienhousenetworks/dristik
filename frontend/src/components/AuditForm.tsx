@@ -22,11 +22,52 @@ export const SITE_TYPES = [
   { value: 'other', label: 'Other' },
 ];
 
+export interface PillarOption {
+  key: string;
+  name: string;
+  description: string;
+  tag: string;
+  colorClass: string;
+}
+
+export const PILLARS_LIST: PillarOption[] = [
+  {
+    key: 'seo',
+    name: 'SEO',
+    description: 'Technical, Crawl, Schema & On-Page',
+    tag: 'Search Engine Optimization',
+    colorClass: 'text-amber-600 bg-amber-500/10 border-amber-500/30',
+  },
+  {
+    key: 'geo',
+    name: 'GEO',
+    description: 'Entity Knowledge Graphs & Citability',
+    tag: 'Generative Engine Optimization',
+    colorClass: 'text-emerald-600 bg-emerald-500/10 border-emerald-500/30',
+  },
+  {
+    key: 'aeo',
+    name: 'AEO',
+    description: 'Direct AI Answers & Query Simulation',
+    tag: 'Answer Engine Optimization',
+    colorClass: 'text-violet-600 bg-violet-500/10 border-violet-500/30',
+  },
+  {
+    key: 'cro',
+    name: 'CRO',
+    description: 'Conversion Funnels, Copy & UX Friction',
+    tag: 'Conversion Rate Optimization',
+    colorClass: 'text-rose-600 bg-rose-500/10 border-rose-500/30',
+  },
+];
+
 interface AuditFormProps {
   url: string;
   maxPages: number;
   siteType: string;
   declaredNotes?: string;
+  targetPillars?: string[];
+  onTargetPillarsChange?: (pillars: string[]) => void;
   isLoading: boolean;
   error: string | null;
   onUrlChange: (value: string) => void;
@@ -41,6 +82,8 @@ export function AuditForm({
   maxPages,
   siteType,
   declaredNotes = '',
+  targetPillars = ['seo', 'geo', 'aeo', 'cro'],
+  onTargetPillarsChange,
   isLoading,
   error,
   onUrlChange,
@@ -49,6 +92,23 @@ export function AuditForm({
   onDeclaredNotesChange,
   onSubmit,
 }: AuditFormProps) {
+  const allPillarsKeys = ['seo', 'geo', 'aeo', 'cro'];
+  const isAllSelected = targetPillars.length === allPillarsKeys.length;
+
+  const handleTogglePillar = (key: string) => {
+    if (!onTargetPillarsChange) return;
+    if (targetPillars.includes(key)) {
+      if (targetPillars.length === 1) return; // Keep at least one pillar active
+      onTargetPillarsChange(targetPillars.filter((p) => p !== key));
+    } else {
+      onTargetPillarsChange([...targetPillars, key]);
+    }
+  };
+
+  const handleSelectAll = () => {
+    if (!onTargetPillarsChange) return;
+    onTargetPillarsChange(allPillarsKeys);
+  };
   return (
     <form
       className="space-y-4"
@@ -125,6 +185,66 @@ export function AuditForm({
           />
         </label>
       )}
+
+      {/* 4 Core Intelligence Pillars Selection */}
+      <div className="pt-2 border-t border-line/50">
+        <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center gap-2">
+            <span className="label text-xs font-semibold uppercase tracking-wider text-ink-700">Audit Scope & Pillars</span>
+            <span className={`text-[10px] font-mono px-2 py-0.5 rounded font-semibold ${
+              isAllSelected
+                ? 'bg-good/10 text-good border border-good/30'
+                : 'bg-paper-200 text-ink-700 border border-line'
+            }`}>
+              {isAllSelected ? 'Full 4-Pillar Audit' : `Selective Run: ${targetPillars.length} / 4 Active`}
+            </span>
+          </div>
+          {!isAllSelected && onTargetPillarsChange && (
+            <button
+              type="button"
+              onClick={handleSelectAll}
+              disabled={isLoading}
+              className="text-xs text-ink-500 hover:text-ink underline cursor-pointer disabled:opacity-50"
+            >
+              Select All Pillars
+            </button>
+          )}
+        </div>
+
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+          {PILLARS_LIST.map((pillar) => {
+            const isSelected = targetPillars.includes(pillar.key);
+            return (
+              <button
+                key={pillar.key}
+                type="button"
+                onClick={() => handleTogglePillar(pillar.key)}
+                disabled={isLoading}
+                className={`p-2.5 rounded-lg border text-left transition-all cursor-pointer select-none flex flex-col justify-between ${
+                  isSelected
+                    ? 'bg-card border-ink/40 shadow-xs ring-1 ring-ink/20'
+                    : 'bg-paper-100/50 border-line/60 opacity-60 hover:opacity-90'
+                }`}
+              >
+                <div className="flex items-center justify-between gap-1 mb-1">
+                  <span className="font-sans font-bold text-xs text-ink flex items-center gap-1.5">
+                    <span className={`w-3.5 h-3.5 rounded flex items-center justify-center text-[10px] ${
+                      isSelected ? 'bg-pine text-white' : 'border border-line bg-paper-200 text-transparent'
+                    }`}>
+                      ✓
+                    </span>
+                    {pillar.name}
+                  </span>
+                  <span className={`text-[9px] font-mono font-semibold px-1.5 py-0.2 rounded border ${pillar.colorClass}`}>
+                    {pillar.key.toUpperCase()}
+                  </span>
+                </div>
+                <p className="text-[10px] text-ink-500 line-clamp-1 leading-tight">{pillar.description}</p>
+              </button>
+            );
+          })}
+        </div>
+      </div>
 
       <p className="text-xs text-ink-400">
         Site type is treated as context, not truth. Dristik verifies the live pages independently.

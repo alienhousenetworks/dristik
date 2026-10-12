@@ -1,92 +1,20 @@
 import React from 'react';
 import { ReportTheme } from '../brandTheme';
 import { PageHeader, PageFooter } from './PageHeaderFooter';
+import { PublicationManifest, PublicationChapterDescriptor } from '../adaptivePublication';
+import { PaginationState } from '../paginationEngine';
 
 interface TableOfContentsProps {
   theme: ReportTheme;
   domain: string;
-  brandName: string;
-  analysisId: string;
-  dateStr: string;
+  brandName?: string;
+  analysisId?: string;
+  dateStr?: string;
   isRealCompetitorDataAvailable?: boolean;
+  manifest?: PublicationManifest;
+  pagination?: PaginationState;
+  pageNumber?: string | number;
 }
-
-export function getChapterDirectory(isRealCompetitorDataAvailable: boolean = false) {
-  return [
-    {
-      num: '00',
-      title: 'Executive Brief & Audit Snapshot',
-      desc: 'High-level synthesis, 4 core signals, 5-Pillar Scorecard, Tri-Perspective cognitive diagnosis, and visual diagnostic matrix.',
-      pageEst: 3,
-    },
-    {
-      num: '01',
-      title: 'Discoverability & Technical SEO',
-      desc: 'Crawl architecture, canonical host routing, 301 consolidation, TTFB latency curves, robots.txt directives, and XML sitemaps.',
-      pageEst: 5,
-    },
-    {
-      num: '02',
-      title: 'Generative Engine Optimization (GEO)',
-      desc: 'Layer 1 first-party DOM extractability, 8-dimension breakdown, /llms.txt AI-bot permissions, and entity attribution rewrites.',
-      pageEst: 8,
-    },
-    {
-      num: '03',
-      title: 'Answer Engine Visibility (AEO)',
-      desc: 'Layer 2 live visibility across ChatGPT, Perplexity, Google AIO, Claude & Gemini. 100-Question dynamic sandbox digest & Re-Query uplift delta.',
-      pageEst: 11,
-    },
-    {
-      num: '04',
-      title: isRealCompetitorDataAvailable
-        ? 'Competitive Intelligence & Knowledge Graph'
-        : 'Knowledge Graph & Entity Readiness',
-      desc: isRealCompetitorDataAvailable
-        ? 'Recorded competitor bake-off, schema types extracted from the sample, and social meta presence.'
-        : 'Schema types extracted from the sample, social meta presence, and the unmeasured competitor benchmark.',
-      pageEst: 14,
-    },
-  {
-    num: '05',
-    title: 'Conversion Ergonomics & Production Copy',
-    desc: 'Crawled value-proposition copy, form screening when a form audit ran, and character counts on generated copy. Not a timed test or a WCAG certification.',
-    pageEst: 16,
-  },
-  {
-    num: '06',
-    title: 'Page-by-Page Audit Review',
-    desc: 'Sampled URL inventory only: SERP metadata, H1 outlines, and copy recommendations for the analyzed URLs.',
-    pageEst: 18,
-  },
-  {
-    num: '07',
-    title: 'Strategic Priorities & 90-Day Roadmap',
-    desc: 'Executive Top-10 Action Plan with effort/impact calculations, NOW / NEXT / ONGOING roadmap, and commercial financial model.',
-    pageEst: 20,
-  },
-  {
-    num: '07b',
-    title: 'Master audit index',
-    desc: 'All 55 sections and appendices A–O. Each one is measured, inferred, unavailable, not tested, or not applicable. Missing data is not scored as zero.',
-    pageEst: 21,
-  },
-  {
-    num: '08',
-    title: 'Research Methodology & Sampling Parameters',
-    desc: 'Audit scope, crawl depth boundaries, multi-engine testing protocol, confidence algorithms, and known operational limitations.',
-    pageEst: 22,
-  },
-  {
-    num: '09',
-    title: 'Institutional Findings Register & Evidence Ledger',
-    desc: 'Exhaustive verified defect register, production code patches with file paths, cryptographic verification proofs, and SHA-256 AST ledger.',
-    pageEst: 23,
-  },
-];
-}
-
-export const CHAPTER_DIRECTORY = getChapterDirectory(false);
 
 export function TableOfContents({
   theme,
@@ -95,14 +23,123 @@ export function TableOfContents({
   analysisId,
   dateStr,
   isRealCompetitorDataAvailable = false,
+  manifest,
+  pagination,
+  pageNumber = 'ii',
 }: TableOfContentsProps) {
-  const chapters = getChapterDirectory(isRealCompetitorDataAvailable);
+  // Use chapters from manifest if provided, or default fallback
+  const chapters: PublicationChapterDescriptor[] = manifest?.chapters || [
+    {
+      id: 'ch_brief',
+      number: '00',
+      part: 'PART I: EXECUTIVE DIAGNOSTIC & BASELINE',
+      title: 'Executive Brief & Audit Snapshot',
+      shortTitle: 'EXECUTIVE BRIEF',
+      description: 'High-level synthesis, 4 core signals, 5-Pillar Scorecard, and Tri-Perspective cognitive diagnosis.',
+    },
+    {
+      id: 'ch_seo',
+      number: '01',
+      part: 'PART II: AUDIT CHAPTERS',
+      title: 'Discoverability & Technical SEO',
+      shortTitle: 'TECHNICAL SEO',
+      description: 'Crawl architecture, canonical host routing, 301 consolidation, TTFB latency curves, robots.txt directives, and XML sitemaps.',
+    },
+    {
+      id: 'ch_geo',
+      number: '02',
+      part: 'PART II: AUDIT CHAPTERS',
+      title: 'Generative Engine Optimization (GEO)',
+      shortTitle: 'GEO READINESS',
+      description: 'Layer 1 first-party DOM extractability, 8-dimension breakdown, /llms.txt AI-bot permissions, and entity attribution rewrites.',
+    },
+    {
+      id: 'ch_aeo',
+      number: '03',
+      part: 'PART II: AUDIT CHAPTERS',
+      title: 'Answer Engine Visibility (AEO)',
+      shortTitle: 'AEO CITATIONS',
+      description: 'Layer 2 live visibility across ChatGPT, Perplexity, Google AIO, Claude & Gemini. 100-Question dynamic sandbox digest.',
+    },
+    {
+      id: 'ch_competitive',
+      number: '04',
+      part: 'PART II: AUDIT CHAPTERS',
+      title: isRealCompetitorDataAvailable
+        ? 'Competitive Intelligence & Knowledge Graph'
+        : 'Knowledge Graph & Entity Readiness',
+      shortTitle: 'COMPETITIVE INTELLIGENCE',
+      description: isRealCompetitorDataAvailable
+        ? 'Recorded competitor bake-off, schema types extracted from the sample, and social meta presence.'
+        : 'Schema types extracted from the sample and unmeasured competitor benchmark notice.',
+    },
+    {
+      id: 'ch_conversion',
+      number: '05',
+      part: 'PART II: AUDIT CHAPTERS',
+      title: 'Conversion Ergonomics & Production Copy',
+      shortTitle: 'CONVERSION ERGONOMICS',
+      description: 'Crawled value-proposition copy, CTA hierarchy, and character counts on generated copy.',
+    },
+    {
+      id: 'ch_page_by_page',
+      number: '06',
+      part: 'PART II: AUDIT CHAPTERS',
+      title: 'Page-by-Page Audit Review',
+      shortTitle: 'PAGE-BY-PAGE REVIEW',
+      description: 'Sampled URL inventory: SERP metadata, H1 outlines, and copy recommendations for the analyzed URLs.',
+    },
+    {
+      id: 'ch_roadmap',
+      number: '07',
+      part: 'PART III: REMEDIATION & GOVERNANCE',
+      title: 'Strategic Priorities & 90-Day Roadmap',
+      shortTitle: '90-DAY ROADMAP',
+      description: 'Executive Top-10 Action Plan with effort/impact calculations, NOW / NEXT / ONGOING roadmap, and commercial model.',
+    },
+    {
+      id: 'ch_methodology',
+      number: '08',
+      part: 'PART III: REMEDIATION & GOVERNANCE',
+      title: 'Research Methodology & Sampling Parameters',
+      shortTitle: 'METHODOLOGY',
+      description: 'Audit scope, crawl depth boundaries, multi-engine testing protocol, confidence algorithms, and operational limitations.',
+    },
+    {
+      id: 'ch_appendix',
+      number: '09',
+      part: 'PART IV: APPENDICES & TECHNICAL REGISTERS',
+      title: 'Institutional Findings Register & Evidence Ledger',
+      shortTitle: 'EVIDENCE REGISTERS',
+      description: 'Exhaustive verified defect register, production code patches with file paths, and cryptographic SHA-256 AST ledger.',
+      isAppendix: true,
+    },
+  ];
+
+  // Group chapters by Part
+  const parts: Array<{ partTitle: string; items: PublicationChapterDescriptor[] }> = [];
+  chapters.forEach((ch) => {
+    const partName = ch.part || 'MAIN AUDIT BODY';
+    let existingPart = parts.find((p) => p.partTitle === partName);
+    if (!existingPart) {
+      existingPart = { partTitle: partName, items: [] };
+      parts.push(existingPart);
+    }
+    existingPart.items.push(ch);
+  });
 
   return (
-    <section className="report-page-break p-8 md:p-14 min-h-[960px] flex flex-col justify-between bg-paper-50 border-b-2 border-line">
-      <PageHeader theme={theme} domain={domain} chapterTitle="TABLE OF CONTENTS // DOCUMENT ARCHITECTURE" />
+    <section
+      data-chapter-id="front_matter_toc"
+      className="report-page-break p-8 md:p-14 min-h-[960px] flex flex-col justify-between bg-paper-50 border-b-2 border-line text-ink"
+    >
+      <PageHeader
+        theme={theme}
+        domain={domain}
+        chapterTitle="TABLE OF CONTENTS // DOCUMENT ARCHITECTURE"
+      />
 
-      <div className="space-y-6">
+      <div className="space-y-6 max-w-4xl my-auto py-2">
         <div>
           <span className="font-mono text-[8pt] font-bold uppercase tracking-[0.04em] text-ink-500 block mb-1">
             Publication Index &amp; Information Architecture
@@ -113,56 +150,102 @@ export function TableOfContents({
           <div className="bg-ink w-10 h-px mt-2" />
         </div>
 
-        {/* Chapter Table */}
-        <div className="divide-y divide-line border-t border-b border-line">
-          {chapters.map((ch) => (
-            <div key={ch.num} className="py-2.5 flex items-start justify-between gap-4 text-[8.5pt]">
-              <div className="flex items-start gap-3 flex-1">
-                <span className="font-mono font-bold text-ink-400 w-6 pt-0.5">
-                  {ch.num}
+        {/* Dynamic Part & Chapter Tree with Leader Dots & Real Page Numbers */}
+        <div className="space-y-5 border-t border-b border-line py-3">
+          {/* Front Matter Line */}
+          <div className="space-y-1">
+            <div className="font-mono text-[7pt] font-extrabold uppercase tracking-[0.08em] text-ink-400">
+              FRONT MATTER
+            </div>
+            <div className="flex items-baseline justify-between text-[8.5pt]">
+              <div className="flex items-baseline gap-2 flex-1">
+                <span className="font-mono font-bold text-ink-400 w-7">FM</span>
+                <span className="font-sans font-semibold text-ink">
+                  Document Identification &amp; Measurement Scope
                 </span>
-                <div>
-                  <h3 className="font-sans font-bold text-ink text-[10pt] leading-tight">
-                    {ch.title}
-                  </h3>
-                  <p className="text-ink-600 font-sans text-[8pt] leading-relaxed mt-0.5">
-                    {ch.desc}
-                  </p>
-                </div>
+                <span className="flex-1 border-b border-dotted border-ink-300 mx-2 mb-1" />
               </div>
-              <div className="font-mono text-[8.5pt] text-ink-400 pt-0.5">
-                p. {ch.pageEst}
-              </div>
-            </div>
-          ))}
-        </div>
-
-        {/* "How to Read This Report" - Dual Layer Architecture */}
-        <div className="p-4 rounded bg-paper-100 border border-line mt-6 text-[8.5pt]">
-          <h4 className="font-mono text-[8pt] font-bold uppercase tracking-[0.04em] text-ink-700 mb-2">
-            HOW TO READ THIS PUBLICATION: DUAL-LAYER GOVERNANCE
-          </h4>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-ink-700 leading-relaxed font-sans">
-            <div>
-              <strong className="text-ink block font-sans text-[9pt] mb-0.5">
-                1. Executive Narrative Layer (Pages 3 – 21)
-              </strong>
-              Designed for board and executive leadership. Synthesizes macro performance signals, competitive standing, conversion ergonomics, and the 90-day commercial impact roadmap.
-            </div>
-            <div>
-              <strong className="text-ink block font-sans text-[9pt] mb-0.5">
-                2. Technical Evidence &amp; Proof Layer (Pages 22+)
-              </strong>
-              Designed for engineering and search teams. Provides deterministic AST proof, exact code patch diffs, file paths, and cryptographic SHA-256 evidence IDs for every single claim.
+              <span className="font-mono font-semibold text-ink-500 pl-2">
+                p. i
+              </span>
             </div>
           </div>
+
+          {/* Body Parts */}
+          {parts.map((p) => (
+            <div key={p.partTitle} className="space-y-1.5">
+              <div className="font-mono text-[7pt] font-extrabold uppercase tracking-[0.08em] text-ink-500 border-t border-line/60 pt-2">
+                {p.partTitle}
+              </div>
+
+              {p.items.map((ch) => {
+                const targetPage = pagination?.locations[ch.id]?.logicalPageNumber;
+                const pageLabel = targetPage != null ? `p. ${targetPage}` : 'p. —';
+
+                return (
+                  <div key={ch.id} className="py-1">
+                    <div className="flex items-baseline justify-between text-[8.5pt]">
+                      <a
+                        href={`#${ch.id}`}
+                        className="flex items-baseline gap-2 flex-1 hover:text-sky-700 transition-colors group"
+                      >
+                        <span className="font-mono font-bold text-ink-500 w-7">
+                          {ch.number}
+                        </span>
+                        <span className="font-sans font-bold text-ink text-[9pt] group-hover:underline">
+                          {ch.title}
+                        </span>
+                        <span className="flex-1 border-b border-dotted border-ink-300 mx-2 mb-1" />
+                      </a>
+                      <span className="font-mono font-bold text-ink-700 pl-2">
+                        {pageLabel}
+                      </span>
+                    </div>
+                    {ch.description && (
+                      <p className="text-ink-600 font-sans text-[7.5pt] leading-relaxed pl-9 pr-12">
+                        {ch.description}
+                      </p>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          ))}
+
+          {/* Closing Attestation Line */}
+          <div className="pt-2 border-t border-line/60">
+            <div className="flex items-baseline justify-between text-[8.5pt]">
+              <div className="flex items-baseline gap-2 flex-1">
+                <span className="font-mono font-bold text-ink-400 w-7">FIN</span>
+                <span className="font-sans font-semibold text-ink">
+                  Audit Assurance Seal &amp; Governance Attestation
+                </span>
+                <span className="flex-1 border-b border-dotted border-ink-300 mx-2 mb-1" />
+              </div>
+              <span className="font-mono font-semibold text-ink-500 pl-2">
+                p. {pagination?.locations['closing_page']?.logicalPageNumber != null ? pagination.locations['closing_page'].logicalPageNumber : 'End'}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* Summary Footer Notice */}
+        <div className="p-3 rounded bg-paper-100 border border-line flex items-center justify-between text-[7.5pt] font-mono text-ink-600">
+          <span>
+            {pagination?.status === 'STABLE_CONVERGED'
+              ? '✓ STABLE PAGINATION SEALED'
+              : 'PAGINATION CONVERGING'}
+          </span>
+          <span>
+            {manifest ? `${manifest.chapters.length} Active Chapters · ${pagination?.totalPhysicalPages || 24} Total Pages` : ''}
+          </span>
         </div>
       </div>
 
       <PageFooter
         theme={theme}
         domain={domain}
-        pageNumber={2}
+        pageNumber={pageNumber}
         reportId={analysisId}
         dateStr={dateStr}
       />

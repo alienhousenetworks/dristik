@@ -849,4 +849,69 @@ async def get_section_pptx_deck(
     )
 
 
+@router.get("/{analysis_id}/audit-book")
+async def get_adaptive_audit_book(
+    analysis_id: str,
+    format: str = "html",
+    profile: Optional[str] = None,
+    title: Optional[str] = None,
+    subtitle: Optional[str] = None,
+    classification: Optional[str] = None,
+    user: UserIdentity = Depends(get_current_user),
+):
+    """
+    Renders the publication-ready, typeset adaptive digital audit book HTML/PDF
+    matching the detected or requested report family (COMPLETE, SEO, GEO, AEO, CRO, COMPETITOR, HYBRID, CUSTOM).
+
+    format='html': returns standalone A4 publication HTML with CSS Paged Media rules,
+                   dedicated cover page, front matter, TOC leader dots, and Zero-Fake closing seal.
+    format='json': returns publication manifest and dynamic pagination layout.
+    """
+    run = require_analysis(analysis_id, user)
+    report = getattr(run, "report", None)
+    if not report:
+        raise HTTPException(status_code=400, detail="Executive report not yet synthesized for this analysis run.")
+
+    from app.reports.adaptive_audit_book import (
+        detect_report_family,
+        build_publication_manifest,
+        compute_toc_pagination,
+        render_adaptive_audit_book_html,
+    )
+
+    family = detect_report_family(report, profile)
+    manifest = build_publication_manifest(
+        report,
+        family,
+        title_override=title,
+        subtitle_override=subtitle,
+        classification_override=classification,
+    )
+    pagination = compute_toc_pagination(manifest)
+
+    if format.lower() == "json":
+        return {
+            "analysis_id": analysis_id,
+            "family": family,
+            "manifest": manifest,
+            "pagination": pagination,
+            "status": "READY",
+        }
+
+    html_content = render_adaptive_audit_book_html(
+        report,
+        report_type=profile,
+        title_override=title,
+        subtitle_override=subtitle,
+        classification=classification,
+    )
+
+    return Response(
+        content=html_content,
+        media_type="text/html",
+        headers={
+            "X-Dristik-Report-Family": family,
+            "X-Dristik-Total-Pages": str(pagination.get("closing_page", 1)),
+        },
+    )
 

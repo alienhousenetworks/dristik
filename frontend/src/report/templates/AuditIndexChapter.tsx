@@ -8,13 +8,19 @@ export function AuditIndexChapter({
   theme,
   report,
   domain,
+  pageNumber = 'Index',
 }: {
   theme: ReportTheme;
   report: ExecutiveReport;
   domain: string;
+  pageNumber?: number | string;
 }) {
   return (
-    <section className="report-page-break p-8 md:p-14 bg-paper-50 border-b-2 border-line">
+    <section
+      id="ch_audit_index"
+      data-chapter-id="ch_audit_index"
+      className="report-page-break p-8 md:p-14 bg-paper-50 border-b-2 border-line text-ink"
+    >
       <PageHeader theme={theme} domain={domain} chapterTitle="MASTER AUDIT INDEX" />
       <div className="space-y-4">
         <div>
@@ -29,7 +35,7 @@ export function AuditIndexChapter({
         </div>
         <AuditIndex report={report} expandChecks />
       </div>
-      <PageFooter theme={theme} domain={domain} pageNumber="Index" />
+      <PageFooter theme={theme} domain={domain} pageNumber={pageNumber} />
     </section>
   );
 }

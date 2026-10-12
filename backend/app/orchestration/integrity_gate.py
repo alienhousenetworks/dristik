@@ -146,7 +146,7 @@ class EvidenceIntegrityValidator:
                     agent_id=claim.agent_id,
                     claim_id=claim.id,
                     violation_type="SINGLE_SOURCE_UNVERIFIED",
-                    description=f"Claim about {claim.claim_family.value if claim.claim_family else 'gated topic'} rests on DOM (ev_xxx) only; no usable ext_xxx.",
+                    description=f"Claim about {claim.claim_family.value if claim.claim_family else 'gated topic'} rests on DOM evidence only; no usable external ground truth.",
                     action_taken="Labeled SINGLE_SOURCE_UNVERIFIED; confidence capped at MEDIUM.",
                 ))
                 result.claims_adjusted += 1
@@ -156,7 +156,7 @@ class EvidenceIntegrityValidator:
                     claim_id=claim.id,
                     violation_type="FLAGGED_UNVERIFIED",
                     description=f"External feed contradicts DOM for {claim.claim_family.value if claim.claim_family else 'gated topic'}.",
-                    action_taken="Status CONTESTED; cited ev_xxx and ext_xxx; routed to verification.contradiction.v3; winner not selected.",
+                    action_taken="Status CONTESTED; cited both DOM and external evidence; routed to verification.contradiction.v3; winner not selected.",
                 ))
                 if claim.verification_status != VerificationStatus.CONTESTED:
                     claim.verification_status = VerificationStatus.CONTESTED

@@ -2252,6 +2252,7 @@ class AnalysisRequest(BaseModel):
     max_crawl_pages: Optional[int] = None
     voucher_code: Optional[str] = None
     data_residency: DataResidency = DataResidency.GLOBAL
+    target_pillars: Optional[List[str]] = Field(default=None, description="Selected pillars to audit: 'seo', 'geo', 'aeo', 'cro'. If omitted, audits all pillars.")
 
 class AnalysisRun(BaseModel):
     analysis_id: str
@@ -2270,6 +2271,7 @@ class AnalysisRun(BaseModel):
     is_sealed: bool = False
     manifest_id: Optional[str] = None
     report_id: Optional[str] = None
+    target_pillars: Optional[List[str]] = None
 
 
 class TrackedKeyword(BaseModel):

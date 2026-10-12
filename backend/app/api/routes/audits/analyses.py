@@ -224,7 +224,12 @@ async def start_analysis(
                 )
             )
 
-    run = orchestrator.create_run(url, org_id=user.org_id, created_by=user.user_id)
+    run = orchestrator.create_run(
+        url,
+        org_id=user.org_id,
+        created_by=user.user_id,
+        target_pillars=request.target_pillars,
+    )
     max_pages = allowed_pages
     get_store().record_audit(
         analysis_id=run.analysis_id,
@@ -245,6 +250,7 @@ async def start_analysis(
         request.declared_site_type_notes,
         request.country,
         request.language,
+        request.target_pillars,
     )
     return run
 
@@ -1025,6 +1031,25 @@ async def run_pipeline_section_endpoint(analysis_id: str, section_id: str, user:
     res = await orchestrator.run_pipeline_section(analysis_id, section_id)
     if not res.get("success"):
         raise HTTPException(status_code=400, detail=res.get("error", f"Section '{section_id}' execution failed."))
+    return res
+
+
+@router.post("/{analysis_id}/pillars/{pillar_key}/run")
+async def run_pipeline_pillar_endpoint(analysis_id: str, pillar_key: str, user: UserIdentity = Depends(require_permission("mission:create"))):
+    """
+    Executes all DAG nodes belonging to a specific pillar (SEO, GEO, AEO, CRO) on demand.
+    """
+    _get_org_run(analysis_id, user)
+    from app.orchestration.pipeline_dag import PILLAR_TO_SECTION
+    section_id = PILLAR_TO_SECTION.get(pillar_key.lower())
+    if not section_id:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid pillar '{pillar_key}'. Valid pillars are: {', '.join(PILLAR_TO_SECTION.keys())}"
+        )
+    res = await orchestrator.run_pipeline_section(analysis_id, section_id)
+    if not res.get("success"):
+        raise HTTPException(status_code=400, detail=res.get("error", f"Pillar '{pillar_key}' execution failed."))
     return res
 
 

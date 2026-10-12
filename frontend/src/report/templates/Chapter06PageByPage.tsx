@@ -7,20 +7,25 @@ import { PageHeader, PageFooter } from './PageHeaderFooter';
 interface Chapter06PageByPageProps {
   theme: ReportTheme;
   report: NormalizedReport;
+  pageNumber?: number | string;
+  chapterNumber?: string;
 }
 
 export function Chapter06PageByPage({
   theme,
   report,
+  pageNumber,
+  chapterNumber = '06',
 }: Chapter06PageByPageProps) {
   const { pages, meta } = report;
+  const detailsPageNumber = typeof pageNumber === 'number' ? pageNumber + 1 : pageNumber;
 
   return (
     <>
       {/* 1. Full-Page Chapter Opener */}
       <ChapterOpener
         theme={theme}
-        chapterNumber="06"
+        chapterNumber={chapterNumber}
         subtitle="SAMPLED ROUTE INVENTORY"
         title="Page-by-Page Audit Review"
         description={`Review of the ${meta.pagesAnalyzed} analyzed URL${meta.pagesAnalyzed === 1 ? '' : 's'}${meta.discoveredUrlsCount != null ? ` out of ${meta.discoveredUrlsCount} discovered` : ''}. This is the sample, not a site-wide inventory.`}
@@ -28,11 +33,15 @@ export function Chapter06PageByPage({
         whyThisMatters="Systemic indexation failures frequently originate on specific high-value sub-routes. Granular route audits prevent individual weak links from diluting overall domain discoverability."
         howWeMeasuredIt="Per-URL DOM extraction, HTTP header validation, TTFB network telemetry, and section-by-section copywriting analysis."
         whatWasAnalyzed="Status codes, word counts, TTFB latency, SEO & Copy scores, title/meta length compliance, and AI citation snippet targets."
-        pageNumber={16}
+        pageNumber={typeof pageNumber === 'number' ? pageNumber : undefined}
       />
 
       {/* 2. Page Inventory Breakdown */}
-      <section className="report-page-break p-8 md:p-14 min-h-[960px] flex flex-col justify-between bg-paper-50 border-b-2 border-line">
+      <section
+        id="ch_page_by_page"
+        data-chapter-id="ch_page_by_page"
+        className="report-page-break p-8 md:p-14 min-h-[960px] flex flex-col justify-between bg-paper-50 border-b-2 border-line text-ink"
+      >
         <PageHeader
           theme={theme}
           domain={meta.domain}
@@ -147,7 +156,7 @@ export function Chapter06PageByPage({
         <PageFooter
           theme={theme}
           domain={meta.domain}
-          pageNumber={17}
+          pageNumber={detailsPageNumber}
           reportId={meta.analysisId}
           dateStr={meta.generatedAt}
         />

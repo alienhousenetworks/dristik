@@ -51,6 +51,7 @@ export function App() {
   const [maxPages, setMaxPages] = useState(5);
   const [siteType, setSiteType] = useState<string>('');
   const [declaredNotes, setDeclaredNotes] = useState<string>('');
+  const [targetPillars, setTargetPillars] = useState<string[]>(['seo', 'geo', 'aeo', 'cro']);
   const [run, setRun] = useState<AnalysisRun | null>(null);
   const [finding, setFinding] = useState<Finding | null>(null);
   const [tab, setTab] = useState<TabId>('overview');
@@ -296,7 +297,7 @@ export function App() {
     setTab('overview');
 
     try {
-      const created = await startAnalysis(target, maxPages, siteType, declaredNotes);
+      const created = await startAnalysis(target, maxPages, siteType, declaredNotes, targetPillars);
       setRun(created);
       syncActiveAnalysisId(created.analysis_id);
 
@@ -360,6 +361,8 @@ export function App() {
       maxPages={maxPages}
       siteType={siteType}
       declaredNotes={declaredNotes}
+      targetPillars={targetPillars}
+      onTargetPillarsChange={setTargetPillars}
       isLoading={loading}
       error={error}
       onUrlChange={(value) => {

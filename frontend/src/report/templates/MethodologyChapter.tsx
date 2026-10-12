@@ -7,20 +7,25 @@ import { PageHeader, PageFooter } from './PageHeaderFooter';
 interface MethodologyChapterProps {
   theme: ReportTheme;
   report: NormalizedReport;
+  pageNumber?: number | string;
+  chapterNumber?: string;
 }
 
 export function MethodologyChapter({
   theme,
   report,
+  pageNumber,
+  chapterNumber = '08',
 }: MethodologyChapterProps) {
   const { methodology, meta } = report;
+  const detailsPageNumber = typeof pageNumber === 'number' ? pageNumber + 1 : pageNumber;
 
   return (
     <>
       {/* 1. Full-Page Chapter Opener */}
       <ChapterOpener
         theme={theme}
-        chapterNumber="08"
+        chapterNumber={chapterNumber}
         subtitle="RESEARCH METHODOLOGY &amp; SAMPLING PROTOCOL"
         title="Inspection Methodology &amp; Governance"
         description="Formal operational specifications governing crawler parameters, AST decomposition rules, multi-model query sampling, and cryptographic evidence hashing standards."
@@ -28,11 +33,15 @@ export function MethodologyChapter({
         whyThisMatters="Institutional assurance mandates transparent, repeatable measurement protocols with explicit limitations and zero synthetic data interpolation."
         howWeMeasuredIt="Headless Chromium DOM crawling, deterministic AST traversal, verbatim multi-model prompt execution, and SHA-256 evidence hashing."
         whatWasAnalyzed="Origin crawl boundaries, response latency curves, 100-question commercial sandbox models, and WCAG accessibility standards."
-        pageNumber={20}
+        pageNumber={typeof pageNumber === 'number' ? pageNumber : undefined}
       />
 
       {/* 2. Methodology Details Page */}
-      <section className="report-page-break p-8 md:p-14 min-h-[960px] flex flex-col justify-between bg-paper-50 border-b-2 border-line">
+      <section
+        id="ch_methodology"
+        data-chapter-id="ch_methodology"
+        className="report-page-break p-8 md:p-14 min-h-[960px] flex flex-col justify-between bg-paper-50 border-b-2 border-line text-ink"
+      >
         <PageHeader
           theme={theme}
           domain={meta.domain}
@@ -215,7 +224,7 @@ export function MethodologyChapter({
         <PageFooter
           theme={theme}
           domain={meta.domain}
-          pageNumber={21}
+          pageNumber={detailsPageNumber}
           reportId={meta.analysisId}
           dateStr={meta.generatedAt}
         />

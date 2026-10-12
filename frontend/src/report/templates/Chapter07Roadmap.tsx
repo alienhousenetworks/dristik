@@ -7,20 +7,25 @@ import { PageHeader, PageFooter } from './PageHeaderFooter';
 interface Chapter07RoadmapProps {
   theme: ReportTheme;
   report: NormalizedReport;
+  pageNumber?: number | string;
+  chapterNumber?: string;
 }
 
 export function Chapter07Roadmap({
   theme,
   report,
+  pageNumber,
+  chapterNumber = '07',
 }: Chapter07RoadmapProps) {
   const { priorities, meta, remediation } = report;
+  const detailsPageNumber = typeof pageNumber === 'number' ? pageNumber + 1 : pageNumber;
 
   return (
     <>
       {/* 1. Full-Page Chapter Opener */}
       <ChapterOpener
         theme={theme}
-        chapterNumber="07"
+        chapterNumber={chapterNumber}
         subtitle="ENGINEERING ACTION PLAN &amp; 90-DAY MILESTONES"
         title="Strategic Priorities &amp; Implementation Roadmap"
         description="Prioritized, phased execution blueprint designed for immediate engineering deployment. Formulates exact file path remedies, impact × effort rankings, and expected commercial returns."
@@ -28,11 +33,15 @@ export function Chapter07Roadmap({
         whyThisMatters="Discoverability audits only deliver enterprise value when translated into deterministic code changes and prioritized engineering sprints."
         howWeMeasuredIt="Algorithmic impact vs. effort scoring, developer implementation hour estimation, and closed-loop verification acceptance tests."
         whatWasAnalyzed="Top-10 executive remediation items, 3-phase execution timeline (NOW / NEXT / ONGOING), and estimated commercial upside."
-        pageNumber={18}
+        pageNumber={typeof pageNumber === 'number' ? pageNumber : undefined}
       />
 
       {/* 2. Analytical Data Page - Action Plan & Roadmap */}
-      <section className="report-page-break p-8 md:p-14 min-h-[960px] flex flex-col justify-between bg-paper-50 border-b-2 border-line">
+      <section
+        id="ch_roadmap"
+        data-chapter-id="ch_roadmap"
+        className="report-page-break p-8 md:p-14 min-h-[960px] flex flex-col justify-between bg-paper-50 border-b-2 border-line text-ink"
+      >
         <PageHeader
           theme={theme}
           domain={meta.domain}
@@ -167,7 +176,7 @@ export function Chapter07Roadmap({
         <PageFooter
           theme={theme}
           domain={meta.domain}
-          pageNumber={19}
+          pageNumber={detailsPageNumber}
           reportId={meta.analysisId}
           dateStr={meta.generatedAt}
         />

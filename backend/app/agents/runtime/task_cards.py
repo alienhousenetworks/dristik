@@ -15,12 +15,12 @@ SPECIALIST_OUTPUT_SCHEMA = """{
       "category": "TECHNICAL_SEO | ON_PAGE_SEO | CONTENT | GEO | AI_SEARCH | SCHEMA | UX_CONVERSION | TRUST_AUTHORITY | COMPETITIVE",
       "severity": "CRITICAL | HIGH | MEDIUM | LOW | INFO",
       "confidence": 0.0,
-      "evidence_refs": ["ev_xxx", "ext_xxx"],
+      "evidence_refs": ["ev_001"],
       "evidence_status": "supported | not_in_evidence",
       "source_integrity_label": "CORROBORATED | CONTESTED | SINGLE_SOURCE_UNVERIFIED | NOT_APPLICABLE",
       "confidence_band": "HIGH | MEDIUM | LOW",
       "finding": "plain-language claim",
-      "evidence": ["ev_xxx", "ext_xxx"],
+      "evidence": ["ev_001"],
       "confidence_rubric": "CERTAIN | LIKELY | GUESSING",
       "confidence_basis": "one sentence: why this level, not the one above it",
       "materiality": "CRITICAL | MAJOR | MINOR",
@@ -3964,7 +3964,7 @@ Produce a coherent business representation downstream Dristik specialists can tr
         "(2) Video prominence and viewport priority on the host page; (3) Discoverable and accessible thumbnail image URIs; "
         "(4) Availability of closed captions, subtitles, and text transcripts for search accessibility; "
         "(5) Embed player responsiveness without blocking core page rendering or violating mobile viewports.\n"
-        "Do not flag missing video schema if no video player or media element is present on the page. Ground all findings in ev_xxx references."
+        "Do not flag missing video schema if no video player or media element is present on the page. Ground all findings in verified evidence references."
     ),
 
     "seo.specialized.policy_compliance.v3": (

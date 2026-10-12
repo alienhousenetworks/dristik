@@ -10,11 +10,15 @@ import { PageHeader, PageFooter } from './PageHeaderFooter';
 interface AppendixLedgerProps {
   theme: ReportTheme;
   report: NormalizedReport;
+  pageNumber?: number | string;
+  chapterNumber?: string;
 }
 
 export function AppendixLedger({
   theme,
   report,
+  pageNumber,
+  chapterNumber = '09',
 }: AppendixLedgerProps) {
   const { appendices, meta, remediation } = report;
   const criticalFindings = appendices.findings.filter((f) => f.severity === 'CRITICAL');
@@ -22,12 +26,17 @@ export function AppendixLedger({
   const mediumFindings = appendices.findings.filter((f) => f.severity === 'MEDIUM');
   const otherFindings = appendices.findings.filter((f) => f.severity === 'LOW' || f.severity === 'INFO');
 
+  const p1 = typeof pageNumber === 'number' ? pageNumber : undefined;
+  const p2 = typeof pageNumber === 'number' ? pageNumber + 1 : pageNumber;
+  const p3 = typeof pageNumber === 'number' ? pageNumber + 2 : pageNumber;
+  const p4 = typeof pageNumber === 'number' ? (appendices.patches.length > 0 ? pageNumber + 3 : pageNumber + 2) : pageNumber;
+
   return (
     <>
       {/* 1. Full-Page Chapter Opener */}
       <ChapterOpener
         theme={theme}
-        chapterNumber="09"
+        chapterNumber={chapterNumber}
         subtitle="FINDINGS REGISTER &amp; EVIDENCE LEDGER"
         title="Findings Register &amp; Appendices"
         description="Recorded findings, generated patches, and the evidence each finding cites. A hash checks that a stored snippet was not edited. It does not prove the analysis is correct, and a generated patch is not an applied fix."
@@ -35,11 +44,15 @@ export function AppendixLedger({
         whyThisMatters="Engineering resolution requires exact reproduction paths, affected DOM selectors, and before/after code diffs with unambiguous acceptance criteria."
         howWeMeasuredIt="Automated 20-point validation checks, AST node verification, and SHA-256 hash sealing against the crawl snapshot."
         whatWasAnalyzed="Complete finding registry, unified git-compatible patch diffs, and the tamper-evident evidence ledger."
-        pageNumber={22}
+        pageNumber={p1}
       />
 
       {/* 2. Findings Register Section */}
-      <section className="report-page-break p-8 md:p-14 min-h-[960px] flex flex-col justify-between bg-paper-50 border-b-2 border-line">
+      <section
+        id="ch_appendix"
+        data-chapter-id="ch_appendix"
+        className="report-page-break p-8 md:p-14 min-h-[960px] flex flex-col justify-between bg-paper-50 border-b-2 border-line text-ink"
+      >
         <PageHeader
           theme={theme}
           domain={meta.domain}
@@ -71,7 +84,7 @@ export function AppendixLedger({
         <PageFooter
           theme={theme}
           domain={meta.domain}
-          pageNumber={23}
+          pageNumber={p2}
           reportId={meta.analysisId}
           dateStr={meta.generatedAt}
         />
@@ -160,7 +173,7 @@ export function AppendixLedger({
           <PageFooter
             theme={theme}
             domain={meta.domain}
-            pageNumber={24}
+            pageNumber={p3}
             reportId={meta.analysisId}
             dateStr={meta.generatedAt}
           />
@@ -223,7 +236,7 @@ export function AppendixLedger({
         <PageFooter
           theme={theme}
           domain={meta.domain}
-          pageNumber={25}
+          pageNumber={p4}
           reportId={meta.analysisId}
           dateStr={meta.generatedAt}
         />

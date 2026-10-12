@@ -7,17 +7,25 @@ import { PageHeader, PageFooter } from './PageHeaderFooter';
 interface Chapter02GeoProps {
   theme: ReportTheme;
   report: NormalizedReport;
+  pageNumber?: number | string;
+  chapterNumber?: string;
 }
 
-export function Chapter02Geo({ theme, report }: Chapter02GeoProps) {
+export function Chapter02Geo({
+  theme,
+  report,
+  pageNumber,
+  chapterNumber = '02',
+}: Chapter02GeoProps) {
   const { geo, meta } = report;
+  const detailsPageNumber = typeof pageNumber === 'number' ? pageNumber + 1 : pageNumber;
 
   return (
     <>
       {/* 1. Full-Page Chapter Opener */}
       <ChapterOpener
         theme={theme}
-        chapterNumber="02"
+        chapterNumber={chapterNumber}
         subtitle="LAYER 1 DOM EXTRACTABILITY &amp; LLM GROUNDING"
         title="Generative Engine Optimization (GEO)"
         description="First-party DOM content analysis evaluating how effectively generative answer engines can parse, quote, and ground factual commercial statements about the business without hallucination."
@@ -25,11 +33,15 @@ export function Chapter02Geo({ theme, report }: Chapter02GeoProps) {
         whyThisMatters="Answer engines like ChatGPT, Claude, and Perplexity rely on dense, unambiguous factual prose. Marketing hyperbole causes retrieval truncation and competitor substitution."
         howWeMeasuredIt="Deterministic 8-dimension AST extractability breakdown, crawler manifesto inspection, and passage attribution cross-referencing."
         whatWasAnalyzed="First-party DOM clarity, llms.txt availability, AI bot permissions (GPTBot, ClaudeBot, PerplexityBot), and sentence-level entity rewrites."
-        pageNumber={7}
+        pageNumber={typeof pageNumber === 'number' ? pageNumber : undefined}
       />
 
       {/* 2. Analytical Data Page */}
-      <section className="report-page-break p-8 md:p-14 min-h-[960px] flex flex-col justify-between bg-paper-50 border-b-2 border-line">
+      <section
+        id="ch_geo"
+        data-chapter-id="ch_geo"
+        className="report-page-break p-8 md:p-14 min-h-[960px] flex flex-col justify-between bg-paper-50 border-b-2 border-line text-ink"
+      >
         <PageHeader
           theme={theme}
           domain={meta.domain}
@@ -183,7 +195,7 @@ export function Chapter02Geo({ theme, report }: Chapter02GeoProps) {
         <PageFooter
           theme={theme}
           domain={meta.domain}
-          pageNumber={8}
+          pageNumber={detailsPageNumber}
           reportId={meta.analysisId}
           dateStr={meta.generatedAt}
         />

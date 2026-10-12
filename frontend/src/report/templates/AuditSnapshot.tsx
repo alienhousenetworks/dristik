@@ -12,6 +12,7 @@ interface AuditSnapshotProps {
   report: NormalizedReport;
   radarChart?: ChartSpecification | null;
   donutChart?: ChartSpecification | null;
+  pageNumber?: number | string;
 }
 
 export function AuditSnapshot({
@@ -19,11 +20,16 @@ export function AuditSnapshot({
   report,
   radarChart,
   donutChart,
+  pageNumber = 2,
 }: AuditSnapshotProps) {
   const { scorecard, meta, visual } = report;
 
   return (
-    <section className="report-page-break p-8 md:p-14 min-h-[960px] flex flex-col justify-between bg-paper-50 border-b-2 border-line">
+    <section
+      id="ch_snapshot"
+      data-chapter-id="ch_snapshot"
+      className="report-page-break p-8 md:p-14 min-h-[960px] flex flex-col justify-between bg-paper-50 border-b-2 border-line text-ink"
+    >
       <PageHeader
         theme={theme}
         domain={meta.domain}
@@ -223,7 +229,7 @@ export function AuditSnapshot({
       <PageFooter
         theme={theme}
         domain={meta.domain}
-        pageNumber={4}
+        pageNumber={pageNumber}
         reportId={meta.analysisId}
         dateStr={meta.generatedAt}
       />

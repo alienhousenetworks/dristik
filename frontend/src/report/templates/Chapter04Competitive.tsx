@@ -7,20 +7,25 @@ import { PageHeader, PageFooter } from './PageHeaderFooter';
 interface Chapter04CompetitiveProps {
   theme: ReportTheme;
   report: NormalizedReport;
+  pageNumber?: number | string;
+  chapterNumber?: string;
 }
 
 export function Chapter04Competitive({
   theme,
   report,
+  pageNumber,
+  chapterNumber = '04',
 }: Chapter04CompetitiveProps) {
   const { competitive, meta } = report;
+  const detailsPageNumber = typeof pageNumber === 'number' ? pageNumber + 1 : pageNumber;
 
   return (
     <>
       {/* 1. Full-Page Chapter Opener */}
       <ChapterOpener
         theme={theme}
-        chapterNumber="04"
+        chapterNumber={chapterNumber}
         subtitle={competitive.chapterSubtitle || (competitive.isRealCompetitorDataAvailable ? "PEER-SET BENCHMARK & SCHEMA ENTITY MAPPING" : "SEMANTIC SCHEMA & MACHINE-READABLE ENTITY MAPPING")}
         title={competitive.chapterTitle || (competitive.isRealCompetitorDataAvailable ? "Competitive Intelligence & Knowledge Graph" : "Knowledge Graph & Entity Readiness")}
         description={competitive.chapterDescription || (competitive.isRealCompetitorDataAvailable ? "Machine-readable entity graph crosscheck, structured data verification, and head-to-head evaluation on commercial buyer queries against verified industry peers." : "Machine-readable entity graph crosscheck, structured data verification, and first-party semantic knowledge extraction.")}
@@ -32,11 +37,15 @@ export function Chapter04Competitive({
         whatWasAnalyzed={competitive.isRealCompetitorDataAvailable
           ? 'Structured data types on the sample and the recorded competitor bake-off.'
           : 'Structured data types on the sampled pages. Competitor queries were not run.'}
-        pageNumber={12}
+        pageNumber={typeof pageNumber === 'number' ? pageNumber : undefined}
       />
 
       {/* 2. Analytical Data Page */}
-      <section className="report-page-break p-8 md:p-14 min-h-[960px] flex flex-col justify-between bg-paper-50 border-b-2 border-line">
+      <section
+        id="ch_competitive"
+        data-chapter-id="ch_competitive"
+        className="report-page-break p-8 md:p-14 min-h-[960px] flex flex-col justify-between bg-paper-50 border-b-2 border-line text-ink"
+      >
         <PageHeader
           theme={theme}
           domain={meta.domain}
@@ -227,7 +236,7 @@ export function Chapter04Competitive({
         <PageFooter
           theme={theme}
           domain={meta.domain}
-          pageNumber={13}
+          pageNumber={detailsPageNumber}
           reportId={meta.analysisId}
           dateStr={meta.generatedAt}
         />

@@ -15,7 +15,8 @@ export async function startAnalysis(
   websiteUrl: string,
   maxCrawlPages: number,
   siteType?: string,
-  declaredNotes?: string
+  declaredNotes?: string,
+  targetPillars?: string[]
 ): Promise<AnalysisRun> {
   return api<AnalysisRun>(
     '/api/v1/analyses',
@@ -27,9 +28,21 @@ export async function startAnalysis(
         site_type: siteType || undefined,
         industry: siteType || undefined,
         declared_site_type_notes: declaredNotes || undefined,
+        target_pillars: targetPillars && targetPillars.length > 0 ? targetPillars : undefined,
       }),
     },
     'Could not start the audit',
+  );
+}
+
+export async function runPillar(
+  analysisId: string,
+  pillarKey: string
+): Promise<{ success: boolean; section_id: string; title: string }> {
+  return api(
+    `/api/v1/analyses/${analysisId}/pillars/${pillarKey}/run`,
+    { method: 'POST' },
+    `Could not execute pillar '${pillarKey}'`,
   );
 }
 

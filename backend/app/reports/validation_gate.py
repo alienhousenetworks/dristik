@@ -1045,6 +1045,12 @@ class ValidationGate:
                 setattr(report, field_name, cleaned)
                 repairs_made.append(f"Stripped placeholder evidence tokens from {field_name}.")
 
+        for list_field in ["what_site_gets_right", "what_is_holding_it_back"]:
+            val_list = getattr(report, list_field, []) or []
+            if any(placeholder_pat.search(s) for s in val_list):
+                setattr(report, list_field, [placeholder_pat.sub("", s).strip() for s in val_list])
+                repairs_made.append(f"Stripped placeholder evidence tokens from {list_field}.")
+
         for f in report.findings:
             if placeholder_pat.search(f.title or ""):
                 f.title = placeholder_pat.sub("", f.title).strip()
@@ -1052,16 +1058,40 @@ class ValidationGate:
             if placeholder_pat.search(f.description or ""):
                 f.description = placeholder_pat.sub("", f.description).strip()
                 repairs_made.append(f"Stripped placeholder tokens from finding {f.finding_id} description.")
-            if getattr(f, "evidence_refs", None):
-                clean_refs = [r for r in f.evidence_refs if not re.search(r"^(?:ev|ext)_[xX]{3,}$", str(r), re.I)]
-                if len(clean_refs) != len(f.evidence_refs):
-                    f.evidence_refs = clean_refs
-                    repairs_made.append(f"Removed placeholder evidence refs from finding {f.finding_id}.")
-            if getattr(f, "evidence_ids", None):
-                clean_ids = [r for r in f.evidence_ids if not re.search(r"^(?:ev|ext)_[xX]{3,}$", str(r), re.I)]
-                if len(clean_ids) != len(f.evidence_ids):
-                    f.evidence_ids = clean_ids
-                    repairs_made.append(f"Removed placeholder evidence IDs from finding {f.finding_id}.")
+            if getattr(f, "finding", None) and placeholder_pat.search(f.finding):
+                f.finding = placeholder_pat.sub("", f.finding).strip()
+            if getattr(f, "diagnosis", None) and placeholder_pat.search(f.diagnosis):
+                f.diagnosis = placeholder_pat.sub("", f.diagnosis).strip()
+                repairs_made.append(f"Stripped placeholder tokens from finding {f.finding_id} diagnosis.")
+            if getattr(f, "observed_value", None) and placeholder_pat.search(str(f.observed_value)):
+                f.observed_value = placeholder_pat.sub("", str(f.observed_value)).strip()
+                repairs_made.append(f"Stripped placeholder tokens from finding {f.finding_id} observed_value.")
+            if getattr(f, "recommendation", None) and placeholder_pat.search(f.recommendation):
+                f.recommendation = placeholder_pat.sub("", f.recommendation).strip()
+
+            raw_refs = getattr(f, "evidence_refs", None) or []
+            clean_refs = [
+                r for r in raw_refs
+                if not placeholder_pat.search(str(r)) and str(r).strip() not in ["", "none", "null"]
+            ]
+            if len(clean_refs) != len(raw_refs):
+                f.evidence_refs = clean_refs
+                repairs_made.append(f"Removed placeholder evidence refs from finding {f.finding_id}.")
+
+            raw_ids = getattr(f, "evidence_ids", None) or []
+            clean_ids = [
+                r for r in raw_ids
+                if not placeholder_pat.search(str(r)) and str(r).strip() not in ["", "none", "null"]
+            ]
+            if len(clean_ids) != len(raw_ids):
+                f.evidence_ids = clean_ids
+                repairs_made.append(f"Removed placeholder evidence IDs from finding {f.finding_id}.")
+
+            # Keep evidence_refs and evidence_ids synchronized
+            if f.evidence_refs and not f.evidence_ids:
+                f.evidence_ids = list(f.evidence_refs)
+            elif f.evidence_ids and not f.evidence_refs:
+                f.evidence_refs = list(f.evidence_ids)
 
         for item in (report.roadmap_7_days or []) + (report.roadmap_30_days or []) + (report.roadmap_90_days or []):
             if placeholder_pat.search(item.title or ""):
@@ -1072,6 +1102,10 @@ class ValidationGate:
         for patch in (report.code_patches or []):
             if placeholder_pat.search(patch.explanation or ""):
                 patch.explanation = placeholder_pat.sub("", patch.explanation).strip()
+                repairs_made.append(f"Stripped placeholder tokens from patch {patch.patch_id} explanation.")
+            if placeholder_pat.search(patch.after_snippet or ""):
+                patch.after_snippet = placeholder_pat.sub("", patch.after_snippet).strip()
+                repairs_made.append(f"Stripped placeholder tokens from patch {patch.patch_id} after_snippet.")
 
         # 11c. Quarantine unbacked findings or findings that only possessed placeholder evidence
         clean_backed_findings = []

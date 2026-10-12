@@ -65,6 +65,15 @@ def topological_waves(definitions: Dict[str, AgentDefinition]) -> List[List[str]
     return waves
 
 
+PILLAR_DOMAINS: Dict[str, Set[str]] = {
+    "seo": {"TECHNICAL_SEO", "STRUCTURED_DATA", "CONTENT"},
+    "geo": {"GEO"},
+    "aeo": {"AI_SEARCH", "AEO"},
+    "cro": {"EXPERIENCE", "UX_CONVERSION"},
+}
+CORE_ALWAYS_DOMAINS: Set[str] = {"BUSINESS", "VERIFICATION", "COMPETITOR"}
+
+
 class AgentPool:
     """Creates and runs the full 50-agent specialist workforce."""
 
@@ -102,6 +111,7 @@ class AgentPool:
         progress_cb: ProgressCb = None,
         base_progress: int = 40,
         end_progress: int = 88,
+        active_pillars: Optional[Set[str]] = None,
     ) -> Dict[str, Any]:
         total = max(len(self.agents), 1)
         completed = 0
@@ -110,16 +120,35 @@ class AgentPool:
             "agents_ran": 0,
             "completed": 0,
             "unavailable": 0,
+            "skipped": 0,
             "errors": 0,
             "waves": len(self.waves),
             "results": {},
         }
+
+        # Determine active domains if selective pillars specified
+        normalized_pillars = {p.lower().strip() for p in (active_pillars or set()) if p}
+        allowed_domains: Optional[Set[str]] = None
+        if normalized_pillars and normalized_pillars != {"seo", "geo", "aeo", "cro"}:
+            allowed_domains = set(CORE_ALWAYS_DOMAINS)
+            for p in normalized_pillars:
+                allowed_domains.update(PILLAR_DOMAINS.get(p, set()))
 
         # Limit parallel agent tasks per wave to prevent scheduling bursts
         pool_concurrency = max(2, getattr(settings, "LLM_MAX_CONCURRENCY", 2) * 2)
         sem = asyncio.Semaphore(pool_concurrency)
 
         async def _bounded_run(aid: str) -> Dict[str, Any]:
+            if allowed_domains is not None:
+                defn = SPECIALIST_AGENTS_V3.get(aid)
+                dom = defn.domain if defn else "UNKNOWN"
+                if dom not in allowed_domains:
+                    return {
+                        "agent_id": aid,
+                        "status": "skipped",
+                        "unavailable_reason": f"Pillar excluded (active pillars: {', '.join(sorted(normalized_pillars))})",
+                        "claims": [],
+                    }
             async with sem:
                 return await self._run_one(aid, blackboard)
 
@@ -143,6 +172,8 @@ class AgentPool:
                     summary["agents_ran"] += 1
                     if status == "unavailable":
                         summary["unavailable"] += 1
+                    elif status == "skipped":
+                        summary["skipped"] += 1
                     elif status == "error":
                         summary["errors"] += 1
                     else:
@@ -165,7 +196,7 @@ class AgentPool:
                     )
 
         blackboard.blackboard_state["agent_pool_summary"] = {
-            k: summary[k] for k in ("agents_declared", "agents_ran", "completed", "unavailable", "errors", "waves")
+            k: summary[k] for k in ("agents_declared", "agents_ran", "completed", "unavailable", "skipped", "errors", "waves")
         }
         return summary
 

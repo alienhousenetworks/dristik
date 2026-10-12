@@ -7,6 +7,7 @@ import { PageHeader, PageFooter } from './PageHeaderFooter';
 interface ExecutiveBriefProps {
   theme: ReportTheme;
   report: NormalizedReport;
+  pageNumber?: number | string;
 }
 
 function ratioText(ratio: { numerator: number; denominator: number } | null, empty: string): string {
@@ -86,7 +87,7 @@ function GooglePerformance({ report }: { report: NormalizedReport }) {
   );
 }
 
-export function ExecutiveBrief({ theme, report }: ExecutiveBriefProps) {
+export function ExecutiveBrief({ theme, report, pageNumber = 1 }: ExecutiveBriefProps) {
   const { brief, meta } = report;
   const { keySignals } = brief;
   const ledger = report.scorecard.ledger;
@@ -96,7 +97,11 @@ export function ExecutiveBrief({ theme, report }: ExecutiveBriefProps) {
   const croRow = ledger.find((row) => row.categoryKey === 'UX_CONVERSION');
 
   return (
-    <section className="report-page-break p-8 md:p-14 min-h-[960px] flex flex-col justify-between bg-paper-50 border-b-2 border-line">
+    <section
+      id="ch_brief"
+      data-chapter-id="ch_brief"
+      className="report-page-break p-8 md:p-14 min-h-[960px] flex flex-col justify-between bg-paper-50 border-b-2 border-line text-ink"
+    >
       <PageHeader
         theme={theme}
         domain={meta.domain}
@@ -344,7 +349,7 @@ export function ExecutiveBrief({ theme, report }: ExecutiveBriefProps) {
       <PageFooter
         theme={theme}
         domain={meta.domain}
-        pageNumber={3}
+        pageNumber={pageNumber}
         reportId={meta.analysisId}
         dateStr={meta.generatedAt}
       />

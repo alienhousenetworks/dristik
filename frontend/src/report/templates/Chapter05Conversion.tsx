@@ -8,24 +8,29 @@ import { PageHeader, PageFooter } from './PageHeaderFooter';
 interface Chapter05ConversionProps {
   theme: ReportTheme;
   report: NormalizedReport;
+  pageNumber?: number | string;
+  chapterNumber?: string;
 }
 
 export function Chapter05Conversion({
   theme,
   report,
+  pageNumber,
+  chapterNumber = '05',
 }: Chapter05ConversionProps) {
   const { conversion, meta } = report;
   const copySuite = conversion.characterSafeCopy;
   const headlineWords = countWords(copySuite?.hero_headline);
   const blockWords = countWords(`${copySuite?.hero_headline || ''} ${copySuite?.hero_subhead || ''}`);
   const blockStatus = blockWords >= 40 && blockWords <= 60 ? 'within 40–60' : blockWords < 40 ? 'under 40' : 'over 60';
+  const detailsPageNumber = typeof pageNumber === 'number' ? pageNumber + 1 : pageNumber;
 
   return (
     <>
       {/* 1. Full-Page Chapter Opener */}
       <ChapterOpener
         theme={theme}
-        chapterNumber="05"
+        chapterNumber={chapterNumber}
         subtitle="VISITOR VALUE PROPOSITION &amp; COPY"
         title="Conversion Ergonomics &amp; Production Copy"
         description="Above-the-fold value proposition, automated form screening when a form audit ran, and character counts only when a copy recommendation was generated."
@@ -33,11 +38,15 @@ export function Chapter05Conversion({
         whyThisMatters="Discoverability gains are wasted if visitors encounter ambiguous value propositions, unlabeled lead capture forms, or truncated SERP titles that lower click-through rates."
         howWeMeasuredIt="Recorded hero copy, an automated form-label screen when that audit ran, and character counts on generated recommendations. This is not a WCAG certification."
         whatWasAnalyzed="Hero copy on sampled pages, form labels when a form audit ran, and contradictions recorded by the audit."
-        pageNumber={14}
+        pageNumber={typeof pageNumber === 'number' ? pageNumber : undefined}
       />
 
       {/* 2. Analytical Data Page */}
-      <section className="report-page-break p-8 md:p-14 min-h-[960px] flex flex-col justify-between bg-paper-50 border-b-2 border-line">
+      <section
+        id="ch_conversion"
+        data-chapter-id="ch_conversion"
+        className="report-page-break p-8 md:p-14 min-h-[960px] flex flex-col justify-between bg-paper-50 border-b-2 border-line text-ink"
+      >
         <PageHeader
           theme={theme}
           domain={meta.domain}
@@ -191,7 +200,7 @@ export function Chapter05Conversion({
         <PageFooter
           theme={theme}
           domain={meta.domain}
-          pageNumber={15}
+          pageNumber={detailsPageNumber}
           reportId={meta.analysisId}
           dateStr={meta.generatedAt}
         />

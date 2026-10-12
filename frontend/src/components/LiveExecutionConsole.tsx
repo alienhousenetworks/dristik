@@ -1,6 +1,14 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { AnalysisRun, PipelineGraphState, GraphNode, ActivityEvent } from '../types';
-import { getExecutionGraph, pauseAnalysis, resumeAnalysis, runGraphNode, runGraphSection, getAgentWorkforce } from '../services/api';
+import {
+  getExecutionGraph,
+  pauseAnalysis,
+  resumeAnalysis,
+  runGraphNode,
+  runGraphSection,
+  runPillar,
+  getAgentWorkforce,
+} from '../services/api';
 import { formatMs } from '../lib/format';
 
 interface LiveExecutionConsoleProps {
@@ -16,61 +24,83 @@ interface CanonicalSectionDef {
   node_ids: string[];
 }
 
+export const PILLAR_SECTION_MAP: Record<string, { label: string; color: string; pillarKey: string }> = {
+  sec_seo: { label: 'SEO Pillar', color: 'text-amber-700 bg-amber-500/10 border-amber-500/30', pillarKey: 'seo' },
+  sec_geo: { label: 'GEO Pillar', color: 'text-emerald-700 bg-emerald-500/10 border-emerald-500/30', pillarKey: 'geo' },
+  sec_aeo: { label: 'AEO Pillar', color: 'text-violet-700 bg-violet-500/10 border-violet-500/30', pillarKey: 'aeo' },
+  sec_cro: { label: 'CRO Pillar', color: 'text-rose-700 bg-rose-500/10 border-rose-500/30', pillarKey: 'cro' },
+};
+
 const DEFAULT_SECTIONS: CanonicalSectionDef[] = [
   {
     section_id: 'sec_ingestion',
     title: '1. Ingestion & Multi-Page Crawl',
     description: 'Crawls target domain pages, extracts clean HTML, and populates raw DOM evidence.',
     order: 1,
-    node_ids: ['node_crawl', 'node_dom_extraction'],
-  },
-  {
-    section_id: 'sec_deterministic',
-    title: '2. Deterministic Evidence & External Plane',
-    description: 'Extracts Schema AST, verifies DNS/SSL, TLS, security headers, and CruX performance metrics.',
-    order: 2,
-    node_ids: ['node_dns_ssl_headers', 'node_schema_ld_json'],
+    node_ids: ['node_crawl', 'node_dom_extraction', 'node_dns_ssl_headers'],
   },
   {
     section_id: 'sec_business_identity',
-    title: '3. Business Understanding & Entity Grounding',
+    title: '2. Business Understanding & Entity Grounding',
     description: 'Resolves canonical entity, industry classification, ICP, and value proposition.',
-    order: 3,
+    order: 2,
     node_ids: ['node_entity_resolution', 'node_icp_offer_profile'],
   },
   {
-    section_id: 'sec_specialist_waves',
-    title: '4. Specialist Workforce Waves',
-    description: 'Executes topological specialist workforce across technical, content, CRO, and citability domains.',
-    order: 4,
+    section_id: 'sec_seo',
+    title: '3. Search Engine Optimization (SEO)',
+    description: 'Technical crawlability, indexability, on-page architecture, schema AST, and page rewrites.',
+    order: 3,
     node_ids: [
-      'node_specialist_wave_1',
-      'node_specialist_wave_2',
-      'node_specialist_wave_3',
-      'node_specialist_wave_4',
-      'node_page_intelligence',
+      'node_seo_crawl_indexing',
+      'node_seo_technical_health',
+      'node_seo_onpage_content',
+      'node_seo_schema_ast',
+      'node_seo_page_intelligence',
     ],
   },
   {
-    section_id: 'sec_verification',
-    title: '5. Adversarial Verification & Integrity Gate',
-    description: 'Applies multi-agent adversarial cross-examination and Zero-Fake Evidence integrity gate.',
-    order: 5,
-    node_ids: ['node_adversarial_critic', 'node_integrity_gate'],
+    section_id: 'sec_geo',
+    title: '4. Generative Engine Optimization (GEO)',
+    description: 'Entity knowledge graphs, Wikidata grounding, local/multi-location signals, and brand presence.',
+    order: 4,
+    node_ids: [
+      'node_geo_entity_grounding',
+      'node_geo_local_signals',
+      'node_geo_llm_footprint',
+    ],
   },
   {
-    section_id: 'sec_causal_sim',
-    title: '6. Causal Bottlenecks & AI Search Simulation',
-    description: 'Isolates primary root-cause bottlenecks and tests commercial buyer queries across AI answer engines.',
+    section_id: 'sec_aeo',
+    title: '5. Answer Engine Optimization (AEO)',
+    description: 'AI answer engine citability, conversational query simulation, FAQ schema, and direct answer readiness.',
+    order: 5,
+    node_ids: [
+      'node_aeo_citability_matrix',
+      'node_aeo_qa_readiness',
+      'node_aeo_search_simulation',
+    ],
+  },
+  {
+    section_id: 'sec_cro',
+    title: '6. Conversion Rate Optimization (CRO & UX)',
+    description: 'Funnel friction, primary CTA hierarchy, value proposition clarity, trust proof, and form ergonomics.',
     order: 6,
-    node_ids: ['node_causal_bottlenecks', 'node_ai_search_simulation'],
+    node_ids: [
+      'node_cro_cta_visibility',
+      'node_cro_value_clarity',
+      'node_cro_trust_and_forms',
+    ],
   },
   {
     section_id: 'sec_synthesis',
     title: '7. Executive Synthesis, Scoring & Patches',
-    description: 'Computes honest 3-pillar scores, synthesizes C-suite narrative, and builds production code patch pack.',
+    description: 'Computes honest multi-pillar scores, synthesizes C-suite narrative, and builds production code patch pack.',
     order: 7,
     node_ids: [
+      'node_adversarial_critic',
+      'node_integrity_gate',
+      'node_causal_bottlenecks',
       'node_honest_scoring',
       'node_executive_narrative',
       'node_code_patch_pack',
@@ -80,6 +110,7 @@ const DEFAULT_SECTIONS: CanonicalSectionDef[] = [
 ];
 
 const DEFAULT_NODES_MAP: Record<string, Partial<GraphNode>> = {
+  // --- 1. Ingestion & Multi-Page Crawl ---
   node_crawl: {
     node_id: 'node_crawl',
     section_id: 'sec_ingestion',
@@ -100,26 +131,19 @@ const DEFAULT_NODES_MAP: Record<string, Partial<GraphNode>> = {
   },
   node_dns_ssl_headers: {
     node_id: 'node_dns_ssl_headers',
-    section_id: 'sec_deterministic',
-    section_title: '2. Deterministic Evidence & External Plane',
+    section_id: 'sec_ingestion',
+    section_title: '1. Ingestion & Multi-Page Crawl',
     title: 'DNS, SSL/TLS & Security Headers',
     description: 'Inspects A/AAAA DNS records, SSL certificate issuer, HSTS, CSP, and transport security.',
     agent_name: 'ExternalEvidenceEnricher',
     dependencies: ['node_dom_extraction'],
   },
-  node_schema_ld_json: {
-    node_id: 'node_schema_ld_json',
-    section_id: 'sec_deterministic',
-    section_title: '2. Deterministic Evidence & External Plane',
-    title: 'Schema.org JSON-LD Parser',
-    description: 'Extracts JSON-LD script blocks, parses Schema AST, and validates entity types.',
-    agent_name: 'SchemaAstValidator',
-    dependencies: ['node_dom_extraction'],
-  },
+
+  // --- 2. Business Understanding & Grounding ---
   node_entity_resolution: {
     node_id: 'node_entity_resolution',
     section_id: 'sec_business_identity',
-    section_title: '3. Business Understanding & Entity Grounding',
+    section_title: '2. Business Understanding & Entity Grounding',
     title: 'Brand & Canonical Entity Resolver',
     description: 'Resolves legal and commercial brand identity, official domain, and industry category.',
     agent_name: 'UniversalEntityResolver',
@@ -128,70 +152,161 @@ const DEFAULT_NODES_MAP: Record<string, Partial<GraphNode>> = {
   node_icp_offer_profile: {
     node_id: 'node_icp_offer_profile',
     section_id: 'sec_business_identity',
-    section_title: '3. Business Understanding & Entity Grounding',
+    section_title: '2. Business Understanding & Entity Grounding',
     title: 'ICP & Value Proposition Profiler',
     description: 'Identifies target audience, core buyer pain points, and commercial value propositions.',
     agent_name: 'BusinessUnderstandingOrchestrator',
     dependencies: ['node_entity_resolution'],
   },
-  node_specialist_wave_1: {
-    node_id: 'node_specialist_wave_1',
-    section_id: 'sec_specialist_waves',
-    section_title: '4. Specialist Workforce Waves',
-    title: 'Technical SEO & Crawlability (Wave 1)',
-    description: 'Audits robots.txt, sitemaps, canonicals, status codes, and indexation hygiene.',
+
+  // --- 3. SEO Pillar ---
+  node_seo_crawl_indexing: {
+    node_id: 'node_seo_crawl_indexing',
+    section_id: 'sec_seo',
+    section_title: '3. Search Engine Optimization (SEO)',
+    title: 'Crawlability, Status Codes & Indexation',
+    description: 'Audits robots.txt, XML sitemaps, canonical links, HTTP codes, and redirect chains.',
     agent_name: 'TechnicalSeoSpecialists',
-    dependencies: ['node_schema_ld_json', 'node_icp_offer_profile'],
+    dependencies: ['node_dom_extraction', 'node_entity_resolution'],
   },
-  node_specialist_wave_2: {
-    node_id: 'node_specialist_wave_2',
-    section_id: 'sec_specialist_waves',
-    section_title: '4. Specialist Workforce Waves',
-    title: 'Schema AST & On-Page Content (Wave 2)',
-    description: 'Audits structured data depth, heading hierarchy, meta tags, and content depth.',
-    agent_name: 'OnPageSchemaSpecialists',
-    dependencies: ['node_specialist_wave_1'],
+  node_seo_technical_health: {
+    node_id: 'node_seo_technical_health',
+    section_id: 'sec_seo',
+    section_title: '3. Search Engine Optimization (SEO)',
+    title: 'Core Web Vitals & Transport Health',
+    description: 'Audits LCP, INP, CLS diagnostics, TTFB, asset caching, compression, and rendering.',
+    agent_name: 'PerformanceSecuritySpecialists',
+    dependencies: ['node_seo_crawl_indexing'],
   },
-  node_specialist_wave_3: {
-    node_id: 'node_specialist_wave_3',
-    section_id: 'sec_specialist_waves',
-    section_title: '4. Specialist Workforce Waves',
-    title: 'Conversion & UX Friction (Wave 3)',
-    description: 'Identifies conversion leakages, CTA clarity, value proposition delivery, and trust signals.',
-    agent_name: 'CroUxSpecialists',
-    dependencies: ['node_specialist_wave_1'],
+  node_seo_onpage_content: {
+    node_id: 'node_seo_onpage_content',
+    section_id: 'sec_seo',
+    section_title: '3. Search Engine Optimization (SEO)',
+    title: 'On-Page Hierarchy & Semantic Content',
+    description: 'Audits title tags, meta descriptions, H1-H6 heading trees, and semantic landmarks.',
+    agent_name: 'OnPageContentSpecialists',
+    dependencies: ['node_seo_crawl_indexing'],
   },
-  node_specialist_wave_4: {
-    node_id: 'node_specialist_wave_4',
-    section_id: 'sec_specialist_waves',
-    section_title: '4. Specialist Workforce Waves',
-    title: 'AI Citability & Knowledge Graph (Wave 4)',
-    description: 'Calculates extractability, entity consensus, claims citation index, and LLM readability.',
-    agent_name: 'AiCitabilitySpecialists',
-    dependencies: ['node_specialist_wave_2'],
+  node_seo_schema_ast: {
+    node_id: 'node_seo_schema_ast',
+    section_id: 'sec_seo',
+    section_title: '3. Search Engine Optimization (SEO)',
+    title: 'Schema.org JSON-LD Structured Data',
+    description: 'Extracts JSON-LD script blocks, parses Schema AST, and validates entity graph links.',
+    agent_name: 'SchemaAstValidator',
+    dependencies: ['node_dom_extraction'],
   },
-  node_page_intelligence: {
-    node_id: 'node_page_intelligence',
-    section_id: 'sec_specialist_waves',
-    section_title: '4. Specialist Workforce Waves',
-    title: 'Page Intelligence & Link Graph',
-    description: 'Cross-analyzes page-level templates, internal link centrality, and orphan risks.',
-    agent_name: 'PageIntelligenceWorker',
-    dependencies: ['node_specialist_wave_2'],
+  node_seo_page_intelligence: {
+    node_id: 'node_seo_page_intelligence',
+    section_id: 'sec_seo',
+    section_title: '3. Search Engine Optimization (SEO)',
+    title: 'Page-by-Page SEO & Copywriting Rewrites',
+    description: 'Generates per-URL action reports, title tag upgrades, and character-safe copy rewrites.',
+    agent_name: 'PageIntelligenceAgent',
+    dependencies: ['node_seo_onpage_content'],
   },
+
+  // --- 4. GEO Pillar ---
+  node_geo_entity_grounding: {
+    node_id: 'node_geo_entity_grounding',
+    section_id: 'sec_geo',
+    section_title: '4. Generative Engine Optimization (GEO)',
+    title: 'Wikidata & Entity Knowledge Graph',
+    description: 'Grounds entity identity across Wikidata triples, knowledge panels, and authoritative sources.',
+    agent_name: 'GeoEntityGraphSpecialists',
+    dependencies: ['node_entity_resolution'],
+  },
+  node_geo_local_signals: {
+    node_id: 'node_geo_local_signals',
+    section_id: 'sec_geo',
+    section_title: '4. Generative Engine Optimization (GEO)',
+    title: 'Local Grounding & Regional Authority',
+    description: 'Audits multi-location NAP consistency, GBP signals, and geographic grounding.',
+    agent_name: 'GeoLocalSpecialists',
+    dependencies: ['node_geo_entity_grounding'],
+  },
+  node_geo_llm_footprint: {
+    node_id: 'node_geo_llm_footprint',
+    section_id: 'sec_geo',
+    section_title: '4. Generative Engine Optimization (GEO)',
+    title: 'Generative Citability & Brand Footprint',
+    description: 'Evaluates LLM parsability, semantic chunking, and brand presence in AI models.',
+    agent_name: 'GeoCitabilitySpecialists',
+    dependencies: ['node_geo_entity_grounding'],
+  },
+
+  // --- 5. AEO Pillar ---
+  node_aeo_citability_matrix: {
+    node_id: 'node_aeo_citability_matrix',
+    section_id: 'sec_aeo',
+    section_title: '5. Answer Engine Optimization (AEO)',
+    title: 'AI Answer Citability & Readability Matrix',
+    description: 'Tests AI answer readiness across ChatGPT, Perplexity, Claude, and Gemini.',
+    agent_name: 'AeoCitabilitySpecialists',
+    dependencies: ['node_dom_extraction', 'node_icp_offer_profile'],
+  },
+  node_aeo_qa_readiness: {
+    node_id: 'node_aeo_qa_readiness',
+    section_id: 'sec_aeo',
+    section_title: '5. Answer Engine Optimization (AEO)',
+    title: 'Direct Q&A & Semantic FAQ Readiness',
+    description: 'Audits direct answer sentence density, FAQPage schema markup, and conversational queries.',
+    agent_name: 'AeoFaqSpecialists',
+    dependencies: ['node_aeo_citability_matrix'],
+  },
+  node_aeo_search_simulation: {
+    node_id: 'node_aeo_search_simulation',
+    section_id: 'sec_aeo',
+    section_title: '5. Answer Engine Optimization (AEO)',
+    title: 'Synthetic Commercial Query Simulation',
+    description: 'Simulates realistic commercial buyer inquiries across AI answer engines to measure recommendation share.',
+    agent_name: 'AISearchSimulationEngine',
+    dependencies: ['node_icp_offer_profile', 'node_aeo_citability_matrix'],
+  },
+
+  // --- 6. CRO Pillar ---
+  node_cro_cta_visibility: {
+    node_id: 'node_cro_cta_visibility',
+    section_id: 'sec_cro',
+    section_title: '6. Conversion Rate Optimization (CRO & UX)',
+    title: 'Primary CTA Hierarchy & Friction',
+    description: 'Evaluates primary CTA visibility, above-the-fold prominence, layout distraction, and conversion pathways.',
+    agent_name: 'CroCtaSpecialists',
+    dependencies: ['node_dom_extraction'],
+  },
+  node_cro_value_clarity: {
+    node_id: 'node_cro_value_clarity',
+    section_id: 'sec_cro',
+    section_title: '6. Conversion Rate Optimization (CRO & UX)',
+    title: 'Value Proposition & Commercial Clarity',
+    description: 'Measures 5-second headline comprehension, ICP alignment, offer transparency, and pricing access.',
+    agent_name: 'CroValuePropSpecialists',
+    dependencies: ['node_icp_offer_profile'],
+  },
+  node_cro_trust_and_forms: {
+    node_id: 'node_cro_trust_and_forms',
+    section_id: 'sec_cro',
+    section_title: '6. Conversion Rate Optimization (CRO & UX)',
+    title: 'Social Proof, Trust Proof & Form Usability',
+    description: 'Audits customer testimonials, trust badges, security seals, return policies, and form friction.',
+    agent_name: 'CroTrustFormSpecialists',
+    dependencies: ['node_cro_cta_visibility'],
+  },
+
+  // --- 7. Executive Synthesis & Verification ---
   node_adversarial_critic: {
     node_id: 'node_adversarial_critic',
-    section_id: 'sec_verification',
-    section_title: '5. Adversarial Verification & Integrity Gate',
+    section_id: 'sec_synthesis',
+    section_title: '7. Executive Synthesis, Scoring & Patches',
     title: 'Adversarial Critic Cross-Examination',
     description: 'Challenges finding assumptions, flags potential hallucinations, and cross-checks evidence.',
     agent_name: 'AdversarialCritic',
-    dependencies: ['node_specialist_wave_4'],
+    dependencies: ['node_aeo_citability_matrix'],
   },
   node_integrity_gate: {
     node_id: 'node_integrity_gate',
-    section_id: 'sec_verification',
-    section_title: '5. Adversarial Verification & Integrity Gate',
+    section_id: 'sec_synthesis',
+    section_title: '7. Executive Synthesis, Scoring & Patches',
     title: 'Zero-Fake Evidence Gate & Claim Attestation',
     description: 'Enforces strictly verifiable facts against raw DOM evidence before scoring.',
     agent_name: 'ZeroFakeEvidenceGate',
@@ -199,28 +314,19 @@ const DEFAULT_NODES_MAP: Record<string, Partial<GraphNode>> = {
   },
   node_causal_bottlenecks: {
     node_id: 'node_causal_bottlenecks',
-    section_id: 'sec_causal_sim',
-    section_title: '6. Causal Bottlenecks & AI Search Simulation',
+    section_id: 'sec_synthesis',
+    section_title: '7. Executive Synthesis, Scoring & Patches',
     title: 'Causal Diagnostic Graph & Bottlenecks',
     description: 'Determines upstream root-causes vs downstream symptoms to isolate highest ROI remediations.',
     agent_name: 'CausalEngine',
     dependencies: ['node_integrity_gate'],
   },
-  node_ai_search_simulation: {
-    node_id: 'node_ai_search_simulation',
-    section_id: 'sec_causal_sim',
-    section_title: '6. Causal Bottlenecks & AI Search Simulation',
-    title: 'Live Commercial Query Simulation',
-    description: 'Executes commercial buyer intent queries against live AI answer engines.',
-    agent_name: 'AiAnswerEngineSimulator',
-    dependencies: ['node_causal_bottlenecks'],
-  },
   node_honest_scoring: {
     node_id: 'node_honest_scoring',
     section_id: 'sec_synthesis',
     section_title: '7. Executive Synthesis, Scoring & Patches',
-    title: 'Honest 3-Pillar Scoring Engine',
-    description: 'Calculates un-inflated, reality-grounded scores across Search, Experience, and AI Citability.',
+    title: 'Honest Multi-Pillar Scoring Engine',
+    description: 'Calculates un-inflated, reality-grounded scores across SEO, GEO, AEO, and CRO.',
     agent_name: 'ScoreEngine',
     dependencies: ['node_integrity_gate'],
   },
@@ -251,6 +357,71 @@ const DEFAULT_NODES_MAP: Record<string, Partial<GraphNode>> = {
     agent_name: 'ReportAssembler',
     dependencies: ['node_code_patch_pack'],
   },
+
+  // --- Backward Compatibility Aliases ---
+  node_schema_ld_json: {
+    node_id: 'node_schema_ld_json',
+    section_id: 'sec_seo',
+    section_title: '3. Search Engine Optimization (SEO)',
+    title: 'Schema.org JSON-LD Parser',
+    description: 'Legacy alias for Schema AST structured data parser.',
+    agent_name: 'SchemaAstValidator',
+    dependencies: ['node_dom_extraction'],
+  },
+  node_specialist_wave_1: {
+    node_id: 'node_specialist_wave_1',
+    section_id: 'sec_seo',
+    section_title: '3. Search Engine Optimization (SEO)',
+    title: 'Technical SEO Specialists (Wave 1)',
+    description: 'Legacy alias for Technical SEO specialists.',
+    agent_name: 'TechnicalSeoSpecialists',
+    dependencies: ['node_dom_extraction'],
+  },
+  node_specialist_wave_2: {
+    node_id: 'node_specialist_wave_2',
+    section_id: 'sec_seo',
+    section_title: '3. Search Engine Optimization (SEO)',
+    title: 'On-Page Content & Schema Specialists (Wave 2)',
+    description: 'Legacy alias for On-Page Content specialists.',
+    agent_name: 'OnPageSchemaSpecialists',
+    dependencies: ['node_specialist_wave_1'],
+  },
+  node_specialist_wave_3: {
+    node_id: 'node_specialist_wave_3',
+    section_id: 'sec_cro',
+    section_title: '6. Conversion Rate Optimization (CRO & UX)',
+    title: 'CRO & Experience Specialists (Wave 3)',
+    description: 'Legacy alias for CRO specialists.',
+    agent_name: 'CroUxSpecialists',
+    dependencies: ['node_specialist_wave_1'],
+  },
+  node_specialist_wave_4: {
+    node_id: 'node_specialist_wave_4',
+    section_id: 'sec_geo',
+    section_title: '4. Generative Engine Optimization (GEO)',
+    title: 'GEO & AEO Citability Specialists (Wave 4)',
+    description: 'Legacy alias for Citability specialists.',
+    agent_name: 'AiCitabilitySpecialists',
+    dependencies: ['node_specialist_wave_2'],
+  },
+  node_page_intelligence: {
+    node_id: 'node_page_intelligence',
+    section_id: 'sec_seo',
+    section_title: '3. Search Engine Optimization (SEO)',
+    title: 'Page-Level SEO & Copywriting',
+    description: 'Legacy alias for Page Intelligence rewrites.',
+    agent_name: 'PageIntelligenceAgent',
+    dependencies: ['node_specialist_wave_2'],
+  },
+  node_ai_search_simulation: {
+    node_id: 'node_ai_search_simulation',
+    section_id: 'sec_aeo',
+    section_title: '5. Answer Engine Optimization (AEO)',
+    title: 'AI Answer Engine Simulation',
+    description: 'Legacy alias for AI Search Simulation.',
+    agent_name: 'AISearchSimulationEngine',
+    dependencies: ['node_specialist_wave_4'],
+  },
 };
 
 export function LiveExecutionConsole({ run, onRefreshRun }: LiveExecutionConsoleProps) {
@@ -261,6 +432,7 @@ export function LiveExecutionConsole({ run, onRefreshRun }: LiveExecutionConsole
   const [autoScroll, setAutoScroll] = useState(true);
   const [runningNodeId, setRunningNodeId] = useState<string | null>(null);
   const [runningSectionId, setRunningSectionId] = useState<string | null>(null);
+  const [runningPillar, setRunningPillar] = useState<string | null>(null);
   const [isRunningAll, setIsRunningAll] = useState(false);
   const [nodeActionError, setNodeActionError] = useState<string | null>(null);
   const [isPausing, setIsPausing] = useState(false);
@@ -391,6 +563,21 @@ export function LiveExecutionConsole({ run, onRefreshRun }: LiveExecutionConsole
     }
   };
 
+  const handleRunPillar = async (pillarKey: string) => {
+    setRunningPillar(pillarKey);
+    setNodeActionError(null);
+    try {
+      await runPillar(run.analysis_id, pillarKey);
+      const updated = await getExecutionGraph(run.analysis_id);
+      setGraphState(updated);
+      if (onRefreshRun) onRefreshRun();
+    } catch (err: any) {
+      setNodeActionError(err.message || `Failed to run ${pillarKey.toUpperCase()} pillar`);
+    } finally {
+      setRunningPillar(null);
+    }
+  };
+
   const handleRunAllWorkflow = async () => {
     setIsRunningAll(true);
     setNodeActionError(null);
@@ -459,13 +646,17 @@ export function LiveExecutionConsole({ run, onRefreshRun }: LiveExecutionConsole
   const sectionDetails = sections.map((sec, idx) => {
     const secNodes = sec.node_ids.map(getNode);
     const completedCount = secNodes.filter((n) => n.status === 'completed').length;
+    const skippedCount = secNodes.filter((n) => n.status === 'skipped').length;
     const isSectionAllDone = isCompleted || (secNodes.length > 0 && completedCount === secNodes.length);
+    const isSectionAllSkipped = !isCompleted && secNodes.length > 0 && skippedCount === secNodes.length;
     const hasRunningNode = secNodes.some((n) => n.status === 'running' || runningNodeId === n.node_id);
     const hasFailedNode = secNodes.some((n) => n.status === 'failed');
 
-    let sectionStatus: 'completed' | 'running' | 'failed' | 'waiting' = 'waiting';
+    let sectionStatus: 'completed' | 'running' | 'failed' | 'skipped' | 'waiting' = 'waiting';
     if (isSectionAllDone) {
       sectionStatus = 'completed';
+    } else if (isSectionAllSkipped) {
+      sectionStatus = 'skipped';
     } else if (hasRunningNode) {
       sectionStatus = 'running';
     } else if (hasFailedNode) {
@@ -482,19 +673,21 @@ export function LiveExecutionConsole({ run, onRefreshRun }: LiveExecutionConsole
       section: sec,
       nodes: secNodes,
       completedCount,
+      skippedCount,
       totalCount: secNodes.length,
       isAllDone: isSectionAllDone,
+      isAllSkipped: isSectionAllSkipped,
       status: sectionStatus,
     };
   });
 
   // If no node is currently flagged 'running', locate next expected active section
   if (!activeSectionDef && !isCompleted) {
-    const firstPendingSec = sectionDetails.find((s) => s.status !== 'completed');
+    const firstPendingSec = sectionDetails.find((s) => s.status !== 'completed' && s.status !== 'skipped');
     if (firstPendingSec) {
       activeSectionDef = firstPendingSec.section;
       activeSectionIndex = sections.findIndex((s) => s.section_id === firstPendingSec.section.section_id);
-      activeSubsectionNode = firstPendingSec.nodes.find((n) => n.status !== 'completed') || null;
+      activeSubsectionNode = firstPendingSec.nodes.find((n) => n.status !== 'completed' && n.status !== 'skipped') || null;
     }
   }
 
@@ -585,19 +778,49 @@ export function LiveExecutionConsole({ run, onRefreshRun }: LiveExecutionConsole
             </div>
           </div>
 
-          {/* Run All / Pause / Resume Buttons */}
-          <button
-            type="button"
-            onClick={handleRunAllWorkflow}
-            disabled={isRunningAll || runningSectionId !== null}
-            className="px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-pine hover:bg-pine/90 text-paper-50 flex items-center gap-1.5 cursor-pointer transition-colors shadow-2xs disabled:opacity-50"
-            title="Execute all phases sequentially from Ingestion to Synthesis"
-          >
-            <svg className="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24">
-              <path d="M8 5v14l11-7z" />
-            </svg>
-            <span>{isRunningAll ? 'Executing Workflow...' : 'Run All (All Phases)'}</span>
-          </button>
+          {/* Workflow & Pillar Triggers */}
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <button
+              type="button"
+              onClick={handleRunAllWorkflow}
+              disabled={isRunningAll || runningSectionId !== null || runningPillar !== null}
+              className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-pine hover:bg-pine/90 text-paper-50 flex items-center gap-1.5 cursor-pointer transition-colors shadow-2xs disabled:opacity-50"
+              title="Execute all 7 phases sequentially from Ingestion to Synthesis"
+            >
+              <svg className="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24">
+                <path d="M8 5v14l11-7z" />
+              </svg>
+              <span>{isRunningAll ? 'Executing...' : 'Run All (7 Phases)'}</span>
+            </button>
+
+            {[
+              { key: 'seo', name: 'SEO', color: 'bg-amber-500/10 text-amber-700 hover:bg-amber-500/20 border-amber-500/30' },
+              { key: 'geo', name: 'GEO', color: 'bg-emerald-500/10 text-emerald-700 hover:bg-emerald-500/20 border-emerald-500/30' },
+              { key: 'aeo', name: 'AEO', color: 'bg-violet-500/10 text-violet-700 hover:bg-violet-500/20 border-violet-500/30' },
+              { key: 'cro', name: 'CRO', color: 'bg-rose-500/10 text-rose-700 hover:bg-rose-500/20 border-rose-500/30' },
+            ].map((p) => {
+              const isPillarRunning = runningPillar === p.key;
+              return (
+                <button
+                  key={p.key}
+                  type="button"
+                  onClick={() => handleRunPillar(p.key)}
+                  disabled={isRunningAll || runningSectionId !== null || runningPillar !== null}
+                  className={`px-2.5 py-1.5 rounded-lg text-xs font-bold border transition-colors cursor-pointer flex items-center gap-1 shadow-2xs disabled:opacity-50 ${p.color}`}
+                  title={`Execute only ${p.name} pillar workflow`}
+                >
+                  {isPillarRunning ? (
+                    <span className="w-2 h-2 rounded-full bg-current animate-ping" />
+                  ) : (
+                    <svg className="w-3 h-3 fill-current opacity-70" viewBox="0 0 24 24">
+                      <path d="M8 5v14l11-7z" />
+                    </svg>
+                  )}
+                  <span>{isPillarRunning ? `Running ${p.name}...` : `Run ${p.name}`}</span>
+                </button>
+              );
+            })}
+          </div>
 
           {isRunning && (
             <button
@@ -687,19 +910,30 @@ export function LiveExecutionConsole({ run, onRefreshRun }: LiveExecutionConsole
                 All 7 Phases Verified
               </span>
             ) : activeSectionDef ? (
-              <span
-                className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md font-semibold ${
-                  isRunning
-                    ? 'bg-paper-200 text-ink-700 border border-line'
-                    : isPaused
-                    ? 'bg-warn/10 text-warn border border-warn/30'
-                    : 'bg-paper-200 text-ink-700'
-                }`}
-              >
-                {isRunning && <span className="w-1.5 h-1.5 rounded-full bg-pine animate-ping" />}
-                Phase {activeSectionIndex >= 0 ? activeSectionIndex + 1 : 1} of {sections.length}:{' '}
-                {activeSectionDef.title}
-              </span>
+              <div className="inline-flex items-center gap-1.5 flex-wrap">
+                <span
+                  className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md font-semibold ${
+                    isRunning
+                      ? 'bg-paper-200 text-ink-700 border border-line'
+                      : isPaused
+                      ? 'bg-warn/10 text-warn border border-warn/30'
+                      : 'bg-paper-200 text-ink-700'
+                  }`}
+                >
+                  {isRunning && <span className="w-1.5 h-1.5 rounded-full bg-pine animate-ping" />}
+                  Phase {activeSectionIndex >= 0 ? activeSectionIndex + 1 : 1} of {sections.length}:{' '}
+                  {activeSectionDef.title}
+                </span>
+                {PILLAR_SECTION_MAP[activeSectionDef.section_id] && (
+                  <span
+                    className={`text-[10px] font-mono font-bold uppercase tracking-wide px-2 py-0.5 rounded-md border ${
+                      PILLAR_SECTION_MAP[activeSectionDef.section_id].color
+                    }`}
+                  >
+                    {PILLAR_SECTION_MAP[activeSectionDef.section_id].label}
+                  </span>
+                )}
+              </div>
             ) : (
               <span className="text-ink-600 font-medium">Ready</span>
             )}
@@ -797,10 +1031,14 @@ export function LiveExecutionConsole({ run, onRefreshRun }: LiveExecutionConsole
           </div>
 
           <div className="relative border-l-2 border-line/80 ml-4 sm:ml-5 pl-5 sm:pl-7 space-y-5">
-            {sectionDetails.map(({ section, nodes: secNodes, completedCount, totalCount, isAllDone, status }, sIdx) => {
+            {sectionDetails.map(({ section, nodes: secNodes, completedCount, skippedCount, totalCount, isAllDone, status }, sIdx) => {
               const isSectionRunning = status === 'running';
               const isSectionFailed = status === 'failed';
+              const isSectionSkipped = status === 'skipped';
               const isExpanded = expandedSections[section.section_id] ?? (isSectionRunning || sIdx === 0);
+              const pillarMeta = PILLAR_SECTION_MAP[section.section_id];
+              const isPillarExecuting = pillarMeta && runningPillar === pillarMeta.pillarKey;
+              const isThisSectionRunning = runningSectionId === section.section_id || isPillarExecuting;
 
               let phaseIcon = (
                 <span className="w-7 h-7 rounded-full bg-paper-200 border-2 border-line text-ink-600 text-xs font-mono font-bold flex items-center justify-center -left-[35px] sm:-left-[43px] absolute bg-card shadow-2xs">
@@ -812,6 +1050,12 @@ export function LiveExecutionConsole({ run, onRefreshRun }: LiveExecutionConsole
                 phaseIcon = (
                   <span className="w-7 h-7 rounded-full bg-good/10 text-paper-50 border-2 border-good/30 text-xs font-bold flex items-center justify-center -left-[35px] sm:-left-[43px] absolute shadow-2xs">
                     ✓
+                  </span>
+                );
+              } else if (isSectionSkipped) {
+                phaseIcon = (
+                  <span className="w-7 h-7 rounded-full bg-paper-200/60 text-ink-400 border-2 border-line/70 text-xs font-mono font-bold flex items-center justify-center -left-[35px] sm:-left-[43px] absolute bg-card shadow-2xs">
+                    —
                   </span>
                 );
               } else if (isSectionRunning) {
@@ -836,6 +1080,8 @@ export function LiveExecutionConsole({ run, onRefreshRun }: LiveExecutionConsole
                       ? 'border-line ring-1 ring-line'
                       : isAllDone
                       ? 'border-good/30'
+                      : isSectionSkipped
+                      ? 'border-line/60 opacity-90'
                       : 'border-line'
                   }`}
                 >
@@ -848,6 +1094,13 @@ export function LiveExecutionConsole({ run, onRefreshRun }: LiveExecutionConsole
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-sans font-bold text-sm text-ink">{section.title}</span>
+                        {pillarMeta && (
+                          <span
+                            className={`text-[10px] font-mono font-bold uppercase tracking-wider px-2 py-0.5 rounded-md border ${pillarMeta.color}`}
+                          >
+                            {pillarMeta.label}
+                          </span>
+                        )}
                         {isSectionRunning && (
                           <span className="text-[10px] font-mono font-semibold text-ink-700 bg-paper-200 px-2 py-0.5 rounded-md border border-line flex items-center gap-1">
                             <span className="w-1.5 h-1.5 rounded-full bg-pine animate-ping" />
@@ -859,7 +1112,12 @@ export function LiveExecutionConsole({ run, onRefreshRun }: LiveExecutionConsole
                             Completed
                           </span>
                         )}
-                        {!isAllDone && !isSectionRunning && (
+                        {isSectionSkipped && (
+                          <span className="text-[10px] font-mono font-semibold text-ink-500 bg-paper-200/70 px-2 py-0.5 rounded-md border border-line/60">
+                            Skipped (Selective Run)
+                          </span>
+                        )}
+                        {!isAllDone && !isSectionRunning && !isSectionSkipped && (
                           <span className="text-[10px] font-mono text-ink-400 bg-paper-200/60 px-2 py-0.5 rounded-md">
                             Queued
                           </span>
@@ -873,33 +1131,41 @@ export function LiveExecutionConsole({ run, onRefreshRun }: LiveExecutionConsole
                         type="button"
                         onClick={(e) => {
                           e.stopPropagation();
-                          handleRunSection(section.section_id);
+                          if (pillarMeta) {
+                            handleRunPillar(pillarMeta.pillarKey);
+                          } else {
+                            handleRunSection(section.section_id);
+                          }
                         }}
-                        disabled={isSectionRunning || runningSectionId === section.section_id || isRunningAll}
+                        disabled={isSectionRunning || isThisSectionRunning || isRunningAll}
                         className="px-2.5 py-1 text-xs font-semibold bg-paper-200 hover:bg-pine hover:text-white text-ink border border-line rounded-md transition-colors cursor-pointer flex items-center gap-1.5 shadow-2xs disabled:opacity-50"
-                        title={`Execute all sub-phases in ${section.title}`}
+                        title={pillarMeta ? `Execute only ${pillarMeta.label} workflow` : `Execute all sub-phases in ${section.title}`}
                       >
                         <svg className="w-3 h-3 text-pine group-hover:text-white" fill="currentColor" viewBox="0 0 24 24">
                           <path d="M8 5v14l11-7z" />
                         </svg>
                         <span>
-                          {runningSectionId === section.section_id
-                            ? 'Running Phase...'
+                          {isThisSectionRunning
+                            ? pillarMeta ? `Running ${pillarMeta.label}...` : 'Running Phase...'
                             : isAllDone
-                            ? 'Re-run Phase'
-                            : 'Run Phase'}
+                            ? pillarMeta ? `Re-run ${pillarMeta.label}` : 'Re-run Phase'
+                            : isSectionSkipped
+                            ? pillarMeta ? `Run ${pillarMeta.label}` : 'Run Phase'
+                            : pillarMeta ? `Run ${pillarMeta.label}` : 'Run Phase'}
                         </span>
                       </button>
                       <span
                         className={`text-xs font-mono px-2 py-0.5 rounded-md font-medium ${
                           isAllDone
                             ? 'bg-good/10 text-good border border-good/30'
+                            : isSectionSkipped
+                            ? 'bg-paper-200/70 text-ink-500 border border-line/60'
                             : isSectionRunning
                             ? 'bg-paper-200 text-ink-700 border border-line'
                             : 'bg-paper-200 text-ink-600'
                         }`}
                       >
-                        {completedCount} / {totalCount} Done
+                        {isSectionSkipped ? `${skippedCount} Skipped` : `${completedCount} / ${totalCount} Done`}
                       </span>
                       <span className="text-ink-400 text-xs font-mono">{isExpanded ? '▲' : '▼'}</span>
                     </div>
@@ -912,7 +1178,8 @@ export function LiveExecutionConsole({ run, onRefreshRun }: LiveExecutionConsole
                         const isNodeRunning = runningNodeId === node.node_id || node.status === 'running';
                         const isNodeCompleted = isCompleted || node.status === 'completed';
                         const isNodeFailed = node.status === 'failed';
-                        const canRun = node.can_run_separately && !isNodeRunning;
+                        const isNodeSkipped = !isCompleted && node.status === 'skipped';
+                        const canRun = (node.can_run_separately || isNodeSkipped || isNodeCompleted) && !isNodeRunning;
 
                         let subStatusBadge = (
                           <span className="text-[10px] font-mono text-ink-400 bg-paper-200/50 px-2 py-0.5 rounded">
@@ -936,6 +1203,12 @@ export function LiveExecutionConsole({ run, onRefreshRun }: LiveExecutionConsole
                           subStatusBadge = (
                             <span className="text-[10px] font-mono text-bad bg-bad/10 px-2 py-0.5 rounded border border-bad/20 font-semibold">
                               ✕ Failed
+                            </span>
+                          );
+                        } else if (isNodeSkipped) {
+                          subStatusBadge = (
+                            <span className="text-[10px] font-mono text-ink-500 bg-paper-200/60 px-2 py-0.5 rounded border border-line/50">
+                              Skipped (Selective Run)
                             </span>
                           );
                         } else if (canRun) {
@@ -1012,7 +1285,7 @@ export function LiveExecutionConsole({ run, onRefreshRun }: LiveExecutionConsole
                                   <svg className="w-3 h-3 text-ink-700" fill="currentColor" viewBox="0 0 24 24">
                                     <path d="M8 5v14l11-7z" />
                                   </svg>
-                                  <span>{isNodeCompleted ? 'Re-run' : 'Run step'}</span>
+                                  <span>{isNodeCompleted ? 'Re-run' : isNodeSkipped ? 'Run step' : 'Run step'}</span>
                                 </button>
                               ) : isNodeRunning ? (
                                 <span className="text-xs font-mono text-ink-700 flex items-center gap-1">

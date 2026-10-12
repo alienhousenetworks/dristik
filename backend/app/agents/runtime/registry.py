@@ -123,7 +123,7 @@ SPECIALIST_AGENTS_V3: Dict[str, AgentDefinition] = {
         allowed_models=["deterministic", "fast_slm"],
         token_budget=2000,
         risk_level="low",
-        timeout_sec=15,
+        timeout_sec=30,
         required_evidence=["canonical_url", "meta_robots", "x_robots_tag"]
     ),
     "seo.html.v3": AgentDefinition(
