@@ -492,6 +492,137 @@ class SectionReportGenerator:
             padding: 12px 14px;
             margin: 8px 0 16px;
         }}
+        .agent-consulting-dossier {{
+            background: #ffffff;
+            border: 1px solid #cbd5e1;
+            border-left: 4px solid #0284c7;
+            border-radius: 6px;
+            padding: 16px 18px;
+            margin: 14px 0 20px;
+            page-break-inside: avoid;
+        }}
+        .agent-header-strip {{
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid #e2e8f0;
+            padding-bottom: 10px;
+            margin-bottom: 14px;
+        }}
+        .agent-badge {{
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }}
+        .agent-id-tag {{
+            font-family: monospace;
+            font-size: 10px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            background: #0f172a;
+            color: #f8fafc;
+            padding: 3px 8px;
+            border-radius: 3px;
+        }}
+        .agent-name {{
+            font-size: 13px;
+            color: #0f172a;
+        }}
+        .agent-role-title {{
+            font-size: 11px;
+            color: #64748b;
+            font-weight: 500;
+        }}
+        .consulting-section {{
+            margin-bottom: 14px;
+        }}
+        .consulting-heading {{
+            font-size: 13px;
+            font-weight: 700;
+            color: #0f172a;
+            margin: 0 0 6px;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }}
+        .consulting-narrative {{
+            font-size: 12px;
+            line-height: 1.6;
+            color: #334155;
+            margin: 0;
+        }}
+        .consulting-grid {{
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+            margin-bottom: 14px;
+        }}
+        .consulting-col {{
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 4px;
+            padding: 12px;
+        }}
+        .consulting-subheading {{
+            font-size: 11px;
+            font-weight: 700;
+            color: #0f172a;
+            margin: 0 0 6px;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }}
+        .consulting-text {{
+            font-size: 11px;
+            line-height: 1.5;
+            color: #475569;
+            margin: 0 0 6px;
+        }}
+        .code-fix-block, .verification-block {{
+            background: #0f172a;
+            color: #e2e8f0;
+            border-radius: 4px;
+            padding: 8px 10px;
+            font-family: monospace;
+            font-size: 10px;
+            line-height: 1.4;
+            overflow-x: auto;
+            word-break: break-word;
+        }}
+        .code-fix-block code, .verification-block code {{
+            color: #38bdf8;
+            font-family: monospace;
+        }}
+        .chapter-empirical-evidence {{
+            margin-top: 14px;
+            border-top: 1px solid #e2e8f0;
+            padding-top: 12px;
+        }}
+        .evidence-table-title {{
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: #0f172a;
+            margin: 0 0 8px;
+        }}
+        .sub-index-ledger-header {{
+            margin: 22px 0 8px;
+            padding-bottom: 4px;
+            border-bottom: 1px solid #cbd5e1;
+        }}
+        .sub-index-ledger-header h5 {{
+            font-size: 13px;
+            font-weight: 700;
+            color: #0f172a;
+            margin: 0;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }}
+        .ledger-desc {{
+            font-size: 11px;
+            color: #64748b;
+            margin: 2px 0 0;
+        }}
         .sources-kicker, .chart-title {{
             font-family: monospace;
             font-size: 10px;

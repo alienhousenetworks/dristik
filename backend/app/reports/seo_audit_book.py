@@ -13,6 +13,11 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from app.reports.seo_chapter_visuals import chapter_panel, evidence_mix_chart
+from app.reports.seo_chapter_agentic_audit import (
+    generate_chapter_narrative,
+    generate_chapter_data_table,
+    get_chapter_agent,
+)
 
 _INDEX_PATH = Path(__file__).with_name("seo_audit_index.json")
 _STOP = {
@@ -1629,6 +1634,64 @@ def _stored_narrative(report: Any, name: str) -> str:
     return value
 
 
+def _chapter_agent_consultation_card(book: _Book, number: str, section: Dict[str, Any], findings: List[Any]) -> str:
+    narrative = generate_chapter_narrative(book, number, section, findings)
+    data_table = generate_chapter_data_table(book, number)
+    
+    table_block = f"""
+    <div class="chapter-empirical-evidence">
+        <h5 class="evidence-table-title">Empirical Evidence &amp; Telemetry Matrix</h5>
+        {data_table}
+    </div>
+    """ if data_table else ""
+    
+    return f"""
+    <div class="agent-consulting-dossier">
+        <div class="agent-header-strip">
+            <div class="agent-badge">
+                <span class="agent-id-tag">{_esc(narrative['agent_id'])}</span>
+                <strong class="agent-name">{_esc(narrative['agent_name'])}</strong>
+            </div>
+            <span class="agent-role-title">{_esc(narrative['agent_role'])}</span>
+        </div>
+        
+        <div class="consulting-section diagnostic-block">
+            <h5 class="consulting-heading">Executive Diagnostic Review &amp; Strategy</h5>
+            <p class="consulting-narrative">{_esc(narrative['diagnostic_overview'])}</p>
+        </div>
+        
+        <div class="consulting-grid">
+            <div class="consulting-col">
+                <h5 class="consulting-subheading">Technical &amp; Architectural Mechanics</h5>
+                <p class="consulting-text">{_esc(narrative['technical_mechanics'])}</p>
+            </div>
+            <div class="consulting-col">
+                <h5 class="consulting-subheading">Root Cause &amp; Business Impact Risk</h5>
+                <p class="consulting-text"><strong>Root Cause:</strong> {_esc(narrative['root_cause_analysis'])}</p>
+                <p class="consulting-text"><strong>Search Risk:</strong> {_esc(narrative['business_risk'])}</p>
+            </div>
+        </div>
+        
+        <div class="consulting-grid">
+            <div class="consulting-col">
+                <h5 class="consulting-subheading">Prescriptive Engineering &amp; Content Fix</h5>
+                <div class="code-fix-block">
+                    <code>{_esc(narrative['prescriptive_fix'])}</code>
+                </div>
+            </div>
+            <div class="consulting-col">
+                <h5 class="consulting-subheading">Post-Fix Verification &amp; Regression Testing</h5>
+                <div class="verification-block">
+                    <code>{_esc(narrative['verification_protocol'])}</code>
+                </div>
+            </div>
+        </div>
+        
+        {table_block}
+    </div>
+    """
+
+
 def render_seo_audit_book(report: Any) -> str:
     """Render sections 01–55 and appendices A–O as evidence chapters."""
     payload = json.loads(_INDEX_PATH.read_text(encoding="utf-8"))
@@ -1733,6 +1796,7 @@ def render_seo_audit_book(report: Any) -> str:
                     "</article>"
                 )
 
+            agent_card = _chapter_agent_consultation_card(book, number, section, section_findings)
             blocks.append(
                 f"<section class=\"seo-section\" id=\"seo-{_esc(number)}\">"
                 f"<p class=\"part-label\">Part {_esc(section['part'])} — {_esc(part_titles.get(section['part'], ''))}</p>"
@@ -1740,6 +1804,9 @@ def render_seo_audit_book(report: Any) -> str:
                 f"<p class=\"status\">{_esc(_LABEL.get(status, 'Not tested'))} · {_esc(book.sample)}</p>"
                 f"<p class=\"section-summary-lead\">{_esc(summary)}</p>"
                 f"{chapter_panel(book, number, line_codes)}"
+                f"{agent_card}"
+                '<div class="sub-index-ledger-header"><h5>Sub-Index Evidence &amp; Verification Ledger</h5>'
+                f'<p class="ledger-desc">Deterministic evaluation of each taxonomy parameter under crawled conditions.</p></div>'
                 '<p class="sources-kicker">Sub-index evidence</p>'
                 f"{''.join(checks_html)}"
                 "</section>"

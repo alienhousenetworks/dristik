@@ -166,6 +166,77 @@ export function AuditIndex({
                       lineStatuses={(section.auditedChecks || []).map((check) => check.status)}
                     />
 
+                    {/* Specialist Agent Consultation Dossier */}
+                    {section.analysis && (
+                      <div className="mt-3 border border-line bg-paper p-3.5 rounded">
+                        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line pb-2 mb-2.5">
+                          <div className="flex items-center gap-2">
+                            <span className="font-mono text-[10px] font-bold bg-ink text-paper px-2 py-0.5 rounded">
+                              {section.analysis.agentId}
+                            </span>
+                            <span className="text-xs font-semibold text-ink">
+                              {section.analysis.agentName}
+                            </span>
+                          </div>
+                          <span className="font-mono text-[10px] uppercase tracking-wider text-ink-500 font-bold">
+                            Lead Specialist Review
+                          </span>
+                        </div>
+
+                        <div className="space-y-2 text-xs">
+                          <div>
+                            <span className="font-mono text-[10px] uppercase font-bold text-ink-500 block mb-0.5">
+                              Diagnostic Assessment
+                            </span>
+                            <p className="text-ink-800 leading-relaxed">
+                              {section.analysis.executiveSummary}
+                            </p>
+                          </div>
+
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 pt-1">
+                            <div className="bg-paper-50 border border-line p-2 rounded">
+                              <span className="font-mono text-[10px] uppercase font-bold text-ink-500 block mb-0.5">
+                                Technical Mechanics
+                              </span>
+                              <p className="text-ink-700 leading-relaxed">
+                                {section.analysis.technicalMechanics}
+                              </p>
+                            </div>
+                            <div className="bg-paper-50 border border-line p-2 rounded">
+                              <span className="font-mono text-[10px] uppercase font-bold text-ink-500 block mb-0.5">
+                                Root Cause &amp; Risk
+                              </span>
+                              <p className="text-ink-700 leading-relaxed">
+                                <strong className="text-ink">Cause:</strong> {section.analysis.rootCause}
+                              </p>
+                              <p className="mt-1 text-ink-700 leading-relaxed">
+                                <strong className="text-ink">Risk:</strong> {section.analysis.businessImpact}
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 pt-1">
+                            <div className="bg-paper-50 border border-line p-2 rounded">
+                              <span className="font-mono text-[10px] uppercase font-bold text-ink-500 block mb-0.5">
+                                Prescriptive Engineering Fix
+                              </span>
+                              <code className="font-mono text-[11px] text-ink block break-words">
+                                {section.analysis.remediation}
+                              </code>
+                            </div>
+                            <div className="bg-paper-50 border border-line p-2 rounded">
+                              <span className="font-mono text-[10px] uppercase font-bold text-ink-500 block mb-0.5">
+                                Verification Protocol
+                              </span>
+                              <code className="font-mono text-[11px] text-ink block break-words">
+                                {section.analysis.verificationMethod}
+                              </code>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
                     {/* Verified Empirical Findings */}
                     {section.findings.length > 0 && (
                       <div className="mt-3 space-y-1.5">

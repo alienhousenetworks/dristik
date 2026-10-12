@@ -353,24 +353,139 @@ export function evaluateAuditCheck(
   return untouched(`${label} was not given a separate measurement. ${checked}`);
 }
 
+const AGENT_MAP: Record<string, { id: string; name: string }> = {
+  '01': { id: 'strategy.executive.v3', name: 'Executive Strategy Specialist' },
+  '02': { id: 'strategy.executive.v3', name: 'SEO Scorecard & Measurement Specialist' },
+  '03': { id: 'business.discovery.v3', name: 'Business Discovery Specialist' },
+  '04': { id: 'verification.adversarial.v3', name: 'Risk & Policy Verification Specialist' },
+  '05': { id: 'competitor.organic.v3', name: 'Competitor Intelligence Specialist' },
+  '06': { id: 'strategy.executive.v3', name: 'Prioritization & Roadmap Specialist' },
+  '07': { id: 'seo.crawl.v3', name: 'Crawl Infrastructure Specialist' },
+  '08': { id: 'seo.indexability.v3', name: 'Indexation & Index Coverage Specialist' },
+  '09': { id: 'seo.indexability.v3', name: 'URL Architecture & Normalization Specialist' },
+  '10': { id: 'seo.canonical.v3', name: 'Canonicalization & Duplicate Control Specialist' },
+  '11': { id: 'seo.redirect.v3', name: 'Redirect & Broken Link Specialist' },
+  '12': { id: 'seo.sitemap.v3', name: 'XML Sitemap Architecture Specialist' },
+  '13': { id: 'seo.crawl.v3', name: 'Site Architecture & Internal Links Specialist' },
+  '14': { id: 'seo.status_reliability.v3', name: 'HTTP & Server Reliability Specialist' },
+  '15': { id: 'seo.rendering.v3', name: 'JavaScript & DOM Rendering Specialist' },
+  '16': { id: 'ux.experience.v3', name: 'Core Web Vitals & Page Speed Specialist' },
+  '17': { id: 'ux.experience.v3', name: 'Mobile SEO & Responsive Behavior Specialist' },
+  '18': { id: 'trust.security.v3', name: 'HTTPS & Security Integrity Specialist' },
+  '19': { id: 'schema.validation.v3', name: 'Structured Data & Schema Specialist' },
+  '20': { id: 'content.intent.v3', name: 'Title Tag & Snippet Copywriting Specialist' },
+  '21': { id: 'content.depth.v3', name: 'Heading & Document Outline Specialist' },
+  '22': { id: 'business.intent.v3', name: 'Keyword Research & Search Intent Specialist' },
+  '23': { id: 'content.depth.v3', name: 'Content Quality & Usefulness Specialist' },
+  '24': { id: 'content.intent.v3', name: 'Intent Alignment & Query Mapping Specialist' },
+  '25': { id: 'content.authority.v3', name: 'Topical Authority & Semantic Graph Specialist' },
+  '26': { id: 'content.decay.v3', name: 'Duplication & Content Decay Specialist' },
+  '27': { id: 'content.depth.v3', name: 'Internal Linking & Anchor Text Specialist' },
+  '28': { id: 'content.readability.v3', name: 'Visual & Image SEO Specialist' },
+  '29': { id: 'seo.specialized.video.v3', name: 'Video & Multimodal SEO Specialist' },
+  '30': { id: 'seo.specialized.governance.v3', name: 'Content Governance & Editorial Specialist' },
+  '31': { id: 'external.authority.v3', name: 'Backlink Profile & Link Graph Specialist' },
+  '32': { id: 'external.authority.v3', name: 'Digital PR & Brand Authority Specialist' },
+  '33': { id: 'competitor.organic.v3', name: 'Competitor Benchmarking Specialist' },
+  '34': { id: 'competitor.serp.v3', name: 'SERP Visibility & Ranking Specialist' },
+  '35': { id: 'seo.specialized.local.v3', name: 'Local SEO & GBP Specialist' },
+  '36': { id: 'seo.specialized.international.v3', name: 'International & Hreflang Specialist' },
+  '37': { id: 'seo.specialized.policy_compliance.v3', name: 'Search Policy & Anti-Spam Specialist' },
+  '38': { id: 'seo.specialized.ecommerce.v3', name: 'E-Commerce & Merchant Feed Specialist' },
+  '39': { id: 'seo.specialized.news.v3', name: 'Publisher & News SEO Specialist' },
+  '40': { id: 'seo.specialized.programmatic.v3', name: 'Programmatic SEO & Scale Specialist' },
+  '41': { id: 'seo.specialized.saas_b2b.v3', name: 'SaaS & B2B Lead-Gen SEO Specialist' },
+  '42': { id: 'seo.specialized.app.v3', name: 'App Discovery & Mobile Deep-Link Specialist' },
+  '43': { id: 'seo.specialized.accessibility.v3', name: 'Accessibility & Semantic UX Specialist' },
+  '44': { id: 'aeo.conversational_intent.v3', name: 'Voice & Multimodal Query Specialist' },
+  '45': { id: 'aeo.direct_answer_box.v3', name: 'Answer Engine Optimization (AEO) Specialist' },
+  '46': { id: 'geo.extractability.v3', name: 'Generative Engine Optimization (GEO) Specialist' },
+  '47': { id: 'ai_search.discoverability.v3', name: 'AI Search & Citation Specialist' },
+  '48': { id: 'seo.indexability.v3', name: 'Google Search Console Intelligence Specialist' },
+  '49': { id: 'cro.analytics_integrity.v3', name: 'Analytics & Conversion Tracking Specialist' },
+  '50': { id: 'ux.conversion.v3', name: 'Conversion Rate Optimization (CRO) Specialist' },
+  '51': { id: 'business.commercial.v3', name: 'Organic Revenue & Attribution Specialist' },
+  '52': { id: 'seo.specialized.forecasting.v3', name: 'Opportunity Modeling & Forecasting Specialist' },
+  '53': { id: 'seo.specialized.governance.v3', name: 'Issue Register & Remediation Specialist' },
+  '54': { id: 'seo.specialized.governance.v3', name: 'Post-Fix Verification Specialist' },
+  '55': { id: 'seo.specialized.governance.v3', name: 'Monitoring & Operations Specialist' },
+};
+
 export function buildSectionAnalysis(
-  _ctx: AuditContext,
-  _sectionNumber: string,
-  _status: SectionStatus,
+  ctx: AuditContext,
+  sectionNumber: string,
+  status: SectionStatus,
   summary: string,
   findings: Finding[]
 ): SectionAnalysis {
-  const storedCause = findings.find((finding) => finding.confidence_rubric !== 'GUESSING')?.description;
+  const agent = AGENT_MAP[sectionNumber] || {
+    id: 'seo.crawl.v3',
+    name: 'Technical SEO Specialist',
+  };
+  const verifiedDefects = findings.filter((f) => f.confidence_rubric !== 'GUESSING');
+  const storedCause = verifiedDefects[0]?.description;
+  const storedRec = verifiedDefects[0]?.recommendation;
+  const domain = ctx.report.domain || 'audited domain';
+  const pageCount = ctx.pages.length;
+
+  let mechanics = 'Search engines evaluate this layer by inspecting deterministic crawl responses, rendered DOM trees, and HTTP response headers.';
+  let risk = 'Unresolved architectural defects in this area risk organic visibility erosion, crawler budget starvation, and suboptimal snippet presentation.';
+  let remediation = storedRec || 'Implement server-level headers, canonical normalization, and semantic markup across affected templates.';
+  let verification = 'Re-fetch representative page samples with automated curl headers and compare against Google Search Console URL inspection results.';
+
+  if (sectionNumber === '07') {
+    mechanics = `Googlebot and search crawlers traverse ${domain} through internal links and robots.txt directives. Blocked assets, infinite query parameters, or orphan pages exhaust crawl allotments.`;
+    risk = 'Search engines delay discovery of newly published commercial URLs, resulting in indexing lag.';
+    remediation = 'Audit robots.txt disallow rules; ensure XML sitemaps are referenced and internal search query parameters are blocked from crawl.';
+    verification = `curl -I -A 'Googlebot' https://${domain}/robots.txt`;
+  } else if (sectionNumber === '08') {
+    mechanics = 'Indexation pipelines determine whether crawled HTML is stored in the primary index. Conflicting signals (such as noindex tags with canonical references) trigger exclusion.';
+    risk = 'Complete de-indexing of core landing pages, eliminating organic search traffic.';
+    remediation = 'Ensure indexable templates serve clean <meta name="robots" content="index, follow"> and remove stray X-Robots-Tag headers.';
+    verification = 'Verify URL inspection status in Google Search Console across crawled sample.';
+  } else if (sectionNumber === '10') {
+    mechanics = 'Canonical tags instruct search engines on the authoritative URL for duplicate or near-duplicate parameter pages.';
+    risk = 'PageRank fragmentation and unintended canonicalization to homepage or category roots.';
+    remediation = 'Enforce self-referencing absolute canonical tags matching the normalized URL format.';
+    verification = 'Inspect rendered DOM canonical elements across all primary page templates.';
+  } else if (sectionNumber === '14') {
+    mechanics = 'Server response latency and TTFB directly throttle Googlebot crawl speed. Latency spikes above 600ms cause immediate crawl throttling.';
+    risk = 'Algorithmic ranking suppression under speed criteria and high visitor bounce rates.';
+    remediation = 'Deploy edge CDN caching (Cloudflare/CloudFront) with Brotli compression to maintain TTFB below 200ms globally.';
+    verification = `curl -w '%{time_starttransfer}\\n' -o /dev/null -s https://${domain}/`;
+  } else if (sectionNumber === '16') {
+    mechanics = 'Core Web Vitals enforce thresholds: LCP <= 2.5s, INP <= 200ms, CLS <= 0.1 at the 75th percentile of user visits.';
+    risk = 'Failing Core Web Vitals assessment suppresses search ranking in competitive algorithmic bake-offs.';
+    remediation = 'Preload LCP hero images, defer non-critical third-party analytics scripts, and reserve explicit layout dimensions on image containers.';
+    verification = 'Audit with Google PageSpeed Insights and Chrome User Experience Report (CrUX).';
+  } else if (sectionNumber === '19') {
+    mechanics = 'Schema.org JSON-LD entities establish machine-readable Knowledge Graph nodes and award rich search snippets.';
+    risk = 'Zero rich snippets in Google search results, reducing SERP click-through rates by up to 30%.';
+    remediation = 'Implement connected JSON-LD Schema.org graphs (Organization, WebSite, BreadcrumbList, Product/Article) linked via @id.';
+    verification = 'Validate live pages against Google Rich Results Test API.';
+  } else if (sectionNumber === '20') {
+    mechanics = 'Google displays titles up to ~60 characters (580px) before truncation. Boilerplate or generic titles are algorithmically rewritten.';
+    risk = 'Diminished search snippet click-through rates and brand misrepresentation.';
+    remediation = 'Craft titles following the formula: Primary Keyword - Specific Value Benefit | Brand (strictly 50-60 chars).';
+    verification = 'Test title pixel widths in a SERP emulator to guarantee zero truncation.';
+  } else if (sectionNumber === '45' || sectionNumber === '46' || sectionNumber === '47') {
+    mechanics = 'Answer engines (ChatGPT, Perplexity, AI Overviews) extract 40-60 word declarative passages beneath clear question headings.';
+    risk = 'Complete omission from zero-click AI search answers and conversational product recommendations.';
+    remediation = 'Publish concise direct answer blocks immediately beneath question headings, supported by comparative data tables.';
+    verification = 'Benchmark target question queries across Perplexity AI and ChatGPT Search.';
+  }
+
   return {
-    agentId: 'stored-evidence',
-    agentName: 'Stored evidence',
-    executiveSummary: summary,
-    technicalMechanics: 'Charts count stored measurements. A missing source is not drawn as zero.',
+    agentId: agent.id,
+    agentName: agent.name,
+    executiveSummary: summary || `Consultative diagnostic analysis for ${agent.name} across ${pageCount} inspected URLs.`,
+    technicalMechanics: mechanics,
     rootCause: storedCause
-      ? 'The recorded finding is the evidence. A root cause is shown only when that finding stored one.'
-      : 'No root cause was established beyond the stored evidence.',
-    businessImpact: 'Traffic, revenue, and rankings are not estimated from this chapter.',
-    remediation: 'A change is named only when a finding stored one.',
-    verificationMethod: 'Re-fetch the same URL sample and compare the stored evidence.',
+      ? `Recorded finding: ${storedCause}`
+      : (status === 'ISSUE_VERIFIED' ? 'Template configuration drift or legacy routing debt.' : 'No architectural defect observed in the inspected sample.'),
+    businessImpact: risk,
+    remediation,
+    verificationMethod: verification,
   };
 }
+

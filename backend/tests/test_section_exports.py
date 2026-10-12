@@ -84,6 +84,11 @@ def test_seo_section_pdf_includes_the_full_index():
     assert html.count("<article") >= 700
     assert "Sitemap missing" in html
     assert "Publish sitemap.xml" in html
+    assert "agent-consulting-dossier" in html
+    assert "seo.crawl.v3" in html
+    assert "Executive Diagnostic Review &amp; Strategy" in html
+    assert "Prescriptive Engineering &amp; Content Fix" in html
+    assert "Sub-Index Evidence &amp; Verification Ledger" in html
     assert "CERTIFIED" not in html
     assert "ZERO-FAKE" not in html
     assert "SINGLE_SOURCE_UNVERIFIED" not in html

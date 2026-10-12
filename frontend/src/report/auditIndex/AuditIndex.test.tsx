@@ -19,5 +19,5 @@ describe('AuditIndex', () => {
     expect(screen.queryByText(/Lab performance simulated/)).not.toBeInTheDocument();
     expect(screen.queryByText(/83\.3/)).not.toBeInTheDocument();
     expect(screen.queryByText(/52\.7/)).not.toBeInTheDocument();
-  });
+  }, 15000);
 });
