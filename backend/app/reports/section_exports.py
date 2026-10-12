@@ -486,6 +486,62 @@ class SectionReportGenerator:
             font-style: italic;
             margin: 10px 0;
         }}
+        .chapter-panel {{
+            border: 1px solid #e2e8f0;
+            background: #f8fafc;
+            padding: 12px 14px;
+            margin: 8px 0 16px;
+        }}
+        .sources-kicker, .chart-title {{
+            font-family: monospace;
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+            color: #64748b;
+            margin: 0 0 6px;
+        }}
+        .source-list {{
+            list-style: none;
+            padding: 0;
+            margin: 0 0 10px;
+        }}
+        .source-list li {{
+            font-size: 12px;
+            color: #334155;
+            margin: 0 0 4px;
+        }}
+        .src {{
+            font-family: monospace;
+            font-size: 10px;
+            font-weight: 700;
+            margin-right: 6px;
+            color: #0f172a;
+        }}
+        .chapter-chart {{
+            margin: 10px 0;
+            page-break-inside: avoid;
+        }}
+        .chapter-chart figcaption {{
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+            margin-bottom: 4px;
+        }}
+        .chapter-chart figcaption strong {{
+            font-size: 12px;
+            color: #0f172a;
+        }}
+        .chapter-chart figcaption span, .chart-gap {{
+            font-size: 11px;
+            color: #475569;
+            line-height: 1.45;
+        }}
+        .chapter-chart svg text {{
+            font-size: 11px;
+            fill: #0f172a;
+            font-family: sans-serif;
+        }}
         
         /* 16-Field Enterprise Finding Card */
         .finding-card-v2 {{
@@ -602,9 +658,87 @@ class SectionReportGenerator:
             font-size: 11px;
             font-family: monospace;
             color: #64748b;
-            padding-top: 8px;
-            margin-top: 8px;
-            border-top: 1px solid #f1f5f9;
+        /* Specialist Agent Analysis Dossier */
+        .agent-analysis-card {{
+            background: #f8fafc;
+            border: 1px solid #cbd5e1;
+            border-left: 4px solid #0284c7;
+            border-radius: 6px;
+            padding: 14px 16px;
+            margin: 12px 0 16px;
+            page-break-inside: avoid;
+        }}
+        .agent-badge-bar {{
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+            margin-bottom: 10px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid #e2e8f0;
+        }}
+        .agent-title {{
+            font-size: 13px;
+            color: #0f172a;
+        }}
+        .agent-title code {{
+            font-size: 11px;
+            color: #64748b;
+        }}
+        .agent-role-pill {{
+            font-family: monospace;
+            font-size: 10px;
+            font-weight: 700;
+            background: #e0f2fe;
+            color: #0369a1;
+            padding: 2px 8px;
+            border-radius: 3px;
+        }}
+        .agent-exec-summary {{
+            font-size: 13px;
+            line-height: 1.5;
+            color: #1e293b;
+            margin: 0 0 10px;
+        }}
+        .agent-diag-grid {{
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-bottom: 10px;
+            padding: 8px;
+            background: #ffffff;
+            border: 1px solid #e2e8f0;
+            border-radius: 4px;
+        }}
+        .diag-label {{
+            display: block;
+            font-size: 11px;
+            font-weight: 700;
+            color: #475569;
+            margin-bottom: 2px;
+        }}
+        .diag-val {{
+            font-size: 12px;
+            color: #0f172a;
+            margin: 0;
+            line-height: 1.4;
+        }}
+        .agent-verification-strip {{
+            display: flex;
+            align-items: baseline;
+            gap: 8px;
+            font-size: 11px;
+            padding-top: 6px;
+            border-top: 1px solid #e2e8f0;
+        }}
+        .ver-label {{
+            font-weight: 700;
+            color: #475569;
+            white-space: nowrap;
+        }}
+        .agent-verification-strip code {{
+            font-size: 11px;
+            color: #0369a1;
         }}
         @media print {{
             body {{ padding: 0; }}

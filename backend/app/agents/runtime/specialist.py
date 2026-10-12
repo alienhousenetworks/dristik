@@ -1082,6 +1082,123 @@ class SpecialistAgent(BaseAgent):
                 "Address common buyer evaluation questions ('How does X compare to Y?', 'Is X suitable for Z?') with dedicated, unbiased landing sections."
             )
 
+        elif aid == "aeo.question_discovery.v3":
+            # Question Discovery & Demand Research Specialist
+            observations["question_discovery_evaluated"] = True
+            add(
+                "Question inventory audit: ensure continuous discovery and ingestion of natural-language search queries.",
+                Severity.LOW,
+                "Regularly harvest query demand from Search Console questions, autocomplete, and customer support logs."
+            )
+
+        elif aid == "aeo.intent_classification.v3":
+            # Question Intent Classification Specialist
+            observations["intent_classification_evaluated"] = True
+            add(
+                "Question intent distribution: classify customer queries across informational, comparative, and transactional stages.",
+                Severity.LOW,
+                "Map each question cluster to clear buyer intent and ensure dedicated destination pages exist."
+            )
+
+        elif aid == "aeo.question_clustering.v3":
+            # Question Clustering Specialist
+            observations["question_clustering_evaluated"] = True
+            add(
+                "Topic cluster mapping: group semantically similar queries and establish clear primary vs supporting relationships.",
+                Severity.LOW,
+                "Consolidate fragmented Q&A content into authoritative topic hubs to prevent internal question cannibalization."
+            )
+
+        elif aid == "aeo.factual_verification.v3":
+            # Factual Accuracy & Evidence Verification Specialist
+            observations["factual_claims_checked"] = True
+            add(
+                "Factual verifiability audit: verify all quantitative claims, feature specifications, and comparative benchmarks against documented evidence.",
+                Severity.LOW,
+                "Attach verifiable data sources or first-party documentation to substantive product performance claims."
+            )
+
+        elif aid == "aeo.passage_analysis.v3":
+            # Passage Extractability Specialist
+            observations["passage_extractability_checked"] = True
+            add(
+                "Passage independence audit: ensure key declarative statements are self-contained and free of ambiguous pronoun references.",
+                Severity.LOW,
+                "Craft standalone answer passages that preserve their complete meaning when extracted out of surrounding context."
+            )
+
+        elif aid == "aeo.technical_eligibility.v3":
+            # Technical Discoverability Specialist
+            observations["technical_eligibility_checked"] = True
+            add(
+                "Crawler accessibility and rendering: verify AI search bots have unrestricted access to critical answer passages.",
+                Severity.LOW,
+                "Confirm robots.txt directives allow eligible AI user-agents and server responses avoid hydration-blocking barriers."
+            )
+
+        elif aid == "aeo.source_attribution.v3":
+            # Source Provenance Specialist
+            observations["source_attribution_checked"] = True
+            add(
+                "Source citation provenance: provide clear citation links to primary research, official specs, and authoritative standards.",
+                Severity.LOW,
+                "Maintain explicit attribution links to primary sources to increase citation probability in generative engines."
+            )
+
+        elif aid == "aeo.live_benchmark.v3":
+            # Live Answer Engine Benchmark Specialist
+            observations["live_benchmark_evaluated"] = True
+            add(
+                "Live answer monitoring: track engine response variance across multiple test queries and log raw outputs with timestamps.",
+                Severity.LOW,
+                "Establish automated benchmark query suites to monitor mention and citation rate trends over time."
+            )
+
+        elif aid == "aeo.citation_analysis.v3":
+            # Citation Distribution Specialist
+            observations["citation_distribution_checked"] = True
+            add(
+                "Citation share analysis: evaluate distribution between brand-owned URLs and third-party editorial citations.",
+                Severity.LOW,
+                "Strengthen first-party authoritative documentation while expanding third-party citation footprints."
+            )
+
+        elif aid == "aeo.competitive_intelligence.v3":
+            # Competitive Answer Share Specialist
+            observations["competitive_answer_share_checked"] = True
+            add(
+                "Competitive answer presence: identify high-intent query spaces where competitor brands are cited instead.",
+                Severity.LOW,
+                "Close competitive source gaps by publishing authoritative, head-to-head comparison and pricing clarity."
+            )
+
+        elif aid == "aeo.brand_accuracy.v3":
+            # Brand Accuracy & Misinformation Specialist
+            observations["brand_accuracy_checked"] = True
+            add(
+                "Hallucination and accuracy safeguards: monitor generated answers for obsolete pricing, false claims, or confusing entity names.",
+                Severity.LOW,
+                "Keep public corporate registries and Knowledge Graph entities synchronized to prevent AI hallucination."
+            )
+
+        elif aid == "aeo.business_attribution.v3":
+            # AEO Business Attribution Specialist
+            observations["business_attribution_checked"] = True
+            add(
+                "Answer traffic attribution: track assisted conversions and referral traffic emerging from generative search surfaces.",
+                Severity.LOW,
+                "Tag AI referral landing pages with dedicated analytics campaign parameters to measure pipeline impact."
+            )
+
+        elif aid == "aeo.remediation_planner.v3":
+            # Remediation Planner Specialist
+            observations["remediation_planner_checked"] = True
+            add(
+                "AEO remediation roadmap: maintain prioritized register of content and technical fixes with measurable validation criteria.",
+                Severity.LOW,
+                "Execute the prioritized 30/60/90-day answer optimization backlog and verify post-deployment crawl re-tests."
+            )
+
         elif aid == "geo.multimodal_citation.v3":
             # Multi-Modal Data & Visual Asset Specialist
             total_images = sum(getattr(p, "total_images", 0) for p in pages)

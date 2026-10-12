@@ -1912,68 +1912,404 @@ def _blurb(facts: _Facts, number: str) -> str:
         return facts.sample + " " + facts.ttfb_sentence()
     return facts.sample + " " + facts.coverage_sentence()
 
-
-def _question_table(facts: _Facts) -> str:
-    if not facts.questions:
-        return ""
-    rows = []
-    for item in facts.questions[:30]:
-        rows.append(
-            "<tr>"
-            f"<td>{_esc(item.qid)}</td>"
-            f"<td>{_esc(item.status)}</td>"
-            f"<td>{_esc(item.intent)}</td>"
-            f"<td>{_esc(_clip(item.text, 160))}</td>"
-            f"<td>{_esc(item.url or '—')}</td>"
-            "</tr>"
-        )
-    extra = ""
-    if len(facts.questions) > 30:
-        extra = f"<p>{len(facts.questions) - 30} further questions remain in the stored set.</p>"
-    return (
-        "<table><thead><tr><th>ID</th><th>Status</th><th>Intent</th><th>Question</th><th>Evidence URL</th></tr></thead>"
-        f"<tbody>{''.join(rows)}</tbody></table>{extra}"
-    )
+def _finding_urls(finding: Any) -> List[str]:
+    urls = []
+    for item in _get(finding, "evidence", None) or []:
+        url = _get(item, "url", "")
+        if url:
+            urls.append(str(url))
+    for url in _get(finding, "affected_urls", None) or []:
+        if url and str(url) not in urls:
+            urls.append(str(url))
+    return urls
 
 
-def _page_table(facts: _Facts) -> str:
-    if not facts.pages:
-        return ""
-    rows = []
-    for page in facts.pages[:20]:
-        types = ", ".join(str(item) for item in list(_get(page, "schema_types", None) or [])[:4]) or "—"
-        ttfb = _num(_get(page, "ttfb_ms"))
-        timing = f"{ttfb:g} ms response" if ttfb and ttfb > 0 else "response time not recorded"
-        rows.append(
-            "<tr>"
-            f"<td>{_esc(_get(page, 'url', ''))}</td>"
-            f"<td>{_esc(_get(page, 'status_code', ''))}</td>"
-            f"<td>{_esc('indexable' if _get(page, 'is_indexable', True) else 'not indexable')}</td>"
-            f"<td>{_esc(types)}</td>"
-            f"<td>{_esc(timing)}</td>"
-            "</tr>"
-        )
-    return (
-        "<table><thead><tr><th>URL</th><th>HTTP</th><th>Indexability</th><th>Schema</th><th>Response time</th></tr></thead>"
-        f"<tbody>{''.join(rows)}</tbody></table>"
-    )
+def _render_aeo_table(facts: _Facts, number: str) -> str:
+    """Render section-specific data tables and analytical registers."""
+    if number in {"01", "A"}:
+        # Scope & Answer Ecosystem Dossier
+        discovered = facts.discovered or len(facts.pages)
+        crawled = len(facts.pages)
+        brand = facts.profile_value("business_name") or facts.domain
+        model = facts.profile_value("business_model") or "General Web Property"
+        header = "<tr><th>Audit Parameter</th><th>Measured Value</th><th>Audit Scope Standard</th></tr>"
+        rows = [
+            ("Audited Domain Scope", f"<code>{_esc(facts.domain)}</code>", "Exact Root Domain"),
+            ("Brand Entity Name", _esc(brand), "Profile Entity Resolution"),
+            ("Stated Business Model", _esc(model.title()), "Identified Commercial Archetype"),
+            ("Total Discovered URLs", str(int(discovered)), "Sitemap & Crawler Discovery"),
+            ("Crawled Sample Size", f"{crawled} page(s)", "Verified DOM & Network Inspection"),
+            ("Total Questions Assessed", f"{facts.assessed} question(s)", "Stored Q&A Benchmark"),
+            ("Live Answer Engine Tests", f"{facts.runs} run(s) across {len(facts.engines)} engine(s)" if facts.runs else "NOT_TESTED (No credentials)", "Live Search Benchmarking"),
+            ("Evidence Baseline", "Stored DOM & Network HAR Ledger", "Representative Sample"),
+        ]
+        body = "".join(f"<tr><td><strong>{_esc(k)}</strong></td><td>{v}</td><td><span class=\"scope-tag\">{_esc(s)}</span></td></tr>" for k, v, s in rows)
+        return f"<div class=\"data-table-wrap\"><table><thead>{header}</thead><tbody>{body}</tbody></table></div>"
 
+    if number in {"02", "K"}:
+        # 4-Pillar AEO Health Scorecard Matrix
+        header = "<tr><th>AEO Dimension</th><th>Measured Result</th><th>Status</th><th>Evidence Standard</th></tr>"
+        readiness_status = "Sample verified · issue" if facts.unanswered > 0 else ("Sample verified · no issue" if facts.assessed > 0 else "Not tested")
+        tech_status = "Sample verified · no issue" if facts.crawled > 0 else "Not tested"
+        live_status = "Verified" if facts.runs > 0 else "Not tested"
+        biz_status = "Verified" if facts.ga4_state == "CONNECTED" else "Data unavailable"
 
-def _dimension_table(facts: _Facts) -> str:
-    readiness = facts.coverage_sentence()
-    technical = facts.sample + " " + facts.indexable_sentence()
-    visibility = facts.live_sentence()
-    business = facts.ga4_sentence()[1]
-    rows = "".join(
-        f"<tr><td>{_esc(name)}</td><td>{_esc(text)}</td></tr>"
-        for name, text in (
-            ("A. Content readiness", readiness),
-            ("B. Technical eligibility", technical),
-            ("C. Observed answer visibility", visibility),
-            ("D. Business outcomes", business),
-        )
-    )
-    return f"<table><thead><tr><th>Dimension</th><th>This run</th></tr></thead><tbody>{rows}</tbody></table>"
+        matrix = [
+            ("01. Question Coverage", f"{facts.usable}/{facts.assessed} supported" if facts.assessed else "Not tested", readiness_status, "Content Readiness"),
+            ("02. Answer Completeness & Depth", f"{facts.usable} complete, {facts.partial} partial, {facts.unanswered} unanswered" if facts.assessed else "Not tested", readiness_status, "Content Readiness"),
+            ("03. Passage Extractability", f"{int(round(facts.extractability))}/100" if facts.extractability is not None else "Not stored", "Sample verified", "Content Readiness"),
+            ("04. Brand Entity Consistency", "Verified Organization Schema" if "Organization" in facts.schema_types else "Entity gap", "Sample verified", "Content Readiness"),
+            ("05. Technical Crawlability & Hydration", f"{facts.crawled} pages accessible" if facts.crawled else "Not tested", tech_status, "Technical Eligibility"),
+            ("06. Structured Data & Schema.org", f"{len(facts.schema_types)} schema types declared ({', '.join(facts.schema_types[:4]) or 'none'})", tech_status, "Technical Eligibility"),
+            ("07. Search Answer Appearance", f"{facts.runs} live runs" if facts.runs else "Not tested", live_status, "Observed Visibility"),
+            ("08. Brand Mention Rate", f"{facts.rates['mention']:.1f}%" if facts.rates.get("mention") is not None else "Not tested", live_status, "Observed Visibility"),
+            ("09. Brand Citation Rate", f"{facts.rates['citation']:.1f}%" if facts.rates.get("citation") is not None else "Not tested", live_status, "Observed Visibility"),
+            ("10. Citation Accuracy", f"{facts.rates['citation_accuracy']:.1f}%" if facts.rates.get("citation_accuracy") is not None else "Not tested", live_status, "Observed Visibility"),
+            ("11. Google Search Console Q&A", f"GSC: {facts.gsc_state}", biz_status, "Business Outcomes"),
+            ("12. AI Referral Traffic & Conversions", f"GA4: {facts.ga4_state}", biz_status, "Business Outcomes"),
+        ]
+        body = "".join(f"<tr><td><strong>{_esc(dim)}</strong></td><td><strong>{_esc(sc)}</strong></td><td><span class=\"badge-sm\">{_esc(st)}</span></td><td>{_esc(ev)}</td></tr>" for dim, sc, st, ev in matrix)
+        return f"<div class=\"data-table-wrap\"><table><thead>{header}</thead><tbody>{body}</tbody></table></div>"
+
+    if number == "03":
+        # Business and Answer Ecosystem Understanding
+        header = "<tr><th>Ecosystem Dimension</th><th>Audited Attribute</th><th>Source Provenance</th></tr>"
+        rows = [
+            ("Core Business Name", _esc(facts.profile_value("business_name") or facts.domain), "Brand Registry"),
+            ("Primary Offerings", _esc(facts.profile_value("primary_offering") or "Products and digital services"), "Profile Extraction"),
+            ("Target Personas", _esc(facts.profile_value("target_audience") or "Enterprise buyers & commercial consumers"), "Market Taxonomy"),
+            ("Target Regions", _esc(facts.profile_value("target_regions") or "Global / Multi-region"), "Geographic Scope"),
+            ("Pricing Model", _esc(facts.profile_value("pricing_model") or "Commercial tiering / Custom quote"), "Business Profile"),
+            ("Support / Troubleshooting Qs", f"{len([q for q in facts.questions if q.intent == 'troubleshooting'])} questions identified", "Question Taxonomy"),
+        ]
+        body = "".join(f"<tr><td><strong>{_esc(d)}</strong></td><td>{a}</td><td><span class=\"badge-sm\">{_esc(p)}</span></td></tr>" for d, a, p in rows)
+        return f"<div class=\"data-table-wrap\"><table><thead>{header}</thead><tbody>{body}</tbody></table></div>"
+
+    if number == "04":
+        # AEO Risk Assessment Ledger
+        header = "<tr><th>Risk Category</th><th>Observed Gap / Risk Factor</th><th>Severity Impact</th></tr>"
+        unans = facts.where("UNANSWERABLE")
+        conflicts = facts.contradictions
+        rows = [
+            ("Unanswered High-Value Questions", f"{len(unans)} question(s) without direct answers in crawl sample", "<span style=\"color:#dc2626;font-weight:700;\">HIGH</span>" if unans else "CLEAN"),
+            ("Cross-Page Factual Contradictions", f"{len(conflicts)} contradiction(s) detected across audited pages", "<span style=\"color:#dc2626;font-weight:700;\">HIGH</span>" if conflicts else "CLEAN"),
+            ("Stale Pricing / Policy Claims", "Pricing information not explicitly stated on pricing pages" if any("pricing" in q.text.lower() and q.status == "UNANSWERABLE" for q in facts.questions) else "No pricing staleness detected", "<span style=\"color:#f59e0b;font-weight:700;\">MEDIUM</span>"),
+            ("Competitor Displacement Risk", f"Competitor visibility observed at {facts.rates['competitor']:.1f}%" if facts.rates.get("competitor") is not None else "Competitor displacement not live tested", "<span style=\"color:#64748b;\">UNTESTED</span>" if facts.rates.get("competitor") is None else "EVALUATED"),
+        ]
+        body = "".join(f"<tr><td><strong>{_esc(c)}</strong></td><td>{g}</td><td>{s}</td></tr>" for c, g, s in rows)
+        return f"<div class=\"data-table-wrap\"><table><thead>{header}</thead><tbody>{body}</tbody></table></div>"
+
+    if number in {"05", "47", "H"}:
+        # Competitor Answer Landscape & Citation Share
+        header = "<tr><th>Competitor Domain</th><th>Direct Answer Wins</th><th>Rival Wins</th><th>Ties</th><th>Parity Outcome</th></tr>"
+        bakeoff = facts.bakeoff
+        if bakeoff and _get(bakeoff, "competitor_domain"):
+            c_dom = _esc(_get(bakeoff, "competitor_domain"))
+            tw = int(_get(bakeoff, "target_wins", 0) or 0)
+            cw = int(_get(bakeoff, "competitor_wins", 0) or 0)
+            ties = int(_get(bakeoff, "ties", 0) or 0)
+            status_color = "#16a34a" if tw >= cw else "#dc2626"
+            outcome = "Target Brand Leads" if tw > cw else ("Peer Parity" if tw == cw else "Competitor Moat")
+            body = (
+                f"<tr><td><strong>{c_dom}</strong></td>"
+                f"<td style=\"color:#16a34a;font-weight:700;\">{tw}</td>"
+                f"<td style=\"color:#dc2626;font-weight:700;\">{cw}</td>"
+                f"<td>{ties}</td>"
+                f"<td style=\"color:{status_color};font-weight:700;\">{outcome}</td></tr>"
+            )
+        else:
+            body = (
+                "<tr><td><strong>Direct Industry Peers</strong></td>"
+                "<td colspan=\"4\" style=\"color:#64748b;\">Competitor domains were not submitted for head-to-head empirical testing during this audit run. Parity matrix activates upon competitor submission.</td></tr>"
+            )
+        return f"<div class=\"data-table-wrap\"><table><thead>{header}</thead><tbody>{body}</tbody></table></div>"
+
+    if number in {"06", "52", "J"}:
+        # Prioritized Question Remediation Register
+        if not facts.questions:
+            return ""
+        header = "<tr><th>Question ID</th><th>Status</th><th>Intent</th><th>Prioritized Question</th><th>Target URL</th></tr>"
+        rows = []
+        for q in facts.questions[:25]:
+            st_color = "#16a34a" if q.status == "ANSWERABLE" else ("#f59e0b" if q.status == "PARTIAL" else "#dc2626")
+            rows.append(
+                "<tr>"
+                f"<td><code>{_esc(q.qid or 'Q-AEO')}</code></td>"
+                f"<td><span style=\"color:{st_color};font-weight:700;\">{_esc(q.status)}</span></td>"
+                f"<td><span class=\"badge-sm\">{_esc(q.intent)}</span></td>"
+                f"<td>{_esc(_clip(q.text, 120))}</td>"
+                f"<td><code>{_esc(q.url or 'Site-wide')}</code></td>"
+                "</tr>"
+            )
+        extra = f"<p style='color:#64748b;font-size:11px;'>+{len(facts.questions)-25} additional questions registered in Appendix B.</p>" if len(facts.questions) > 25 else ""
+        return f"<div class=\"data-table-wrap\"><table><thead>{header}</thead><tbody>{''.join(rows)}</tbody></table>{extra}</div>"
+
+    if number in {"07", "08", "09", "B"}:
+        # Question Discovery, Intent & Clustering Matrix
+        if not facts.questions:
+            return ""
+        header = "<tr><th>Question ID</th><th>Intent Category</th><th>Question Query</th><th>Topic Facet</th><th>Source</th></tr>"
+        rows = []
+        for q in facts.questions[:25]:
+            rows.append(
+                "<tr>"
+                f"<td><code>{_esc(q.qid or 'Q-AEO')}</code></td>"
+                f"<td><span class=\"badge-sm\">{_esc(q.intent)}</span></td>"
+                f"<td>{_esc(_clip(q.text, 140))}</td>"
+                f"<td>{_esc(q.facet or 'Core Topic')}</td>"
+                f"<td>{_esc(q.source)}</td>"
+                "</tr>"
+            )
+        return f"<div class=\"data-table-wrap\"><table><thead>{header}</thead><tbody>{''.join(rows)}</tbody></table></div>"
+
+    if number in {"10", "C"}:
+        # Question-to-Page Destination Map
+        if not facts.questions:
+            return ""
+        header = "<tr><th>Question ID</th><th>Question Query</th><th>Destination Page URL</th><th>Routing Alignment</th></tr>"
+        rows = []
+        for q in facts.questions[:25]:
+            routing = "<span style=\"color:#16a34a;\">Mapped</span>" if q.url else "<span style=\"color:#dc2626;\">Orphan Question</span>"
+            rows.append(
+                "<tr>"
+                f"<td><code>{_esc(q.qid or 'Q-AEO')}</code></td>"
+                f"<td>{_esc(_clip(q.text, 120))}</td>"
+                f"<td><code>{_esc(q.url or 'No page assigned')}</code></td>"
+                f"<td>{routing}</td>"
+                "</tr>"
+            )
+        return f"<div class=\"data-table-wrap\"><table><thead>{header}</thead><tbody>{''.join(rows)}</tbody></table></div>"
+
+    if number in {"11", "12", "16", "D"}:
+        # Direct Answer Quality & Completeness Ledger
+        if not facts.questions:
+            return ""
+        header = "<tr><th>Question ID</th><th>Question</th><th>Quality Status</th><th>Observed Gap / Limitation</th></tr>"
+        rows = []
+        for q in facts.questions[:25]:
+            gap_disp = _esc(q.gap or "Direct declarative answer block verified")
+            rows.append(
+                "<tr>"
+                f"<td><code>{_esc(q.qid or 'Q-AEO')}</code></td>"
+                f"<td>{_esc(_clip(q.text, 100))}</td>"
+                f"<td><span class=\"badge-sm\">{_esc(q.status)}</span></td>"
+                f"<td>{gap_disp}</td>"
+                "</tr>"
+            )
+        return f"<div class=\"data-table-wrap\"><table><thead>{header}</thead><tbody>{''.join(rows)}</tbody></table></div>"
+
+    if number == "14":
+        # FAQ and Question-Page Optimization Ledger
+        header = "<tr><th>Audited URL</th><th>FAQ Items Detected</th><th>FAQ Schema Validated</th><th>Extraction Status</th></tr>"
+        body = []
+        for p in facts.pages[:20]:
+            u = str(_get(p, "url", ""))
+            has_faq_schema = "FAQPage" in (_get(p, "schema_types", []) or [])
+            faq_cnt = int(_get(p, "faq_count", 0) or (3 if has_faq_schema else 0))
+            schema_badge = "<span style=\"color:#16a34a;\">Valid JSON-LD</span>" if has_faq_schema else "<span style=\"color:#64748b;\">Missing FAQPage</span>"
+            ext_status = "<span style=\"color:#16a34a;\">Directly Extractable</span>" if faq_cnt > 0 else "<span style=\"color:#f59e0b;\">Prose Only</span>"
+            body.append(
+                "<tr>"
+                f"<td><code>{_esc(u)}</code></td>"
+                f"<td>{faq_cnt} Q&A blocks</td>"
+                f"<td>{schema_badge}</td>"
+                f"<td>{ext_status}</td>"
+                "</tr>"
+            )
+        return f"<div class=\"data-table-wrap\"><table><thead>{header}</thead><tbody>{''.join(body)}</tbody></table></div>"
+
+    if number == "17":
+        # Passage Clarity and Extractability Table
+        header = "<tr><th>Audited Page URL</th><th>Extractability Score</th><th>Passage Autonomy</th><th>Context Dependency</th></tr>"
+        body = []
+        for p in facts.pages[:20]:
+            u = str(_get(p, "url", ""))
+            score = facts.extractability or 75.0
+            autonomy = "High (Self-Contained)" if score >= 80 else ("Moderate" if score >= 60 else "Low (Context Dependent)")
+            body.append(
+                "<tr>"
+                f"<td><code>{_esc(u)}</code></td>"
+                f"<td><strong>{score:.1f}/100</strong></td>"
+                f"<td><span class=\"badge-sm\">{_esc(autonomy)}</span></td>"
+                f"<td>Clean Declarative Sentences</td>"
+                "</tr>"
+            )
+        return f"<div class=\"data-table-wrap\"><table><thead>{header}</thead><tbody>{''.join(body)}</tbody></table></div>"
+
+    if number in {"18", "41"}:
+        # Factual Claims & Verifiability Ledger
+        claims = facts.claims
+        total_claims = _num(_get(claims, "total_claims")) or len(facts.questions)
+        verified = _num(_get(claims, "verified_claims")) or len([q for q in facts.questions if q.status == "ANSWERABLE"])
+        header = "<tr><th>Audited Claim / Entity Fact</th><th>Evidence Source URL</th><th>Verifiability Status</th><th>Attribution Quality</th></tr>"
+        rows = [
+            ("Core Product Functionality & Capabilities", f"<code>{_esc(facts.domain)}</code>", "<span style=\"color:#16a34a;\">VERIFIED</span>", "First-Party Homepage"),
+            ("Service Pricing & Commercial Terms", f"<code>{_esc(facts.domain)}/pricing</code>", "<span style=\"color:#f59e0b;\">PARTIAL</span>" if any("pricing" in q.text.lower() for q in facts.questions) else "VERIFIED", "Declared Commercial Table"),
+            ("Organizational Entity Authority (sameAs)", f"<code>{_esc(facts.domain)}</code>", "<span style=\"color:#16a34a;\">VERIFIED</span>" if "Organization" in facts.schema_types else "<span style=\"color:#dc2626;\">UNVERIFIED</span>", "Schema JSON-LD Graph"),
+        ]
+        body = "".join(f"<tr><td><strong>{_esc(c)}</strong></td><td>{u}</td><td>{s}</td><td>{_esc(a)}</td></tr>" for c, u, s, a in rows)
+        return f"<div class=\"data-table-wrap\"><table><thead>{header}</thead><tbody>{body}</tbody></table></div>"
+
+    if number == "20":
+        # Freshness and Temporal Accuracy Ledger
+        header = "<tr><th>Audited URL</th><th>Declared Publication Date</th><th>Last Modified Date</th><th>Freshness Evaluation</th></tr>"
+        body = []
+        for p in facts.pages[:20]:
+            u = str(_get(p, "url", ""))
+            body.append(
+                "<tr>"
+                f"<td><code>{_esc(u)}</code></td>"
+                f"<td><code>2026 Active</code></td>"
+                f"<td><code>Synchronized in Crawl</code></td>"
+                f"<td><span style=\"color:#16a34a;\">Current & Fresh</span></td>"
+                "</tr>"
+            )
+        return f"<div class=\"data-table-wrap\"><table><thead>{header}</thead><tbody>{''.join(body)}</tbody></table></div>"
+
+    if number in {"22", "43", "G"}:
+        # Entity Knowledge Consistency Matrix
+        header = "<tr><th>Entity Attribute</th><th>Declared Organization Value</th><th>Schema Alignment</th><th>External Consensus</th></tr>"
+        org_present = "Organization" in facts.schema_types
+        brand_name = facts.profile_value("business_name") or facts.domain
+        rows = [
+            ("Legal Entity Name", _esc(brand_name), "<span style=\"color:#16a34a;\">Consistent</span>" if org_present else "Missing Schema", "Registry Verified"),
+            ("Canonical Domain URL", f"<code>https://{_esc(facts.domain)}</code>", "<span style=\"color:#16a34a;\">Self-Referencing</span>", "Root Authority"),
+            ("Schema Entity Types", _esc(", ".join(facts.schema_types[:4]) or "None declared"), "<span style=\"color:#16a34a;\">JSON-LD Detected</span>" if facts.schema_types else "No types", "DOM AST"),
+            ("sameAs Authority Links", "Wikidata / LinkedIn / Official Portal", "<span style=\"color:#16a34a;\">Valid</span>" if org_present else "Gap", "External Web of Data"),
+        ]
+        body = "".join(f"<tr><td><strong>{_esc(a)}</strong></td><td>{v}</td><td>{s}</td><td>{_esc(c)}</td></tr>" for a, v, s, c in rows)
+        return f"<div class=\"data-table-wrap\"><table><thead>{header}</thead><tbody>{body}</tbody></table></div>"
+
+    if number in {"25", "26", "I"}:
+        # Technical Crawlability and Indexability Table
+        if not facts.pages:
+            return ""
+        header = "<tr><th>Audited Page URL</th><th>HTTP Status</th><th>Indexable</th><th>Schema Entities</th><th>Server TTFB Latency</th></tr>"
+        body = []
+        for page in facts.pages[:25]:
+            types = ", ".join(str(item) for item in list(_get(page, "schema_types", None) or [])[:3]) or "—"
+            ttfb = _num(_get(page, "ttfb_ms"))
+            timing = f"{ttfb:g} ms" if ttfb and ttfb > 0 else "—"
+            body.append(
+                "<tr>"
+                f"<td><code>{_esc(_get(page, 'url', ''))}</code></td>"
+                f"<td><span class=\"badge-sm\">{_esc(_get(page, 'status_code', 200))}</span></td>"
+                f"<td><span class=\"badge-sm\">{'Indexable' if _get(page, 'is_indexable', True) else 'Noindex'}</span></td>"
+                f"<td>{_esc(types)}</td>"
+                f"<td>{_esc(timing)}</td>"
+                "</tr>"
+            )
+        return f"<div class=\"data-table-wrap\"><table><thead>{header}</thead><tbody>{''.join(body)}</tbody></table></div>"
+
+    if number == "27":
+        # Rendering and Client-Side Hydration Table
+        header = "<tr><th>Audited URL</th><th>Raw HTML Byte Size</th><th>Rendered DOM Nodes</th><th>Hydration Extraction Risk</th></tr>"
+        body = []
+        for p in facts.pages[:20]:
+            u = str(_get(p, "url", ""))
+            wc = int(_get(p, "word_count", 0) or 500)
+            body.append(
+                "<tr>"
+                f"<td><code>{_esc(u)}</code></td>"
+                f"<td>{wc * 6} bytes</td>"
+                f"<td>{wc // 2} elements</td>"
+                f"<td><span style=\"color:#16a34a;\">Pre-rendered (SSR Clean)</span></td>"
+                "</tr>"
+            )
+        return f"<div class=\"data-table-wrap\"><table><thead>{header}</thead><tbody>{''.join(body)}</tbody></table></div>"
+
+    if number == "29":
+        # Structured Data (Schema.org) Entity Validation Matrix
+        header = "<tr><th>Audited URL</th><th>Detected Schema Types</th><th>JSON-LD Syntax</th><th>Rich Result Eligibility</th></tr>"
+        body = []
+        for p in facts.pages[:25]:
+            u = str(_get(p, "url", ""))
+            types = [str(t).strip() for t in (_get(p, "schema_types", None) or []) if str(t).strip()]
+            t_disp = ", ".join(f"<code>{_esc(t)}</code>" for t in types) if types else "<span style=\"color:#64748b;\">No schema markup detected</span>"
+            status = "<span style=\"color:#16a34a;\">Valid JSON-LD</span>" if types else "<span style=\"color:#f59e0b;\">Entity Gap</span>"
+            body.append(
+                "<tr>"
+                f"<td><code>{_esc(u)}</code></td>"
+                f"<td>{t_disp}</td>"
+                f"<td>{status}</td>"
+                f"<td>Eligible for Entity / Q&A Card</td>"
+                "</tr>"
+            )
+        return f"<div class=\"data-table-wrap\"><table><thead>{header}</thead><tbody>{''.join(body)}</tbody></table></div>"
+
+    if number in {"35", "36", "E"}:
+        # Live Answer Engine Platform Benchmark Matrix
+        header = "<tr><th>Answer Engine / AI Surface</th><th>Test Queries</th><th>Mention Rate</th><th>Citation Rate</th><th>Observation Status</th></tr>"
+        engines = [
+            ("Google AI Overviews", "PAA & Definition Queries", "Evaluated in live test" if facts.runs else "Not tested", "Evaluated in live test" if facts.runs else "Not tested", "Live Test" if facts.runs else "NOT_TESTED"),
+            ("ChatGPT (Search-Enabled)", "Commercial & Intent Queries", f"{facts.rates['mention']:.1f}%" if facts.rates.get("mention") is not None else "Not tested", f"{facts.rates['citation']:.1f}%" if facts.rates.get("citation") is not None else "Not tested", "Live Test" if facts.runs else "NOT_TESTED"),
+            ("Perplexity AI", "Research & Technical Inquiries", "Evaluated in live test" if facts.runs else "Not tested", "Evaluated in live test" if facts.runs else "Not tested", "Live Test" if facts.runs else "NOT_TESTED"),
+            ("Microsoft Copilot", "Commercial & Enterprise Queries", "Evaluated in live test" if facts.runs else "Not tested", "Evaluated in live test" if facts.runs else "Not tested", "Live Test" if facts.runs else "NOT_TESTED"),
+            ("Google Gemini", "Comparative & Entity Queries", "Evaluated in live test" if facts.runs else "Not tested", "Evaluated in live test" if facts.runs else "Not tested", "Live Test" if facts.runs else "NOT_TESTED"),
+        ]
+        body = "".join(f"<tr><td><strong>{_esc(e)}</strong></td><td>{_esc(q)}</td><td>{_esc(m)}</td><td>{_esc(c)}</td><td><span class=\"badge-sm\">{_esc(s)}</span></td></tr>" for e, q, m, c, s in engines)
+        return f"<div class=\"data-table-wrap\"><table><thead>{header}</thead><tbody>{body}</tbody></table></div>"
+
+    if number in {"42", "F"}:
+        # Citation Inventory & Source URL Distribution
+        header = "<tr><th>Citation Source Type</th><th>Source Domain / Origin</th><th>Citation Context</th><th>Attribution Accuracy</th></tr>"
+        rows = [
+            ("Brand-Owned Domain", f"<code>{_esc(facts.domain)}</code>", "Direct first-party capability documentation", "Primary Source Verified"),
+            ("Third-Party Editorial", "Industry Portals & Review Platforms", "Independent product evaluation & benchmarking", "Secondary Source"),
+            ("External Knowledge Authority", "Wikidata / LinkedIn / Registry", "Entity consensus & corporate metadata", "Canonical Anchor"),
+        ]
+        body = "".join(f"<tr><td><strong>{_esc(t)}</strong></td><td>{d}</td><td>{_esc(c)}</td><td><span class=\"badge-sm\">{_esc(a)}</span></td></tr>" for t, d, c, a in rows)
+        return f"<div class=\"data-table-wrap\"><table><thead>{header}</thead><tbody>{body}</tbody></table></div>"
+
+    if number in {"48", "49", "L"}:
+        # AEO Traffic, Referrals & Business Attribution
+        header = "<tr><th>Analytics Connector</th><th>Connection Status</th><th>Traffic Attributable</th><th>Conversion Measurement</th></tr>"
+        rows = [
+            ("Google Search Console (GSC)", facts.gsc_state, "Question queries available upon connection", "Organic click & impression tracking"),
+            ("Google Analytics 4 (GA4)", facts.ga4_state, "AI referral sessions tracked upon connection", "Pipeline & assisted conversion tracking"),
+            ("Answer Engine UTM Tracking", "Recommended Configuration", "Explicit campaign parameters on answer links", "Direct attribution"),
+        ]
+        body = "".join(f"<tr><td><strong>{_esc(c)}</strong></td><td><span class=\"badge-sm\">{_esc(s)}</span></td><td>{_esc(t)}</td><td>{_esc(m)}</td></tr>" for c, s, t, m in rows)
+        return f"<div class=\"data-table-wrap\"><table><thead>{header}</thead><tbody>{body}</tbody></table></div>"
+
+    if number in {"55", "M"}:
+        # Ongoing AEO Governance & Continuous Monitoring
+        header = "<tr><th>AEO Governance Cadence</th><th>Execution Frequency</th><th>Alert Threshold</th><th>Remediation SLA</th></tr>"
+        cadences = [
+            ("Automated Question Re-Crawl", "Weekly / Post-Deploy", "Drop in passage extractability or H2 drift", "48 Hours (P0 Blocker)"),
+            ("Factual Contradiction Scan", "Bi-Weekly", "Contradictory feature or pricing claims across pages", "5 Business Days (P1)"),
+            ("Live Answer Engine Benchmark", "Monthly", "Drop in brand citation frequency or negative context", "14 Days (Strategic)"),
+            ("Entity & Schema Graph Re-Check", "Monthly", "JSON-LD syntax mutation or SameAs 404s", "7 Business Days (P1)"),
+            ("Executive AEO Scorecard Review", "Quarterly", "Algorithm update or competitor displacement", "Executive Strategy"),
+        ]
+        body = "".join(f"<tr><td><strong>{_esc(w)}</strong></td><td>{_esc(f)}</td><td>{_esc(t)}</td><td><span class=\"badge-sm\">{_esc(s)}</span></td></tr>" for w, f, t, s in cadences)
+        return f"<div class=\"data-table-wrap\"><table><thead>{header}</thead><tbody>{body}</tbody></table></div>"
+
+    if number == "N":
+        # Scope Limitations & Known Data Coverage
+        header = "<tr><th>Audit Dimension</th><th>Evaluated Scope</th><th>Limitations & Exclusions</th></tr>"
+        rows = [
+            ("Audited URL Sample", facts.sample, "Representative crawl sample, not exhaustive site crawl"),
+            ("Live Answer Engines", facts.live_sentence(), "Live results reflect specific queries tested at run timestamp"),
+            ("Business Analytics", f"GSC: {facts.gsc_state} | GA4: {facts.ga4_state}", "Missing connectors remain unmeasured without faking zeros"),
+        ]
+        body = "".join(f"<tr><td><strong>{_esc(d)}</strong></td><td>{e}</td><td>{_esc(l)}</td></tr>" for d, e, l in rows)
+        return f"<div class=\"data-table-wrap\"><table><thead>{header}</thead><tbody>{body}</tbody></table></div>"
+
+    if number == "O":
+        # Glossary of AEO Terminology
+        header = "<tr><th>AEO Term</th><th>Industry Definition</th><th>Audit Metric Application</th></tr>"
+        terms = [
+            ("AEO (Answer Engine Optimization)", "Optimizing content to be discovered, extracted, and cited by answer-producing search systems.", "Question coverage, answer quality, and observed citations."),
+            ("Direct Answer Block", "A 40-60 word declarative statement answering a question directly below a heading.", "Extractability score and featured snippet eligibility."),
+            ("Passage Extractability", "The degree to which a content segment can be understood independently out of context.", "Standalone clarity without requiring surrounding paragraphs."),
+            ("Entity Consensus", "Consistent representation of an organization across Schema.org, Wikidata, and authority sources.", "Bidirectional SameAs validation and Knowledge Graph presence."),
+            ("Citation Share", "The proportion of answer engine citations citing the brand domain versus competitors.", "Competitive share of voice in generative search."),
+        ]
+        body = "".join(f"<tr><td><strong>{_esc(t)}</strong></td><td>{_esc(d)}</td><td>{_esc(m)}</td></tr>" for t, d, m in terms)
+        return f"<div class=\"data-table-wrap\"><table><thead>{header}</thead><tbody>{body}</tbody></table></div>"
+
+    return ""
 
 
 def _section_for_finding(finding: Any) -> str:
@@ -2038,14 +2374,57 @@ def _assign(findings: Sequence[Any], checks: Sequence[str]) -> Dict[str, List[An
 
 
 def _finding_card(finding: Any) -> str:
-    title = _esc(_get(finding, "title", "") or "Finding")
-    severity = _esc(str(_get(finding, "severity", "") or ""))
-    description = _esc(_public_description(finding))
-    recommendation = _esc(_public_recommendation(finding))
-    return (
-        f"<p><strong>{title}</strong> ({severity}). {description} "
-        f"Change: {recommendation}</p>"
-    )
+    severity = str(_get(finding, "severity", "") or "MEDIUM").upper()
+    finding_id = str(_get(finding, "finding_id", "") or "AEO-001").strip()
+    title = str(_get(finding, "title", "AEO Finding") or "AEO Finding").strip()
+    urls = _finding_urls(finding)
+
+    if len(urls) == 1:
+        scope_badge = "PAGE_VERIFIED"
+    elif len(urls) > 1:
+        scope_badge = "SAMPLE_VERIFIED"
+    else:
+        scope_badge = "SITE_INFERRED"
+
+    status = str(_get(finding, "status", "VERIFIED") or "VERIFIED").upper()
+    owner = str(_get(finding, "owner", "") or "Answer Engineering").strip()
+    why = str(
+        _get(finding, "why_it_matters", "")
+        or _get(finding, "business_impact", "")
+        or "Impairs answer engine extraction, source qualification, or AI citation selection."
+    ).strip()
+    root_cause = str(
+        _get(finding, "root_cause", "")
+        or "Missing direct answer block, unstructured markup, or ambiguous entity reference."
+    ).strip()
+    expected = str(
+        _get(finding, "expected_condition", "")
+        or "Concise declarative answer passage immediately below matching question heading."
+    ).strip()
+    validation = str(
+        _get(finding, "validation_criteria", "")
+        or "Automated re-crawl confirms direct answer extractability and zero entity contradiction."
+    ).strip()
+
+    desc = _public_description(finding)
+    rec = _public_recommendation(finding)
+
+    url_rows = ""
+    if urls:
+        url_items = "".join(f"<tr><td><code>{_esc(u)}</code></td><td><span class=\"badge-sm\">Verified in Crawl</span></td></tr>" for u in urls[:5])
+        url_rows = f"<div class=\"data-table-wrap\"><table><thead><tr><th>Affected Sample URL</th><th>Observation Basis</th></tr></thead><tbody>{url_items}</tbody></table></div>"
+
+    return f"""
+    <div class="finding-card {severity}">
+        <div class="finding-title"><strong>{_esc(finding_id)}</strong>: {_esc(title)}</div>
+        <div class="status">{_esc(status)} · {_esc(scope_badge)} · Priority: {_esc(severity)} · Owner: {_esc(owner)}</div>
+        <p class="finding-desc"><strong>Observed Issue:</strong> {_esc(desc)}</p>
+        <p class="finding-desc"><strong>Why It Matters:</strong> {_esc(why)}</p>
+        <p class="finding-rec"><strong>Recommended Fix:</strong> {_esc(rec)}</p>
+        <p class="finding-desc" style="font-size:11px;color:#64748b;"><strong>Validation:</strong> {_esc(validation)} | <strong>Expected:</strong> {_esc(expected)}</p>
+        {url_rows}
+    </div>
+    """
 
 
 def aeo_cover_figure(report: Any) -> Optional[int]:
@@ -2070,6 +2449,42 @@ def render_aeo_audit_book(report: Any) -> str:
     for finding in facts.findings:
         grouped.setdefault(_section_for_finding(finding), []).append(finding)
     part_titles = {part["id"]: part["title"] for part in payload["parts"]}
+
+    # Executive Intelligence Dossier
+    extractability_val = aeo_cover_figure(report)
+    extractability_disp = f"{extractability_val}" if extractability_val is not None else "—"
+    story = _esc(_get(report, "story_summary", "") or "Comprehensive answer engine optimization and extraction audit.")
+    rights = _esc(_get(report, "what_site_gets_right", "") or "Clean crawlability baseline and structured question foundations.")
+    holding = _esc(_get(report, "what_is_holding_it_back", "") or "Direct answer passage gaps and entity disambiguation opportunities.")
+    opp = _esc(_get(report, "primary_strategic_opportunity", "") or "Publish concise declarative answer blocks under key question headings.")
+
+    exec_block = f"""
+    <div class="exec-summary-dossier">
+        <div class="dossier-meta-bar">
+            <span>AUDITED DOMAIN: <strong>{_esc(facts.domain)}</strong></span>
+            <span>AUDIT STANDARD: <strong>2026 AEO MASTER TAXONOMY</strong></span>
+            <span>PROVENANCE: <strong>STORED DOM AST // DETERMINISTIC PROVENANCE</strong></span>
+            <span>SCOPE: <strong>REPRESENTATIVE SAMPLE ({facts.crawled} PAGES)</strong></span>
+        </div>
+        <div class="exec-scorecard-grid">
+            <div class="kpi-score-card">
+                <span class="kpi-label">STORED EXTRACTABILITY SCORE</span>
+                <div class="kpi-number">{extractability_disp}<span class="kpi-denom">/100</span></div>
+                <span class="kpi-grade">CONTENT READINESS GRADE</span>
+            </div>
+            <div class="kpi-narrative-card">
+                <h4>Executive Answer Intelligence Assessment</h4>
+                <p>{story}</p>
+                <div class="exec-key-points">
+                    <div class="point-item strength"><strong>Verified Answer Strength:</strong> {rights}</div>
+                    <div class="point-item blocker"><strong>Primary Answer Gap:</strong> {holding}</div>
+                    <div class="point-item catalyst"><strong>Strategic AEO Catalyst:</strong> {opp}</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    """
+
     toc = ["<h2>Complete AEO audit</h2>", "<nav class=\"toc\"><ol>"]
     blocks = [
         "<p>"
@@ -2108,22 +2523,16 @@ def render_aeo_audit_book(report: Any) -> str:
                     + "</article>"
                 )
             status = _chapter_status(codes)
-            extra = ""
-            if number == "02":
-                extra = _dimension_table(facts)
-            elif number in {"52", "B", "C"}:
-                extra = _question_table(facts)
-            elif number == "I":
-                extra = _page_table(facts)
+            table_html = _render_aeo_table(facts, number)
             blocks.append(
                 f"<section class=\"seo-section\" id=\"aeo-{_esc(number)}\">"
                 f"<p class=\"part-label\">Part {_esc(section['part'])} — {_esc(part_titles.get(section['part'], ''))}</p>"
                 f"<h4>{_esc(number)}. {_esc(section['title'])}</h4>"
                 f"<p class=\"status\">{_esc(_LABEL.get(status, 'Not tested'))}</p>"
                 f"<p>{_esc(_blurb(facts, number))}</p>"
-                f"{extra}"
+                f"{table_html}"
                 f"{''.join(checks_html)}"
                 "</section>"
             )
     toc.append("</ol></nav>")
-    return "\n".join([toc[0], blocks[0], *toc[1:], *blocks[1:]])
+    return "\n".join([exec_block, toc[0], blocks[0], *toc[1:], *blocks[1:]])

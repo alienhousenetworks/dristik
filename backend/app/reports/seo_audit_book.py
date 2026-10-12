@@ -12,6 +12,8 @@ import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
+from app.reports.seo_chapter_visuals import chapter_panel, evidence_mix_chart
+
 _INDEX_PATH = Path(__file__).with_name("seo_audit_index.json")
 _STOP = {
     "and", "or", "the", "a", "an", "of", "to", "for", "in", "on", "with", "where",
@@ -216,108 +218,67 @@ def _finding_card(finding: Any) -> str:
     if _is_guessing(finding):
         kind = "note"
     urls = _finding_urls(finding)
-    
-    # Evidence scope classification per Dristik standards
     if len(urls) == 1:
         scope_badge = "PAGE_VERIFIED"
-        scope_desc = "Single verified URL"
+        scope_desc = "One URL was attached to this finding."
     elif len(urls) > 1:
         scope_badge = "SAMPLE_VERIFIED"
-        scope_desc = f"Verified across {len(urls)} sample URLs"
+        scope_desc = f"{len(urls)} URLs were attached to this finding."
     else:
-        scope_badge = "SITE_INFERRED"
-        scope_desc = "Inferred from site-level configuration"
+        scope_badge = "URL_NOT_ATTACHED"
+        scope_desc = "No URL was attached to this finding."
 
-    status = str(_get(finding, "status", "VERIFIED") or "VERIFIED").upper()
-    owner = str(_get(finding, "owner", "") or "Engineering").strip()
-    why = str(
-        _get(finding, "why_it_matters", "")
-        or _get(finding, "business_impact", "")
-        or "Impairs organic discoverability, indexation hygiene, or click-through performance."
-    ).strip()
-    root_cause = str(
-        _get(finding, "root_cause", "")
-        or "Template-level implementation, missing CMS metadata, or server configuration."
-    ).strip()
-    expected = str(
-        _get(finding, "expected_condition", "")
-        or "Conforms to search engine standards and zero-error architectural thresholds."
-    ).strip()
-    validation = str(
-        _get(finding, "validation_criteria", "")
-        or "Automated re-crawl confirms zero errors on affected URLs with consistent response codes."
-    ).strip()
-    
-    priority = _num(_get(finding, "priority", 7)) or 7.0
-    effort = _num(_get(finding, "effort", 3)) or 3.0
-    impact = _num(_get(finding, "impact", 6)) or 6.0
-    confidence = _num(_get(finding, "confidence", 0.9)) or 0.9
-    basis = str(_get(finding, "confidence_basis", "") or "DOM observation").strip()
-    deps = [str(d).strip() for d in (_get(finding, "dependencies", None) or []) if str(d).strip()]
-    deps_text = ", ".join(deps) if deps else "None"
-    
-    label = "Observation" if kind == "note" else "Defect Finding"
     observed = _public_description(finding)
     recommendation = _public_recommendation(finding)
-    
     shown_urls = ", ".join(f"<code>{_esc(u)}</code>" for u in urls[:5])
     if len(urls) > 5:
         shown_urls += f" (+{len(urls) - 5} more)"
-    urls_html = shown_urls if urls else "Site-wide domain scope"
-    
-    guess_note = "<div class=\"finding-row note-flag\">This observation was marked guessing in the source rubric and is excluded from defect totals.</div>" if _is_guessing(finding) else ""
+    urls_html = shown_urls if urls else "No URL was attached."
+
+    optional = []
+    for field_name, heading in (
+        ("why_it_matters", "Why it matters"),
+        ("business_impact", "Stored business impact"),
+        ("root_cause", "Stored root cause"),
+        ("expected_condition", "Stored expected condition"),
+        ("validation_criteria", "Stored validation"),
+    ):
+        value = str(_get(finding, field_name, "") or "").strip()
+        if value:
+            optional.append(
+                f'<div class="finding-field-block"><span class="field-title">{_esc(heading)}:</span>'
+                f'<p class="field-text">{_esc(value)}</p></div>'
+            )
+    guess_note = (
+        '<div class="finding-row note-flag">This observation was marked guessing and is excluded from defect totals.</div>'
+        if _is_guessing(finding)
+        else ""
+    )
+    label = "Observation" if kind == "note" else "Recorded finding"
 
     return f"""
     <div class="finding-card-v2 {severity.lower()}">
         <div class="finding-v2-header">
             <div class="header-tags">
                 <span class="badge-tag sev-{severity.lower()}">{_esc(severity)}</span>
-                <span class="badge-tag scope-{scope_badge.lower()}">{_esc(scope_badge)}</span>
-                <span class="badge-tag status-{status.lower()}">{_esc(status)}</span>
+                <span class="badge-tag">{_esc(scope_badge)}</span>
                 <span class="finding-id-tag">{_esc(finding_id)}</span>
             </div>
             <h5 class="finding-v2-title">{_esc(label)}: {_esc(title)}</h5>
         </div>
         <div class="finding-v2-body">
             <div class="finding-field-block">
-                <span class="field-title">Observed Fact (Empirical Proof):</span>
+                <span class="field-title">Observed:</span>
                 <p class="field-text">{_esc(observed)}</p>
             </div>
-            <div class="finding-two-col">
-                <div class="finding-field-block">
-                    <span class="field-title">Scope &amp; Tested URLs:</span>
-                    <p class="field-text">{urls_html} <span class="scope-note">({_esc(scope_desc)})</span></p>
-                </div>
-                <div class="finding-field-block">
-                    <span class="field-title">Root Cause:</span>
-                    <p class="field-text">{_esc(root_cause)}</p>
-                </div>
-            </div>
             <div class="finding-field-block">
-                <span class="field-title">Why It Matters (Impact):</span>
-                <p class="field-text">{_esc(why)}</p>
+                <span class="field-title">URLs:</span>
+                <p class="field-text">{urls_html} <span class="scope-note">({_esc(scope_desc)})</span></p>
             </div>
+            {''.join(optional)}
             <div class="finding-field-block action-block">
-                <span class="field-title">Recommended Action:</span>
+                <span class="field-title">Recommended action:</span>
                 <p class="field-text action-text">{_esc(recommendation)}</p>
-            </div>
-            <div class="finding-two-col">
-                <div class="finding-field-block">
-                    <span class="field-title">Expected Condition:</span>
-                    <p class="field-text">{_esc(expected)}</p>
-                </div>
-                <div class="finding-field-block">
-                    <span class="field-title">Validation Method ("Fixed vs Verified"):</span>
-                    <p class="field-text verify-text">✓ {_esc(validation)}</p>
-                </div>
-            </div>
-            <div class="finding-meta-footer">
-                <span>Owner: <strong>{_esc(owner)}</strong></span>
-                <span>Priority: <strong>{int(priority)}/10</strong></span>
-                <span>Effort: <strong>{int(effort)}/10</strong></span>
-                <span>Impact: <strong>{int(impact)}/10</strong></span>
-                <span>Dependencies: <strong>{_esc(deps_text)}</strong></span>
-                <span>Confidence: <strong>{int(confidence * 100)}% ({_esc(basis)})</strong></span>
             </div>
             {guess_note}
         </div>
@@ -1662,444 +1623,14 @@ def _section_summary(book: _Book, number: str) -> Tuple[str, str]:
     return code, text
 
 
-def _page_table(book: _Book, number: str) -> str:
-    """Generate structured empirical data tables across all 55 chapters and appendices A-O."""
-    # Appendices and Section Data Ledgers
-    if number in {"C", "URL_INVENTORY"}:
-        if not book.pages:
-            return "<p class=\"table-empty\">No pages crawled in the stored manifest.</p>"
-        header = "<tr><th>#</th><th>URL</th><th>HTTP</th><th>TTFB</th><th>Title Tag (chars)</th><th>H1 Primary Outline</th></tr>"
-        body = []
-        for idx, page in enumerate(book.pages[:50], 1):
-            h1 = _h1s(page)
-            timing = _num(_get(page, "ttfb_ms"))
-            ttfb_disp = f"{_ms(timing)} ms" if timing and timing > 0 else "—"
-            title = _get(page, "title", "") or ""
-            t_len = f" ({len(title)})" if title else ""
-            body.append(
-                "<tr>"
-                f"<td>{idx}</td>"
-                f"<td><code>{_esc(_get(page, 'url', ''))}</code></td>"
-                f"<td><span class=\"badge-sm\">{_esc(_get(page, 'status_code', 200))}</span></td>"
-                f"<td>{_esc(ttfb_disp)}</td>"
-                f"<td>{_esc((title[:50] + '...') if len(title) > 50 else (title or '—'))}{_esc(t_len)}</td>"
-                f"<td>{_esc((h1[0][:45] + '...') if (h1 and len(h1[0]) > 45) else (h1[0] if h1 else '—'))}</td>"
-                "</tr>"
-            )
-        return f"<div class=\"data-table-wrap\"><table><thead>{header}</thead><tbody>{''.join(body)}</tbody></table></div>"
 
-    if number in {"01", "A"}:
-        # Executive Scope & Architecture
-        discovered = _num(_get(book.manifest, "total_pages_discovered")) or len(book.pages)
-        crawled = len(book.pages)
-        brand = book.profile_value("business_name") or "Primary Audited Property"
-        model = book.profile_value("business_model") or "General Web Property"
-        header = "<tr><th>Audit Parameter</th><th>Measured Value</th><th>Audit Scope Standard</th></tr>"
-        rows = [
-            ("Audited Domain Scope", f"<code>{_esc(_get(book.report, 'domain', '') or 'Target Domain')}</code>", "Exact Root Domain"),
-            ("Business & Brand Entity", _esc(brand), "Profile Entity Resolution"),
-            ("Stated Business Model", _esc(model.title()), "Identified Commercial Archetype"),
-            ("Total Discovered URLs", str(int(discovered)), "Sitemap & Crawler Discovery"),
-            ("Crawled Sample Size", f"{crawled} page(s)", "Verified DOM & Network Inspection"),
-            ("Robots.txt Status", "Discovered & Validated" if _get(book.manifest, "robots_txt_found") else "Missing / Root Absent", "RFC 9309 Crawler Directives"),
-            ("Sitemap Coverage", "Discovered in Crawl" if _get(book.manifest, "sitemap_found") else "Not Discovered at Root", "XML Sitemap Discovery Standard"),
-            ("Evidence Baseline", "Stored DOM & Network HAR Ledger", "Zero-Fake Representative AST"),
-        ]
-        body = "".join(f"<tr><td><strong>{_esc(k)}</strong></td><td>{v}</td><td><span class=\"scope-tag\">{_esc(s)}</span></td></tr>" for k, v, s in rows)
-        return f"<div class=\"data-table-wrap\"><table><thead>{header}</thead><tbody>{body}</tbody></table></div>"
-
-    if number in {"02", "B"}:
-        # Website Health Scorecard & 11-Dimension Matrix
-        scores = _get(book.report, "scores")
-        base_score = _num(_get(scores, "overall_score")) if scores else None
-        score_val = f"{int(round(base_score))}/100" if base_score is not None else "UNMEASURED"
-        header = "<tr><th>Audit Dimension</th><th>Benchmark Score</th><th>Status</th><th>Evidence Standard</th></tr>"
-        matrix = [
-            ("01. Overall SEO Health", score_val, "Synthesized", "Sealed Category Weights"),
-            ("02. Technical Infrastructure", f"{int(round(_get(scores, 'seo_score', 80) or 80))}/100", "Measured", "HTTP, Routing & Server AST"),
-            ("03. Crawlability & Indexability", f"{int(round(_get(scores, 'seo_score', 82) or 82))}/100", "Measured", "Robots, Canonicals, Sitemaps"),
-            ("04. On-Page SEO Quality", f"{int(round(_get(scores, 'seo_score', 78) or 78))}/100", "Measured", "Titles, Metas, Heading Trees"),
-            ("05. Content Quality & EEAT", f"{int(round(_get(scores, 'seo_score', 75) or 75))}/100", "Measured", "Word Counts & Topical Density"),
-            ("06. Internal Linking Architecture", f"{int(round(_get(scores, 'seo_score', 76) or 76))}/100", "Measured", "Click Depth & Link Distribution"),
-            ("07. Backlink & External Authority", "DATA_UNAVAILABLE" if not _ran(_get(book.report, "external_authority")) else "Measured", "Live Gap", "Requires Live Provider API"),
-            ("08. User Experience & Core Web Vitals", f"{int(round(_get(scores, 'cro_score', 74) or 74))}/100", "Measured", "TTFB & Lab Diagnostics"),
-            ("09. Local SEO Presence", "NOT_APPLICABLE" if not _model_matches(book, ["local", "store", "restaurant", "clinic", "dental"]) else "Measured", "Conditional", "LocalBusiness & NAP Ledger"),
-            ("10. International & Multilingual SEO", "NOT_APPLICABLE" if not book.urls(lambda p: _get(p, "hreflang")) else "Measured", "Conditional", "Hreflang & Reciprocal Checks"),
-            ("11. AEO & GEO Citability Readiness", f"{int(round(_get(scores, 'geo_score', 72) or 72))}/100", "Measured", "Direct Answers & LLM Extraction"),
-            ("12. Measurement Confidence", "94% Confidence", "High", "Grounded Crawl AST (Zero Guessing)"),
-        ]
-        body = "".join(f"<tr><td><strong>{_esc(dim)}</strong></td><td><strong>{_esc(sc)}</strong></td><td><span class=\"badge-sm\">{_esc(st)}</span></td><td>{_esc(ev)}</td></tr>" for dim, sc, st, ev in matrix)
-        return f"<div class=\"data-table-wrap\"><table><thead>{header}</thead><tbody>{body}</tbody></table></div>"
-
-    if number in {"05", "33", "F"}:
-        # Competitor Parity & Bakeoff Matrix
-        bakeoff = _get(book.report, "competitor_bakeoff")
-        header = "<tr><th>Competitor Domain</th><th>Target Wins</th><th>Rival Wins</th><th>Ties</th><th>Parity Outcome</th></tr>"
-        if bakeoff and _get(bakeoff, "competitor_domain"):
-            c_dom = _esc(_get(bakeoff, "competitor_domain"))
-            tw = int(_get(bakeoff, "target_wins", 0) or 0)
-            cw = int(_get(bakeoff, "competitor_wins", 0) or 0)
-            ties = int(_get(bakeoff, "ties", 0) or 0)
-            status_color = "#16a34a" if tw >= cw else "#dc2626"
-            outcome = "Target Domain Leads" if tw > cw else ("Peer Parity" if tw == cw else "Rival Moat Identified")
-            body = (
-                f"<tr><td><strong>{c_dom}</strong></td>"
-                f"<td style=\"color:#16a34a;font-weight:700;\">{tw}</td>"
-                f"<td style=\"color:#dc2626;font-weight:700;\">{cw}</td>"
-                f"<td>{ties}</td>"
-                f"<td style=\"color:{status_color};font-weight:700;\">{outcome}</td></tr>"
-            )
-        else:
-            body = (
-                "<tr><td><strong>Industry Peer Benchmark</strong></td>"
-                "<td colspan=\"4\" style=\"color:#64748b;\">Competitor domain was not declared for this automated run. Head-to-head empirical testing activates when competitor domains are submitted.</td></tr>"
-            )
-        return f"<div class=\"data-table-wrap\"><table><thead>{header}</thead><tbody>{body}</tbody></table></div>"
-
-    if number in {"07", "08"}:
-        # Crawlability & Indexability Ledger
-        if not book.pages:
-            return ""
-        header = "<tr><th>URL</th><th>HTTP Status</th><th>Indexable</th><th>Robots Directives</th><th>Canonical Self-Match</th></tr>"
-        body = []
-        for page in book.pages[:35]:
-            url = str(_get(page, "url", "") or "")
-            st = _get(page, "status_code", 200)
-            canon = str(_get(page, "canonical_url", "") or "").strip()
-            self_match = "Yes (Clean)" if (canon == url or not canon) else "Points Elsewhere"
-            is_idx = "Indexable" if st == 200 and self_match == "Yes (Clean)" else "Check"
-            body.append(
-                "<tr>"
-                f"<td><code>{_esc(url)}</code></td>"
-                f"<td><span class=\"badge-sm\">{_esc(st)}</span></td>"
-                f"<td><span class=\"badge-sm\">{_esc(is_idx)}</span></td>"
-                f"<td>index, follow</td>"
-                f"<td>{_esc(self_match)}</td>"
-                "</tr>"
-            )
-        return f"<div class=\"data-table-wrap\"><table><thead>{header}</thead><tbody>{''.join(body)}</tbody></table></div>"
-
-    if number == "10":
-        # Canonicalization & Duplicate Control Ledger
-        if not book.pages:
-            return ""
-        header = "<tr><th>Audited Page URL</th><th>Declared Canonical URL</th><th>Canonical Match Type</th></tr>"
-        body = []
-        for page in book.pages[:35]:
-            url = str(_get(page, "url", "") or "")
-            canon = str(_get(page, "canonical_url", "") or "").strip()
-            if not canon:
-                match_type = "<span style=\"color:#f59e0b;font-weight:700;\">Missing Canonical</span>"
-                canon_disp = "—"
-            elif canon == url:
-                match_type = "<span style=\"color:#16a34a;\">Self-Referencing (Clean)</span>"
-                canon_disp = f"<code>{_esc(canon)}</code>"
-            else:
-                match_type = "<span style=\"color:#0284c7;font-weight:700;\">Consolidated Alternate</span>"
-                canon_disp = f"<code>{_esc(canon)}</code>"
-            body.append(
-                "<tr>"
-                f"<td><code>{_esc(url)}</code></td>"
-                f"<td>{canon_disp}</td>"
-                f"<td>{match_type}</td>"
-                "</tr>"
-            )
-        return f"<div class=\"data-table-wrap\"><table><thead>{header}</thead><tbody>{''.join(body)}</tbody></table></div>"
-
-    if number == "11":
-        # Redirects & Broken URLs Ledger
-        if not book.pages:
-            return ""
-        header = "<tr><th>Request URL</th><th>Response Status</th><th>Redirect Destination</th><th>Classification</th></tr>"
-        body = []
-        redirect_pages = [p for p in book.pages if str(_get(p, "status_code", "")).startswith("3")]
-        broken_pages = [p for p in book.pages if str(_get(p, "status_code", "")).startswith(("4", "5"))]
-        clean_pages = [p for p in book.pages if _get(p, "status_code") == 200]
-        displayed = (redirect_pages + broken_pages + clean_pages)[:30]
-        for p in displayed:
-            u = str(_get(p, "url", ""))
-            sc = _get(p, "status_code", 200)
-            dest = str(_get(p, "redirect_url", "") or "—")
-            cls_name = "200 OK (Clean)" if sc == 200 else ("Redirect (3xx)" if str(sc).startswith("3") else "Client/Server Error")
-            body.append(
-                "<tr>"
-                f"<td><code>{_esc(u)}</code></td>"
-                f"<td><span class=\"badge-sm\">{_esc(sc)}</span></td>"
-                f"<td><code>{_esc(dest)}</code></td>"
-                f"<td>{_esc(cls_name)}</td>"
-                "</tr>"
-            )
-        return f"<div class=\"data-table-wrap\"><table><thead>{header}</thead><tbody>{''.join(body)}</tbody></table></div>"
-
-    if number == "13":
-        # Site Architecture & Internal Links Ledger
-        if not book.pages:
-            return ""
-        header = "<tr><th>URL</th><th>Word Count</th><th>Primary H1 Tag</th><th>Internal Discovery Status</th></tr>"
-        body = []
-        for page in book.pages[:35]:
-            u = str(_get(page, "url", ""))
-            wc = int(_get(page, "word_count", 0) or 0)
-            h1 = _h1s(page)
-            body.append(
-                "<tr>"
-                f"<td><code>{_esc(u)}</code></td>"
-                f"<td>{wc} words</td>"
-                f"<td>{_esc(h1[0] if h1 else '—')}</td>"
-                f"<td><span class=\"badge-sm\">Linked in Crawl</span></td>"
-                "</tr>"
-            )
-        return f"<div class=\"data-table-wrap\"><table><thead>{header}</thead><tbody>{''.join(body)}</tbody></table></div>"
-
-    if number == "14":
-        # HTTP Status & Server Latency Ledger
-        header = "<tr><th>URL</th><th>HTTP Status</th><th>TTFB Latency</th><th>Performance Assessment</th></tr>"
-        body = []
-        for page in book.pages[:40]:
-            timing = _num(_get(page, "ttfb_ms"))
-            shown = f"{_ms(timing)} ms" if timing and timing > 0 else "not stored"
-            eval_text = "Fast (<300ms)" if (timing and timing <= 300) else ("Moderate (300-800ms)" if (timing and timing <= 800) else "Slow Latency (>800ms)")
-            body.append(
-                "<tr>"
-                f"<td><code>{_esc(_get(page, 'url', ''))}</code></td>"
-                f"<td><span class=\"badge-sm\">{_esc(_get(page, 'status_code', ''))}</span></td>"
-                f"<td>{_esc(shown)}</td>"
-                f"<td>{_esc(eval_text)}</td>"
-                "</tr>"
-            )
-        return f"<div class=\"data-table-wrap\"><table><thead>{header}</thead><tbody>{''.join(body)}</tbody></table></div>"
-
-    if number in {"16", "I"}:
-        # Core Web Vitals Ledger
-        header = "<tr><th>Core Web Vital Metric</th><th>Google Threshold (75th Percentile)</th><th>Lab / Proxy Status</th><th>Diagnostic Guidance</th></tr>"
-        cwv_rows = [
-            ("Largest Contentful Paint (LCP)", "≤ 2.5 seconds", "Fast / Responsive", "Optimize hero hero imagery, fonts, and render-blocking CSS."),
-            ("Interaction to Next Paint (INP)", "≤ 200 milliseconds", "Responsive", "Minimize main-thread blocking JavaScript during event loops."),
-            ("Cumulative Layout Shift (CLS)", "≤ 0.1 score", "Stable", "Set explicit width/height dimensions on all <img> and <iframe> elements."),
-            ("Time to First Byte (TTFB)", "≤ 800 milliseconds", f"Avg {_ms(_num(_get(book.report, 'crawl_summary', {}).get('avg_ttfb_ms')) or 240)} ms", "Ensure edge CDN caching and TLS session resumption."),
-        ]
-        body = "".join(f"<tr><td><strong>{_esc(m)}</strong></td><td><code>{_esc(t)}</code></td><td><span class=\"badge-sm\">{_esc(s)}</span></td><td>{_esc(g)}</td></tr>" for m, t, s, g in cwv_rows)
-        return f"<div class=\"data-table-wrap\"><table><thead>{header}</thead><tbody>{body}</tbody></table></div>"
-
-    if number == "18":
-        # Security & Integrity Ledger
-        if not book.pages:
-            return ""
-        header = "<tr><th>URL</th><th>Protocol</th><th>Security Headers Declared</th><th>Mixed Content Status</th></tr>"
-        body = []
-        for page in book.pages[:30]:
-            u = str(_get(page, "url", ""))
-            proto = "HTTPS (TLS)" if u.startswith("https") else "HTTP (Insecure)"
-            headers = _header_map(page)
-            hsts = "HSTS" if "strict-transport-security" in headers else ""
-            csp = "CSP" if "content-security-policy" in headers else ""
-            h_text = ", ".join(filter(None, [hsts, csp])) or "Standard Web Headers"
-            body.append(
-                "<tr>"
-                f"<td><code>{_esc(u)}</code></td>"
-                f"<td><span class=\"badge-sm\">{_esc(proto)}</span></td>"
-                f"<td>{_esc(h_text)}</td>"
-                f"<td><span style=\"color:#16a34a;\">Clean (0 Insecure Assets)</span></td>"
-                "</tr>"
-            )
-        return f"<div class=\"data-table-wrap\"><table><thead>{header}</thead><tbody>{''.join(body)}</tbody></table></div>"
-
-    if number in {"19", "H"}:
-        # Structured Data & Schema Validation Matrix
-        header = "<tr><th>Audited Page URL</th><th>Detected Schema.org Entity Types</th><th>Syntax &amp; Rich Result Status</th></tr>"
-        body = []
-        for page in book.pages[:35]:
-            u = str(_get(page, "url", ""))
-            types = [str(t).strip() for t in (_get(page, "schema_types", None) or []) if str(t).strip()]
-            t_disp = ", ".join(f"<code>{_esc(t)}</code>" for t in types) if types else "<span style=\"color:#64748b;\">No schema markup detected</span>"
-            status = "<span style=\"color:#16a34a;\">Valid JSON-LD</span>" if types else "<span style=\"color:#f59e0b;\">Entity Gap</span>"
-            body.append(
-                "<tr>"
-                f"<td><code>{_esc(u)}</code></td>"
-                f"<td>{t_disp}</td>"
-                f"<td>{status}</td>"
-                "</tr>"
-            )
-        return f"<div class=\"data-table-wrap\"><table><thead>{header}</thead><tbody>{''.join(body)}</tbody></table></div>"
-
-    if number == "20":
-        # Title Tags & Metadata Ledger
-        header = "<tr><th>URL</th><th>Title Tag Length</th><th>Meta Description Length</th><th>SERP Truncation Assessment</th></tr>"
-        titles = {url: (title, length) for url, title, length in _titles(book)}
-        metas = {url: length for url, _meta, length in _metas(book)}
-        body = []
-        for url, (title, length) in list(titles.items())[:35]:
-            m_len = metas.get(url, 0)
-            t_status = "Optimal (50-60 chars)" if 40 <= length <= 60 else ("Truncation Risk (>60 chars)" if length > 60 else "Short (<40 chars)")
-            body.append(
-                "<tr>"
-                f"<td><code>{_esc(url)}</code></td>"
-                f"<td>{_esc(length if title else 'Missing (0)')} chars</td>"
-                f"<td>{_esc(m_len if m_len else 'Missing (0)')} chars</td>"
-                f"<td>{_esc(t_status)}</td>"
-                "</tr>"
-            )
-        return f"<div class=\"data-table-wrap\"><table><thead>{header}</thead><tbody>{''.join(body)}</tbody></table></div>"
-
-    if number == "21":
-        # Heading Outline Ledger
-        header = "<tr><th>URL</th><th>Primary H1 Tag</th><th>H2 Sections</th><th>H3 Subsections</th><th>Outline Balance</th></tr>"
-        body = []
-        for page in book.pages[:35]:
-            h1 = _h1s(page)
-            h2 = [str(item).strip() for item in (_get(page, "h2", None) or []) if str(item).strip()]
-            h3 = [str(item).strip() for item in (_get(page, "h3", None) or []) if str(item).strip()]
-            balance = "Single H1 (Clean)" if len(h1) == 1 else ("Missing H1" if not h1 else f"{len(h1)} Multiple H1s")
-            body.append(
-                "<tr>"
-                f"<td><code>{_esc(_get(page, 'url', ''))}</code></td>"
-                f"<td>{_esc(' | '.join(h1) if h1 else '—')}</td>"
-                f"<td>{len(h2)}</td>"
-                f"<td>{len(h3)}</td>"
-                f"<td>{_esc(balance)}</td>"
-                "</tr>"
-            )
-        return f"<div class=\"data-table-wrap\"><table><thead>{header}</thead><tbody>{''.join(body)}</tbody></table></div>"
-
-    if number in {"23", "D"}:
-        # Content Quality & Word Count Depth Ledger
-        if not book.pages:
-            return ""
-        header = "<tr><th>URL</th><th>Word Count</th><th>Primary Content Theme</th><th>Editorial Depth</th></tr>"
-        body = []
-        for page in book.pages[:35]:
-            wc = int(_get(page, "word_count", 0) or 0)
-            t = str(_get(page, "title", "") or "")
-            depth = "Comprehensive (>800 words)" if wc >= 800 else ("Standard Depth (400-800)" if wc >= 400 else "Thin Content (<400)")
-            body.append(
-                "<tr>"
-                f"<td><code>{_esc(_get(page, 'url', ''))}</code></td>"
-                f"<td><strong>{wc}</strong> words</td>"
-                f"<td>{_esc((t[:45] + '...') if len(t) > 45 else (t or '—'))}</td>"
-                f"<td>{_esc(depth)}</td>"
-                "</tr>"
-            )
-        return f"<div class=\"data-table-wrap\"><table><thead>{header}</thead><tbody>{''.join(body)}</tbody></table></div>"
-
-    if number in {"45", "46", "47", "K"}:
-        # AI Citations & Answer Engine Benchmark Ledger
-        header = "<tr><th>AI Answer Engine</th><th>Benchmark Scenario</th><th>Brand Citation Status</th><th>Attributed Destination</th></tr>"
-        engines = [
-            ("Google AI Overviews", "Direct category and product definition queries", "Grounding Verified", "Homepage & Core Offerings"),
-            ("ChatGPT (SearchGPT)", "Commercial recommendation and vendor bakeoffs", "Referenced in Context", "High-Authority Solution Hubs"),
-            ("Perplexity AI", "Comparative feature, pricing, and FAQ queries", "Direct Footnote Citations", "Structured Data Entities"),
-            ("Microsoft Copilot", "B2B enterprise capabilities and security checks", "Included in Digest", "Canonical Commercial Routes"),
-            ("Gemini AI Search", "Multimodal discovery and knowledge graph entities", "Entity Graph Match", "Organization Schema Node"),
-        ]
-        body = "".join(f"<tr><td><strong>{_esc(eng)}</strong></td><td>{_esc(sc)}</td><td><span class=\"badge-sm\">{_esc(st)}</span></td><td>{_esc(dest)}</td></tr>" for eng, sc, st, dest in engines)
-        return f"<div class=\"data-table-wrap\"><table><thead>{header}</thead><tbody>{body}</tbody></table></div>"
-
-    if number in {"48", "J"}:
-        # Google Search Console Ledger
-        header = "<tr><th>Search Console Metric</th><th>Connection Status</th><th>Recorded Telemetry</th><th>Operational Note</th></tr>"
-        state = book.gsc_state
-        clicks = book.search.get("clicks") if state == "MEASURED" else "Unconnected"
-        impressions = book.search.get("impressions") if state == "MEASURED" else "Unconnected"
-        rows = [
-            ("Property Verification", state, f"Domain: {_esc(_get(book.report, 'domain', '') or 'Target')}", "OAuth2 GSC Integration"),
-            ("Total Organic Clicks", state, str(clicks), "Live 90-Day GSC Performance"),
-            ("Total Organic Impressions", state, str(impressions), "SERP Discoverability Exposure"),
-            ("Crawl Statistics & Anomalies", state, "Zero crawl errors detected" if state == "MEASURED" else "Connect GSC for crawl telemetry", "Search Console Coverage Report"),
-        ]
-        body = "".join(f"<tr><td><strong>{_esc(m)}</strong></td><td><span class=\"badge-sm\">{_esc(s)}</span></td><td>{_esc(v)}</td><td>{_esc(n)}</td></tr>" for m, s, v, n in rows)
-        return f"<div class=\"data-table-wrap\"><table><thead>{header}</thead><tbody>{body}</tbody></table></div>"
-
-    if number == "50":
-        # CRO & Conversion Usability Ledger
-        if not book.pages:
-            return ""
-        header = "<tr><th>Audited Conversion Landing Page</th><th>Above-the-Fold Primary CTA</th><th>Friction Classification</th></tr>"
-        body = []
-        for page in book.pages[:30]:
-            u = str(_get(page, "url", ""))
-            body.append(
-                "<tr>"
-                f"<td><code>{_esc(u)}</code></td>"
-                f"<td><code>Primary Action Button</code></td>"
-                f"<td><span style=\"color:#16a34a;\">Actionable / Clean Ergonomics</span></td>"
-                "</tr>"
-            )
-        return f"<div class=\"data-table-wrap\"><table><thead>{header}</thead><tbody>{''.join(body)}</tbody></table></div>"
-
-    if number == "52":
-        # Forecasting & Opportunity Scenarios Ledger
-        header = "<tr><th>Remediation Scenario</th><th>Modeled Search Demand Lift</th><th>Expected Conversion Delta</th><th>Confidence Interval</th></tr>"
-        scenarios = [
-            ("Conservative Baseline", "+12% to +18% Organic Impressions", "+8% Qualified Inquiries", "90% Confidence (Fixing P0/P1 Blockers)"),
-            ("Expected Base Case", "+25% to +40% Organic Impressions", "+18% Qualified Inquiries", "80% Confidence (Technical + Schema + Entity)"),
-            ("Aggressive Growth Upside", "+50% to +85% Organic Visibility", "+35% Qualified Inquiries", "65% Confidence (Full Roadmap + AI Dominance)"),
-        ]
-        body = "".join(f"<tr><td><strong>{_esc(sc)}</strong></td><td>{_esc(d)}</td><td><span style=\"color:#16a34a;font-weight:700;\">{_esc(c)}</span></td><td>{_esc(cf)}</td></tr>" for sc, d, c, cf in scenarios)
-        return f"<div class=\"data-table-wrap\"><table><thead>{header}</thead><tbody>{body}</tbody></table></div>"
-
-    if number in {"53", "L"}:
-        # Master Issue Register & Remediation Backlog
-        if not book.findings:
-            return "<p class=\"table-empty\">Zero verified defects recorded across the audited sample.</p>"
-        header = "<tr><th>Finding ID</th><th>Severity</th><th>Category</th><th>Title &amp; Empirical Defect</th><th>Owner</th><th>Remediation Status</th></tr>"
-        body = []
-        for f in book.findings:
-            fid = str(_get(f, "finding_id", "") or "FIND-SEO")
-            sev = str(_get(f, "severity", "MEDIUM") or "MEDIUM").upper()
-            title = _get(f, "title", "Audit Finding")
-            cat = str(_get(f, "category", "") or "Technical SEO").upper()
-            owner = str(_get(f, "owner", "") or "Engineering")
-            stat = str(_get(f, "status", "OPEN") or "OPEN").upper()
-            body.append(
-                "<tr>"
-                f"<td><code>{_esc(fid)}</code></td>"
-                f"<td><span class=\"badge-sm sev-{sev.lower()}\">{_esc(sev)}</span></td>"
-                f"<td>{_esc(cat)}</td>"
-                f"<td><strong>{_esc(title)}</strong></td>"
-                f"<td>{_esc(owner)}</td>"
-                f"<td><span class=\"badge-sm status-{stat.lower()}\">{_esc(stat)}</span></td>"
-                "</tr>"
-            )
-        return f"<div class=\"data-table-wrap\"><table><thead>{header}</thead><tbody>{''.join(body)}</tbody></table></div>"
-
-    if number == "54":
-        # Post-Fix Verification Acceptance Tests
-        if not book.findings:
-            return ""
-        header = "<tr><th>Finding ID</th><th>Verification Acceptance Criterion</th><th>Expected Condition</th><th>QA Protocol</th></tr>"
-        body = []
-        for f in book.findings[:25]:
-            fid = str(_get(f, "finding_id", "") or "FIND-SEO")
-            val = str(_get(f, "validation_criteria", "") or "Automated re-crawl confirms zero errors.")
-            exp = str(_get(f, "expected_condition", "") or "Conforms to search engine standards.")
-            body.append(
-                "<tr>"
-                f"<td><code>{_esc(fid)}</code></td>"
-                f"<td>✓ {_esc(val)}</td>"
-                f"<td>{_esc(exp)}</td>"
-                f"<td><span class=\"badge-sm\">Automated CI Re-Crawl</span></td>"
-                "</tr>"
-            )
-        return f"<div class=\"data-table-wrap\"><table><thead>{header}</thead><tbody>{''.join(body)}</tbody></table></div>"
-
-    if number == "55":
-        # Ongoing Monitoring & Governance Cadence
-        header = "<tr><th>Monitoring Workflow</th><th>Execution Cadence</th><th>Alert Trigger Threshold</th><th>Remediation SLA</th></tr>"
-        cadences = [
-            ("Automated CI Technical Re-Crawl", "Weekly / Pre-Deploy", "HTTP 4xx/5xx or Canonical Mutation", "48 Hours (P0 Blocker)"),
-            ("SERP Snippet & Title Rewrite Audit", "Bi-Weekly", "Title truncation or unexpected rewrite", "7 Days (P1 Warning)"),
-            ("AI Citation & Share-of-Voice Tracking", "Monthly", "Drop in citation frequency or negative context", "14 Days (Strategic)"),
-            ("Core Web Vitals Regression Audit", "Continuous (CrUX)", "LCP > 2.5s or INP > 200ms", "14 Days (Engineering)"),
-            ("Quarterly Strategic SEO Review", "Quarterly", "Algorithm update or competitor displacement", "Strategic Planning"),
-        ]
-        body = "".join(f"<tr><td><strong>{_esc(w)}</strong></td><td>{_esc(c)}</td><td>{_esc(t)}</td><td><span class=\"badge-sm\">{_esc(s)}</span></td></tr>" for w, c, t, s in cadences)
-        return f"<div class=\"data-table-wrap\"><table><thead>{header}</thead><tbody>{body}</tbody></table></div>"
-
-    return ""
+def _stored_narrative(report: Any, name: str) -> str:
+    value = str(_get(report, name, "") or "").strip()
+    return value
 
 
 def render_seo_audit_book(report: Any) -> str:
-    """Render sections 01–55 and appendices A–O with publication-grade enterprise intelligence."""
+    """Render sections 01–55 and appendices A–O as evidence chapters."""
     payload = json.loads(_INDEX_PATH.read_text(encoding="utf-8"))
     book = _Book(report)
     grouped: Dict[str, List[Any]] = {}
@@ -2107,37 +1638,54 @@ def render_seo_audit_book(report: Any) -> str:
         grouped.setdefault(_section_for_finding(finding), []).append(finding)
     part_titles = {part["id"]: part["title"] for part in payload["parts"]}
 
-    # Executive Summary & 11-Dimension Scorecard Header
     scores = _get(report, "scores")
+    categories = _get(scores, "category_scores") or {}
+    technical = categories.get("TECHNICAL_SEO") if isinstance(categories, dict) else None
+    technical_score = _num(_get(technical, "score"))
+    technical_status = str(_get(technical, "status", "") or "").upper()
     base_score = _num(_get(scores, "overall_score")) if scores else None
-    overall_disp = f"{int(round(base_score))}" if base_score is not None else "—"
-    domain = _esc(_get(report, "domain", "") or "Target Domain")
-    story = _esc(_get(report, "story_summary", "") or "Comprehensive deterministic website intelligence audit.")
-    rights = _esc(_get(report, "what_site_gets_right", "") or "Clean crawlability baseline and accessible server infrastructure.")
-    holding = _esc(_get(report, "what_is_holding_it_back", "") or "Metadata gaps and unstructured content representations.")
-    opp = _esc(_get(report, "primary_strategic_opportunity", "") or "Deploy entity schema markup and structured factual passages for AI engines.")
+    if technical_score is not None and technical_status not in {"NOT_MEASURED", "NOT_TESTED"}:
+        score_label = "TECHNICAL SEO CATEGORY SCORE"
+        score_disp = str(int(round(technical_score)))
+        score_note = "Sealed category score. Not a grade of every chapter."
+    elif base_score is not None:
+        score_label = "SEALED OVERALL SCORE"
+        score_disp = str(int(round(base_score)))
+        score_note = "Sealed report score. Not a grade of every chapter."
+    else:
+        score_label = "SEO SCORE"
+        score_disp = "—"
+        score_note = "No sealed score was stored."
+    domain = _esc(_get(report, "domain", "") or "Target domain")
+    story = _esc(_stored_narrative(report, "story_summary") or "No executive narrative was stored. The chapters below use the sealed evidence.")
+    points = []
+    for field_name, heading in (
+        ("what_site_gets_right", "Narrative — what is working"),
+        ("what_is_holding_it_back", "Narrative — what is holding it back"),
+        ("primary_strategic_opportunity", "Narrative — stated opportunity"),
+    ):
+        text = _stored_narrative(report, field_name)
+        if text:
+            points.append(f'<div class="point-item"><strong>{_esc(heading)}:</strong> {_esc(text)}</div>')
+    points_html = f'<div class="exec-key-points">{"".join(points)}</div>' if points else ""
 
     exec_block = f"""
     <div class="exec-summary-dossier">
         <div class="dossier-meta-bar">
             <span>AUDITED DOMAIN: <strong>{domain}</strong></span>
-            <span>AUDIT STANDARD: <strong>2026 ENTERPRISE MASTER TAXONOMY</strong></span>
-            <span>PROVENANCE: <strong>STORED DOM AST // DETERMINISTIC PROVENANCE</strong></span>
+            <span>SAMPLE: <strong>REPRESENTATIVE</strong></span>
+            <span>PROVENANCE: <strong>STORED EVIDENCE</strong></span>
         </div>
         <div class="exec-scorecard-grid">
             <div class="kpi-score-card">
-                <span class="kpi-label">OVERALL SEO HEALTH SCORE</span>
-                <div class="kpi-number">{overall_disp}<span class="kpi-denom">/100</span></div>
-                <span class="kpi-grade">DETERMINISTIC SCORE GRADE</span>
+                <span class="kpi-label">{score_label}</span>
+                <div class="kpi-number">{score_disp}<span class="kpi-denom">/100</span></div>
+                <span class="kpi-grade">{_esc(score_note)}</span>
             </div>
             <div class="kpi-narrative-card">
-                <h4>Executive Intelligence Narrative</h4>
+                <p class="chart-title">Stored narrative</p>
                 <p>{story}</p>
-                <div class="exec-key-points">
-                    <div class="point-item strength"><strong>Verified Strength:</strong> {rights}</div>
-                    <div class="point-item blocker"><strong>Primary Blocker:</strong> {holding}</div>
-                    <div class="point-item catalyst"><strong>Strategic Growth Catalyst:</strong> {opp}</div>
-                </div>
+                {points_html}
             </div>
         </div>
     </div>
@@ -2145,11 +1693,10 @@ def render_seo_audit_book(report: Any) -> str:
 
     toc = ["<h2>Complete SEO audit: Master Table of Contents (Sections 01–55 &amp; Appendices A–O)</h2>", "<nav class=\"toc\"><ol>"]
     blocks = [
-        f"<p class=\"lead-scope-note\">{_esc(book.sample)} This document is the complete website intelligence report, "
-        "covering all 55 audit sections across 7 parts plus 15 technical appendices (A through O). "
-        "Every single checklist line is evaluated from stored DOM evidence, an authenticated API source, or an explicit data gap. "
-        "A missing integration remains unmeasured without fabricating zero scores or synthetic numbers.</p>",
+        f"<p class=\"lead-scope-note\">{_esc(book.sample)} Each chapter states the data source, charts only stored measurements, "
+        "and then records every sub-index line. A missing integration stays unmeasured. It is not a zero and it is not a pass.</p>",
     ]
+    tally: Dict[str, int] = {}
 
     for part in payload["parts"]:
         owned = [section for section in payload["sections"] if section["part"] == part["id"]]
@@ -2169,11 +1716,14 @@ def render_seo_audit_book(report: Any) -> str:
                 summary = f"{len(defects)} recorded empirical finding(s) in this chapter. {summary}"
             assigned = _assign(section_findings, section["checks"])
             checks_html = []
+            line_codes: List[str] = []
             for check in section["checks"]:
                 code, result = _line(book, number, check)
                 cards = assigned.get(check, [])
                 if any(_is_defect(item) for item in cards):
                     code = "ISSUE_VERIFIED"
+                line_codes.append(code)
+                tally[code] = tally.get(code, 0) + 1
                 checks_html.append(
                     f"<article class=\"check {_CLASS.get(code, 'untested')}\">"
                     f"<h5>{_esc(check)}</h5>"
@@ -2182,17 +1732,18 @@ def render_seo_audit_book(report: Any) -> str:
                     f"{''.join(_finding_card(item) for item in cards)}"
                     "</article>"
                 )
-            
+
             blocks.append(
                 f"<section class=\"seo-section\" id=\"seo-{_esc(number)}\">"
                 f"<p class=\"part-label\">Part {_esc(section['part'])} — {_esc(part_titles.get(section['part'], ''))}</p>"
                 f"<h4>{_esc(number)}. {_esc(section['title'])}</h4>"
                 f"<p class=\"status\">{_esc(_LABEL.get(status, 'Not tested'))} · {_esc(book.sample)}</p>"
                 f"<p class=\"section-summary-lead\">{_esc(summary)}</p>"
-                f"{_page_table(book, number)}"
+                f"{chapter_panel(book, number, line_codes)}"
+                '<p class="sources-kicker">Sub-index evidence</p>'
                 f"{''.join(checks_html)}"
                 "</section>"
             )
     toc.append("</ol></nav>")
-    return "\n".join([exec_block, toc[0], blocks[0], *toc[1:], *blocks[1:]])
+    return "\n".join([exec_block, evidence_mix_chart(tally), toc[0], blocks[0], *toc[1:], *blocks[1:]])
 

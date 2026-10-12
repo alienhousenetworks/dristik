@@ -39,7 +39,7 @@ export function SeoWorkspaceView({
   );
 
   const rawScore = report.scores?.category_scores?.['TECHNICAL_SEO']?.score ?? report.honest_scores?.google_score;
-  const seoScore = rawScore != null ? Math.round(rawScore) : 85;
+  const seoScore = rawScore != null && Number.isFinite(rawScore) ? Math.round(rawScore) : null;
 
   // Handle tab switching with backward compatibility normalization
   const handleTabChange = (rawId: string) => {
@@ -159,7 +159,7 @@ export function SeoWorkspaceView({
       )}
 
       {activeTab === 'index' && (
-        <AuditIndex report={report} expandChecks />
+        <AuditIndex report={report} />
       )}
     </PillarShell>
   );

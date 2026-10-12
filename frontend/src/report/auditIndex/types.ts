@@ -19,6 +19,27 @@ export interface AuditFindingRef {
   severity: string;
   title: string;
   scope: string;
+  description?: string;
+  action?: string;
+  priority?: number;
+}
+
+export interface AuditedCheck {
+  label: string;
+  status: SectionStatus;
+  result: string;
+  findings?: AuditFindingRef[];
+}
+
+export interface SectionAnalysis {
+  agentId: string;
+  agentName: string;
+  executiveSummary: string;
+  technicalMechanics: string;
+  rootCause: string;
+  businessImpact: string;
+  remediation: string;
+  verificationMethod: string;
 }
 
 export interface ResolvedAuditSection extends AuditSectionDefinition {
@@ -27,6 +48,8 @@ export interface ResolvedAuditSection extends AuditSectionDefinition {
   coverage: string;
   findings: AuditFindingRef[];
   findingCount: number;
+  auditedChecks: AuditedCheck[];
+  analysis: SectionAnalysis;
 }
 
 export interface ResolvedAuditIndex {

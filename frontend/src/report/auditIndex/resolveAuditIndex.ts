@@ -1,6 +1,12 @@
 import { ExecutiveReport, Finding, PageEvidence } from '../../types';
 import { AUDIT_SECTIONS } from './catalog';
 import { ResolvedAuditIndex, ResolvedAuditSection, SectionStatus } from './types';
+import {
+  assignFindingsToChecks,
+  buildSectionAnalysis,
+  evaluateAuditCheck,
+  toFindingRef,
+} from './auditAnalysisEngine';
 
 interface AuditContext {
   report: ExecutiveReport;
@@ -87,10 +93,7 @@ function specialist(
 }
 
 function fieldVitals(ctx: AuditContext): boolean {
-  return ctx.pages.some((page) => {
-    const field = page.field_performance as { lcp_ms?: number; inp_ms?: number; cls?: number } | undefined;
-    return field != null && (finite(field.lcp_ms) != null || finite(field.inp_ms) != null || finite(field.cls) != null);
-  });
+  return ctx.pages.some((page) => page.field_performance?.has_field_data === true);
 }
 
 function sectionForFinding(finding: Finding): string {
@@ -342,7 +345,7 @@ function baseResult(ctx: AuditContext, number: string): SectionResult {
       if (fieldVitals(ctx)) {
         return { status: 'MEASURED', summary: 'Field Core Web Vitals were stored on at least one crawled page. Thresholds are LCP 2.5s, INP 200ms, and CLS 0.1 at the 75th percentile.', coverage: 'Field data' };
       }
-      const lab = pages.some((page) => page.lab_performance);
+      const lab = pages.some((page) => Boolean((page.lab_performance as { lighthouse_audit_version?: string } | undefined)?.lighthouse_audit_version));
       if (lab) {
         return { status: 'MEASURED', summary: 'A lab performance record was stored. It is not field Core Web Vitals and it is not a Google certification.', coverage: 'Lab data' };
       }
@@ -788,11 +791,6 @@ function baseResult(ctx: AuditContext, number: string): SectionResult {
   }
 }
 
-function scopeLabel(finding: Finding): string {
-  if (finding.confidence_rubric === 'GUESSING') return 'Guessing — not a measured defect';
-  return finding.evidence_scope || 'Scope not labeled';
-}
-
 function applyFindings(result: SectionResult, findings: Finding[]): Pick<ResolvedAuditSection, 'status' | 'summary' | 'findings' | 'findingCount'> {
   const verified = findings.filter((finding) => finding.confidence_rubric !== 'GUESSING');
   let status = result.status;
@@ -805,12 +803,7 @@ function applyFindings(result: SectionResult, findings: Finding[]): Pick<Resolve
     status,
     summary,
     findingCount: findings.length,
-    findings: findings.slice(0, 3).map((finding) => ({
-      id: finding.finding_id,
-      severity: finding.severity,
-      title: finding.title,
-      scope: scopeLabel(finding),
-    })),
+    findings: findings.slice(0, 10).map(toFindingRef),
   };
 }
 
@@ -829,9 +822,21 @@ export function resolveAuditIndex(report: ExecutiveReport): ResolvedAuditIndex {
   const counts = { ...EMPTY_COUNTS };
   const sections = AUDIT_SECTIONS.map((definition) => {
     const base = baseResult(ctx, definition.number);
-    const withFindings = applyFindings(base, grouped.get(definition.number) || []);
+    const sectionFindings = grouped.get(definition.number) || [];
+    const withFindings = applyFindings(base, sectionFindings);
+    const assignedChecks = assignFindingsToChecks(sectionFindings, definition.checks);
+    const auditedChecks = definition.checks.map((check) =>
+      evaluateAuditCheck(ctx, definition.number, check, assignedChecks.get(check) || [])
+    );
+    const analysis = buildSectionAnalysis(
+      ctx,
+      definition.number,
+      withFindings.status,
+      withFindings.summary,
+      sectionFindings
+    );
     counts[withFindings.status] += 1;
-    return { ...definition, ...base, ...withFindings };
+    return { ...definition, ...base, ...withFindings, auditedChecks, analysis };
   });
   return {
     sampleNotice: sampleLine(ctx),

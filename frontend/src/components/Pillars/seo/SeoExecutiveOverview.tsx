@@ -40,32 +40,28 @@ export function SeoExecutiveOverview({
   const media = report.media_assets;
   const localSeo = report.local_seo;
   const intlSeo = report.international_seo;
-  const compParity = report.competitor_seo_parity;
   const redirects = report.host_and_redirects;
 
   const rawScore = report.scores?.category_scores?.['TECHNICAL_SEO']?.score;
-  const seoScore = rawScore != null ? Math.round(rawScore) : 85;
+  const seoScore = rawScore != null && Number.isFinite(rawScore) ? Math.round(rawScore) : null;
 
-  // Derive 5 Sub-discipline health ratings (0-100)
   const crawlHealth = httpStatus && httpStatus.total_urls_checked > 0
     ? Math.round((httpStatus.count_2xx / httpStatus.total_urls_checked) * 100)
-    : 95;
+    : null;
 
-  const onPageHealth = headings?.h1_health_score
+  const onPageHealth = headings?.h1_health_score != null && Number.isFinite(headings.h1_health_score)
     ? Math.round(headings.h1_health_score)
-    : 90;
+    : null;
 
   const assetHealth = media?.total_images_analyzed && media.total_images_analyzed > 0
     ? Math.max(0, Math.round(100 - ((media.missing_alt_count + media.missing_dimensions_count) / (media.total_images_analyzed * 2)) * 100))
-    : 88;
+    : null;
 
-  const localHealth = localSeo?.nap_consistency_score != null
+  const localHealth = localSeo?.nap_consistency_score != null && Number.isFinite(localSeo.nap_consistency_score)
     ? Math.round(localSeo.nap_consistency_score)
-    : 92;
+    : null;
 
-  const compHealth = compParity?.target_rank != null && compParity.competitors.length > 0
-    ? Math.round(Math.max(40, 100 - ((compParity.target_rank - 1) / Math.max(1, compParity.competitors.length - 1)) * 40))
-    : 85;
+  const compHealth = null;
 
   // Filter top critical/high findings
   const criticalFindings = seoFindings.filter((f) => f.severity === 'CRITICAL');
@@ -79,7 +75,7 @@ export function SeoExecutiveOverview({
     return { label: 'Needs Attention', badge: 'bg-bad/10 text-bad border-bad/20' };
   };
 
-  const grade = getScoreGrade(seoScore);
+  const grade = seoScore != null ? getScoreGrade(seoScore) : { label: 'Not scored', badge: 'bg-paper-100 text-ink-500 border-line' };
 
   return (
     <div className="space-y-6">
@@ -102,7 +98,7 @@ export function SeoExecutiveOverview({
 
             <div className="flex items-baseline gap-3 pt-1">
               <span className="font-mono text-5xl font-extrabold tracking-tight text-ink">
-                {seoScore}
+                {seoScore != null ? seoScore : '—'}
               </span>
               <span className="text-sm font-mono text-ink-400 font-medium">/ 100</span>
             </div>
@@ -147,11 +143,11 @@ export function SeoExecutiveOverview({
 
             <div className="space-y-3.5 pt-3">
               {[
-                { label: 'Crawlability & HTTP Codes', score: crawlHealth, tab: 'architecture', desc: '2xx pass rate & canonical routing' },
-                { label: 'On-Page Content & SERP', score: onPageHealth, tab: 'onpage', desc: 'Pixel truncation, H1 health & meta lengths' },
-                { label: 'Asset Stability & Core Web Vitals', score: assetHealth, tab: 'onpage', desc: 'Image alt tags & CLS dimensions' },
-                { label: 'Local & Global Search Footprint', score: localHealth, tab: 'market', desc: 'NAP consistency & Hreflang targeting' },
-                { label: 'Competitive Authority & Parity', score: compHealth, tab: 'market', desc: 'Benchmark vs direct competitor set' },
+                { label: 'Crawlability & HTTP Codes', score: crawlHealth, tab: 'architecture', desc: 'Share of stored responses that are HTTP 2xx' },
+                { label: 'On-Page Content & SERP', score: onPageHealth, tab: 'onpage', desc: 'Stored H1 health score, when the heading audit saved one' },
+                { label: 'Image alt and dimensions', score: assetHealth, tab: 'onpage', desc: 'Stored image audit. Not Core Web Vitals.' },
+                { label: 'Local NAP consistency', score: localHealth, tab: 'market', desc: 'Stored NAP score, when the local module ran' },
+                { label: 'Competitive comparison', score: compHealth, tab: 'market', desc: 'No competitor score is invented from rank' },
               ].map((sub, idx) => (
                 <div
                   key={idx}
@@ -163,21 +159,23 @@ export function SeoExecutiveOverview({
                       {sub.label}
                       <ChevronRight className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity text-pine-600" />
                     </span>
-                    <span className="font-mono font-bold text-ink">{sub.score}%</span>
+                    <span className="font-mono font-bold text-ink">{sub.score != null ? `${sub.score}%` : 'Not measured'}</span>
                   </div>
                   <div className="w-full h-1.5 rounded-full bg-paper-200 overflow-hidden">
-                    <div
-                      className={`h-full rounded-full transition-all duration-500 ${
-                        sub.score >= 85
-                          ? 'bg-good'
-                          : sub.score >= 70
-                          ? 'bg-pine-500'
-                          : sub.score >= 50
-                          ? 'bg-warn'
-                          : 'bg-bad'
-                      }`}
-                      style={{ width: `${sub.score}%` }}
-                    />
+                    {sub.score != null ? (
+                      <div
+                        className={`h-full rounded-full transition-all duration-500 ${
+                          sub.score >= 85
+                            ? 'bg-good'
+                            : sub.score >= 70
+                            ? 'bg-pine-500'
+                            : sub.score >= 50
+                            ? 'bg-warn'
+                            : 'bg-bad'
+                        }`}
+                        style={{ width: `${sub.score}%` }}
+                      />
+                    ) : null}
                   </div>
                 </div>
               ))}

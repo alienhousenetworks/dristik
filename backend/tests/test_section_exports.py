@@ -150,6 +150,18 @@ def test_seo_section_pdf_writes_a_result_for_crawled_evidence():
     assert "Issue verified" in html
     assert "Not tested" in html
     assert "Data unavailable" in html
+    assert html.count('class="chapter-chart"') >= 70
+    assert "HTTP status in the crawled sample" in html
+    assert "Crawl response time (ms)" in html
+    assert "No forecast chart is drawn" in html
+    assert "94% Confidence" not in html
+    assert "Fast / Responsive" not in html
+    assert "Grounding Verified" not in html
+    assert "+12%" not in html
+    assert "DETERMINISTIC" not in html
+    assert "Zero-Fake" not in html
+    assert "83.3" not in html
+    assert "Lab performance simulated" not in html
 
 
 def test_aeo_section_pdf_is_an_evidence_book():
