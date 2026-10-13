@@ -15,7 +15,9 @@ RUN pip install --no-cache-dir torch --index-url https://download.pytorch.org/wh
     && pip install --no-cache-dir -r /tmp/requirements.txt
 
 # Install Playwright Chromium browser & OS dependencies for PDF export & JS crawling
-ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+# PLAYWRIGHT_SKIP_FFMPEG_INSTALL=1 prevents downloading unused FFmpeg (which frequently times out on Microsoft CDN)
+ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright \
+    PLAYWRIGHT_SKIP_FFMPEG_INSTALL=1
 RUN playwright install --with-deps chromium \
     && rm -rf /var/lib/apt/lists/*
 

@@ -17,6 +17,7 @@ services:
       SYSTEM_ADMIN_EMAIL: ${SYSTEM_ADMIN_EMAIL:-admin@dristik.ai}
       AUTH_DATABASE_PATH: /app/data/dristik.db
       PLAYWRIGHT_BROWSERS_PATH: /ms-playwright
+      PLAYWRIGHT_SKIP_FFMPEG_INSTALL: "1"
     volumes:
       - ./backend:/app
       - dristik-data:/app/data
