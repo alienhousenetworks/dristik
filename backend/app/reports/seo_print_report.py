@@ -211,10 +211,114 @@ html, body {
 @media screen {
     body {
         background: #0f172a !important;
-        padding: 30px 10px;
+        padding: 20px 10px 40px 10px;
         display: flex;
         flex-direction: column;
         align-items: center;
+    }
+    .screen-toolbar {
+        position: sticky;
+        top: 12px;
+        z-index: 9999;
+        max-width: 210mm;
+        width: 100%;
+        margin: 0 auto 20px auto;
+        background: #0f172a;
+        border: 1px solid #334155;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.08);
+        border-radius: 12px;
+        padding: 14px 20px;
+        color: #f8fafc;
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        box-sizing: border-box;
+    }
+    .toolbar-brand {
+        display: flex;
+        flex-direction: column;
+    }
+    .toolbar-tag {
+        font-size: 10px;
+        font-weight: 700;
+        letter-spacing: 0.14em;
+        color: #38bdf8;
+        text-transform: uppercase;
+    }
+    .toolbar-domain {
+        font-size: 15px;
+        font-weight: 700;
+        color: #ffffff;
+    }
+    .toolbar-actions {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        flex-wrap: wrap;
+    }
+    .btn-print {
+        background: #0284c7;
+        color: #ffffff;
+        font-weight: 600;
+        font-size: 13px;
+        padding: 8px 16px;
+        border-radius: 6px;
+        border: none;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+        transition: background 0.15s ease;
+        text-decoration: none;
+    }
+    .btn-print:hover {
+        background: #0369a1;
+    }
+    .btn-download {
+        background: #10b981;
+        color: #ffffff;
+        font-weight: 600;
+        font-size: 13px;
+        padding: 8px 16px;
+        border-radius: 6px;
+        border: none;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+        transition: background 0.15s ease;
+        text-decoration: none;
+    }
+    .btn-download:hover {
+        background: #059669;
+    }
+    .btn-secondary-action {
+        background: #1e293b;
+        border: 1px solid #475569;
+        color: #cbd5e1;
+        font-weight: 500;
+        font-size: 13px;
+        padding: 8px 14px;
+        border-radius: 6px;
+        text-decoration: none;
+        transition: background 0.15s ease, color 0.15s ease;
+    }
+    .btn-secondary-action:hover {
+        background: #334155;
+        color: #ffffff;
+    }
+    .toolbar-hint {
+        width: 100%;
+        font-size: 11px;
+        color: #94a3b8;
+        border-top: 1px solid #1e293b;
+        padding-top: 8px;
+        margin-top: 2px;
+    }
+    .toolbar-hint strong, .toolbar-hint em {
+        color: #e2e8f0;
     }
     .print-document-container {
         max-width: 210mm;
@@ -238,7 +342,7 @@ html, body {
         padding: 0 !important;
         box-shadow: none !important;
     }
-    .screen-only, .btn, .top-actions {
+    .screen-only, .btn, .top-actions, .screen-toolbar, .no-print {
         display: none !important;
     }
 }
@@ -1043,6 +1147,7 @@ class SeoPrintReportRenderer:
             page_numbers = calculate_chapter_page_numbers(report)
 
         domain = html.escape(report.domain or "website.com")
+        analysis_id = html.escape(report.analysis_id or report.report_id or "")
         
         # Render Cover
         cover_html = self._render_cover(report)
@@ -1056,6 +1161,9 @@ class SeoPrintReportRenderer:
             for sec_id, sec_title in self.sections
         ])
 
+        # Render Screen Action Bar (hidden in print)
+        toolbar_html = self._render_screen_toolbar(domain, analysis_id)
+
         return f"""<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -1067,6 +1175,7 @@ class SeoPrintReportRenderer:
     </style>
 </head>
 <body>
+    {toolbar_html}
     <div class="print-document-container">
         <!-- 01: Dedicated Cover Page -->
         {cover_html}
@@ -1080,6 +1189,35 @@ class SeoPrintReportRenderer:
 </body>
 </html>
 """
+
+    def _render_screen_toolbar(self, domain: str, analysis_id: str) -> str:
+        pdf_download_url = f"/api/v1/reports/{analysis_id}/seo-report?format=pdf&download=true" if analysis_id else "#"
+        dashboard_url = f"/api/v1/reports/{analysis_id}/seo-report?format=html" if analysis_id else "#"
+
+        return f"""
+        <aside class="screen-toolbar no-print" aria-label="Document Controls">
+            <div class="toolbar-brand">
+                <span class="toolbar-tag">Publication-Grade A4 Print Book</span>
+                <span class="toolbar-domain">{domain}</span>
+            </div>
+            <div class="toolbar-actions">
+                <button type="button" class="btn-print" onclick="window.print()" title="Open native print dialog to print or save to PDF">
+                    <svg width="15" height="15" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="vertical-align:middle;margin-right:6px;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"/></svg>
+                    Print / Save as PDF
+                </button>
+                <a href="{pdf_download_url}" class="btn-download" title="Download rendered PDF document">
+                    <svg width="15" height="15" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="vertical-align:middle;margin-right:6px;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+                    Download PDF File
+                </a>
+                <a href="{dashboard_url}" class="btn-secondary-action" title="Switch to interactive screen dashboard">
+                    ← Interactive View
+                </a>
+            </div>
+            <div class="toolbar-hint">
+                <span>💡 <strong>To Save as PDF:</strong> Click <em>Print / Save as PDF</em> &rarr; Destination: <strong>Save as PDF</strong> &rarr; More settings: check <strong>Background graphics</strong>.</span>
+            </div>
+        </aside>
+        """
 
     # --------------------------------------------------------------------------
     # Cover Page

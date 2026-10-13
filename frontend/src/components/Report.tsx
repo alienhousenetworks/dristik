@@ -94,9 +94,20 @@ export function Report({
                 if (id) window.open(`/api/v1/reports/${id}/seo-report?format=print`, '_blank');
               }}
               className="btn-secondary px-3 py-2 text-sm flex items-center gap-1.5"
-              title="Open Publication-Grade 20-Section SEO Master Audit Book (Print & PDF)"
+              title="Open Publication-Grade 20-Section SEO Master Audit Book (Print & PDF Preview)"
             >
-              SEO Book (20-Sec)
+              SEO Book (Print)
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                const id = report.analysis_id || report.report_id;
+                if (id) window.open(`/api/v1/reports/${id}/seo-report?format=pdf&download=true`, '_blank');
+              }}
+              className="btn-secondary px-3 py-2 text-sm flex items-center gap-1.5"
+              title="Download Publication-Grade 20-Section SEO Master Audit Book PDF"
+            >
+              SEO Book (PDF)
             </button>
             <button
               type="button"

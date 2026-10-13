@@ -479,11 +479,14 @@ async def get_presentation_deck_manifest(
 async def get_complete_seo_report(
     analysis_id: str,
     format: str = "html",
+    download: bool = False,
     user: UserIdentity = Depends(get_current_user)
 ):
     """
     Renders the dedicated, complete 20-Section SEO Master Audit and Remediation Report.
     format='html': returns modern responsive HTML report.
+    format='print': returns publication-grade A4 print document with screen controls.
+    format='pdf': returns real application/pdf. Set download=true for attachment disposition.
     format='json': returns structured 20-section JSON payload.
     """
     run = require_analysis(analysis_id, user)
@@ -503,7 +506,8 @@ async def get_complete_seo_report(
     if format.lower() == "pdf":
         print_html = seo_report_generator.render_print_html_report(report)
         domain_clean = (report.domain or "website").replace("https://", "").replace("http://", "").split("/")[0]
-        return await _html_to_pdf_response(print_html, f"{domain_clean}_master_seo_audit_book.pdf")
+        disposition = "attachment" if download else "inline"
+        return await _html_to_pdf_response(print_html, f"{domain_clean}_master_seo_audit_book.pdf", disposition=disposition)
 
     html_content = seo_report_generator.render_html_report(report)
     return Response(content=html_content, media_type="text/html")
@@ -806,7 +810,7 @@ async def export_aeo_evidence_ledger_csv(
     )
 
 
-async def _html_to_pdf_response(html_content: str, filename: str) -> Response:
+async def _html_to_pdf_response(html_content: str, filename: str, disposition: str = "inline") -> Response:
     """Renders HTML to a real PDF; raises 503 rather than silently returning HTML."""
     from app.crawl.browser import BrowserRenderService
 
@@ -814,13 +818,13 @@ async def _html_to_pdf_response(html_content: str, filename: str) -> Response:
     if not pdf_bytes:
         raise HTTPException(
             status_code=503,
-            detail="PDF rendering is unavailable (headless Chromium via Playwright could not start). "
-                   "Install it with `playwright install chromium`, or request ?format=html for the print-ready HTML.",
+            detail="PDF rendering engine is currently unavailable or timed out. "
+                   "You can open the report with ?format=print and select 'Print / Save as PDF' in your browser.",
         )
     return Response(
         content=pdf_bytes,
         media_type="application/pdf",
-        headers={"Content-Disposition": f'inline; filename="{filename}"'},
+        headers={"Content-Disposition": f'{disposition}; filename="{filename}"'},
     )
 
 
@@ -829,6 +833,7 @@ async def get_section_pdf_report(
     analysis_id: str,
     section_key: str,
     format: str = "pdf",
+    download: bool = False,
     user: UserIdentity = Depends(get_current_user)
 ):
     """
@@ -847,7 +852,8 @@ async def get_section_pdf_report(
         return Response(content=html_content, media_type="text/html")
 
     domain_clean = (report.domain or "website").replace("https://", "").replace("http://", "").split("/")[0]
-    return await _html_to_pdf_response(html_content, f"{domain_clean}_{section_key.lower()}_audit.pdf")
+    disposition = "attachment" if download else "inline"
+    return await _html_to_pdf_response(html_content, f"{domain_clean}_{section_key.lower()}_audit.pdf", disposition=disposition)
 
 
 

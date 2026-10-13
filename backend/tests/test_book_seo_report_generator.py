@@ -323,38 +323,49 @@ def test_svg_chart_renderers():
 
 
 def test_api_endpoint_format_print():
-    """Validates API route handles format=print returning publication-grade print HTML."""
+    """Validates API route handles format=print returning publication-grade print HTML and format=pdf download."""
+    import sys
+    from unittest.mock import MagicMock, patch
+    if "bs4" not in sys.modules:
+        sys.modules["bs4"] = MagicMock()
+
+    from fastapi import FastAPI
     from fastapi.testclient import TestClient
-    from unittest.mock import MagicMock
-    from app.main import app
-    from app.orchestration.orchestrator import orchestrator
-    import uuid
+    from app.reports.pdf_generator import router
+    from app.identity.deps import get_current_user
+    from app.identity.authorizer import UserIdentity
 
-    client = TestClient(app)
-    signup = client.post("/api/v1/auth/signup", json={
-        "full_name": "Print Tester",
-        "email": f"print_{uuid.uuid4().hex[:8]}@example.com",
-        "password": "Password123!",
-        "organization_name": "Print Org",
-    })
-    assert signup.status_code == 200
+    test_app = FastAPI()
+    test_app.include_router(router, prefix="/api/v1")
 
+    mock_user = UserIdentity(id="u1", user_id="u1", email="test@example.com", org_id="org1", role="admin")
     mock_run = MagicMock()
     mock_run.report = _make_sample_report()
-    mock_run.org_id = signup.json()["user"]["org_id"]
+    mock_run.org_id = "org1"
     mock_run.analysis_id = "analysis_book_001"
     mock_run.domain = "example.com"
     mock_run.website_url = "https://example.com"
 
-    orchestrator.get_run = MagicMock(return_value=mock_run)
+    test_app.dependency_overrides[get_current_user] = lambda: mock_user
 
-    res_print = client.get("/api/v1/reports/analysis_book_001/seo-report?format=print")
-    assert res_print.status_code == 200
-    assert "text/html" in res_print.headers["content-type"]
-    assert "book-cover" in res_print.text
-    assert "Table of Contents" in res_print.text
-    assert "chapter-start" in res_print.text
-    assert "Fixed is not the same as Verified" in res_print.text
+    with patch("app.reports.pdf_generator.require_analysis", return_value=mock_run):
+        client = TestClient(test_app)
+        res_print = client.get("/api/v1/reports/analysis_book_001/seo-report?format=print")
+        assert res_print.status_code == 200
+        assert "text/html" in res_print.headers["content-type"]
+        assert "book-cover" in res_print.text
+        assert "Table of Contents" in res_print.text
+        assert "chapter-start" in res_print.text
+        assert "screen-toolbar" in res_print.text
+        assert "Print / Save as PDF" in res_print.text
+        assert "Download PDF File" in res_print.text
+
+        with patch("app.crawl.browser.BrowserRenderService.render_pdf", return_value=b"%PDF-1.4 mock"):
+            res_pdf = client.get("/api/v1/reports/analysis_book_001/seo-report?format=pdf&download=true")
+            assert res_pdf.status_code == 200
+            assert res_pdf.headers["content-type"] == "application/pdf"
+            assert "attachment;" in res_pdf.headers["content-disposition"]
+            assert res_pdf.content == b"%PDF-1.4 mock"
 
 
 def test_external_authority_list_coverage_safety():

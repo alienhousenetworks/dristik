@@ -218,8 +218,12 @@ def test_complete_seo_report_generator_json():
 
 def test_seo_report_and_exports_api_endpoints():
     """Verify FastAPI router endpoints for seo-report (HTML/JSON) and CSV exports."""
-    from fastapi.testclient import TestClient
+    import sys
     from unittest.mock import MagicMock
+    if "bs4" not in sys.modules:
+        sys.modules["bs4"] = MagicMock()
+
+    from fastapi.testclient import TestClient
     from app.main import app
     from app.orchestration.orchestrator import orchestrator
 

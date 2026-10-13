@@ -277,12 +277,16 @@ class BrowserRenderService:
         try:
             context = await browser.new_context()
             page = await context.new_page()
-            await page.set_content(html, wait_until="load", timeout=timeout_ms)
+            await page.set_content(html, wait_until="domcontentloaded", timeout=timeout_ms)
             await page.emulate_media(media="print")
-            await page.evaluate("document.fonts && document.fonts.ready")
+            try:
+                await page.evaluate("document.fonts && document.fonts.ready")
+            except Exception:
+                pass
             return await page.pdf(
                 prefer_css_page_size=True,
                 print_background=True,
+                timeout=timeout_ms,
             )
         except Exception as exc:
             logger.warning("Failed to render PDF with Playwright: %s", exc)
