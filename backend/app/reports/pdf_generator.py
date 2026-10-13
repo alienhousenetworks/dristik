@@ -797,15 +797,35 @@ async def export_aeo_evidence_ledger_csv(
     )
 
 
+async def _html_to_pdf_response(html_content: str, filename: str) -> Response:
+    """Renders HTML to a real PDF; raises 503 rather than silently returning HTML."""
+    from app.crawl.browser import BrowserRenderService
+
+    pdf_bytes = await BrowserRenderService.render_pdf(html_content)
+    if not pdf_bytes:
+        raise HTTPException(
+            status_code=503,
+            detail="PDF rendering is unavailable (headless Chromium via Playwright could not start). "
+                   "Install it with `playwright install chromium`, or request ?format=html for the print-ready HTML.",
+        )
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'inline; filename="{filename}"'},
+    )
+
+
 @router.get("/{analysis_id}/sections/{section_key}/pdf")
 async def get_section_pdf_report(
     analysis_id: str,
     section_key: str,
+    format: str = "pdf",
     user: UserIdentity = Depends(get_current_user)
 ):
     """
-    Renders the dedicated, print-ready editorial HTML report for a specific section:
-    crawl, seo, geo, aeo, cro, or competitors.
+    Renders the dedicated report for a specific section (crawl, seo, geo, aeo, cro, competitors).
+    format='pdf' (default): real application/pdf rendered by headless Chromium.
+    format='html': the print-ready HTML preview.
     """
     run = require_analysis(analysis_id, user)
     report = getattr(run, "report", None)
@@ -814,7 +834,12 @@ async def get_section_pdf_report(
 
     from app.reports.section_exports import section_report_generator
     html_content = section_report_generator.render_section_html(report, section_key)
-    return Response(content=html_content, media_type="text/html")
+    if format.lower() == "html":
+        return Response(content=html_content, media_type="text/html")
+
+    domain_clean = (report.domain or "website").replace("https://", "").replace("http://", "").split("/")[0]
+    return await _html_to_pdf_response(html_content, f"{domain_clean}_{section_key.lower()}_audit.pdf")
+
 
 
 @router.get("/{analysis_id}/sections/{section_key}/pptx")
@@ -905,6 +930,10 @@ async def get_adaptive_audit_book(
         subtitle_override=subtitle,
         classification=classification,
     )
+
+    if format.lower() == "pdf":
+        domain_clean = (report.domain or "website").replace("https://", "").replace("http://", "").split("/")[0]
+        return await _html_to_pdf_response(html_content, f"{domain_clean}_{family.lower()}_audit_book.pdf")
 
     return Response(
         content=html_content,

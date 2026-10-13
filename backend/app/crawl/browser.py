@@ -260,6 +260,36 @@ class BrowserRenderService:
                     pass
 
     @classmethod
+    async def render_pdf(cls, html: str, timeout_ms: int = 60000) -> Optional[bytes]:
+        """
+        Renders standalone HTML to a PDF using headless Chromium.
+        Honors the document's CSS @page size/margins and preserves backgrounds.
+        Returns None when the browser is unavailable or rendering fails.
+        """
+        browser = await cls.get_browser()
+        if browser is None:
+            return None
+        context = None
+        try:
+            context = await browser.new_context()
+            page = await context.new_page()
+            await page.set_content(html, wait_until="load", timeout=timeout_ms)
+            await page.emulate_media(media="print")
+            await page.evaluate("document.fonts && document.fonts.ready")
+            return await page.pdf(
+                prefer_css_page_size=True,
+                print_background=True,
+            )
+        except Exception:
+            return None
+        finally:
+            if context:
+                try:
+                    await context.close()
+                except Exception:
+                    pass
+
+    @classmethod
     async def shutdown(cls):
         """Cleanly releases browser and playwright resources."""
         async with cls._lock:

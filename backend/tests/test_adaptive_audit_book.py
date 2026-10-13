@@ -293,3 +293,50 @@ class TestAuditBookApiRoute:
             assert "Technical SEO" in data_seo["manifest"]["title"]
         finally:
             app.dependency_overrides.clear()
+
+
+class TestSectionPdfEndpoint:
+    def _setup(self):
+        from app.main import app
+        from app.orchestration.orchestrator import orchestrator
+        from app.domain.enums import AnalysisStage, UserRole
+        from app.domain.models import AnalysisRun
+        from app.identity.authorizer import UserIdentity
+        from app.identity.deps import get_current_user
+
+        user = UserIdentity(user_id="usr_pdf", org_id="org_pdf", email="a@b.co", role=UserRole.ADMIN)
+        app.dependency_overrides[get_current_user] = lambda: user
+        run = AnalysisRun(
+            analysis_id="run_pdf_001", org_id=user.org_id, website_url="https://acme-analytics.io",
+            status=AnalysisStage.COMPLETED, created_at="2026-10-12T14:30:00Z", updated_at="2026-10-12T14:30:00Z",
+        )
+        run.report = _build_test_report()
+        orchestrator.runs["run_pdf_001"] = run
+        return app
+
+    def test_pdf_default_html_opt_in_and_503(self, monkeypatch):
+        from fastapi.testclient import TestClient
+        from app.crawl.browser import BrowserRenderService
+
+        app = self._setup()
+        try:
+            client = TestClient(app)
+            url = "/api/v1/reports/run_pdf_001/sections/seo/pdf"
+
+            async def fake_ok(html, timeout_ms=60000):
+                return b"%PDF-1.7 fake"
+            monkeypatch.setattr(BrowserRenderService, "render_pdf", fake_ok)
+            r = client.get(url)
+            assert r.status_code == 200
+            assert r.headers["content-type"] == "application/pdf"
+            assert r.content.startswith(b"%PDF")
+
+            r = client.get(url + "?format=html")
+            assert r.status_code == 200 and "text/html" in r.headers["content-type"]
+
+            async def fake_none(html, timeout_ms=60000):
+                return None
+            monkeypatch.setattr(BrowserRenderService, "render_pdf", fake_none)
+            assert client.get(url).status_code == 503
+        finally:
+            app.dependency_overrides.clear()
