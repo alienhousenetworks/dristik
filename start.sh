@@ -159,6 +159,7 @@ validate_environment() {
         echo -e "${DIM}  Installing backend requirements...${RESET}"
         "${BACKEND_DIR}/venv/bin/pip" install --quiet --upgrade pip
         "${BACKEND_DIR}/venv/bin/pip" install --quiet -r "${BACKEND_DIR}/requirements.txt"
+        "${BACKEND_DIR}/venv/bin/playwright" install chromium 2>/dev/null || true
         echo -e "  ${GREEN}✓${RESET} Backend dependencies installed"
     fi
 

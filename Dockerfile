@@ -14,6 +14,11 @@ COPY backend/requirements.txt /tmp/requirements.txt
 RUN pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu \
     && pip install --no-cache-dir -r /tmp/requirements.txt
 
+# Install Playwright Chromium browser & OS dependencies for PDF export & JS crawling
+ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+RUN playwright install --with-deps chromium \
+    && rm -rf /var/lib/apt/lists/*
+
 COPY backend /app
 
 ENV PYTHONUNBUFFERED=1 \

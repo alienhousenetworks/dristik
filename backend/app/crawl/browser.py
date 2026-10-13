@@ -6,8 +6,11 @@ for fast execution and minimal CPU/memory overhead.
 """
 import time
 import asyncio
+import logging
 from typing import Optional, Tuple, Dict, Any
 from app.core.config import settings
+
+logger = logging.getLogger("dristik.browser")
 
 # Graceful detection of playwright package
 _PLAYWRIGHT_AVAILABLE = False
@@ -47,7 +50,8 @@ class BrowserRenderService:
                             "--disable-extensions",
                         ]
                     )
-                except Exception:
+                except Exception as exc:
+                    logger.warning("Failed to launch headless Chromium: %s", exc)
                     cls._browser = None
                     return None
             return cls._browser
@@ -280,7 +284,8 @@ class BrowserRenderService:
                 prefer_css_page_size=True,
                 print_background=True,
             )
-        except Exception:
+        except Exception as exc:
+            logger.warning("Failed to render PDF with Playwright: %s", exc)
             return None
         finally:
             if context:

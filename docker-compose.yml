@@ -5,6 +5,7 @@ services:
       dockerfile: Dockerfile
     ports:
       - "${BACKEND_PORT:-8000}:8000"
+    shm_size: '1gb'
     env_file:
       - .env
     environment:
@@ -15,6 +16,7 @@ services:
       SYSTEM_ADMIN_PASSWORD: ${SYSTEM_ADMIN_PASSWORD:?Set a non-default SYSTEM_ADMIN_PASSWORD}
       SYSTEM_ADMIN_EMAIL: ${SYSTEM_ADMIN_EMAIL:-admin@dristik.ai}
       AUTH_DATABASE_PATH: /app/data/dristik.db
+      PLAYWRIGHT_BROWSERS_PATH: /ms-playwright
     volumes:
       - ./backend:/app
       - dristik-data:/app/data
