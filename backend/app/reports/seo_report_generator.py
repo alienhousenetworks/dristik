@@ -482,10 +482,24 @@ class CompleteSeoReportGenerator:
             rendering_disparity_html = ""
 
         # External Authority Rollup
-        ext_auth = getattr(report, "external_authority", None) or {}
-        has_ext_conn = bool(ext_auth.get("coverage", {}).get("connected_sources")) or ext_auth.get("status") == "CONNECTED"
+        ext_auth = getattr(report, "external_authority", None)
+        has_ext_conn = False
+        ext_metrics: Dict[str, Any] = {}
+        if isinstance(ext_auth, dict):
+            cov = ext_auth.get("coverage")
+            has_connected_sources = False
+            if isinstance(cov, dict):
+                has_connected_sources = bool(cov.get("connected_sources"))
+            elif isinstance(cov, list):
+                has_connected_sources = any(
+                    isinstance(c, dict) and (c.get("data_state") in {"MEASURED", "PARTIALLY_MEASURED"} or c.get("connection_status") == "CONNECTED")
+                    for c in cov
+                )
+            has_ext_conn = has_connected_sources or ext_auth.get("status") == "CONNECTED"
+            if isinstance(ext_auth.get("metrics"), dict):
+                ext_metrics = ext_auth.get("metrics") or {}
+
         if has_ext_conn:
-            ext_metrics = ext_auth.get("metrics") or {}
             ext_auth_html = f"""
             <div class="status-summary-card">
                 <h4>Off-Page Entity Signals & Verified External Authority</h4>

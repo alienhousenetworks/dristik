@@ -355,3 +355,43 @@ def test_api_endpoint_format_print():
     assert "Table of Contents" in res_print.text
     assert "chapter-start" in res_print.text
     assert "Fixed is not the same as Verified" in res_print.text
+
+
+def test_external_authority_list_coverage_safety():
+    """Validates that external_authority with list coverage (e.g. from _unavailable) does not raise AttributeError."""
+    report = _make_sample_report()
+    # Case 1: Standard _unavailable() payload where coverage is an empty list
+    report.external_authority = {
+        "title": "External Authority & Entity Intelligence",
+        "coverage": [],
+        "findings": [],
+        "pillars": {},
+        "sections": {},
+        "notes": ["External authority was not attached."],
+    }
+    html_out = seo_report_generator.render_print_html_report(report)
+    assert "External Authority Status: NOT_CONNECTED" in html_out
+
+    # Case 2: external_authority with active measured providers list
+    report.external_authority = {
+        "title": "External Authority & Entity Intelligence",
+        "status": "CONNECTED",
+        "coverage": [
+            {"provider": "ahrefs", "connection_status": "CONNECTED", "data_state": "MEASURED"}
+        ],
+        "metrics": {
+            "domain_authority": 72,
+            "referring_domains": 1420,
+            "total_backlinks": 45800,
+            "toxic_link_ratio_pct": 2.1,
+        },
+    }
+    html_out_conn = seo_report_generator.render_print_html_report(report)
+    assert "72" in html_out_conn
+    assert "1420" in html_out_conn
+
+    # Case 3: external_authority set to unexpected raw list
+    report.external_authority = ["some_unexpected_list_data"]  # type: ignore[assignment]
+    html_out_list = seo_report_generator.render_print_html_report(report)
+    assert "External Authority Status: NOT_CONNECTED" in html_out_list
+

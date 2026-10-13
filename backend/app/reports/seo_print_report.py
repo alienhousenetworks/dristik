@@ -1250,6 +1250,8 @@ class SeoPrintReportRenderer:
         
         manifest = getattr(report, "crawl_manifest", None)
         crawl_inv = getattr(manifest, "crawl_inventory", None) or {} if manifest else {}
+        if not isinstance(crawl_inv, dict):
+            crawl_inv = {}
         disc_total = crawl_inv.get("discovered_total", pages_crawled)
         tested_pages = crawl_inv.get("tested_pages", pages_crawled)
         cov_pct = crawl_inv.get("url_coverage_pct", 100.0 if tested_pages >= disc_total else round((tested_pages / max(1, disc_total)) * 100.0, 1))
@@ -1338,6 +1340,8 @@ class SeoPrintReportRenderer:
     def _render_sec_02(self, report: ExecutiveReport) -> str:
         manifest = getattr(report, "crawl_manifest", None)
         crawl_inv = getattr(manifest, "crawl_inventory", None) or {} if manifest else {}
+        if not isinstance(crawl_inv, dict):
+            crawl_inv = {}
         disc_total = crawl_inv.get("discovered_total", len(report.page_reports))
         tested_pages = crawl_inv.get("tested_pages", len(report.page_reports))
         cov_pct = crawl_inv.get("url_coverage_pct", 100.0 if tested_pages >= disc_total else round((tested_pages / max(1, disc_total)) * 100.0, 1))
@@ -1447,7 +1451,12 @@ class SeoPrintReportRenderer:
         # Rendering Disparity
         manifest = getattr(report, "crawl_manifest", None)
         manifest_pages = getattr(manifest, "pages", []) or []
-        empty_shells = sum(1 for p in manifest_pages if getattr(p, "rendering_discrepancy", None) and p.rendering_discrepancy.get("empty_raw_shell"))
+        if not isinstance(manifest_pages, list):
+            manifest_pages = []
+        empty_shells = sum(
+            1 for p in manifest_pages
+            if getattr(p, "rendering_discrepancy", None) and isinstance(p.rendering_discrepancy, dict) and p.rendering_discrepancy.get("empty_raw_shell")
+        )
 
         disparity_badge = '<span class="badge badge-crit">HYDRATION DISPARITY DETECTED</span>' if empty_shells > 0 else '<span class="badge badge-verified">SSR / HTML PARITY VERIFIED</span>'
 
@@ -2016,11 +2025,25 @@ class SeoPrintReportRenderer:
     # Chapter 16: External Authority, Backlinks & Mentions
     # --------------------------------------------------------------------------
     def _render_sec_16(self, report: ExecutiveReport) -> str:
-        ext_auth = getattr(report, "external_authority", None) or {}
-        has_ext_conn = bool(ext_auth.get("coverage", {}).get("connected_sources")) or ext_auth.get("status") == "CONNECTED"
+        ext_auth = getattr(report, "external_authority", None)
+        has_ext_conn = False
+        ext_metrics: Dict[str, Any] = {}
+
+        if isinstance(ext_auth, dict):
+            cov = ext_auth.get("coverage")
+            has_connected_sources = False
+            if isinstance(cov, dict):
+                has_connected_sources = bool(cov.get("connected_sources"))
+            elif isinstance(cov, list):
+                has_connected_sources = any(
+                    isinstance(c, dict) and (c.get("data_state") in {"MEASURED", "PARTIALLY_MEASURED"} or c.get("connection_status") == "CONNECTED")
+                    for c in cov
+                )
+            has_ext_conn = has_connected_sources or ext_auth.get("status") == "CONNECTED"
+            if isinstance(ext_auth.get("metrics"), dict):
+                ext_metrics = ext_auth.get("metrics") or {}
 
         if has_ext_conn:
-            ext_metrics = ext_auth.get("metrics") or {}
             conn_content = f"""
             <div class="kpi-grid">
                 <div class="kpi-card"><span class="kpi-label">Domain Authority</span><div class="kpi-val">{ext_metrics.get('domain_authority', 'N/A')}</div></div>
