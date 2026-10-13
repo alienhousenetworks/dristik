@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 
 from app.domain.models import RemediationPatch, RoiInput, RoiEstimate, VerificationResult, RemediationVerificationReport
-from app.domain.enums import PatchRiskLevel, PatchApprovalStatus
+from app.domain.enums import PatchRiskLevel, PatchApprovalStatus, FindingStatus, VerificationStatus
 from app.identity.access import require_analysis
 from app.identity.authorizer import Authorizer, UserIdentity
 from app.identity.deps import get_current_user, require_permission
@@ -255,6 +255,18 @@ async def verify_finding_remediation(
         website_url=target_url or "https://example.com",
         analysis_id=req.analysis_id,
     )
+    if finding:
+        finding.remediation_verification = report
+        if report.status == "RESOLVED":
+            finding.status = FindingStatus.VERIFIED
+            finding.resolution_status = "RESOLVED"
+            finding.verification_status = VerificationStatus.VERIFIED
+        elif report.status == "PARTIALLY_RESOLVED":
+            finding.status = FindingStatus.IN_PROGRESS
+            finding.resolution_status = "PARTIALLY_RESOLVED"
+        elif report.status in ("FAILED_RECHECK", "FAILED_RECRAWL", "REGRESSED"):
+            finding.status = FindingStatus.OPEN
+            finding.resolution_status = "REGRESSED"
     return report
 
 @router.post("/verify-all/{analysis_id}", response_model=List[RemediationVerificationReport])
@@ -281,6 +293,17 @@ async def verify_all_findings_remediation(
             website_url=f_url,
             analysis_id=analysis_id,
         )
+        f.remediation_verification = rep
+        if rep.status == "RESOLVED":
+            f.status = FindingStatus.VERIFIED
+            f.resolution_status = "RESOLVED"
+            f.verification_status = VerificationStatus.VERIFIED
+        elif rep.status == "PARTIALLY_RESOLVED":
+            f.status = FindingStatus.IN_PROGRESS
+            f.resolution_status = "PARTIALLY_RESOLVED"
+        elif rep.status in ("FAILED_RECHECK", "FAILED_RECRAWL", "REGRESSED"):
+            f.status = FindingStatus.OPEN
+            f.resolution_status = "REGRESSED"
         results.append(rep)
     return results
 

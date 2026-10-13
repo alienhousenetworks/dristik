@@ -436,26 +436,42 @@ def render_adaptive_audit_book_html(
 
     # Findings Cards HTML
     finding_cards_html = []
-    for f in findings[:6]:
+    for f in findings:
         f_id = getattr(f, "finding_id", "F-000")
-        f_title = getattr(f, "title", "Discrepancy")
+        f_title = getattr(f, "finding_title", None) or getattr(f, "title", "Discrepancy")
         f_sev = str(getattr(f, "severity", "MEDIUM")).upper()
-        f_desc = getattr(f, "description", "")
-        f_rec = getattr(f, "recommendation", "")
-        f_ev = getattr(f, "evidence_id", None) or "DOM AST"
+        f_desc = getattr(f, "detailed_diagnosis", None) or getattr(f, "description", "")
+        f_rec = getattr(f, "recommended_solution", None) or getattr(f, "recommendation", "")
+        f_ev = getattr(f, "evidence_id", None) or getattr(f, "evidence_source", None) or "DOM AST"
+        f_scope = str(getattr(f, "scope_classification", None) or getattr(f, "scope", None) or "PAGE_VERIFIED").upper()
+        f_root_cause = getattr(f, "root_cause", None)
+        f_acceptance = getattr(f, "acceptance_criteria", None) or getattr(f, "validation_criteria", None)
+        f_code = getattr(f, "relevant_code_or_configuration_example", None)
 
+        card_body = []
+        if f_root_cause:
+            card_body.append(f'<div class="finding-meta-row"><strong>ROOT CAUSE:</strong> {_esc(f_root_cause)}</div>')
+        if f_rec:
+            card_body.append(f'<div class="finding-rec"><strong>RECOMMENDATION:</strong> {_esc(f_rec)}</div>')
+        if f_code:
+            card_body.append(f'<pre class="finding-code"><code>{_esc(f_code)}</code></pre>')
+        if f_acceptance:
+            card_body.append(f'<div class="finding-meta-row" style="color:#059669;"><strong>ACCEPTANCE CRITERIA:</strong> {_esc(f_acceptance)}</div>')
+
+        card_content = "".join(card_body)
         finding_cards_html.append(f"""
         <div class="finding-card report-avoid-break">
             <div class="finding-header">
                 <div>
                     <span class="finding-id">{_esc(f_id)}</span>
                     <span class="finding-sev sev-{_esc(f_sev.lower())}">{_esc(f_sev)}</span>
+                    <span class="finding-scope">{_esc(f_scope)}</span>
                 </div>
                 <span class="finding-ev">EVIDENCE: {_esc(f_ev)}</span>
             </div>
             <div class="finding-title">{_esc(f_title)}</div>
             <p class="finding-desc">{_esc(f_desc)}</p>
-            {f'<div class="finding-rec"><strong>RECOMMENDATION:</strong> {_esc(f_rec)}</div>' if f_rec else ''}
+            {card_content}
         </div>
         """)
 
@@ -754,6 +770,32 @@ def render_adaptive_audit_book_html(
             border: 1px solid #e2e8f0;
             padding: 6px 8px;
             border-radius: 2px;
+            margin-bottom: 4px;
+        }}
+        .finding-scope {{
+            font-size: 6.5pt;
+            font-weight: 700;
+            padding: 1px 4px;
+            background: #e2e8f0;
+            color: #334155;
+            border-radius: 2px;
+            margin-left: 4px;
+        }}
+        .finding-meta-row {{
+            font-size: 7.5pt;
+            margin-bottom: 4px;
+            color: #1e293b;
+        }}
+        .finding-code {{
+            background: #0f172a;
+            color: #38bdf8;
+            font-family: ui-monospace, monospace;
+            font-size: 7pt;
+            padding: 6px;
+            border-radius: 3px;
+            margin: 4px 0;
+            overflow-x: auto;
+            white-space: pre-wrap;
         }}
 
         /* Evidence Badges */

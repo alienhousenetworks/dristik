@@ -4043,6 +4043,50 @@ Produce a coherent business representation downstream Dristik specialists can tr
         "(5) Continuous monitoring cadences (scheduled crawls, anomaly alerting, and monthly audit diff tracking).\n"
         "Ensure every remediation finding has an actionable owner, dependency list, and unambiguous validation criterion."
     ),
+
+    "seo.specialized.ecommerce.v3": (
+        "TASK CONTRACT: E-COMMERCE & MERCHANT FEED SEO SPECIALIST\n"
+        "Audit product catalog crawl efficiency, faceted navigation indexability, merchant schema fidelity, and inventory state transitions.\n"
+        "Verify: (1) Product and Offer schema integrity (valid SKU, price, priceCurrency, availability, and returnPolicy specification); "
+        "(2) Faceted navigation architecture, ensuring multi-parameter filter combinations do not generate unbounded crawl traps or index bloat; "
+        "(3) Canonical URL alignment across product variants, color swatches, and size parameter permutations; "
+        "(4) Merchant Center data feed parity with on-page pricing and stock availability; "
+        "(5) Out-of-stock, discontinued, and seasonal product URL lifecycle management (HTTP 404 vs 410 vs 301 canonical redirects).\n"
+        "Ground all findings in verified product schema, canonical links, and query parameters without inferring catalog metrics."
+    ),
+
+    "seo.specialized.local.v3": (
+        "TASK CONTRACT: LOCAL SEO & GOOGLE BUSINESS PROFILE SPECIALIST\n"
+        "Audit localized search visibility, NAP (Name, Address, Phone) consistency, location landing page hierarchy, and LocalBusiness markup.\n"
+        "Verify: (1) Canonical NAP data consistency across footer, header, contact pages, and Google Business Profile references; "
+        "(2) LocalBusiness and PostalAddress structured data syntax, coordinates (geo:latitude/longitude), and openingHoursSpecification; "
+        "(3) Location page content uniqueness and local proof points to prevent doorway page penalization; "
+        "(4) Local pack citability and localized answer engine entity corroboration; "
+        "(5) Prominent local review integration and geo-targeted schema properties.\n"
+        "Ground all observations strictly in verified address text, footer markup, and structured data entities."
+    ),
+
+    "seo.specialized.international.v3": (
+        "TASK CONTRACT: INTERNATIONAL & MULTILINGUAL SEO SPECIALIST\n"
+        "Audit internationalization signals, reciprocal hreflang annotations, x-default fallback handling, and regional URL architectures.\n"
+        "Verify: (1) Full reciprocity of hreflang annotations (page A pointing to page B requires page B pointing back to page A with matching language-country codes); "
+        "(2) Valid ISO 639-1 language and ISO 3166-1 Alpha-2 region formatting; "
+        "(3) Presence of a global x-default fallback link element for unmatched visitor locales; "
+        "(4) International URL structure clarity (ccTLDs vs subdomains vs subdirectories) with zero geotargeting conflicts; "
+        "(5) Localized HTML lang attribute alignment with server-rendered content.\n"
+        "Only flag verified hreflang syntax errors, broken reciprocal links, or missing x-default tags discovered in page markup."
+    ),
+
+    "seo.specialized.app.v3": (
+        "TASK CONTRACT: APP DISCOVERY & APP STORE OPTIMIZATION SPECIALIST\n"
+        "Audit mobile app discovery mechanisms, deep linking protocols, smart banners, and software application structured data.\n"
+        "Verify: (1) Apple Universal Links (apple-app-site-association) and Android App Links (assetlinks.json) discoverability and HTTP 200 response headers; "
+        "(2) Smart App Banner meta tags (apple-itunes-app) configuration with valid app-id; "
+        "(3) SoftwareApplication and MobileApplication schema implementation with accurate operatingSystem, applicationCategory, and download URLs; "
+        "(4) Mobile web to native app handover journeys and deferred deep linking indexability; "
+        "(5) Mobile app landing page content indexing parity.\n"
+        "Report verified app link configurations, meta tags, and schema without inferring download figures or store rankings."
+    ),
 }
 
 # COPYWRITING_TASK_CARDS: Dict[str, str] = {

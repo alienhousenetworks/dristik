@@ -368,7 +368,7 @@ class ScoringEngine:
                         if manifest is not None and not getattr(manifest, "sitemap_found", True):
                             site_size = len(manifest.pages) if getattr(manifest, "pages", None) else sample_size
                             if site_size <= 25:
-                                s = 0.8
+                                s = 0.5
                                 passed = int(round(s * sample_size))
                                 failed = sample_size - passed
                                 evidence_list.append({"url": "sitemap.xml", "status": "ADVISORY", "detail": "XML Sitemap not discovered; on small sites (<= 25 pages) with complete internal linking, impact is advisory."})

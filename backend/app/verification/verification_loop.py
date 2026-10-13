@@ -133,7 +133,7 @@ class RemediationVerificationService:
         elif "h1" in finding_text or "positioning" in finding_text:
             checks = self._check_h1_assertions(crawled_html=crawled_html)
 
-        elif "duplicate" in finding_text or "meta" in finding_text or "title" in finding_text:
+        elif "canonical" in finding_text or "duplicate" in finding_text or "meta" in finding_text or "title" in finding_text:
             checks = self._check_metadata_assertions(crawled_html=crawled_html, website_url=website_url)
 
         else:

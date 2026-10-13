@@ -953,6 +953,23 @@ class AnalysisOrchestrator:
                     if not any(x.finding_id == f.finding_id for x in raw_findings):
                         raw_findings.append(f)
 
+            # Raw HTML vs Rendered DOM Disparity Findings
+            from app.analyzers.rendering_disparity import analyze_rendering_disparity
+            for p in eval_pages:
+                if getattr(p, "raw_html", None) and getattr(p, "rendered_html", None):
+                    try:
+                        _, render_findings = analyze_rendering_disparity(
+                            raw_html=p.raw_html,
+                            rendered_html=p.rendered_html,
+                            page_url=p.url,
+                            evidence_store=blackboard.evidence_store,
+                        )
+                        for rf in render_findings:
+                            if not any(x.finding_id == rf.finding_id for x in raw_findings):
+                                raw_findings.append(rf)
+                    except Exception as rf_err:
+                        logger.info("Page rendering disparity collection note: %s", rf_err)
+
             # Layer 2 — Deterministic Finding Engine evaluation
             from app.evidence.deterministic_rules import DeterministicFindingEngine
             deterministic_engine = DeterministicFindingEngine()
@@ -975,105 +992,10 @@ class AnalysisOrchestrator:
             if entity_graph_contradictions:
                 blackboard.identity_contradictions.extend(entity_graph_contradictions)
 
-            # Authoritative Root Cause Deduplication (single source of truth for entire pipeline)
-            final_findings = FindingDeduplicator.deduplicate(raw_findings)
-            blackboard.findings = final_findings
-
-            overall_scores = self.scoring_engine.calculate_scores(
-                findings=final_findings,
-                business_profile=blackboard.business_profile,
-                has_schema=any(len(p.schema_types) > 0 for p in blackboard.pages),
-                is_https=website_url.startswith("https://"),
-                readability=page_ev.readability_score,
-                manifest=manifest,
-            )
-            blackboard.scores = overall_scores
-            controller.mark_node_status("node_honest_scoring", GraphNodeStatus.COMPLETED)
-            controller.log_activity("node_honest_scoring", "success", "scoring.complete", f"Honest 3-Pillar scores computed: Overall {overall_scores.overall_score:.0f}/100 ({overall_scores.grade})")
-
-            # Calibrated Confidence
-            confidence_result = self.confidence_engine.calculate_confidence(
-                claims=current_claims,
-                evidence_store=blackboard.evidence_store,
-                pages=blackboard.pages,
-                contradictions_count=len(blackboard.claim_registry.get_contradictions())
-            )
-            overall_scores.overall_confidence = confidence_result.confidence_score
-            overall_scores.evidence_coverage = confidence_result.evidence_coverage
-
-            if await _check_pause():
-                return
-
-            # 13. Validated Remediation & Roadmaps
-            controller.mark_node_status("node_code_patch_pack", GraphNodeStatus.RUNNING)
-            controller.log_activity("node_code_patch_pack", "running", "patches.start", "Generating autonomous code patch pack...")
-
-            remediation_plan = self.remediation_planner.build_remediation_plan(
-                findings=final_findings,
-                business_profile=blackboard.business_profile,
-                target_url=website_url,
-                pages=eval_pages,
-            )
-            blackboard.code_patches = remediation_plan.patches
-
-            remediation_patches = patch_engine.generate_patches(
-                findings=final_findings,
-                business_profile=blackboard.business_profile,
-                website_url=website_url,
-                commercial_evals=getattr(blackboard, "commercial_evaluations", None),
-            )
-            blackboard.remediation_patches = remediation_patches
-
-            controller.mark_node_status("node_code_patch_pack", GraphNodeStatus.COMPLETED)
-            controller.log_activity("node_code_patch_pack", "success", "patches.complete", f"Generated {len(remediation_plan.patches)} code patches and {len(remediation_patches)} universal remediation patches")
-
-            if await _check_pause():
-                return
-
-            controller.mark_node_status("node_final_report_assembly", GraphNodeStatus.RUNNING)
-            controller.log_activity("node_final_report_assembly", "running", "report.assemble", "Assembling executive report and enforcing Validation Gate...")
-
-            r7, r30, r90 = self.roadmap_builder.build_roadmap(final_findings, blackboard.executive_narrative)
-            top_10_plan = self.roadmap_builder.build_top_10_actions(
-                final_findings,
-                blackboard.business_profile,
-                overall_scores,
-                blackboard.executive_narrative,
-                crawl_summary=manifest.crawl_health if manifest else None,
-            )
-            blackboard.roadmap_7_days = r7
-            blackboard.roadmap_30_days = r30
-            blackboard.roadmap_90_days = r90
-
-            # 14. Digital Twin & Temporal Timeline Update
-            if domain not in self.digital_twins:
-                self.digital_twins[domain] = WebsiteDigitalTwin(
-                    twin_id=f"twin_{domain.replace('.', '_')}",
-                    domain=domain,
-                    base_url=website_url
-                )
-            twin = self.digital_twins[domain]
-            twin.update_from_mission(
-                blackboard.business_profile,
-                blackboard.pages,
-                overall_scores,
-                final_findings,
-                remediation_plan.patches
-            )
-
-            if domain not in self.timelines:
-                self.timelines[domain] = WebsiteIntelligenceTimeline(domain)
-            timeline = self.timelines[domain]
-            timeline.record_audit(analysis_id, overall_scores, final_findings)
-
-            # 15. Narrative and Final Report Assembly
-            narrative_data = self.narrative_gen.build_narrative(
-                business_profile=blackboard.business_profile,
-                findings=final_findings,
-                scores=overall_scores,
-                synthesizer_output=blackboard.executive_narrative
-            )
-
+            # -----------------------------------------------------------------
+            # Step 13: Live AI Visibility, Competitive Intelligence & External Authority
+            # (Collected BEFORE final deduplication, scoring, and roadmaps)
+            # -----------------------------------------------------------------
             model_router.set_active_stage("ai_visibility_monitor", "Live AI Citation & Search Visibility")
 
             from app.intelligence.geo.readiness import evaluate_geo_readiness
@@ -1081,6 +1003,8 @@ class AnalysisOrchestrator:
             visibility_detail = None
             live_citation_score = None
             ai_visibility_scorecard = None
+            geo_readiness = None
+            agent_readiness = None
             geo_bench_report = None
             ai_citation_dash = None
             try:
@@ -1121,7 +1045,6 @@ class AnalysisOrchestrator:
                 ai_visibility_scorecard = None
                 geo_bench_report = None
 
-            # Run Hero Real AI Citation Tracker at audit runtime
             try:
                 from app.intelligence.citations.tracker import ai_citation_tracker
                 profile = blackboard.business_profile
@@ -1142,8 +1065,6 @@ class AnalysisOrchestrator:
             blackboard.blackboard_state["geo_benchmark_report"] = geo_bench_report
             blackboard.blackboard_state["ai_citation_dashboard"] = ai_citation_dash
 
-            # A previous GEO snapshot is not this run. Leave the citation unmeasured
-            # unless this run recorded successful engine responses.
             geo_readiness = evaluate_geo_readiness(
                 website_url=website_url,
                 pages=blackboard.pages,
@@ -1169,17 +1090,97 @@ class AnalysisOrchestrator:
             except Exception as e:
                 logger.warning("Failed to enrich GEO readiness citations with LLM: %s", e)
             blackboard.geo_readiness = geo_readiness
-            extractability = getattr(geo_readiness, "extractability_score", None)
-            if overall_scores is not None and extractability is not None:
-                self.scoring_engine.apply_measured_geo_score(overall_scores, extractability)
-
-            telemetry_data = telemetry_tracker.get_data()
 
             try:
                 from app.intelligence.geo.agent_readiness import evaluate_agent_readiness
-                agent_readiness = await evaluate_agent_readiness(website_url, blackboard.pages, manifest)
-            except Exception:
+                agent_readiness = await evaluate_agent_readiness(
+                    website_url=website_url,
+                    pages=blackboard.pages,
+                    manifest=manifest,
+                )
+            except Exception as e:
+                logger.warning("Failed to evaluate agent readiness: %s", e)
                 agent_readiness = None
+            blackboard.agent_readiness = agent_readiness
+
+            from app.intelligence.competitive.evidence_graph import competitive_evidence_graph_engine
+            comp_graph_res = competitive_evidence_graph_engine.build_graph(
+                target_profile=blackboard.business_profile,
+                target_domain=domain,
+                target_evals=blackboard.commercial_evaluations,
+                observatory_records=(ai_visibility_scorecard.observatory_records if ai_visibility_scorecard else []),
+            )
+
+            from app.intelligence.competitive.engine import competitive_intelligence_engine
+            comp_report_obj = competitive_intelligence_engine.build_competitive_report(
+                target_domain=domain,
+                business_profile=blackboard.business_profile,
+                target_pages=eval_pages,
+                competitor_domains=getattr(blackboard.business_profile, "competitors", []) if blackboard.business_profile else [],
+                commercial_evaluations=blackboard.commercial_evaluations,
+                observatory_records=(ai_visibility_scorecard.observatory_records if ai_visibility_scorecard else []),
+                audit_id=analysis_id,
+            )
+
+            external_authority_payload = {
+                "title": "External Authority & Entity Intelligence",
+                "universal_authority_score": None,
+                "coverage": [],
+                "findings": [],
+                "notes": ["External authority was not attached. The crawl audit is unchanged."],
+            }
+            has_external_authority_connected = False
+            try:
+                from app.external_authority.audit_bridge import build_audit_attachment
+                attachment = build_audit_attachment(
+                    project_id=getattr(run, "org_id", None) or "org_default",
+                    domain=domain,
+                    pages=eval_pages,
+                    evidence_store=getattr(blackboard, "evidence_store", None),
+                )
+                external_authority_payload = attachment["report"]
+                for f in attachment.get("domain_findings", []):
+                    if not any(x.finding_id == f.finding_id for x in raw_findings):
+                        raw_findings.append(f)
+
+                cov_items = external_authority_payload.get("coverage", [])
+                if any((getattr(c, "status", None) == "CONNECTED" or (isinstance(c, dict) and c.get("status") == "CONNECTED")) for c in cov_items):
+                    has_external_authority_connected = True
+                elif external_authority_payload.get("status") in ("CONNECTED", "PARTIALLY_MEASURED"):
+                    has_external_authority_connected = True
+                elif len(attachment.get("domain_findings", [])) > 0:
+                    has_external_authority_connected = True
+            except Exception as exc:
+                logger.info("external authority attachment skipped: %s", type(exc).__name__)
+                external_authority_payload["error"] = type(exc).__name__
+
+            # -----------------------------------------------------------------
+            # Step 14: Authoritative Finding Deduplication & Scope Classification
+            # (Every finding is scoped PAGE_VERIFIED, SAMPLE_VERIFIED, or SITE_INFERRED)
+            # -----------------------------------------------------------------
+            final_findings = FindingDeduplicator.deduplicate(raw_findings)
+            from app.evidence.taxonomy import assign_evidence_scope
+            for f in final_findings:
+                assign_evidence_scope(f, sample_size=len(eval_pages))
+            blackboard.findings = final_findings
+
+            # Synthesize final Causal Diagnostic Chains with multi-source evidence
+            causal_diagnostic_chains = self.causal_engine.analyze_root_causes(
+                claims=current_claims,
+                business_profile=blackboard.business_profile,
+                findings=final_findings,
+                ai_search_evaluations=blackboard.ai_search_evaluations,
+                competitor_bakeoff=blackboard.competitor_bakeoff,
+                crawl_summary=manifest.crawl_health,
+                observatory_records=(ai_visibility_scorecard.observatory_records if ai_visibility_scorecard else []),
+                competitive_graph=comp_graph_res,
+            )
+
+            # -----------------------------------------------------------------
+            # Step 15: Scoring Engine (Single Source of Truth over complete findings)
+            # -----------------------------------------------------------------
+            controller.mark_node_status("node_honest_scoring", GraphNodeStatus.RUNNING)
+            controller.log_activity("node_honest_scoring", "running", "scoring.calc", "Deterministic Scoring Engine computing intent-adjusted category scores...")
 
             live_bench = None
             completed_runs = int(getattr(ai_visibility_scorecard, "successful_runs", 0) or 0) if ai_visibility_scorecard is not None else 0
@@ -1192,7 +1193,23 @@ class AnalysisOrchestrator:
                 if geo_bench_report and isinstance(geo_bench_report, dict) and "share_of_model" in geo_bench_report:
                     live_bench["share_of_model"] = geo_bench_report["share_of_model"]
 
-            # Human, Google, and on-page AI readiness. Live citation stays null unless a snapshot exists.
+            overall_scores = self.scoring_engine.calculate_scores(
+                findings=final_findings,
+                business_profile=blackboard.business_profile,
+                has_schema=any(len(p.schema_types) > 0 for p in blackboard.pages),
+                is_https=website_url.startswith("https://"),
+                readability=page_ev.readability_score,
+                external_authority_connected=has_external_authority_connected,
+                live_citation_score=live_citation_score,
+                live_benchmark_data=live_bench,
+                manifest=manifest,
+            )
+            extractability = getattr(geo_readiness, "extractability_score", None)
+            if overall_scores is not None and extractability is not None:
+                self.scoring_engine.apply_measured_geo_score(overall_scores, extractability)
+            blackboard.scores = overall_scores
+
+            # Human, Google, and on-page AI readiness (honest specialized views)
             honest_scores = self.scoring_engine.calculate_honest_scores(
                 findings=final_findings,
                 business_profile=blackboard.business_profile,
@@ -1203,8 +1220,98 @@ class AnalysisOrchestrator:
                 geo_readiness=geo_readiness,
                 live_citation_score=live_citation_score,
                 live_benchmark_data=live_bench,
+                external_authority_connected=has_external_authority_connected,
             )
             blackboard.honest_scores = honest_scores
+
+            # Calibrated Confidence
+            confidence_result = self.confidence_engine.calculate_confidence(
+                claims=current_claims,
+                evidence_store=blackboard.evidence_store,
+                pages=blackboard.pages,
+                contradictions_count=len(blackboard.claim_registry.get_contradictions())
+            )
+            overall_scores.overall_confidence = confidence_result.confidence_score
+            overall_scores.evidence_coverage = confidence_result.evidence_coverage
+
+            controller.mark_node_status("node_honest_scoring", GraphNodeStatus.COMPLETED)
+            controller.log_activity("node_honest_scoring", "success", "scoring.complete", f"Honest scores computed: Overall {overall_scores.overall_score:.0f}/100 ({overall_scores.grade})")
+
+            if await _check_pause():
+                return
+
+            # -----------------------------------------------------------------
+            # Step 16: Validated Remediation & Roadmaps (built on COMPLETE findings)
+            # -----------------------------------------------------------------
+            controller.mark_node_status("node_code_patch_pack", GraphNodeStatus.RUNNING)
+            controller.log_activity("node_code_patch_pack", "running", "patches.start", "Generating autonomous code patch pack...")
+
+            remediation_plan = self.remediation_planner.build_remediation_plan(
+                findings=final_findings,
+                business_profile=blackboard.business_profile,
+                target_url=website_url,
+                pages=eval_pages,
+            )
+            blackboard.code_patches = remediation_plan.patches
+
+            remediation_patches = patch_engine.generate_patches(
+                findings=final_findings,
+                business_profile=blackboard.business_profile,
+                website_url=website_url,
+                commercial_evals=getattr(blackboard, "commercial_evaluations", None),
+            )
+            blackboard.remediation_patches = remediation_patches
+
+            controller.mark_node_status("node_code_patch_pack", GraphNodeStatus.COMPLETED)
+            controller.log_activity("node_code_patch_pack", "success", "patches.complete", f"Generated {len(remediation_plan.patches)} code patches and {len(remediation_patches)} universal remediation patches")
+
+            if await _check_pause():
+                return
+
+            controller.mark_node_status("node_final_report_assembly", GraphNodeStatus.RUNNING)
+            controller.log_activity("node_final_report_assembly", "running", "report.assemble", "Assembling executive report and enforcing Validation Gate...")
+
+            r7, r30, r90 = self.roadmap_builder.build_roadmap(final_findings, blackboard.executive_narrative)
+            top_10_plan = self.roadmap_builder.build_top_10_actions(
+                final_findings,
+                blackboard.business_profile,
+                overall_scores,
+                blackboard.executive_narrative,
+                crawl_summary=manifest.crawl_health if manifest else None,
+            )
+            blackboard.roadmap_7_days = r7
+            blackboard.roadmap_30_days = r30
+            blackboard.roadmap_90_days = r90
+
+            # Digital Twin & Temporal Timeline Update
+            if domain not in self.digital_twins:
+                self.digital_twins[domain] = WebsiteDigitalTwin(
+                    twin_id=f"twin_{domain.replace('.', '_')}",
+                    domain=domain,
+                    base_url=website_url
+                )
+            twin = self.digital_twins[domain]
+            twin.update_from_mission(
+                blackboard.business_profile,
+                blackboard.pages,
+                overall_scores,
+                final_findings,
+                remediation_plan.patches
+            )
+
+            if domain not in self.timelines:
+                self.timelines[domain] = WebsiteIntelligenceTimeline(domain)
+            timeline = self.timelines[domain]
+            timeline.record_audit(analysis_id, overall_scores, final_findings)
+
+            # Narrative Synthesis
+            narrative_data = self.narrative_gen.build_narrative(
+                business_profile=blackboard.business_profile,
+                findings=final_findings,
+                scores=overall_scores,
+                synthesizer_output=blackboard.executive_narrative
+            )
+
             try:
                 from app.scoring.displayed_score import align_story_score, displayed_composite
                 score_payload = {
@@ -1228,14 +1335,13 @@ class AnalysisOrchestrator:
             except Exception:
                 logger.info("displayed score alignment skipped")
 
-            # Enforce Character-Safe Copy bounds
+            # Character-Safe Copy and C-Suite WhatsApp 1-Pager
             character_copy = generate_character_safe_copy(
                 blackboard.business_profile,
                 website_url
             )
             blackboard.character_safe_copy = character_copy
 
-            # Format C-Suite WhatsApp 1-Pager
             wa_summary = generate_whatsapp_summary(
                 domain=domain,
                 honest_scores=honest_scores,
@@ -1286,6 +1392,7 @@ class AnalysisOrchestrator:
                 media_type="application/json",
             )
             report_uuid = str(uuid.uuid4())
+            telemetry_data = telemetry_tracker.get_data()
             run_manifest = build_run_manifest(
                 analysis_id=analysis_id,
                 website_url=website_url,
@@ -1364,19 +1471,20 @@ class AnalysisOrchestrator:
                 dom_evidence=evidence_ledger_map,
             )
 
-            cro_finding = visual_ux_tester.generate_grounded_cro_finding(
-                domain=domain,
-                website_url=website_url,
-                pages=getattr(blackboard, "pages", None),
-            )
-            # cro_finding is already integrated into canonical findings
-
-            # Synthesize Lifecycle Revenue Intelligence (website -> search -> visitor -> lead -> revenue)
+            # Synthesize Lifecycle Revenue Intelligence with genuine provider connection states
             from app.connectors.lifecycle_revenue import lifecycle_service
+            gsc_conn = any(
+                (isinstance(c, dict) and c.get("provider") == "google_search_console" and c.get("status") == "CONNECTED")
+                for c in external_authority_payload.get("coverage", [])
+            )
+            ga4_conn = any(
+                (isinstance(c, dict) and c.get("provider") == "google_analytics_4" and c.get("status") == "CONNECTED")
+                for c in external_authority_payload.get("coverage", [])
+            )
             lifecycle_rep = lifecycle_service.synthesize_lifecycle_intelligence(
                 domain=domain,
-                gsc_connected=False,
-                ga4_connected=False,
+                gsc_connected=gsc_conn,
+                ga4_connected=ga4_conn,
                 crm_connected=False,
             )
 
@@ -1388,83 +1496,13 @@ class AnalysisOrchestrator:
                 sample_size=len(blackboard.pages or []),
             )
 
-            # Synthesize 40-Page Agency Technical SEO & Architecture Rollups
-            # (Audited and unified prior to honest scoring for single-source grounding)
+            # Synthesize per-engine AI evaluations
             from app.intelligence.geo.per_engine_evaluator import evaluate_per_engine_ai
-
             per_engine_geo_rep = evaluate_per_engine_ai(
                 pages=eval_pages,
                 manifest=manifest,
                 profile=blackboard.business_profile,
                 website_url=website_url
-            )
-
-            external_authority_payload = {
-                "title": "External Authority & Entity Intelligence",
-                "universal_authority_score": None,
-                "coverage": [],
-                "findings": [],
-                "notes": ["External authority was not attached. The crawl audit is unchanged."],
-            }
-            try:
-                from app.external_authority.audit_bridge import build_audit_attachment
-                attachment = build_audit_attachment(
-                    project_id=getattr(run, "org_id", None) or "org_default",
-                    domain=domain,
-                    pages=eval_pages,
-                    evidence_store=getattr(blackboard, "evidence_store", None),
-                )
-                external_authority_payload = attachment["report"]
-                final_findings.extend(attachment["domain_findings"])
-                try:
-                    run_manifest = build_run_manifest(
-                        analysis_id=analysis_id,
-                        website_url=website_url,
-                        report_id=report_uuid,
-                        evidence_store=blackboard.evidence_store,
-                        findings=final_findings,
-                        telemetry=telemetry_data,
-                        snapshots=blackboard.evidence_store.snapshots,
-                        evidence_graph_snapshot_id=graph_snap.snapshot_id,
-                        app_version=settings.APP_VERSION,
-                    )
-                    seal_manifest(run_manifest, snapshots=blackboard.evidence_store.snapshots)
-                    run.manifest_id = run_manifest.manifest_id
-                except Exception:
-                    logger.info("manifest reseal after external authority skipped")
-            except Exception as exc:
-                logger.info("external authority attachment skipped: %s", type(exc).__name__)
-                external_authority_payload["error"] = type(exc).__name__
-
-            from app.intelligence.competitive.evidence_graph import competitive_evidence_graph_engine
-            comp_graph_res = competitive_evidence_graph_engine.build_graph(
-                target_profile=blackboard.business_profile,
-                target_domain=domain,
-                target_evals=blackboard.commercial_evaluations,
-                observatory_records=(ai_visibility_scorecard.observatory_records if ai_visibility_scorecard else []),
-            )
-
-            from app.intelligence.competitive.engine import competitive_intelligence_engine
-            comp_report_obj = competitive_intelligence_engine.build_competitive_report(
-                target_domain=domain,
-                business_profile=blackboard.business_profile,
-                target_pages=eval_pages,
-                competitor_domains=getattr(blackboard.business_profile, "competitors", []) if blackboard.business_profile else [],
-                commercial_evaluations=blackboard.commercial_evaluations,
-                observatory_records=(ai_visibility_scorecard.observatory_records if ai_visibility_scorecard else []),
-                audit_id=analysis_id,
-            )
-
-            # Synthesize final Causal Diagnostic Chains with multi-source evidence
-            causal_diagnostic_chains = self.causal_engine.analyze_root_causes(
-                claims=current_claims,
-                business_profile=blackboard.business_profile,
-                findings=final_findings,
-                ai_search_evaluations=blackboard.ai_search_evaluations,
-                competitor_bakeoff=blackboard.competitor_bakeoff,
-                crawl_summary=manifest.crawl_health,
-                observatory_records=(ai_visibility_scorecard.observatory_records if ai_visibility_scorecard else []),
-                competitive_graph=comp_graph_res,
             )
 
             # Layer 3 — Derived Intelligence Engine evaluation

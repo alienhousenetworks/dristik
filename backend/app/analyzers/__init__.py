@@ -20,6 +20,7 @@ from app.analyzers.topical_authority_analyzer import analyze_topical_authority
 from app.analyzers.ecommerce_seo import analyze_ecommerce_seo
 from app.analyzers.serp_appearance import analyze_serp_appearance
 from app.analyzers.cro_analyzer import CroAnalyzer, analyze_cro
+from app.analyzers.rendering_disparity import RenderingDisparityAnalyzer, analyze_rendering_disparity
 
 __all__ = [
     "MetaRollupAnalyzer",
@@ -41,4 +42,6 @@ __all__ = [
     "analyze_topical_authority",
     "analyze_ecommerce_seo",
     "analyze_serp_appearance",
+    "RenderingDisparityAnalyzer",
+    "analyze_rendering_disparity",
 ]

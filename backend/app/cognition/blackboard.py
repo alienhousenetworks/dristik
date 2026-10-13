@@ -86,3 +86,7 @@ class CognitiveBlackboard:
 
     def add_code_patch(self, patch: CodePatch):
         self.code_patches.append(patch)
+
+    @property
+    def claims(self) -> List[Any]:
+        return self.claim_registry.get_all()

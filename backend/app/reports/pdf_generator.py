@@ -496,6 +496,15 @@ async def get_complete_seo_report(
     if format.lower() == "json":
         return seo_report_generator.render_json_report(report)
 
+    if format.lower() in ("print", "print_html"):
+        print_html = seo_report_generator.render_print_html_report(report)
+        return Response(content=print_html, media_type="text/html")
+
+    if format.lower() == "pdf":
+        print_html = seo_report_generator.render_print_html_report(report)
+        domain_clean = (report.domain or "website").replace("https://", "").replace("http://", "").split("/")[0]
+        return await _html_to_pdf_response(print_html, f"{domain_clean}_master_seo_audit_book.pdf")
+
     html_content = seo_report_generator.render_html_report(report)
     return Response(content=html_content, media_type="text/html")
 

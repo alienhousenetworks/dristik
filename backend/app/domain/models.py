@@ -311,8 +311,8 @@ class Finding(BaseModel):
     root_cause_id: Optional[str] = None
     sub_observations: List[str] = Field(default_factory=list)
     detailed_observations: List[SubObservation] = Field(default_factory=list)
-    title: str
-    description: str
+    title: str = ""
+    description: str = ""
     evidence: List[FindingEvidence] = Field(default_factory=list)
     evidence_refs: List[str] = Field(default_factory=list)
     evidence_ids: List[str] = Field(default_factory=list)
@@ -323,7 +323,7 @@ class Finding(BaseModel):
     impact: int = Field(default=5, ge=1, le=10)
     effort: int = Field(default=5, ge=1, le=10)
     priority: int = Field(default=5, ge=1, le=10)
-    recommendation: str
+    recommendation: str = ""
     grounded_recommendation: Optional[GroundedRecommendation] = None
     reasoning: Optional[str] = None
     business_impact: Optional[str] = None
@@ -377,6 +377,34 @@ class Finding(BaseModel):
     source_method: Optional[str] = None
     limitations: Optional[str] = None
     deduplication_key: Optional[str] = None
+
+    # Industry-Standard SEO Diagnostic Specification Fields
+    audit_id: Optional[str] = None
+    finding_title: Optional[str] = None
+    concise_summary: Optional[str] = None
+    detailed_diagnosis: Optional[str] = None
+    business_context: Optional[str] = None
+    affected_templates: List[str] = Field(default_factory=list)
+    evidence_references: List[str] = Field(default_factory=list)
+    evidence_source: Optional[str] = None
+    evidence_timestamp: Optional[str] = None
+    observed_values: Optional[Any] = None
+    expected_or_reference_behavior: Optional[str] = None
+    scope_classification: Optional[str] = None  # PAGE_VERIFIED, SAMPLE_VERIFIED, SITE_INFERRED, NOT_MEASURED, NOT_APPLICABLE
+    sample_size: Optional[int] = None
+    affected_sample_count: Optional[int] = None
+    affected_percentage: Optional[float] = None
+    root_cause: Optional[str] = None
+    secondary_symptoms: List[str] = Field(default_factory=list)
+    recommended_solution: Optional[str] = None
+    implementation_steps: List[str] = Field(default_factory=list)
+    relevant_code_or_configuration_example: Optional[str] = None
+    implementation_dependencies: List[str] = Field(default_factory=list)
+    acceptance_criteria: Optional[str] = None
+    verification_method: Optional[str] = None
+    data_limitations: Optional[str] = None
+    estimated_effort: Optional[str] = None
+
     # v2: Lifecycle and display fields
     lifecycle_state: FindingLifecycle = Field(
         default=FindingLifecycle.OPEN,
@@ -403,24 +431,110 @@ class Finding(BaseModel):
 
     @model_validator(mode="after")
     def sync_evidence_ids_and_refs(self) -> "Finding":
+        if self.finding_title and not self.title:
+            self.title = self.finding_title
+        elif self.title and not self.finding_title:
+            self.finding_title = self.title
+
+        if self.concise_summary and not self.description:
+            self.description = self.concise_summary
+        elif self.description and not self.concise_summary:
+            self.concise_summary = self.description
+
+        if self.detailed_diagnosis and not self.diagnosis:
+            self.diagnosis = self.detailed_diagnosis
+        elif self.diagnosis and not self.detailed_diagnosis:
+            self.detailed_diagnosis = self.diagnosis
+
         if self.evidence_ids and not self.evidence_refs:
             self.evidence_refs = list(self.evidence_ids)
         elif self.evidence_refs and not self.evidence_ids:
             self.evidence_ids = list(self.evidence_refs)
+
+        if self.evidence_references and not self.evidence_refs:
+            self.evidence_refs = list(self.evidence_references)
+        elif self.evidence_refs and not self.evidence_references:
+            self.evidence_references = list(self.evidence_refs)
+
         if self.scope and not self.evidence_scope:
             self.evidence_scope = self.scope
         elif self.evidence_scope and not self.scope:
             self.scope = self.evidence_scope
+
+        if self.scope_classification and not self.scope:
+            self.scope = self.scope_classification
+            self.evidence_scope = self.scope_classification
+        elif self.scope and not self.scope_classification:
+            self.scope_classification = self.scope
+
+        if self.sample_size is not None and self.scope_sample_size is None:
+            self.scope_sample_size = self.sample_size
+        elif self.scope_sample_size is not None and self.sample_size is None:
+            self.sample_size = self.scope_sample_size
+
+        if self.affected_sample_count is not None and self.scope_hit_count is None:
+            self.scope_hit_count = self.affected_sample_count
+        elif self.scope_hit_count is not None and self.affected_sample_count is None:
+            self.affected_sample_count = self.scope_hit_count
+
         if self.recommended_action and not self.recommendation:
             self.recommendation = self.recommended_action
         elif self.recommendation and not self.recommended_action:
             self.recommended_action = self.recommendation
+
+        if self.recommended_solution and not self.recommendation:
+            self.recommendation = self.recommended_solution
+        elif self.recommendation and not self.recommended_solution:
+            self.recommended_solution = self.recommendation
+
         if self.diagnosis and not self.description:
             self.description = self.diagnosis
         elif self.description and not self.diagnosis:
             self.diagnosis = self.description
+
         if self.affected_url_count is None:
             self.affected_url_count = len(self.affected_urls)
+        if self.affected_sample_count is None and self.affected_urls:
+            self.affected_sample_count = len(self.affected_urls)
+
+        if self.affected_percentage is None and self.sample_size and self.affected_sample_count is not None:
+            self.affected_percentage = round((self.affected_sample_count / max(1, self.sample_size)) * 100.0, 1)
+
+        if self.acceptance_criteria and not self.validation_criteria:
+            self.validation_criteria = self.acceptance_criteria
+        elif self.validation_criteria and not self.acceptance_criteria:
+            self.acceptance_criteria = self.validation_criteria
+
+        if self.data_limitations and not self.limitations:
+            self.limitations = self.data_limitations
+        elif self.limitations and not self.data_limitations:
+            self.data_limitations = self.limitations
+
+        if self.observed_values is not None and self.observed_value is None:
+            self.observed_value = str(self.observed_values)
+        elif self.observed_value is not None and self.observed_values is None:
+            self.observed_values = self.observed_value
+
+        if self.expected_or_reference_behavior and not self.expected_condition:
+            self.expected_condition = self.expected_or_reference_behavior
+        elif self.expected_condition and not self.expected_or_reference_behavior:
+            self.expected_or_reference_behavior = self.expected_condition
+
+        if self.implementation_dependencies and not self.dependencies:
+            self.dependencies = list(self.implementation_dependencies)
+        elif self.dependencies and not self.implementation_dependencies:
+            self.implementation_dependencies = list(self.dependencies)
+
+        if self.root_cause and not self.root_cause_id:
+            self.root_cause_id = self.root_cause
+        elif self.root_cause_id and not self.root_cause:
+            self.root_cause = self.root_cause_id
+
+        if self.business_context and not self.why_it_matters:
+            self.why_it_matters = self.business_context
+        elif self.why_it_matters and not self.business_context:
+            self.business_context = self.why_it_matters
+
         if not self.deduplication_key:
             cat_name = self.category.value if hasattr(self.category, "value") else str(self.category)
             self.deduplication_key = f"{cat_name}:{self.title.lower().strip()}"
@@ -1296,6 +1410,8 @@ class PageEvidence(BaseModel):
     raw_schema: List[Dict[str, Any]] = Field(default_factory=list)
     structured_data: List[Dict[str, Any]] = Field(default_factory=list)
     raw_html: Optional[str] = None
+    rendered_html: Optional[str] = None
+    rendering_discrepancy: Optional[Dict[str, Any]] = None
     internal_links: List[str] = Field(default_factory=list)
     external_links: List[str] = Field(default_factory=list)
     images_without_alt: int = 0

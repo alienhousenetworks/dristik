@@ -201,6 +201,13 @@ class SpecialistAgent(BaseAgent):
             return result
 
         result = await self._llm_audit(blackboard, evidence_slice)
+        if result.get("status") == "unavailable" and result.get("unavailable_reason") in ("no_llm_key", "timeout", "model_error"):
+            det = self._deterministic_audit(blackboard, evidence_slice)
+            if det.get("claims") or det.get("observations"):
+                det["status"] = "completed"
+                det["mode"] = "DETERMINISTIC_OFFLINE_FALLBACK"
+                self._store(blackboard, det)
+                return det
         self._store(blackboard, result)
         return result
 
@@ -1221,21 +1228,54 @@ class SpecialistAgent(BaseAgent):
         elif aid == "crawl.rendering_hydration.v3":
             # JS Rendering & Hydration Risk Specialist
             observations["hydration_analysis_mode"] = "RAW_VS_RENDERED_DOM"
-            add(
-                "Rendering hygiene: ensure core navigation links and primary value proposition text are pre-rendered in initial HTML response.",
-                Severity.LOW,
-                "Ensure server-side rendering (SSR) or static generation covers primary body copy so search crawlers receive complete content without JS delays."
-            )
+            disparities = [p for p in pages if getattr(p, "rendering_discrepancy", None) and p.rendering_discrepancy.get("has_discrepancy")]
+            empty_shells = [p for p in pages if getattr(p, "rendering_discrepancy", None) and p.rendering_discrepancy.get("empty_raw_shell")]
+            client_h1s = [p for p in pages if getattr(p, "rendering_discrepancy", None) and p.rendering_discrepancy.get("client_injected_h1")]
+            observations["disparities_count"] = len(disparities)
+            observations["empty_shells_count"] = len(empty_shells)
+            if empty_shells:
+                add(
+                    f"{len(empty_shells)} audited page(s) deliver an empty server shell relying entirely on client-side JS hydration.",
+                    Severity.CRITICAL,
+                    "Implement Server-Side Rendering (SSR) or Static Site Generation (SSG) so raw HTML delivers complete content on initial HTTP response."
+                )
+            elif disparities:
+                add(
+                    f"{len(disparities)} audited page(s) exhibit significant rendering disparity between raw HTML and client DOM.",
+                    Severity.HIGH,
+                    "Pre-render primary textual content, headings, and critical internal links on the server to prevent crawler rendering indexing lag."
+                )
+            elif client_h1s:
+                add(
+                    f"{len(client_h1s)} audited page(s) have H1 headings that only exist after client-side JavaScript execution.",
+                    Severity.MEDIUM,
+                    "Move primary H1 heading tags into the initial server-delivered HTML template."
+                )
+            else:
+                add(
+                    "Rendering hygiene: ensure core navigation links and primary value proposition text are pre-rendered in initial HTML response.",
+                    Severity.LOW,
+                    "Ensure server-side rendering (SSR) or static generation covers primary body copy so search crawlers receive complete content without JS delays."
+                )
 
         elif aid == "crawl.international_hreflang.v3":
             # Internationalization & Hreflang Specialist
             html_langs = set(filter(None, [getattr(p, "html_lang", None) for p in pages]))
             observations["detected_html_langs"] = list(html_langs)
-            add(
-                "Internationalization hygiene: verify html lang attributes and hreflang return tags where multilingual editions are published.",
-                Severity.LOW,
-                "Ensure <html lang='...'> attribute is explicitly set on all pages and reciprocal hreflang alternate links exist for multi-regional locales."
-            )
+            missing_lang = [p.url for p in pages if not getattr(p, "html_lang", None)]
+            observations["missing_lang_count"] = len(missing_lang)
+            if missing_lang and len(pages) > 0:
+                add(
+                    f"{len(missing_lang)} audited page(s) are missing an html lang attribute.",
+                    Severity.MEDIUM,
+                    "Add an explicit lang attribute to the <html> tag (e.g. <html lang=\"en\">) on all indexable pages."
+                )
+            else:
+                add(
+                    "Internationalization hygiene: verify html lang attributes and hreflang return tags where multilingual editions are published.",
+                    Severity.LOW,
+                    "Ensure <html lang='...'> attribute is explicitly set on all pages and reciprocal hreflang alternate links exist for multi-regional locales."
+                )
 
         elif aid == "verification.adversarial.v3":
             # Adversarial critic cross-examines findings against ground truth DOM evidence

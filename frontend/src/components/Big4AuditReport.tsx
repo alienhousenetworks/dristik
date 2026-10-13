@@ -216,6 +216,17 @@ export function Big4AuditReport({
               type="button"
               onClick={() => {
                 const id = report.analysis_id || report.report_id;
+                if (id) window.open(`/api/v1/reports/${id}/seo-report?format=print`, '_blank');
+              }}
+              className="bg-brand-sky hover:bg-sky-400 text-slate-950 font-bold px-3.5 py-1.5 rounded text-xs tracking-wide uppercase shadow transition-colors flex items-center gap-1.5"
+              title="Open Publication-Grade 20-Section SEO Master Audit Book (Print & PDF)"
+            >
+              SEO Book (20-Sec)
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                const id = report.analysis_id || report.report_id;
                 if (id) window.open(`/api/v1/reports/${id}/deck.pptx`, '_blank');
               }}
               className="bg-brand-sky hover:bg-sky-400 text-slate-950 font-bold px-3.5 py-1.5 rounded text-xs tracking-wide uppercase shadow transition-colors flex items-center gap-1.5"

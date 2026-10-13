@@ -545,6 +545,10 @@ class CrawlerService:
                         visible_words < 80 and (soup.find_all("script") and len(soup.find_all("script")) >= 3)
                     )
 
+                    raw_http_content = html_content
+                    rendered_dom_content = None
+                    rendering_disparity_data = None
+
                     if (
                         settings.JS_RENDER_THIN_PAGES
                         and render_mode == "static"
@@ -555,6 +559,7 @@ class CrawlerService:
                             page_url, client, force_js=True
                         )
                         if js_html:
+                            rendered_dom_content = js_html
                             html_content = js_html
                             status_code = js_status or status_code
                             ttfb_ms = js_ttfb or ttfb_ms
@@ -568,6 +573,18 @@ class CrawlerService:
                                 redirect_chain = js_chain
                             if js_final:
                                 final_url = js_final
+
+                            # Perform deep Raw HTML vs Rendered DOM Disparity Evaluation
+                            try:
+                                from app.analyzers.rendering_disparity import analyze_rendering_disparity
+                                rendering_disparity_data, _ = analyze_rendering_disparity(
+                                    raw_html=raw_http_content,
+                                    rendered_html=rendered_dom_content,
+                                    page_url=page_url,
+                                    evidence_store=evidence_store,
+                                )
+                            except Exception as disp_err:
+                                logger.warning("Rendering disparity analysis note: %s", disp_err)
                         elif embedded.get("word_count"):
                             render_mode = "embedded_cms"
                     elif embedded.get("sources"):
@@ -625,8 +642,8 @@ class CrawlerService:
                         soup=soup,
                         timing_data=timing_data,
                         dom_data=dom_res,
-                        raw_html=html_content,
-                        rendered_html=html_content,
+                        raw_html=raw_http_content,
+                        rendered_html=rendered_dom_content or html_content,
                     )
                     sec_res = analyze_security_headers(page_url, resp_headers, evidence_store)
 
@@ -694,7 +711,9 @@ class CrawlerService:
                         final_url=final_url if final_url != page_url else None,
                         snapshot_id=snap_id,
                         snapshot_path=snap_path,
-                        raw_html=html_content,
+                        raw_html=raw_http_content,
+                        rendered_html=rendered_dom_content,
+                        rendering_discrepancy=rendering_disparity_data,
                         observed_at=datetime.now(timezone.utc).isoformat(),
                         image_assets=dom_res.get("image_assets", []),
                         x_robots_tag=meta_res.get("x_robots_tag"),
