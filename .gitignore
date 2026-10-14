@@ -12,3 +12,6 @@ frontend/dist/
 data/runs/
 scratch/
 backend/reports/
+*.db
+*.sqlite
+*.sqlite3
