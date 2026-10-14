@@ -10,7 +10,10 @@ Verifies:
 """
 import io
 import pytest
-import pypdf
+try:
+    import pypdf
+except ImportError:
+    pypdf = None
 
 from app.domain.models import BusinessProfile, ExecutiveReport, Finding, OverallScoreResult
 from app.reports.publishing_engine import (
@@ -164,6 +167,7 @@ class TestTableOfContentsGenerator:
         assert "REMEDIATION ROADMAP" in html_out
 
 
+@pytest.mark.skipif(pypdf is None, reason="pypdf not installed in test environment")
 class TestPdfPaginationResolver:
     """Verifies Section 4 requirements for accurate physical page detection with pypdf."""
 
@@ -197,6 +201,7 @@ class TestPdfPaginationResolver:
         assert res["ch_02"] > res["ch_01"]
 
 
+@pytest.mark.skipif(pypdf is None, reason="pypdf not installed in test environment")
 class TestPdfPostProcessor:
     """Verifies PDF interactive bookmarks and document metadata injection."""
 
@@ -222,6 +227,7 @@ class TestPdfPostProcessor:
         assert len(reader.outline) >= 2
 
 
+@pytest.mark.skipif(pypdf is None, reason="pypdf not installed in test environment")
 class TestPdfQualityAssurance:
     """Verifies Section 13 requirements for automated PDF QA gate."""
 
@@ -251,6 +257,7 @@ class TestPdfQualityAssurance:
         assert len(report.failed_checks) > 0
 
 
+@pytest.mark.skipif(pypdf is None, reason="pypdf not installed in test environment")
 class TestMasterPublishingPipeline:
     """Verifies the two-pass physical layout orchestration."""
 

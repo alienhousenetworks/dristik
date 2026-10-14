@@ -404,6 +404,13 @@ class Finding(BaseModel):
     verification_method: Optional[str] = None
     data_limitations: Optional[str] = None
     estimated_effort: Optional[str] = None
+    raw_observation: Optional[str] = None
+    difference_observed_expected: Optional[str] = None
+    technical_explanation: Optional[str] = None
+    user_experience_impact: Optional[str] = None
+    risk_of_inaction: Optional[str] = None
+    implementation_detail: Optional[str] = None
+    change_history: List[Dict[str, Any]] = Field(default_factory=list)
 
     # v2: Lifecycle and display fields
     lifecycle_state: FindingLifecycle = Field(
@@ -445,6 +452,32 @@ class Finding(BaseModel):
             self.diagnosis = self.detailed_diagnosis
         elif self.diagnosis and not self.detailed_diagnosis:
             self.detailed_diagnosis = self.diagnosis
+
+        if self.technical_explanation and not self.detailed_diagnosis:
+            self.detailed_diagnosis = self.technical_explanation
+            self.diagnosis = self.technical_explanation
+        elif self.detailed_diagnosis and not self.technical_explanation:
+            self.technical_explanation = self.detailed_diagnosis
+
+        if self.raw_observation and not self.observed_value:
+            self.observed_value = self.raw_observation
+        elif self.observed_value and not self.raw_observation:
+            self.raw_observation = self.observed_value
+
+        if self.difference_observed_expected and not self.diagnosis:
+            self.diagnosis = self.difference_observed_expected
+        elif self.diagnosis and not self.difference_observed_expected:
+            self.difference_observed_expected = self.diagnosis
+
+        if self.user_experience_impact and not self.business_context:
+            self.business_context = self.user_experience_impact
+        elif self.business_context and not self.user_experience_impact:
+            self.user_experience_impact = self.business_context
+
+        if self.recommended_solution and not self.recommendation:
+            self.recommendation = self.recommended_solution
+        elif self.recommendation and not self.recommended_solution:
+            self.recommended_solution = self.recommendation
 
         if self.evidence_ids and not self.evidence_refs:
             self.evidence_refs = list(self.evidence_ids)
@@ -2257,6 +2290,90 @@ class SerpAppearanceReport(BaseModel):
     snippets: List[SerpSnippetPreview] = Field(default_factory=list)
     summary: str = ""
 
+# ===========================================================================
+# ENTERPRISE DIAGNOSTIC INVENTORY, PAGE ASSESSMENTS & CONSISTENCY MODELS
+# ===========================================================================
+
+class DiagnosticRecord(BaseModel):
+    diagnostic_id: str
+    chapter_num: str  # "01" .. "20"
+    chapter_title: str
+    subchapter: str
+    applicable_url_types: List[str] = Field(default_factory=lambda: ["all"])
+    preconditions: List[str] = Field(default_factory=list)
+    required_data_sources: List[str] = Field(default_factory=list)
+    test_performed: str
+    status: str = "NOT_TESTED"  # PASS, FAIL, WARNING, NOT_TESTED, NOT_CONNECTED, NOT_APPLICABLE, INCONCLUSIVE
+    status_reason: str = ""
+    evidence_references: List[str] = Field(default_factory=list)
+    affected_urls: List[str] = Field(default_factory=list)
+    affected_count: int = 0
+    severity: str = "INFORMATIONAL"  # CRITICAL, HIGH, MEDIUM, LOW, INFORMATIONAL
+    confidence: float = 0.90
+    analysis_status: str = "COMPLETED"
+    remediation_requirement: Optional[str] = None
+    validation_test: Optional[str] = None
+
+class DiagnosticCoverageMatrix(BaseModel):
+    total_diagnostics: int = 0
+    passed_count: int = 0
+    failed_count: int = 0
+    warning_count: int = 0
+    not_tested_count: int = 0
+    not_connected_count: int = 0
+    not_applicable_count: int = 0
+    inconclusive_count: int = 0
+    needs_manual_review_count: int = 0
+    coverage_pct: float = 0.0
+    records: List[DiagnosticRecord] = Field(default_factory=list)
+    chapter_breakdown: Dict[str, Dict[str, int]] = Field(default_factory=dict)
+
+class PageLevelAssessment(BaseModel):
+    url: str
+    page_purpose: str = "General Content"
+    page_type: str = "general"
+    http_status: int = 200
+    redirect_target: Optional[str] = None
+    ttfb_ms: float = 0.0
+    indexable: bool = True
+    indexability_evidence: str = "200 OK, indexable, noindex absent"
+    canonical_declared: Optional[str] = None
+    canonical_match: bool = True
+    title: Optional[str] = None
+    title_length: int = 0
+    title_pixel_width: int = 0
+    title_truncated: bool = False
+    meta_description: Optional[str] = None
+    meta_description_length: int = 0
+    meta_description_truncated: bool = False
+    h1: Optional[str] = None
+    h1_count: int = 1
+    heading_outline: List[str] = Field(default_factory=list)
+    word_count: int = 0
+    main_content_quality: str = "STANDARD"
+    search_intent: str = "INFORMATIONAL"
+    intent_notes: str = ""
+    internal_inlinks_count: int = 0
+    internal_outlinks_count: int = 0
+    click_depth: int = 1
+    schema_types: List[str] = Field(default_factory=list)
+    schema_valid: bool = True
+    rich_result_eligible: bool = False
+    lcp_seconds: Optional[float] = None
+    cls_score: Optional[float] = None
+    mobile_viewport_ok: bool = True
+    open_issues_count: int = 0
+    findings: List[str] = Field(default_factory=list)
+    recommended_changes: List[str] = Field(default_factory=list)
+
+class ConsistencyAuditReport(BaseModel):
+    is_consistent: bool = True
+    checks_run: int = 0
+    contradictions_detected: List[Dict[str, Any]] = Field(default_factory=list)
+    reconciled_repairs: List[Dict[str, Any]] = Field(default_factory=list)
+    inconclusive_items: List[Dict[str, Any]] = Field(default_factory=list)
+    summary: str = ""
+
 class ExecutiveReport(BaseModel):
     report_id: str
     analysis_id: Optional[str] = None
@@ -2352,6 +2469,10 @@ class ExecutiveReport(BaseModel):
     claim_ledger: Optional[ClaimLedger] = None
     geo_benchmark_report: Optional[Dict[str, Any]] = None
     ai_citation_dashboard: Optional[Dict[str, Any]] = None
+    diagnostic_inventory: Optional[DiagnosticCoverageMatrix] = None
+    page_level_assessments: List[PageLevelAssessment] = Field(default_factory=list)
+    consistency_report: Optional[ConsistencyAuditReport] = None
+    quality_gate_results: Optional[Dict[str, Any]] = None
 
 class AnalysisRequest(BaseModel):
     website_url: str

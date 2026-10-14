@@ -523,6 +523,38 @@ async def get_complete_seo_report(
     return Response(content=html_content, media_type="text/html")
 
 
+@router.get("/{analysis_id}/deliverables")
+async def get_audit_deliverables(
+    analysis_id: str,
+    user: UserIdentity = Depends(get_current_user)
+):
+    """
+    Returns the complete 7 Core Deliverables (A through G) for Dristik AI
+    2026 Master Standard:
+    - Deliverable A: Chapter Investigation Matrix (DiagnosticCoverageMatrix)
+    - Deliverable B: Evidence Register (ClaimLedger & Evidence Ledger)
+    - Deliverable C: Deep Chapter Analysis (20-Chapter Master Output references)
+    - Deliverable D: Reconciliation Report (ConsistencyAuditReport)
+    - Deliverable E: Prioritised Remediation Backlog (P0-P3 Roadmap & Tracker)
+    - Deliverable F: Audit Reliability Report (Confidence, Coverage, Quality Gates)
+    - Deliverable G: Engineering Gap Report (Unmeasured Capabilities & Disclosures)
+    """
+    run = require_analysis(analysis_id, user)
+    report = getattr(run, "report", None)
+    if not report:
+        raise HTTPException(status_code=400, detail="Executive report not yet synthesized for this analysis run.")
+
+    from app.reports.seo_report_generator import seo_report_generator
+    json_rep = seo_report_generator.render_json_report(report)
+    return {
+        "analysis_id": analysis_id,
+        "domain": report.domain,
+        "generated_at": report.generated_at,
+        "certification_status": getattr(report, "certification_status", "CERTIFIED"),
+        "deliverables": json_rep.get("deliverables", {}),
+    }
+
+
 @router.get("/{analysis_id}/export/urls.csv")
 async def export_urls_csv(
     analysis_id: str,

@@ -74,6 +74,10 @@ class CompleteSeoReportGenerator:
             "generated_at": report.generated_at,
             "certification_status": getattr(report, "certification_status", "CERTIFIED"),
             "health_score": score_val,
+            "diagnostic_inventory": report.diagnostic_inventory.model_dump() if getattr(report, "diagnostic_inventory", None) else None,
+            "page_level_assessments": [p.model_dump() for p in getattr(report, "page_level_assessments", [])],
+            "consistency_report": report.consistency_report.model_dump() if getattr(report, "consistency_report", None) else None,
+            "quality_gate_results": getattr(report, "quality_gate_results", None),
             "exports": {
                 "urls_csv": f"/api/v1/reports/{analysis_id}/export/urls.csv",
                 "remediation_tracker_csv": f"/api/v1/reports/{analysis_id}/export/remediation-tracker.csv",
@@ -175,6 +179,59 @@ class CompleteSeoReportGenerator:
                         "fixed": len([f for f in report.findings if f.status == FindingStatus.FIXED]),
                         "verified": len([f for f in report.findings if f.status == FindingStatus.VERIFIED]),
                     },
+                },
+            },
+            "deliverables": {
+                "deliverable_a_chapter_investigation_matrix": (
+                    report.diagnostic_inventory.model_dump() if getattr(report, "diagnostic_inventory", None) else None
+                ),
+                "deliverable_b_evidence_register": (
+                    report.claim_ledger.model_dump() if getattr(report, "claim_ledger", None) else (report.evidence_ledger or {})
+                ),
+                "deliverable_c_deep_chapter_analysis": {
+                    "total_chapters": 20,
+                    "sections_indexed": len(self.SECTIONS),
+                    "url": f"/api/v1/reports/{analysis_id}/seo-report",
+                    "pdf_url": f"/api/v1/reports/{analysis_id}/seo-report?format=pdf",
+                },
+                "deliverable_d_reconciliation_report": (
+                    report.consistency_report.model_dump() if getattr(report, "consistency_report", None) else None
+                ),
+                "deliverable_e_prioritised_remediation_backlog": {
+                    "p0_critical_count": len(p0_findings),
+                    "p1_high_count": len(p1_findings),
+                    "p2_medium_count": len(p2_findings),
+                    "p3_low_count": len(p3_findings),
+                    "p0_critical_ids": [f.finding_id for f in p0_findings],
+                    "p1_high_ids": [f.finding_id for f in p1_findings],
+                    "remediation_tracker_csv": f"/api/v1/reports/{analysis_id}/export/remediation-tracker.csv",
+                },
+                "deliverable_f_audit_reliability_report": {
+                    "honest_scores": report.honest_scores.model_dump() if getattr(report, "honest_scores", None) else None,
+                    "certification_status": getattr(report, "certification_status", "CERTIFIED"),
+                    "url_coverage_pct": cov_pct,
+                    "sampling_status": sampling_status,
+                    "quality_gate_results": getattr(report, "quality_gate_results", None),
+                },
+                "deliverable_g_engineering_gap_report": {
+                    "withheld_sections": getattr(report, "withheld_sections", []),
+                    "unmeasured_capabilities": [
+                        {
+                            "source": "Google Search Console",
+                            "status": "CONNECTED" if (report.google_performance and report.google_performance.get("search_console")) else "NOT_CONNECTED",
+                            "reason": "Search Console OAuth2 connector required for live impressions and query clicks."
+                        },
+                        {
+                            "source": "Google Analytics 4",
+                            "status": "CONNECTED" if (report.google_performance and report.google_performance.get("analytics")) else "NOT_CONNECTED",
+                            "reason": "GA4 connector required for live conversion rates and revenue attribution."
+                        },
+                        {
+                            "source": "Off-Page Backlink Index",
+                            "status": "CONNECTED" if (report.external_authority and report.external_authority.get("status") == "CONNECTED") else "NOT_CONNECTED",
+                            "reason": "Third-party link graph index required for exhaustive referring domain enumeration."
+                        },
+                    ],
                 },
             },
         }
@@ -535,6 +592,70 @@ class CompleteSeoReportGenerator:
                     and backlink counts are marked strictly as <em>NOT_CONNECTED / NOT_MEASURED</em>.
                     Dristik strictly refuses to fabricate or simulate hypothetical link numbers.
                 </p>
+            </div>
+            """
+
+        # Diagnostic Matrix HTML rollup for Section 02
+        diag_matrix = getattr(report, "diagnostic_inventory", None)
+        diag_rollup_html = ""
+        if diag_matrix:
+            diag_rollup_html = f"""
+            <div class="status-summary-card" style="margin-top: 16px;">
+                <h4>Chapter Investigation Matrix &bull; Deliverable A</h4>
+                <p style="font-size: 13px; color: #94a3b8; margin-bottom: 12px;">Machine-evaluated diagnostic coverage across all 20 audit chapters in accordance with the 2026 Master Standard.</p>
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px;">
+                    <div style="background: #0a0f1d; padding: 10px; border-radius: 6px; border: 1px solid #1a2234; text-align: center;">
+                        <span style="font-size: 10px; color: #64748b; text-transform: uppercase;">Total Diagnostics</span>
+                        <p style="font-size: 18px; font-weight: 800; color: #f8fafc; margin: 4px 0 0 0;">{diag_matrix.total_diagnostics}</p>
+                    </div>
+                    <div style="background: #0a0f1d; padding: 10px; border-radius: 6px; border: 1px solid #1a2234; text-align: center;">
+                        <span style="font-size: 10px; color: #10b981; text-transform: uppercase;">Passed</span>
+                        <p style="font-size: 18px; font-weight: 800; color: #10b981; margin: 4px 0 0 0;">{diag_matrix.passed_count}</p>
+                    </div>
+                    <div style="background: #0a0f1d; padding: 10px; border-radius: 6px; border: 1px solid #1a2234; text-align: center;">
+                        <span style="font-size: 10px; color: #ef4444; text-transform: uppercase;">Failed</span>
+                        <p style="font-size: 18px; font-weight: 800; color: #ef4444; margin: 4px 0 0 0;">{diag_matrix.failed_count}</p>
+                    </div>
+                    <div style="background: #0a0f1d; padding: 10px; border-radius: 6px; border: 1px solid #1a2234; text-align: center;">
+                        <span style="font-size: 10px; color: #f59e0b; text-transform: uppercase;">Warnings</span>
+                        <p style="font-size: 18px; font-weight: 800; color: #f59e0b; margin: 4px 0 0 0;">{diag_matrix.warning_count}</p>
+                    </div>
+                    <div style="background: #0a0f1d; padding: 10px; border-radius: 6px; border: 1px solid #1a2234; text-align: center;">
+                        <span style="font-size: 10px; color: #64748b; text-transform: uppercase;">Not Tested</span>
+                        <p style="font-size: 18px; font-weight: 800; color: #94a3b8; margin: 4px 0 0 0;">{diag_matrix.not_tested_count}</p>
+                    </div>
+                    <div style="background: #0a0f1d; padding: 10px; border-radius: 6px; border: 1px solid #1a2234; text-align: center;">
+                        <span style="font-size: 10px; color: #38bdf8; text-transform: uppercase;">Not Connected</span>
+                        <p style="font-size: 18px; font-weight: 800; color: #38bdf8; margin: 4px 0 0 0;">{diag_matrix.not_connected_count}</p>
+                    </div>
+                    <div style="background: #0a0f1d; padding: 10px; border-radius: 6px; border: 1px solid #1a2234; text-align: center;">
+                        <span style="font-size: 10px; color: #a855f7; text-transform: uppercase;">Inconclusive</span>
+                        <p style="font-size: 18px; font-weight: 800; color: #a855f7; margin: 4px 0 0 0;">{diag_matrix.inconclusive_count}</p>
+                    </div>
+                </div>
+            </div>
+            """
+
+        # Consistency Report HTML for Section 20
+        consistency_rep = getattr(report, "consistency_report", None)
+        consistency_html = ""
+        if consistency_rep:
+            contra_items = "".join(f"<li><strong>[{html.escape(c.get('dimension', ''))}]</strong> {html.escape(c.get('conflict', ''))} &rarr; <em>{html.escape(c.get('action', ''))}</em></li>" for c in consistency_rep.contradictions_detected) or "<li>Zero cross-chapter contradictions detected. All counts and claims reconciled.</li>"
+            repairs_items = "".join(f"<li><strong>{html.escape(r.get('field', ''))}:</strong> {html.escape(str(r.get('reason', '')))}</li>" for r in consistency_rep.reconciled_repairs) or "<li>No automated data model repairs required.</li>"
+            consistency_html = f"""
+            <div class="status-summary-card" style="margin-top: 16px;">
+                <h4>Cross-Chapter Reconciliation &bull; Deliverable D</h4>
+                <p style="font-size: 13px; color: #94a3b8; margin-bottom: 12px;">{html.escape(consistency_rep.summary)}</p>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+                    <div style="background: #0a0f1d; padding: 12px; border-radius: 6px; border: 1px solid #1a2234;">
+                        <h5 style="color: #f59e0b; font-size: 12px; text-transform: uppercase; margin-bottom: 8px;">Contradictions Evaluated ({len(consistency_rep.contradictions_detected)})</h5>
+                        <ul style="font-size: 12px; color: #cbd5e1; padding-left: 18px; margin: 0;">{contra_items}</ul>
+                    </div>
+                    <div style="background: #0a0f1d; padding: 12px; border-radius: 6px; border: 1px solid #1a2234;">
+                        <h5 style="color: #10b981; font-size: 12px; text-transform: uppercase; margin-bottom: 8px;">Automated Data Repairs ({len(consistency_rep.reconciled_repairs)})</h5>
+                        <ul style="font-size: 12px; color: #cbd5e1; padding-left: 18px; margin: 0;">{repairs_items}</ul>
+                    </div>
+                </div>
             </div>
             """
 
@@ -1158,6 +1279,7 @@ class CompleteSeoReportGenerator:
                 </p>
                 <p style="margin-top: 8px;"><strong>Rule on Unmeasured Channels:</strong> In accordance with Dristik zero-fake governance, unmeasured third-party connectors (such as live Google Search Console clicks or Google Analytics conversion events) are reported strictly as <em>NOT_CONNECTED</em> rather than fabricating placeholder metrics.</p>
             </div>
+            {diag_rollup_html}
         </section>
 
         <!-- Section 03: Indexability -->
@@ -1369,6 +1491,7 @@ class CompleteSeoReportGenerator:
                    5. <strong>VERIFIED:</strong> Assertion passes. Certified cryptographically in Claim Ledger.
                 </p>
             </div>
+            {consistency_html}
         </section>
 
     </main>

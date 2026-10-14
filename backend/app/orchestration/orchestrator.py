@@ -1712,6 +1712,42 @@ class AnalysisOrchestrator:
             )
 
             # -------------------------------------------------------------
+            # Stage 4A: Page-Level Dossiers & Assessment Compilation
+            # -------------------------------------------------------------
+            try:
+                from app.audit.page_analysis import PageLevelAnalysisEngine
+                report.page_level_assessments = PageLevelAnalysisEngine.compile_page_assessments(
+                    pages=manifest.pages,
+                    report=report,
+                    manifest=manifest,
+                )
+            except Exception as pe_err:
+                logger.warning("PageLevelAnalysisEngine assessment compilation error: %s", pe_err)
+
+            # -------------------------------------------------------------
+            # Stage 4B: Diagnostic Coverage Matrix (20-Chapter Inventory)
+            # -------------------------------------------------------------
+            try:
+                from app.audit.diagnostic_inventory import DiagnosticInventoryEngine
+                report.diagnostic_inventory = DiagnosticInventoryEngine.build_inventory(
+                    report=report,
+                    manifest=manifest,
+                    eval_pages=manifest.pages,
+                )
+            except Exception as diag_err:
+                logger.warning("DiagnosticInventoryEngine compilation error: %s", diag_err)
+
+            # -------------------------------------------------------------
+            # Stage 4C: Cross-Chapter Consistency Audit & Reconciliation
+            # -------------------------------------------------------------
+            try:
+                from app.audit.consistency_engine import CrossChapterConsistencyEngine
+                report, consistency_rep = CrossChapterConsistencyEngine.audit_and_reconcile(report)
+                report.consistency_report = consistency_rep
+            except Exception as conc_err:
+                logger.warning("CrossChapterConsistencyEngine reconciliation error: %s", conc_err)
+
+            # -------------------------------------------------------------
             # Enforce VALIDATION GATE with Certified Zero-Fake Check
             # -------------------------------------------------------------
             from app.reports.validation_gate import ValidationGate

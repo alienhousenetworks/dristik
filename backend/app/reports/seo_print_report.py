@@ -944,6 +944,10 @@ table.data-table tr:nth-child(even) td {
 .badge-med { background: #fef3c7; color: #92400e; }
 .badge-low { background: #dbeafe; color: #1e40af; }
 .badge-verified { background: #dcfce7; color: #166534; }
+.badge-clean { background: #dcfce7; color: #166534; font-weight: 700; }
+.badge-warn { background: #fef3c7; color: #92400e; font-weight: 700; }
+.badge-untested { background: #e0f2fe; color: #0369a1; font-weight: 700; }
+.badge-na { background: #f1f5f9; color: #64748b; font-weight: 700; }
 .badge-fixed { background: #fef3c7; color: #854d0e; }
 .badge-open { background: #f1f5f9; color: #475569; }
 
@@ -1351,6 +1355,7 @@ class SeoPrintReportRenderer:
         num_str = sec_id.replace("sec-", "")
         
         inner_content = renderer(report)
+        checklist_content = self._render_diagnostic_checklist(num_str, report)
 
         return f"""
         <section id="{sec_id}" class="chapter-start report-section">
@@ -1369,12 +1374,62 @@ class SeoPrintReportRenderer:
             </div>
 
             {inner_content}
+            {checklist_content}
 
             <div class="page-running-footer">
                 <span>Dristik AI | Enterprise Intelligence Advisory</span>
                 <span>Chapter {num_str} &bull; Starts Page {start_page:02d}</span>
             </div>
         </section>
+        """
+
+    def _render_diagnostic_checklist(self, chapter_num: str, report: ExecutiveReport) -> str:
+        """Renders diagnostic checklist items for this chapter with verified status badges."""
+        matrix = getattr(report, "diagnostic_inventory", None)
+        if not matrix or not getattr(matrix, "records", None):
+            return ""
+
+        ch_records = [r for r in matrix.records if r.chapter_num == chapter_num]
+        if not ch_records:
+            return ""
+
+        rows = []
+        for r in ch_records:
+            st = r.status.upper()
+            badge_class = (
+                "badge-clean" if st == "PASS"
+                else "badge-crit" if st == "FAIL"
+                else "badge-warn" if st == "WARNING"
+                else "badge-untested" if st == "NOT_TESTED"
+                else "badge-na" if st == "NOT_APPLICABLE"
+                else "badge-secondary"
+            )
+            rows.append(f"""
+            <tr>
+                <td style="font-family: monospace; font-size: 7.5pt; font-weight: 700; color: #475569;">{html.escape(r.diagnostic_id)}</td>
+                <td><strong>{html.escape(r.subchapter)}</strong><br/><span style="font-size: 7.5pt; color: #64748b;">{html.escape(r.test_performed)}</span></td>
+                <td><span class="badge {badge_class}">{html.escape(st)}</span></td>
+                <td style="font-size: 7.5pt; color: #334155;">{html.escape(r.status_reason)}</td>
+            </tr>
+            """)
+
+        return f"""
+        <div style="margin-top: 4mm; margin-bottom: 5mm;">
+            <h4 style="font-size: 9pt; font-weight: 800; color: #0f294a; margin-bottom: 2mm;">Chapter {chapter_num} &bull; Diagnostic Checklist &amp; Coverage</h4>
+            <table class="data-table" style="font-size: 8pt; margin-bottom: 0;">
+                <thead>
+                    <tr>
+                        <th style="width: 20%;">Diagnostic ID</th>
+                        <th style="width: 35%;">Test Evaluated</th>
+                        <th style="width: 15%;">Status</th>
+                        <th style="width: 30%;">Observed Finding</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {"".join(rows)}
+                </tbody>
+            </table>
+        </div>
         """
 
     # --------------------------------------------------------------------------
@@ -1750,10 +1805,47 @@ class SeoPrintReportRenderer:
         meta = report.meta_rollup
         head = report.heading_hierarchy
 
-        missing_titles = getattr(meta, "missing_titles_count", 0) if meta else 0
-        dup_titles = getattr(meta, "duplicate_titles_count", 0) if meta else 0
-        missing_desc = getattr(meta, "missing_meta_descriptions_count", 0) if meta else 0
-        missing_h1 = getattr(head, "missing_h1_count", 0) if head else 0
+        missing_titles = len(meta.missing_titles) if (meta and hasattr(meta, "missing_titles")) else getattr(meta, "missing_titles_count", 0)
+        dup_titles = len(meta.duplicate_titles) if (meta and hasattr(meta, "duplicate_titles")) else getattr(meta, "duplicate_titles_count", 0)
+        missing_desc = len(meta.missing_descriptions) if (meta and hasattr(meta, "missing_descriptions")) else getattr(meta, "missing_meta_descriptions_count", 0)
+        missing_h1 = (len(head.missing_h1) + len(head.multiple_h1)) if (head and hasattr(head, "missing_h1")) else getattr(head, "missing_h1_count", 0)
+
+        # Collect page-level metadata discrepancy samples
+        sample_rows = []
+        if meta:
+            for item in getattr(meta, "missing_titles", [])[:3]:
+                url_short = item.url if len(item.url) <= 45 else item.url[:42] + "..."
+                sample_rows.append(f"<tr><td><code>{html.escape(url_short)}</code></td><td><span class='badge badge-crit'>MISSING_TITLE</span></td><td>0 chars (Google fallback required)</td></tr>")
+            for item in getattr(meta, "too_long_titles", [])[:3]:
+                url_short = item.url if len(item.url) <= 45 else item.url[:42] + "..."
+                sample_rows.append(f"<tr><td><code>{html.escape(url_short)}</code></td><td><span class='badge badge-warn'>TITLE_TRUNCATED</span></td><td>{item.length} chars (SERP pixel overflow)</td></tr>")
+            for item in getattr(meta, "missing_descriptions", [])[:3]:
+                url_short = item.url if len(item.url) <= 45 else item.url[:42] + "..."
+                sample_rows.append(f"<tr><td><code>{html.escape(url_short)}</code></td><td><span class='badge badge-warn'>MISSING_META_DESC</span></td><td>0 chars (SERP snippet synthetic)</td></tr>")
+        if head:
+            for item in getattr(head, "missing_h1", [])[:3]:
+                url_short = item.url if len(item.url) <= 45 else item.url[:42] + "..."
+                sample_rows.append(f"<tr><td><code>{html.escape(url_short)}</code></td><td><span class='badge badge-crit'>MISSING_H1</span></td><td>{html.escape(item.detail or 'Zero H1 tags found')}</td></tr>")
+
+        evidence_table = ""
+        if sample_rows:
+            evidence_table = f"""
+            <div style="margin-top: 4mm;">
+                <h4 style="font-size: 8.5pt; font-weight: 800; color: #0f294a; margin-bottom: 2mm;">Page-Level Metadata &amp; Heading Discrepancy Evidence</h4>
+                <table class="data-table" style="font-size: 7.5pt; margin-bottom: 0;">
+                    <thead>
+                        <tr>
+                            <th style="width: 45%;">Target URL</th>
+                            <th style="width: 25%;">Defect Type</th>
+                            <th style="width: 30%;">Diagnostic Detail</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {"".join(sample_rows[:6])}
+                    </tbody>
+                </table>
+            </div>
+            """
 
         return f"""
         <div class="kpi-grid">
@@ -1786,6 +1878,8 @@ class SeoPrintReportRenderer:
                 Clear headings allow search engines and generative models to extract answer paragraphs efficiently.
             </p>
         </div>
+
+        {evidence_table}
         """
 
     # --------------------------------------------------------------------------
@@ -1880,10 +1974,44 @@ class SeoPrintReportRenderer:
     # --------------------------------------------------------------------------
     def _render_sec_08(self, report: ExecutiveReport) -> str:
         s = report.schema_validation
-        schemas_count = getattr(s, "schemas_found_count", 0) if s else 0
-        valid_count = getattr(s, "valid_schemas_count", 0) if s else 0
-        error_count = getattr(s, "schemas_with_errors_count", 0) if s else 0
-        rich_pct = getattr(s, "rich_result_eligibility_pct", 0.0) if s else 0.0
+        schemas_count = getattr(s, "total_entities_detected", getattr(s, "schemas_found_count", 0)) if s else 0
+        valid_count = getattr(s, "valid_entities_count", getattr(s, "valid_schemas_count", 0)) if s else 0
+        error_count = getattr(s, "entities_with_errors_count", getattr(s, "schemas_with_errors_count", 0)) if s else 0
+        rich_pct = getattr(s, "rich_result_eligibility_pct", round((valid_count / max(1, schemas_count)) * 100.0, 1) if schemas_count > 0 else 0.0) if s else 0.0
+
+        issue_rows = []
+        if s and getattr(s, "issues", None):
+            for iss in s.issues[:5]:
+                sev_badge = "badge-crit" if iss.severity == "ERROR" else "badge-warn"
+                issue_rows.append(f"""
+                <tr>
+                    <td><strong>{html.escape(iss.schema_type)}</strong></td>
+                    <td><code>{html.escape(iss.field)}</code></td>
+                    <td><span class="badge {sev_badge}">{html.escape(iss.severity)}</span></td>
+                    <td style="font-size: 7.5pt;">{html.escape(iss.message)}</td>
+                </tr>
+                """)
+
+        issues_table = ""
+        if issue_rows:
+            issues_table = f"""
+            <div style="margin-top: 4mm;">
+                <h4 style="font-size: 8.5pt; font-weight: 800; color: #0f294a; margin-bottom: 2mm;">Rich Result Disqualification Log</h4>
+                <table class="data-table" style="font-size: 7.5pt; margin-bottom: 0;">
+                    <thead>
+                        <tr>
+                            <th style="width: 25%;">Entity Type</th>
+                            <th style="width: 20%;">Property</th>
+                            <th style="width: 15%;">Severity</th>
+                            <th style="width: 40%;">Google Eligibility Impact</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {"".join(issue_rows)}
+                    </tbody>
+                </table>
+            </div>
+            """
 
         return f"""
         <div class="kpi-grid">
@@ -1916,6 +2044,8 @@ class SeoPrintReportRenderer:
                 FAQPage, BreadcrumbList, and LocalBusiness types. Missing fields directly disqualify URLs from Google rich snippet enhancements.
             </p>
         </div>
+
+        {issues_table}
         """
 
     # --------------------------------------------------------------------------
@@ -2014,9 +2144,45 @@ class SeoPrintReportRenderer:
         sec = report.security_audit
         redirs = report.host_and_redirects
 
-        https_ok = getattr(sec, "https_enforced", True) if sec else True
-        hsts_ok = getattr(sec, "has_hsts_header", True) if sec else True
+        https_ok = getattr(sec, "https_enforced", getattr(report, "ssl_enforced", True)) if sec else True
+        hsts_ok = getattr(sec, "hsts_enabled", getattr(sec, "has_hsts_header", False)) if sec else False
+        csp_ok = getattr(sec, "csp_enabled", False) if sec else False
         apex_canonical = getattr(redirs, "apex_www_canonicalized", True) if redirs else True
+
+        sec_table = ""
+        if sec:
+            headers = [
+                ("Strict-Transport-Security (HSTS)", "ENABLED" if hsts_ok else "MISSING", "badge-clean" if hsts_ok else "badge-warn", sec.hsts_header or "Enforces encrypted HTTPS connections; prevents SSL stripping."),
+                ("Content-Security-Policy (CSP)", "ENABLED" if csp_ok else "MISSING", "badge-clean" if csp_ok else "badge-warn", sec.csp_header or "Mitigates cross-site scripting (XSS) and packet injection."),
+                ("X-Content-Type-Options", "PRESENT" if getattr(sec, "x_content_type_options", None) else "MISSING", "badge-clean" if getattr(sec, "x_content_type_options", None) else "badge-warn", "nosniff (prevents MIME type sniffing vulnerabilities)."),
+                ("X-Frame-Options", "PRESENT" if getattr(sec, "x_frame_options", None) else "MISSING", "badge-clean" if getattr(sec, "x_frame_options", None) else "badge-warn", "DENY / SAMEORIGIN (prevents clickjacking attacks)."),
+                ("Referrer-Policy", "PRESENT" if getattr(sec, "referrer_policy", None) else "MISSING", "badge-clean" if getattr(sec, "referrer_policy", None) else "badge-secondary", "Protects user privacy & search query parameters."),
+            ]
+            sec_rows = "".join(f"""
+            <tr>
+                <td><strong>{html.escape(h[0])}</strong></td>
+                <td><span class="badge {h[2]}">{h[1]}</span></td>
+                <td style="font-size: 7.5pt; color: #475569;">{html.escape(h[3])}</td>
+            </tr>
+            """ for h in headers)
+
+            sec_table = f"""
+            <div style="margin-top: 4mm;">
+                <h4 style="font-size: 8.5pt; font-weight: 800; color: #0f294a; margin-bottom: 2mm;">HTTP Security Headers &amp; Protocol Integrity Inventory</h4>
+                <table class="data-table" style="font-size: 7.5pt; margin-bottom: 0;">
+                    <thead>
+                        <tr>
+                            <th style="width: 35%;">Security Header</th>
+                            <th style="width: 15%;">Status</th>
+                            <th style="width: 50%;">Security &amp; Crawler Trust Standard</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {sec_rows}
+                    </tbody>
+                </table>
+            </div>
+            """
 
         return f"""
         <div class="kpi-grid">
@@ -2055,6 +2221,8 @@ class SeoPrintReportRenderer:
                 X-Content-Type-Options) preventing clickjacking and protocol downgrades.
             </p>
         </div>
+
+        {sec_table}
         """
 
     # --------------------------------------------------------------------------
@@ -2471,6 +2639,110 @@ class SeoPrintReportRenderer:
             ("Verified", verif_c, "#10b981"),
         ], size=115)
 
+        # Quality Gates Section
+        qg = getattr(report, "quality_gate_results", {}) or {}
+        gates_dict = qg.get("gates", qg) if isinstance(qg, dict) else {}
+        qg_rows = []
+        for gate_name, gate_info in gates_dict.items():
+            if isinstance(gate_info, dict):
+                st = gate_info.get("status", "PASS")
+                st_badge = "badge-clean" if st == "PASS" else "badge-warn" if st == "WARNING" else "badge-crit"
+                details = gate_info.get("details", "")
+                qg_rows.append(f"""
+                <tr>
+                    <td><strong>{html.escape(gate_name.replace('_', ' ').title())}</strong></td>
+                    <td><span class="badge {st_badge}">{st}</span></td>
+                    <td style="font-size: 7.5pt; color: #475569;">{html.escape(details)}</td>
+                </tr>
+                """)
+
+        qg_table = ""
+        if qg_rows:
+            qg_table = f"""
+            <div style="margin-top: 4mm;">
+                <h4 style="font-size: 8.5pt; font-weight: 800; color: #0f294a; margin-bottom: 2mm;">Pre-Publication Quality Assurance Gate Evaluations</h4>
+                <table class="data-table" style="font-size: 7.5pt; margin-bottom: 0;">
+                    <thead>
+                        <tr>
+                            <th style="width: 45%;">Quality Gate</th>
+                            <th style="width: 25%;">Gate Status</th>
+                            <th style="width: 30%;">Evaluation Pass Rate</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {"".join(qg_rows)}
+                    </tbody>
+                </table>
+            </div>
+            """
+
+        # Page-Level Dossier Summary (top 5 pages)
+        dossiers = getattr(report, "page_level_assessments", []) or []
+        dossier_rows = []
+        for d in dossiers[:5]:
+            url_short = d.url if len(d.url) <= 40 else d.url[:37] + "..."
+            is_idx = getattr(d, "indexable", True)
+            idx_label = "INDEXABLE" if is_idx else "NON_INDEXABLE"
+            idx_badge = "badge-clean" if is_idx else "badge-crit"
+            dossier_rows.append(f"""
+            <tr>
+                <td><code>{html.escape(url_short)}</code></td>
+                <td>{d.http_status}</td>
+                <td><span class="badge {idx_badge}">{idx_label}</span></td>
+                <td>{d.title_length} chars</td>
+                <td>{d.h1_count}</td>
+                <td>{d.open_issues_count}</td>
+            </tr>
+            """)
+
+        dossier_table = ""
+        if dossier_rows:
+            dossier_table = f"""
+            <div style="margin-top: 4mm;">
+                <h4 style="font-size: 8.5pt; font-weight: 800; color: #0f294a; margin-bottom: 2mm;">Page-Level Assessment Dossiers (Sample)</h4>
+                <table class="data-table" style="font-size: 7.5pt; margin-bottom: 0;">
+                    <thead>
+                        <tr>
+                            <th style="width: 35%;">Evaluated URL</th>
+                            <th style="width: 10%;">HTTP</th>
+                            <th style="width: 20%;">Indexability</th>
+                            <th style="width: 15%;">Title Chars</th>
+                            <th style="width: 10%;">H1s</th>
+                            <th style="width: 10%;">Issues</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {"".join(dossier_rows)}
+                    </tbody>
+                </table>
+            </div>
+            """
+
+        # Cross-Chapter Reconciliation Section (Deliverable D)
+        cons = getattr(report, "consistency_report", None)
+        reconciliation_table = ""
+        if cons:
+            contra_rows = []
+            for c in cons.contradictions_detected:
+                dim = c.get("dimension", "")
+                conf = c.get("conflict", "")
+                act = c.get("action", "")
+                contra_rows.append(f"""
+                <tr>
+                    <td><strong>{html.escape(dim)}</strong></td>
+                    <td style="color: #b45309;">{html.escape(conf)}</td>
+                    <td style="color: #10b981;"><em>{html.escape(act)}</em></td>
+                </tr>
+                """)
+
+            reconciliation_table = f"""
+            <div style="margin-top: 4mm;">
+                <h4 style="font-size: 8.5pt; font-weight: 800; color: #0f294a; margin-bottom: 2mm;">Cross-Chapter Reconciliation &bull; Deliverable D</h4>
+                <p style="font-size: 7.5pt; color: #475569; margin-bottom: 2mm;">{html.escape(cons.summary)}</p>
+                {"<table class='data-table' style='font-size: 7.5pt; margin-bottom: 3mm;'><thead><tr><th style='width: 25%;'>Dimension</th><th style='width: 50%;'>Contradiction Evaluated</th><th style='width: 25%;'>Resolution Action</th></tr></thead><tbody>" + "".join(contra_rows) + "</tbody></table>" if contra_rows else "<div style='font-size: 7.5pt; color: #166534; background: #f0fdf4; padding: 2mm; border-radius: 4px; margin-bottom: 3mm;'>✓ Zero cross-chapter contradictions detected across all 9 reconciliation dimensions.</div>"}
+            </div>
+            """
+
         return f"""
         <div class="status-summary-card">
             <h4>5-Stage Continuous Assurance Protocol</h4>
@@ -2543,6 +2815,10 @@ class SeoPrintReportRenderer:
                 </table>
             </div>
         </div>
+
+        {reconciliation_table}
+        {qg_table}
+        {dossier_table}
 
         <div class="callout-box">
             <strong>Critical Assurance Rule:</strong>
