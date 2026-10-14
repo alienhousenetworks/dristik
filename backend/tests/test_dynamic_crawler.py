@@ -131,3 +131,50 @@ def test_browser_render_service_graceful_fallback():
     """Verifies that BrowserRenderService does not throw errors when called."""
     is_avail = BrowserRenderService.is_available()
     assert isinstance(is_avail, bool)
+
+
+@pytest.mark.asyncio
+async def test_browser_render_service_render_pdf_unavailable():
+    """When browser is unavailable, render_pdf gracefully returns None."""
+    from unittest.mock import patch
+    with patch.object(BrowserRenderService, "get_browser", return_value=None):
+        result = await BrowserRenderService.render_pdf("<html><body>Hello</body></html>")
+        assert result is None
+
+
+@pytest.mark.asyncio
+async def test_browser_render_service_render_pdf_mocked_calls_page_pdf():
+    """Verifies that render_pdf calls page.pdf without timeout argument and returns PDF bytes."""
+    from unittest.mock import AsyncMock, MagicMock, patch
+
+    mock_page = AsyncMock()
+    mock_page.pdf = AsyncMock(return_value=b"%PDF-1.4 sample content")
+    mock_page.set_content = AsyncMock()
+    mock_page.emulate_media = AsyncMock()
+    mock_page.evaluate = AsyncMock()
+    mock_page.close = AsyncMock()
+
+    mock_context = AsyncMock()
+    mock_context.new_page = AsyncMock(return_value=mock_page)
+    mock_context.close = AsyncMock()
+
+    mock_browser = MagicMock()
+    mock_browser.new_context = AsyncMock(return_value=mock_context)
+
+    with patch.object(BrowserRenderService, "get_browser", AsyncMock(return_value=mock_browser)):
+        pdf_bytes = await BrowserRenderService.render_pdf("<html><body>Audit Dossier</body></html>", timeout_ms=30000)
+
+        assert pdf_bytes == b"%PDF-1.4 sample content"
+        mock_page.set_content.assert_awaited_once_with(
+            "<html><body>Audit Dossier</body></html>",
+            wait_until="domcontentloaded",
+            timeout=30000,
+        )
+        mock_page.emulate_media.assert_awaited_once_with(media="print")
+        # Ensure page.pdf was called with prefer_css_page_size and print_background, and NOT timeout
+        mock_page.pdf.assert_awaited_once_with(
+            prefer_css_page_size=True,
+            print_background=True,
+        )
+        mock_page.close.assert_awaited_once()
+        mock_context.close.assert_awaited_once()

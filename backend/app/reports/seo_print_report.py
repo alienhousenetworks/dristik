@@ -1354,6 +1354,7 @@ class SeoPrintReportRenderer:
 
         return f"""
         <section id="{sec_id}" class="chapter-start report-section">
+            <span class="chapter-marker" style="display:inline; font-size: 0pt; color: transparent; line-height: 0;">[[chapter_ref:{sec_id}:ch_{num_str}]]</span>
             <div class="page-running-header">
                 <span class="brand-tag">DRISTIK AI</span>
                 <span>Complete SEO Master Audit &amp; Remediation Report</span>

@@ -4,7 +4,15 @@ Extracts structured headings, body copy, and distills raw HTML (90% token reduct
 """
 import re
 from typing import Dict, Any, List, Optional
-from bs4 import BeautifulSoup
+try:
+    from bs4 import BeautifulSoup
+except ImportError:
+    import sys
+    from pathlib import Path
+    _vp = Path(__file__).resolve().parent.parent.parent.parent / "venv/lib/python3.14/site-packages"
+    if _vp.is_dir() and str(_vp) not in sys.path:
+        sys.path.append(str(_vp))
+    from bs4 import BeautifulSoup
 from app.evidence.store import EvidenceStore
 from app.crawl.analyzers.visible import (
     CHROME_CLASS_TOKENS,

@@ -1402,20 +1402,75 @@ class CompleteSeoReportGenerator:
     ) -> Optional[bytes]:
         """
         Renders publication-grade PDF using headless Chromium via BrowserRenderService.
-        Supports two-pass page number resolution if browser is available.
+        Executes two-pass layout:
+        Pass 1: Render with initial page numbers.
+        Pass 2: Extract exact physical pages using pypdf and re-render TOC.
+        Post-Process: Inject bookmarks & metadata, validate publication QA.
         """
         from app.crawl.browser import BrowserRenderService
+        from app.reports.publishing_engine import (
+            PdfPaginationResolver,
+            PdfPostProcessor,
+            ChapterSpec,
+            PartSpec,
+            PublicationDocument,
+            PublicationMetadata,
+        )
+
+        # Build chapter specs for pagination resolver
+        chapters = [
+            ChapterSpec(
+                id=sec_id,
+                num=sec_id.replace("sec-", ""),
+                part_id="seo_body",
+                part_title="20-SECTION MASTER SEO AUDIT",
+                title=sec_title,
+                desc="",
+                html_content="",
+            )
+            for sec_id, sec_title in self.SECTIONS
+        ]
 
         # Pass 1: Render with estimated page numbers
-        html_doc = self.render_print_html_report(report, page_numbers=page_numbers)
-        pdf_bytes = await BrowserRenderService.render_pdf(html_doc)
-        
-        if pdf_bytes and output_path:
+        html_doc_1 = self.render_print_html_report(report, page_numbers=page_numbers)
+        pdf_bytes_1 = await BrowserRenderService.render_pdf(html_doc_1)
+        if not pdf_bytes_1 or len(pdf_bytes_1) < 100:
+            return pdf_bytes_1
+
+        # Pass 2: Extract actual physical pages
+        measured_pages = PdfPaginationResolver.resolve_physical_pages(
+            pdf_bytes_1,
+            chapters,
+            starting_body_page=3,
+        )
+
+        # Pass 2: Re-render with measured physical page numbers
+        html_doc_2 = self.render_print_html_report(report, page_numbers=measured_pages)
+        pdf_bytes_2 = await BrowserRenderService.render_pdf(html_doc_2)
+        final_pdf_raw = pdf_bytes_2 if pdf_bytes_2 else pdf_bytes_1
+
+        # Post-Process: Add bookmarks and metadata
+        domain_clean = (report.domain or "website").replace("https://", "").replace("http://", "").split("/")[0]
+        doc_wrapper = PublicationDocument(
+            metadata=PublicationMetadata(
+                family="SEO",
+                title="Complete SEO Master Audit & Remediation Report",
+                subtitle="20-SECTION PUBLICATION-GRADE TECHNICAL AUDIT",
+                domain=domain_clean,
+                brand_name=getattr(report.business_profile, "business_name", None) or domain_clean,
+                audit_date=str(report.generated_at or "2026-10-14")[:10],
+                report_ref=str(report.analysis_id or "DST-SEO")[:12].upper(),
+            ),
+            parts=[PartSpec(id="seo_body", num="", title="20-SECTION MASTER SEO AUDIT", chapters=chapters)],
+        )
+        final_pdf = PdfPostProcessor.process(final_pdf_raw, doc_wrapper, measured_pages)
+
+        if final_pdf and output_path:
             out_file = Path(output_path)
             out_file.parent.mkdir(parents=True, exist_ok=True)
-            out_file.write_bytes(pdf_bytes)
+            out_file.write_bytes(final_pdf)
 
-        return pdf_bytes
+        return final_pdf
 
 
 seo_report_generator = CompleteSeoReportGenerator()

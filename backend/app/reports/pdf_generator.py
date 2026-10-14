@@ -504,10 +504,20 @@ async def get_complete_seo_report(
         return Response(content=print_html, media_type="text/html")
 
     if format.lower() == "pdf":
-        print_html = seo_report_generator.render_print_html_report(report)
         domain_clean = (report.domain or "website").replace("https://", "").replace("http://", "").split("/")[0]
         disposition = "attachment" if download else "inline"
-        return await _html_to_pdf_response(print_html, f"{domain_clean}_master_seo_audit_book.pdf", disposition=disposition)
+        pdf_bytes = await seo_report_generator.render_book_pdf(report)
+        if not pdf_bytes:
+            raise HTTPException(
+                status_code=503,
+                detail="PDF rendering engine is currently unavailable or timed out. "
+                       "You can open the report with ?format=print and select 'Print / Save as PDF' in your browser.",
+            )
+        return Response(
+            content=pdf_bytes,
+            media_type="application/pdf",
+            headers={"Content-Disposition": f'{disposition}; filename="{domain_clean}_master_seo_audit_book.pdf"'},
+        )
 
     html_content = seo_report_generator.render_html_report(report)
     return Response(content=html_content, media_type="text/html")
@@ -587,6 +597,22 @@ async def get_complete_geo_report(
     if format.lower() == "json":
         return geo_report_generator.render_json_report(report)
 
+    if format.lower() in ("print", "print_html"):
+        from app.reports.adaptive_audit_book import render_adaptive_audit_book_html
+        return Response(content=render_adaptive_audit_book_html(report, report_type="GEO"), media_type="text/html")
+
+    if format.lower() == "pdf":
+        from app.reports.adaptive_audit_book import render_adaptive_audit_book_pdf
+        pdf_bytes, qa = await render_adaptive_audit_book_pdf(report, report_type="GEO")
+        if not pdf_bytes:
+            raise HTTPException(status_code=503, detail="PDF rendering engine is currently unavailable.")
+        domain_clean = (report.domain or "website").replace("https://", "").replace("http://", "").split("/")[0]
+        return Response(
+            content=pdf_bytes,
+            media_type="application/pdf",
+            headers={"Content-Disposition": f'inline; filename="{domain_clean}_geo_audit_book.pdf"'},
+        )
+
     html_content = geo_report_generator.render_html_report(report)
     return Response(content=html_content, media_type="text/html")
 
@@ -639,6 +665,22 @@ async def get_complete_aeo_report(
     if format.lower() == "json":
         return aeo_report_generator.render_json_report(report)
 
+    if format.lower() in ("print", "print_html"):
+        from app.reports.adaptive_audit_book import render_adaptive_audit_book_html
+        return Response(content=render_adaptive_audit_book_html(report, report_type="AEO"), media_type="text/html")
+
+    if format.lower() == "pdf":
+        from app.reports.adaptive_audit_book import render_adaptive_audit_book_pdf
+        pdf_bytes, qa = await render_adaptive_audit_book_pdf(report, report_type="AEO")
+        if not pdf_bytes:
+            raise HTTPException(status_code=503, detail="PDF rendering engine is currently unavailable.")
+        domain_clean = (report.domain or "website").replace("https://", "").replace("http://", "").split("/")[0]
+        return Response(
+            content=pdf_bytes,
+            media_type="application/pdf",
+            headers={"Content-Disposition": f'inline; filename="{domain_clean}_aeo_audit_book.pdf"'},
+        )
+
     html_content = aeo_report_generator.render_html_report(report)
     return Response(content=html_content, media_type="text/html")
 
@@ -671,6 +713,23 @@ async def get_complete_cro_report(
     }
     if format.lower() == "json":
         return cro_report_generator.render_json_report(intel, **kwargs)
+
+    if format.lower() in ("print", "print_html"):
+        from app.reports.adaptive_audit_book import render_adaptive_audit_book_html
+        return Response(content=render_adaptive_audit_book_html(report, report_type="CRO"), media_type="text/html")
+
+    if format.lower() == "pdf":
+        from app.reports.adaptive_audit_book import render_adaptive_audit_book_pdf
+        pdf_bytes, qa = await render_adaptive_audit_book_pdf(report, report_type="CRO")
+        if not pdf_bytes:
+            raise HTTPException(status_code=503, detail="PDF rendering engine is currently unavailable.")
+        domain_clean = (report.domain or "website").replace("https://", "").replace("http://", "").split("/")[0]
+        return Response(
+            content=pdf_bytes,
+            media_type="application/pdf",
+            headers={"Content-Disposition": f'inline; filename="{domain_clean}_cro_audit_book.pdf"'},
+        )
+
     html_content = cro_report_generator.render_html_report(intel, **kwargs)
     return Response(content=html_content, media_type="text/html")
 
@@ -948,7 +1007,29 @@ async def get_adaptive_audit_book(
 
     if format.lower() == "pdf":
         domain_clean = (report.domain or "website").replace("https://", "").replace("http://", "").split("/")[0]
-        return await _html_to_pdf_response(html_content, f"{domain_clean}_{family.lower()}_audit_book.pdf")
+        from app.reports.adaptive_audit_book import render_adaptive_audit_book_pdf
+        pdf_bytes, qa_report = await render_adaptive_audit_book_pdf(
+            report,
+            report_type=profile,
+            title_override=title,
+            subtitle_override=subtitle,
+            classification=classification,
+        )
+        if not pdf_bytes:
+            raise HTTPException(
+                status_code=503,
+                detail="PDF rendering engine is currently unavailable or timed out. "
+                       "You can open the report with ?format=print and select 'Print / Save as PDF' in your browser.",
+            )
+        return Response(
+            content=pdf_bytes,
+            media_type="application/pdf",
+            headers={
+                "Content-Disposition": f'inline; filename="{domain_clean}_{family.lower()}_audit_book.pdf"',
+                "X-Dristik-QA-Valid": str(qa_report.is_valid),
+                "X-Dristik-QA-Passed": str(len(qa_report.passed_checks)),
+            },
+        )
 
     return Response(
         content=html_content,

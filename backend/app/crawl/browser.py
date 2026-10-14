@@ -274,6 +274,7 @@ class BrowserRenderService:
         if browser is None:
             return None
         context = None
+        page = None
         try:
             context = await browser.new_context()
             page = await context.new_page()
@@ -283,15 +284,22 @@ class BrowserRenderService:
                 await page.evaluate("document.fonts && document.fonts.ready")
             except Exception:
                 pass
-            return await page.pdf(
+            pdf_coro = page.pdf(
                 prefer_css_page_size=True,
                 print_background=True,
-                timeout=timeout_ms,
             )
+            if timeout_ms and timeout_ms > 0:
+                return await asyncio.wait_for(pdf_coro, timeout=timeout_ms / 1000.0)
+            return await pdf_coro
         except Exception as exc:
             logger.warning("Failed to render PDF with Playwright: %s", exc)
             return None
         finally:
+            if page:
+                try:
+                    await page.close()
+                except Exception:
+                    pass
             if context:
                 try:
                     await context.close()
