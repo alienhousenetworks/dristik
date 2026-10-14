@@ -1942,14 +1942,30 @@ class SeoPrintReportRenderer:
 
         rows = []
         for e in evals[:6]:
-            status_badge = '<span class="badge badge-verified">ALIGNED</span>' if e.is_aligned else '<span class="badge badge-high">MISALIGNED</span>'
+            q_text = getattr(e, "query", None) or getattr(e, "buyer_query", "Commercial Query")
+            intent_text = getattr(e, "detected_intent", None) or getattr(e, "question_title", None) or getattr(e, "question_key", "Commercial Intent")
+            target_url = getattr(e, "target_url", None) or "/"
+            
+            is_aligned = getattr(e, "is_aligned", None)
+            if is_aligned is None:
+                ev_status = str(getattr(e, "before_evidence_status", "")).upper()
+                b_score = getattr(e, "before_score", 0)
+                is_aligned = (ev_status == "VERIFIED") or (isinstance(b_score, (int, float)) and b_score >= 7)
+            
+            status_badge = '<span class="badge badge-verified">ALIGNED</span>' if is_aligned else '<span class="badge badge-high">MISALIGNED</span>'
+            
+            sat_score = getattr(e, "satisfaction_score", None)
+            if sat_score is None:
+                b_score = getattr(e, "before_score", 5)
+                sat_score = (b_score * 10) if isinstance(b_score, (int, float)) else 50
+
             rows.append(f"""
             <tr>
-                <td><strong>{html.escape(e.query)}</strong></td>
-                <td><span class="badge badge-open">{html.escape(e.detected_intent)}</span></td>
-                <td><code style="font-size: 7.5pt;">{html.escape(e.target_url or '/')}</code></td>
+                <td><strong>{html.escape(str(q_text))}</strong></td>
+                <td><span class="badge badge-open">{html.escape(str(intent_text))}</span></td>
+                <td><code style="font-size: 7.5pt;">{html.escape(str(target_url))}</code></td>
                 <td>{status_badge}</td>
-                <td>{e.satisfaction_score}/100</td>
+                <td>{sat_score}/100</td>
             </tr>
             """)
 
@@ -2230,7 +2246,8 @@ class SeoPrintReportRenderer:
     # --------------------------------------------------------------------------
     def _render_sec_12(self, report: ExecutiveReport) -> str:
         i = report.international_seo
-        if not i or not getattr(i, "is_international_detected", False):
+        is_detected = getattr(i, "is_international_detected", False) or getattr(i, "is_multilingual", False)
+        if not i or not is_detected:
             return """
             <div class="status-summary-card not-applicable">
                 <h4>International SEO &amp; Hreflang Architecture: NOT_APPLICABLE</h4>
@@ -2238,12 +2255,14 @@ class SeoPrintReportRenderer:
             </div>
             """
 
-        langs = ", ".join(i.detected_languages) if i.detected_languages else "None"
+        langs_list = getattr(i, "detected_languages", None) or getattr(i, "locales_detected", []) or []
+        langs = ", ".join(langs_list) if langs_list else "None"
+        missing_returns = getattr(i, "missing_return_tags_count", 0)
         return f"""
         <div class="status-summary-card">
             <h4>International SEO &amp; Hreflang Architecture</h4>
             <p><strong>Status:</strong> <span class="badge badge-open">{i.status}</span></p>
-            <p><strong>Declared Languages:</strong> {langs} | <strong>Missing Return Tags:</strong> {i.missing_return_tags_count}</p>
+            <p><strong>Declared Languages:</strong> {html.escape(langs)} | <strong>Missing Return Tags:</strong> {missing_returns}</p>
             <p style="margin-top: 2mm; font-size: 8.5pt;">{html.escape(i.summary)}</p>
         </div>
         """
@@ -2253,7 +2272,8 @@ class SeoPrintReportRenderer:
     # --------------------------------------------------------------------------
     def _render_sec_13(self, report: ExecutiveReport) -> str:
         l = report.local_seo
-        if not l or not getattr(l, "is_local_detected", False):
+        is_detected = getattr(l, "is_local_detected", False) or getattr(l, "has_google_business_profile", False) or bool(getattr(l, "gbp_urls", []))
+        if not l or not is_detected:
             return """
             <div class="status-summary-card not-applicable">
                 <h4>Local SEO &amp; Google Business Profile: NOT_APPLICABLE</h4>
@@ -2261,11 +2281,17 @@ class SeoPrintReportRenderer:
             </div>
             """
 
+        gbp_links = getattr(l, "gbp_links", None) or getattr(l, "gbp_urls", []) or []
+        has_map = getattr(l, "has_map_embed", False) or getattr(l, "has_google_maps_embed", False)
+        nap_score = getattr(l, "nap_consistency_pct", None)
+        if nap_score is None:
+            nap_score = getattr(l, "nap_consistency_score", 100.0)
+
         return f"""
         <div class="status-summary-card">
             <h4>Local SEO &amp; Google Business Profile Readiness</h4>
             <p><strong>Status:</strong> <span class="badge badge-open">{l.status}</span></p>
-            <p><strong>GBP Links:</strong> {len(l.gbp_links)} | <strong>Map Embed:</strong> {'YES' if l.has_map_embed else 'NO'} | <strong>NAP Consistency:</strong> {l.nap_consistency_pct}%</p>
+            <p><strong>GBP Links:</strong> {len(gbp_links)} | <strong>Map Embed:</strong> {'YES' if has_map else 'NO'} | <strong>NAP Consistency:</strong> {nap_score}%</p>
             <p style="margin-top: 2mm; font-size: 8.5pt;">{html.escape(l.summary)}</p>
         </div>
         """

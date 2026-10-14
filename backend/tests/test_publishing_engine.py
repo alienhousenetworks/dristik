@@ -350,3 +350,58 @@ class TestAdaptiveAuditBookIntegration:
         assert "Ambiguous Product Entities" in html_out
         assert "screen-toolbar" in html_out
         assert "Table of Contents" in html_out
+
+    def test_print_html_report_renders_with_commercial_evaluations(self):
+        from app.reports.seo_report_generator import seo_report_generator
+        from app.domain.models import CommercialQueryEvaluation, OverallScoreResult, ThreeWayComparison, BusinessProfile
+
+        comm_evals = [
+            CommercialQueryEvaluation(
+                question_key="identity",
+                question_title="Identity & Value Prop",
+                buyer_query="What does Enterprise Scale do?",
+                before_score=8,
+                before_answer="Enterprise Scale builds high performance apps.",
+                before_evidence_status="VERIFIED",
+            ),
+            CommercialQueryEvaluation(
+                question_key="pricing",
+                question_title="Pricing & Commercial Terms",
+                buyer_query="How much does Enterprise Scale cost?",
+                before_score=2,
+                before_answer="",
+                before_evidence_status="MISSING",
+            ),
+        ]
+
+        rep = ExecutiveReport(
+            report_id="rep_test_print",
+            analysis_id="run_test_print",
+            domain="enterprise-scale.io",
+            url="https://enterprise-scale.io",
+            website_url="https://enterprise-scale.io",
+            generated_at="2026-10-14T10:00:00Z",
+            story_summary="Test audit narrative with commercial queries.",
+            primary_strategic_opportunity="Optimize commercial queries.",
+            consultant_advice_what_to_ignore="Ignore dev urls.",
+            three_way_comparison=ThreeWayComparison(
+                human_visitor_perspective="Clear value.",
+                search_engine_perspective="Clean 200.",
+                ai_answer_engine_perspective="Extractable.",
+            ),
+            business_profile=BusinessProfile(business_name="Enterprise Scale"),
+            scores=OverallScoreResult(overall_score=78.0, overall_grade="B", grade="B", health_label="MODERATE"),
+            commercial_evaluations=comm_evals,
+            findings=[],
+        )
+
+        print_html = seo_report_generator.render_print_html_report(rep)
+        assert "<!DOCTYPE html>" in print_html
+        assert "enterprise-scale.io" in print_html
+        assert "Buyer Journey Intent Mapping" in print_html
+        assert "What does Enterprise Scale do?" in print_html
+        assert "ALIGNED" in print_html
+        assert "MISALIGNED" in print_html
+        assert "80/100" in print_html
+        assert "20/100" in print_html
+

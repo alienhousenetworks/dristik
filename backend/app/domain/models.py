@@ -773,6 +773,27 @@ class CommercialQueryEvaluation(BaseModel):
     evidence_snippet: Optional[str] = None
     gap_analysis: Optional[str] = None
 
+    # Compatibility attributes & computed defaults
+    query: Optional[str] = None
+    detected_intent: Optional[str] = None
+    target_url: Optional[str] = None
+    is_aligned: Optional[bool] = None
+    satisfaction_score: Optional[int] = None
+
+    @model_validator(mode="after")
+    def populate_compat_fields(self) -> "CommercialQueryEvaluation":
+        if not self.query:
+            self.query = self.buyer_query
+        if not self.detected_intent:
+            self.detected_intent = self.question_title or self.question_key
+        if not self.target_url:
+            self.target_url = "/"
+        if self.is_aligned is None:
+            self.is_aligned = (self.before_evidence_status == "VERIFIED") or (self.before_score >= 7)
+        if self.satisfaction_score is None:
+            self.satisfaction_score = self.before_score * 10
+        return self
+
 
 class DynamicSandboxQuestionEvaluation(BaseModel):
     question_id: str                    # e.g. "Q-001" to "Q-100"
@@ -2172,6 +2193,24 @@ class LocalSeoAuditReport(BaseModel):
     nap_records: List[NapRecord] = Field(default_factory=list)
     summary: str = ""
 
+    # Compatibility aliases
+    gbp_links: List[str] = Field(default_factory=list)
+    has_map_embed: bool = False
+    nap_consistency_pct: float = 100.0
+    is_local_detected: bool = False
+
+    @model_validator(mode="after")
+    def populate_local_compat(self) -> "LocalSeoAuditReport":
+        if not self.gbp_links and self.gbp_urls:
+            self.gbp_links = list(self.gbp_urls)
+        if not self.has_map_embed:
+            self.has_map_embed = self.has_google_maps_embed
+        if self.nap_consistency_pct == 100.0 and self.nap_consistency_score != 100.0:
+            self.nap_consistency_pct = self.nap_consistency_score
+        if not self.is_local_detected:
+            self.is_local_detected = self.has_google_business_profile or bool(self.gbp_urls) or self.local_business_schema_found
+        return self
+
 class HreflangEntry(BaseModel):
     hreflang: str
     href: str
@@ -2204,6 +2243,21 @@ class InternationalSeoAuditReport(BaseModel):
     issues: List[HreflangValidationIssue] = Field(default_factory=list)
     matrix: List[HreflangMatrixItem] = Field(default_factory=list)
     summary: str = ""
+
+    # Compatibility aliases
+    detected_languages: List[str] = Field(default_factory=list)
+    missing_return_tags_count: int = 0
+    is_international_detected: bool = False
+
+    @model_validator(mode="after")
+    def populate_intl_compat(self) -> "InternationalSeoAuditReport":
+        if not self.detected_languages and self.locales_detected:
+            self.detected_languages = list(self.locales_detected)
+        if not self.is_international_detected:
+            self.is_international_detected = self.is_multilingual or bool(self.locales_detected)
+        if self.missing_return_tags_count == 0 and self.issues:
+            self.missing_return_tags_count = len([iss for iss in self.issues if getattr(iss, "issue_type", "") == "missing_return_tag"])
+        return self
 
 class CannibalizationCluster(BaseModel):
     cluster_id: str
