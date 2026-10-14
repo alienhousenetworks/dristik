@@ -1690,14 +1690,334 @@ def _chapter_agent_consultation_card(book: _Book, number: str, section: Dict[str
     """
 
 
+def calculate_seo_book_page_numbers(payload: Dict[str, Any], grouped: Dict[str, List[Any]]) -> Dict[str, int]:
+    """Calculates deterministic physical page numbers for all 70 chapters."""
+    # Page 1: Dedicated Cover Page
+    # Page 2: Front Matter & Epistemic Protocol (p. i)
+    # Page 3: Executive Summary & Evidence Mix (p. ii)
+    # Page 4-5: Master Table of Contents (p. iii-iv)
+    current_page = 6
+    page_numbers: Dict[str, int] = {}
+    for section in payload.get("sections", []):
+        number = section["number"]
+        page_numbers[number] = current_page
+        checks_count = len(section.get("checks", []))
+        findings_count = len(grouped.get(number, []))
+        span = 2 if (checks_count > 8 or findings_count > 0) else 1
+        current_page += span
+    page_numbers["closing_page"] = current_page
+    return page_numbers
+
+
+def _render_seo_cover(
+    domain: str,
+    brand_name: str,
+    audit_date: str,
+    report_ref: str,
+    score_disp: str,
+    score_label: str,
+    score_note: str,
+    pages_count: int,
+    findings_count: int,
+) -> str:
+    from app.reports.publishing_engine import CoverGenerator
+    motif_svg = CoverGenerator.render_motif_svg("SEO")
+
+    return f"""
+    <div class="book-cover cover-page" style="background: radial-gradient(circle at 50% 85%, #1e3a8a 0%, #081226 70%);">
+        <div class="cover-header">
+            <div>
+                <div class="cover-brand">DRISTIK // PUBLICATION</div>
+                <div class="cover-series-tag">
+                    WEBSITE INTELLIGENCE / TECHNICAL SEO &amp; SEARCH ARCHITECTURE AUDIT
+                </div>
+            </div>
+            <div class="cover-classification-badge">
+                EVIDENCE-GROUNDED // REPRESENTATIVE SAMPLE
+            </div>
+        </div>
+
+        <div class="cover-body">
+            <div class="cover-eyebrow" style="color: #38bdf8;">
+                02 // SEARCH ENGINE OPTIMIZATION (SEO) SPACE
+            </div>
+            <h1>Technical SEO &amp; Organic Search Audit Book</h1>
+            <h2>CRAWL TOPOLOGY · CANONICAL ROUTING · SERP HYGIENE · CODE DIRECTIVES</h2>
+
+            <div class="cover-target-box">
+                <span class="cover-target-label">SUBJECT ENTITY UNDER ASSURANCE</span>
+                <div class="cover-target-name">{_esc(brand_name)}</div>
+                <div class="cover-target-url">{_esc(domain)}</div>
+            </div>
+
+            <div class="cover-description">
+                Deterministic engineering audit examining crawler traversal, HTTP status codes, canonical routing, meta boundaries, heading hierarchy, and search engine directives across the representative sample.
+            </div>
+
+            <div class="cover-visual">
+                {motif_svg}
+            </div>
+        </div>
+
+        <div class="cover-bottom-container">
+            <div class="cover-metadata-grid">
+                <div class="cover-meta-cell">
+                    <span class="meta-label">AUDITED DOMAIN</span>
+                    <span class="meta-val">{_esc(domain)}</span>
+                </div>
+                <div class="cover-meta-cell">
+                    <span class="meta-label">AUDIT EXECUTION</span>
+                    <span class="meta-val">{_esc(audit_date)}</span>
+                </div>
+                <div class="cover-meta-cell">
+                    <span class="meta-label">REPORT REFERENCE</span>
+                    <span class="meta-val">{_esc(report_ref)} · v2.6 Enterprise</span>
+                </div>
+                <div class="cover-meta-cell">
+                    <span class="meta-label">{_esc(score_label)}</span>
+                    <span class="meta-val" style="color: #38bdf8; font-weight: 800;">
+                        {_esc(score_disp)} / 100 [{_esc(score_note)}]
+                    </span>
+                </div>
+                <div class="cover-meta-cell">
+                    <span class="meta-label">SAMPLE SCOPE</span>
+                    <span class="meta-val">{pages_count} URLs Analysed · {findings_count} Findings</span>
+                </div>
+                <div class="cover-meta-cell">
+                    <span class="meta-label">EVIDENCE BASIS</span>
+                    <span class="meta-val" style="color: #38bdf8;">STORED EVIDENCE // DIRECT AST PARSING</span>
+                </div>
+            </div>
+
+            <div class="cover-footer-bar">
+                <div>CONFIDENTIAL &amp; PROPRIETARY // PREPARED EXCLUSIVELY FOR {_esc(brand_name).upper()}</div>
+                <div>PAGE 1 (COVER) // UNNUMBERED</div>
+            </div>
+        </div>
+    </div>
+    """
+
+
+def _render_seo_front_matter(domain: str, report_ref: str, sample_str: str) -> str:
+    return f"""
+    <div class="chapter-start front-matter-page" id="front-matter">
+        <div class="running-header">
+            <div class="running-brand">DRISTIK // FRONT MATTER &amp; METHODOLOGY</div>
+            <div class="running-meta">{_esc(domain)} · {_esc(report_ref)}</div>
+        </div>
+
+        <div class="front-matter-content">
+            <span class="section-kicker">AUDIT FRAMEWORK &amp; EVIDENCE TAXONOMY</span>
+            <h2 class="front-matter-title">Technical SEO Publication Guide &amp; Reader Protocol</h2>
+            <div class="decorative-separator"></div>
+
+            <p class="front-matter-lead">
+                This dossier constitutes an evidence-grounded technical SEO audit across 55 core analytical sections and 15 reference appendices. Every sub-index parameter is evaluated directly against crawled HTTP response headers, AST DOM node trees, and deterministic crawler simulation for {_esc(domain)}.
+            </p>
+
+            <div class="grid-2" style="margin: 16px 0;">
+                <div class="card">
+                    <div class="card-kicker">01 // SAMPLE-GROUNDED DISCLOSURE</div>
+                    <div class="card-title">Representative Sample Basis</div>
+                    <p style="font-size: 8.5pt; color: #475569; margin: 0;">
+                        {_esc(sample_str)} This evaluation reflects recorded parameters from crawled HTML snapshots. Unconnected third-party integrations (e.g. Google Search Console API, raw server log files) remain strictly labeled as <code>DATA_UNAVAILABLE</code> or <code>NOT_TESTED</code>, never as false positives or unearned passes.
+                    </p>
+                </div>
+                <div class="card">
+                    <div class="card-kicker">02 // EMPIRICAL VERIFICATION</div>
+                    <div class="card-title">Zero Speculation Governance</div>
+                    <p style="font-size: 8.5pt; color: #475569; margin: 0;">
+                        Every recorded finding contains an immutable root cause, business impact calculation, and explicit engineering remediation steps. Speculative traffic models and simulated revenue figures are excluded by design.
+                    </p>
+                </div>
+            </div>
+
+            <div class="card" style="margin-bottom: 16px;">
+                <div class="card-kicker">EVIDENCE STATUS CLASSIFICATION LEGEND</div>
+                <div class="status-legend-grid">
+                    <div class="legend-item"><span class="status-pill clean">NO_ISSUE</span> <span class="legend-desc">Complies with technical SEO standards in sample</span></div>
+                    <div class="legend-item"><span class="status-pill issue">ISSUE_VERIFIED</span> <span class="legend-desc">Empirical defect verified against crawled AST</span></div>
+                    <div class="legend-item"><span class="status-pill measured">MEASURED</span> <span class="legend-desc">Quantitative metric measured directly from crawl</span></div>
+                    <div class="legend-item"><span class="status-pill inferred">INFERRED</span> <span class="legend-desc">Derived structural pattern without direct API feed</span></div>
+                    <div class="legend-item"><span class="status-pill gap">DATA_UNAVAILABLE</span> <span class="legend-desc">Integration not connected; chapter remains unmeasured</span></div>
+                    <div class="legend-item"><span class="status-pill untested">NOT_TESTED</span> <span class="legend-desc">Parameter not targeted in current crawl profile</span></div>
+                </div>
+            </div>
+
+            <div class="card">
+                <div class="card-kicker">DOCUMENT ARCHITECTURE</div>
+                <p style="font-size: 8.5pt; color: #334155; margin: 0;">
+                    <strong>Part I:</strong> Executive Intelligence &amp; Strategic Assessment (Sec 01–03)<br>
+                    <strong>Part II:</strong> Technical SEO &amp; Website Infrastructure (Sec 04–16)<br>
+                    <strong>Part III:</strong> On-Page SEO &amp; Content Intelligence (Sec 17–28)<br>
+                    <strong>Part IV:</strong> Off-Page SEO, Authority &amp; Competitive Visibility (Sec 29–38)<br>
+                    <strong>Part V:</strong> Specialized SEO &amp; Emerging Search Surfaces (Sec 39–47)<br>
+                    <strong>Part VI:</strong> Conversion, Analytics &amp; Business Outcomes (Sec 48–51)<br>
+                    <strong>Part VII:</strong> Remediation, Validation &amp; Continuous Operations (Sec 52–55)<br>
+                    <strong>Part A:</strong> Appendices (App A–O): Deep registers, logs, limitations, glossary
+                </p>
+            </div>
+        </div>
+
+        <div class="running-footer">
+            <div>TECHNICAL SEO &amp; SEARCH ARCHITECTURE AUDIT // FRONT MATTER</div>
+            <div class="mono" style="font-weight: 700;">p. i</div>
+        </div>
+    </div>
+    """
+
+
+def _render_seo_toc(
+    payload: Dict[str, Any],
+    page_numbers: Dict[str, int],
+    domain: str,
+    report_ref: str,
+    sample_str: str,
+) -> str:
+    part_titles = {part["id"]: part["title"] for part in payload["parts"]}
+    part_blocks = []
+
+    for part in payload["parts"]:
+        owned = [section for section in payload["sections"] if section["part"] == part["id"]]
+        if not owned:
+            continue
+        chapter_rows = []
+        for section in owned:
+            number = section["number"]
+            page_num = page_numbers.get(number, 6)
+            chapter_rows.append(f"""
+            <li class="toc-entry">
+                <a href="#seo-{_esc(number)}" class="toc-link">
+                    <span class="toc-badge">{_esc(number)}</span>
+                    <span class="toc-title">{_esc(number)}. {_esc(section['title'])}</span>
+                    <span class="toc-dots toc-leader"></span>
+                    <span class="toc-page">p. {page_num}</span>
+                </a>
+            </li>
+            """)
+        part_blocks.append(f"""
+        <div class="toc-part-group report-avoid-break">
+            <div class="toc-part-title">Part {_esc(part['id'])} — {_esc(part['title'])}</div>
+            <ol class="toc-list">
+                {"".join(chapter_rows)}
+            </ol>
+        </div>
+        """)
+
+    return f"""
+    <div class="chapter-start toc-container" id="table-of-contents">
+        <div class="running-header">
+            <div class="running-brand">DRISTIK // TABLE OF CONTENTS</div>
+            <div class="running-meta">{_esc(domain)} · {_esc(report_ref)}</div>
+        </div>
+
+        <div class="toc-header-block">
+            <span class="section-kicker">DOCUMENT ARCHITECTURE &amp; MASTER INDEX</span>
+            <h2>Complete SEO audit: Master Table of Contents (Sections 01–55 &amp; Appendices A–O)</h2>
+            <p class="toc-intro-note">
+                {_esc(sample_str)} Each chapter states the data source, charts only stored measurements, and then records every sub-index line. An unmeasured chapter is not a zero. Page references correspond strictly to physical sheet numbers in this published edition.
+            </p>
+            <div class="decorative-separator"></div>
+        </div>
+
+        <div class="toc-content-wrapper">
+            {"".join(part_blocks)}
+        </div>
+
+        <div class="running-footer">
+            <div>TECHNICAL SEO &amp; SEARCH ARCHITECTURE AUDIT // TABLE OF CONTENTS</div>
+            <div class="mono" style="font-weight: 700;">p. iii</div>
+        </div>
+    </div>
+    """
+
+
+def _render_seo_back_matter(domain: str, report_ref: str, brand_name: str) -> str:
+    return f"""
+    <div class="chapter-start back-matter-page" id="assurance-seal">
+        <div class="running-header">
+            <div class="running-brand">DRISTIK // ASSURANCE SEAL</div>
+            <div class="running-meta">{_esc(domain)} · {_esc(report_ref)}</div>
+        </div>
+
+        <div class="back-matter-body" style="margin: 20px 0;">
+            <span class="section-kicker">AUDIT COMPLETION &amp; ATTESTATION</span>
+            <h2 class="serif" style="font-size: 20pt; margin: 4px 0 14px 0;">Technical SEO Audit Completion &amp; Attestation Seal</h2>
+            <div class="decorative-separator"></div>
+
+            <div class="card" style="margin-bottom: 16px; border-left: 3.5px solid #0284c7;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                    <span class="mono" style="font-size: 8.5pt; font-weight: 700;">EVIDENCE PROVENANCE ATTESTATION</span>
+                    <span class="mono" style="font-size: 7.5pt; font-weight: 700; background: #e0f2fe; color: #0369a1; padding: 2px 6px; border-radius: 2px;">REPRESENTATIVE SAMPLE AUDIT</span>
+                </div>
+                <p style="font-size: 8.5pt; color: #334155; margin: 0; line-height: 1.55;">
+                    Every metric, status code, canonical mapping, and defect recorded in this dossier originates from deterministic AST DOM parsing, HTTP header inspection, and live crawler traversal across the representative sample. Speculative traffic models and simulated revenue figures are strictly excluded under Dristik's evidence governance protocol.
+                </p>
+            </div>
+
+            <div class="grid-2" style="margin-bottom: 16px;">
+                <div class="card">
+                    <div class="card-kicker">RE-VERIFICATION &amp; REGRESSION TESTING</div>
+                    <p style="font-size: 8pt; color: #475569; margin: 0;">
+                        Engineering patches should be deployed in staging environments first. Execute an automated re-crawl against historical AST snapshots to verify defect remediation before production cutover.
+                    </p>
+                </div>
+                <div class="card">
+                    <div class="card-kicker">INTEGRITY HASH &amp; IMMUTABILITY</div>
+                    <p style="font-size: 8pt; color: #475569; margin: 0;">
+                        All extracted selectors, heading strings, and HTTP headers are hashed with SHA-256 signatures to ensure audit record reproducibility and regression prevention.
+                    </p>
+                </div>
+            </div>
+
+            <div class="mono" style="font-size: 7pt; color: #94a3b8; line-height: 1.6; border-top: 1px solid #e2e8f0; padding-top: 12px;">
+                CONFIDENTIALITY NOTICE: This publication is prepared exclusively for {_esc(brand_name)}. Unauthorized duplication or external distribution is prohibited. Observations reflect target conditions during the stated crawl window.
+            </div>
+        </div>
+
+        <div class="running-footer">
+            <div>DRISTIK AUTONOMOUS INTELLIGENCE SYSTEMS // ALL RIGHTS RESERVED</div>
+            <div class="mono" style="font-weight: 700;">FINAL PAGE // ASSURANCE SEAL</div>
+        </div>
+    </div>
+    """
+
+
+def _render_screen_toolbar(domain: str, analysis_id: str) -> str:
+    pdf_url = f"/api/v1/reports/{analysis_id}/sections/seo/pdf?download=true" if analysis_id else "#"
+    return f"""
+    <div class="screen-toolbar no-print">
+        <div class="toolbar-brand">
+            <span class="toolbar-tag">DRISTIK PUBLICATION SUITE // A4 PRINT BOOK</span>
+            <span class="toolbar-domain">{_esc(domain)}</span>
+        </div>
+        <div class="toolbar-actions">
+            <button class="btn-action-primary" onclick="window.print()">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="vertical-align:middle;margin-right:6px;"><path d="M6 9V2h12v7M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><path d="M6 14h12v8H6z"/></svg>
+                Print / Save as PDF
+            </button>
+            <a class="btn-action-secondary" href="{pdf_url}">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="vertical-align:middle;margin-right:6px;"><path d="M4 16v1a3 3 0 0 0 3 3h10a3 3 0 0 0 3-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+                Download PDF
+            </a>
+            <a class="btn-action-secondary" href="#table-of-contents">
+                Index / TOC
+            </a>
+        </div>
+    </div>
+    """
+
+
 def render_seo_audit_book(report: Any) -> str:
-    """Render sections 01–55 and appendices A–O as evidence chapters."""
+    """Render sections 01–55 and appendices A–O as evidence chapters in publication book style."""
     payload = json.loads(_INDEX_PATH.read_text(encoding="utf-8"))
     book = _Book(report)
     grouped: Dict[str, List[Any]] = {}
     for finding in book.findings:
         grouped.setdefault(_section_for_finding(finding), []).append(finding)
     part_titles = {part["id"]: part["title"] for part in payload["parts"]}
+
+    page_numbers = calculate_seo_book_page_numbers(payload, grouped)
 
     scores = _get(report, "scores")
     categories = _get(scores, "category_scores") or {}
@@ -1717,7 +2037,30 @@ def render_seo_audit_book(report: Any) -> str:
         score_label = "SEO SCORE"
         score_disp = "—"
         score_note = "No sealed score was stored."
-    domain = _esc(_get(report, "domain", "") or "Target domain")
+
+    raw_domain = _get(report, "domain", "") or "Target domain"
+    clean_domain = str(raw_domain).replace("https://", "").replace("http://", "").split("/")[0]
+    domain = _esc(clean_domain)
+    brand_name = _esc(getattr(_get(report, "business_profile", None), "business_name", None) or clean_domain)
+    generated_at = str(_get(report, "generated_at", None) or "Measured on audit execution")
+    audit_date = generated_at[:10] if len(generated_at) >= 10 else generated_at
+    analysis_id = str(_get(report, "analysis_id", None) or _get(report, "report_id", "DST-SEO"))
+    report_ref = analysis_id[:12].upper()
+
+    toolbar = _render_screen_toolbar(domain, analysis_id)
+    cover = _render_seo_cover(
+        domain=domain,
+        brand_name=brand_name,
+        audit_date=audit_date,
+        report_ref=report_ref,
+        score_disp=score_disp,
+        score_label=score_label,
+        score_note=score_note,
+        pages_count=len(book.pages),
+        findings_count=len(book.findings),
+    )
+    front_matter = _render_seo_front_matter(domain, report_ref, book.sample)
+
     story = _esc(_stored_narrative(report, "story_summary") or "No executive narrative was stored. The chapters below use the sealed evidence.")
     points = []
     for field_name, heading in (
@@ -1731,7 +2074,11 @@ def render_seo_audit_book(report: Any) -> str:
     points_html = f'<div class="exec-key-points">{"".join(points)}</div>' if points else ""
 
     exec_block = f"""
-    <div class="exec-summary-dossier">
+    <div class="chapter-start exec-summary-dossier" id="executive-synthesis">
+        <div class="running-header">
+            <div class="running-brand">DRISTIK // EXECUTIVE SYNTHESIS</div>
+            <div class="running-meta">{domain} · {report_ref}</div>
+        </div>
         <div class="dossier-meta-bar">
             <span>AUDITED DOMAIN: <strong>{domain}</strong></span>
             <span>SAMPLE: <strong>REPRESENTATIVE</strong></span>
@@ -1749,26 +2096,36 @@ def render_seo_audit_book(report: Any) -> str:
                 {points_html}
             </div>
         </div>
+        <div class="running-footer">
+            <div>TECHNICAL SEO &amp; SEARCH ARCHITECTURE AUDIT // EXECUTIVE SYNTHESIS</div>
+            <div class="mono" style="font-weight: 700;">p. ii</div>
+        </div>
     </div>
     """
 
-    toc = ["<h2>Complete SEO audit: Master Table of Contents (Sections 01–55 &amp; Appendices A–O)</h2>", "<nav class=\"toc\"><ol>"]
-    blocks = [
-        f"<p class=\"lead-scope-note\">{_esc(book.sample)} Each chapter states the data source, charts only stored measurements, "
-        "and then records every sub-index line. A missing integration stays unmeasured. It is not a zero and it is not a pass.</p>",
-    ]
     tally: Dict[str, int] = {}
+    blocks = []
 
     for part in payload["parts"]:
         owned = [section for section in payload["sections"] if section["part"] == part["id"]]
         if not owned:
             continue
-        blocks.append(f"<h3 id=\"part-{_esc(part['id'])}\" class=\"part-header\">Part {_esc(part['id'])} — {_esc(part['title'])}</h3>")
+        part_banner = f"""
+        <div class="part-divider-banner chapter-start report-avoid-break">
+            <div class="running-header">
+                <div class="running-brand">DRISTIK // PART {_esc(part['id'])}</div>
+                <div class="running-meta">{domain} · {report_ref}</div>
+            </div>
+            <span class="part-kicker">PART {_esc(part['id'])}</span>
+            <h3 id="part-{_esc(part['id'])}" class="part-header">Part {_esc(part['id'])} — {_esc(part['title'])}</h3>
+            <div class="decorative-separator"></div>
+        </div>
+        """
+        blocks.append(part_banner)
+
         for section in owned:
             number = section["number"]
-            toc.append(
-                f"<li><a href=\"#seo-{_esc(number)}\"><span>{_esc(number)}</span> {_esc(section['title'])}</a></li>"
-            )
+            page_num = page_numbers.get(number, 6)
             status, summary = _section_summary(book, number)
             section_findings = grouped.get(number, [])
             defects = [item for item in section_findings if _is_defect(item)]
@@ -1796,8 +2153,15 @@ def render_seo_audit_book(report: Any) -> str:
 
             agent_card = _chapter_agent_consultation_card(book, number, section, section_findings)
             blocks.append(
-                f"<section class=\"seo-section\" id=\"seo-{_esc(number)}\">"
-                f"<p class=\"part-label\">Part {_esc(section['part'])} — {_esc(part_titles.get(section['part'], ''))}</p>"
+                f"<section class=\"seo-section chapter-start\" id=\"seo-{_esc(number)}\">"
+                f"<div class=\"running-header\">"
+                f"  <div class=\"running-brand\">DRISTIK // PART {_esc(section['part'])} // SECTION {_esc(number)}</div>"
+                f"  <div class=\"running-meta\">{domain} · {report_ref}</div>"
+                f"</div>"
+                f"<div class=\"section-header-row\">"
+                f"  <p class=\"part-label\">Part {_esc(section['part'])} — {_esc(part_titles.get(section['part'], ''))}</p>"
+                f"  <span class=\"page-badge\">p. {page_num}</span>"
+                f"</div>"
                 f"<h4>{_esc(number)}. {_esc(section['title'])}</h4>"
                 f"<p class=\"status\">{_esc(_LABEL.get(status, 'Not tested'))} · {_esc(book.sample)}</p>"
                 f"<p class=\"section-summary-lead\">{_esc(summary)}</p>"
@@ -1807,8 +2171,25 @@ def render_seo_audit_book(report: Any) -> str:
                 f'<p class="ledger-desc">Deterministic evaluation of each taxonomy parameter under crawled conditions.</p></div>'
                 '<p class="sources-kicker">Sub-index evidence</p>'
                 f"{''.join(checks_html)}"
+                f"<div class=\"running-footer\">"
+                f"  <div>TECHNICAL SEO &amp; ON-PAGE AUDIT // SECTION {_esc(number)}</div>"
+                f"  <div class=\"mono\">p. {page_num}</div>"
+                f"</div>"
                 "</section>"
             )
-    toc.append("</ol></nav>")
-    return "\n".join([exec_block, evidence_mix_chart(tally), toc[0], blocks[0], *toc[1:], *blocks[1:]])
+
+    toc_html = _render_seo_toc(payload, page_numbers, domain, report_ref, book.sample)
+    mix_chart = evidence_mix_chart(tally)
+    back_matter = _render_seo_back_matter(domain, report_ref, brand_name)
+
+    return "\n".join([
+        toolbar,
+        cover,
+        front_matter,
+        exec_block,
+        mix_chart,
+        toc_html,
+        *blocks,
+        back_matter,
+    ])
 

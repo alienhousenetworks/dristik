@@ -17,6 +17,7 @@ import math
 from typing import Any, Dict, List, Optional, Tuple
 
 from app.domain.models import ExecutiveReport, Finding, FindingStatus
+from app.audit.inventory_helper import get_canonical_crawl_inventory
 
 
 # Standard 20 Sections Specification
@@ -1439,17 +1440,14 @@ class SeoPrintReportRenderer:
         score_val = getattr(report.scores, "overall_score", None) if getattr(report, "scores", None) else None
         score_gauge_svg = render_svg_score_gauge(score_val, size=130)
 
-        pages_crawled = len(report.page_reports)
         findings_count = len(report.findings)
         
         manifest = getattr(report, "crawl_manifest", None)
-        crawl_inv = getattr(manifest, "crawl_inventory", None) or {} if manifest else {}
-        if not isinstance(crawl_inv, dict):
-            crawl_inv = {}
-        disc_total = crawl_inv.get("discovered_total", pages_crawled)
-        tested_pages = crawl_inv.get("tested_pages", pages_crawled)
-        cov_pct = crawl_inv.get("url_coverage_pct", 100.0 if tested_pages >= disc_total else round((tested_pages / max(1, disc_total)) * 100.0, 1))
-        sampling_status = getattr(manifest, "sampling_status", "SAMPLED_AUDIT" if disc_total > tested_pages else "FULL_CRAWL")
+        canon_inv = get_canonical_crawl_inventory(manifest, report)
+        disc_total = canon_inv.discovered_total
+        tested_pages = canon_inv.tested_pages
+        cov_pct = canon_inv.url_coverage_pct
+        sampling_status = canon_inv.sampling_status
 
         crit_high_count = len([f for f in report.findings if f.priority >= 7 or str(f.severity.value).upper() in ("CRITICAL", "HIGH")])
 
@@ -1460,6 +1458,49 @@ class SeoPrintReportRenderer:
         holding_items = "".join(f"<li>{html.escape(h)}</li>" for h in report.what_is_holding_it_back) if report.what_is_holding_it_back else "<li>Thin content volume on key paths</li><li>Structured data omissions</li><li>Internal linking depth anomalies</li>"
         
         opp_text = html.escape(report.primary_strategic_opportunity or "Prioritize technical remediation on high-impact landing pages to maximize organic indexation and AI answer engine extraction.")
+
+        # Authoritative 9-Pillar category scores table
+        cat_rows = []
+        if getattr(report, "scores", None) and getattr(report.scores, "category_scores", None):
+            for cat_key, cat_obj in report.scores.category_scores.items():
+                cat_name = html.escape(str(cat_obj.category.value if hasattr(cat_obj.category, "value") else cat_obj.category).replace("_", " ").title())
+                raw_s = f"{cat_obj.score:.1f}" if cat_obj.score is not None else "N/A"
+                wt = f"{cat_obj.weight:.1f}%" if cat_obj.weight is not None else "0.0%"
+                w_contrib = f"{cat_obj.weighted_score:.2f}" if cat_obj.weighted_score is not None else "0.00"
+                s_color = "#10b981" if (cat_obj.score and cat_obj.score >= 80) else ("#f59e0b" if (cat_obj.score and cat_obj.score >= 60) else "#ef4444")
+                badge_cls = "badge-clean" if (cat_obj.score and cat_obj.score >= 80) else ("badge-warn" if (cat_obj.score and cat_obj.score >= 60) else "badge-crit")
+                badge_lbl = "OPTIMAL" if (cat_obj.score and cat_obj.score >= 80) else ("NEEDS ATTENTION" if (cat_obj.score and cat_obj.score >= 60) else "CRITICAL DEFICIT")
+                cat_rows.append(f"""
+                <tr>
+                    <td><strong>{cat_name}</strong></td>
+                    <td style="color: {s_color}; font-weight: 700;">{raw_s}</td>
+                    <td>{wt}</td>
+                    <td style="font-weight: 600;">{w_contrib}</td>
+                    <td><span class="badge {badge_cls}">{badge_lbl}</span></td>
+                </tr>
+                """)
+
+        cat_breakdown_table = ""
+        if cat_rows:
+            cat_breakdown_table = f"""
+            <div style="margin-top: 4mm;">
+                <h4 style="font-size: 8.5pt; font-weight: 800; color: #0f294a; margin-bottom: 2mm;">Authoritative 9-Pillar SEO Health Score Breakdown</h4>
+                <table class="data-table" style="font-size: 7.5pt; margin-bottom: 0;">
+                    <thead>
+                        <tr>
+                            <th style="width: 35%;">SEO Pillar</th>
+                            <th style="width: 15%;">Score (0-100)</th>
+                            <th style="width: 15%;">Weight</th>
+                            <th style="width: 15%;">Contribution</th>
+                            <th style="width: 20%;">Pillar Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {"".join(cat_rows)}
+                    </tbody>
+                </table>
+            </div>
+            """
 
         return f"""
         <div style="display: flex; gap: 6mm; align-items: center; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 4mm 6mm; margin-bottom: 5mm;">
@@ -1498,7 +1539,9 @@ class SeoPrintReportRenderer:
             <p style="font-size: 8.5pt; color: #334155; line-height: 1.55;">{html.escape(report.story_summary)}</p>
         </div>
 
-        <div class="three-column-grid">
+        {cat_breakdown_table}
+
+        <div class="three-column-grid" style="margin-top: 4mm;">
             <div class="takeaway-card success">
                 <div class="takeaway-header">
                     <span>✓</span> What's Working Well
@@ -1533,12 +1576,13 @@ class SeoPrintReportRenderer:
     # --------------------------------------------------------------------------
     def _render_sec_02(self, report: ExecutiveReport) -> str:
         manifest = getattr(report, "crawl_manifest", None)
-        crawl_inv = getattr(manifest, "crawl_inventory", None) or {} if manifest else {}
-        if not isinstance(crawl_inv, dict):
-            crawl_inv = {}
-        disc_total = crawl_inv.get("discovered_total", len(report.page_reports))
-        tested_pages = crawl_inv.get("tested_pages", len(report.page_reports))
-        cov_pct = crawl_inv.get("url_coverage_pct", 100.0 if tested_pages >= disc_total else round((tested_pages / max(1, disc_total)) * 100.0, 1))
+        canon_inv = get_canonical_crawl_inventory(manifest, report)
+        disc_total = canon_inv.discovered_total
+        tested_pages = canon_inv.tested_pages
+        cov_pct = canon_inv.url_coverage_pct
+        untested_pages = canon_inv.untested_total
+        failed_pages = canon_inv.failed_total
+        eligible_total = canon_inv.eligible_total
 
         return f"""
         <div class="status-summary-card">
@@ -1570,19 +1614,19 @@ class SeoPrintReportRenderer:
         </div>
 
         <div class="status-summary-card">
-            <h4>2.2 Crawl Inventory &amp; URL Accounting</h4>
+            <h4>2.2 Authoritative Crawl Inventory &amp; URL Accounting</h4>
             <div class="kpi-grid">
                 <div class="kpi-card">
                     <span class="kpi-label">Seed URLs</span>
-                    <div class="kpi-val">{crawl_inv.get("seed_urls_count", 1)}</div>
+                    <div class="kpi-val">{canon_inv.seed_urls_count}</div>
                 </div>
                 <div class="kpi-card">
                     <span class="kpi-label">Via Internal Links</span>
-                    <div class="kpi-val">{crawl_inv.get("discovered_via_links", 0)}</div>
+                    <div class="kpi-val">{canon_inv.discovered_via_links}</div>
                 </div>
                 <div class="kpi-card">
                     <span class="kpi-label">Via Sitemap</span>
-                    <div class="kpi-val">{crawl_inv.get("discovered_via_sitemap", 0)}</div>
+                    <div class="kpi-val">{canon_inv.discovered_via_sitemap}</div>
                 </div>
                 <div class="kpi-card">
                     <span class="kpi-label">Total Discovered</span>
@@ -1591,17 +1635,24 @@ class SeoPrintReportRenderer:
             </div>
             <div class="kpi-grid" style="margin-bottom: 0;">
                 <div class="kpi-card">
-                    <span class="kpi-label">Successfully Tested</span>
+                    <span class="kpi-label">Successfully Analyzed</span>
                     <div class="kpi-val" style="color: #10b981;">{tested_pages}</div>
+                    <span class="kpi-sub">HTTP 200 + DOM rendered</span>
                 </div>
                 <div class="kpi-card">
-                    <span class="kpi-label">Crawl Coverage</span>
-                    <div class="kpi-val" style="color: #0284c7;">{cov_pct}%</div>
+                    <span class="kpi-label">Untested Scope</span>
+                    <div class="kpi-val" style="color: {'#f59e0b' if untested_pages > 0 else '#64748b'};">{untested_pages}</div>
+                    <span class="kpi-sub">Disclosed sampling delta</span>
                 </div>
-                <div class="kpi-card" style="grid-column: span 2;">
-                    <span class="kpi-label">Sampling Governance</span>
-                    <div class="kpi-val" style="font-size: 12pt; padding-top: 2mm;">Zero-Fabrication Policy</div>
-                    <span class="kpi-sub">Untested URLs remain unverified and are not claimed as clean.</span>
+                <div class="kpi-card">
+                    <span class="kpi-label">Failed / Errored</span>
+                    <div class="kpi-val" style="color: {'#ef4444' if failed_pages > 0 else '#10b981'};">{failed_pages}</div>
+                    <span class="kpi-sub">Socket / timeout failures</span>
+                </div>
+                <div class="kpi-card">
+                    <span class="kpi-label">Coverage (Denominator: {canon_inv.coverage_denominator})</span>
+                    <div class="kpi-val" style="color: #0284c7;">{cov_pct}%</div>
+                    <span class="kpi-sub">{tested_pages} / {eligible_total} eligible URLs</span>
                 </div>
             </div>
         </div>
@@ -1609,7 +1660,7 @@ class SeoPrintReportRenderer:
         <div class="callout-box">
             <strong>Dristik Zero-Fake Evidence Governance:</strong>
             External authority metrics (Ahrefs/Semrush APIs) and live Google Search Console clicks are marked strictly
-            as <em>NOT_CONNECTED</em> rather than fabricating hypothetical numbers. All metrics presented are deterministic.
+            as <em>NOT_CONNECTED</em> rather than fabricating hypothetical numbers. Untested URLs remain unverified and are not claimed as clean.
         </div>
         """
 
@@ -2427,15 +2478,84 @@ class SeoPrintReportRenderer:
         if not c:
             return """
             <div class="status-summary-card not-applicable">
-                <h4>Competitive Parity Matrix: NOT_MEASURED</h4>
+                <h4>17.1 Competitive Parity Matrix: NOT_MEASURED</h4>
                 <p class="text-muted">No competitor domains were configured for comparative benchmarking during this audit crawl.</p>
             </div>
             """
 
+        comps = getattr(c, "competitors", []) or []
+        if len(comps) <= 1:
+            target_profile = comps[0] if comps else None
+            t_score = getattr(target_profile, "overall_seo_score", "N/A") if target_profile else "N/A"
+            return f"""
+            <div class="kpi-grid">
+                <div class="kpi-card">
+                    <span class="kpi-label">SEO Parity Index</span>
+                    <div class="kpi-val" style="color: #0284c7;">{t_score}/100</div>
+                    <span class="kpi-sub">Target internal health model</span>
+                </div>
+                <div class="kpi-card">
+                    <span class="kpi-label">Competitor Domains</span>
+                    <div class="kpi-val">0 Crawled</div>
+                    <span class="kpi-sub">Single-domain mode</span>
+                </div>
+                <div class="kpi-card" style="grid-column: span 2;">
+                    <span class="kpi-label">Peer Benchmark Status</span>
+                    <div class="kpi-val" style="font-size: 10.5pt; color: #f59e0b; padding-top: 2mm;">PEER BENCHMARK UNMEASURED</div>
+                    <span class="kpi-sub">Score reflects target domain's internal crawl parity index. No competitor domains crawled.</span>
+                </div>
+            </div>
+
+            <div class="status-summary-card">
+                <h4>17.1 Competitive Parity Model &amp; Disclosures</h4>
+                <p style="font-size: 8.5pt; color: #334155; line-height: 1.5;">
+                    The <strong>Competitive SEO Parity Index ({t_score}/100)</strong> is an internal diagnostic benchmark
+                    evaluating foundational technical hygiene, metadata coverage, content depth, and schema adoption.
+                    Because no competitor websites were fetched during this crawl run, peer comparison claims are
+                    strictly reported as <strong>UNMEASURED</strong> in compliance with Dristik zero-fake governance.
+                </p>
+            </div>
+            """
+
+        rows = []
+        for comp in comps:
+            is_tgt = getattr(comp, "is_target", False)
+            domain_lbl = f"<strong>{html.escape(comp.domain)}</strong>" + (" <span class='badge badge-clean'>TARGET</span>" if is_tgt else "")
+            rows.append(f"""
+            <tr>
+                <td>{domain_lbl}</td>
+                <td>{comp.pages_sampled}</td>
+                <td>{comp.technical_health_score or 'N/A'}</td>
+                <td>{comp.onpage_score or 'N/A'}</td>
+                <td>{comp.content_depth_score or 'N/A'}</td>
+                <td>{comp.schema_score or 'N/A'}</td>
+                <td style="font-weight: 700; color: #0284c7;">{comp.overall_seo_score or 'N/A'}/100</td>
+            </tr>
+            """)
+
         return f"""
         <div class="status-summary-card">
-            <h4>Competitive Benchmark Matrix</h4>
-            <p style="font-size: 8.5pt; color: #334155;">{html.escape(str(c))}</p>
+            <h4>17.1 Competitive Benchmark &amp; Parity Matrix</h4>
+            <p style="font-size: 8.5pt; color: #334155; margin-bottom: 3mm;">
+                Compares equivalent crawl metrics across technical infrastructure, on-page hygiene, content depth,
+                and schema adoption. Internal diagnostic model; not an uncalibrated third-party authority index.
+            </p>
+            <table class="data-table" style="font-size: 7.5pt; margin-bottom: 0;">
+                <thead>
+                    <tr>
+                        <th style="width: 25%;">Domain</th>
+                        <th style="width: 10%;">Pages</th>
+                        <th style="width: 12%;">Technical</th>
+                        <th style="width: 12%;">On-Page</th>
+                        <th style="width: 12%;">Content</th>
+                        <th style="width: 12%;">Schema</th>
+                        <th style="width: 17%;">Parity Index</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {"".join(rows)}
+                </tbody>
+            </table>
         </div>
         """
 
@@ -2498,6 +2618,28 @@ class SeoPrintReportRenderer:
         p2_findings = [f for f in report.findings if f.priority in (5, 6) and f not in p0_findings and f not in p1_findings]
         p3_findings = [f for f in report.findings if f not in p0_findings and f not in p1_findings and f not in p2_findings]
 
+        # Dynamic roadmap items
+        r7_list = report.roadmap_7_days or []
+        r7_items = "".join(f"<li><strong>{html.escape(r.title)}</strong>: {html.escape(r.description or '')[:85]}</li>" for r in r7_list[:3])
+        if not r7_items:
+            r7_items = "".join(f"<li><strong>{html.escape(f.title)}</strong>: {html.escape(f.recommendation or '')[:85]}</li>" for f in p0_findings[:3])
+        if not r7_items:
+            r7_items = "<li>Fix critical crawl/index blockers</li><li>Restore missing canonical tags</li><li>Correct redirect chains</li>"
+
+        r30_list = report.roadmap_30_days or []
+        r30_items = "".join(f"<li><strong>{html.escape(r.title)}</strong>: {html.escape(r.description or '')[:85]}</li>" for r in r30_list[:3])
+        if not r30_items:
+            r30_items = "".join(f"<li><strong>{html.escape(f.title)}</strong>: {html.escape(f.recommendation or '')[:85]}</li>" for f in p1_findings[:3])
+        if not r30_items:
+            r30_items = "<li>Optimize internal linking depth</li><li>Deploy Schema.org JSON-LD</li><li>Remediate heading hierarchies</li>"
+
+        r90_list = report.roadmap_90_days or []
+        r90_items = "".join(f"<li><strong>{html.escape(r.title)}</strong>: {html.escape(r.description or '')[:85]}</li>" for r in r90_list[:3])
+        if not r90_items:
+            r90_items = "".join(f"<li><strong>{html.escape(f.title)}</strong>: {html.escape(f.recommendation or '')[:85]}</li>" for f in p2_findings[:3])
+        if not r90_items:
+            r90_items = "<li>Build topical authority clusters</li><li>Enhance AI search answer extractability</li><li>Automate continuous re-crawl validation</li>"
+
         # Finding cards markup
         finding_cards_html = []
         for f in report.findings:
@@ -2531,35 +2673,29 @@ class SeoPrintReportRenderer:
             <div class="takeaway-card danger">
                 <div class="takeaway-header">7 Days &bull; Quick Wins</div>
                 <ul class="takeaway-list">
-                    <li>Fix critical 404s &amp; redirect loops</li>
-                    <li>Restore missing title tags</li>
-                    <li>Resolve canonical URL conflicts</li>
+                    {r7_items}
                 </ul>
             </div>
             <div class="takeaway-card warning">
                 <div class="takeaway-header">30 Days &bull; Core Improvements</div>
                 <ul class="takeaway-list">
-                    <li>Optimize internal linking depth</li>
-                    <li>Deploy Schema.org JSON-LD</li>
-                    <li>Prerender SSR client hydration shells</li>
+                    {r30_items}
                 </ul>
             </div>
             <div class="takeaway-card success">
                 <div class="takeaway-header">90 Days &bull; Strategic Growth</div>
                 <ul class="takeaway-list">
-                    <li>Build topical authority clusters</li>
-                    <li>Enhance AI search answer extractability</li>
-                    <li>Automate continuous re-crawl validation</li>
+                    {r90_items}
                 </ul>
             </div>
         </div>
 
-        <h3 style="font-size: 11pt; font-weight: 800; color: #0f294a; margin-bottom: 3mm;">Detailed 14-Field Defect Cards</h3>
+        <h3 style="font-size: 11pt; font-weight: 800; color: #0f294a; margin-bottom: 3mm;">Detailed 14-Field Defect Cards with Causal Analysis</h3>
         {''.join(finding_cards_html)}
         """
 
     def _render_single_finding_card(self, f: Finding) -> str:
-        """Renders standard 14-field audit finding card."""
+        """Renders standard 14-field audit finding card with 11-dimension causal analysis."""
         sev_str = str(f.severity.value if hasattr(f.severity, "value") else f.severity).lower()
         stat_str = str(f.status.value if hasattr(f.status, "value") else f.status).lower()
         cat_name = html.escape(str(f.category.value if hasattr(f.category, "value") else f.category))
@@ -2574,22 +2710,61 @@ class SeoPrintReportRenderer:
         owner = html.escape(f.owner or "Engineering")
         aff_count = f.affected_sample_count if f.affected_sample_count is not None else len(f.affected_urls)
 
-        # Optional fields
+        # Causal Analysis block
+        c_mechanism = getattr(f, "causal_mechanism", None)
+        c_status = getattr(f, "root_cause_status", None) or ("confirmed" if f.root_cause else "unknown")
+        c_status_badge = f"<span class='badge badge-clean'>{c_status.upper()}</span>" if c_status == "confirmed" else f"<span class='badge badge-warn'>{c_status.upper()}</span>"
+        
+        causal_block = ""
+        if f.root_cause or c_mechanism:
+            root_text = html.escape(f.root_cause or c_mechanism or "")
+            mech_html = f'<p style="font-size: 7.5pt; color: #475569; margin-top: 1mm;"><strong>Causal Mechanism:</strong> {html.escape(c_mechanism)}</p>' if (c_mechanism and c_mechanism != f.root_cause) else ""
+            causal_block = f"""
+            <div class="field-item full-width">
+                <span class="field-label">Root Cause (Causal Chain) {c_status_badge}</span>
+                <span class="field-val highlight">{root_text}</span>
+                {mech_html}
+            </div>
+            """
+
+        gap_block = ""
+        d_gap = getattr(f, "diagnostic_gap", None)
+        if d_gap:
+            gap_block = f"""
+            <div class="field-item full-width" style="background: #fffbeb; border: 1px solid #fef3c7; border-radius: 4px; padding: 2mm 3mm;">
+                <span class="field-label" style="color: #b45309;">Empirical Diagnostic Gap &amp; Boundary</span>
+                <span class="field-val" style="color: #92400e; font-size: 7.5pt;">⚠️ {html.escape(d_gap)}</span>
+            </div>
+            """
+
+        alt_block = ""
+        alts = getattr(f, "alternative_explanations", [])
+        if alts:
+            alt_list = "".join(f"<li>{html.escape(a)}</li>" for a in alts)
+            alt_block = f"""
+            <div class="field-item full-width">
+                <span class="field-label">Alternative Hypotheses Considered</span>
+                <ul style="font-size: 7.5pt; color: #64748b; margin-top: 1mm; padding-left: 4mm;">{alt_list}</ul>
+            </div>
+            """
+
+        outcome_block = ""
+        o_metric = getattr(f, "outcome_metric", None)
+        if o_metric:
+            outcome_block = f"""
+            <div class="field-item">
+                <span class="field-label">Post-Remediation Outcome Metric</span>
+                <span class="field-val">📈 {html.escape(o_metric)}</span>
+            </div>
+            """
+
+        # Optional code fix block
         code_block = ""
         if f.relevant_code_or_configuration_example:
             code_block = f"""
             <div class="field-item full-width">
                 <span class="field-label">Production Code / Configuration Fix</span>
                 <pre class="code-example"><code>{html.escape(f.relevant_code_or_configuration_example)}</code></pre>
-            </div>
-            """
-
-        root_cause_block = ""
-        if f.root_cause:
-            root_cause_block = f"""
-            <div class="field-item full-width">
-                <span class="field-label">Root Cause (Causal Chain)</span>
-                <span class="field-val highlight">{html.escape(f.root_cause)}</span>
             </div>
             """
 
@@ -2621,7 +2796,9 @@ class SeoPrintReportRenderer:
             </div>
             <p class="finding-desc">{desc_esc}</p>
             <div class="field-grid">
-                {root_cause_block}
+                {causal_block}
+                {gap_block}
+                {alt_block}
                 <div class="field-item">
                     <span class="field-label">Expected Condition</span>
                     <span class="field-val">{exp_esc}</span>
@@ -2644,6 +2821,7 @@ class SeoPrintReportRenderer:
                     <span class="field-label">Verification Method</span>
                     <span class="field-val">{verif_method}</span>
                 </div>
+                {outcome_block}
             </div>
         </div>
         """
@@ -2664,6 +2842,39 @@ class SeoPrintReportRenderer:
             ("Fixed", fixed_c, "#f59e0b"),
             ("Verified", verif_c, "#10b981"),
         ], size=115)
+
+        # Certification Status Banner
+        cert_status = getattr(report, "certification_status", "CERTIFIED")
+        if cert_status == "CERTIFIED":
+            cert_banner = """
+            <div style="background: #f0fdf4; border: 1.5px solid #16a34a; border-radius: 6px; padding: 4mm 6mm; margin-bottom: 5mm; display: flex; align-items: center; justify-content: space-between;">
+                <div>
+                    <div style="font-size: 11pt; font-weight: 800; color: #166534;">✓ AUDIT CERTIFIED — ALL 10 QUALITY GATES CLEARED</div>
+                    <div style="font-size: 8pt; color: #15803d; margin-top: 1mm;">Mathematical reconciliation, zero-fake evidence verification, and causal integrity confirmed.</div>
+                </div>
+                <span class="badge badge-clean" style="font-size: 9pt; padding: 1.5mm 4mm;">CERTIFIED</span>
+            </div>
+            """
+        elif cert_status == "PUBLISHED_WITH_LIMITATIONS":
+            cert_banner = """
+            <div style="background: #fffbeb; border: 1.5px solid #d97706; border-radius: 6px; padding: 4mm 6mm; margin-bottom: 5mm; display: flex; align-items: center; justify-content: space-between;">
+                <div>
+                    <div style="font-size: 11pt; font-weight: 800; color: #92400e;">⚠️ PUBLISHED WITH LIMITATIONS — PROVISIONAL REPORT</div>
+                    <div style="font-size: 8pt; color: #b45309; margin-top: 1mm;">Audit cleared integrity gates with explicit sampling, crawl budget, or external API disclosures.</div>
+                </div>
+                <span class="badge badge-warn" style="font-size: 9pt; padding: 1.5mm 4mm;">PUBLISHED_WITH_LIMITATIONS</span>
+            </div>
+            """
+        else:
+            cert_banner = f"""
+            <div style="background: #fef2f2; border: 1.5px solid #dc2626; border-radius: 6px; padding: 4mm 6mm; margin-bottom: 5mm; display: flex; align-items: center; justify-content: space-between;">
+                <div>
+                    <div style="font-size: 11pt; font-weight: 800; color: #991b1b;">❌ PUBLICATION BLOCKED — QA GATE FAILED ({cert_status})</div>
+                    <div style="font-size: 8pt; color: #b91c1c; margin-top: 1mm;">One or more mandatory publication gates failed validation. Certification withheld.</div>
+                </div>
+                <span class="badge badge-crit" style="font-size: 9pt; padding: 1.5mm 4mm;">QA_FAILED</span>
+            </div>
+            """
 
         # Quality Gates Section
         qg = getattr(report, "quality_gate_results", {}) or {}
@@ -2686,13 +2897,13 @@ class SeoPrintReportRenderer:
         if qg_rows:
             qg_table = f"""
             <div style="margin-top: 4mm;">
-                <h4 style="font-size: 8.5pt; font-weight: 800; color: #0f294a; margin-bottom: 2mm;">Pre-Publication Quality Assurance Gate Evaluations</h4>
+                <h4 style="font-size: 8.5pt; font-weight: 800; color: #0f294a; margin-bottom: 2mm;">Pre-Publication Quality Assurance Gate Evaluations (10 Gates)</h4>
                 <table class="data-table" style="font-size: 7.5pt; margin-bottom: 0;">
                     <thead>
                         <tr>
-                            <th style="width: 45%;">Quality Gate</th>
-                            <th style="width: 25%;">Gate Status</th>
-                            <th style="width: 30%;">Evaluation Pass Rate</th>
+                            <th style="width: 35%;">Quality Gate</th>
+                            <th style="width: 20%;">Gate Status</th>
+                            <th style="width: 45%;">Evaluation Result &amp; Audit Provenance</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -2765,11 +2976,13 @@ class SeoPrintReportRenderer:
             <div style="margin-top: 4mm;">
                 <h4 style="font-size: 8.5pt; font-weight: 800; color: #0f294a; margin-bottom: 2mm;">Cross-Chapter Reconciliation &bull; Deliverable D</h4>
                 <p style="font-size: 7.5pt; color: #475569; margin-bottom: 2mm;">{html.escape(cons.summary)}</p>
-                {"<table class='data-table' style='font-size: 7.5pt; margin-bottom: 3mm;'><thead><tr><th style='width: 25%;'>Dimension</th><th style='width: 50%;'>Contradiction Evaluated</th><th style='width: 25%;'>Resolution Action</th></tr></thead><tbody>" + "".join(contra_rows) + "</tbody></table>" if contra_rows else "<div style='font-size: 7.5pt; color: #166534; background: #f0fdf4; padding: 2mm; border-radius: 4px; margin-bottom: 3mm;'>✓ Zero cross-chapter contradictions detected across all 9 reconciliation dimensions.</div>"}
+                {"<table class='data-table' style='font-size: 7.5pt; margin-bottom: 3mm;'><thead><tr><th style='width: 25%;'>Dimension</th><th style='width: 50%;'>Contradiction Evaluated</th><th style='width: 25%;'>Resolution Action</th></tr></thead><tbody>" + "".join(contra_rows) + "</tbody></table>" if contra_rows else "<div style='font-size: 7.5pt; color: #166534; background: #f0fdf4; padding: 2mm; border-radius: 4px; margin-bottom: 3mm;'>✓ Zero cross-chapter contradictions detected across all 12 reconciliation dimensions.</div>"}
             </div>
             """
 
         return f"""
+        {cert_banner}
+
         <div class="status-summary-card">
             <h4>5-Stage Continuous Assurance Protocol</h4>
             <div class="lifecycle-pipeline">

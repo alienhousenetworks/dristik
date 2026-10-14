@@ -944,6 +944,75 @@ async def get_section_pdf_report(
 
     domain_clean = (report.domain or "website").replace("https://", "").replace("http://", "").split("/")[0]
     disposition = "attachment" if download else "inline"
+
+    if section_key.lower() == "seo":
+        from app.crawl.browser import BrowserRenderService
+        from app.reports.publishing_engine import (
+            PdfPostProcessor,
+            PublicationDocument,
+            PublicationMetadata,
+            ChapterSpec,
+            PartSpec,
+        )
+        pdf_bytes = await BrowserRenderService.render_pdf(html_content)
+        if not pdf_bytes:
+            raise HTTPException(
+                status_code=503,
+                detail="PDF rendering engine is currently unavailable or timed out. "
+                       "You can open the report with ?format=print and select 'Print / Save as PDF' in your browser.",
+            )
+        try:
+            import json
+            from pathlib import Path
+            index_path = Path(__file__).resolve().parent / "seo_audit_index.json"
+            if index_path.exists():
+                payload = json.loads(index_path.read_text(encoding="utf-8"))
+                from app.reports.seo_audit_book import calculate_seo_book_page_numbers
+                grouped = {}
+                for finding in (getattr(report, "findings", []) or []):
+                    grouped.setdefault("01", []).append(finding)
+                page_numbers = calculate_seo_book_page_numbers(payload, grouped)
+                parts_list = []
+                for part in payload.get("parts", []):
+                    ch_specs = []
+                    for s in payload.get("sections", []):
+                        if s.get("part") == part["id"]:
+                            ch_specs.append(
+                                ChapterSpec(
+                                    id=f"seo-{s['number']}",
+                                    num=s["number"],
+                                    part_id=part["id"],
+                                    part_title=part["title"],
+                                    title=s["title"],
+                                    desc="",
+                                    html_content="",
+                                    page_number=page_numbers.get(s["number"], 6),
+                                )
+                            )
+                    parts_list.append(PartSpec(id=part["id"], num=part["id"], title=part["title"], chapters=ch_specs))
+
+                doc_wrapper = PublicationDocument(
+                    metadata=PublicationMetadata(
+                        family="SEO",
+                        title="Technical SEO & Organic Search Audit Book",
+                        subtitle="CRAWL TOPOLOGY · CANONICAL ROUTING · SERP HYGIENE · CODE DIRECTIVES",
+                        domain=domain_clean,
+                        brand_name=getattr(report.business_profile, "business_name", None) or domain_clean,
+                        audit_date=str(report.generated_at or "October 2026")[:10],
+                        report_ref=str(report.analysis_id or "DST-SEO")[:12].upper(),
+                    ),
+                    parts=parts_list,
+                )
+                pdf_bytes = PdfPostProcessor.process(pdf_bytes, doc_wrapper, {f"seo-{k}": v for k, v in page_numbers.items()})
+        except Exception:
+            pass
+
+        return Response(
+            content=pdf_bytes,
+            media_type="application/pdf",
+            headers={"Content-Disposition": f'{disposition}; filename="{domain_clean}_seo_audit_book.pdf"'},
+        )
+
     return await _html_to_pdf_response(html_content, f"{domain_clean}_{section_key.lower()}_audit.pdf", disposition=disposition)
 
 

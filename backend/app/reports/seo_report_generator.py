@@ -13,6 +13,7 @@ from typing import Any, Dict, List, Optional
 from urllib.parse import quote
 
 from app.domain.models import ExecutiveReport, Finding, FindingStatus
+from app.audit.inventory_helper import get_canonical_crawl_inventory
 from app.reports.seo_print_report import (
     SeoPrintReportRenderer,
     calculate_chapter_page_numbers as calc_print_page_numbers,
@@ -60,11 +61,12 @@ class CompleteSeoReportGenerator:
         p3_findings = [f for f in report.findings if f not in p0_findings and f not in p1_findings and f not in p2_findings]
 
         manifest = getattr(report, "crawl_manifest", None)
-        crawl_inv = getattr(manifest, "crawl_inventory", None) or {} if manifest else {}
-        disc_total = crawl_inv.get("discovered_total", len(report.page_reports))
-        tested_pages = crawl_inv.get("tested_pages", len(report.page_reports))
-        cov_pct = crawl_inv.get("url_coverage_pct", 100.0 if tested_pages >= disc_total else round((tested_pages / max(1, disc_total)) * 100.0, 1))
-        sampling_status = getattr(manifest, "sampling_status", "SAMPLED_AUDIT" if disc_total > tested_pages else "FULL_CRAWL")
+        canon_inv = get_canonical_crawl_inventory(manifest, report)
+        disc_total = canon_inv.discovered_total
+        tested_pages = canon_inv.tested_pages
+        cov_pct = canon_inv.url_coverage_pct
+        sampling_status = canon_inv.sampling_status
+        crawl_inv = canon_inv.model_dump()
 
         return {
             "report_id": report.report_id,
@@ -252,12 +254,13 @@ class CompleteSeoReportGenerator:
         findings_count = len(report.findings)
 
         manifest = getattr(report, "crawl_manifest", None)
-        crawl_inv = getattr(manifest, "crawl_inventory", None) or {} if manifest else {}
-        disc_total = crawl_inv.get("discovered_total", pages_crawled)
-        tested_pages = crawl_inv.get("tested_pages", pages_crawled)
-        cov_pct = crawl_inv.get("url_coverage_pct", 100.0 if tested_pages >= disc_total else round((tested_pages / max(1, disc_total)) * 100.0, 1))
-        sampling_status = getattr(manifest, "sampling_status", "SAMPLED_AUDIT" if disc_total > tested_pages else "FULL_CRAWL")
+        canon_inv = get_canonical_crawl_inventory(manifest, report)
+        disc_total = canon_inv.discovered_total
+        tested_pages = canon_inv.tested_pages
+        cov_pct = canon_inv.url_coverage_pct
+        sampling_status = canon_inv.sampling_status
         is_sampled = sampling_status == "SAMPLED_AUDIT" or disc_total > tested_pages
+        crawl_inv = canon_inv.model_dump()
 
         # Nav items HTML
         nav_items_html = "\n".join(

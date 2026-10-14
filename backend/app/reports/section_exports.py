@@ -15,6 +15,523 @@ from app.reports.aeo_audit_book import aeo_cover_figure, render_aeo_audit_book
 from app.reports.geo_audit_book import geo_cover_figure, render_geo_audit_book
 from app.reports.seo_audit_book import render_seo_audit_book
 
+SEO_BOOK_PRINT_CSS = """
+/* Book-Style Publication & Geometry Tokens */
+.chapter-start {
+    break-before: page;
+    page-break-before: always;
+    padding-top: 4mm;
+}
+.report-avoid-break, .check, .finding-card, .finding-card-v2, .data-table-wrap, .agent-consulting-dossier, .chapter-panel {
+    break-inside: avoid;
+    page-break-inside: avoid;
+}
+.part-divider-banner {
+    break-before: page;
+    page-break-before: always;
+    margin-bottom: 24px;
+    padding-bottom: 8px;
+}
+.part-kicker {
+    font-family: monospace;
+    font-size: 9pt;
+    font-weight: 700;
+    color: #0284c7;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+}
+.part-header {
+    font-size: 18px;
+    font-weight: 800;
+    color: #0f172a;
+    margin: 4px 0 0;
+    border-bottom: none;
+    padding-bottom: 0;
+}
+.running-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid #e2e8f0;
+    padding-bottom: 6px;
+    margin-bottom: 16px;
+    font-family: monospace;
+    font-size: 8pt;
+    color: #64748b;
+    text-transform: uppercase;
+}
+.running-brand {
+    font-weight: 700;
+    color: #0284c7;
+}
+.running-meta {
+    color: #94a3b8;
+}
+.running-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-top: 1px solid #e2e8f0;
+    padding-top: 8px;
+    margin-top: 24px;
+    font-family: monospace;
+    font-size: 8pt;
+    color: #64748b;
+}
+.mono {
+    font-family: monospace;
+}
+.serif {
+    font-family: Georgia, Cambria, "Times New Roman", serif;
+}
+.section-header-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 4px;
+}
+.page-badge {
+    font-family: monospace;
+    font-size: 8.5pt;
+    font-weight: 700;
+    color: #0284c7;
+}
+.decorative-separator {
+    height: 2px;
+    background: linear-gradient(90deg, #0284c7 0%, rgba(2, 132, 199, 0) 100%);
+    margin: 8px 0 16px;
+}
+
+/* Screen Control Toolbar */
+.screen-toolbar {
+    position: sticky;
+    top: 12px;
+    z-index: 9999;
+    max-width: 210mm;
+    width: 100%;
+    margin: 0 auto 24px auto;
+    background: #0f172a;
+    border: 1px solid #334155;
+    box-shadow: 0 12px 36px rgba(0, 0, 0, 0.7);
+    border-radius: 12px;
+    padding: 14px 22px;
+    color: #f8fafc;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    box-sizing: border-box;
+}
+.toolbar-brand {
+    display: flex;
+    flex-direction: column;
+}
+.toolbar-tag {
+    font-size: 9.5px;
+    font-weight: 700;
+    letter-spacing: 0.16em;
+    color: #38bdf8;
+    text-transform: uppercase;
+}
+.toolbar-domain {
+    font-size: 16px;
+    font-weight: 800;
+    color: #ffffff;
+}
+.toolbar-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+.btn-action-primary {
+    background: #0284c7;
+    color: #ffffff;
+    font-weight: 600;
+    font-size: 12.5px;
+    padding: 8px 16px;
+    border-radius: 6px;
+    border: none;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    transition: all 0.15s ease;
+    text-decoration: none;
+}
+.btn-action-primary:hover { background: #0369a1; }
+.btn-action-secondary {
+    background: #1e293b;
+    color: #e2e8f0;
+    font-weight: 600;
+    font-size: 12.5px;
+    padding: 8px 16px;
+    border-radius: 6px;
+    border: 1px solid #334155;
+    display: inline-flex;
+    align-items: center;
+    text-decoration: none;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+.btn-action-secondary:hover { background: #334155; color: #ffffff; }
+
+/* Document Stage Geometry */
+@media screen {
+    body {
+        background: #090d16 !important;
+        padding: 24px 12px 60px 12px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+    }
+    .document-stage {
+        max-width: 210mm;
+        width: 100%;
+        background: #ffffff;
+        box-shadow: 0 16px 48px rgba(0, 0, 0, 0.6);
+        margin: 0 auto;
+        box-sizing: border-box;
+    }
+}
+@media print {
+    body {
+        background: #ffffff !important;
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+    .screen-toolbar, .no-print {
+        display: none !important;
+    }
+    .document-stage {
+        max-width: none !important;
+        width: 100% !important;
+        box-shadow: none !important;
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+    @page :first {
+        margin: 0 !important;
+    }
+}
+
+/* Publication Book Cover */
+.book-cover {
+    min-height: 297mm;
+    height: 297mm;
+    box-sizing: border-box;
+    padding: 22mm 20mm;
+    color: #ffffff;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    break-after: page;
+    page-break-after: always;
+    position: relative;
+    overflow: hidden;
+}
+.cover-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.16);
+    padding-bottom: 12px;
+}
+.cover-brand {
+    font-size: 16pt;
+    font-weight: 900;
+    letter-spacing: 2.5px;
+    color: #38bdf8;
+}
+.cover-series-tag {
+    font-size: 7.5pt;
+    color: #94a3b8;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    margin-top: 2px;
+    font-family: monospace;
+}
+.cover-classification-badge {
+    font-family: monospace;
+    font-size: 7.5pt;
+    font-weight: 700;
+    padding: 4px 10px;
+    background: rgba(56, 189, 248, 0.15);
+    border: 1px solid rgba(56, 189, 248, 0.35);
+    color: #7dd3fc;
+    border-radius: 4px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+.cover-body {
+    margin: 8mm 0;
+}
+.cover-eyebrow {
+    font-family: monospace;
+    font-size: 8.5pt;
+    font-weight: 800;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    margin-bottom: 6px;
+}
+.cover-body h1 {
+    font-size: 26pt;
+    font-weight: 800;
+    color: #ffffff;
+    line-height: 1.15;
+    margin: 0 0 6px 0;
+    letter-spacing: -0.02em;
+}
+.cover-body h2 {
+    font-size: 10pt;
+    font-weight: 600;
+    color: #94a3b8;
+    border-bottom: none;
+    padding-bottom: 0;
+    margin: 0 0 16px 0;
+    letter-spacing: 0.08em;
+}
+.cover-target-box {
+    background: rgba(15, 23, 42, 0.7);
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 6px;
+    padding: 12px 16px;
+    margin: 14px 0;
+    max-width: 130mm;
+}
+.cover-target-label {
+    font-family: monospace;
+    font-size: 7pt;
+    color: #94a3b8;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    display: block;
+}
+.cover-target-name {
+    font-size: 14pt;
+    font-weight: 800;
+    color: #ffffff;
+    margin-top: 2px;
+}
+.cover-target-url {
+    font-family: monospace;
+    font-size: 8.5pt;
+    color: #38bdf8;
+    margin-top: 1px;
+}
+.cover-description {
+    font-size: 9pt;
+    color: #cbd5e1;
+    line-height: 1.55;
+    max-width: 145mm;
+    margin: 12px 0;
+}
+.cover-visual {
+    margin: 12px 0 0 0;
+}
+.cover-metadata-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+    background: rgba(15, 23, 42, 0.85);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 6px;
+    padding: 12px 14px;
+    margin-bottom: 12px;
+}
+.cover-meta-cell {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+.cover-meta-cell .meta-label {
+    font-family: monospace;
+    font-size: 6.5pt;
+    color: #94a3b8;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+.cover-meta-cell .meta-val {
+    font-size: 8.5pt;
+    font-weight: 700;
+    color: #f8fafc;
+}
+.cover-footer-bar {
+    display: flex;
+    justify-content: space-between;
+    font-family: monospace;
+    font-size: 7pt;
+    color: #64748b;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    padding-top: 8px;
+}
+
+/* Front Matter & Legend */
+.front-matter-page {
+    padding: 0 4mm;
+}
+.front-matter-title {
+    font-size: 18pt;
+    font-weight: 800;
+    color: #0f172a;
+    margin: 4px 0 12px 0;
+}
+.front-matter-lead {
+    font-size: 9.5pt;
+    color: #334155;
+    line-height: 1.6;
+    margin-bottom: 16px;
+}
+.status-legend-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+    margin-top: 8px;
+    font-size: 8pt;
+}
+.legend-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.status-pill {
+    font-family: monospace;
+    font-size: 7.5pt;
+    font-weight: 700;
+    padding: 2px 6px;
+    border-radius: 3px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    flex-shrink: 0;
+}
+.status-pill.clean { background: #0f172a; color: #ffffff; }
+.status-pill.issue { background: #ffedd5; color: #9a3412; }
+.status-pill.measured { background: #e0f2fe; color: #0369a1; }
+.status-pill.inferred { background: #f1f5f9; color: #475569; }
+.status-pill.gap { background: #f8fafc; color: #94a3b8; border: 1px solid #e2e8f0; }
+.status-pill.untested { background: #f1f5f9; color: #64748b; }
+.legend-desc {
+    color: #475569;
+}
+
+/* Book-Style Table of Contents */
+.toc-container {
+    padding: 0 4mm;
+}
+.toc-header-block {
+    margin-bottom: 20px;
+}
+.toc-intro-note {
+    font-size: 8.5pt;
+    color: #64748b;
+    line-height: 1.5;
+    margin: 6px 0 12px;
+}
+.toc-part-group {
+    margin-bottom: 16px;
+}
+.toc-part-title {
+    font-family: monospace;
+    font-size: 9pt;
+    font-weight: 800;
+    color: #0284c7;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 6px;
+    border-bottom: 1px solid #e2e8f0;
+    padding-bottom: 4px;
+}
+.toc-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+.toc-entry {
+    margin-bottom: 4px;
+}
+.toc-link {
+    display: flex;
+    align-items: baseline;
+    text-decoration: none;
+    color: #0f172a;
+    font-size: 8.5pt;
+    transition: color 0.15s ease;
+}
+.toc-link:hover {
+    color: #0284c7;
+}
+.toc-badge {
+    font-family: monospace;
+    font-weight: 700;
+    color: #64748b;
+    width: 32px;
+    flex-shrink: 0;
+}
+.toc-title {
+    font-weight: 600;
+    color: #0f172a;
+    flex-shrink: 0;
+}
+.toc-dots {
+    flex: 1;
+    border-bottom: 1.5px dotted #cbd5e1;
+    margin: 0 8px 3px 8px;
+    min-width: 20px;
+}
+.toc-page {
+    font-family: monospace;
+    font-weight: 700;
+    color: #0f172a;
+    flex-shrink: 0;
+}
+
+/* Back Matter Attestation Seal */
+.back-matter-page {
+    padding: 0 4mm;
+}
+.section-kicker {
+    font-family: monospace;
+    font-size: 7.5pt;
+    font-weight: 700;
+    color: #0284c7;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    margin-bottom: 4px;
+    display: block;
+}
+.grid-2 {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 14px;
+}
+.grid-3 {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+}
+.card {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    padding: 14px;
+}
+.card-kicker {
+    font-family: monospace;
+    font-size: 7pt;
+    font-weight: 700;
+    text-transform: uppercase;
+    color: #64748b;
+    margin-bottom: 4px;
+    letter-spacing: 0.05em;
+}
+.card-title {
+    font-size: 10pt;
+    font-weight: 700;
+    color: #0f172a;
+    margin-bottom: 6px;
+}
+"""
+
 
 class SectionReportGenerator:
     """
@@ -884,17 +1401,52 @@ class SectionReportGenerator:
             color: #475569;
             white-space: nowrap;
         }}
-        .agent-verification-strip code {{
-            font-size: 11px;
             color: #0369a1;
         }}
         @media print {{
             body {{ padding: 0; }}
             .no-print {{ display: none; }}
         }}
+        {SEO_BOOK_PRINT_CSS}
     </style>
 </head>
 <body>
+    {self._render_body_layout(report, section_key, is_seo, title, domain, subtitle, date_str, badge, score_label, score_html, score_note, pages, findings, assurance_label, assurance_value, standard_label, standard_value, findings_html, extra_html, book_html, footer_mark)}
+</body>
+</html>"""
+
+    def _render_body_layout(
+        self,
+        report: ExecutiveReport,
+        section_key: str,
+        is_seo: bool,
+        title: str,
+        domain: str,
+        subtitle: str,
+        date_str: str,
+        badge: str,
+        score_label: str,
+        score_html: str,
+        score_note: str,
+        pages: List[Any],
+        findings: List[Any],
+        assurance_label: str,
+        assurance_value: str,
+        standard_label: str,
+        standard_value: str,
+        findings_html: str,
+        extra_html: str,
+        book_html: str,
+        footer_mark: str,
+    ) -> str:
+        if is_seo:
+            return f"""
+    <main class="document-stage">
+        {book_html}
+    </main>
+    """
+
+        return f"""
     <div class="header">
         <div class="brand">DRISTIK AI // SECTION DOSSIER</div>
         <div class="badge">{badge}</div>
@@ -947,8 +1499,7 @@ class SectionReportGenerator:
         <div>DRISTIK AUTONOMOUS INTELLIGENCE SYSTEMS // {domain}</div>
         <div>{footer_mark}</div>
     </div>
-</body>
-</html>"""
+    """
 
     def _matches_section(self, finding, section_key: str) -> bool:
         cat = str(getattr(finding, "category", "") or "").upper()

@@ -412,6 +412,14 @@ class Finding(BaseModel):
     implementation_detail: Optional[str] = None
     change_history: List[Dict[str, Any]] = Field(default_factory=list)
 
+    # Master Standard Causal Reasoning & Integrity Fields
+    causal_mechanism: Optional[str] = None
+    alternative_explanations: List[str] = Field(default_factory=list)
+    diagnostic_gap: Optional[str] = None
+    outcome_metric: Optional[str] = None
+    severity_justification: Optional[str] = None
+    root_cause_status: str = "confirmed"  # confirmed, strongly_supported, hypothesized, diagnostic_gap
+
     # v2: Lifecycle and display fields
     lifecycle_state: FindingLifecycle = Field(
         default=FindingLifecycle.OPEN,
@@ -1660,10 +1668,54 @@ class IndexationAuditRollup(BaseModel):
     pages: List[IndexationPageStatus] = Field(default_factory=list)
     summary: str = ""
 
+class CrawlInventory(BaseModel):
+    discovered_total: int = 0
+    eligible_total: int = 0
+    queued_total: int = 0
+    fetched_total: int = 0
+    rendered_total: int = 0
+    analyzed_total: int = 0
+    excluded_total: int = 0
+    failed_total: int = 0
+    untested_total: int = 0
+    url_coverage_pct: Optional[float] = 100.0
+    coverage_denominator: str = "eligible_total"
+    discovered_via_sitemap: int = 0
+    discovered_via_links: int = 0
+    seed_urls_count: int = 1
+    sampling_status: str = "FULL_CRAWL"  # FULL_CRAWL | SAMPLED_AUDIT | INTERRUPTED | PARTIAL
+    tested_pages: int = 0  # alias for analyzed_total
+    total_unique_discovered: int = 0  # alias for discovered_total
+    total_crawled_tested: int = 0  # alias for analyzed_total
+
+    def calculate_coverage(self) -> Optional[float]:
+        denom = self.eligible_total if self.eligible_total > 0 else self.discovered_total
+        if denom <= 0:
+            return None
+        return round((self.analyzed_total / denom) * 100.0, 1)
+
+class ExternalDataSource(BaseModel):
+    source_name: str
+    connection_status: str = "NOT_CONNECTED"  # CONNECTED, NOT_CONNECTED, NOT_CONFIGURED, UNAVAILABLE
+    provider: Optional[str] = None
+    last_synced_at: Optional[str] = None
+    metrics_available: List[str] = Field(default_factory=list)
+    limitations: Optional[str] = None
+
+class QualityGateResult(BaseModel):
+    gate_id: str
+    gate_name: str
+    status: str = "PASS"  # PASS, WARNING, FAIL
+    passed: bool = True
+    details: str = ""
+    remediation_required: Optional[str] = None
+    blocking: bool = True
+
 class CrawlManifest(BaseModel):
     domain: str = ""
     base_url: str = ""
     total_pages_discovered: int = 0
+    total_pages_crawled: int = 0
     pages: List[PageEvidence] = Field(default_factory=list)
     sitemap_found: bool = False
     sitemap_url: Optional[str] = None
@@ -1675,7 +1727,7 @@ class CrawlManifest(BaseModel):
     sitemap_urls: List[str] = Field(default_factory=list)
     orphan_urls: List[str] = Field(default_factory=list)
     indexation_rollup: Optional[IndexationAuditRollup] = None
-    crawl_inventory: Dict[str, Any] = Field(default_factory=dict)
+    crawl_inventory: Union[CrawlInventory, Dict[str, Any]] = Field(default_factory=dict)
     url_coverage_pct: float = 100.0
     sampling_status: str = "FULL_CRAWL"  # "FULL_CRAWL" | "SAMPLED_AUDIT" | "INTERRUPTED" | "PARTIAL"
     discovered_urls: List[str] = Field(default_factory=list)
@@ -2382,6 +2434,10 @@ class DiagnosticCoverageMatrix(BaseModel):
     records: List[DiagnosticRecord] = Field(default_factory=list)
     chapter_breakdown: Dict[str, Dict[str, int]] = Field(default_factory=dict)
 
+    @property
+    def diagnostics(self) -> List[DiagnosticRecord]:
+        return self.records
+
 class PageLevelAssessment(BaseModel):
     url: str
     page_purpose: str = "General Content"
@@ -2527,6 +2583,9 @@ class ExecutiveReport(BaseModel):
     page_level_assessments: List[PageLevelAssessment] = Field(default_factory=list)
     consistency_report: Optional[ConsistencyAuditReport] = None
     quality_gate_results: Optional[Dict[str, Any]] = None
+    canonical_crawl_inventory: Optional[CrawlInventory] = None
+    external_data_sources: List[ExternalDataSource] = Field(default_factory=list)
+    issue_ledger: Optional[Dict[str, Any]] = None
 
 class AnalysisRequest(BaseModel):
     website_url: str

@@ -149,10 +149,31 @@ class PageLevelAnalysisEngine:
             outlinks = len(getattr(p, "internal_links", []))
             inlinks = getattr(p, "inlinks_count", 0) or 0
 
-            # Schema evaluation
+            # Schema evaluation: separate existence, syntax, and Google Rich Result eligibility
             schema_types = list(getattr(p, "schema_types", []))
             has_schema = len(schema_types) > 0
-            rich_eligible = has_schema and any(t in ["Organization", "Product", "Article", "FAQPage", "LocalBusiness", "BreadcrumbList"] for t in schema_types)
+
+            # Check if this URL has schema issues in schema_validation report
+            schema_val_issues = []
+            if report.schema_validation and getattr(report.schema_validation, "issues", None):
+                for iss in report.schema_validation.issues:
+                    iss_url = getattr(iss, "url", None)
+                    if not iss_url or iss_url.strip() == url.strip():
+                        schema_val_issues.append(iss)
+
+            has_schema_finding_syntax_error = any(
+                ("schema" in f.title.lower() or "structured data" in f.title.lower()) and
+                any(err_kw in f.title.lower() or err_kw in (f.description or "").lower() for err_kw in ["syntax", "json-ld parse", "invalid json"])
+                for f in matched_findings
+            )
+            has_syntax_error = any("syntax" in str(getattr(iss, "message", "")).lower() or "json" in str(getattr(iss, "message", "")).lower() for iss in schema_val_issues)
+
+            is_syntax_valid = has_schema and not has_schema_finding_syntax_error and not has_syntax_error
+            google_rich_types = {"Organization", "Product", "Article", "FAQPage", "LocalBusiness", "BreadcrumbList"}
+            has_rich_type = any(t in google_rich_types for t in schema_types)
+            
+            # Rich result eligibility requires valid syntax AND presence of all Google feature-specific requirements (no validation issues)
+            rich_eligible = is_syntax_valid and has_rich_type and len(schema_val_issues) == 0
 
             # H1 handling (list or string)
             raw_h1 = getattr(p, "h1", None)
@@ -195,7 +216,7 @@ class PageLevelAnalysisEngine:
                 internal_outlinks_count=outlinks,
                 click_depth=depth_map.get(url.strip(), 1),
                 schema_types=schema_types,
-                schema_valid=has_schema,
+                schema_valid=is_syntax_valid,
                 rich_result_eligible=rich_eligible,
                 mobile_viewport_ok=bool(getattr(p, "viewport", True)),
                 open_issues_count=len(matched_findings),

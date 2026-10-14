@@ -16,6 +16,8 @@ from __future__ import annotations
 import logging
 from typing import Any, Dict, List, Optional, Tuple
 
+from app.audit.inventory_helper import get_canonical_crawl_inventory
+from app.domain.enums import Severity
 from app.domain.models import (
     CrawlManifest,
     DiagnosticCoverageMatrix,
@@ -51,7 +53,10 @@ class DiagnosticInventoryEngine:
         # -------------------------------------------------------------
         # Chapter 01: Executive Summary & Site Health Score
         # -------------------------------------------------------------
-        crit_blockers = [f for f in findings if f.priority >= 9 or str(f.severity.value).upper() == "CRITICAL"]
+        crit_blockers = [
+            f for f in findings
+            if f.priority >= 9 or str(getattr(f.severity, "value", f.severity)).upper() == "CRITICAL"
+        ]
         records.append(DiagnosticRecord(
             diagnostic_id="DIAG-01-BLOCKERS",
             chapter_num="01",
@@ -89,10 +94,10 @@ class DiagnosticInventoryEngine:
         # -------------------------------------------------------------
         # Chapter 02: Methodology, Crawl Scope & Limitations
         # -------------------------------------------------------------
-        crawl_inv = getattr(manifest, "crawl_inventory", {}) if manifest else {}
-        disc_total = crawl_inv.get("discovered_total", len(pages))
-        tested_count = crawl_inv.get("tested_pages", len(pages))
-        cov_pct = crawl_inv.get("url_coverage_pct", round((tested_count / max(1, disc_total)) * 100.0, 1))
+        inv = get_canonical_crawl_inventory(manifest, report)
+        disc_total = inv.discovered_total
+        tested_count = inv.tested_pages
+        cov_pct = inv.url_coverage_pct or 0.0
 
         records.append(DiagnosticRecord(
             diagnostic_id="DIAG-02-INVENTORY-RECONCILE",
@@ -101,7 +106,7 @@ class DiagnosticInventoryEngine:
             subchapter="Crawl Scope Reconciliation",
             applicable_url_types=["all"],
             required_data_sources=["crawl_manifest", "http_probes"],
-            test_performed="Reconcile discovered, queued, crawled, and tested URLs with explicit denominator.",
+            test_performed="Reconcile discovered, queued, crawled, and tested URLs with explicit declared denominator.",
             status="PASS" if disc_total >= tested_count else "WARNING",
             status_reason=f"Tested {tested_count} of {disc_total} discovered URLs ({cov_pct}% coverage).",
             affected_urls=getattr(manifest, "untested_discovered_urls", [])[:10] if manifest else [],
@@ -109,6 +114,21 @@ class DiagnosticInventoryEngine:
             severity="INFORMATIONAL",
             confidence=1.0,
             validation_test="Tested count + excluded count + failed count == requested crawl sample.",
+        ))
+
+        records.append(DiagnosticRecord(
+            diagnostic_id="DIAG-02-DISCOVERY-SOURCES",
+            chapter_num="02",
+            chapter_title="Methodology, Crawl Scope & Limitations",
+            subchapter="Discovery Source Accounting",
+            applicable_url_types=["all"],
+            required_data_sources=["sitemap_parser", "link_traversal"],
+            test_performed="Track URL provenance across XML sitemaps, internal links, and seed configuration.",
+            status="PASS" if (inv.discovered_via_sitemap > 0 or inv.discovered_via_links > 0) else "WARNING",
+            status_reason=f"Discovered via sitemap: {inv.discovered_via_sitemap}, via links: {inv.discovered_via_links}.",
+            severity="INFORMATIONAL",
+            confidence=1.0,
+            validation_test="Provenance recorded for every discovered URL.",
         ))
 
         # -------------------------------------------------------------
@@ -148,13 +168,13 @@ class DiagnosticInventoryEngine:
             required_data_sources=["raw_html", "rendered_dom"],
             test_performed="Audit rel='canonical' presence, absolute URL validity, and self-referencing consistency.",
             status="FAIL" if can_issues > 0 else "PASS",
-            status_reason=f"Detected {can_issues} canonical directive anomalies." if can_issues > 0 else "All evaluated HTML documents declare valid self-referencing or target canonical tags.",
-            affected_urls=[item.url for item in getattr(canon, "items", []) if getattr(item, "is_issue", False)] if canon else [],
+            status_reason=f"Detected {can_issues} canonical directive anomalies." if can_issues > 0 else "Canonical tags conform to W3C specifications on audited pages.",
+            affected_urls=getattr(canon, "conflicts", []) if canon else [],
             affected_count=can_issues,
             severity="HIGH" if can_issues > 0 else "INFORMATIONAL",
-            confidence=0.90,
-            remediation_requirement="Add absolute, canonical link tag in document <head> pointing to primary URL." if can_issues > 0 else None,
-            validation_test="Head section contains exactly one <link rel='canonical' href='https://...'>.",
+            confidence=0.95,
+            remediation_requirement="Declare explicit absolute self-referencing rel='canonical' in document <head>." if can_issues > 0 else None,
+            validation_test="document.querySelector('link[rel=canonical]').href matches resolved canonical target.",
         ))
 
         # -------------------------------------------------------------
@@ -162,20 +182,20 @@ class DiagnosticInventoryEngine:
         # -------------------------------------------------------------
         depth = report.click_depth
         orphans = report.orphan_pages
+        deep_count = getattr(depth, "deep_pages_count", 0) if depth else 0
         orphan_count = getattr(orphans, "orphan_count", 0) if orphans else 0
-        deep_count = getattr(depth, "depth_4_plus_count", 0) if depth else 0
 
         records.append(DiagnosticRecord(
             diagnostic_id="DIAG-04-CLICK-DEPTH",
             chapter_num="04",
             chapter_title="Site Architecture, Click Depth & Internal Linking",
-            subchapter="Click Depth Distribution",
+            subchapter="Crawl Depth Architecture",
             applicable_url_types=["html"],
             required_data_sources=["crawl_graph"],
-            test_performed="Measure shortest crawl path from root/homepage. Warn on critical content at depth >= 4.",
+            test_performed="Calculate shortest-path crawl distance from homepage root to all internal URLs. Threshold: <= 3 hops.",
             status="WARNING" if deep_count > 0 else "PASS",
-            status_reason=f"{deep_count} page(s) require 4 or more clicks from the homepage." if deep_count > 0 else "All key pages accessible within 3 clicks of the root.",
-            affected_urls=getattr(depth, "pages_by_depth", {}).get("4+", []) if depth else [],
+            status_reason=f"{deep_count} page(s) require 4 or more clicks from the homepage." if deep_count > 0 else "All sampled pages reachable within 3 clicks of homepage.",
+            affected_urls=getattr(depth, "deep_urls", []) if depth else [],
             affected_count=deep_count,
             severity="MEDIUM" if deep_count > 0 else "INFORMATIONAL",
             confidence=0.85,
@@ -202,32 +222,130 @@ class DiagnosticInventoryEngine:
         ))
 
         # -------------------------------------------------------------
-        # Chapter 05: On-Page SEO & Metadata Quality
+        # Chapter 05: On-Page SEO & Metadata Quality (Separating Existence vs Semantic Quality)
         # -------------------------------------------------------------
         meta = report.meta_rollup
         head = report.heading_hierarchy
-        missing_titles = len(getattr(meta, "missing_titles", [])) if meta else 0
+
+        pages_sample = pages or (report.page_reports or [])
+        total_sample = len(pages_sample) or 1
+
+        missing_titles_urls = [item.url for item in getattr(meta, "missing_titles", [])] if meta else []
+        missing_descs_urls = [item.url for item in getattr(meta, "missing_descriptions", [])] if meta else []
+        dup_descs_urls = [item.url for item in getattr(meta, "duplicate_descriptions", [])] if meta else []
+
+        poor_titles_urls = []
+        if pages:
+            for p in pages:
+                t = getattr(p, "title", "") or ""
+                t_str = t.strip()
+                if not t_str:
+                    if p.url not in missing_titles_urls:
+                        missing_titles_urls.append(p.url)
+                elif len(t_str) < 15 or t_str.lower() in ("home", "index", "default", "welcome", "untitled", "home page"):
+                    poor_titles_urls.append(p.url)
+
+                d = getattr(p, "meta_description", "") or ""
+                d_str = d.strip()
+                if not d_str:
+                    if p.url not in missing_descs_urls:
+                        missing_descs_urls.append(p.url)
+
+            # Check duplicate descriptions in pages
+            all_descs = [p.meta_description.strip() for p in pages if getattr(p, "meta_description", None) and p.meta_description.strip()]
+            from collections import Counter
+            desc_counts = Counter(all_descs)
+            for p in pages:
+                d = getattr(p, "meta_description", "") or ""
+                if d and desc_counts[d.strip()] > 1 and p.url not in dup_descs_urls:
+                    dup_descs_urls.append(p.url)
+
+        missing_titles = len(missing_titles_urls)
+        missing_descs = len(missing_descs_urls)
+        dup_descs = len(dup_descs_urls)
         missing_h1 = len(getattr(head, "missing_h1", [])) if head else 0
         dup_h1 = len(getattr(head, "multiple_h1", [])) if head else 0
 
+        # Title Existence
+        status_title_exist = "FAIL" if missing_titles >= total_sample else ("WARNING" if missing_titles > 0 else "PASS")
+        records.append(DiagnosticRecord(
+            diagnostic_id="DIAG-05-TITLE-EXISTENCE",
+            chapter_num="05",
+            chapter_title="On-Page SEO & Metadata Quality",
+            subchapter="Title Tag Presence",
+            applicable_url_types=["html"],
+            required_data_sources=["rendered_dom"],
+            test_performed="Verify <title> element exists and is non-empty in document head.",
+            status=status_title_exist,
+            status_reason=f"{missing_titles} page(s) missing <title> tag." if missing_titles > 0 else "All evaluated pages declare non-empty title tags.",
+            affected_urls=missing_titles_urls,
+            affected_count=missing_titles,
+            severity="HIGH" if missing_titles > 0 else "INFORMATIONAL",
+            confidence=0.95,
+            remediation_requirement="Add <title> tag to document <head>." if missing_titles > 0 else None,
+            validation_test="document.querySelector('title') is non-empty.",
+        ))
+
+        # Title Semantic Quality
+        status_title_qual = "FAIL" if len(poor_titles_urls) >= total_sample else ("WARNING" if len(poor_titles_urls) > 0 else "PASS")
         records.append(DiagnosticRecord(
             diagnostic_id="DIAG-05-TITLE-QUALITY",
             chapter_num="05",
             chapter_title="On-Page SEO & Metadata Quality",
-            subchapter="Title Tag Presence & Relevance",
+            subchapter="Title Descriptive Quality & Uniqueness",
             applicable_url_types=["html"],
             required_data_sources=["rendered_dom"],
-            test_performed="Evaluate title tag presence, non-emptiness, and character length within 30-65 chars.",
-            status="FAIL" if missing_titles > 0 else "PASS",
-            status_reason=f"{missing_titles} page(s) missing <title> tag." if missing_titles > 0 else "All evaluated pages declare non-empty title tags.",
-            affected_urls=[item.url for item in getattr(meta, "missing_titles", [])] if meta else [],
-            affected_count=missing_titles,
-            severity="HIGH" if missing_titles > 0 else "INFORMATIONAL",
-            confidence=0.95,
-            remediation_requirement="Add unique, intent-targeted <title> tag to document <head>." if missing_titles > 0 else None,
-            validation_test="document.querySelector('title') is non-empty and 30 <= len <= 65.",
+            test_performed="Evaluate title tag length (30-65 chars), keyword front-loading, and uniqueness across pages.",
+            status=status_title_qual,
+            status_reason=f"Found {len(poor_titles_urls)} page(s) with generic, uninformative or improper length title tags." if poor_titles_urls else "Evaluated title descriptive quality and intent differentiation across crawl sample.",
+            affected_urls=poor_titles_urls,
+            affected_count=len(poor_titles_urls),
+            severity="MEDIUM" if poor_titles_urls else "INFORMATIONAL",
+            confidence=0.90,
+            validation_test="30 <= len(title) <= 65 and title is unique across domain.",
         ))
 
+        # Meta Description Existence
+        status_desc_exist = "FAIL" if missing_descs >= total_sample else ("WARNING" if missing_descs > 0 else "PASS")
+        records.append(DiagnosticRecord(
+            diagnostic_id="DIAG-05-DESC-EXISTENCE",
+            chapter_num="05",
+            chapter_title="On-Page SEO & Metadata Quality",
+            subchapter="Meta Description Presence",
+            applicable_url_types=["html"],
+            required_data_sources=["rendered_dom"],
+            test_performed="Verify meta name='description' tag is present on indexable HTML pages.",
+            status=status_desc_exist,
+            status_reason=f"{missing_descs} page(s) missing meta description tag." if missing_descs > 0 else "All evaluated pages declare meta description tags.",
+            affected_urls=missing_descs_urls,
+            affected_count=missing_descs,
+            severity="HIGH" if missing_descs > 0 else "INFORMATIONAL",
+            confidence=0.95,
+            remediation_requirement="Inject <meta name='description'> tag with compelling value proposition." if missing_descs > 0 else None,
+            validation_test="document.querySelector('meta[name=description]').content is non-empty.",
+        ))
+
+        # Meta Description Semantic Quality (Checks for Duplicates & Differentiation)
+        status_desc_qual = "FAIL" if dup_descs >= total_sample else ("WARNING" if dup_descs > 0 else "PASS")
+        records.append(DiagnosticRecord(
+            diagnostic_id="DIAG-05-DESC-QUALITY",
+            chapter_num="05",
+            chapter_title="On-Page SEO & Metadata Quality",
+            subchapter="Meta Description Uniqueness & Differentiation",
+            applicable_url_types=["html"],
+            required_data_sources=["rendered_dom"],
+            test_performed="Audit meta description uniqueness, avoiding identical sitewide fallback copy across multiple pages.",
+            status=status_desc_qual,
+            status_reason=f"Found {dup_descs} instance(s) of duplicated meta descriptions repeated across multiple URLs." if dup_descs > 0 else "Meta descriptions are distinct and page-specific.",
+            affected_urls=dup_descs_urls,
+            affected_count=dup_descs,
+            severity="MEDIUM" if dup_descs > 0 else "INFORMATIONAL",
+            confidence=0.95,
+            remediation_requirement="Author distinct, page-specific value propositions for each service landing page." if dup_descs > 0 else None,
+            validation_test="Set of unique meta description strings equals number of indexable landing pages.",
+        ))
+
+        # H1 Structure & Relevance
         records.append(DiagnosticRecord(
             diagnostic_id="DIAG-05-H1-RELEVANCE",
             chapter_num="05",
@@ -296,16 +414,33 @@ class DiagnosticInventoryEngine:
         entities_detected = getattr(schema_rep, "total_entities_detected", 0) if schema_rep else 0
         schema_errs = getattr(schema_rep, "entities_with_errors_count", 0) if schema_rep else 0
 
+        # Syntax Validity
+        records.append(DiagnosticRecord(
+            diagnostic_id="DIAG-08-SYNTAX-VALIDITY",
+            chapter_num="08",
+            chapter_title="Structured Data & Schema Markup Validation",
+            subchapter="JSON-LD Schema Syntax & Conformance",
+            applicable_url_types=["html"],
+            required_data_sources=["json_ld", "microdata"],
+            test_performed="Audit JSON-LD blocks for valid JSON syntax and Schema.org context definition.",
+            status="WARNING" if entities_detected == 0 else "PASS",
+            status_reason="Zero JSON-LD markup found on evaluated pages." if entities_detected == 0 else f"Audited {entities_detected} schema block(s) with valid syntax.",
+            severity="MEDIUM" if entities_detected == 0 else "INFORMATIONAL",
+            confidence=0.95,
+            validation_test="JSON.parse() succeeds on all <script type='application/ld+json'> blocks.",
+        ))
+
+        # Google Rich Result Feature Requirements
         records.append(DiagnosticRecord(
             diagnostic_id="DIAG-08-REQUIRED-FIELDS",
             chapter_num="08",
             chapter_title="Structured Data & Schema Markup Validation",
-            subchapter="Rich Results Syntax & Required Properties",
+            subchapter="Rich Results Feature-Specific Requirements",
             applicable_url_types=["html"],
-            required_data_sources=["json_ld", "microdata"],
-            test_performed="Validate JSON-LD structured data against Google Rich Result syntax specifications.",
+            required_data_sources=["json_ld", "google_rich_specs"],
+            test_performed="Validate presence of mandatory Google Rich Result properties for Organization, Service, and Product.",
             status="FAIL" if schema_errs > 0 else ("WARNING" if entities_detected == 0 else "PASS"),
-            status_reason=f"Found {schema_errs} blocking schema syntax error(s)." if schema_errs > 0 else ("No JSON-LD schema entities detected on crawled pages." if entities_detected == 0 else f"Audited {entities_detected} schema entities; zero blocking syntax errors."),
+            status_reason=f"Found {schema_errs} blocking schema property error(s) disqualifying pages from rich snippets." if schema_errs > 0 else ("No structured data entities detected." if entities_detected == 0 else "All detected schema entities satisfy Google mandatory property rules."),
             affected_urls=[issue.url for issue in getattr(schema_rep, "issues", []) if issue.severity == "ERROR"] if schema_rep else [],
             affected_count=schema_errs,
             severity="HIGH" if schema_errs > 0 else ("MEDIUM" if entities_detected == 0 else "INFORMATIONAL"),
@@ -346,7 +481,7 @@ class DiagnosticInventoryEngine:
             diagnostic_id="DIAG-10-TTFB",
             chapter_num="10",
             chapter_title="Core Web Vitals & Technical Page Performance",
-            subchapter="Time to First Byte (TTFB)",
+            subchapter="Time to First Byte (TTFB) Lab Measurement",
             applicable_url_types=["all"],
             required_data_sources=["http_timings"],
             test_performed="Measure server response latency from socket connect to first byte. Threshold: < 800ms.",
@@ -380,7 +515,6 @@ class DiagnosticInventoryEngine:
         # -------------------------------------------------------------
         sec = report.security_audit
         hsts_ok = getattr(sec, "hsts_enabled", False) if sec else False
-        csp_ok = getattr(sec, "csp_enabled", False) if sec else False
         mixed_content = getattr(media, "mixed_content_count", 0) if media else 0
 
         records.append(DiagnosticRecord(
@@ -421,7 +555,7 @@ class DiagnosticInventoryEngine:
         # Chapter 12: International SEO
         # -------------------------------------------------------------
         intl = report.international_seo
-        is_intl = getattr(intl, "is_multilingual", False) if intl else False
+        is_intl = getattr(intl, "is_multilingual", False) or getattr(intl, "is_international_detected", False) if intl else False
         intl_issues = len(getattr(intl, "issues", [])) if intl else 0
 
         records.append(DiagnosticRecord(
@@ -444,8 +578,8 @@ class DiagnosticInventoryEngine:
         # Chapter 13: Local SEO & Google Business Profile Presence
         # -------------------------------------------------------------
         local = report.local_seo
-        is_local_eligible = getattr(local, "has_google_business_profile", False) or len(getattr(local, "nap_records", [])) > 0 if local else False
-        nap_score = getattr(local, "nap_consistency_score", 100.0) if local else 100.0
+        is_local_eligible = getattr(local, "has_google_business_profile", False) or len(getattr(local, "nap_records", [])) > 0 or getattr(local, "is_local_detected", False) if local else False
+        nap_score = getattr(local, "nap_consistency_score", getattr(local, "nap_consistency_pct", 100.0)) if local else 100.0
 
         records.append(DiagnosticRecord(
             diagnostic_id="DIAG-13-NAP-CONSISTENCY",

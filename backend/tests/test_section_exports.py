@@ -286,3 +286,104 @@ def test_section_html_generation_with_category_score_objects():
         assert "<html" in html
         assert "</html>" in html
 
+
+def test_seo_section_pdf_book_style_structure():
+    rep = _mock_report()
+    html = section_report_generator.render_section_html(rep, "seo")
+
+    # Document wrapper & toolbar
+    assert '<main class="document-stage">' in html
+    assert 'class="screen-toolbar no-print"' in html
+    assert "Print / Save as PDF" in html
+    assert "window.print()" in html
+
+    # Book cover
+    assert 'class="book-cover cover-page"' in html
+    assert "TECHNICAL SEO &amp; SEARCH ARCHITECTURE AUDIT" in html
+    assert "EVIDENCE BASIS" in html
+    assert "STORED EVIDENCE // DIRECT AST PARSING" in html
+    assert "PAGE 1 (COVER) // UNNUMBERED" in html
+
+    # Front matter & reader guide
+    assert 'class="chapter-start front-matter-page"' in html
+    assert "Technical SEO Publication Guide &amp; Reader Protocol" in html
+    assert "01 // SAMPLE-GROUNDED DISCLOSURE" in html
+    assert "02 // EMPIRICAL VERIFICATION" in html
+    assert "EVIDENCE STATUS CLASSIFICATION LEGEND" in html
+
+    # Master Table of Contents with dot leaders and physical page numbers
+    assert 'class="chapter-start toc-container"' in html
+    assert "Master Table of Contents (Sections 01–55 &amp; Appendices A–O)" in html
+    assert 'class="toc-part-group' in html
+    assert 'class="toc-dots toc-leader"' in html
+    assert 'class="toc-page"' in html
+    assert "p. 1" in html
+    assert "p. iii" in html
+
+    # Running headers and footers across sections
+    assert html.count('class="running-header"') >= 72
+    assert html.count('class="running-footer"') >= 72
+
+    # Assurance seal / back matter
+    assert 'class="chapter-start back-matter-page"' in html
+    assert "Technical SEO Audit Completion &amp; Attestation Seal" in html
+    assert "EVIDENCE PROVENANCE ATTESTATION" in html
+    assert "RE-VERIFICATION &amp; REGRESSION TESTING" in html
+
+    # Content integrity: 70 chapters (55 numbered + 15 appendices), 700+ checks, agent dossiers
+    assert html.count("<h4>") >= 70
+    assert html.count("<article") >= 700
+    assert "agent-consulting-dossier" in html
+
+    # Epistemic guardrails
+    assert "CERTIFIED" not in html
+    assert "ZERO-FAKE" not in html
+    assert "DETERMINISTIC" not in html
+
+    # Non-SEO sections do not get the SEO book cover
+    crawl_html = section_report_generator.render_section_html(rep, "crawl")
+    assert "TECHNICAL SEO &amp; SEARCH ARCHITECTURE AUDIT" not in crawl_html
+    assert 'class="book-cover"' not in crawl_html
+
+
+def test_seo_section_pdf_endpoint():
+    from unittest.mock import MagicMock, patch
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from app.reports.pdf_generator import router, get_current_user
+    from app.identity.authorizer import UserIdentity
+
+    test_app = FastAPI()
+    test_app.include_router(router, prefix="/api/v1")
+
+    mock_user = UserIdentity(id="u1", user_id="u1", email="test@example.com", org_id="org1", role="admin")
+    mock_run = MagicMock()
+    mock_run.report = _mock_report()
+    mock_run.org_id = "org1"
+    mock_run.analysis_id = "run_test_001"
+    mock_run.domain = "example.com"
+    mock_run.website_url = "https://example.com"
+
+    test_app.dependency_overrides[get_current_user] = lambda: mock_user
+
+    with patch("app.reports.pdf_generator.require_analysis", return_value=mock_run):
+        client = TestClient(test_app)
+
+        # 1. format=html preview
+        res_html = client.get("/api/v1/reports/run_test_001/sections/seo/pdf?format=html")
+        assert res_html.status_code == 200
+        assert "text/html" in res_html.headers["content-type"]
+        assert "book-cover cover-page" in res_html.text
+        assert "Technical SEO &amp; Organic Search Audit Book" in res_html.text
+        assert "Master Table of Contents (Sections 01–55 &amp; Appendices A–O)" in res_html.text
+
+        # 2. format=pdf generation with download=true
+        with patch("app.crawl.browser.BrowserRenderService.render_pdf", return_value=b"%PDF-1.4 mock pdf"):
+            res_pdf = client.get("/api/v1/reports/run_test_001/sections/seo/pdf?format=pdf&download=true")
+            assert res_pdf.status_code == 200
+            assert res_pdf.headers["content-type"] == "application/pdf"
+            assert "attachment;" in res_pdf.headers["content-disposition"]
+            assert "example.com_seo_audit_book.pdf" in res_pdf.headers["content-disposition"]
+
+
+
