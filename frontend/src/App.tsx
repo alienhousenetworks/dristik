@@ -436,12 +436,9 @@ export function App() {
       onOpenAgency={() => setAgencyOpen(true)}
       onOpenRubric={() => setRubricOpen(true)}
       onExport={() => {
-        try {
-          window.print();
-        } catch {
-          const id = run?.report?.analysis_id || run?.report?.report_id || run?.analysis_id;
-          if (id) window.open(`/api/v1/reports/${id}/executive-deck`, '_blank');
-        }
+        const id = run?.report?.analysis_id || run?.report?.report_id || run?.analysis_id;
+        if (id) window.open(`/api/v1/reports/${id}/seo-report?format=pdf&download=true`, '_blank');
+        else window.print();
       }}
     >
       {workspaceRun ? (
@@ -623,7 +620,11 @@ export function App() {
                     <Report
                       report={report}
                       onPreviewDeck={() => setPreviewDeck(true)}
-                      onExportPdf={() => window.print()}
+                      onExportPdf={() => {
+                        const id = report.analysis_id || report.report_id || run?.analysis_id;
+                        if (id) window.open(`/api/v1/reports/${id}/seo-report?format=pdf&download=true`, '_blank');
+                        else window.print();
+                      }}
                     />
                   )}
 

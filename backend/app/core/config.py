@@ -5,7 +5,17 @@ Loads settings from environment variables with validation.
 import os
 from pathlib import Path
 from typing import Any, Optional, List, Dict
-from dotenv import load_dotenv
+# Attempt to import load_dotenv; if unavailable, define a no-op fallback
+try:
+    from dotenv import load_dotenv
+except ImportError:  # pragma: no cover
+    def load_dotenv(*args, **kwargs):
+        """Fallback dummy load_dotenv when python-dotenv is not installed.
+        This ensures the configuration module can be imported without
+        raising an ImportError. Environment variables can still be set
+        manually or via other means.
+        """
+        return None
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import Field
 

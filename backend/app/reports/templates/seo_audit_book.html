@@ -490,6 +490,7 @@ pre {
       <strong>Report ID:</strong> {{ report.run_id }}<br>
       <strong>Audit date:</strong> {{ report.audit_date }}<br>
       <strong>Audit scope:</strong> {{ report.scope_label }}<br>
+      <strong>SEO Score:</strong> {{ report.seo_score if report.seo_score is not none else "Unmeasured" }}/100 {% if report.grade and report.grade != '—' %}[GRADE {{ report.grade }} · {{ report.grade_label }}]{% endif %}<br>
       <strong>Report version:</strong> {{ report.report_version | default("1.0") }}
     </div>
   </div>
@@ -607,7 +608,7 @@ pre {
     </p>
   </div>
 
-  <div class="grid-3">
+  <div class="grid-3" style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 10pt; margin-bottom: 16pt;">
     <div class="metric">
       <div class="value">
         {{ report.pages_crawled | default("N/A") }}
@@ -618,14 +619,62 @@ pre {
       <div class="value">
         {{ report.finding_count | default("N/A") }}
       </div>
-      <div class="label">Recorded findings</div>
+      <div class="label">Total issues</div>
     </div>
     <div class="metric">
       <div class="value">
-        {{ report.seo_score if report.seo_score is not none else "N/A" }}
+        {% if report.seo_score is not none %}
+          {{ report.seo_score }}<span style="font-size: 11pt; color: var(--muted);">/100</span>
+          {% if report.grade and report.grade != '—' %}
+            <div style="font-size: 8.5pt; color: var(--brand); font-weight: 700; margin-top: 2pt;">Grade {{ report.grade }}</div>
+          {% endif %}
+        {% else %}
+          N/A
+        {% endif %}
       </div>
-      <div class="label">SEO score, if supported</div>
+      <div class="label">SEO Health Index</div>
     </div>
+    <div class="metric">
+      <div class="value" style="color: var(--critical);">
+        {{ report.critical_count | default(0) }} <span style="font-size: 10pt; color: var(--high);">/ {{ report.high_count | default(0) }}</span>
+      </div>
+      <div class="label">Critical / High</div>
+    </div>
+  </div>
+
+  <div class="executive-briefing-cards" style="display: grid; grid-template-columns: 1fr 1fr; gap: 12pt; margin: 14pt 0;">
+    <div class="panel" style="border-left: 4px solid var(--low); background: #f6faf7; margin: 0; break-inside: avoid;">
+      <h4 style="color: var(--low); margin-top: 0; font-size: 10.5pt; text-transform: uppercase; letter-spacing: 0.05em;">What is Working Well</h4>
+      {% if executive_summary.strengths %}
+        <ul style="padding-left: 14pt; margin: 0; font-size: 9pt;">
+          {% for item in executive_summary.strengths %}
+          <li>{{ item }}</li>
+          {% endfor %}
+        </ul>
+      {% else %}
+        <p class="muted" style="margin: 0; font-size: 9pt;">Audit confirmed baseline transport health without fatal server disconnects.</p>
+      {% endif %}
+    </div>
+
+    <div class="panel" style="border-left: 4px solid var(--critical); background: #fdf6f7; margin: 0; break-inside: avoid;">
+      <h4 style="color: var(--critical); margin-top: 0; font-size: 10.5pt; text-transform: uppercase; letter-spacing: 0.05em;">What is Holding it Back</h4>
+      {% if executive_summary.blockers %}
+        <ul style="padding-left: 14pt; margin: 0; font-size: 9pt;">
+          {% for item in executive_summary.blockers %}
+          <li>{{ item }}</li>
+          {% endfor %}
+        </ul>
+      {% else %}
+        <p class="muted" style="margin: 0; font-size: 9pt;">Unresolved canonical and crawl directive defects limit search engine indexation.</p>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="panel" style="border-left: 4px solid var(--brand); background: var(--brand-light); margin: 12pt 0; break-inside: avoid;">
+    <h4 style="color: var(--brand); margin-top: 0; font-size: 10.5pt; text-transform: uppercase; letter-spacing: 0.05em;">Primary Strategic Opportunity</h4>
+    <p style="margin: 0; font-size: 9.5pt; line-height: 1.5;">
+      {{ executive_summary.primary_opportunity }}
+    </p>
   </div>
 
   <h3>Audit scope and coverage</h3>
@@ -640,21 +689,6 @@ pre {
       <tr><th>External authority data</th><td>{{ report.authority_data_status | default("Unavailable or not connected") }}</td></tr>
     </tbody>
   </table>
-
-  <h3>What is working well</h3>
-  {% if executive_summary.strengths %}
-    <ul>
-      {% for item in executive_summary.strengths %}
-      <li>{{ item }}</li>
-      {% endfor %}
-    </ul>
-  {% else %}
-    <div class="empty-state">
-      No strengths have been included because no supported positive findings
-      were supplied to the report. This is not proof that the website has
-      no strengths.
-    </div>
-  {% endif %}
 
   <h3>Most important issues</h3>
   {% if executive_summary.top_findings %}

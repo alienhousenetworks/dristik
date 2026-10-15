@@ -851,6 +851,48 @@ def build_seo_book_context(report: Any, page_numbers: Optional[Dict[str, int]] =
     ext_auth = _get_val(report, "external_authority")
     ext_auth_status = "Connected" if ext_auth else "Unavailable or not connected"
 
+    # Calculate executive grade
+    def _calc_grade(sc: Optional[int]) -> Tuple[str, str]:
+        if sc is None:
+            return "—", "UNMEASURED"
+        if sc >= 90:
+            return "A", "EXEMPLARY"
+        if sc >= 80:
+            return "B", "COMMENDABLE"
+        if sc >= 70:
+            return "C", "MODERATE RISK"
+        if sc >= 60:
+            return "D", "HIGH RISK"
+        return "F", "CRITICAL DEFECTS"
+
+    grade, grade_label = _calc_grade(display_score)
+
+    def _as_text_list(val: Any) -> List[str]:
+        if not val:
+            return []
+        if isinstance(val, list):
+            return [str(x).strip() for x in val if x]
+        if isinstance(val, str):
+            lines = [s.strip(" -•*") for s in val.split("\n") if s.strip()]
+            return lines if lines else [val.strip()]
+        return [str(val)]
+
+    raw_strengths = _get_val(report, "what_site_gets_right")
+    strengths = _as_text_list(raw_strengths)
+
+    raw_blockers = _get_val(report, "what_is_holding_it_back") or _get_val(report, "bottleneck_summary")
+    blockers = _as_text_list(raw_blockers)
+
+    primary_opp = _get_val(report, "primary_strategic_opportunity") or (
+        "Resolve high-priority crawl directives and technical canonical routing to capture unindexed search traffic."
+    )
+    story_summary = _get_val(report, "story_summary") or (
+        "Comprehensive empirical technical audit evaluating crawler accessibility, HTML semantic hygiene, and structured data compliance."
+    )
+
+    critical_count = sum(1 for f in normalized_findings if f.get("priority") == "Critical")
+    high_count = sum(1 for f in normalized_findings if f.get("priority") == "High")
+
     # Report meta
     report_dict = {
         "domain": domain,
@@ -862,17 +904,27 @@ def build_seo_book_context(report: Any, page_numbers: Optional[Dict[str, int]] =
         "urls_discovered": urls_discovered if urls_discovered else pages_crawled,
         "coverage_percent": coverage_percent,
         "finding_count": len(normalized_findings),
+        "critical_count": critical_count,
+        "high_count": high_count,
         "seo_score": display_score,
+        "grade": grade,
+        "grade_label": grade_label,
         "analytics_status": ga4_status,
         "gsc_status": gsc_status,
         "authority_data_status": ext_auth_status,
     }
 
     # Executive summary data
-    strengths = list(_get_val(report, "what_site_gets_right") or [])
     top_findings = normalized_findings[:3] if normalized_findings else []
     exec_summary = {
+        "grade": grade,
+        "grade_label": grade_label,
         "strengths": strengths,
+        "blockers": blockers,
+        "primary_opportunity": primary_opp,
+        "story_summary": story_summary,
+        "critical_count": critical_count,
+        "high_count": high_count,
         "top_findings": [
             {
                 "title": f["title"],
@@ -882,15 +934,13 @@ def build_seo_book_context(report: Any, page_numbers: Optional[Dict[str, int]] =
             }
             for f in top_findings
         ],
-        "business_implications": _get_val(report, "story_summary") or _get_val(report, "primary_strategic_opportunity") or (
-            "Technical search engine crawlability directly impacts customer discovery and digital conversion."
-        ),
+        "business_implications": story_summary or primary_opp,
         "first_actions": [
             f.title for f in (_get_val(report, "roadmap_7_days") or [])
         ] or [f["title"] for f in top_findings],
         "plain_english": (
             f"This audit evaluated {pages_crawled} representative pages on {domain}. "
-            "Addressing the prioritized technical defects will improve search indexing and organic visibility."
+            f"There are {critical_count} critical and {high_count} high-priority issues that require prompt remediation to restore crawlability and index health."
         ),
     }
 

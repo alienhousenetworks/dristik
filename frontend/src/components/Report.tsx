@@ -94,9 +94,9 @@ export function Report({
                 if (id) window.open(`/api/v1/reports/${id}/seo-report?format=print`, '_blank');
               }}
               className="btn-secondary px-3 py-2 text-sm flex items-center gap-1.5"
-              title="Open Publication-Grade 20-Section SEO Master Audit Book (Print & PDF Preview)"
+              title="Open Publication-Grade Master SEO Audit Book (Print & PDF Preview)"
             >
-              SEO Book (Print)
+              Print / Preview
             </button>
             <button
               type="button"
@@ -104,10 +104,13 @@ export function Report({
                 const id = report.analysis_id || report.report_id;
                 if (id) window.open(`/api/v1/reports/${id}/seo-report?format=pdf&download=true`, '_blank');
               }}
-              className="btn-secondary px-3 py-2 text-sm flex items-center gap-1.5"
-              title="Download Publication-Grade 20-Section SEO Master Audit Book PDF"
+              className="btn-secondary px-3 py-2 text-sm flex items-center gap-1.5 font-semibold text-brand"
+              title="Download Publication-Grade Master SEO Audit Book PDF"
             >
-              SEO Book (PDF)
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+              </svg>
+              Master SEO Book (PDF)
             </button>
             <button
               type="button"
@@ -142,22 +145,6 @@ export function Report({
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
               </svg>
               PPT Deck (70+ Slides)
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                try {
-                  if (onExportPdf) onExportPdf();
-                  else window.print();
-                } catch {
-                  const id = report.analysis_id || report.report_id;
-                  if (id) window.open(`/api/v1/reports/${id}/executive-deck`, '_blank');
-                }
-              }}
-              className="btn-secondary px-3.5 py-2 text-sm"
-              title="Print or Save as PDF"
-            >
-              Export PDF
             </button>
           </div>
         )}

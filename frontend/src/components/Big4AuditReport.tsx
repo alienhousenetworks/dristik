@@ -219,9 +219,9 @@ export function Big4AuditReport({
                 if (id) window.open(`/api/v1/reports/${id}/seo-report?format=print`, '_blank');
               }}
               className="bg-brand-sky hover:bg-sky-400 text-slate-950 font-bold px-3 py-1.5 rounded text-xs tracking-wide uppercase shadow transition-colors flex items-center gap-1.5"
-              title="Open Publication-Grade 20-Section SEO Master Audit Book (Print & PDF Preview)"
+              title="Open Publication-Grade Master SEO Audit Book (Print & PDF Preview)"
             >
-              SEO Book (Print)
+              Print / Preview
             </button>
             <button
               type="button"
@@ -230,9 +230,12 @@ export function Big4AuditReport({
                 if (id) window.open(`/api/v1/reports/${id}/seo-report?format=pdf&download=true`, '_blank');
               }}
               className="bg-brand-sky hover:bg-sky-400 text-slate-950 font-bold px-3 py-1.5 rounded text-xs tracking-wide uppercase shadow transition-colors flex items-center gap-1.5"
-              title="Download Publication-Grade 20-Section SEO Master Audit Book PDF"
+              title="Download Publication-Grade Master SEO Audit Book PDF"
             >
-              SEO Book (PDF)
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+              </svg>
+              Master SEO Book (PDF)
             </button>
             <button
               type="button"
@@ -248,23 +251,6 @@ export function Big4AuditReport({
               </svg>
               PPT Deck (70+ Slides)
             </button>
-            {onPrint && (
-              <button
-                type="button"
-                onClick={onPrint}
-                className="btn-primary font-medium px-4 py-1.5 rounded text-xs tracking-wide uppercase shadow transition-colors flex items-center gap-1.5"
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"
-                  />
-                </svg>
-                Export PDF / Print
-              </button>
-            )}
             {onClosePreview && (
               <button
                 type="button"
