@@ -103,7 +103,7 @@ target_settings = {
     # OpenAI / ChatGPT
     "AI_CITATION_CHATGPT_ACTIVE": "true",
     "AI_CITATION_CHATGPT_PROVIDER": "openrouter",
-    "AI_CITATION_CHATGPT_MODEL": "openai/gpt-6.1-sol",
+    "AI_CITATION_CHATGPT_MODEL": "openai/gpt-oss-20b",
 
     # Qwen (Alibaba)
     "AI_CITATION_QWEN_ACTIVE": "true",
@@ -115,8 +115,8 @@ target_settings = {
     "AI_CITATION_DEEPSEEK_PROVIDER": "openrouter",
     "AI_CITATION_DEEPSEEK_MODEL": "deepseek/deepseek-v4.1-flash",
 
-    # Perplexity Pro
-    "AI_CITATION_PERPLEXITY_ACTIVE": "true",
+    # Perplexity Pro (temporarily stopped)
+    "AI_CITATION_PERPLEXITY_ACTIVE": "false",
     "AI_CITATION_PERPLEXITY_PROVIDER": "openrouter",
     "AI_CITATION_PERPLEXITY_MODEL": "perplexity/sonar",
 

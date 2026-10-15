@@ -79,9 +79,11 @@ _LIST_USD_PER_MILLION: Dict[Tuple[str, str], Tuple[float, float]] = {
     # OpenRouter Frontier Models
     ("openrouter", "google/gemini-3.8-flash"): (0.30, 2.50),
     ("openrouter", "openai/gpt-6.1-sol"): (2.00, 8.00),
+    ("openrouter", "openai/gpt-oss-20b"): (0.075, 0.30),
     ("openrouter", "anthropic/claude-haiku-4.5"): (1.00, 5.00),
     ("openrouter", "qwen/qwen3.8-flash"): (0.20, 0.60),
     ("openrouter", "deepseek/deepseek-v4.1-flash"): (0.14, 0.28),
+    ("openai", "openai/gpt-oss-20b"): (0.075, 0.30),
 }
 
 _KNOWN_PROVIDERS = {

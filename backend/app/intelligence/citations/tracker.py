@@ -151,7 +151,7 @@ GATEWAY_SIX = ("claude", "gemini", "chatgpt", "qwen", "deepseek", "perplexity")
 GATEWAY_MODEL_DEFAULTS = {
     "claude": "anthropic/claude-haiku-4.5",
     "gemini": "google/gemini-3.8-flash",
-    "chatgpt": "openai/gpt-6.1-sol",
+    "chatgpt": "openai/gpt-oss-20b",
     "qwen": "qwen/qwen3.8-flash",
     "deepseek": "deepseek/deepseek-v4.1-flash",
     "perplexity": "perplexity/sonar",
@@ -228,7 +228,8 @@ def _route_six_through_main_gateway(engines: List[Dict[str, Any]]) -> None:
         eng["provider"] = provider
         eng["api_key"] = api_key
         eng["model"] = model
-        eng["active"] = _engine_active(f"AI_CITATION_{str(eid).upper()}_ACTIVE", True)
+        default_active = False if eid == "perplexity" else True
+        eng["active"] = _engine_active(f"AI_CITATION_{str(eid).upper()}_ACTIVE", default_active)
 
 
 def _engine_matches_active_provider(engine_provider: str) -> bool:
@@ -313,11 +314,9 @@ def get_configured_ai_engines() -> List[Dict[str, Any]]:
     else:
         chatgpt_key = chatgpt_explicit_key or chatgpt_native
     chatgpt_active = _engine_active("AI_CITATION_CHATGPT_ACTIVE", bool(chatgpt_key))
-    chatgpt_model = os.environ.get("AI_CITATION_CHATGPT_MODEL") or (
-        "openai/gpt-6.1-sol" if chatgpt_provider == "openrouter" else "gpt-4o-mini"
-    )
+    chatgpt_model = os.environ.get("AI_CITATION_CHATGPT_MODEL") or "openai/gpt-oss-20b"
 
-    # 3. Perplexity Pro
+    # 3. Perplexity Pro (temporarily stopped; re-enable via AI_CITATION_PERPLEXITY_ACTIVE=true)
     perp_explicit_key = os.environ.get("AI_CITATION_PERPLEXITY_API_KEY")
     perp_native = settings.PERPLEXITY_API_KEY or os.environ.get("PERPLEXITY_API_KEY") or ""
     perp_provider = (
@@ -329,7 +328,7 @@ def get_configured_ai_engines() -> List[Dict[str, Any]]:
         perp_key = perp_explicit_key or _or_key_if("openrouter")
     else:
         perp_key = perp_explicit_key or perp_native
-    perp_active = _engine_active("AI_CITATION_PERPLEXITY_ACTIVE", bool(perp_key))
+    perp_active = _engine_active("AI_CITATION_PERPLEXITY_ACTIVE", False)
     perp_model = os.environ.get("AI_CITATION_PERPLEXITY_MODEL") or ("perplexity/sonar" if perp_provider == "openrouter" else "sonar")
 
     # 4. Claude (Anthropic)
@@ -711,8 +710,8 @@ class AiCitationTracker:
             fallback_map = {
                 "google": "google/gemini-2.0-flash-001",
                 "gemini": "google/gemini-2.0-flash-001",
-                "openai": "openai/gpt-4o-mini",
-                "chatgpt": "openai/gpt-4o-mini",
+                "openai": "openai/gpt-oss-20b",
+                "chatgpt": "openai/gpt-oss-20b",
                 "anthropic": "anthropic/claude-3.5-haiku",
                 "claude": "anthropic/claude-3.5-haiku",
                 "qwen": "qwen/qwen-2.5-72b-instruct",
@@ -965,6 +964,8 @@ class AiCitationTracker:
 
         configured_engines = get_configured_ai_engines()
         active_engines = [e for e in configured_engines if e.get("active", True)]
+        perp_eng = next((e for e in configured_engines if e.get("id") == "perplexity"), None)
+        perp_active = bool(perp_eng and perp_eng.get("active"))
         
         perp_key = os.environ.get("PERPLEXITY_API_KEY") or settings.PERPLEXITY_API_KEY
         or_key = settings.OPENROUTER_API_KEY or os.environ.get("OPENROUTER_API_KEY")
@@ -972,8 +973,9 @@ class AiCitationTracker:
         gemini_key = settings.GEMINI_API_KEY or os.environ.get("GEMINI_API_KEY") or settings.GOOGLE_API_KEY or os.environ.get("GOOGLE_API_KEY")
         anthropic_key = settings.ANTHROPIC_API_KEY or os.environ.get("ANTHROPIC_API_KEY") or settings.CLAUDE_API_KEY or os.environ.get("CLAUDE_API_KEY")
 
+        perp_active_for_keys = perp_key if perp_active else None
         has_keys = bool(
-            perp_key or or_key or groq_key or gemini_key or anthropic_key
+            perp_active_for_keys or or_key or groq_key or gemini_key or anthropic_key
             or any(bool(e.get("api_key")) for e in active_engines)
         )
         if not has_keys:
@@ -1036,7 +1038,7 @@ class AiCitationTracker:
         async def _evaluate_query(client: httpx.AsyncClient, bq: Dict[str, str]) -> RealBuyerQueryEvaluation:
             base_query = bq["query"]
             base_search_res: Optional[Dict[str, Any]] = None
-            if perp_key and _engine_matches_active_provider("perplexity"):
+            if perp_key and perp_active and _engine_matches_active_provider("perplexity"):
                 base_search_res = await self._query_perplexity_live(base_query, perp_key)
                 if base_search_res.get("error"):
                     engine_errors.append(f"Perplexity: {base_search_res['error']}")
@@ -1047,6 +1049,7 @@ class AiCitationTracker:
                 not base_search_res
                 and or_key
                 and active_prov == "openrouter"
+                and perp_active
             ):
                 base_search_res = await self._query_openrouter_engine(base_query, "perplexity/sonar", or_key, client)
                 if base_search_res.get("error"):

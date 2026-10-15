@@ -83,7 +83,7 @@ def get_adapter(engine_id: str) -> Optional[BaseGeoEngineAdapter]:
             or getattr(settings, "OPENAI_API_KEY", "")
             or ""
         )
-        model = os.environ.get("AI_CITATION_CHATGPT_MODEL") or "gpt-4o-mini"
+        model = os.environ.get("AI_CITATION_CHATGPT_MODEL") or "openai/gpt-oss-20b"
         return OpenAISearchAdapter(api_key=key, model=model)
 
     elif eid in ["gemini", "google"]:
@@ -121,17 +121,20 @@ def get_adapter(engine_id: str) -> Optional[BaseGeoEngineAdapter]:
 
 
 def get_available_adapters() -> List[BaseGeoEngineAdapter]:
-    """Returns live engines. The six gateway models win over separate vendor keys."""
+    """Returns live engines. The gateway models win over separate vendor keys."""
     gateway = _configured_live_adapters()
     if gateway:
         return gateway
     all_adapters = [
-        get_adapter("perplexity"),
         get_adapter("chatgpt"),
         get_adapter("gemini"),
         get_adapter("claude"),
         get_adapter("groq"),
     ]
+    # Perplexity Sonar is temporarily stopped by default; re-enable via AI_CITATION_PERPLEXITY_ACTIVE=true
+    perp_active = os.environ.get("AI_CITATION_PERPLEXITY_ACTIVE", "false").lower() in ("true", "1", "yes")
+    if perp_active:
+        all_adapters.append(get_adapter("perplexity"))
     return [a for a in all_adapters if a and a.is_configured()]
 
 

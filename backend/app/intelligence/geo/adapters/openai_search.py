@@ -18,7 +18,7 @@ DEFAULT_TIMEOUT_SECONDS = 14.0
 class OpenAISearchAdapter(BaseGeoEngineAdapter):
     engine_id = "chatgpt"
     display_name = "ChatGPT (OpenAI)"
-    default_model = "gpt-4o-mini"
+    default_model = "openai/gpt-oss-20b"
 
     def __init__(
         self,

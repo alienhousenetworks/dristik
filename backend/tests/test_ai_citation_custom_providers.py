@@ -24,6 +24,7 @@ async def test_anthropic_direct_query_in_citation_tracker():
              "AI_CITATION_GEMINI_ACTIVE": "false",
              "AI_CITATION_PERPLEXITY_ACTIVE": "false",
              "AI_CITATION_DEEPSEEK_ACTIVE": "false",
+             "AI_CITATION_QWEN_ACTIVE": "false",
              "AI_CITATION_KIMI_ACTIVE": "false",
              "AI_CITATION_GROK_ACTIVE": "false",
              "AI_CITATION_LLAMA_ACTIVE": "false",
@@ -275,7 +276,7 @@ def test_openrouter_frontier_models_defaults_without_explicit_models():
          }, clear=False):
         engines = {e["id"]: e for e in get_configured_ai_engines()}
         assert engines["gemini"]["model"] == "google/gemini-3.8-flash"
-        assert engines["chatgpt"]["model"] == "openai/gpt-6.1-sol"
+        assert engines["chatgpt"]["model"] == "openai/gpt-oss-20b"
         assert engines["claude"]["model"] == "anthropic/claude-haiku-4.5"
         assert engines["qwen"]["model"] == "qwen/qwen3.8-flash"
         assert engines["deepseek"]["model"] == "deepseek/deepseek-v4.1-flash"
@@ -305,3 +306,28 @@ async def test_qwen_dispatch_via_openrouter():
         assert call_args[0] == "What is Acme Software?"
         assert call_args[1] == "qwen/qwen3.8-flash"
         assert call_args[2] == "sk-or-v1-test-qwen"
+
+
+def test_perplexity_stopped_by_default_and_chatgpt_uses_gpt_oss_20b():
+    from app.core.config import settings
+
+    # 1. By default, even with PERPLEXITY_API_KEY present, perplexity is stopped (active is False)
+    with patch.object(settings, "PERPLEXITY_API_KEY", "pplx-test-key"), \
+         patch.dict("os.environ", {
+             "PERPLEXITY_API_KEY": "pplx-test-key",
+             "AI_CITATION_CROSS_PROVIDER": "true",
+         }, clear=False):
+        engines = {e["id"]: e for e in get_configured_ai_engines()}
+        assert engines["perplexity"]["active"] is False
+        assert engines["chatgpt"]["model"] == "openai/gpt-oss-20b"
+
+    # 2. When AI_CITATION_PERPLEXITY_ACTIVE is explicitly set to true, perplexity is re-enabled
+    with patch.object(settings, "PERPLEXITY_API_KEY", "pplx-test-key"), \
+         patch.dict("os.environ", {
+             "PERPLEXITY_API_KEY": "pplx-test-key",
+             "AI_CITATION_CROSS_PROVIDER": "true",
+             "AI_CITATION_PERPLEXITY_ACTIVE": "true",
+         }, clear=False):
+        engines = {e["id"]: e for e in get_configured_ai_engines()}
+        assert engines["perplexity"]["active"] is True
+
