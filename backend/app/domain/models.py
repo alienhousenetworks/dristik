@@ -420,6 +420,16 @@ class Finding(BaseModel):
     severity_justification: Optional[str] = None
     root_cause_status: str = "confirmed"  # confirmed, strongly_supported, hypothesized, diagnostic_gap
 
+    # Mandatory Plain-English Structured Fields
+    plain_english_summary: Optional[str] = Field(default=None, description="Everyday language explanation for business owners.")
+    what_was_checked: Optional[str] = Field(default=None, description="The test Dristik actually performed.")
+    observed_result: Optional[str] = Field(default=None, description="The measured or observed result.")
+    who_affected: Optional[str] = Field(default=None, description="Who is affected: Visitors, Business Owners, Search Engines, AI Engines, Developers.")
+    developer_instructions: Optional[str] = Field(default=None, description="Technical implementation details, separated from plain-English explanation.")
+    verification_steps: List[str] = Field(default_factory=list, description="Concrete retest steps required to verify the fix.")
+    scope_status: Optional[str] = Field(default=None, description="PAGE_VERIFIED, SAMPLE_VERIFIED, DOMAIN_WIDE, NOT_MEASURED.")
+    expected_outcome: Optional[str] = Field(default=None, description="Plausible qualitative outcome or evidence-backed quantitative estimate. Never guaranteed traffic/rankings.")
+
     # v2: Lifecycle and display fields
     lifecycle_state: FindingLifecycle = Field(
         default=FindingLifecycle.OPEN,
@@ -575,6 +585,35 @@ class Finding(BaseModel):
             self.why_it_matters = self.business_context
         elif self.why_it_matters and not self.business_context:
             self.business_context = self.why_it_matters
+
+        # Plain-English Auto-Sync
+        if self.observed_result and not self.description:
+            self.description = self.observed_result
+        elif self.description and not self.observed_result:
+            self.observed_result = self.description
+
+        if self.plain_english_summary and not self.why_it_matters:
+            self.why_it_matters = self.plain_english_summary
+        elif self.why_it_matters and not self.plain_english_summary:
+            self.plain_english_summary = self.why_it_matters
+
+        if self.business_impact and not self.why_it_matters:
+            self.why_it_matters = self.business_impact
+        elif self.why_it_matters and not self.business_impact:
+            self.business_impact = self.why_it_matters
+
+        if self.scope_status and not self.scope:
+            self.scope = self.scope_status
+        elif self.scope and not self.scope_status:
+            self.scope_status = self.scope
+
+        if self.developer_instructions and not self.implementation_detail:
+            self.implementation_detail = self.developer_instructions
+        elif self.implementation_detail and not self.developer_instructions:
+            self.developer_instructions = self.implementation_detail
+
+        if not self.verification_steps and self.validation_criteria:
+            self.verification_steps = [self.validation_criteria]
 
         if not self.deduplication_key:
             cat_name = self.category.value if hasattr(self.category, "value") else str(self.category)
@@ -2520,6 +2559,7 @@ class ExecutiveReport(BaseModel):
     page_reports: List[PageReport] = Field(default_factory=list)
     agent_execution_trace: List[Dict[str, Any]] = Field(default_factory=list)
     policy_pack: str = "enterprise_web_intel_v4"
+    target_pillars: Optional[List[str]] = None
     sealed_evidence_snapshot_id: Optional[str] = None
     manifest_id: Optional[str] = None
     honest_scores: Optional[HonestScores] = None

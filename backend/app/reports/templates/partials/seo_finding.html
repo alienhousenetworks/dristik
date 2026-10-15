@@ -1,0 +1,164 @@
+<article class="finding" id="finding-{{ finding.id }}">
+
+  <div class="finding-title">
+    {{ finding.id }} — {{ finding.title }}
+  </div>
+
+  <div class="finding-meta">
+    <span class="status {{ finding.priority | lower }}">
+      {{ finding.priority }}
+    </span>
+
+    <span class="status info">
+      {{ finding.scope_status }}
+    </span>
+
+    <span class="status">
+      {{ finding.lifecycle_status | default("Open Defect") }}
+    </span>
+
+    {% if finding.who_affected %}
+    <span class="status" style="background:#f1f5f9; color:#334155;">
+      <strong>Who is affected:</strong> {{ finding.who_affected }}
+    </span>
+    {% endif %}
+  </div>
+
+  <!-- 1. WHAT WAS FOUND? -->
+  <div class="finding-block">
+    <h4>1. What was found?</h4>
+    <p>{{ finding.observed_result }}</p>
+  </div>
+
+  <!-- 2. WHAT DOES THIS MEAN IN SIMPLE ENGLISH? -->
+  <div class="finding-block plain-english">
+    <h4>2. What does this mean in simple English?</h4>
+    <p>{{ finding.plain_english_summary }}</p>
+  </div>
+
+  <!-- 3. WHY DOES THIS MATTER TO YOUR BUSINESS? -->
+  <div class="finding-block">
+    <h4>3. Why does this matter to your business?</h4>
+    <p>{{ finding.business_impact }}</p>
+  </div>
+
+  <!-- 4. WHAT DID DRISTIK CHECK? -->
+  <div class="finding-block">
+    <h4>4. What did Dristik check?</h4>
+    <p>{{ finding.what_was_checked }}</p>
+  </div>
+
+  <!-- 5. WHICH PAGES ARE AFFECTED? -->
+  <div class="finding-block">
+    <h4>5. Which pages are affected?</h4>
+
+    {% if finding.affected_urls %}
+    <ul>
+      {% for url in finding.affected_urls %}
+      <li><code>{{ url }}</code></li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p>
+      Specific affected URLs were not supplied. Do not assume that every
+      page is affected.
+    </p>
+    {% endif %}
+  </div>
+
+  <!-- 6. RECOMMENDED SOLUTION -->
+  <div class="finding-block">
+    <h4>6. Recommended solution</h4>
+    <p>{{ finding.recommended_action }}</p>
+  </div>
+
+  <!-- 7. TECHNICAL IMPLEMENTATION INSTRUCTIONS -->
+  <div class="finding-block">
+    <h4>7. Technical implementation instructions (Developer details)</h4>
+
+    {% if finding.developer_instructions %}
+    <pre class="code-block" style="background:#0f172a; color:#38bdf8; padding:8px 10px; border-radius:4px; font-size:7.5pt; line-height:1.45; white-space:pre-wrap;"><code>{{ finding.developer_instructions }}</code></pre>
+    {% else %}
+    <p>
+      Developer-level instructions have not been supplied. A technical
+      owner should define the implementation before work begins.
+    </p>
+    {% endif %}
+  </div>
+
+  <!-- 8. HOW TO VERIFY THE FIX -->
+  <div class="finding-block">
+    <h4>8. How to verify the fix (Retest procedure)</h4>
+
+    {% if finding.verification_steps %}
+    <ol>
+      {% for step in finding.verification_steps %}
+      <li>{{ step }}</li>
+      {% endfor %}
+    </ol>
+    {% else %}
+    <p>
+      Verification criteria have not been supplied. Do not mark this
+      finding as verified fixed until the criteria are defined and tested.
+    </p>
+    {% endif %}
+  </div>
+
+  <!-- 9. SUPPORTING EVIDENCE -->
+  <div class="finding-block">
+    <h4>9. Supporting evidence</h4>
+
+    {% if finding.evidence %}
+    <table class="print-table" style="width:100%; font-size:8pt; border-collapse:collapse; margin-top:4px;">
+      <thead>
+        <tr style="background:#f1f5f9; text-align:left;">
+          <th style="padding:4px 8px; border-bottom:1px solid #cbd5e1;">Evidence ID</th>
+          <th style="padding:4px 8px; border-bottom:1px solid #cbd5e1;">Source</th>
+          <th style="padding:4px 8px; border-bottom:1px solid #cbd5e1;">Observation</th>
+          <th style="padding:4px 8px; border-bottom:1px solid #cbd5e1;">Scope</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for evidence in finding.evidence %}
+        <tr>
+          <td style="padding:4px 8px; border-bottom:1px solid #f1f5f9;"><code>{{ evidence.id }}</code></td>
+          <td style="padding:4px 8px; border-bottom:1px solid #f1f5f9;">{{ evidence.source }}</td>
+          <td style="padding:4px 8px; border-bottom:1px solid #f1f5f9;">{{ evidence.observation }}</td>
+          <td style="padding:4px 8px; border-bottom:1px solid #f1f5f9;">{{ evidence.scope | default(finding.scope_status) }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div class="empty-state">
+      No supporting evidence was attached to this finding. It requires
+      validation before it can be described as verified.
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- 10. CONFIDENCE AND LIMITATIONS -->
+  <div class="finding-block">
+    <h4>10. Confidence and limitations</h4>
+    <p>
+      <strong>Confidence:</strong>
+      {{ finding.confidence | default("Not assessed") }}
+    </p>
+    <p>
+      <strong>Limitations:</strong>
+      {{ finding.limitations | default("No limitations were supplied.") }}
+    </p>
+  </div>
+
+  <!-- 11. EXPECTED OUTCOME -->
+  {% if finding.expected_outcome %}
+  <div class="finding-block">
+    <h4>11. Expected outcome</h4>
+    <p>{{ finding.expected_outcome }}</p>
+    <p class="small" style="font-size:7.5pt; color:#64748b; font-style:italic;">
+      Commercial Disclaimer: This is an expected qualitative or evidence-backed outcome, not a guarantee of improved rankings, traffic, leads, or revenue.
+    </p>
+  </div>
+  {% endif %}
+
+</article>

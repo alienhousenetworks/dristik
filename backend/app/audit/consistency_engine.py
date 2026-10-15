@@ -431,6 +431,32 @@ class CrossChapterConsistencyEngine:
                 "reason": "Synchronized 7-day quick-win roadmap with verified P0 critical blockers."
             })
 
+        # -------------------------------------------------------------
+        # 13. Mandatory Plain-English Structured Fields Enrichment
+        # -------------------------------------------------------------
+        if report.findings:
+            from app.reports.plain_english_engine import PlainEnglishEngine
+            for f in report.findings:
+                if hasattr(f, "plain_english_summary"):
+                    if not f.plain_english_summary or not f.observed_result or not f.who_affected or not f.expected_outcome:
+                        enriched = PlainEnglishEngine.enrich_finding(f)
+                        if not f.plain_english_summary:
+                            f.plain_english_summary = enriched.get("plain_english_summary")
+                        if not f.what_was_checked:
+                            f.what_was_checked = enriched.get("what_was_checked")
+                        if not f.observed_result:
+                            f.observed_result = enriched.get("observed_result")
+                        if not f.who_affected:
+                            f.who_affected = enriched.get("who_affected")
+                        if not f.developer_instructions:
+                            f.developer_instructions = enriched.get("developer_instructions")
+                        if not f.verification_steps and enriched.get("verification_steps"):
+                            f.verification_steps = enriched.get("verification_steps")
+                        if not f.scope_status:
+                            f.scope_status = enriched.get("scope_status")
+                        if not f.expected_outcome:
+                            f.expected_outcome = enriched.get("expected_outcome")
+
         # Summary
         is_consistent = len(contradictions) == 0
         summary = (

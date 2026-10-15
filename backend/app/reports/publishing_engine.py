@@ -410,8 +410,10 @@ def get_publishing_css() -> str:
         background: #ffffff !important;
         color: #0f172a !important;
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Inter", "Helvetica Neue", Arial, sans-serif;
-        font-size: 9.5pt;
+        font-size: 10.5pt;
         line-height: 1.55;
+        -webkit-font-smoothing: antialiased;
+        text-rendering: optimizeLegibility;
     }
 
     .serif {
@@ -537,12 +539,12 @@ def get_publishing_css() -> str:
         margin-bottom: 8mm;
     }
 
-    .report-avoid-break, .finding-card, .kpi-card, .data-table-wrapper, .evidence-box, .score-panel {
+    .report-avoid-break, .finding-card, .business-explanation-card, .chapter-chart, .kpi-card, .data-table-wrapper, .evidence-box, .score-panel, figure {
         break-inside: avoid;
         page-break-inside: avoid;
     }
 
-    h1, h2, h3, h4, .section-kicker {
+    h1, h2, h3, h4, .section-kicker, .chapter-header, .finding-block-title, figcaption {
         break-after: avoid;
         page-break-after: avoid;
     }
@@ -928,94 +930,185 @@ def get_publishing_css() -> str:
         margin-bottom: 6px;
     }
 
-    /* Finding Cards (Consistent 10-point presentation) */
+    /* Finding Cards (Consistent 11-point Enterprise Presentation) */
     .finding-card {
-        background: #f8fafc;
+        background: #ffffff;
         border: 1px solid #e2e8f0;
-        border-left: 3.5px solid #0f172a;
-        border-radius: 4px;
-        padding: 12px 14px;
-        margin-bottom: 10px;
+        border-left: 4.5px solid #0f172a;
+        border-radius: 6px;
+        padding: 16px 18px;
+        margin-bottom: 20px;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+        break-inside: avoid;
+        page-break-inside: avoid;
     }
 
     .finding-card.sev-critical { border-left-color: #dc2626; }
     .finding-card.sev-high { border-left-color: #ea580c; }
     .finding-card.sev-medium { border-left-color: #d97706; }
-    .finding-card.sev-low { border-left-color: #64748b; }
+    .finding-card.sev-low { border-left-color: #2563eb; }
+    .finding-card.sev-info { border-left-color: #64748b; }
 
     .finding-top-bar {
         display: flex;
         justify-content: space-between;
         align-items: center;
+        flex-wrap: wrap;
+        gap: 8px;
         font-family: ui-monospace, monospace;
-        font-size: 7pt;
-        margin-bottom: 4px;
+        font-size: 7.5pt;
+        margin-bottom: 8px;
+        border-bottom: 1px solid #f1f5f9;
+        padding-bottom: 8px;
+    }
+
+    .finding-meta-left {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        flex-wrap: wrap;
+    }
+
+    .finding-meta-right {
+        display: flex;
+        align-items: center;
     }
 
     .finding-id-pill {
         font-weight: 800;
         color: #0f172a;
-        margin-right: 6px;
+        padding: 2px 6px;
+        background: #f1f5f9;
+        border-radius: 3px;
     }
 
     .finding-sev-pill {
-        font-weight: 700;
-        padding: 1px 6px;
-        border-radius: 2px;
+        font-weight: 800;
+        padding: 2px 8px;
+        border-radius: 3px;
         text-transform: uppercase;
+        letter-spacing: 0.05em;
     }
 
-    .sev-critical .finding-sev-pill { background: #fee2e2; color: #991b1b; }
-    .sev-high .finding-sev-pill { background: #ffedd5; color: #c2410c; }
-    .sev-medium .finding-sev-pill { background: #fef3c7; color: #92400e; }
-    .sev-low .finding-sev-pill { background: #f1f5f9; color: #475569; }
+    .finding-scope-badge, .finding-lifecycle-badge {
+        font-weight: 600;
+        padding: 2px 6px;
+        background: #f8fafc;
+        border: 1px solid #e2e8f0;
+        border-radius: 3px;
+        color: #475569;
+    }
+
+    .who-affected-label {
+        font-size: 7.5pt;
+        color: #475569;
+    }
 
     .finding-heading {
-        font-size: 10pt;
+        font-size: 13pt;
         font-weight: 700;
         color: #0f172a;
-        margin-bottom: 4px;
+        margin: 6px 0 10px 0;
+        line-height: 1.35;
     }
 
-    .finding-body-text {
+    .finding-block {
+        margin-bottom: 10px;
+    }
+
+    .finding-block-title {
+        font-family: ui-monospace, monospace;
+        font-size: 7.5pt;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: #64748b;
+        margin-bottom: 3px;
+    }
+
+    .finding-block-text {
+        font-size: 10pt;
+        color: #1e293b;
+        line-height: 1.55;
+    }
+
+    .plain-english-panel {
+        background: #eff6ff;
+        border: 1px solid #bfdbfe;
+        border-radius: 4px;
+        padding: 12px 14px;
+        margin: 10px 0;
+    }
+
+    .plain-english-panel .finding-block-title {
+        color: #1e40af;
+    }
+
+    .plain-english-panel .finding-block-text {
+        color: #1e3a8a;
+        font-weight: 500;
+    }
+
+    .affected-urls-list {
+        margin: 4px 0 6px 18px;
         font-size: 8.5pt;
         color: #334155;
-        line-height: 1.5;
-        margin-bottom: 6px;
     }
 
-    .finding-solution-box {
-        background: #ffffff;
+    .affected-urls-list code {
+        font-family: ui-monospace, monospace;
+        color: #0284c7;
+        font-size: 8pt;
+    }
+
+    .verification-steps-list {
+        margin: 4px 0 6px 18px;
+        font-size: 9pt;
+        color: #1e293b;
+        line-height: 1.5;
+    }
+
+    .solution-box {
+        background: #f8fafc;
         border: 1px solid #e2e8f0;
         border-radius: 4px;
-        padding: 8px 10px;
-        font-size: 8pt;
-        color: #1e293b;
-        margin-bottom: 6px;
-    }
-
-    .finding-meta-row {
-        font-family: ui-monospace, monospace;
-        font-size: 7pt;
-        color: #475569;
-        margin-top: 4px;
+        padding: 10px 12px;
     }
 
     .code-block {
         background: #0f172a;
         color: #38bdf8;
         font-family: ui-monospace, monospace;
-        font-size: 7pt;
-        padding: 8px 10px;
+        font-size: 7.5pt;
+        padding: 10px 12px;
         border-radius: 4px;
         white-space: pre-wrap;
-        margin: 6px 0;
+        margin: 4px 0 0 0;
+        line-height: 1.45;
     }
 
-    /* Print Tables */
-    .data-table-wrapper {
-        margin: 10px 0 16px 0;
+    .confidence-limitations-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 10px;
+        background: #f8fafc;
         border: 1px solid #e2e8f0;
+        border-radius: 4px;
+        padding: 10px 12px;
+        font-size: 8.5pt;
+    }
+
+    .meta-disclaimer {
+        font-size: 7.5pt;
+        color: #94a3b8;
+        font-style: italic;
+        margin-top: 4px;
+    }
+
+    /* Print Tables (Repeated Headers & Legible Text) */
+    .data-table-wrapper {
+        margin: 12px 0 18px 0;
+        border: 1px solid #cbd5e1;
         border-radius: 4px;
         overflow: hidden;
     }
@@ -1023,7 +1116,7 @@ def get_publishing_css() -> str:
     table.print-table {
         width: 100%;
         border-collapse: collapse;
-        font-size: 8pt;
+        font-size: 8.5pt;
         text-align: left;
     }
 
@@ -1034,18 +1127,24 @@ def get_publishing_css() -> str:
 
     table.print-table th {
         font-family: ui-monospace, monospace;
-        font-size: 7pt;
+        font-size: 7.5pt;
         font-weight: 700;
-        color: #475569;
+        color: #334155;
         text-transform: uppercase;
-        padding: 8px 10px;
+        padding: 9px 12px;
         border-bottom: 1.5px solid #cbd5e1;
+        word-break: break-word;
+        overflow-wrap: break-word;
     }
 
     table.print-table td {
-        padding: 7px 10px;
+        padding: 8px 12px;
         border-bottom: 1px solid #f1f5f9;
         color: #1e293b;
+        word-break: break-word;
+        overflow-wrap: break-word;
+        font-size: 8.5pt;
+        line-height: 1.4;
     }
 
     table.print-table tr:nth-child(even) {
@@ -1054,6 +1153,15 @@ def get_publishing_css() -> str:
 
     table.print-table tr {
         break-inside: avoid;
+        page-break-inside: avoid;
+    }
+
+    .chart-explanation-note {
+        font-size: 8pt;
+        color: #64748b;
+        line-height: 1.4;
+        margin-top: 4px;
+        font-style: italic;
     }
     """
 

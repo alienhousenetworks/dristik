@@ -249,7 +249,7 @@ def test_seo_report_and_exports_api_endpoints():
 
     try:
         # 1. Complete SEO Report in HTML
-        res_html = client.get("/api/v1/reports/analysis_test_001/seo-report")
+        res_html = client.get("/api/v1/reports/analysis_test_001/seo-report?template=classic")
         assert res_html.status_code == 200
         assert "text/html" in res_html.headers["content-type"]
         assert "01. Executive Summary" in res_html.text

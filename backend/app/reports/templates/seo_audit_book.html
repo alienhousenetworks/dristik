@@ -1,0 +1,1076 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SEO Audit Report — {{ report.domain | default("Website") }}</title>
+
+<style>
+/* =========================================================
+   DRISTIK SEO AUDIT BOOK — PRINT DESIGN SYSTEM
+   Target: A4 portrait PDF, Chromium / Playwright
+   ========================================================= */
+
+:root {
+  --ink: #172235;
+  --muted: #596579;
+  --brand: #173e73;
+  --brand-light: #eaf1fa;
+  --line: #d8dee8;
+  --paper: #ffffff;
+  --surface: #f5f7fa;
+  --critical: #a51d2d;
+  --high: #b54708;
+  --medium: #8a6100;
+  --low: #356b49;
+  --info: #315d92;
+  --font-body: Arial, Helvetica, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  font-family: var(--font-body);
+  color: var(--ink);
+  background: var(--paper);
+  font-size: 10.5pt;
+  line-height: 1.55;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  overflow-wrap: anywhere;
+}
+
+p {
+  margin: 0 0 9pt;
+}
+
+ul, ol {
+  margin: 5pt 0 10pt;
+  padding-left: 20pt;
+}
+
+li {
+  margin-bottom: 4pt;
+}
+
+h1, h2, h3, h4 {
+  color: var(--ink);
+  line-height: 1.25;
+  page-break-after: avoid;
+  break-after: avoid;
+}
+
+h1 {
+  font-size: 29pt;
+  margin: 0 0 16pt;
+}
+
+h2 {
+  font-size: 21pt;
+  margin: 0 0 13pt;
+}
+
+h3 {
+  font-size: 14pt;
+  margin: 18pt 0 7pt;
+}
+
+h4 {
+  font-size: 11pt;
+  margin: 12pt 0 5pt;
+}
+
+a {
+  color: var(--brand);
+  text-decoration: none;
+}
+
+small, .small {
+  font-size: 8.5pt;
+  color: var(--muted);
+}
+
+.muted {
+  color: var(--muted);
+}
+
+.eyebrow {
+  text-transform: uppercase;
+  letter-spacing: 1.6pt;
+  color: var(--brand);
+  font-weight: 700;
+  font-size: 9pt;
+}
+
+.rule {
+  border: 0;
+  border-top: 1px solid var(--line);
+  margin: 15pt 0;
+}
+
+.section-intro {
+  font-size: 11pt;
+  color: var(--muted);
+  max-width: 650px;
+}
+
+.panel {
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  padding: 12pt;
+  margin: 10pt 0;
+  background: #fff;
+  break-inside: avoid;
+}
+
+.panel.soft {
+  background: var(--surface);
+}
+
+.plain-english {
+  border-left: 4px solid var(--brand);
+  background: var(--brand-light);
+  padding: 10pt 12pt;
+  margin: 10pt 0;
+  break-inside: avoid;
+}
+
+.plain-english strong,
+.panel strong {
+  color: var(--ink);
+}
+
+.status {
+  display: inline-block;
+  padding: 3pt 6pt;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  font-size: 8pt;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .3pt;
+}
+
+.status.critical { color: var(--critical); }
+.status.high { color: var(--high); }
+.status.medium { color: var(--medium); }
+.status.low { color: var(--low); }
+.status.info { color: var(--info); }
+
+.grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10pt;
+}
+
+.grid-3 {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8pt;
+}
+
+.metric {
+  border: 1px solid var(--line);
+  padding: 12pt;
+  border-radius: 5px;
+  min-height: 75pt;
+  break-inside: avoid;
+}
+
+.metric .value {
+  font-size: 24pt;
+  font-weight: 700;
+  color: var(--brand);
+  line-height: 1.2;
+}
+
+.metric .label {
+  margin-top: 5pt;
+  color: var(--muted);
+  font-size: 9pt;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 10pt 0 16pt;
+  font-size: 9pt;
+}
+
+thead {
+  display: table-header-group;
+}
+
+tr {
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+
+th {
+  text-align: left;
+  color: #fff;
+  background: var(--brand);
+  padding: 7pt;
+  border: 1px solid var(--brand);
+  font-weight: 700;
+}
+
+td {
+  padding: 7pt;
+  border: 1px solid var(--line);
+  vertical-align: top;
+}
+
+tbody tr:nth-child(even) {
+  background: #f8f9fb;
+}
+
+.finding {
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  padding: 14pt;
+  margin: 12pt 0 18pt;
+  break-inside: auto;
+}
+
+.finding-title {
+  font-size: 15pt;
+  font-weight: 700;
+  margin-bottom: 8pt;
+}
+
+.finding-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6pt;
+  margin-bottom: 10pt;
+}
+
+.finding-block {
+  margin-top: 10pt;
+  break-inside: avoid;
+}
+
+.finding-block h4 {
+  margin-top: 0;
+  margin-bottom: 4pt;
+  color: var(--brand);
+}
+
+.evidence {
+  background: #f5f7fa;
+  border: 1px solid var(--line);
+  padding: 8pt;
+  border-radius: 3px;
+  font-size: 8.5pt;
+  overflow-wrap: anywhere;
+}
+
+code, pre {
+  font-family: "Courier New", monospace;
+  font-size: 8.5pt;
+}
+
+pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  background: #f5f7fa;
+  border: 1px solid var(--line);
+  padding: 10pt;
+  break-inside: avoid;
+}
+
+.chapter {
+  page-break-before: always;
+  break-before: page;
+}
+
+.chapter-opener {
+  padding-top: 30pt;
+  border-top: 5px solid var(--brand);
+  margin-bottom: 22pt;
+}
+
+.chapter-number {
+  font-size: 10pt;
+  font-weight: 700;
+  color: var(--brand);
+  letter-spacing: 1.5pt;
+  text-transform: uppercase;
+  margin-bottom: 12pt;
+}
+
+.toc-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.toc-list li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12pt;
+  padding: 6pt 0;
+  border-bottom: 1px dotted #b9c2d0;
+  break-inside: avoid;
+}
+
+.toc-list .toc-sub {
+  padding-left: 18pt;
+  font-size: 9.5pt;
+}
+
+.toc-page {
+  white-space: nowrap;
+  color: var(--muted);
+}
+
+/* Cover uses its own page and no running chapter header. */
+.cover {
+  min-height: 245mm;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 20mm 14mm;
+  color: white;
+  background: var(--brand);
+  page-break-after: always;
+  break-after: page;
+}
+
+.cover * {
+  color: white;
+}
+
+.cover-brand {
+  font-size: 13pt;
+  letter-spacing: 3pt;
+  font-weight: 700;
+}
+
+.cover h1 {
+  font-size: 39pt;
+  max-width: 500px;
+  margin: 0 0 15pt;
+}
+
+.cover-subtitle {
+  font-size: 15pt;
+  max-width: 470px;
+  opacity: .94;
+}
+
+.cover-rule {
+  width: 75px;
+  border-top: 4px solid white;
+  margin: 22pt 0;
+}
+
+.cover-meta {
+  font-size: 10pt;
+  line-height: 1.9;
+}
+
+.disclaimer {
+  font-size: 8.5pt;
+  color: var(--muted);
+  border-top: 1px solid var(--line);
+  padding-top: 8pt;
+  margin-top: 18pt;
+}
+
+.empty-state {
+  padding: 12pt;
+  border: 1px dashed #9ba7b8;
+  background: #fafbfd;
+  color: var(--muted);
+  margin: 10pt 0;
+  break-inside: avoid;
+}
+
+/* The backend should inject the final PDF page number map.
+   Do not invent page numbers or use section order as page number. */
+.toc-page[data-page]::after {
+  content: attr(data-page);
+}
+
+/* Chromium print layout. */
+@page {
+  size: A4 portrait;
+  margin: 19mm 17mm 19mm 17mm;
+}
+
+@media print {
+  html, body {
+    width: auto;
+    background: white;
+    font-size: 10.5pt;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .cover {
+    margin: -19mm -17mm;
+    min-height: 297mm;
+  }
+
+  .no-print {
+    display: none !important;
+  }
+
+  .chapter {
+    break-before: page;
+  }
+
+  .avoid-break {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  h2, h3, h4 {
+    break-after: avoid;
+    page-break-after: avoid;
+  }
+
+  p, li {
+    orphans: 3;
+    widows: 3;
+  }
+
+  a {
+    color: inherit;
+  }
+
+  .panel, .metric, .plain-english, .evidence {
+    break-inside: avoid;
+  }
+}
+</style>
+</head>
+
+<body>
+
+<!-- SCREEN-ONLY INTERACTIVE CONTROL TOOLBAR -->
+<div class="screen-toolbar no-print" style="position: sticky; top: 0; z-index: 1000; background: #0f172a; color: #fff; padding: 10px 16px; display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #1e293b;">
+  <div>
+    <strong>DRISTIK SEO AUDIT BOOK</strong> — {{ report.domain }}
+  </div>
+  <div style="display: flex; gap: 10px; align-items: center;">
+    <button onclick="window.print()" style="background: #173e73; color: #fff; border: 1px solid #38bdf8; padding: 6px 14px; border-radius: 4px; font-weight: 700; cursor: pointer;">Print / Save as PDF</button>
+    <a href="?format=pdf&download=true" style="background: #1e293b; color: #fff; border: 1px solid #64748b; padding: 6px 14px; border-radius: 4px; font-size: 9pt; text-decoration: none;">Download PDF File</a>
+  </div>
+</div>
+
+<!-- ======================================================
+     01. COVER
+     ====================================================== -->
+<section class="cover book-cover">
+  <div>
+    <div class="cover-brand">
+      DRISTIK
+    </div>
+    <div class="cover-rule"></div>
+    <div class="eyebrow">Website Intelligence Report</div>
+  </div>
+
+  <div>
+    <h1>Comprehensive SEO Audit</h1>
+    <p class="cover-subtitle">
+      Search performance, technical health, content quality,
+      authority, usability and organic growth opportunities.
+    </p>
+    <div class="cover-rule"></div>
+    <div class="cover-meta">
+      <strong>Website:</strong> {{ report.domain }}<br>
+      <strong>Report ID:</strong> {{ report.run_id }}<br>
+      <strong>Audit date:</strong> {{ report.audit_date }}<br>
+      <strong>Audit scope:</strong> {{ report.scope_label }}<br>
+      <strong>Report version:</strong> {{ report.report_version | default("1.0") }}
+    </div>
+  </div>
+
+  <div>
+    <p>
+      Prepared by Dristik Website Intelligence
+    </p>
+    <p class="small">
+      Findings in this report are limited to the pages, data sources,
+      and tests identified in the evidence register.
+    </p>
+  </div>
+</section>
+
+<!-- ======================================================
+     02. REPORT READING GUIDE
+     ====================================================== -->
+<section class="chapter chapter-start" id="reading-guide">
+  <span class="chapter-marker" style="display:inline; font-size: 0pt; color: transparent; line-height: 0;">[[chapter_ref:reading-guide]]</span>
+  <div class="chapter-opener">
+    <div class="chapter-number">Reader Guide</div>
+    <h2>How to Read This Report</h2>
+    <p class="section-intro">
+      This report translates SEO checks into business implications,
+      evidence-backed findings, and practical next steps.
+    </p>
+  </div>
+
+  <h3>Every finding has two layers</h3>
+  <div class="grid-2">
+    <div class="panel">
+      <h4>Business explanation</h4>
+      <p>
+        What was observed, why it matters, and what the business owner
+        should understand without needing technical knowledge.
+      </p>
+    </div>
+    <div class="panel">
+      <h4>Implementation detail</h4>
+      <p>
+        The affected URL, technical evidence, recommended change,
+        verification method, and any limitations.
+      </p>
+    </div>
+  </div>
+
+  <h3>Evidence status definitions</h3>
+  <table>
+    <thead><tr><th>Status</th><th>Meaning</th></tr></thead>
+    <tbody>
+      <tr><td>Verified finding</td><td>A specific issue was observed in the stated evidence.</td></tr>
+      <tr><td>Passed check</td><td>The stated test ran and met its defined criteria.</td></tr>
+      <tr><td>Not tested</td><td>The check was not performed. This does not mean the website passed or failed.</td></tr>
+      <tr><td>Unavailable</td><td>The required source, permission, service, or measurement was unavailable.</td></tr>
+      <tr><td>Sampled</td><td>The result applies to the inspected sample, not necessarily every page.</td></tr>
+      <tr><td>Inferred</td><td>A reasoned interpretation, not a directly observed fact.</td></tr>
+      <tr><td>Fixed — pending verification</td><td>A change was reported or applied, but the post-change check has not confirmed it.</td></tr>
+      <tr><td>Verified fixed</td><td>The same issue was retested after the change and the evidence supports resolution.</td></tr>
+    </tbody>
+  </table>
+
+  <div class="plain-english">
+    <strong>What this means for your business</strong>
+    <p>
+      A missing measurement is not proof of poor performance. The report
+      will distinguish confirmed problems from areas where more data is
+      needed before a reliable conclusion can be made.
+    </p>
+  </div>
+</section>
+
+<!-- ======================================================
+     03. TABLE OF CONTENTS
+     Page values must be injected from final PDF pagination.
+     ====================================================== -->
+<section class="chapter chapter-start" id="contents">
+  <span class="chapter-marker" style="display:inline; font-size: 0pt; color: transparent; line-height: 0;">[[chapter_ref:contents]]</span>
+  <div class="chapter-opener">
+    <div class="chapter-number">Navigation</div>
+    <h2>Table of Contents</h2>
+    <p class="section-intro">
+      Use the chapter links to navigate the digital report. Final page
+      numbers must be generated from the rendered PDF.
+    </p>
+  </div>
+
+  <ol class="toc-list">
+    {% for item in toc_items %}
+    <li class="{% if item.level == 2 %}toc-sub{% endif %}">
+      <a href="#{{ item.id }}">{{ item.title }}</a>
+      <span class="toc-page" data-page="{{ item.page_number | default('—') }}"></span>
+    </li>
+    {% endfor %}
+  </ol>
+
+  <p class="disclaimer">
+    Page references are populated by the report renderer after pagination.
+    If pagination has not been calculated, the page number must remain
+    unavailable rather than being guessed.
+  </p>
+</section>
+
+<!-- ======================================================
+     04. EXECUTIVE SUMMARY
+     ====================================================== -->
+<section class="chapter chapter-start" id="executive-summary">
+  <span class="chapter-marker" style="display:inline; font-size: 0pt; color: transparent; line-height: 0;">[[chapter_ref:executive-summary]]</span>
+  <div class="chapter-opener">
+    <div class="chapter-number">Chapter 01</div>
+    <h2>Executive Summary</h2>
+    <p class="section-intro">
+      The most important confirmed SEO observations and the recommended
+      order of work.
+    </p>
+  </div>
+
+  <div class="grid-3">
+    <div class="metric">
+      <div class="value">
+        {{ report.pages_crawled | default("N/A") }}
+      </div>
+      <div class="label">Pages inspected</div>
+    </div>
+    <div class="metric">
+      <div class="value">
+        {{ report.finding_count | default("N/A") }}
+      </div>
+      <div class="label">Recorded findings</div>
+    </div>
+    <div class="metric">
+      <div class="value">
+        {{ report.seo_score if report.seo_score is not none else "N/A" }}
+      </div>
+      <div class="label">SEO score, if supported</div>
+    </div>
+  </div>
+
+  <h3>Audit scope and coverage</h3>
+  <table>
+    <tbody>
+      <tr><th>Website</th><td>{{ report.domain }}</td></tr>
+      <tr><th>URLs discovered</th><td>{{ report.urls_discovered | default("Not measured") }}</td></tr>
+      <tr><th>URLs inspected</th><td>{{ report.pages_crawled | default("Not measured") }}</td></tr>
+      <tr><th>Coverage</th><td>{{ report.coverage_percent | default("Not calculated") }}</td></tr>
+      <tr><th>Connected analytics</th><td>{{ report.analytics_status | default("Not connected or not reported") }}</td></tr>
+      <tr><th>Search Console</th><td>{{ report.gsc_status | default("Not connected or not reported") }}</td></tr>
+      <tr><th>External authority data</th><td>{{ report.authority_data_status | default("Unavailable or not connected") }}</td></tr>
+    </tbody>
+  </table>
+
+  <h3>What is working well</h3>
+  {% if executive_summary.strengths %}
+    <ul>
+      {% for item in executive_summary.strengths %}
+      <li>{{ item }}</li>
+      {% endfor %}
+    </ul>
+  {% else %}
+    <div class="empty-state">
+      No strengths have been included because no supported positive findings
+      were supplied to the report. This is not proof that the website has
+      no strengths.
+    </div>
+  {% endif %}
+
+  <h3>Most important issues</h3>
+  {% if executive_summary.top_findings %}
+    {% for item in executive_summary.top_findings %}
+    <div class="panel">
+      <strong>{{ item.title }}</strong>
+      <p>{{ item.plain_english_summary }}</p>
+      <p><strong>Priority:</strong> {{ item.priority }}</p>
+      <p><strong>Evidence:</strong> {{ item.evidence_summary }}</p>
+    </div>
+    {% endfor %}
+  {% else %}
+    <div class="empty-state">
+      No ranked findings were provided. A prioritized summary cannot be
+      generated until the findings have been validated and ranked.
+    </div>
+  {% endif %}
+
+  <h3>Business implications</h3>
+  <p>{{ executive_summary.business_implications | default("A business-impact assessment has not been supplied.") }}</p>
+
+  <h3>Recommended first actions</h3>
+  {% if executive_summary.first_actions %}
+  <ol>
+    {% for action in executive_summary.first_actions %}
+    <li>{{ action }}</li>
+    {% endfor %}
+  </ol>
+  {% else %}
+  <p>First actions have not been ranked from verified findings.</p>
+  {% endif %}
+
+  <div class="plain-english">
+    <strong>What this means for your business</strong>
+    <p>{{ executive_summary.plain_english | default("This summary should explain the most important verified SEO issues, their business relevance, and the limits of the current audit.") }}</p>
+  </div>
+</section>
+
+<!-- ======================================================
+     05. SEO HEALTH & SCORING METHODOLOGY
+     ====================================================== -->
+<section class="chapter chapter-start" id="seo-health">
+  <span class="chapter-marker" style="display:inline; font-size: 0pt; color: transparent; line-height: 0;">[[chapter_ref:seo-health]]</span>
+  <div class="chapter-opener">
+    <div class="chapter-number">Chapter 02</div>
+    <h2>SEO Health and Scoring Methodology</h2>
+    <p class="section-intro">
+      Explains how the audit score is calculated and what the score can
+      and cannot tell you.
+    </p>
+  </div>
+
+  <h3>SEO pillar scores</h3>
+  {% if seo_pillars %}
+  <table>
+    <thead>
+      <tr><th>Pillar</th><th>Score</th><th>Coverage</th><th>Interpretation</th></tr>
+    </thead>
+    <tbody>
+      {% for pillar in seo_pillars %}
+      <tr>
+        <td>{{ pillar.name }}</td>
+        <td>{{ pillar.score if pillar.score is not none else "N/A" }}</td>
+        <td>{{ pillar.coverage | default("Not reported") }}</td>
+        <td>{{ pillar.interpretation | default("No interpretation supplied") }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div class="empty-state">Pillar-level scores were not supplied.</div>
+  {% endif %}
+
+  <h3>Scoring methodology</h3>
+  <p>{{ scoring.methodology | default("Scoring methodology not supplied.") }}</p>
+
+  <h3>Coverage and confidence</h3>
+  <p>{{ scoring.coverage_explanation | default("The report must identify which pages and data sources were included before the score is interpreted.") }}</p>
+
+  <div class="plain-english">
+    <strong>What this means for your business</strong>
+    <p>
+      A score is a summary of the checks performed; it is not a promise
+      of rankings, traffic, leads, or revenue. A limited crawl can miss
+      issues on pages that were not inspected. Compare scores only when
+      the methodology and coverage are comparable.
+    </p>
+  </div>
+</section>
+
+<!-- ======================================================
+     06. COMPLETE SEO CHAPTER CATALOG
+     The backend should create only relevant sections.
+     ====================================================== -->
+
+{% for section in seo_sections %}
+<section class="chapter chapter-start" id="{{ section.id }}">
+  <span class="chapter-marker" style="display:inline; font-size: 0pt; color: transparent; line-height: 0;">[[chapter_ref:{{ section.id }}]]</span>
+  <div class="chapter-opener">
+    <div class="chapter-number">{{ section.chapter_label }}</div>
+    <h2>{{ section.title }}</h2>
+    <p class="section-intro">{{ section.introduction }}</p>
+  </div>
+
+  {% if section.business_explanation %}
+  <div class="plain-english">
+    <strong>What this means for your business</strong>
+    <p>{{ section.business_explanation }}</p>
+  </div>
+  {% endif %}
+
+  {% for subsection in section.subsections %}
+  <div id="{{ subsection.id }}">
+    <h3>{{ subsection.title }}</h3>
+    <p>{{ subsection.explanation }}</p>
+
+    {% if subsection.business_explanation %}
+    <div class="plain-english">
+      <strong>What this means for your business</strong>
+      <p>{{ subsection.business_explanation }}</p>
+    </div>
+    {% endif %}
+
+    {% if subsection.metrics %}
+    <table>
+      <thead>
+        <tr><th>Metric or check</th><th>Result</th><th>Status</th><th>Scope</th></tr>
+      </thead>
+      <tbody>
+        {% for metric in subsection.metrics %}
+        <tr>
+          <td>{{ metric.name }}</td>
+          <td>{{ metric.value if metric.value is not none else "Not measured" }}</td>
+          <td>{{ metric.status }}</td>
+          <td>{{ metric.scope | default("Not specified") }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% endif %}
+
+    {% if subsection.findings %}
+      {% for finding in subsection.findings %}
+      {% include "partials/seo_finding.html" %}
+      {% endfor %}
+    {% else %}
+      <div class="empty-state">
+        No finding records were supplied for this subsection.
+        This must not be interpreted as a verified pass unless the
+        defined checks were actually executed and passed.
+      </div>
+    {% endif %}
+  </div>
+  {% endfor %}
+
+  <h3>Section conclusion</h3>
+  <p>{{ section.conclusion | default("A section conclusion has not been supplied.") }}</p>
+
+  <div class="plain-english">
+    <strong>What this means for your business</strong>
+    <p>{{ section.closing_business_explanation | default(section.business_explanation | default("The business implications of this section have not yet been supplied.")) }}</p>
+  </div>
+</section>
+{% endfor %}
+
+<!-- ======================================================
+     07. FINDINGS REGISTER
+     ====================================================== -->
+<section class="chapter chapter-start" id="findings-register">
+  <span class="chapter-marker" style="display:inline; font-size: 0pt; color: transparent; line-height: 0;">[[chapter_ref:findings-register]]</span>
+  <div class="chapter-opener">
+    <div class="chapter-number">Chapter 37</div>
+    <h2>Consolidated Findings Register</h2>
+    <p class="section-intro">
+      One place to review the recorded issues, their severity, affected
+      pages, evidence and next actions.
+    </p>
+  </div>
+
+  {% if findings %}
+  <table>
+    <thead>
+      <tr>
+        <th>ID</th><th>Finding</th><th>Priority</th><th>Scope</th><th>Status</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for finding in findings %}
+      <tr>
+        <td>{{ finding.id }}</td>
+        <td>{{ finding.title }}</td>
+        <td>{{ finding.priority }}</td>
+        <td>{{ finding.scope_status }}</td>
+        <td>{{ finding.lifecycle_status | default("Open") }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div class="empty-state">No consolidated findings were supplied.</div>
+  {% endif %}
+
+  <div class="plain-english">
+    <strong>What this means for your business</strong>
+    <p>
+      Use this register to assign work and track progress. A high-priority
+      label indicates the audit's recommended urgency, not a guaranteed
+      amount of traffic or revenue loss.
+    </p>
+  </div>
+</section>
+
+<!-- ======================================================
+     08. IMPLEMENTATION ROADMAP
+     ====================================================== -->
+<section class="chapter chapter-start" id="roadmap">
+  <span class="chapter-marker" style="display:inline; font-size: 0pt; color: transparent; line-height: 0;">[[chapter_ref:roadmap]]</span>
+  <div class="chapter-opener">
+    <div class="chapter-number">Chapter 38</div>
+    <h2>SEO Implementation Roadmap</h2>
+    <p class="section-intro">
+      An evidence-based order for addressing issues and verifying changes.
+    </p>
+  </div>
+
+  {% for phase in roadmap %}
+  <h3>{{ phase.title }}</h3>
+  <p>{{ phase.objective }}</p>
+
+  {% if phase.business_explanation %}
+  <div class="plain-english">
+    <strong>Why this phase matters</strong>
+    <p>{{ phase.business_explanation }}</p>
+  </div>
+  {% endif %}
+
+  <table>
+    <thead>
+      <tr>
+        <th>Task</th><th>Priority</th><th>Owner</th><th>Dependency</th><th>Verification</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for task in phase.tasks %}
+      <tr>
+        <td>{{ task.title }}<br><span class="small">{{ task.description }}</span></td>
+        <td>{{ task.priority }}</td>
+        <td>{{ task.owner | default("To assign") }}</td>
+        <td>{{ task.dependency | default("None specified") }}</td>
+        <td>{{ task.verification | default("Verification criteria required") }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endfor %}
+
+  <h3>Definition of done</h3>
+  <ul>
+    <li>The change has been implemented in the intended environment.</li>
+    <li>The affected URL or template has been retested.</li>
+    <li>Evidence from the retest is recorded and linked to the finding.</li>
+    <li>Any remaining limitations are stated explicitly.</li>
+    <li>Search performance is measured over an appropriate period when relevant.</li>
+  </ul>
+
+  <div class="plain-english">
+    <strong>What this means for your business</strong>
+    <p>
+      Completing a task is not the same as proving it worked. Dristik
+      should mark a finding as verified fixed only after a successful
+      post-change check supports that status.
+    </p>
+  </div>
+</section>
+
+<!-- ======================================================
+     09. EVIDENCE REGISTER
+     ====================================================== -->
+<section class="chapter chapter-start" id="evidence-register">
+  <span class="chapter-marker" style="display:inline; font-size: 0pt; color: transparent; line-height: 0;">[[chapter_ref:evidence-register]]</span>
+  <div class="chapter-opener">
+    <div class="chapter-number">Appendix A</div>
+    <h2>Evidence Register</h2>
+    <p class="section-intro">
+      Traceability for observations, measurements and conclusions.
+    </p>
+  </div>
+
+  {% if evidence_records %}
+  <table>
+    <thead>
+      <tr>
+        <th>Evidence ID</th><th>Type</th><th>Source / URL</th>
+        <th>Captured at</th><th>Scope</th><th>Finding references</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for evidence in evidence_records %}
+      <tr>
+        <td>{{ evidence.id }}</td>
+        <td>{{ evidence.type }}</td>
+        <td>{{ evidence.source }}</td>
+        <td>{{ evidence.captured_at | default("Not recorded") }}</td>
+        <td>{{ evidence.scope }}</td>
+        <td>{{ evidence.finding_refs | join(", ") }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div class="empty-state">
+    No evidence records were supplied. Findings requiring evidence cannot
+    be presented as independently verified without supporting records.
+  </div>
+  {% endif %}
+
+  <div class="plain-english">
+    <strong>What this means for your business</strong>
+    <p>
+      Evidence IDs let a reviewer trace a report statement back to the
+      actual URL, response, measurement or test that supports it.
+    </p>
+  </div>
+</section>
+
+<!-- ======================================================
+     10. GLOSSARY
+     ====================================================== -->
+<section class="chapter chapter-start" id="glossary">
+  <span class="chapter-marker" style="display:inline; font-size: 0pt; color: transparent; line-height: 0;">[[chapter_ref:glossary]]</span>
+  <div class="chapter-opener">
+    <div class="chapter-number">Appendix B</div>
+    <h2>SEO Glossary for Business Owners</h2>
+    <p class="section-intro">
+      Plain-English definitions for technical terms used in this report.
+    </p>
+  </div>
+
+  {% if glossary %}
+  <table>
+    <thead><tr><th>Term</th><th>Simple explanation</th><th>Why it matters</th></tr></thead>
+    <tbody>
+      {% for item in glossary %}
+      <tr>
+        <td><strong>{{ item.term }}</strong></td>
+        <td>{{ item.definition }}</td>
+        <td>{{ item.business_relevance }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+</section>
+
+<!-- ======================================================
+     11. METHODOLOGY & LIMITATIONS
+     ====================================================== -->
+<section class="chapter chapter-start" id="methodology">
+  <span class="chapter-marker" style="display:inline; font-size: 0pt; color: transparent; line-height: 0;">[[chapter_ref:methodology]]</span>
+  <div class="chapter-opener">
+    <div class="chapter-number">Appendix C</div>
+    <h2>Methodology, Scope and Limitations</h2>
+  </div>
+
+  <h3>Data sources used</h3>
+  {% if methodology.sources %}
+  <ul>
+    {% for source in methodology.sources %}
+    <li>{{ source.name }} — {{ source.status }}. {{ source.notes }}</li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p>Data source inventory was not supplied.</p>
+  {% endif %}
+
+  <h3>Checks not performed</h3>
+  {% if methodology.not_tested %}
+  <ul>
+    {% for item in methodology.not_tested %}
+    <li>{{ item }}</li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p>No list of unperformed checks was supplied.</p>
+  {% endif %}
+
+  <h3>Known limitations</h3>
+  {% if methodology.limitations %}
+  <ul>
+    {% for item in methodology.limitations %}
+    <li>{{ item }}</li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p>Limitations have not been supplied. The report owner must review coverage before treating the audit as complete.</p>
+  {% endif %}
+
+  <h3>Important interpretation rules</h3>
+  <ul>
+    <li>Do not treat sampled URLs as a full-site inspection.</li>
+    <li>Do not treat unavailable metrics as zero.</li>
+    <li>Do not claim a ranking, traffic increase, lead increase or revenue outcome without supporting evidence.</li>
+    <li>Do not label a recommendation as implemented unless implementation evidence exists.</li>
+    <li>Do not label a change as verified fixed without a post-change test.</li>
+    <li>Do not present inferred causes as directly observed facts.</li>
+  </ul>
+
+  <div class="plain-english">
+    <strong>Final note for the reader</strong>
+    <p>
+      This audit is a decision-support document. Use the findings,
+      evidence, coverage notes and verification steps together rather
+      than relying on a single score.
+    </p>
+  </div>
+</section>
+
+</body>
+</html>

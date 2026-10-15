@@ -186,6 +186,15 @@ export interface Finding {
     selector?: string;
     details?: string;
   }>;
+  plain_english_summary?: string;
+  what_was_checked?: string;
+  observed_result?: string;
+  who_affected?: string;
+  developer_instructions?: string;
+  verification_steps?: string[];
+  scope_status?: string;
+  expected_outcome?: string;
+  limitations?: string;
 }
 
 export interface CroEvidenceDissection {

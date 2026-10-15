@@ -14,6 +14,13 @@ from app.domain.models import ExecutiveReport
 from app.reports.aeo_audit_book import aeo_cover_figure, render_aeo_audit_book
 from app.reports.geo_audit_book import geo_cover_figure, render_geo_audit_book
 from app.reports.seo_audit_book import render_seo_audit_book
+from app.reports.plain_english_engine import (
+    PlainEnglishEngine,
+    generate_section_explanation,
+    render_plain_english_finding_card,
+    render_section_business_callout,
+)
+from app.reports.publishing_engine import get_publishing_css
 
 SEO_BOOK_PRINT_CSS = """
 /* Book-Style Publication & Geometry Tokens */
@@ -631,12 +638,33 @@ class SectionReportGenerator:
         else:
             score_html = f"{score_val}<span style=\"font-size:20px;color:#64748b;\">/100</span>"
 
+        sec_id_map = {
+            "crawl": "ch_seo",
+            "seo": "ch_seo",
+            "geo": "ch_geo",
+            "aeo": "ch_aeo",
+            "cro": "ch_conversion",
+            "competitors": "ch_competitive",
+        }
+        sec_id = sec_id_map.get(section_key, f"ch_{section_key}")
+        sec_explanation = generate_section_explanation(
+            section_id=sec_id,
+            section_title=title,
+            section_findings=findings,
+            pages_crawled=len(pages) if pages else 1,
+            is_sample_audit=True,
+            has_connector=True,
+            connector_name="Direct Crawl & DOM Analysis",
+        )
+        business_callout_html = render_section_business_callout(sec_explanation)
+
         return f"""<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <title>Dristik Intelligence Dossier - {title} - {domain}</title>
     <style>
+        {get_publishing_css()}
         @page {{
             size: A4;
             margin: 15mm;
@@ -1411,7 +1439,7 @@ class SectionReportGenerator:
     </style>
 </head>
 <body>
-    {self._render_body_layout(report, section_key, is_seo, title, domain, subtitle, date_str, badge, score_label, score_html, score_note, pages, findings, assurance_label, assurance_value, standard_label, standard_value, findings_html, extra_html, book_html, footer_mark)}
+    {self._render_body_layout(report, section_key, is_seo, title, domain, subtitle, date_str, badge, score_label, score_html, score_note, pages, findings, assurance_label, assurance_value, standard_label, standard_value, findings_html, extra_html, book_html, footer_mark, business_callout_html)}
 </body>
 </html>"""
 
@@ -1438,6 +1466,7 @@ class SectionReportGenerator:
         extra_html: str,
         book_html: str,
         footer_mark: str,
+        business_callout_html: str = "",
     ) -> str:
         if is_seo:
             return f"""
@@ -1488,6 +1517,8 @@ class SectionReportGenerator:
             <div class="stat-val">{standard_value}</div>
         </div>
     </div>
+
+    {business_callout_html}
 
     {findings_html}
 
@@ -1612,20 +1643,8 @@ class SectionReportGenerator:
         return report.story_summary or "Deterministic website intelligence audit."
 
     def _render_finding(self, finding) -> str:
-        sev = str(getattr(finding, "severity", "MEDIUM") or "MEDIUM").upper()
-        title = getattr(finding, "title", "Audit Finding")
-        desc = getattr(finding, "description", "")
-        rec = getattr(finding, "suggested_fix", "") or getattr(finding, "recommendation", "")
-        return f"""
-        <div class="finding-card {sev}">
-            <div style="display:flex;justify-content:space-between;">
-                <div class="finding-title">{title}</div>
-                <span class="badge" style="background:{'#fee2e2' if sev in ('CRITICAL','HIGH') else '#fef3c7'};color:#0f172a;">{sev}</span>
-            </div>
-            <div class="finding-desc">{desc}</div>
-            {f'<div class="finding-rec">Suggested Fix: {rec}</div>' if rec else ''}
-        </div>
-        """
+        enriched = PlainEnglishEngine.enrich_finding(finding)
+        return render_plain_english_finding_card(enriched)
 
     def _render_extra_section_tables(self, report: ExecutiveReport, section_key: str, pages: List[Any]) -> str:
         if section_key in ("crawl", "seo") and pages:

@@ -479,13 +479,15 @@ async def get_presentation_deck_manifest(
 async def get_complete_seo_report(
     analysis_id: str,
     format: str = "html",
+    template: str = "book",
     download: bool = False,
     user: UserIdentity = Depends(get_current_user)
 ):
     """
-    Renders the dedicated, complete 20-Section SEO Master Audit and Remediation Report.
-    format='html': returns modern responsive HTML report.
-    format='print': returns publication-grade A4 print document with screen controls.
+    Renders the complete publication-grade SEO Audit Book & Remediation Report.
+    template='book': returns the master 42-chapter book publication layout (default).
+    template='classic': returns legacy 20-section presentation.
+    format='html' | 'print': returns publication A4 HTML document.
     format='pdf': returns real application/pdf. Set download=true for attachment disposition.
     format='json': returns structured 20-section JSON payload.
     """
@@ -495,18 +497,45 @@ async def get_complete_seo_report(
         raise HTTPException(status_code=400, detail="Executive report not yet synthesized for this analysis run.")
 
     from app.reports.seo_report_generator import seo_report_generator
+    from app.reports.seo_book_renderer import seo_audit_book_renderer
 
     if format.lower() == "json":
         return seo_report_generator.render_json_report(report)
 
-    if format.lower() in ("print", "print_html"):
-        print_html = seo_report_generator.render_print_html_report(report)
-        return Response(content=print_html, media_type="text/html")
+    if template.lower() == "classic":
+        if format.lower() in ("print", "print_html"):
+            print_html = seo_report_generator.render_print_html_report(report)
+            return Response(content=print_html, media_type="text/html")
+        if format.lower() == "pdf":
+            domain_clean = (report.domain or "website").replace("https://", "").replace("http://", "").split("/")[0]
+            disposition = "attachment" if download else "inline"
+            pdf_bytes = await seo_report_generator.render_book_pdf(report)
+            if not pdf_bytes:
+                raise HTTPException(
+                    status_code=503,
+                    detail="PDF rendering engine is currently unavailable or timed out. "
+                           "You can open the report with ?format=print and select 'Print / Save as PDF' in your browser.",
+                )
+            return Response(
+                content=pdf_bytes,
+                media_type="application/pdf",
+                headers={"Content-Disposition": f'{disposition}; filename="{domain_clean}_seo_audit.pdf"'},
+            )
+        html_content = seo_report_generator.render_html_report(report)
+        return Response(content=html_content, media_type="text/html")
+
+    # Master Book template (default)
+    if format.lower() in ("print", "print_html", "html", "book"):
+        book_html = seo_audit_book_renderer.render_html_report(report)
+        return Response(content=book_html, media_type="text/html")
 
     if format.lower() == "pdf":
         domain_clean = (report.domain or "website").replace("https://", "").replace("http://", "").split("/")[0]
         disposition = "attachment" if download else "inline"
-        pdf_bytes = await seo_report_generator.render_book_pdf(report)
+        pdf_bytes = await seo_audit_book_renderer.render_book_pdf(report)
+        if not pdf_bytes:
+            # Fallback to legacy generator if browser or template issue occurs
+            pdf_bytes = await seo_report_generator.render_book_pdf(report)
         if not pdf_bytes:
             raise HTTPException(
                 status_code=503,
@@ -519,8 +548,8 @@ async def get_complete_seo_report(
             headers={"Content-Disposition": f'{disposition}; filename="{domain_clean}_master_seo_audit_book.pdf"'},
         )
 
-    html_content = seo_report_generator.render_html_report(report)
-    return Response(content=html_content, media_type="text/html")
+    book_html = seo_audit_book_renderer.render_html_report(report)
+    return Response(content=book_html, media_type="text/html")
 
 
 @router.get("/{analysis_id}/deliverables")

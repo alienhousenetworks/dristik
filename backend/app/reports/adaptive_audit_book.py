@@ -343,57 +343,26 @@ def compute_toc_pagination(manifest: Dict[str, Any]) -> Dict[str, int]:
     return page_map
 
 
+from app.reports.plain_english_engine import (
+    PlainEnglishEngine,
+    generate_section_explanation,
+    render_section_business_callout,
+    render_plain_english_finding_card,
+)
+
+
 # ==============================================================================
 # CHAPTER BODY BUILDERS (EMPIRICAL, GROUNDED DATA)
 # ==============================================================================
 
 def _format_finding_cards(findings: List[Any], limit: int = 8) -> str:
-    """Formats findings into consistent 10-point publication cards."""
+    """Formats findings into consistent 11-point enterprise publication cards."""
     cards = []
-    for f in findings[:limit]:
-        f_id = getattr(f, "finding_id", "F-000")
-        f_title = getattr(f, "finding_title", None) or getattr(f, "title", "Discrepancy")
-        f_sev = str(getattr(f, "severity", "MEDIUM")).upper()
-        if hasattr(f_sev, "value"):
-            f_sev = str(f_sev.value).upper()
-        f_desc = getattr(f, "detailed_diagnosis", None) or getattr(f, "description", "")
-        f_rec = getattr(f, "recommended_solution", None) or getattr(f, "recommendation", "")
-        f_ev = getattr(f, "evidence_id", None) or getattr(f, "evidence_source", None) or "DOM AST"
-        f_scope = str(getattr(f, "scope_classification", None) or getattr(f, "scope", None) or "PAGE_VERIFIED").upper()
-        f_root_cause = getattr(f, "root_cause", None)
-        f_impact = getattr(f, "why_it_matters", None) or getattr(f, "expected_impact", None)
-        f_acceptance = getattr(f, "acceptance_criteria", None) or getattr(f, "validation_criteria", None)
-        f_code = getattr(f, "relevant_code_or_configuration_example", None)
+    for idx, f in enumerate(findings[:limit]):
+        enriched = PlainEnglishEngine.enrich_finding(f, idx + 1)
+        cards.append(render_plain_english_finding_card(enriched))
 
-        meta_rows = []
-        if f_root_cause:
-            meta_rows.append(f'<div class="finding-meta-row"><strong>ROOT CAUSE:</strong> {_esc(f_root_cause)}</div>')
-        if f_impact:
-            meta_rows.append(f'<div class="finding-meta-row"><strong>BUSINESS IMPACT:</strong> {_esc(f_impact)}</div>')
-        if f_acceptance:
-            meta_rows.append(f'<div class="finding-meta-row" style="color:#059669;"><strong>ACCEPTANCE CRITERIA:</strong> {_esc(f_acceptance)}</div>')
-
-        code_snippet = f'<pre class="code-block"><code>{_esc(f_code)}</code></pre>' if f_code else ""
-
-        cards.append(f"""
-        <article class="finding-card sev-{_esc(f_sev.lower())} report-avoid-break">
-            <div class="finding-top-bar">
-                <div>
-                    <span class="finding-id-pill">{_esc(f_id)}</span>
-                    <span class="finding-sev-pill">{_esc(f_sev)}</span>
-                    <span class="finding-meta-row" style="margin-left:8px;">{_esc(f_scope)}</span>
-                </div>
-                <span class="finding-meta-row">EVIDENCE: {_esc(f_ev)}</span>
-            </div>
-            <h4 class="finding-heading">{_esc(f_title)}</h4>
-            <p class="finding-body-text">{_esc(f_desc)}</p>
-            {f'<div class="finding-solution-box"><strong>RECOMMENDED ACTION:</strong> Remediate: {_esc(f_rec)}</div>' if f_rec else ''}
-            {code_snippet}
-            {"".join(meta_rows)}
-        </article>
-        """)
-
-    return "".join(cards) if cards else '<p style="color:#64748b;">No high-priority defects recorded in this discipline.</p>'
+    return "".join(cards) if cards else '<p style="color:#64748b; font-size: 9pt; font-style: italic;">No high-priority defects recorded in this discipline.</p>'
 
 
 def _build_ch_brief(report: Any, manifest: Dict[str, Any]) -> str:
@@ -413,7 +382,13 @@ def _build_ch_brief(report: Any, manifest: Dict[str, Any]) -> str:
     cro_s = getattr(scores, "cro_score", "—")
     comp_s = getattr(scores, "competitor_score", "—")
 
+    callout = render_section_business_callout(
+        generate_section_explanation("ch_brief", "Executive Diagnostic Briefing", report, getattr(report, "findings", []))
+    )
+
     return f"""
+    {callout}
+
     <div class="card" style="margin-bottom: 16px; padding: 18px; border-left: 3.5px solid #0284c7;">
         <div class="card-kicker">EXECUTIVE THESIS &amp; PRIMARY OBSERVATION</div>
         <p style="font-size: 11pt; line-height: 1.6; color: #0f172a; margin: 4px 0 0 0;">
@@ -491,6 +466,7 @@ def _build_ch_brief(report: Any, manifest: Dict[str, Any]) -> str:
                 </tbody>
             </table>
         </div>
+        <div class="chart-explanation-note">Scorecard Note: Each pillar score (0–100) reflects verified telemetry for that specific domain. Unmeasured areas or missing integrations are not shown as zeroes; they are marked Unmeasured until authenticated.</div>
     </div>
 
     <div class="card">
@@ -512,8 +488,13 @@ def _build_ch_seo(report: Any, manifest: Dict[str, Any]) -> str:
     disc = getattr(manifest_obj, "total_pages_discovered", pages_count) or pages_count
 
     findings = [f for f in getattr(report, "findings", []) if "SEO" in str(getattr(f, "category", "")).upper() or "TECH" in str(getattr(f, "category", "")).upper()]
+    callout = render_section_business_callout(
+        generate_section_explanation("ch_seo", "Technical SEO & Crawl Architecture", report, findings, {"pages_crawled": pages_count})
+    )
 
     return f"""
+    {callout}
+
     <div class="grid-3" style="margin-bottom: 16px;">
         <div class="card">
             <div class="card-kicker">CRAWL TOPOLOGY</div>
@@ -543,8 +524,13 @@ def _build_ch_geo(report: Any, manifest: Dict[str, Any]) -> str:
     score_disp = f"{float(score_ext):.1f}" if score_ext is not None else "76.4"
 
     findings = [f for f in getattr(report, "findings", []) if "GEO" in str(getattr(f, "category", "")).upper()]
+    callout = render_section_business_callout(
+        generate_section_explanation("ch_geo", "Generative Engine Optimization (GEO)", report, findings)
+    )
 
     return f"""
+    {callout}
+
     <div class="grid-2" style="margin-bottom: 16px;">
         <div class="card">
             <div class="card-kicker">FIRST-PARTY EXTRACTABILITY INDEX</div>
@@ -574,6 +560,7 @@ def _build_ch_geo(report: Any, manifest: Dict[str, Any]) -> str:
                 </tbody>
             </table>
         </div>
+        <div class="chart-explanation-note">8-Dimension GEO Matrix: Evaluates on-page extractability, schema graph presence, entity attribution, and LLM bot permissions. Improvement areas directly limit how generative AI tools describe your offerings.</div>
     </div>
 
     <h3 style="font-size: 12pt; margin: 16px 0 8px 0; color: #0f172a;">Generative Engine Optimization Findings</h3>
@@ -585,8 +572,13 @@ def _build_ch_aeo(report: Any, manifest: Dict[str, Any]) -> str:
     card = getattr(report, "ai_visibility_scorecard", None)
     runs = getattr(card, "successful_runs", 0) if card else 0
     findings = [f for f in getattr(report, "findings", []) if "AEO" in str(getattr(f, "category", "")).upper() or "SEARCH" in str(getattr(f, "category", "")).upper()]
+    callout = render_section_business_callout(
+        generate_section_explanation("ch_aeo", "Answer Engine Optimization (AEO) & AI Citations", report, findings)
+    )
 
     return f"""
+    {callout}
+
     <div class="grid-3" style="margin-bottom: 16px;">
         <div class="card">
             <div class="card-kicker">LIVE ENGINE QUERY RUNS</div>
@@ -612,8 +604,13 @@ def _build_ch_aeo(report: Any, manifest: Dict[str, Any]) -> str:
 
 def _build_ch_competitive(report: Any, manifest: Dict[str, Any]) -> str:
     findings = [f for f in getattr(report, "findings", []) if "COMP" in str(getattr(f, "category", "")).upper()]
+    callout = render_section_business_callout(
+        generate_section_explanation("ch_competitive", "Competitive Digital Visibility", report, findings)
+    )
 
     return f"""
+    {callout}
+
     <div class="card" style="margin-bottom: 16px;">
         <div class="card-kicker">COMPETITIVE PARITY &amp; BENCHMARK MATRIX</div>
         <p style="font-size: 8.5pt; color: #475569; margin: 4px 0 10px 0;">
@@ -631,6 +628,7 @@ def _build_ch_competitive(report: Any, manifest: Dict[str, Any]) -> str:
                 </tbody>
             </table>
         </div>
+        <div class="chart-explanation-note">Competitive Delta: Evaluates schema depth, server latencies, and passage readiness against recorded sector peers. Missing competitor data is reported as Data Unavailable rather than speculative scores.</div>
     </div>
 
     <h3 style="font-size: 12pt; margin: 16px 0 8px 0; color: #0f172a;">Competitive Differentiation Findings</h3>
@@ -640,8 +638,13 @@ def _build_ch_competitive(report: Any, manifest: Dict[str, Any]) -> str:
 
 def _build_ch_conversion(report: Any, manifest: Dict[str, Any]) -> str:
     findings = [f for f in getattr(report, "findings", []) if "CONV" in str(getattr(f, "category", "")).upper() or "UX" in str(getattr(f, "category", "")).upper()]
+    callout = render_section_business_callout(
+        generate_section_explanation("ch_conversion", "Conversion Rate Optimization (CRO)", report, findings)
+    )
 
     return f"""
+    {callout}
+
     <div class="grid-2" style="margin-bottom: 16px;">
         <div class="card">
             <div class="card-kicker">VALUE PROPOSITION AUDIT</div>
@@ -683,7 +686,13 @@ def _build_ch_page_by_page(report: Any, manifest: Dict[str, Any]) -> str:
         </tr>
         """)
 
+    callout = render_section_business_callout(
+        generate_section_explanation("ch_page_by_page", "Page-by-Page Audit Review", report, [])
+    )
+
     return f"""
+    {callout}
+
     <div class="card" style="margin-bottom: 16px;">
         <div class="card-kicker">SAMPLED URL INVENTORY &amp; PAGE DIRECTIVES</div>
         <div class="data-table-wrapper" style="margin-top:8px;">
@@ -696,12 +705,19 @@ def _build_ch_page_by_page(report: Any, manifest: Dict[str, Any]) -> str:
                 </tbody>
             </table>
         </div>
+        <div class="chart-explanation-note">URL Telemetry Ledger: Direct server response codes, content length, and H1 heading tags measured across crawled sample routes. Uninspected routes are not represented in this table.</div>
     </div>
     """
 
 
 def _build_ch_roadmap(report: Any, manifest: Dict[str, Any]) -> str:
+    callout = render_section_business_callout(
+        generate_section_explanation("ch_roadmap", "Strategic Priorities & 90-Day Roadmap", report, getattr(report, "findings", []))
+    )
+
     return f"""
+    {callout}
+
     <div class="card" style="margin-bottom: 16px; border-left: 3.5px solid #10b981;">
         <div class="card-kicker">EXECUTIVE PRIORITIES // TOP ACTION PLAN</div>
         <p style="font-size: 8.5pt; color: #334155; margin: 4px 0 10px 0;">
@@ -721,13 +737,20 @@ def _build_ch_roadmap(report: Any, manifest: Dict[str, Any]) -> str:
                 </tbody>
             </table>
         </div>
+        <div class="chart-explanation-note">Prioritization Index: Sequences remediation actions by return on engineering investment, focusing first on high-impact zero-regression updates.</div>
     </div>
     """
 
 
 def _build_ch_methodology(report: Any, manifest: Dict[str, Any]) -> str:
     pages_count = manifest.get("pages_crawled", 1)
+    callout = render_section_business_callout(
+        generate_section_explanation("ch_methodology", "Research Methodology & Sampling Parameters", report, [])
+    )
+
     return f"""
+    {callout}
+
     <div class="grid-2" style="margin-bottom: 16px;">
         <div class="card">
             <div class="card-kicker">ZERO-FAKE EVIDENCE ASSURANCE</div>
@@ -747,7 +770,13 @@ def _build_ch_methodology(report: Any, manifest: Dict[str, Any]) -> str:
 
 def _build_ch_appendix(report: Any, manifest: Dict[str, Any]) -> str:
     findings = list(getattr(report, "findings", []) or [])
+    callout = render_section_business_callout(
+        generate_section_explanation("ch_appendix", "Institutional Findings Register & Evidence Ledger", report, findings)
+    )
+
     return f"""
+    {callout}
+
     <div class="card" style="margin-bottom: 16px;">
         <div class="card-kicker">INSTITUTIONAL EVIDENCE REGISTER ({len(findings)} ITEMS)</div>
         <p style="font-size: 8pt; color: #475569; margin: 4px 0 10px 0;">
