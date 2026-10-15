@@ -886,7 +886,7 @@ def build_seo_book_context(report: Any, page_numbers: Optional[Dict[str, int]] =
             "Technical search engine crawlability directly impacts customer discovery and digital conversion."
         ),
         "first_actions": [
-            f.get("title") for f in (_get_val(report, "roadmap_7_days") or [])
+            f.title for f in (_get_val(report, "roadmap_7_days") or [])
         ] or [f["title"] for f in top_findings],
         "plain_english": (
             f"This audit evaluated {pages_crawled} representative pages on {domain}. "
