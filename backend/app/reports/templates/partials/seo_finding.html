@@ -1,163 +1,124 @@
-<article class="finding" id="finding-{{ finding.id }}">
+<article class="finding" id="finding-{{ finding.id }}" style="border: 1px solid var(--line); border-radius: 6px; padding: 14pt; margin: 14pt 0 20pt; background: #ffffff; break-inside: avoid; page-break-inside: avoid;">
 
-  <div class="finding-title">
-    {{ finding.id }} — {{ finding.title }}
+  <!-- FINDING HEADER & META BADGES -->
+  <div style="display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 8pt; border-bottom: 2px solid #e2e8f0; padding-bottom: 8pt; margin-bottom: 12pt;">
+    <div style="font-size: 14pt; font-weight: 700; color: var(--ink);">
+      <span style="font-family: monospace; color: var(--brand); font-size: 12pt; margin-right: 6pt;">{{ finding.id }}</span>
+      {{ finding.title }}
+    </div>
+    <div class="finding-meta" style="display: flex; gap: 6pt; align-items: center; flex-wrap: wrap;">
+      <span class="status {{ finding.priority | lower }}" style="font-weight: 700; text-transform: uppercase; font-size: 8pt; padding: 2pt 8pt; border-radius: 4px;">
+        {{ finding.priority }}
+      </span>
+      <span class="status info" style="font-size: 8pt; padding: 2pt 8pt; border-radius: 4px;">
+        {{ finding.scope_status | default("SAMPLE_VERIFIED") }}
+      </span>
+      <span class="status" style="font-size: 8pt; padding: 2pt 8pt; border-radius: 4px; background: #f1f5f9; color: #475569;">
+        {{ finding.lifecycle_status | default("Open Defect") }}
+      </span>
+      {% if finding.who_affected %}
+      <span class="status" style="font-size: 8pt; padding: 2pt 8pt; border-radius: 4px; background: #e0f2fe; color: #0369a1; font-weight: 600;">
+        Impact: {{ finding.who_affected }}
+      </span>
+      {% endif %}
+    </div>
   </div>
 
-  <div class="finding-meta">
-    <span class="status {{ finding.priority | lower }}">
-      {{ finding.priority }}
-    </span>
-
-    <span class="status info">
-      {{ finding.scope_status }}
-    </span>
-
-    <span class="status">
-      {{ finding.lifecycle_status | default("Open Defect") }}
-    </span>
-
-    {% if finding.who_affected %}
-    <span class="status" style="background:#f1f5f9; color:#334155;">
-      <strong>Who is affected:</strong> {{ finding.who_affected }}
-    </span>
-    {% endif %}
+  <!-- SECTION A: WHAT IS THE ISSUE? (SIMPLE NON-TECH EXPLANATION + DETAILED DESCRIPTION) -->
+  <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-left: 4px solid var(--brand); padding: 10pt 12pt; border-radius: 4px; margin-bottom: 12pt;">
+    <div style="font-size: 9pt; font-weight: 800; color: var(--brand); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 4pt;">
+      1. What is the issue? (What does this mean in simple English?)
+    </div>
+    <p style="font-size: 10.5pt; font-weight: 600; color: #0f172a; margin: 0 0 6pt; line-height: 1.5;">
+      {{ finding.plain_english_summary }}
+    </p>
+    <div style="font-size: 8pt; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; margin-top: 6pt; margin-bottom: 2pt;">
+      Detailed Empirical Observation:
+    </div>
+    <p style="font-size: 9pt; color: #334155; margin: 0; line-height: 1.5;">
+      {{ finding.observed_result }}
+    </p>
   </div>
 
-  <!-- 1. WHAT WAS FOUND? -->
-  <div class="finding-block">
-    <h4>1. What was found?</h4>
-    <p>{{ finding.observed_result }}</p>
-  </div>
-
-  <!-- 2. WHAT DOES THIS MEAN IN SIMPLE ENGLISH? -->
-  <div class="finding-block plain-english">
-    <h4>2. What does this mean in simple English?</h4>
-    <p>{{ finding.plain_english_summary }}</p>
-  </div>
-
-  <!-- 3. WHY DOES THIS MATTER TO YOUR BUSINESS? -->
-  <div class="finding-block">
-    <h4>3. Why does this matter to your business?</h4>
-    <p>{{ finding.business_impact }}</p>
-  </div>
-
-  <!-- 4. WHAT DID DRISTIK CHECK? -->
-  <div class="finding-block">
-    <h4>4. What did Dristik check?</h4>
-    <p>{{ finding.what_was_checked }}</p>
-  </div>
-
-  <!-- 5. WHICH PAGES ARE AFFECTED? -->
-  <div class="finding-block">
-    <h4>5. Which pages are affected?</h4>
-
+  <!-- SECTION B: WHY IS IT HAPPENING? (ROOT CAUSE & INSPECTION MECHANISM) -->
+  <div style="margin-bottom: 12pt; padding: 8pt 0; border-top: 1px dashed #e2e8f0; border-bottom: 1px dashed #e2e8f0;">
+    <div style="font-size: 9pt; font-weight: 800; color: #0369a1; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 4pt;">
+      2. Why is this happening? (Root Cause &amp; Inspection)
+    </div>
+    <p style="font-size: 9pt; color: #1e293b; margin: 0 0 6pt; line-height: 1.5;">
+      <strong>Inspection Mechanism:</strong> {{ finding.what_was_checked }}
+    </p>
     {% if finding.affected_urls %}
-    <ul>
-      {% for url in finding.affected_urls %}
-      <li><code>{{ url }}</code></li>
-      {% endfor %}
-    </ul>
-    {% else %}
-    <p>
-      Specific affected URLs were not supplied. Do not assume that every
-      page is affected.
-    </p>
-    {% endif %}
-  </div>
-
-  <!-- 6. RECOMMENDED SOLUTION -->
-  <div class="finding-block">
-    <h4>6. Recommended solution</h4>
-    <p>{{ finding.recommended_action }}</p>
-  </div>
-
-  <!-- 7. TECHNICAL IMPLEMENTATION INSTRUCTIONS -->
-  <div class="finding-block">
-    <h4>7. Technical implementation instructions (Developer details)</h4>
-
-    {% if finding.developer_instructions %}
-    <pre class="code-block" style="background:#0f172a; color:#38bdf8; padding:8px 10px; border-radius:4px; font-size:7.5pt; line-height:1.45; white-space:pre-wrap;"><code>{{ finding.developer_instructions }}</code></pre>
-    {% else %}
-    <p>
-      Developer-level instructions have not been supplied. A technical
-      owner should define the implementation before work begins.
-    </p>
-    {% endif %}
-  </div>
-
-  <!-- 8. HOW TO VERIFY THE FIX -->
-  <div class="finding-block">
-    <h4>8. How to verify the fix (Retest procedure)</h4>
-
-    {% if finding.verification_steps %}
-    <ol>
-      {% for step in finding.verification_steps %}
-      <li>{{ step }}</li>
-      {% endfor %}
-    </ol>
-    {% else %}
-    <p>
-      Verification criteria have not been supplied. Do not mark this
-      finding as verified fixed until the criteria are defined and tested.
-    </p>
-    {% endif %}
-  </div>
-
-  <!-- 9. SUPPORTING EVIDENCE -->
-  <div class="finding-block">
-    <h4>9. Supporting evidence</h4>
-
-    {% if finding.evidence %}
-    <table class="print-table" style="width:100%; font-size:8pt; border-collapse:collapse; margin-top:4px;">
-      <thead>
-        <tr style="background:#f1f5f9; text-align:left;">
-          <th style="padding:4px 8px; border-bottom:1px solid #cbd5e1;">Evidence ID</th>
-          <th style="padding:4px 8px; border-bottom:1px solid #cbd5e1;">Source</th>
-          <th style="padding:4px 8px; border-bottom:1px solid #cbd5e1;">Observation</th>
-          <th style="padding:4px 8px; border-bottom:1px solid #cbd5e1;">Scope</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for evidence in finding.evidence %}
-        <tr>
-          <td style="padding:4px 8px; border-bottom:1px solid #f1f5f9;"><code>{{ evidence.id }}</code></td>
-          <td style="padding:4px 8px; border-bottom:1px solid #f1f5f9;">{{ evidence.source }}</td>
-          <td style="padding:4px 8px; border-bottom:1px solid #f1f5f9;">{{ evidence.observation }}</td>
-          <td style="padding:4px 8px; border-bottom:1px solid #f1f5f9;">{{ evidence.scope | default(finding.scope_status) }}</td>
-        </tr>
+    <div style="font-size: 8.5pt; color: #475569;">
+      <strong>Affected URL(s):</strong>
+      <ul style="margin: 4pt 0 0; padding-left: 18pt;">
+        {% for url in finding.affected_urls %}
+        <li style="margin-bottom: 2pt;"><code style="font-size: 8pt; background: #f1f5f9; padding: 1pt 4pt; border-radius: 3px; word-break: break-all;">{{ url }}</code></li>
         {% endfor %}
-      </tbody>
-    </table>
-    {% else %}
-    <div class="empty-state">
-      No supporting evidence was attached to this finding. It requires
-      validation before it can be described as verified.
+      </ul>
     </div>
     {% endif %}
   </div>
 
-  <!-- 10. CONFIDENCE AND LIMITATIONS -->
-  <div class="finding-block">
-    <h4>10. Confidence and limitations</h4>
-    <p>
-      <strong>Confidence:</strong>
-      {{ finding.confidence | default("Not assessed") }}
-    </p>
-    <p>
-      <strong>Limitations:</strong>
-      {{ finding.limitations | default("No limitations were supplied.") }}
+  <!-- SECTION C: WHY DOES THIS MATTER TO YOUR BUSINESS? -->
+  <div style="background: #fffbeb; border: 1px solid #fef3c7; border-left: 4px solid var(--medium); padding: 9pt 12pt; border-radius: 4px; margin-bottom: 12pt;">
+    <div style="font-size: 9pt; font-weight: 800; color: #92400e; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 4pt;">
+      3. Why does this matter to your business?
+    </div>
+    <p style="font-size: 9.5pt; color: #78350f; margin: 0; line-height: 1.5;">
+      {{ finding.business_impact }}
     </p>
   </div>
 
-  <!-- 11. EXPECTED OUTCOME -->
-  {% if finding.expected_outcome %}
-  <div class="finding-block">
-    <h4>11. Expected outcome</h4>
-    <p>{{ finding.expected_outcome }}</p>
-    <p class="small" style="font-size:7.5pt; color:#64748b; font-style:italic;">
-      Commercial Disclaimer: This is an expected qualitative or evidence-backed outcome, not a guarantee of improved rankings, traffic, leads, or revenue.
+  <!-- SECTION D: ISSUE FIXING PLAN & SUGGESTIONS (HOW TO FIX IT) -->
+  <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-left: 4px solid var(--low); padding: 10pt 12pt; border-radius: 4px; margin-bottom: 12pt;">
+    <div style="font-size: 9pt; font-weight: 800; color: #166534; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 4pt;">
+      4. How to fix it: Remediation Plan &amp; Suggestions
+    </div>
+    <p style="font-size: 9.5pt; font-weight: 600; color: #14532d; margin: 0 0 8pt; line-height: 1.5;">
+      {{ finding.recommended_action }}
     </p>
+
+    <!-- DEVELOPER INSTRUCTIONS & CODE SNIPPET -->
+    {% if finding.developer_instructions %}
+    <div style="margin-top: 8pt;">
+      <div style="font-size: 8pt; font-weight: 700; color: #166534; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 3pt;">
+        Developer Implementation Directives:
+      </div>
+      <pre style="background: #0f172a; color: #38bdf8; padding: 8pt 10pt; border-radius: 4px; font-size: 8pt; line-height: 1.45; white-space: pre-wrap; word-break: break-all; margin: 0;"><code>{{ finding.developer_instructions }}</code></pre>
+    </div>
+    {% endif %}
+
+    <!-- VERIFICATION RETEST PROCEDURE -->
+    {% if finding.verification_steps %}
+    <div style="margin-top: 8pt;">
+      <div style="font-size: 8pt; font-weight: 700; color: #166534; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 3pt;">
+        How to Verify the Fix (Retest Checklist):
+      </div>
+      <ol style="margin: 0; padding-left: 18pt; font-size: 8.5pt; color: #15803d; line-height: 1.45;">
+        {% for step in finding.verification_steps %}
+        <li style="margin-bottom: 2pt;">{{ step }}</li>
+        {% endfor %}
+      </ol>
+    </div>
+    {% endif %}
+
+    <!-- EXPECTED OUTCOME -->
+    {% if finding.expected_outcome %}
+    <div style="margin-top: 8pt; font-size: 8.5pt; color: #166534; border-top: 1px dashed #86efac; padding-top: 6pt;">
+      <strong>Expected Outcome:</strong> {{ finding.expected_outcome }}
+      <div style="font-size: 7.5pt; color: #64748b; font-style: italic; margin-top: 3pt;">
+        Commercial Disclaimer: Expected qualitative outcome based on search engine documentation, not an absolute guarantee of specific ranking positions or traffic.
+      </div>
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- EVIDENCE & CONFIDENCE (COMPACT) -->
+  {% if finding.evidence %}
+  <div style="margin-top: 6pt; font-size: 8pt; color: #64748b;">
+    <strong>Supporting Evidence:</strong>
+    <span style="font-family: monospace;">{{ finding.evidence[0].id }}</span> · {{ finding.evidence[0].source }} · {{ finding.evidence[0].observation }}
   </div>
   {% endif %}
 

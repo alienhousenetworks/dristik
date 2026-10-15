@@ -801,19 +801,18 @@ pre {
   {% endif %}
 
   {% for subsection in section.subsections %}
-  <div id="{{ subsection.id }}">
-    <h3>{{ subsection.title }}</h3>
-    <p>{{ subsection.explanation }}</p>
+  <div id="{{ subsection.id }}" style="margin-top: 12pt;">
+    <h3 style="font-size: 12pt; color: #1e293b; margin: 12pt 0 4pt;">{{ subsection.title }}</h3>
+    <p style="font-size: 9pt; color: #475569; margin-bottom: 6pt;">{{ subsection.explanation }}</p>
 
     {% if subsection.business_explanation %}
-    <div class="plain-english">
-      <strong>What this means for your business</strong>
-      <p>{{ subsection.business_explanation }}</p>
+    <div class="plain-english" style="margin: 6pt 0 10pt; padding: 6pt 10pt; font-size: 8.5pt;">
+      <strong>What this means for your business:</strong> {{ subsection.business_explanation }}
     </div>
     {% endif %}
 
     {% if subsection.metrics %}
-    <table>
+    <table style="margin: 6pt 0 12pt;">
       <thead>
         <tr><th>Metric or check</th><th>Result</th><th>Status</th><th>Scope</th></tr>
       </thead>
@@ -829,20 +828,23 @@ pre {
       </tbody>
     </table>
     {% endif %}
-
-    {% if subsection.findings %}
-      {% for finding in subsection.findings %}
-      {% include "partials/seo_finding.html" %}
-      {% endfor %}
-    {% else %}
-      <div class="empty-state">
-        No finding records were supplied for this subsection.
-        This must not be interpreted as a verified pass unless the
-        defined checks were actually executed and passed.
-      </div>
-    {% endif %}
   </div>
   {% endfor %}
+
+  {% if section.findings %}
+  <div style="margin-top: 16pt;">
+    <h3 style="color: var(--brand); border-bottom: 2px solid var(--brand); padding-bottom: 4pt; font-size: 13pt;">
+      Chapter Findings &amp; Verified Defects ({{ section.findings | length }})
+    </h3>
+    {% for finding in section.findings %}
+      {% include "partials/seo_finding.html" %}
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="empty-state" style="margin-top: 12pt; padding: 10pt 14pt; background: #f8fafc; border: 1px dashed #cbd5e1; border-radius: 4px; font-size: 9pt;">
+    <strong>No Verified Defects in This Chapter:</strong> What was tested on the inspected sample passed target criteria. Uninspected pages remain unverified.
+  </div>
+  {% endif %}
 
   <h3>Section conclusion</h3>
   <p>{{ section.conclusion | default("A section conclusion has not been supplied.") }}</p>

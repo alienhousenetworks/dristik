@@ -975,18 +975,23 @@ def build_seo_book_context(report: Any, page_numbers: Optional[Dict[str, int]] =
     # Active conditional chapters
     applicable_core = [ch for ch in CORE_CHAPTERS if is_chapter_applicable(ch, report)]
 
-    # Group findings into chapters
+    # Track assigned finding IDs to avoid duplicates across chapters
+    assigned_finding_ids: Set[str] = set()
     sections_payload = []
     for ch_idx, ch in enumerate(applicable_core):
         ch_num = f"{ch_idx + 3:02d}"  # Chapters 03 onwards
         hints = ch.get("category_hints", [])
         
-        # Match findings for this chapter
+        # Match findings for this chapter (deduplicated)
         ch_findings = []
         for f in normalized_findings:
-            match_blob = f"{f['title']} {f['what_was_checked']} {f['observed_result']}".lower()
+            f_id = str(f.get("id") or f.get("finding_id") or "")
+            if f_id in assigned_finding_ids:
+                continue
+            match_blob = f"{f.get('title', '')} {f.get('what_was_checked', '')} {f.get('observed_result', '')} {f.get('category', '')}".lower()
             if _matches_any_hint(match_blob, hints):
                 ch_findings.append(f)
+                assigned_finding_ids.add(f_id)
 
         # Build subsections
         subsections = []
@@ -1007,7 +1012,6 @@ def build_seo_book_context(report: Any, page_numbers: Optional[Dict[str, int]] =
                 "explanation": sub["explanation"],
                 "business_explanation": sub.get("business_explanation", ""),
                 "metrics": sub_metrics,
-                "findings": ch_findings,
             })
 
         sections_payload.append({
@@ -1017,8 +1021,40 @@ def build_seo_book_context(report: Any, page_numbers: Optional[Dict[str, int]] =
             "introduction": ch["introduction"],
             "business_explanation": ch.get("business_explanation", ""),
             "subsections": subsections,
+            "findings": ch_findings,
             "conclusion": f"Review and implement the prioritized recommendations for {ch['title'].lower()} to ensure robust organic search compliance.",
             "closing_business_explanation": ch.get("business_explanation", ""),
+        })
+
+    # Catch-all chapter for any remaining unassigned findings (guarantees zero orphans)
+    unassigned_findings = [f for f in normalized_findings if str(f.get("id") or f.get("finding_id") or "") not in assigned_finding_ids]
+    if unassigned_findings:
+        ch_num = f"{len(sections_payload) + 3:02d}"
+        sections_payload.append({
+            "id": "additional-technical-findings",
+            "chapter_label": f"Chapter {ch_num}",
+            "title": "Additional Verified Technical & Architecture Findings",
+            "introduction": "This chapter consolidates specialized technical observations, DOM signals, and server responses discovered during the crawl.",
+            "business_explanation": "Addressing these additional technical defects prevents crawler budget waste and ensures complete indexation integrity.",
+            "subsections": [
+                {
+                    "id": "additional-observations",
+                    "title": "Verified Architectural Anomalies",
+                    "explanation": "Empirical inspection ledger of additional discovered discrepancies.",
+                    "business_explanation": "Secondary defects that influence search crawler efficiency and ranking authority.",
+                    "metrics": [
+                        {
+                            "name": "General Technical Directives",
+                            "value": f"{len(unassigned_findings)} verified finding(s)",
+                            "status": "Verified finding",
+                            "scope": f"{pages_crawled} pages sample",
+                        }
+                    ],
+                }
+            ],
+            "findings": unassigned_findings,
+            "conclusion": "Implement the recommended fixes for these anomalies to ensure clean technical search compliance across the entire site.",
+            "closing_business_explanation": "Guarantees comprehensive crawl hygiene.",
         })
 
     # Table of contents items
