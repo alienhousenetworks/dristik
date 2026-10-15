@@ -1057,7 +1057,7 @@ def build_seo_book_context(report: Any, page_numbers: Optional[Dict[str, int]] =
                 "id": ev["id"],
                 "type": "Crawl DOM Observation",
                 "source": ev["source"],
-                "captured_at": ev["captured_at"],
+                "captured_at": ev.get("captured_at") or ev.get("timestamp") or "N/A",
                 "scope": ev["scope"],
                 "finding_refs": [f["id"]],
             })
