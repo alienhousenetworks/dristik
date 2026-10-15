@@ -114,11 +114,18 @@ def reprocess():
     print(f"Saved Standalone HTML to: {standalone_path} ({len(standalone_html)} bytes)")
 
     # Also save to conversation artifacts directory
-    artifact_dir = Path("/Users/sayantande/.gemini/antigravity-ide/brain/027bb798-0011-4553-9b14-46ae251bd89b")
-    if artifact_dir.exists():
-        (artifact_dir / "alienhouse_networks_print_book.html").write_text(book_html, encoding="utf-8")
-        (artifact_dir / "alienhouse_networks_master_seo_audit.html").write_text(standalone_html, encoding="utf-8")
-        print(f"Mirrored reports to conversation artifacts directory: {artifact_dir}")
+    for art_dir_str in [
+        "/Users/sayantande/.gemini/antigravity-ide/brain/b2e34e7c-e4a5-44f1-8065-4c358b8bd3d5",
+        "/Users/sayantande/.gemini/antigravity-ide/brain/027bb798-0011-4553-9b14-46ae251bd89b",
+    ]:
+        art_dir = Path(art_dir_str)
+        if art_dir.exists():
+            try:
+                (art_dir / "alienhouse_networks_print_book.html").write_text(book_html, encoding="utf-8")
+                (art_dir / "alienhouse_networks_master_seo_audit.html").write_text(standalone_html, encoding="utf-8")
+                print(f"Mirrored reports to conversation artifacts directory: {art_dir}")
+            except Exception as e:
+                print(f"Notice: Could not write to artifact dir {art_dir}: {e}")
 
     return {
         "status": certified_report.certification_status,

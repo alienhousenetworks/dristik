@@ -78,6 +78,10 @@ class CompleteSeoReportGenerator:
             "health_score": score_val,
             "diagnostic_inventory": report.diagnostic_inventory.model_dump() if getattr(report, "diagnostic_inventory", None) else None,
             "page_level_assessments": [p.model_dump() for p in getattr(report, "page_level_assessments", [])],
+            "crawled_pages_telemetry": [
+                p.model_dump() if hasattr(p, "model_dump") else p
+                for p in (manifest.pages if manifest and getattr(manifest, "pages", None) else report.page_reports)
+            ],
             "consistency_report": report.consistency_report.model_dump() if getattr(report, "consistency_report", None) else None,
             "quality_gate_results": getattr(report, "quality_gate_results", None),
             "exports": {
@@ -662,6 +666,58 @@ class CompleteSeoReportGenerator:
             </div>
             """
 
+        # Pre-render empirical section content and in-chapter findings using seo_print_renderer
+        sec_02_content = seo_print_renderer._render_sec_02(report)
+        sec_03_content = seo_print_renderer._render_sec_03(report)
+        sec_03_findings = seo_print_renderer._render_chapter_findings("03", report)
+        
+        sec_04_content = seo_print_renderer._render_sec_04(report)
+        sec_04_findings = seo_print_renderer._render_chapter_findings("04", report)
+
+        sec_05_content = seo_print_renderer._render_sec_05(report)
+        sec_05_findings = seo_print_renderer._render_chapter_findings("05", report)
+
+        sec_06_content = seo_print_renderer._render_sec_06(report)
+        sec_06_findings = seo_print_renderer._render_chapter_findings("06", report)
+
+        sec_07_content = seo_print_renderer._render_sec_07(report)
+        sec_07_findings = seo_print_renderer._render_chapter_findings("07", report)
+
+        sec_08_content = seo_print_renderer._render_sec_08(report)
+        sec_08_findings = seo_print_renderer._render_chapter_findings("08", report)
+
+        sec_09_content = seo_print_renderer._render_sec_09(report)
+        sec_09_findings = seo_print_renderer._render_chapter_findings("09", report)
+
+        sec_10_content = seo_print_renderer._render_sec_10(report)
+        sec_10_findings = seo_print_renderer._render_chapter_findings("10", report)
+
+        sec_11_content = seo_print_renderer._render_sec_11(report)
+        sec_11_findings = seo_print_renderer._render_chapter_findings("11", report)
+
+        sec_12_content = seo_print_renderer._render_sec_12(report)
+        sec_12_findings = seo_print_renderer._render_chapter_findings("12", report)
+
+        sec_13_content = seo_print_renderer._render_sec_13(report)
+        sec_13_findings = seo_print_renderer._render_chapter_findings("13", report)
+
+        sec_14_content = seo_print_renderer._render_sec_14(report)
+        sec_14_findings = seo_print_renderer._render_chapter_findings("14", report)
+
+        sec_15_findings = seo_print_renderer._render_chapter_findings("15", report)
+
+        sec_16_content = seo_print_renderer._render_sec_16(report)
+        sec_16_findings = seo_print_renderer._render_chapter_findings("16", report)
+
+        sec_17_content = seo_print_renderer._render_sec_17(report)
+        sec_17_findings = seo_print_renderer._render_chapter_findings("17", report)
+
+        sec_18_content = seo_print_renderer._render_sec_18(report)
+        sec_18_findings = seo_print_renderer._render_chapter_findings("18", report)
+
+        sec_19_content = seo_print_renderer._render_sec_19(report)
+        sec_20_content = seo_print_renderer._render_sec_20(report)
+
         # Full HTML page
         return f"""<!DOCTYPE html>
 <html lang="en">
@@ -1130,6 +1186,143 @@ class CompleteSeoReportGenerator:
             color: #bae6fd;
         }}
         .text-muted {{ color: var(--text-muted); font-size: 14px; }}
+
+        /* Data Tables for Dark Theme */
+        .data-table {{
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 12px;
+            margin-top: 10px;
+            margin-bottom: 18px;
+            background: #0a0f1d;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            overflow: hidden;
+        }}
+        .data-table th {{
+            background: #111827;
+            color: #94a3b8;
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            padding: 10px 12px;
+            border-bottom: 1px solid var(--border-color);
+            text-align: left;
+        }}
+        .data-table td {{
+            padding: 9px 12px;
+            border-bottom: 1px solid #1a2234;
+            color: #e2e8f0;
+            vertical-align: top;
+            font-size: 12px;
+        }}
+        .data-table tr:last-child td {{
+            border-bottom: none;
+        }}
+        .data-table tr:hover td {{
+            background: #131d2e;
+        }}
+        .data-table code {{
+            background: #1e293b;
+            color: #38bdf8;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-family: monospace;
+        }}
+
+        /* Universal Badges */
+        .badge {{
+            display: inline-block;
+            font-size: 10px;
+            font-weight: 700;
+            padding: 2px 7px;
+            border-radius: 4px;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }}
+        .badge-clean {{ background: rgba(16, 185, 129, 0.15); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.3); }}
+        .badge-warn {{ background: rgba(245, 158, 11, 0.15); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.3); }}
+        .badge-crit {{ background: rgba(239, 68, 68, 0.15); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.3); }}
+        .badge-high {{ background: rgba(249, 115, 22, 0.15); color: #fb923c; border: 1px solid rgba(249, 115, 22, 0.3); }}
+        .badge-open {{ background: rgba(56, 189, 248, 0.15); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.3); }}
+        .badge-secondary {{ background: rgba(100, 116, 139, 0.15); color: #94a3b8; border: 1px solid rgba(100, 116, 139, 0.3); }}
+        .badge-fixed {{ background: rgba(234, 179, 8, 0.15); color: #facc15; border: 1px solid rgba(234, 179, 8, 0.3); }}
+        .badge-verified {{ background: rgba(16, 185, 129, 0.2); color: #10b981; border: 1px solid #10b981; }}
+        .badge-id {{ background: #1e293b; color: #cbd5e1; border: 1px solid #334155; }}
+
+        .callout-box {{
+            background: #0d1527;
+            border: 1px solid #1e293b;
+            border-left: 4px solid var(--accent-cyan);
+            border-radius: 8px;
+            padding: 14px 18px;
+            font-size: 13px;
+            color: #cbd5e1;
+            margin: 16px 0;
+            line-height: 1.5;
+        }}
+        .callout-box strong {{ color: #f8fafc; }}
+
+        .three-column-grid {{
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 16px;
+            margin: 16px 0;
+        }}
+        .takeaway-card {{
+            background: #0a0f1d;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 16px;
+        }}
+        .takeaway-card.danger {{ border-top: 3px solid var(--accent-rose); }}
+        .takeaway-card.warning {{ border-top: 3px solid var(--accent-amber); }}
+        .takeaway-card.success {{ border-top: 3px solid var(--accent-emerald); }}
+        .takeaway-header {{
+            font-size: 13px;
+            font-weight: 800;
+            color: #f8fafc;
+            margin-bottom: 10px;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }}
+        .takeaway-list {{
+            padding-left: 18px;
+            font-size: 12px;
+            color: #cbd5e1;
+            line-height: 1.6;
+        }}
+        .takeaway-list li {{ margin-bottom: 6px; }}
+
+        .verify {{
+            font-family: monospace;
+            color: #34d399;
+            font-size: 12px;
+        }}
+
+        /* Tree Outline Nodes */
+        .tree-node {{
+            display: flex;
+            align-items: baseline;
+            gap: 8px;
+            padding: 3px 0;
+            font-family: monospace;
+            font-size: 12px;
+        }}
+        .tree-level-1 {{ margin-left: 0; font-weight: 700; color: #38bdf8; }}
+        .tree-level-2 {{ margin-left: 18px; color: #e2e8f0; }}
+        .tree-level-3 {{ margin-left: 36px; color: #94a3b8; }}
+        .tree-skip {{ color: #f87171 !important; font-weight: 700; }}
+
+        /* Harmonize Print Content to Dark Mode */
+        div[style*="background: #f8fafc"], div[style*="background:#f8fafc"] {{ background: #111827 !important; border-color: #1f2937 !important; color: #f9fafb !important; }}
+        div[style*="background: #ffffff"], div[style*="background:#ffffff"] {{ background: #0a0f1d !important; border-color: #1a2234 !important; color: #f9fafb !important; }}
+        h4[style*="color: #0f294a"], h3[style*="color: #0f294a"] {{ color: #38bdf8 !important; }}
+        span[style*="color: #475569"], td[style*="color: #475569"], p[style*="color: #475569"], p[style*="color: #334155"] {{ color: #94a3b8 !important; }}
+        td[style*="color: #334155"], em[style*="color: #334155"] {{ color: #cbd5e1 !important; }}
+        span[style*="color: #64748b"] {{ color: #94a3b8 !important; }}
+        div[style*="color: #0f172a"] {{ color: #f8fafc !important; }}
     </style>
 </head>
 <body>
@@ -1282,6 +1475,7 @@ class CompleteSeoReportGenerator:
                 </p>
                 <p style="margin-top: 8px;"><strong>Rule on Unmeasured Channels:</strong> In accordance with Dristik zero-fake governance, unmeasured third-party connectors (such as live Google Search Console clicks or Google Analytics conversion events) are reported strictly as <em>NOT_CONNECTED</em> rather than fabricating placeholder metrics.</p>
             </div>
+            {sec_02_content}
             {diag_rollup_html}
         </section>
 
@@ -1292,10 +1486,8 @@ class CompleteSeoReportGenerator:
                 <span class="section-badge">MASTER INDEX #03</span>
             </div>
             {rendering_disparity_html}
-            <div class="status-summary-card">
-                <h4>Indexation Intelligence Rollup</h4>
-                <p>Evaluates robots.txt disallows, meta robots noindex tags, HTTP header X-Robots directives, XML sitemap presence, and self-referencing vs conflicting canonical URLs.</p>
-            </div>
+            {sec_03_content}
+            {sec_03_findings}
         </section>
 
         <!-- Section 04: Site Architecture -->
@@ -1304,10 +1496,8 @@ class CompleteSeoReportGenerator:
                 <h2>04. Site Architecture, Click Depth & Internal Linking</h2>
                 <span class="section-badge">MASTER INDEX #04</span>
             </div>
-            <div class="status-summary-card">
-                <h4>Click Depth Distribution & Orphan Detection</h4>
-                <p>Calculates shortest-path click depth from origin homepage. Identifies orphan pages present in XML sitemaps but devoid of crawlable internal link equity, as well as anchor text distribution.</p>
-            </div>
+            {sec_04_content}
+            {sec_04_findings}
         </section>
 
         <!-- Section 05: On-Page SEO -->
@@ -1316,10 +1506,8 @@ class CompleteSeoReportGenerator:
                 <h2>05. On-Page SEO & Metadata Quality</h2>
                 <span class="section-badge">MASTER INDEX #05</span>
             </div>
-            <div class="status-summary-card">
-                <h4>Metadata & Heading Hierarchy Rollup</h4>
-                <p>Audits title tags, meta descriptions, and H1-H6 heading hierarchy across all crawled URLs. Detects missing, duplicate, under-length, and over-length elements.</p>
-            </div>
+            {sec_05_content}
+            {sec_05_findings}
         </section>
 
         <!-- Section 06: Content & Topical Authority -->
@@ -1328,7 +1516,8 @@ class CompleteSeoReportGenerator:
                 <h2>06. Content Quality, Topical Authority & Cannibalization</h2>
                 <span class="section-badge">MASTER INDEX #06</span>
             </div>
-            {topical_html}
+            {sec_06_content}
+            {sec_06_findings}
         </section>
 
         <!-- Section 07: Search Intent -->
@@ -1337,10 +1526,8 @@ class CompleteSeoReportGenerator:
                 <h2>07. Search Intent & Commercial Query Alignment</h2>
                 <span class="section-badge">MASTER INDEX #07</span>
             </div>
-            <div class="status-summary-card">
-                <h4>Commercial Query Intent Mapping</h4>
-                <p>Evaluates alignment across Informational, Navigational, Commercial Investigation, and Transactional buyer journeys against audited landing pages.</p>
-            </div>
+            {sec_07_content}
+            {sec_07_findings}
         </section>
 
         <!-- Section 08: Schema Markup -->
@@ -1349,10 +1536,8 @@ class CompleteSeoReportGenerator:
                 <h2>08. Structured Data & Schema Markup Validation</h2>
                 <span class="section-badge">MASTER INDEX #08</span>
             </div>
-            <div class="status-summary-card">
-                <h4>Google Rich Results & JSON-LD Entity Graph</h4>
-                <p>Validates schema syntax and required Google Search Rich Result properties across Organization, LocalBusiness, Product, Article, FAQPage, and BreadcrumbList schemas.</p>
-            </div>
+            {sec_08_content}
+            {sec_08_findings}
         </section>
 
         <!-- Section 09: Mobile Usability -->
@@ -1361,10 +1546,8 @@ class CompleteSeoReportGenerator:
                 <h2>09. Mobile Usability & Responsive Layout</h2>
                 <span class="section-badge">MASTER INDEX #09</span>
             </div>
-            <div class="status-summary-card">
-                <h4>Mobile First & Viewport Verification</h4>
-                <p>Inspects viewport configuration, tap target sizing, font legibility on mobile viewports, and horizontal overflow anomalies.</p>
-            </div>
+            {sec_09_content}
+            {sec_09_findings}
         </section>
 
         <!-- Section 10: Core Web Vitals -->
@@ -1373,10 +1556,8 @@ class CompleteSeoReportGenerator:
                 <h2>10. Core Web Vitals & Technical Page Performance</h2>
                 <span class="section-badge">MASTER INDEX #10</span>
             </div>
-            <div class="status-summary-card">
-                <h4>Time to First Byte (TTFB) & Asset Optimization</h4>
-                <p>Audits server responsiveness, image compression formats (WebP/AVIF), missing explicit width/height tags (Cumulative Layout Shift prevention), and bloated scripts.</p>
-            </div>
+            {sec_10_content}
+            {sec_10_findings}
         </section>
 
         <!-- Section 11: Security & Protocol -->
@@ -1385,10 +1566,8 @@ class CompleteSeoReportGenerator:
                 <h2>11. Security & Protocol Architecture</h2>
                 <span class="section-badge">MASTER INDEX #11</span>
             </div>
-            <div class="status-summary-card">
-                <h4>HTTPS Redirection & Security Headers</h4>
-                <p>Validates apex-to-www canonical redirects, HTTP-to-HTTPS forced redirects, mixed content warnings, and HTTP headers (HSTS, CSP, X-Frame-Options).</p>
-            </div>
+            {sec_11_content}
+            {sec_11_findings}
         </section>
 
         <!-- Section 12: International SEO -->
@@ -1397,7 +1576,8 @@ class CompleteSeoReportGenerator:
                 <h2>12. International SEO (Hreflang & Geotargeting)</h2>
                 <span class="section-badge">MASTER INDEX #12</span>
             </div>
-            {intl_html}
+            {sec_12_content}
+            {sec_12_findings}
         </section>
 
         <!-- Section 13: Local SEO -->
@@ -1406,7 +1586,8 @@ class CompleteSeoReportGenerator:
                 <h2>13. Local SEO & Google Business Profile Presence</h2>
                 <span class="section-badge">MASTER INDEX #13</span>
             </div>
-            {local_html}
+            {sec_13_content}
+            {sec_13_findings}
         </section>
 
         <!-- Section 14: E-commerce SEO -->
@@ -1415,7 +1596,8 @@ class CompleteSeoReportGenerator:
                 <h2>14. E-commerce SEO & Product Architecture</h2>
                 <span class="section-badge">MASTER INDEX #14</span>
             </div>
-            {ecom_html}
+            {sec_14_content}
+            {sec_14_findings}
         </section>
 
         <!-- Section 15: SERP Appearance -->
@@ -1429,6 +1611,7 @@ class CompleteSeoReportGenerator:
                 Titles exceeding <strong>580px</strong> pixel width are cut off by Google with trailing ellipsis (...).
             </p>
             {serp_previews_html}
+            {sec_15_findings}
         </section>
 
         <!-- Section 16: External Authority -->
@@ -1437,11 +1620,8 @@ class CompleteSeoReportGenerator:
                 <h2>16. External Authority, Backlink Quality & Mentions</h2>
                 <span class="section-badge">MASTER INDEX #16</span>
             </div>
-            {ext_auth_html}
-            <div class="status-summary-card">
-                <h4>Off-Page Entity Signals</h4>
-                <p>Inspects brand Wikipedia/Wikidata entity grounding, authoritative sameAs profiles, and external brand recognition.</p>
-            </div>
+            {sec_16_content}
+            {sec_16_findings}
         </section>
 
         <!-- Section 17: Competitive Parity -->
@@ -1450,10 +1630,8 @@ class CompleteSeoReportGenerator:
                 <h2>17. Competitive Landscape & Parity Matrix</h2>
                 <span class="section-badge">MASTER INDEX #17</span>
             </div>
-            <div class="status-summary-card">
-                <h4>Peer Domain Benchmark</h4>
-                <p>Compares technical hygiene, content volume, structured data adoption, and page speed benchmarks against designated competitor domains.</p>
-            </div>
+            {sec_17_content}
+            {sec_17_findings}
         </section>
 
         <!-- Section 18: AI SEO (GEO) -->
@@ -1462,7 +1640,8 @@ class CompleteSeoReportGenerator:
                 <h2>18. AI Search Engine Optimization (GEO & Answer Engines)</h2>
                 <span class="section-badge">MASTER INDEX #18</span>
             </div>
-            {ai_html}
+            {sec_18_content}
+            {sec_18_findings}
         </section>
 
         <!-- Section 19: Prioritized Roadmap -->
@@ -1471,12 +1650,7 @@ class CompleteSeoReportGenerator:
                 <h2>19. Prioritized Remediation Roadmap (P0 - P3)</h2>
                 <span class="section-badge">MASTER INDEX #19</span>
             </div>
-            <p style="margin-bottom: 20px; font-size: 14px; color: var(--text-muted);">
-                Every finding below features the standard 14-field specification including Expected Condition, Why It Matters, Owner, Dependencies, and Validation Acceptance Criteria.
-            </p>
-            <div class="findings-list">
-                {finding_cards_html}
-            </div>
+            {sec_19_content}
         </section>
 
         <!-- Section 20: Verification Lifecycle -->
@@ -1485,16 +1659,7 @@ class CompleteSeoReportGenerator:
                 <h2>20. Verification Protocol & Quality Assurance Lifecycle</h2>
                 <span class="section-badge">MASTER INDEX #20</span>
             </div>
-            <div class="status-summary-card">
-                <h4>5-Stage Lifecycle Assurance Protocol</h4>
-                <p>1. <strong>OPEN:</strong> Defect discovered during machine crawl and anchored to DOM proof.<br>
-                   2. <strong>IN_PROGRESS:</strong> Ticket assigned to owner with defined dependencies.<br>
-                   3. <strong>FIXED:</strong> Code patch applied to staging/production by engineering team.<br>
-                   4. <strong>RECRAWL & RECHECK:</strong> Automated Dristik Continuous Assurance Engine triggers targeted re-crawl.<br>
-                   5. <strong>VERIFIED:</strong> Assertion passes. Certified cryptographically in Claim Ledger.
-                </p>
-            </div>
-            {consistency_html}
+            {sec_20_content}
         </section>
 
     </main>

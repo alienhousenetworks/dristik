@@ -1643,44 +1643,63 @@ def _chapter_agent_consultation_card(book: _Book, number: str, section: Dict[str
     </div>
     """ if data_table else ""
     
+    p_tier = narrative.get("priority_tier", "P1 (HIGH BUSINESS IMPACT)")
+    tier_badge_class = "badge-crit" if "CRITICAL" in p_tier else ("badge-warn" if "HIGH" in p_tier else "badge-clean")
+    
     return f"""
     <div class="agent-consulting-dossier">
         <div class="agent-header-strip">
             <div class="agent-badge">
                 <span class="agent-id-tag">{_esc(narrative['agent_id'])}</span>
                 <strong class="agent-name">{_esc(narrative['agent_name'])}</strong>
+                <span class="badge {tier_badge_class}" style="font-size: 8pt; padding: 2px 6px;">{_esc(p_tier)}</span>
             </div>
             <span class="agent-role-title">{_esc(narrative['agent_role'])}</span>
         </div>
         
-        <div class="consulting-section diagnostic-block">
-            <h5 class="consulting-heading">Executive Diagnostic Review &amp; Strategy</h5>
-            <p class="consulting-narrative">{_esc(narrative['diagnostic_overview'])}</p>
-        </div>
-        
-        <div class="consulting-grid">
-            <div class="consulting-col">
-                <h5 class="consulting-subheading">Technical &amp; Architectural Mechanics</h5>
-                <p class="consulting-text">{_esc(narrative['technical_mechanics'])}</p>
-            </div>
-            <div class="consulting-col">
-                <h5 class="consulting-subheading">Root Cause &amp; Business Impact Risk</h5>
-                <p class="consulting-text"><strong>Root Cause:</strong> {_esc(narrative['root_cause_analysis'])}</p>
-                <p class="consulting-text"><strong>Search Risk:</strong> {_esc(narrative['business_risk'])}</p>
-            </div>
-        </div>
-        
-        <div class="consulting-grid">
-            <div class="consulting-col">
-                <h5 class="consulting-subheading">Prescriptive Engineering &amp; Content Fix</h5>
-                <div class="code-fix-block">
-                    <code>{_esc(narrative['prescriptive_fix'])}</code>
+        <!-- Lens 1: Executive & Business Review (Non-Technical) -->
+        <div class="consulting-section executive-lens-block" style="background: #f0fdf4; border: 1px solid #dcfce7; border-radius: 4px; padding: 10px 12px; margin-bottom: 12px;">
+            <h5 class="consulting-heading" style="color: #15803d; border-bottom: 1.5px solid #bbf7d0; padding-bottom: 3px; margin: 0 0 6px;">👔 Executive Diagnostic Review &amp; Strategy (Non-Technical)</h5>
+            <p class="consulting-narrative" style="color: #166534; font-size: 8.5pt; line-height: 1.5; margin-bottom: 6px;">{_esc(narrative['executive_summary'])}</p>
+            <div class="consulting-grid" style="margin-bottom: 0;">
+                <div class="consulting-col" style="background: #ffffff; border: 1px solid #dcfce7; padding: 8px;">
+                    <h5 class="consulting-subheading" style="color: #991b1b;">⚠️ Business &amp; Revenue Risk</h5>
+                    <p class="consulting-text" style="color: #7f1d1d; margin: 0;">{_esc(narrative['business_risk'])}</p>
+                </div>
+                <div class="consulting-col" style="background: #ffffff; border: 1px solid #dcfce7; padding: 8px;">
+                    <h5 class="consulting-subheading" style="color: #15803d;">📈 Commercial &amp; Search Opportunity</h5>
+                    <p class="consulting-text" style="color: #14532d; margin: 0;">{_esc(narrative.get('commercial_opportunity', 'Reclaiming lost search impressions unlocks incremental organic pipeline.'))}</p>
                 </div>
             </div>
-            <div class="consulting-col">
-                <h5 class="consulting-subheading">Post-Fix Verification &amp; Regression Testing</h5>
-                <div class="verification-block">
-                    <code>{_esc(narrative['verification_protocol'])}</code>
+        </div>
+        
+        <!-- Lens 2: Engineering & Architecture Mechanics (Technical Deep-Dive) -->
+        <div class="consulting-section technical-lens-block" style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 4px; padding: 10px 12px; margin-bottom: 12px;">
+            <h5 class="consulting-heading" style="color: #0f294a; border-bottom: 1.5px solid #cbd5e1; padding-bottom: 3px; margin: 0 0 6px;">⚙️ Engineering &amp; Architecture Deep-Dive (Technical)</h5>
+            
+            <div class="consulting-grid" style="margin-bottom: 8px;">
+                <div class="consulting-col" style="background: #ffffff;">
+                    <h5 class="consulting-subheading">Technical &amp; Crawler Mechanics</h5>
+                    <p class="consulting-text">{_esc(narrative['technical_mechanics'])}</p>
+                </div>
+                <div class="consulting-col" style="background: #ffffff;">
+                    <h5 class="consulting-subheading">Root Cause Analysis</h5>
+                    <p class="consulting-text">{_esc(narrative['root_cause_analysis'])}</p>
+                </div>
+            </div>
+            
+            <div class="consulting-grid" style="margin-bottom: 0;">
+                <div class="consulting-col" style="background: #ffffff;">
+                    <h5 class="consulting-subheading">Prescriptive Engineering &amp; Content Fix</h5>
+                    <div class="code-fix-block">
+                        <code>{_esc(narrative['prescriptive_fix'])}</code>
+                    </div>
+                </div>
+                <div class="consulting-col" style="background: #ffffff;">
+                    <h5 class="consulting-subheading">Automated Post-Fix Verification Protocol</h5>
+                    <div class="verification-block">
+                        <code>{_esc(narrative['verification_protocol'])}</code>
+                    </div>
                 </div>
             </div>
         </div>

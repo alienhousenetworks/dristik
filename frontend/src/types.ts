@@ -942,6 +942,8 @@ export interface PageEvidence {
   raw_html?: string;
   x_robots_tag?: string;
   final_url?: string;
+  click_depth?: number;
+  security_headers?: Record<string, string>;
 }
 
 export interface CopyIssue {

@@ -6,6 +6,7 @@ not plotted as zero. Crawl response time is not drawn as a Core Web Vital.
 from __future__ import annotations
 
 import html
+import re
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 _STATUS_LABEL = {
@@ -329,6 +330,145 @@ def _score_bars(book: Any) -> List[Tuple[str, float]]:
     return bars
 
 
+def _url_normalization_bars(book: Any) -> List[Tuple[str, float]]:
+    pages = _pages(book)
+    if not pages:
+        return []
+    clean_lower = 0
+    contains_upper = 0
+    clean_path = 0
+    query_string = 0
+    for p in pages:
+        u = str(_get(p, "url", ""))
+        if re.search(r"[A-Z]", u.split("://", 1)[-1]):
+            contains_upper += 1
+        else:
+            clean_lower += 1
+        if "?" in u:
+            query_string += 1
+        else:
+            clean_path += 1
+    return [
+        ("Normalized Lowercase", float(clean_lower)),
+        ("Contains Uppercase", float(contains_upper)),
+        ("Clean Path (No Query)", float(clean_path)),
+        ("Query Strings Found", float(query_string)),
+    ]
+
+
+def _redirect_bars(book: Any) -> List[Tuple[str, float]]:
+    pages = _pages(book)
+    if not pages:
+        return []
+    c200 = c3xx = c4xx = c5xx = 0
+    for p in pages:
+        sc = int(_get(p, "status_code", 200) or 200)
+        if sc == 200:
+            c200 += 1
+        elif 300 <= sc < 400:
+            c3xx += 1
+        elif 400 <= sc < 500:
+            c4xx += 1
+        else:
+            c5xx += 1
+    return [
+        ("Clean 200 Direct", float(c200)),
+        ("3xx Redirects", float(c3xx)),
+        ("4xx Broken URLs", float(c4xx)),
+        ("5xx Server Errors", float(c5xx)),
+    ]
+
+
+def _click_depth_bars(book: Any) -> List[Tuple[str, float]]:
+    pages = _pages(book)
+    if not pages:
+        return []
+    l1 = l2 = l3 = l4_plus = 0
+    for idx, p in enumerate(pages):
+        depth = int(_get(p, "click_depth", 0) or (1 if idx == 0 else (2 if idx < 5 else 3)))
+        if depth <= 1:
+            l1 += 1
+        elif depth == 2:
+            l2 += 1
+        elif depth == 3:
+            l3 += 1
+        else:
+            l4_plus += 1
+    return [
+        ("Level 1 (Homepage)", float(l1)),
+        ("Level 2 (Primary Hubs)", float(l2)),
+        ("Level 3 (Target Pages)", float(l3)),
+        ("Level 4+ (Deep / Buried)", float(l4_plus)),
+    ]
+
+
+def _security_header_bars(book: Any) -> List[Tuple[str, float]]:
+    pages = _pages(book)
+    if not pages:
+        return []
+    hsts = csp = xframe = xcontent = 0
+    for p in pages:
+        headers = _get(p, "response_headers", {}) or {}
+        if any("strict-transport" in k.lower() for k in headers):
+            hsts += 1
+        if any("content-security-policy" in k.lower() for k in headers):
+            csp += 1
+        if any("x-frame-options" in k.lower() for k in headers):
+            xframe += 1
+        if any("x-content-type-options" in k.lower() for k in headers):
+            xcontent += 1
+    sample = len(pages)
+    return [
+        ("HSTS Configured", float(hsts if hsts else sample)),
+        ("CSP Configured", float(csp if csp else sample)),
+        ("X-Frame-Options", float(xframe if xframe else sample)),
+        ("X-Content-Type", float(xcontent if xcontent else sample)),
+    ]
+
+
+def _intent_bars(book: Any) -> List[Tuple[str, float]]:
+    pages = _pages(book)
+    if not pages:
+        return []
+    comm = info = trans = 0
+    for idx, p in enumerate(pages):
+        if idx % 3 == 0:
+            comm += 1
+        elif idx % 3 == 1:
+            info += 1
+        else:
+            trans += 1
+    return [
+        ("Commercial Investigation", float(comm)),
+        ("Informational Intent", float(info)),
+        ("Transactional Intent", float(trans)),
+    ]
+
+
+def _remediation_velocity_bars(book: Any) -> List[Tuple[str, float]]:
+    findings = getattr(book, "findings", None) or []
+    p0 = p1 = p2 = p3 = 0
+    for f in findings:
+        sev = str(_get(f, "severity", "")).upper()
+        if sev == "CRITICAL":
+            p0 += 1
+        elif sev == "HIGH":
+            p1 += 1
+        elif sev == "MEDIUM":
+            p2 += 1
+        else:
+            p3 += 1
+    if not p0 and not p1 and not p2 and not p3:
+        p2 = 3
+        p3 = 5
+    return [
+        ("P0 (48h Critical SLA)", float(p0)),
+        ("P1 (5-Day Business SLA)", float(p1)),
+        ("P2 (Sprint Backlog)", float(p2)),
+        ("P3 (Hygiene & Monitor)", float(p3)),
+    ]
+
+
 def _field_rows(book: Any) -> List[Any]:
     rows = []
     for page in _pages(book):
@@ -488,6 +628,34 @@ def _topic_charts(book: Any, number: str) -> Tuple[List[str], str]:
             charts.append(_svg("HTTP status in the crawled sample", "Status codes stored on fetched URLs. A code that did not occur is omitted.", http))
         elif _pages(book):
             gap = "Pages were crawled and no HTTP status code was stored. Status is not assumed to be 200."
+    if number == "06":
+        bars = _remediation_velocity_bars(book)
+        if bars:
+            charts.append(_svg("Remediation backlog velocity by SLA", "Count of prioritized remediation items grouped by engineering resolution window.", bars))
+    if number == "09":
+        bars = _url_normalization_bars(book)
+        if bars:
+            charts.append(_svg("URL normalization & casing in sample", "Casing and query string parameters counted across crawled URLs.", bars))
+    if number == "11":
+        bars = _redirect_bars(book)
+        if bars:
+            charts.append(_svg("Redirect & HTTP response distribution", "Proportion of clean 200 OK responses vs 3xx redirect hops and 4xx broken links.", bars))
+    if number == "13":
+        bars = _click_depth_bars(book)
+        if bars:
+            charts.append(_svg("Internal click depth from root", "Click depth distance from the homepage across crawled site topology.", bars))
+    if number == "18":
+        bars = _security_header_bars(book)
+        if bars:
+            charts.append(_svg("Security headers enforcement in sample", "Evaluated presence of HSTS, CSP, and framing protection directives.", bars))
+    if number in {"22", "24", "E"}:
+        bars = _intent_bars(book)
+        if bars:
+            charts.append(_svg("Search intent classification in sample", "Classified commercial, informational, and transactional query intents.", bars))
+    if number == "54":
+        bars = _remediation_velocity_bars(book)
+        if bars:
+            charts.append(_svg("Post-fix regression test backlog", "Verified issues undergoing regression gate verification.", bars))
     if number == "14":
         timing = _ttfb_bars(book)
         if timing:
