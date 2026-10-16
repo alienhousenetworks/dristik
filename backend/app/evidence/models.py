@@ -129,6 +129,12 @@ class MachineObservation(BaseModel):
     evidence_id: str = Field(..., description="Unique immutable evidence ID, e.g. EV_001")
     url: Optional[str] = None
     selector: Optional[str] = None
+    element: Optional[str] = None
+    expected_condition: Optional[str] = None
+    test_method: Optional[str] = None
+    response_status: Optional[int] = None
+    snippet: Optional[str] = None
+    metadata: dict[str, Any] = Field(default_factory=dict)
     content_sha256: Optional[str] = None
     timestamp: datetime = Field(default_factory=datetime.utcnow)
 
@@ -143,5 +149,6 @@ class MachineObservation(BaseModel):
             "source": self.source,
             "evidence_id": self.evidence_id,
         }
+
 
 

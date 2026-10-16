@@ -22,8 +22,7 @@ from app.audit.diagnostic_inventory import DiagnosticInventoryEngine
 from app.audit.page_analysis import PageLevelAnalysisEngine
 from app.audit.consistency_engine import CrossChapterConsistencyEngine
 from app.reports.validation_gate import ValidationGate
-from app.reports.seo_print_report import seo_print_renderer
-from app.reports.seo_report_generator import CompleteSeoReportGenerator
+from app.reports.seo_book_renderer import seo_audit_book_renderer
 from app.domain.models import ExecutiveReport, CrawlManifest
 
 
@@ -96,42 +95,20 @@ def reprocess():
     conn.close()
     print("\nPersisted updated audit to SQLite database.")
 
-    # Step 7: Render Reports
+    # Step 7: Render Single Canonical SEO Audit Book
+    print("\nRendering Canonical Master SEO Audit Book HTML...")
+    canonical_book_html = seo_audit_book_renderer.render_html_report(certified_report)
+
     output_dir = Path(__file__).resolve().parent.parent / "reports"
     output_dir.mkdir(parents=True, exist_ok=True)
-
-    print("\nRendering 20-Chapter Book HTML...")
-    book_html = seo_print_renderer.render(certified_report)
-    book_path = output_dir / "alienhouse_networks_print_book.html"
-    book_path.write_text(book_html, encoding="utf-8")
-    print(f"Saved Print Book HTML to: {book_path} ({len(book_html)} bytes)")
-
-    print("Rendering Standalone Interactive HTML Report...")
-    generator = CompleteSeoReportGenerator()
-    standalone_html = generator.render_html_report(certified_report)
-    standalone_path = output_dir / "alienhouse_networks_master_seo_audit.html"
-    standalone_path.write_text(standalone_html, encoding="utf-8")
-    print(f"Saved Standalone HTML to: {standalone_path} ({len(standalone_html)} bytes)")
-
-    # Also save to conversation artifacts directory
-    for art_dir_str in [
-        "/Users/sayantande/.gemini/antigravity-ide/brain/b2e34e7c-e4a5-44f1-8065-4c358b8bd3d5",
-        "/Users/sayantande/.gemini/antigravity-ide/brain/027bb798-0011-4553-9b14-46ae251bd89b",
-    ]:
-        art_dir = Path(art_dir_str)
-        if art_dir.exists():
-            try:
-                (art_dir / "alienhouse_networks_print_book.html").write_text(book_html, encoding="utf-8")
-                (art_dir / "alienhouse_networks_master_seo_audit.html").write_text(standalone_html, encoding="utf-8")
-                print(f"Mirrored reports to conversation artifacts directory: {art_dir}")
-            except Exception as e:
-                print(f"Notice: Could not write to artifact dir {art_dir}: {e}")
+    book_path = output_dir / f"{certified_report.domain}_master_seo_audit_book.html"
+    book_path.write_text(canonical_book_html, encoding="utf-8")
+    print(f"Rendered Master SEO Audit Book to: {book_path} ({len(canonical_book_html)} bytes)")
 
     return {
         "status": certified_report.certification_status,
         "score": certified_report.scores.overall_score,
         "book_path": str(book_path),
-        "standalone_path": str(standalone_path),
         "gates": qg.get("gates", {}),
     }
 

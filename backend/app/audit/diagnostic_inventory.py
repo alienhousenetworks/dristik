@@ -17,7 +17,7 @@ import logging
 from typing import Any, Dict, List, Optional, Tuple
 
 from app.audit.inventory_helper import get_canonical_crawl_inventory
-from app.domain.enums import Severity
+from app.domain.enums import Severity, DiagnosticStatus
 from app.domain.models import (
     CrawlManifest,
     DiagnosticCoverageMatrix,
@@ -49,6 +49,12 @@ class DiagnosticInventoryEngine:
         findings = report.findings or []
 
         records: List[DiagnosticRecord] = []
+        inv = get_canonical_crawl_inventory(manifest, report)
+        disc_total = inv.discovered_total
+        tested_count = inv.tested_pages
+        cov_pct = inv.url_coverage_pct or 0.0
+        has_tested_pages = tested_count > 0
+        is_sampled = (tested_count < disc_total) if (disc_total > 0 and has_tested_pages) else False
 
         # -------------------------------------------------------------
         # Chapter 01: Executive Summary & Site Health Score
@@ -57,6 +63,10 @@ class DiagnosticInventoryEngine:
             f for f in findings
             if f.priority >= 9 or str(getattr(f.severity, "value", f.severity)).upper() == "CRITICAL"
         ]
+        status_01 = (
+            DiagnosticStatus.FAILED.value if crit_blockers
+            else (DiagnosticStatus.PASSED.value if has_tested_pages else DiagnosticStatus.NOT_TESTED.value)
+        )
         records.append(DiagnosticRecord(
             diagnostic_id="DIAG-01-BLOCKERS",
             chapter_num="01",
@@ -65,8 +75,8 @@ class DiagnosticInventoryEngine:
             applicable_url_types=["all"],
             required_data_sources=["all_analyzers", "evidence_ledger"],
             test_performed="Identify any verified critical issues that block indexing or render completely blank DOMs.",
-            status="FAIL" if crit_blockers else "PASS",
-            status_reason=f"Found {len(crit_blockers)} confirmed critical blocker(s)." if crit_blockers else "Zero critical blockers identified.",
+            status=status_01,
+            status_reason=f"Found {len(crit_blockers)} confirmed critical blocker(s)." if crit_blockers else ("Zero critical blockers identified across audited pages." if has_tested_pages else "Zero pages audited; blocker status not tested."),
             affected_urls=list({url for f in crit_blockers for url in f.affected_urls}),
             affected_count=len(crit_blockers),
             severity="CRITICAL" if crit_blockers else "INFORMATIONAL",
@@ -84,7 +94,7 @@ class DiagnosticInventoryEngine:
             applicable_url_types=["all"],
             required_data_sources=["scoring_engine"],
             test_performed="Calculate weighted health score with transparent pillar weights summing to 100%.",
-            status="PASS" if score_val is not None else "INCONCLUSIVE",
+            status=DiagnosticStatus.PASSED.value if score_val is not None else DiagnosticStatus.INFERRED.value,
             status_reason=f"Overall health score computed at {score_val:.1f}/100." if score_val is not None else "Overall score calculation incomplete.",
             severity="INFORMATIONAL",
             confidence=0.95,
@@ -94,11 +104,10 @@ class DiagnosticInventoryEngine:
         # -------------------------------------------------------------
         # Chapter 02: Methodology, Crawl Scope & Limitations
         # -------------------------------------------------------------
-        inv = get_canonical_crawl_inventory(manifest, report)
-        disc_total = inv.discovered_total
-        tested_count = inv.tested_pages
-        cov_pct = inv.url_coverage_pct or 0.0
-
+        status_02_inv = (
+            DiagnosticStatus.PASSED.value if (disc_total == tested_count and disc_total > 0)
+            else (DiagnosticStatus.SAMPLED.value if has_tested_pages else DiagnosticStatus.NOT_TESTED.value)
+        )
         records.append(DiagnosticRecord(
             diagnostic_id="DIAG-02-INVENTORY-RECONCILE",
             chapter_num="02",
@@ -107,8 +116,8 @@ class DiagnosticInventoryEngine:
             applicable_url_types=["all"],
             required_data_sources=["crawl_manifest", "http_probes"],
             test_performed="Reconcile discovered, queued, crawled, and tested URLs with explicit declared denominator.",
-            status="PASS" if disc_total >= tested_count else "WARNING",
-            status_reason=f"Tested {tested_count} of {disc_total} discovered URLs ({cov_pct}% coverage).",
+            status=status_02_inv,
+            status_reason=f"Inspected sample of {tested_count} of {disc_total} discovered URLs ({cov_pct}% URL inspection coverage)." if is_sampled else (f"Full crawl scope verified: all {tested_count} discovered URLs inspected." if has_tested_pages else "Zero URLs inspected."),
             affected_urls=getattr(manifest, "untested_discovered_urls", [])[:10] if manifest else [],
             affected_count=max(0, disc_total - tested_count),
             severity="INFORMATIONAL",
@@ -116,6 +125,11 @@ class DiagnosticInventoryEngine:
             validation_test="Tested count + excluded count + failed count == requested crawl sample.",
         ))
 
+
+        status_02_disc = (
+            (DiagnosticStatus.PASSED.value if (inv.discovered_via_sitemap > 0 or inv.discovered_via_links > 0) else DiagnosticStatus.SAMPLED.value)
+            if has_tested_pages else DiagnosticStatus.NOT_TESTED.value
+        )
         records.append(DiagnosticRecord(
             diagnostic_id="DIAG-02-DISCOVERY-SOURCES",
             chapter_num="02",
@@ -124,7 +138,7 @@ class DiagnosticInventoryEngine:
             applicable_url_types=["all"],
             required_data_sources=["sitemap_parser", "link_traversal"],
             test_performed="Track URL provenance across XML sitemaps, internal links, and seed configuration.",
-            status="PASS" if (inv.discovered_via_sitemap > 0 or inv.discovered_via_links > 0) else "WARNING",
+            status=status_02_disc,
             status_reason=f"Discovered via sitemap: {inv.discovered_via_sitemap}, via links: {inv.discovered_via_links}.",
             severity="INFORMATIONAL",
             confidence=1.0,
@@ -140,6 +154,10 @@ class DiagnosticInventoryEngine:
 
         c404 = getattr(http_breakdown, "count_4xx", 0) if http_breakdown else 0
         c500 = getattr(http_breakdown, "count_5xx", 0) if http_breakdown else 0
+        status_03_http = (
+            DiagnosticStatus.FAILED.value if (c404 > 0 or c500 > 0)
+            else (DiagnosticStatus.SAMPLED.value if is_sampled else (DiagnosticStatus.PASSED.value if has_tested_pages else DiagnosticStatus.NOT_TESTED.value))
+        )
         records.append(DiagnosticRecord(
             diagnostic_id="DIAG-03-HTTP-STATUS",
             chapter_num="03",
@@ -148,8 +166,8 @@ class DiagnosticInventoryEngine:
             applicable_url_types=["all"],
             required_data_sources=["raw_http"],
             test_performed="Verify all sampled internal URLs return HTTP 200 OK without unhandled 4xx/5xx exceptions.",
-            status="FAIL" if (c404 > 0 or c500 > 0) else "PASS",
-            status_reason=f"Detected {c404} 4xx error(s) and {c500} 5xx server error(s)." if (c404 > 0 or c500 > 0) else "All audited URLs responded with valid HTTP status codes.",
+            status=status_03_http,
+            status_reason=f"Detected {c404} 4xx error(s) and {c500} 5xx server error(s)." if (c404 > 0 or c500 > 0) else ("All audited URLs responded with valid HTTP status codes." if has_tested_pages else "Zero URLs audited."),
             affected_urls=[item.url for item in getattr(http_breakdown, "pages_4xx", []) + getattr(http_breakdown, "pages_5xx", [])] if http_breakdown else [],
             affected_count=c404 + c500,
             severity="HIGH" if c500 > 0 else ("MEDIUM" if c404 > 0 else "INFORMATIONAL"),
@@ -159,6 +177,10 @@ class DiagnosticInventoryEngine:
         ))
 
         can_issues = getattr(canon, "missing_canonical_count", 0) + getattr(canon, "broken_canonical_count", 0) + getattr(canon, "cross_domain_canonical_count", 0) if canon else 0
+        status_03_canon = (
+            DiagnosticStatus.FAILED.value if can_issues > 0
+            else (DiagnosticStatus.SAMPLED.value if is_sampled else (DiagnosticStatus.PASSED.value if has_tested_pages else DiagnosticStatus.NOT_TESTED.value))
+        )
         records.append(DiagnosticRecord(
             diagnostic_id="DIAG-03-CANONICAL-ALIGN",
             chapter_num="03",
@@ -167,8 +189,8 @@ class DiagnosticInventoryEngine:
             applicable_url_types=["canonical", "html"],
             required_data_sources=["raw_html", "rendered_dom"],
             test_performed="Audit rel='canonical' presence, absolute URL validity, and self-referencing consistency.",
-            status="FAIL" if can_issues > 0 else "PASS",
-            status_reason=f"Detected {can_issues} canonical directive anomalies." if can_issues > 0 else "Canonical tags conform to W3C specifications on audited pages.",
+            status=status_03_canon,
+            status_reason=f"Detected {can_issues} canonical directive anomalies." if can_issues > 0 else ("Canonical tags conform to W3C specifications on audited pages." if has_tested_pages else "Zero pages evaluated."),
             affected_urls=getattr(canon, "conflicts", []) if canon else [],
             affected_count=can_issues,
             severity="HIGH" if can_issues > 0 else "INFORMATIONAL",
@@ -185,6 +207,10 @@ class DiagnosticInventoryEngine:
         deep_count = getattr(depth, "deep_pages_count", 0) if depth else 0
         orphan_count = getattr(orphans, "orphan_count", 0) if orphans else 0
 
+        status_04_depth = (
+            DiagnosticStatus.FAILED.value if deep_count > 0
+            else (DiagnosticStatus.SAMPLED.value if is_sampled else (DiagnosticStatus.PASSED.value if has_tested_pages else DiagnosticStatus.NOT_TESTED.value))
+        )
         records.append(DiagnosticRecord(
             diagnostic_id="DIAG-04-CLICK-DEPTH",
             chapter_num="04",
@@ -193,8 +219,8 @@ class DiagnosticInventoryEngine:
             applicable_url_types=["html"],
             required_data_sources=["crawl_graph"],
             test_performed="Calculate shortest-path crawl distance from homepage root to all internal URLs. Threshold: <= 3 hops.",
-            status="WARNING" if deep_count > 0 else "PASS",
-            status_reason=f"{deep_count} page(s) require 4 or more clicks from the homepage." if deep_count > 0 else "All sampled pages reachable within 3 clicks of homepage.",
+            status=status_04_depth,
+            status_reason=f"{deep_count} page(s) require 4 or more clicks from the homepage." if deep_count > 0 else ("All sampled pages reachable within 3 clicks of homepage." if has_tested_pages else "Zero pages evaluated."),
             affected_urls=getattr(depth, "deep_urls", []) if depth else [],
             affected_count=deep_count,
             severity="MEDIUM" if deep_count > 0 else "INFORMATIONAL",
@@ -203,6 +229,10 @@ class DiagnosticInventoryEngine:
             validation_test="Breadth-first crawl traversal reaches target URL in <= 3 hops from root.",
         ))
 
+        status_04_orphan = (
+            DiagnosticStatus.FAILED.value if orphan_count > 0
+            else (DiagnosticStatus.SAMPLED.value if is_sampled else (DiagnosticStatus.PASSED.value if has_tested_pages else DiagnosticStatus.NOT_TESTED.value))
+        )
         records.append(DiagnosticRecord(
             diagnostic_id="DIAG-04-ORPHAN-PAGES",
             chapter_num="04",
@@ -211,8 +241,8 @@ class DiagnosticInventoryEngine:
             applicable_url_types=["sitemap_urls"],
             required_data_sources=["xml_sitemap", "crawl_graph"],
             test_performed="Cross-reference sitemap URL inventory against pages receiving internal inbound crawl links.",
-            status="WARNING" if orphan_count > 0 else "PASS",
-            status_reason=f"Found {orphan_count} orphan URL(s) in XML sitemap receiving zero internal links." if orphan_count > 0 else "Zero orphan URLs detected in crawl sample.",
+            status=status_04_orphan,
+            status_reason=f"Found {orphan_count} orphan URL(s) in XML sitemap receiving zero internal links." if orphan_count > 0 else ("Zero orphan URLs detected in crawl sample." if has_tested_pages else "Zero pages evaluated."),
             affected_urls=getattr(orphans, "orphan_urls", []) if orphans else [],
             affected_count=orphan_count,
             severity="MEDIUM" if orphan_count > 0 else "INFORMATIONAL",
@@ -220,6 +250,7 @@ class DiagnosticInventoryEngine:
             remediation_requirement="Integrate orphan URLs into related topical hub pages or purge from XML sitemap." if orphan_count > 0 else None,
             validation_test="Page URL possesses at least 2 internal inbound href references from indexable pages.",
         ))
+
 
         # -------------------------------------------------------------
         # Chapter 05: On-Page SEO & Metadata Quality (Separating Existence vs Semantic Quality)
@@ -267,7 +298,10 @@ class DiagnosticInventoryEngine:
         dup_h1 = len(getattr(head, "multiple_h1", [])) if head else 0
 
         # Title Existence
-        status_title_exist = "FAIL" if missing_titles >= total_sample else ("WARNING" if missing_titles > 0 else "PASS")
+        status_title_exist = (
+            DiagnosticStatus.FAILED.value if missing_titles > 0
+            else (DiagnosticStatus.SAMPLED.value if is_sampled else (DiagnosticStatus.PASSED.value if has_tested_pages else DiagnosticStatus.NOT_TESTED.value))
+        )
         records.append(DiagnosticRecord(
             diagnostic_id="DIAG-05-TITLE-EXISTENCE",
             chapter_num="05",
@@ -277,7 +311,7 @@ class DiagnosticInventoryEngine:
             required_data_sources=["rendered_dom"],
             test_performed="Verify <title> element exists and is non-empty in document head.",
             status=status_title_exist,
-            status_reason=f"{missing_titles} page(s) missing <title> tag." if missing_titles > 0 else "All evaluated pages declare non-empty title tags.",
+            status_reason=f"{missing_titles} page(s) missing <title> tag." if missing_titles > 0 else ("All evaluated pages declare non-empty title tags." if has_tested_pages else "Zero pages evaluated."),
             affected_urls=missing_titles_urls,
             affected_count=missing_titles,
             severity="HIGH" if missing_titles > 0 else "INFORMATIONAL",
@@ -287,7 +321,10 @@ class DiagnosticInventoryEngine:
         ))
 
         # Title Semantic Quality
-        status_title_qual = "FAIL" if len(poor_titles_urls) >= total_sample else ("WARNING" if len(poor_titles_urls) > 0 else "PASS")
+        status_title_qual = (
+            DiagnosticStatus.FAILED.value if len(poor_titles_urls) > 0
+            else (DiagnosticStatus.SAMPLED.value if is_sampled else (DiagnosticStatus.PASSED.value if has_tested_pages else DiagnosticStatus.NOT_TESTED.value))
+        )
         records.append(DiagnosticRecord(
             diagnostic_id="DIAG-05-TITLE-QUALITY",
             chapter_num="05",
@@ -297,7 +334,7 @@ class DiagnosticInventoryEngine:
             required_data_sources=["rendered_dom"],
             test_performed="Evaluate title tag length (30-65 chars), keyword front-loading, and uniqueness across pages.",
             status=status_title_qual,
-            status_reason=f"Found {len(poor_titles_urls)} page(s) with generic, uninformative or improper length title tags." if poor_titles_urls else "Evaluated title descriptive quality and intent differentiation across crawl sample.",
+            status_reason=f"Found {len(poor_titles_urls)} page(s) with generic, uninformative or improper length title tags." if poor_titles_urls else ("Evaluated title descriptive quality and intent differentiation across crawl sample." if has_tested_pages else "Zero pages evaluated."),
             affected_urls=poor_titles_urls,
             affected_count=len(poor_titles_urls),
             severity="MEDIUM" if poor_titles_urls else "INFORMATIONAL",
@@ -306,7 +343,12 @@ class DiagnosticInventoryEngine:
         ))
 
         # Meta Description Existence
-        status_desc_exist = "FAIL" if missing_descs >= total_sample else ("WARNING" if missing_descs > 0 else "PASS")
+        if missing_descs == 0:
+            status_desc_exist = "PASS" if has_tested_pages else "NOT_TESTED"
+        elif missing_descs < len(pages):
+            status_desc_exist = "WARNING"
+        else:
+            status_desc_exist = "FAIL"
         records.append(DiagnosticRecord(
             diagnostic_id="DIAG-05-DESC-EXISTENCE",
             chapter_num="05",
@@ -316,7 +358,7 @@ class DiagnosticInventoryEngine:
             required_data_sources=["rendered_dom"],
             test_performed="Verify meta name='description' tag is present on indexable HTML pages.",
             status=status_desc_exist,
-            status_reason=f"{missing_descs} page(s) missing meta description tag." if missing_descs > 0 else "All evaluated pages declare meta description tags.",
+            status_reason=f"{missing_descs} page(s) missing meta description tag." if missing_descs > 0 else ("All evaluated pages declare meta description tags." if has_tested_pages else "Zero pages evaluated."),
             affected_urls=missing_descs_urls,
             affected_count=missing_descs,
             severity="HIGH" if missing_descs > 0 else "INFORMATIONAL",
@@ -326,7 +368,10 @@ class DiagnosticInventoryEngine:
         ))
 
         # Meta Description Semantic Quality (Checks for Duplicates & Differentiation)
-        status_desc_qual = "FAIL" if dup_descs >= total_sample else ("WARNING" if dup_descs > 0 else "PASS")
+        status_desc_qual = (
+            "WARNING" if dup_descs > 0
+            else (DiagnosticStatus.SAMPLED.value if is_sampled else (DiagnosticStatus.PASSED.value if has_tested_pages else DiagnosticStatus.NOT_TESTED.value))
+        )
         records.append(DiagnosticRecord(
             diagnostic_id="DIAG-05-DESC-QUALITY",
             chapter_num="05",
@@ -336,7 +381,7 @@ class DiagnosticInventoryEngine:
             required_data_sources=["rendered_dom"],
             test_performed="Audit meta description uniqueness, avoiding identical sitewide fallback copy across multiple pages.",
             status=status_desc_qual,
-            status_reason=f"Found {dup_descs} instance(s) of duplicated meta descriptions repeated across multiple URLs." if dup_descs > 0 else "Meta descriptions are distinct and page-specific.",
+            status_reason=f"Found {dup_descs} instance(s) of duplicated meta descriptions repeated across multiple URLs." if dup_descs > 0 else ("Meta descriptions are distinct and page-specific." if has_tested_pages else "Zero pages evaluated."),
             affected_urls=dup_descs_urls,
             affected_count=dup_descs,
             severity="MEDIUM" if dup_descs > 0 else "INFORMATIONAL",
@@ -346,6 +391,10 @@ class DiagnosticInventoryEngine:
         ))
 
         # H1 Structure & Relevance
+        status_05_h1 = (
+            DiagnosticStatus.FAILED.value if (missing_h1 > 0 or dup_h1 > 0)
+            else (DiagnosticStatus.SAMPLED.value if is_sampled else (DiagnosticStatus.PASSED.value if has_tested_pages else DiagnosticStatus.NOT_TESTED.value))
+        )
         records.append(DiagnosticRecord(
             diagnostic_id="DIAG-05-H1-RELEVANCE",
             chapter_num="05",
@@ -354,8 +403,8 @@ class DiagnosticInventoryEngine:
             applicable_url_types=["html"],
             required_data_sources=["rendered_dom"],
             test_performed="Verify single primary H1 heading per document representing core page topic.",
-            status="FAIL" if (missing_h1 > 0 or dup_h1 > 0) else "PASS",
-            status_reason=f"{missing_h1} page(s) missing H1; {dup_h1} page(s) declare multiple H1 elements." if (missing_h1 > 0 or dup_h1 > 0) else "Clean single H1 heading hierarchy verified across sample.",
+            status=status_05_h1,
+            status_reason=f"{missing_h1} page(s) missing H1; {dup_h1} page(s) declare multiple H1 elements." if (missing_h1 > 0 or dup_h1 > 0) else ("Clean single H1 heading hierarchy verified across sample." if has_tested_pages else "Zero pages evaluated."),
             affected_urls=[item.url for item in getattr(head, "missing_h1", []) + getattr(head, "multiple_h1", [])] if head else [],
             affected_count=missing_h1 + dup_h1,
             severity="MEDIUM" if (missing_h1 > 0 or dup_h1 > 0) else "INFORMATIONAL",
@@ -370,6 +419,10 @@ class DiagnosticInventoryEngine:
         topical = report.topical_authority
         cannibal_clusters = len(getattr(topical, "cannibalization_clusters", [])) if topical else 0
 
+        status_06_cannibal = (
+            DiagnosticStatus.FAILED.value if cannibal_clusters > 0
+            else (DiagnosticStatus.SAMPLED.value if is_sampled else (DiagnosticStatus.PASSED.value if has_tested_pages else DiagnosticStatus.NOT_TESTED.value))
+        )
         records.append(DiagnosticRecord(
             diagnostic_id="DIAG-06-CANNIBALIZATION",
             chapter_num="06",
@@ -378,8 +431,8 @@ class DiagnosticInventoryEngine:
             applicable_url_types=["html"],
             required_data_sources=["rendered_dom", "entity_extraction"],
             test_performed="Cluster pages sharing >= 75% semantic heading overlap and identical primary target terms.",
-            status="WARNING" if cannibal_clusters > 0 else "PASS",
-            status_reason=f"Detected {cannibal_clusters} cannibalization cluster(s) competing for identical topics." if cannibal_clusters > 0 else "No acute keyword cannibalization detected among crawled pages.",
+            status=status_06_cannibal,
+            status_reason=f"Detected {cannibal_clusters} cannibalization cluster(s) competing for identical topics." if cannibal_clusters > 0 else ("No acute keyword cannibalization detected among crawled pages." if has_tested_pages else "Zero pages evaluated."),
             affected_urls=[url for cluster in getattr(topical, "cannibalization_clusters", []) for url in cluster.urls] if topical else [],
             affected_count=cannibal_clusters,
             severity="MEDIUM" if cannibal_clusters > 0 else "INFORMATIONAL",
@@ -387,6 +440,7 @@ class DiagnosticInventoryEngine:
             remediation_requirement="Consolidate duplicate topic pages via 301 redirect or differentiate secondary keyword modifiers." if cannibal_clusters > 0 else None,
             validation_test="Unique primary heading and title topic targeting per indexable landing page.",
         ))
+
 
         # -------------------------------------------------------------
         # Chapter 07: Search Intent & Commercial Query Alignment
@@ -400,8 +454,8 @@ class DiagnosticInventoryEngine:
             applicable_url_types=["landing_pages"],
             required_data_sources=["commercial_evals", "serp_intelligence"],
             test_performed="Map buyer search journeys across Informational, Commercial Investigation, and Transactional stages.",
-            status="PASS" if commercial_evals else "NOT_CONNECTED",
-            status_reason=f"Evaluated {len(commercial_evals)} commercial buyer journey queries." if commercial_evals else "Keyword research connector unconfigured; qualitative intent only.",
+            status=DiagnosticStatus.INFERRED.value if commercial_evals else DiagnosticStatus.UNAVAILABLE.value,
+            status_reason=f"Evaluated {len(commercial_evals)} commercial buyer journey queries via heuristic inference." if commercial_evals else "Keyword research connector unconfigured; telemetry unavailable.",
             severity="INFORMATIONAL",
             confidence=0.85 if commercial_evals else 0.50,
             validation_test="Target URL content provides answers and clear conversion call-to-action.",
@@ -423,7 +477,7 @@ class DiagnosticInventoryEngine:
             applicable_url_types=["html"],
             required_data_sources=["json_ld", "microdata"],
             test_performed="Audit JSON-LD blocks for valid JSON syntax and Schema.org context definition.",
-            status="WARNING" if entities_detected == 0 else "PASS",
+            status=DiagnosticStatus.FAILED.value if entities_detected == 0 else (DiagnosticStatus.SAMPLED.value if is_sampled else DiagnosticStatus.PASSED.value),
             status_reason="Zero JSON-LD markup found on evaluated pages." if entities_detected == 0 else f"Audited {entities_detected} schema block(s) with valid syntax.",
             severity="MEDIUM" if entities_detected == 0 else "INFORMATIONAL",
             confidence=0.95,
@@ -439,7 +493,7 @@ class DiagnosticInventoryEngine:
             applicable_url_types=["html"],
             required_data_sources=["json_ld", "google_rich_specs"],
             test_performed="Validate presence of mandatory Google Rich Result properties for Organization, Service, and Product.",
-            status="FAIL" if schema_errs > 0 else ("WARNING" if entities_detected == 0 else "PASS"),
+            status=DiagnosticStatus.FAILED.value if (schema_errs > 0 or entities_detected == 0) else (DiagnosticStatus.SAMPLED.value if is_sampled else DiagnosticStatus.PASSED.value),
             status_reason=f"Found {schema_errs} blocking schema property error(s) disqualifying pages from rich snippets." if schema_errs > 0 else ("No structured data entities detected." if entities_detected == 0 else "All detected schema entities satisfy Google mandatory property rules."),
             affected_urls=[issue.url for issue in getattr(schema_rep, "issues", []) if issue.severity == "ERROR"] if schema_rep else [],
             affected_count=schema_errs,
@@ -462,8 +516,8 @@ class DiagnosticInventoryEngine:
             applicable_url_types=["html"],
             required_data_sources=["rendered_dom", "visual_ux_tester"],
             test_performed="Audit meta name='viewport' content='width=device-width, initial-scale=1' and horizontal overflow.",
-            status="FAIL" if mobile_defects > 0 else "PASS",
-            status_reason=f"Identified {mobile_defects} responsive layout defect(s) on mobile viewports." if mobile_defects > 0 else "Mobile viewport configuration and responsive layout validated.",
+            status=DiagnosticStatus.FAILED.value if mobile_defects > 0 else (DiagnosticStatus.SAMPLED.value if is_sampled else (DiagnosticStatus.PASSED.value if has_tested_pages else DiagnosticStatus.NOT_TESTED.value)),
+            status_reason=f"Identified {mobile_defects} responsive layout defect(s) on mobile viewports." if mobile_defects > 0 else ("Mobile viewport configuration and responsive layout validated." if has_tested_pages else "Zero pages evaluated."),
             severity="HIGH" if mobile_defects > 0 else "INFORMATIONAL",
             confidence=0.90,
             remediation_requirement="Ensure viewport meta tag is declared and CSS container max-width does not exceed 100vw." if mobile_defects > 0 else None,
@@ -485,8 +539,8 @@ class DiagnosticInventoryEngine:
             applicable_url_types=["all"],
             required_data_sources=["http_timings"],
             test_performed="Measure server response latency from socket connect to first byte. Threshold: < 800ms.",
-            status="FAIL" if avg_ttfb > 1200 else ("WARNING" if avg_ttfb > 800 else "PASS"),
-            status_reason=f"Average TTFB measured at {avg_ttfb:.0f}ms." if avg_ttfb > 0 else "TTFB within acceptable thresholds.",
+            status=DiagnosticStatus.FAILED.value if avg_ttfb > 800 else (DiagnosticStatus.PASSED.value if avg_ttfb > 0 else DiagnosticStatus.NOT_TESTED.value),
+            status_reason=f"Average TTFB measured at {avg_ttfb:.0f}ms." if avg_ttfb > 0 else "TTFB telemetry not recorded during crawl.",
             severity="HIGH" if avg_ttfb > 1200 else ("MEDIUM" if avg_ttfb > 800 else "INFORMATIONAL"),
             confidence=0.90,
             remediation_requirement="Implement Edge CDN caching (Cloudflare/Fastly) and database query optimization." if avg_ttfb > 800 else None,
@@ -501,8 +555,8 @@ class DiagnosticInventoryEngine:
             applicable_url_types=["html"],
             required_data_sources=["rendered_dom"],
             test_performed="Check <img> elements for explicit width and height attributes or CSS aspect-ratio.",
-            status="WARNING" if cls_risks > 0 else "PASS",
-            status_reason=f"{cls_risks} image(s) lack explicit width/height attributes, creating CLS risk." if cls_risks > 0 else "Explicit dimensions declared on all audited media assets.",
+            status=DiagnosticStatus.FAILED.value if cls_risks > 0 else (DiagnosticStatus.SAMPLED.value if is_sampled else (DiagnosticStatus.PASSED.value if has_tested_pages else DiagnosticStatus.NOT_TESTED.value)),
+            status_reason=f"{cls_risks} image(s) lack explicit width/height attributes, creating CLS risk." if cls_risks > 0 else ("Explicit dimensions declared on all audited media assets." if has_tested_pages else "Zero pages evaluated."),
             affected_count=cls_risks,
             severity="MEDIUM" if cls_risks > 0 else "INFORMATIONAL",
             confidence=0.90,
@@ -525,7 +579,7 @@ class DiagnosticInventoryEngine:
             applicable_url_types=["https_endpoints"],
             required_data_sources=["response_headers"],
             test_performed="Verify Strict-Transport-Security response header on HTTPS connections.",
-            status="PASS" if hsts_ok else "WARNING",
+            status=DiagnosticStatus.PASSED.value if hsts_ok else DiagnosticStatus.FAILED.value,
             status_reason="HSTS header confirmed on server responses." if hsts_ok else "Strict-Transport-Security header missing from server responses.",
             severity="MEDIUM" if not hsts_ok else "INFORMATIONAL",
             confidence=0.95,
@@ -541,8 +595,8 @@ class DiagnosticInventoryEngine:
             applicable_url_types=["https_endpoints"],
             required_data_sources=["rendered_dom", "network_trace"],
             test_performed="Ensure zero unencrypted http:// scripts, stylesheets, or images loaded on HTTPS pages.",
-            status="FAIL" if mixed_content > 0 else "PASS",
-            status_reason=f"Found {mixed_content} insecure http:// asset(s) loaded on HTTPS pages." if mixed_content > 0 else "Zero mixed content references detected.",
+            status=DiagnosticStatus.FAILED.value if mixed_content > 0 else (DiagnosticStatus.SAMPLED.value if is_sampled else (DiagnosticStatus.PASSED.value if has_tested_pages else DiagnosticStatus.NOT_TESTED.value)),
+            status_reason=f"Found {mixed_content} insecure http:// asset(s) loaded on HTTPS pages." if mixed_content > 0 else ("Zero mixed content references detected." if has_tested_pages else "Zero pages evaluated."),
             affected_urls=getattr(media, "mixed_content_urls", []) if media else [],
             affected_count=mixed_content,
             severity="HIGH" if mixed_content > 0 else "INFORMATIONAL",
@@ -558,6 +612,10 @@ class DiagnosticInventoryEngine:
         is_intl = getattr(intl, "is_multilingual", False) or getattr(intl, "is_international_detected", False) if intl else False
         intl_issues = len(getattr(intl, "issues", [])) if intl else 0
 
+        status_12 = (
+            DiagnosticStatus.FAILED.value if (is_intl and intl_issues > 0)
+            else (DiagnosticStatus.PASSED.value if is_intl else DiagnosticStatus.NOT_TESTED.value)
+        )
         records.append(DiagnosticRecord(
             diagnostic_id="DIAG-12-HREFLANG-SYNTAX",
             chapter_num="12",
@@ -566,8 +624,8 @@ class DiagnosticInventoryEngine:
             applicable_url_types=["multilingual_urls"],
             required_data_sources=["raw_html", "response_headers"],
             test_performed="Validate hreflang annotations, return tags, and x-default declarations across language variants.",
-            status="PASS" if (is_intl and intl_issues == 0) else ("FAIL" if (is_intl and intl_issues > 0) else "NOT_APPLICABLE"),
-            status_reason="Reciprocal hreflang annotations validated." if (is_intl and intl_issues == 0) else (f"{intl_issues} hreflang syntax/reciprocity errors detected." if is_intl else "Website does not declare multiple language variants or ccTLDs; International SEO deemed NOT_APPLICABLE."),
+            status=status_12,
+            status_reason="Reciprocal hreflang annotations validated." if (is_intl and intl_issues == 0) else (f"{intl_issues} hreflang syntax/reciprocity errors detected." if is_intl else "Website does not declare multiple language variants or ccTLDs; International SEO deemed NOT_TESTED."),
             severity="HIGH" if (is_intl and intl_issues > 0) else "INFORMATIONAL",
             confidence=0.95,
             remediation_requirement="Ensure reciprocal rel='alternate' hreflang annotations connect all localized counterparts." if (is_intl and intl_issues > 0) else None,
@@ -581,6 +639,10 @@ class DiagnosticInventoryEngine:
         is_local_eligible = getattr(local, "has_google_business_profile", False) or len(getattr(local, "nap_records", [])) > 0 or getattr(local, "is_local_detected", False) if local else False
         nap_score = getattr(local, "nap_consistency_score", getattr(local, "nap_consistency_pct", 100.0)) if local else 100.0
 
+        status_13 = (
+            DiagnosticStatus.FAILED.value if (is_local_eligible and nap_score < 90)
+            else (DiagnosticStatus.PASSED.value if is_local_eligible else DiagnosticStatus.NOT_TESTED.value)
+        )
         records.append(DiagnosticRecord(
             diagnostic_id="DIAG-13-NAP-CONSISTENCY",
             chapter_num="13",
@@ -589,8 +651,8 @@ class DiagnosticInventoryEngine:
             applicable_url_types=["contact_and_location_pages"],
             required_data_sources=["rendered_dom", "local_schema"],
             test_performed="Audit consistency of business Name, Address, and Phone across footer, contact page, and schema.",
-            status="PASS" if (is_local_eligible and nap_score >= 90) else ("WARNING" if (is_local_eligible and nap_score < 90) else "NOT_APPLICABLE"),
-            status_reason=f"NAP consistency verified at {nap_score:.0f}%." if (is_local_eligible and nap_score >= 90) else (f"NAP consistency deficits detected ({nap_score:.0f}%)." if is_local_eligible else "Site operates as a pure digital / cloud entity without public physical storefronts; Local SEO deemed NOT_APPLICABLE."),
+            status=status_13,
+            status_reason=f"NAP consistency verified at {nap_score:.0f}%." if (is_local_eligible and nap_score >= 90) else (f"NAP consistency deficits detected ({nap_score:.0f}%)." if is_local_eligible else "Site operates as a pure digital / cloud entity without public physical storefronts; Local SEO deemed NOT_TESTED."),
             severity="MEDIUM" if (is_local_eligible and nap_score < 90) else "INFORMATIONAL",
             confidence=0.90,
             remediation_requirement="Standardize legal entity name, postal address, and E.164 phone number across all pages." if (is_local_eligible and nap_score < 90) else None,
@@ -604,6 +666,10 @@ class DiagnosticInventoryEngine:
         is_ecom = getattr(ecom, "is_ecommerce_detected", False) if ecom else False
         ecom_issues = len(getattr(ecom, "products_with_issues", [])) if ecom else 0
 
+        status_14 = (
+            DiagnosticStatus.FAILED.value if (is_ecom and ecom_issues > 0)
+            else (DiagnosticStatus.PASSED.value if is_ecom else DiagnosticStatus.NOT_TESTED.value)
+        )
         records.append(DiagnosticRecord(
             diagnostic_id="DIAG-14-PRODUCT-SCHEMA",
             chapter_num="14",
@@ -612,8 +678,8 @@ class DiagnosticInventoryEngine:
             applicable_url_types=["product_urls"],
             required_data_sources=["json_ld"],
             test_performed="Verify Product, Offer, priceCurrency, availability, and merchant return policies.",
-            status="PASS" if (is_ecom and ecom_issues == 0) else ("FAIL" if (is_ecom and ecom_issues > 0) else "NOT_APPLICABLE"),
-            status_reason="Product schema and offer availability validated." if (is_ecom and ecom_issues == 0) else (f"{ecom_issues} product(s) missing mandatory Offer/Pricing schema." if is_ecom else "Zero transactional checkout or product catalog structures detected; E-commerce SEO deemed NOT_APPLICABLE."),
+            status=status_14,
+            status_reason="Product schema and offer availability validated." if (is_ecom and ecom_issues == 0) else (f"{ecom_issues} product(s) missing mandatory Offer/Pricing schema." if is_ecom else "Zero transactional checkout or product catalog structures detected; E-commerce SEO deemed NOT_TESTED."),
             severity="HIGH" if (is_ecom and ecom_issues > 0) else "INFORMATIONAL",
             confidence=0.95,
             remediation_requirement="Include valid Offer markup with price, priceCurrency, and hasMerchantReturnPolicy." if (is_ecom and ecom_issues > 0) else None,
@@ -633,8 +699,8 @@ class DiagnosticInventoryEngine:
             applicable_url_types=["html"],
             required_data_sources=["serp_simulator"],
             test_performed="Simulate Google SERP pixel layout. Flag title tags exceeding 580px (desktop) or 600px (mobile).",
-            status="WARNING" if truncated_titles > 0 else "PASS",
-            status_reason=f"{truncated_titles} title(s) exceed 580px desktop width and risk truncation in Google search results." if truncated_titles > 0 else "All evaluated titles fit within standard Google desktop SERP pixel limits.",
+            status=DiagnosticStatus.FAILED.value if truncated_titles > 0 else (DiagnosticStatus.SAMPLED.value if is_sampled else (DiagnosticStatus.PASSED.value if has_tested_pages else DiagnosticStatus.NOT_TESTED.value)),
+            status_reason=f"{truncated_titles} title(s) exceed 580px desktop width and risk truncation in Google search results." if truncated_titles > 0 else ("All evaluated titles fit within standard Google desktop SERP pixel limits." if has_tested_pages else "Zero pages evaluated."),
             affected_count=truncated_titles,
             severity="MEDIUM" if truncated_titles > 0 else "INFORMATIONAL",
             confidence=0.90,
@@ -655,8 +721,8 @@ class DiagnosticInventoryEngine:
             applicable_url_types=["domain"],
             required_data_sources=["backlink_api"],
             test_performed="Evaluate referring domain count, anchor text distribution, and toxic link signals.",
-            status="PASS" if ext_status == "CONNECTED" else "NOT_CONNECTED",
-            status_reason="External authority connector verified." if ext_status == "CONNECTED" else "External authority API (Ahrefs/Semrush) unconfigured; zero unverified backlink metrics manufactured.",
+            status=DiagnosticStatus.PASSED.value if ext_status == "CONNECTED" else DiagnosticStatus.UNAVAILABLE.value,
+            status_reason="External authority connector verified." if ext_status == "CONNECTED" else "External authority API (Ahrefs/Semrush) unconfigured; live backlink telemetry unavailable.",
             severity="INFORMATIONAL",
             confidence=0.50 if ext_status != "CONNECTED" else 0.90,
             validation_test="Live authenticated API query returns domain backlink summary.",
@@ -675,7 +741,7 @@ class DiagnosticInventoryEngine:
             applicable_url_types=["domain"],
             required_data_sources=["competitor_crawls"],
             test_performed="Benchmark audited site against verified competitor domains across technical health, TTFB, and depth.",
-            status="PASS" if comp_count > 1 else "NOT_TESTED",
+            status=DiagnosticStatus.PASSED.value if comp_count > 1 else DiagnosticStatus.NOT_TESTED.value,
             status_reason=f"Benchmarked against {comp_count - 1} peer competitor domain(s)." if comp_count > 1 else "No competitor domains attached for comparative benchmarking; marked NOT_TESTED.",
             severity="INFORMATIONAL",
             confidence=0.85 if comp_count > 1 else 0.50,
@@ -696,8 +762,8 @@ class DiagnosticInventoryEngine:
             applicable_url_types=["html"],
             required_data_sources=["geo_analyzer", "entity_graph"],
             test_performed="Evaluate factual sentence clarity, definition passages, and structured answer blocks for RAG ingestion.",
-            status="PASS" if (extract_score is not None and extract_score >= 70) else ("WARNING" if (extract_score is not None and extract_score < 70) else "INCONCLUSIVE"),
-            status_reason=f"Answer extractability measured at {extract_score:.1f}/100." if extract_score is not None else "Simulated on-page extractability evaluation completed.",
+            status=DiagnosticStatus.FAILED.value if (extract_score is not None and extract_score < 70) else (DiagnosticStatus.INFERRED.value if extract_score is not None else DiagnosticStatus.UNAVAILABLE.value),
+            status_reason=f"Answer extractability measured at {extract_score:.1f}/100." if extract_score is not None else "Simulated on-page extractability telemetry unavailable.",
             severity="MEDIUM" if (extract_score is not None and extract_score < 70) else "INFORMATIONAL",
             confidence=0.85,
             remediation_requirement="Format primary value propositions into declarative 'X is Y' subject-predicate answer sentences." if (extract_score is not None and extract_score < 70) else None,
@@ -716,7 +782,7 @@ class DiagnosticInventoryEngine:
             applicable_url_types=["all"],
             required_data_sources=["remediation_engine"],
             test_performed="Validate that all identified findings have actionable owners, effort estimates, and code examples.",
-            status="PASS" if roadmap_items else "WARNING",
+            status=DiagnosticStatus.PASSED.value if roadmap_items else DiagnosticStatus.NOT_TESTED.value,
             status_reason=f"Assembled {len(roadmap_items)} prioritized engineering and editorial remediation items." if roadmap_items else "No roadmap items generated.",
             severity="INFORMATIONAL",
             confidence=0.95,
@@ -734,7 +800,7 @@ class DiagnosticInventoryEngine:
             applicable_url_types=["all"],
             required_data_sources=["regression_engine", "snapshots"],
             test_performed="Enforce DISCOVERED -> TRIAGED -> IN_PROGRESS -> FIXED -> VERIFIED lifecycle.",
-            status="PASS",
+            status=DiagnosticStatus.PASSED.value,
             status_reason="Verification protocol and cryptographic baseline snapshot established.",
             severity="INFORMATIONAL",
             confidence=1.0,
@@ -742,16 +808,22 @@ class DiagnosticInventoryEngine:
         ))
 
         # Compile matrix totals
-        passed = sum(1 for r in records if r.status == "PASS")
-        failed = sum(1 for r in records if r.status == "FAIL")
-        warnings = sum(1 for r in records if r.status == "WARNING")
+        passed = sum(1 for r in records if r.status in ("PASS", "PASSED"))
+        failed = sum(1 for r in records if r.status in ("FAIL", "FAILED"))
+        sampled = sum(1 for r in records if r.status == "SAMPLED")
         not_tested = sum(1 for r in records if r.status == "NOT_TESTED")
-        not_connected = sum(1 for r in records if r.status == "NOT_CONNECTED")
-        not_applicable = sum(1 for r in records if r.status == "NOT_APPLICABLE")
-        inconclusive = sum(1 for r in records if r.status == "INCONCLUSIVE")
-        needs_manual_review = sum(1 for r in records if r.status == "NEEDS_MANUAL_REVIEW")
+        unavailable = sum(1 for r in records if r.status in ("NOT_CONNECTED", "UNAVAILABLE"))
+        inferred = sum(1 for r in records if r.status in ("INCONCLUSIVE", "INFERRED"))
+        warnings = sum(1 for r in records if r.status in ("WARNING", "WARN"))
+        not_connected = unavailable
+        not_applicable = sum(1 for r in records if r.status == "NOT_APPLICABLE" or "NOT_APPLICABLE" in (r.status_reason or ""))
+        inconclusive = inferred
+        needs_manual_review = 0
+
         total = len(records)
-        cov_pct = round(((passed + failed + warnings) / max(1, total - not_applicable)) * 100.0, 1)
+        active_tested = passed + failed + sampled
+        inspection_cov = round((active_tested / max(1, total)) * 100.0, 1)
+        audit_health = round(((passed + sampled) / max(1, active_tested)) * 100.0, 1) if active_tested > 0 else 100.0
 
         # Chapter breakdown
         ch_breakdown: Dict[str, Dict[str, int]] = {}
@@ -759,12 +831,17 @@ class DiagnosticInventoryEngine:
             ch = r.chapter_num
             if ch not in ch_breakdown:
                 ch_breakdown[ch] = {
-                    "PASS": 0, "FAIL": 0, "WARNING": 0,
-                    "NOT_TESTED": 0, "NOT_CONNECTED": 0,
-                    "NOT_APPLICABLE": 0, "INCONCLUSIVE": 0,
-                    "NEEDS_MANUAL_REVIEW": 0,
+                    DiagnosticStatus.PASSED.value: 0,
+                    DiagnosticStatus.FAILED.value: 0,
+                    DiagnosticStatus.SAMPLED.value: 0,
+                    DiagnosticStatus.NOT_TESTED.value: 0,
+                    DiagnosticStatus.UNAVAILABLE.value: 0,
+                    DiagnosticStatus.INFERRED.value: 0,
                 }
-            ch_breakdown[ch][r.status] = ch_breakdown[ch].get(r.status, 0) + 1
+            st = r.status
+            if st not in ch_breakdown[ch]:
+                ch_breakdown[ch][st] = 0
+            ch_breakdown[ch][st] += 1
 
         return DiagnosticCoverageMatrix(
             total_diagnostics=total,
@@ -772,11 +849,17 @@ class DiagnosticInventoryEngine:
             failed_count=failed,
             warning_count=warnings,
             not_tested_count=not_tested,
+            unavailable_count=unavailable,
             not_connected_count=not_connected,
             not_applicable_count=not_applicable,
             inconclusive_count=inconclusive,
+            inferred_count=inferred,
+            sampled_count=sampled,
             needs_manual_review_count=needs_manual_review,
-            coverage_pct=cov_pct,
+            coverage_pct=inspection_cov,
+            inspection_coverage_pct=inspection_cov,
+            audit_health_score=audit_health,
             records=records,
             chapter_breakdown=ch_breakdown,
         )
+

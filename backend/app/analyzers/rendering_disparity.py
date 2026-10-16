@@ -17,7 +17,41 @@ from urllib.parse import urlparse
 try:
     from bs4 import BeautifulSoup
 except ImportError:
-    BeautifulSoup = None
+    class _LxmlNodeAdapter:
+        def __init__(self, node):
+            self._node = node
+        def get_text(self, separator=" ", strip=True):
+            if self._node is None:
+                return ""
+            text = separator.join(self._node.itertext())
+            return text.strip() if strip else text
+        def __call__(self, tags):
+            if self._node is None:
+                return []
+            for t in tags:
+                for match in self._node.xpath(f".//{t}"):
+                    match.drop_tree()
+            return []
+        def find_all(self, tag, **kwargs):
+            if self._node is None:
+                return []
+            if tag == "a" and kwargs.get("href"):
+                return [{"href": a.attrib.get("href", "")} for a in self._node.xpath(".//a[@href]")]
+            return [_LxmlNodeAdapter(el) for el in self._node.xpath(f".//{tag}")]
+        @property
+        def title(self):
+            if self._node is None:
+                return None
+            titles = self._node.xpath(".//title")
+            return _LxmlNodeAdapter(titles[0]) if titles else None
+
+    def BeautifulSoup(html, parser="lxml"):
+        import lxml.html
+        try:
+            doc = lxml.html.fromstring(html)
+            return _LxmlNodeAdapter(doc)
+        except Exception:
+            return None
 
 from app.domain.models import Finding, FindingClassification, FindingEvidence, GroundedRecommendation
 from app.domain.enums import Category, Severity, RubricConfidence, EvidenceConfidence, EvidenceClass

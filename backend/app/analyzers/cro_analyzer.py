@@ -45,6 +45,31 @@ PASSIVE_GENERIC_PATTERNS = [
     r"^(submit|click\s+here|learn\s+more|read\s+more|continue|next|more|go|here|download|view\s+more|check\s+it\s+out)$"
 ]
 
+def generate_agentic_cta_rewrite(text: str, business_profile: Optional[Any] = None) -> str:
+    """Agentic generation of action-oriented CTA rewrite customized to business offering and intent."""
+    raw = text.strip()
+    lower = raw.lower()
+    offering = ""
+    if business_profile:
+        offering = str(getattr(business_profile, "primary_offering", "") or getattr(business_profile, "niche", "") or "").strip()
+    
+    if "submit" in lower:
+        return f"Complete Request & Get {offering.title()}" if offering else "Claim Your Strategy Report / Complete Registration"
+    if "click here" in lower:
+        return f"Explore {offering.title()} & Pricing" if offering else "Explore Solution & Pricing"
+    if "learn more" in lower:
+        return f"Discover How {offering.title()} Works" if offering else "Discover How It Works / See Full Capabilities"
+    if "read more" in lower:
+        return f"Read Full Case Study on {offering.title()}" if offering else "Read Full Case Study / View Technical Breakdown"
+    if "continue" in lower or "next" in lower:
+        return "Proceed to Next Step"
+    if "download" in lower:
+        return f"Get Free {offering.title()} Guide" if offering else "Get Free Guide / Download Resource"
+    if "go" in lower:
+        return "Start Now"
+    
+    return f"Start with {raw.title()} Today"
+
 CTA_REWRITE_SUGGESTIONS = {
     "submit": "Claim Your Strategy Report / Complete Registration",
     "click here": "Explore Solution & Pricing",
@@ -129,7 +154,7 @@ class CroAnalyzer:
                     if any(re.search(pat, lower_t) for pat in PASSIVE_GENERIC_PATTERNS):
                         intent = "PASSIVE_GENERIC"
                         is_passive = True
-                        suggestion = CTA_REWRITE_SUGGESTIONS.get(lower_t, f"Action-Oriented: {text_clean} Now")
+                        suggestion = generate_agentic_cta_rewrite(text_clean, business_profile)
                     elif any(re.search(pat, lower_t) for pat in HIGH_INTENT_PATTERNS):
                         intent = "HIGH_INTENT"
                     elif any(re.search(pat, lower_t) for pat in EXPLORATORY_PATTERNS):
@@ -177,7 +202,7 @@ class CroAnalyzer:
                         intent_category=intent,
                         placement_zone="HERO" if idx == 0 and not hero_cta_found else "BODY",
                         is_passive_friction=is_passive,
-                        suggested_rewrite=CTA_REWRITE_SUGGESTIONS.get(lower_t),
+                        suggested_rewrite=generate_agentic_cta_rewrite(c_str, business_profile) if is_passive else None,
                     ))
                     page_ctas_detected += 1
                     if idx == 0 and not hero_cta_found:

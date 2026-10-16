@@ -576,3 +576,22 @@ class FindingStatus(str, Enum):
     ACCEPTED_RISK = "ACCEPTED_RISK"
 
 
+class DiagnosticStatus(str, Enum):
+    """
+    Controlled 6-state status model for audit checks and diagnostic inventory:
+    - PASSED: The test ran and the condition was verified satisfied.
+    - FAILED: The test ran and a defect was observed with evidence.
+    - NOT_TESTED: No test was performed during this audit execution.
+    - UNAVAILABLE: Required data, integration (GSC/GA4/PageSpeed), or access was unavailable.
+    - INFERRED: A conclusion was inferred rather than directly measured.
+    - SAMPLED: Only part of the relevant scope was inspected.
+    """
+    PASSED = "PASSED"
+    FAILED = "FAILED"
+    NOT_TESTED = "NOT_TESTED"
+    UNAVAILABLE = "UNAVAILABLE"
+    INFERRED = "INFERRED"
+    SAMPLED = "SAMPLED"
+
+
+

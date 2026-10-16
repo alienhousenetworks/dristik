@@ -1456,13 +1456,14 @@ class SeoPrintReportRenderer:
         for r in ch_records:
             st = r.status.upper()
             badge_class = (
-                "badge-clean" if st == "PASS"
-                else "badge-crit" if st == "FAIL"
-                else "badge-warn" if st == "WARNING"
+                "badge-clean" if st in ("PASS", "PASSED")
+                else "badge-crit" if st in ("FAIL", "FAILED")
+                else "badge-warn" if st in ("WARNING", "SAMPLED")
                 else "badge-untested" if st == "NOT_TESTED"
-                else "badge-na" if st == "NOT_APPLICABLE"
+                else "badge-na" if st in ("NOT_APPLICABLE", "UNAVAILABLE", "NOT_CONNECTED")
                 else "badge-secondary"
             )
+
             rows.append(f"""
             <tr>
                 <td style="font-family: monospace; font-size: 7.5pt; font-weight: 700; color: #475569;">{html.escape(r.diagnostic_id)}</td>
@@ -2933,7 +2934,7 @@ class SeoPrintReportRenderer:
 
         sec_table = f"""
         <div style="margin-top: 4mm;">
-            <h4 style="font-size: 8.5pt; font-weight: 800; color: #0f294a; margin-bottom: 2mm;">Live HTTP Socket Response Headers Dossier</h4>
+            <h4 style="font-size: 8.5pt; font-weight: 800; color: #0f294a; margin-bottom: 2mm;">HTTP Security Headers &amp; Protocol Integrity Inventory</h4>
             <table class="data-table" style="font-size: 7.5pt; margin-bottom: 4mm;">
                 <thead>
                     <tr>

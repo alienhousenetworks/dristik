@@ -50,9 +50,15 @@ class FindingEvidence(BaseModel):
     url: Optional[str] = None
     element: str = "dom"
     value: str = ""
+    observed_value: Optional[Any] = None
+    expected_condition: Optional[str] = None
+    test_method: Optional[str] = "crawl_dom"
+    response_status: Optional[int] = 200
+    collection_timestamp: Optional[str] = None
     selector: Optional[str] = None
     line_number: Optional[int] = None
     snippet: Optional[str] = None
+    description: Optional[str] = None
     source: Optional[str] = "crawl"
     excerpt: Optional[str] = None
     type: str = "content"
@@ -60,6 +66,9 @@ class FindingEvidence(BaseModel):
     evidence_class: EvidenceClass = EvidenceClass.OBSERVED
     evidence_subtype: Optional[str] = "DOM"
     evidence_ref: Optional[EvidenceRef] = None
+    is_decorative: Optional[bool] = None
+    image_role: Optional[str] = None
+
 
     @field_validator("excerpt", "value", "snippet", mode="before")
     @classmethod
@@ -248,6 +257,12 @@ class GroundedRecommendation(BaseModel):
     how_to_change: str = Field(..., description="Concrete implementation guidance")
     example: Optional[str] = Field(default=None, description="Concrete code snippet or content example")
     target_file: Optional[str] = None
+    responsible_role: str = Field(default="Developer", description="developer, seo_specialist, content_editor, analytics_owner")
+    estimated_effort: str = Field(default="Low (< 2 hours)", description="Estimated effort e.g. Low (< 2 hours), Medium (1 day)")
+    dependencies: List[str] = Field(default_factory=list, description="Implementation prerequisites")
+    priority_rationale: Optional[str] = Field(default=None, description="Technical rationale for priority assignment")
+    acceptance_criteria: Optional[str] = Field(default=None, description="Testable condition verifying resolution")
+    verification_command: Optional[str] = Field(default=None, description="Concrete runnable test command (e.g. curl or selector)")
 
 
 class DerivedMetric(BaseModel):
@@ -429,6 +444,9 @@ class Finding(BaseModel):
     verification_steps: List[str] = Field(default_factory=list, description="Concrete retest steps required to verify the fix.")
     scope_status: Optional[str] = Field(default=None, description="PAGE_VERIFIED, SAMPLE_VERIFIED, DOMAIN_WIDE, NOT_MEASURED.")
     expected_outcome: Optional[str] = Field(default=None, description="Plausible qualitative outcome or evidence-backed quantitative estimate. Never guaranteed traffic/rankings.")
+    responsible_role: Optional[str] = Field(default=None, description="Assigned role: Developer, SEO Specialist, Content Editor, Analytics Owner")
+    verification_command: Optional[str] = Field(default=None, description="Concrete runnable retest command (e.g. curl or selector test)")
+    priority_rationale: Optional[str] = Field(default=None, description="Causal justification for the assigned priority level")
 
     # v2: Lifecycle and display fields
     lifecycle_state: FindingLifecycle = Field(
@@ -2029,8 +2047,11 @@ class MediaAssetAuditReport(BaseModel):
     mixed_content_count: int = 0
     mixed_content_urls: List[str] = Field(default_factory=list)
     cls_risk_images: List[Dict[str, str]] = Field(default_factory=list)
+    missing_alt_images: List[Dict[str, Any]] = Field(default_factory=list)
+    flagged_images: List[MediaAssetItem] = Field(default_factory=list)
     decorative_alt_compliant_count: int = 0
     summary: str = ""
+
 
 
 class WcagViolation(BaseModel):
@@ -2448,16 +2469,39 @@ class DiagnosticRecord(BaseModel):
     preconditions: List[str] = Field(default_factory=list)
     required_data_sources: List[str] = Field(default_factory=list)
     test_performed: str
-    status: str = "NOT_TESTED"  # PASS, FAIL, WARNING, NOT_TESTED, NOT_CONNECTED, NOT_APPLICABLE, INCONCLUSIVE
+    status: str = "NOT_TESTED"  # Controlled statuses: PASSED, FAILED, NOT_TESTED, UNAVAILABLE, INFERRED, SAMPLED
     status_reason: str = ""
     evidence_references: List[str] = Field(default_factory=list)
+    observed_value: Optional[Any] = None
+    expected_condition: Optional[str] = None
+    test_method: Optional[str] = None
+    response_status: Optional[int] = None
     affected_urls: List[str] = Field(default_factory=list)
     affected_count: int = 0
     severity: str = "INFORMATIONAL"  # CRITICAL, HIGH, MEDIUM, LOW, INFORMATIONAL
     confidence: float = 0.90
-    analysis_status: str = "COMPLETED"
     remediation_requirement: Optional[str] = None
     validation_test: Optional[str] = None
+
+    @field_validator("status", mode="before")
+    @classmethod
+    def normalize_status(cls, v: Any) -> str:
+        s = str(getattr(v, "value", v) or "NOT_TESTED").upper()
+        if s in ("PASSED", "PASS"):
+            return "PASSED"
+        if s in ("FAILED", "FAIL"):
+            return "FAILED"
+        if s in ("SAMPLED",):
+            return "SAMPLED"
+        if s in ("UNAVAILABLE", "NOT_CONNECTED"):
+            return "UNAVAILABLE"
+        if s in ("INFERRED", "INCONCLUSIVE"):
+            return "INFERRED"
+        if s in ("NOT_TESTED", "NOT_APPLICABLE"):
+            return "NOT_TESTED"
+        if s in ("WARNING", "WARN"):
+            return "FAILED"
+        return "NOT_TESTED"
 
 class DiagnosticCoverageMatrix(BaseModel):
     total_diagnostics: int = 0
@@ -2465,13 +2509,19 @@ class DiagnosticCoverageMatrix(BaseModel):
     failed_count: int = 0
     warning_count: int = 0
     not_tested_count: int = 0
+    unavailable_count: int = 0
     not_connected_count: int = 0
     not_applicable_count: int = 0
     inconclusive_count: int = 0
+    inferred_count: int = 0
+    sampled_count: int = 0
     needs_manual_review_count: int = 0
     coverage_pct: float = 0.0
+    inspection_coverage_pct: float = 0.0
+    audit_health_score: float = 0.0
     records: List[DiagnosticRecord] = Field(default_factory=list)
     chapter_breakdown: Dict[str, Dict[str, int]] = Field(default_factory=dict)
+
 
     @property
     def diagnostics(self) -> List[DiagnosticRecord]:

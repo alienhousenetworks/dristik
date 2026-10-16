@@ -1586,6 +1586,7 @@ class CompleteSeoReportGenerator:
                 <h2>13. Local SEO & Google Business Profile Presence</h2>
                 <span class="section-badge">MASTER INDEX #13</span>
             </div>
+            {local_html}
             {sec_13_content}
             {sec_13_findings}
         </section>
@@ -1596,6 +1597,7 @@ class CompleteSeoReportGenerator:
                 <h2>14. E-commerce SEO & Product Architecture</h2>
                 <span class="section-badge">MASTER INDEX #14</span>
             </div>
+            {ecom_html}
             {sec_14_content}
             {sec_14_findings}
         </section>
@@ -1620,6 +1622,7 @@ class CompleteSeoReportGenerator:
                 <h2>16. External Authority, Backlink Quality & Mentions</h2>
                 <span class="section-badge">MASTER INDEX #16</span>
             </div>
+            {ext_auth_html}
             {sec_16_content}
             {sec_16_findings}
         </section>
@@ -1651,6 +1654,10 @@ class CompleteSeoReportGenerator:
                 <span class="section-badge">MASTER INDEX #19</span>
             </div>
             {sec_19_content}
+            <div class="findings-cards-container" style="margin-top: 24px;">
+                <h3 style="font-size: 16px; margin-bottom: 16px; color: #f8fafc;">Remediation Finding Cards &amp; Technical Specifications ({findings_count} Items)</h3>
+                {finding_cards_html}
+            </div>
         </section>
 
         <!-- Section 20: Verification Lifecycle -->

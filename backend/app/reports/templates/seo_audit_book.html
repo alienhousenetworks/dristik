@@ -161,6 +161,12 @@ small, .small {
 .status.medium { color: var(--medium); }
 .status.low { color: var(--low); }
 .status.info { color: var(--info); }
+.status.passed { color: #15803d; background: #f0fdf4; border-color: #bbf7d0; }
+.status.failed { color: #b91c1c; background: #fef2f2; border-color: #fecaca; }
+.status.sampled { color: #0284c7; background: #f0f9ff; border-color: #bae6fd; }
+.status.not_tested, .status.not-tested { color: #64748b; background: #f8fafc; border-color: #cbd5e1; }
+.status.unavailable { color: #d97706; background: #fffbeb; border-color: #fde68a; }
+.status.inferred { color: #7c3aed; background: #f5f3ff; border-color: #ddd6fe; }
 
 .grid-2 {
   display: grid;
@@ -819,10 +825,14 @@ pre {
       <tbody>
         {% for metric in subsection.metrics %}
         <tr>
-          <td>{{ metric.name }}</td>
-          <td>{{ metric.value if metric.value is not none else "Not measured" }}</td>
-          <td>{{ metric.status }}</td>
-          <td>{{ metric.scope | default("Not specified") }}</td>
+          <td><strong>{{ metric.name }}</strong></td>
+          <td style="color: #334155;">{{ metric.value if metric.value is not none else "Not measured" }}</td>
+          <td>
+            <span class="status {{ (metric.status | string | lower).replace('_', '-') }}" style="font-size: 7.5pt; padding: 2pt 6pt; border-radius: 3px; font-weight: 700; text-transform: uppercase;">
+              {{ metric.status }}
+            </span>
+          </td>
+          <td><code style="font-size: 7.5pt; background: #f8fafc; padding: 1pt 4pt; border-radius: 2px;">{{ metric.scope | default("Not specified") }}</code></td>
         </tr>
         {% endfor %}
       </tbody>

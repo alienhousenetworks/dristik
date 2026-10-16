@@ -6,6 +6,7 @@ Parses all <img> elements and page subresources to evaluate:
 - Next-gen image format adoption (WebP, AVIF, SVG vs PNG, JPEG, GIF)
 - Mixed content: scans HTTPS pages for subresources loaded over insecure http://
 """
+import hashlib
 from typing import List, Dict, Any, Optional
 from urllib.parse import urlparse
 try:
@@ -19,22 +20,83 @@ _MODERN_FORMATS = {"webp", "avif", "svg"}
 _LEGACY_FORMATS = {"png", "jpeg", "jpg", "gif", "bmp", "tiff"}
 
 
+def _extract_dom_elements(html: str):
+    """Robust extractor supporting BeautifulSoup, lxml.html, and html.parser fallback."""
+    if BeautifulSoup is not None:
+        try:
+            soup = BeautifulSoup(html, "html.parser")
+            imgs = []
+            for tag in soup.find_all("img"):
+                attrs = dict(tag.attrs)
+                attrs["_is_linked"] = bool(tag.find_parent("a"))
+                attrs["_tag_str"] = str(tag)
+                imgs.append(attrs)
+            subresources = []
+            for tag in soup.find_all(["img", "script", "link", "iframe", "video", "audio"]):
+                src = tag.get("src") or tag.get("href")
+                if src:
+                    subresources.append(src)
+            return imgs, subresources
+        except Exception:
+            pass
+
+    try:
+        import lxml.html
+        doc = lxml.html.fromstring(html)
+        imgs = []
+        for tag in doc.xpath("//img"):
+            attrs = dict(tag.attrib)
+            parent = tag.getparent()
+            attrs["_is_linked"] = (parent is not None and parent.tag == "a")
+            attrs["_tag_str"] = lxml.html.tostring(tag, encoding="unicode")
+            imgs.append(attrs)
+        subresources = []
+        for tag in doc.xpath("//img | //script | //link | //iframe | //video | //audio"):
+            src = tag.attrib.get("src") or tag.attrib.get("href")
+            if src:
+                subresources.append(src)
+        return imgs, subresources
+    except Exception:
+        pass
+
+    from html.parser import HTMLParser
+    class SimpleMediaParser(HTMLParser):
+        def __init__(self):
+            super().__init__()
+            self.imgs = []
+            self.subresources = []
+            self._in_a = False
+        def handle_starttag(self, tag, attrs):
+            attr_dict = dict(attrs)
+            if tag == "a":
+                self._in_a = True
+            elif tag == "img":
+                attr_dict["_is_linked"] = self._in_a
+                attr_dict["_tag_str"] = f"<img src='{attr_dict.get('src', '')}'>"
+                self.imgs.append(attr_dict)
+            if tag in ("img", "script", "link", "iframe", "video", "audio"):
+                src = attr_dict.get("src") or attr_dict.get("href")
+                if src:
+                    self.subresources.append(src)
+        def handle_endtag(self, tag):
+            if tag == "a":
+                self._in_a = False
+
+    parser = SimpleMediaParser()
+    try:
+        parser.feed(html)
+    except Exception:
+        pass
+    return parser.imgs, parser.subresources
+
+
 class MediaAssetAnalyzer:
     @staticmethod
     def analyze_media(pages: List[PageEvidence], raw_html_map: Optional[Dict[str, str]] = None) -> MediaAssetAuditReport:
-        if BeautifulSoup is None:
-            return MediaAssetAuditReport(
-                total_images_analyzed=0,
-                images_missing_alt=0,
-                images_missing_dimensions=0,
-                modern_format_adoption_pct=100.0,
-                flagged_images=[],
-                cls_risks=[],
-                mixed_content_urls=[],
-            )
         raw_html_map = raw_html_map or {}
         flagged_images: List[MediaAssetItem] = []
         cls_risks: List[Dict[str, str]] = []
+        missing_alt_images: List[Dict[str, Any]] = []
         mixed_content_urls: List[str] = []
 
         total_images = 0
@@ -46,7 +108,7 @@ class MediaAssetAnalyzer:
 
         for p in pages:
             is_page_https = (p.url or "").startswith("https://")
-            html = raw_html_map.get(p.url) or getattr(p, "raw_html", None)
+            html = raw_html_map.get(p.url) or getattr(p, "raw_html", None) or getattr(p, "rendered_html", None)
             if not html and getattr(p, "snapshot_path", None):
                 try:
                     from pathlib import Path
@@ -57,14 +119,12 @@ class MediaAssetAnalyzer:
                     pass
 
             if html:
-                soup = BeautifulSoup(html, "html.parser")
-                imgs = soup.find_all("img")
+                imgs, subresources = _extract_dom_elements(html)
                 total_images += len(imgs)
 
                 # Check mixed content across all subresources on HTTPS pages (img, script, link, iframe)
                 if is_page_https:
-                    for tag in soup.find_all(["img", "script", "link", "iframe", "video", "audio"]):
-                        src = tag.get("src") or tag.get("href")
+                    for src in subresources:
                         if src and src.strip().lower().startswith("http://"):
                             mixed_content_urls.append(src)
 
@@ -97,6 +157,18 @@ class MediaAssetAnalyzer:
                     # WCAG 2.2: Only flag as missing alt if it has no alt attribute and is not declared decorative
                     if not has_alt and not is_decorative:
                         missing_alt_count += 1
+                        if len(missing_alt_images) < 25:
+                            is_linked = img.get("_is_linked", False)
+                            img_filename = src.split("/")[-1].split("?")[0] or "inline-image"
+                            missing_alt_images.append({
+                                "page_url": p.url,
+                                "img_src": src,
+                                "filename": img_filename,
+                                "tag_snippet": img.get("_tag_str", f"<img src='{src}'>")[:200],
+                                "is_linked": is_linked,
+                                "image_role": "functional" if is_linked else "informative",
+                                "reason": f"Image '{img_filename}' lacks alt attribute (WCAG non-compliant)",
+                            })
                     elif is_decorative:
                         empty_alt_count += 1
 
@@ -154,6 +226,8 @@ class MediaAssetAnalyzer:
             mixed_content_count=len(mixed_content_urls),
             mixed_content_urls=mixed_content_urls,
             cls_risk_images=cls_risks,
+            missing_alt_images=missing_alt_images,
+            flagged_images=flagged_images,
             summary=summary
         )
 
@@ -162,35 +236,82 @@ class MediaAssetAnalyzer:
         findings: List[Finding] = []
 
         if report.missing_alt_count > 0:
+            sample = report.missing_alt_images[0] if getattr(report, "missing_alt_images", None) else None
+            sample_fn = sample.get("filename", "image asset") if sample else "image asset"
+            sample_page = urlparse(sample.get("page_url", "/")).path or "/" if sample else "/"
+            
+            title = f"{report.missing_alt_count} Image Asset(s) Missing Alternative Text"
+            if report.missing_alt_count == 1 and sample:
+                title = f"On '{sample_page}', image '{sample_fn}' is missing an alt attribute"
+            elif sample:
+                title = f"{report.missing_alt_count} Image Asset(s) Missing Alternative Text (e.g. '{sample_fn}' on '{sample_page}')"
+
+            evidence_items: List[FindingEvidence] = []
+            alt_images = getattr(report, "missing_alt_images", []) or []
+            for item in alt_images[:8]:
+                page_url = item.get("page_url") or ""
+                img_src = item.get("img_src") or ""
+                ev_id = f"EV-IMG-ALT-{hashlib.sha256(f'{page_url}:{img_src}'.encode()).hexdigest()[:8]}"
+                evidence_items.append(FindingEvidence(
+                    evidence_id=ev_id,
+                    url=page_url,
+                    element="img",
+                    value=img_src,
+                    observed_value=img_src,
+                    expected_condition="Informative content image must declare a non-empty alt attribute describing its content or function",
+                    snippet=item.get("tag_snippet") or f'<img src="{img_src}">',
+                    test_method="crawl_html_dom",
+                    source="crawl",
+                    is_decorative=False,
+                    image_role=item.get("image_role", "informative"),
+                ))
+
             findings.append(Finding(
                 finding_id="finding_missing_image_alt",
                 category=Category.ON_PAGE_SEO,
-                severity=Severity.MEDIUM,
-                title=f"{report.missing_alt_count} Image Asset(s) Missing Alternative Text",
+                severity=Severity.LOW if report.missing_alt_count <= 2 else Severity.MEDIUM,
+                title=title,
                 description=(
-                    f"Observed {report.missing_alt_count} informative image(s) lacking an alt attribute. "
-                    "Images without alt text cannot be indexed by Google Image Search and violate WCAG 2.2 accessibility."
+                    f"Observed {report.missing_alt_count} informative image asset(s) lacking an alt attribute. "
+                    f"Sample finding: on '{sample_page}', image '{sample_fn}' has no alt text. "
+                    "Informative images require descriptive text for search engine image indexation and assistive technology."
                 ),
-                recommendation="Add descriptive, keyword-rich alternative text to all content images. Mark decorative icons with alt=''.",
-                why_it_matters="Google relies on alt text to understand image context. Screen readers require alt text for accessibility compliance.",
-                validation_criteria="Every non-decorative <img> tag must include a non-empty alt attribute.",
-                evidence=[
-                    FindingEvidence(
-                        url=item.get("page_url") or "",
-                        element="img",
-                        value=item.get("img_src") or "",
-                        snippet=item.get("reason"),
-                        source="crawl"
-                    )
-                    for item in [it for it in report.cls_risk_images if isinstance(it, dict) and "img_src" in it][:5]
-                ] if report.cls_risk_images else [],
-                evidence_refs=["media_audit"],
-                impact=5,
+                recommendation="Add descriptive, concise alternative text to all informative images. Mark purely decorative images with alt='' or role='presentation'.",
+                why_it_matters="Search engines utilize image alt text to understand topical relevance and image search placement. Screen readers rely on alt text to convey non-text content.",
+                validation_criteria="Every non-decorative <img> tag must include a non-empty alt attribute describing its visual content or function.",
+                owner="Content Editor",
+                responsible_role="Content Editor",
+                estimated_effort="Low (< 2 hours)",
+                dependencies=["CMS image asset editor access"],
+                priority_rationale="Medium Priority: Essential for WCAG accessibility and search engine image context, but does not block document indexation.",
+                verification_command=f"curl -s '{sample_page}' | grep -i '<img' | grep -v 'alt='",
+                evidence=evidence_items,
+                evidence_refs=[ev.evidence_id for ev in evidence_items if ev.evidence_id] or ["media_audit"],
+                evidence_ids=[ev.evidence_id for ev in evidence_items if ev.evidence_id],
+                impact=4,
                 effort=2,
-                priority=5
+                priority=4
             ))
 
         if report.missing_dimensions_count > 0:
+            evidence_items = []
+            for item in report.cls_risk_images[:8]:
+                page_url = item.get("page_url") or ""
+                img_src = item.get("img_src") or ""
+                ev_id = f"EV-IMG-CLS-{hashlib.sha256(f'{page_url}:{img_src}'.encode()).hexdigest()[:8]}"
+                evidence_items.append(FindingEvidence(
+                    evidence_id=ev_id,
+                    url=item.get("page_url") or "",
+                    element="img",
+                    value=item.get("img_src") or "",
+                    observed_value="Missing explicit width/height attributes",
+                    expected_condition="Images must declare explicit width and height attributes or CSS aspect-ratio",
+                    snippet=item.get("reason"),
+                    test_method="crawl_html_dom",
+                    source="crawl",
+                ))
+
+            cls_sample_url = report.cls_risk_images[0].get("page_url") if report.cls_risk_images else "https://example.com/"
             findings.append(Finding(
                 finding_id="finding_image_cls_risk",
                 category=Category.TECHNICAL_SEO,
@@ -201,25 +322,38 @@ class MediaAssetAnalyzer:
                     "This prevents the browser layout engine from reserving image aspect ratio before download, causing layout shifts."
                 ),
                 recommendation="Declare explicit width and height attributes or CSS aspect-ratio on all <img> elements.",
-                why_it_matters="Cumulative Layout Shift (CLS) is a Core Web Vital. Layout instability drops mobile ranking signals and irritates visitors.",
+                why_it_matters="Cumulative Layout Shift (CLS) is a Core Web Vital. Visual instability harms user reading flow and suppresses mobile experience scores.",
                 validation_criteria="All <img> tags must declare intrinsic width and height attributes.",
-                evidence=[
-                    FindingEvidence(
-                        url=item.get("page_url") or "",
-                        element="img",
-                        value=item.get("img_src") or "",
-                        snippet=item.get("reason"),
-                        source="crawl"
-                    )
-                    for item in report.cls_risk_images[:5]
-                ],
-                evidence_refs=["media_audit"],
+                owner="Developer",
+                responsible_role="Developer",
+                estimated_effort="Low (< 2 hours)",
+                dependencies=["Frontend template or CSS styling access"],
+                priority_rationale="High: Cumulative Layout Shift directly degrades Google Core Web Vitals compliance.",
+                verification_command=f"curl -s '{cls_sample_url}' | grep -E '<img[^>]+src=[^>]+>' | grep -v 'width='",
+                evidence=evidence_items,
+                evidence_refs=[ev.evidence_id for ev in evidence_items if ev.evidence_id] or ["media_audit"],
+                evidence_ids=[ev.evidence_id for ev in evidence_items if ev.evidence_id],
                 impact=6,
                 effort=2,
                 priority=6
             ))
 
         if report.mixed_content_count > 0:
+            evidence_items = []
+            for u in report.mixed_content_urls[:8]:
+                ev_id = f"EV-SEC-MIXED-{hashlib.sha256(u.encode()).hexdigest()[:8]}"
+                evidence_items.append(FindingEvidence(
+                    evidence_id=ev_id,
+                    url=u,
+                    element="mixed_content",
+                    value=u,
+                    observed_value="Insecure http:// asset URL",
+                    expected_condition="All subresources on HTTPS pages must load securely over https://",
+                    snippet=f"Insecure HTTP subresource: {u}",
+                    test_method="crawl_html_dom",
+                    source="crawl",
+                ))
+
             findings.append(Finding(
                 finding_id="finding_mixed_content_assets",
                 category=Category.TECHNICAL_SEO,
@@ -232,16 +366,9 @@ class MediaAssetAnalyzer:
                 recommendation="Update all image, script, and stylesheet URLs to use HTTPS protocol.",
                 why_it_matters="Mixed content degrades browser padlock security status and causes asset loading failures.",
                 validation_criteria="All subresources on HTTPS pages must load over HTTPS.",
-                evidence=[
-                    FindingEvidence(
-                        url="",
-                        element="mixed_content",
-                        value=u,
-                        source="crawl"
-                    )
-                    for u in report.mixed_content_urls[:5]
-                ],
-                evidence_refs=["media_audit"],
+                evidence=evidence_items,
+                evidence_refs=[ev.evidence_id for ev in evidence_items if ev.evidence_id] or ["media_audit"],
+                evidence_ids=[ev.evidence_id for ev in evidence_items if ev.evidence_id],
                 impact=7,
                 effort=1,
                 priority=7

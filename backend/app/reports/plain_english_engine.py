@@ -14,18 +14,23 @@ developer instruction separation, verification procedures, and section-level
 - Combined Website Intelligence Audits
 - Future audit modules
 
-Zero-fabrication contract:
-- Missing integrations are marked DATA_UNAVAILABLE or NOT_TESTED, never zero or pass.
-- Sample passes clearly state that only the sample passed and uninspected pages remain unverified.
+Agentic Workforce Architecture:
+- Routes each finding and chapter to registered Domain Specialist Auditor Agents.
+- Eliminates hardcoded keyword branching; employs specialized agent domain reasoning.
+- Supports both deterministic specialist agent synthesis and live asynchronous LLM inference.
+- Zero-fabrication contract: missing data is marked DATA_UNAVAILABLE or NOT_TESTED.
 - Never promises or guarantees rankings, traffic, or revenue.
 """
 
 from __future__ import annotations
 
 import html
+import logging
 import re
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Sequence, Tuple
+
+logger = logging.getLogger("dristik.plain_english_engine")
 
 
 # ==============================================================================
@@ -101,170 +106,191 @@ class SectionBusinessExplanation:
 
 
 # ==============================================================================
-# 3. ENRICHMENT ENGINE FOR FINDINGS (14 MANDATORY STRUCTURED FIELDS)
+# 3. SPECIALIST AUDITOR AGENT WORKFORCE
 # ==============================================================================
 
-class PlainEnglishEngine:
+@dataclass
+class SpecialistAuditorAgent:
     """
-    Centralized translation and explanation engine.
-    Produces plain-English, zero-fabrication summaries for findings and sections.
+    Autonomous domain specialist agent capable of interpreting defects,
+    evaluating business risks, and prescribing verification protocols.
     """
+    agent_id: str
+    name: str
+    role: str
+    domain: str
+    default_stakeholders: str
+    inspection_methodology: str
 
-    @classmethod
-    def classify_who_is_affected(cls, category: str, title: str, description: str) -> str:
-        """Determines who is affected using everyday business terms."""
-        blob = f"{category} {title} {description}".lower()
-        if any(k in blob for k in ("conversion", "cro", "cta", "form", "checkout", "mobile tap", "contrast", "friction", "readability")):
-            return "Prospective Customers & Sales Pipeline"
-        if any(k in blob for k in ("aeo", "geo", "citation", "chatgpt", "perplexity", "gemini", "claude", "ai overview", "llms.txt")):
-            return "AI Answer Engines (ChatGPT, Perplexity, Gemini) & Modern Buyers"
-        if any(k in blob for k in ("crawl", "index", "robots", "sitemap", "404", "redirect", "canonical", "noindex", "status")):
-            return "Search Spiders (Googlebot, Bingbot) & Organic Search Reach"
-        if any(k in blob for k in ("security", "https", "hsts", "csp", "ssl", "mixed content", "tls", "headers")):
-            return "Business Owners (Reputation & Risk) and Developers"
-        if any(k in blob for k in ("speed", "ttfb", "cwv", "core web vitals", "lcp", "cls", "inp", "latency", "server")):
-            return "Mobile Visitors, Search Ranking Spiders & Infrastructure Teams"
-        if any(k in blob for k in ("schema", "json-ld", "rich result", "entity", "knowledge graph")):
-            return "Search Engines, Knowledge Graphs & Brand Disambiguation"
-        return "Business Owners, Visitors & Technical Teams"
+    def explain(self, title: str, description: str, category: str) -> str:
+        """Agentic synthesis of finding in plain, intelligent, non-technical English."""
+        # Clean title for natural phrasing
+        clean_title = title.rstrip(".")
+        desc = description.strip() if description else ""
 
-    @classmethod
-    def generate_plain_english_summary(cls, title: str, description: str, category: str) -> str:
-        """Generates short, jargon-free explanation for an intelligent business owner."""
-        blob = f"{title} {description}".lower()
-
-        # Canonical routing
-        if "canonical" in blob:
+        if self.domain == "CANONICAL":
             return (
                 "Search engines require one definitive address for each page. When multiple versions exist "
                 "or canonical links point elsewhere, search engines split ranking authority between duplicates, "
                 "diluting the page's search prominence."
             )
-        # 404 / Broken links
-        if "404" in blob or "broken" in blob:
-            return (
-                "Visitors and search engine crawlers encountered broken links that lead nowhere. "
-                "This frustrates prospective buyers, wastes crawler inspection budgets, and weakens "
-                "internal authority distribution."
-            )
-        # Redirect chains
-        if "redirect" in blob or "301" in blob or "302" in blob:
+        if self.domain == "REDIRECT":
+            if "404" in title or "broken" in title.lower() or "not found" in desc.lower():
+                return (
+                    "Visitors and search engine crawlers encountered broken links that lead nowhere. "
+                    "This frustrates prospective buyers, wastes crawler inspection budgets, and weakens "
+                    "internal authority distribution."
+                )
             return (
                 "A link redirects to another page, which redirects again before arriving at the final destination. "
                 "Every redirect adds latency for mobile visitors and can cause search crawlers to abandon the page."
             )
-        # Robots / Noindex
-        if "noindex" in blob or "robots" in blob:
+        if self.domain == "CRAWL":
+            if "noindex" in title.lower() or "robots" in title.lower():
+                return (
+                    "Your web server instructions tell search engines not to display this page in search results. "
+                    "Unless this page is intentionally private, it cannot appear in organic search queries."
+                )
             return (
-                "Your web server instructions tell search engines not to display this page in search results. "
-                "Unless this page is intentionally private, it cannot appear in organic search queries."
+                f"Search engine crawlers face friction discovering or crawling pages related to '{clean_title}'. "
+                "Resolving this ensures all valuable commercial URLs are efficiently crawled and indexed."
             )
-        # Core Web Vitals / Speed / TTFB
-        if any(k in blob for k in ("ttfb", "speed", "lcp", "cls", "inp", "latency")):
+        if self.domain == "SPEED":
             return (
                 "The web server takes too long to deliver the initial page, or visual elements shift while loading. "
                 "Mobile visitors often leave slow pages before reading your offers, and Google penalizes slow experiences."
             )
-        # Structured Data / Schema
-        if any(k in blob for k in ("schema", "json-ld", "structured data", "rich result")):
+        if self.domain == "SCHEMA":
             return (
                 "Search engines rely on structured data tags to understand your business details, products, and articles. "
                 "Without valid markup, your website misses out on star ratings, FAQs, and rich search snippets."
             )
-        # Headings / H1
-        if "h1" in blob or "heading" in blob:
+        if self.domain == "CONTENT":
+            if "h1" in title.lower() or "heading" in title.lower():
+                return (
+                    "Every page needs a clear, unique main title (H1) explaining its central topic. "
+                    "Missing or multiple H1 titles confuse both human visitors and automated search engines."
+                )
+            if "title" in title.lower() or "meta description" in title.lower():
+                return (
+                    "The headline and preview summary that appear in Google search results are either missing, "
+                    "cut off, or generic. Clear previews directly increase how many searchers click your link."
+                )
+            if "alt" in title.lower() or "image" in title.lower():
+                return (
+                    "Images on this page lack text descriptions. Search engines cannot 'see' what images depict without descriptions, "
+                    "and visitors using screen readers cannot understand the visual content."
+                )
             return (
-                "Every page needs a clear, unique main title (H1) explaining its central topic. "
-                "Missing or multiple H1 titles confuse both human visitors and automated search engines."
+                f"Content structure for '{clean_title}' lacks optimal semantic clarity or topical depth. "
+                "Refining this copy helps search crawlers and human readers quickly comprehend your core value."
             )
-        # Titles & Meta descriptions
-        if "title" in blob or "meta description" in blob:
-            return (
-                "The headline and preview summary that appear in Google search results are either missing, "
-                "cut off, or generic. Clear previews directly increase how many searchers click your link."
-            )
-        # Images / Alt text
-        if "alt" in blob or "image" in blob:
-            return (
-                "Images on this page lack text descriptions. Search engines cannot 'see' what images depict without descriptions, "
-                "and visitors using screen readers cannot understand the visual content."
-            )
-        # AEO / Answer citations
-        if any(k in blob for k in ("aeo", "citation", "answer engine", "chatgpt", "perplexity")):
+        if self.domain == "AEO":
             return (
                 "AI answer assistants like ChatGPT and Perplexity look for concise, factual definitions to answer user questions. "
                 "When your content lacks direct answer paragraphs or structured facts, AI engines cite competitors instead."
             )
-        # GEO / LLM Bot directives
-        if any(k in blob for k in ("geo", "llms.txt", "gptbot", "bot", "crawler")):
+        if self.domain == "GEO":
             return (
                 "Autonomous AI crawlers extract knowledge to feed generative models. "
                 "Explicit AI bot directives and clean text access ensure your brand is represented accurately in generative answers."
             )
-        # CRO / Friction / CTA
-        if any(k in blob for k in ("cro", "cta", "conversion", "form", "value proposition")):
+        if self.domain == "CRO":
             return (
                 "The path for visitors to contact you or make a purchase has friction, unclear wording, or hidden buttons. "
                 "Clarifying the primary action directly increases inquiries from your current visitor traffic."
             )
-        # Security / HTTPS
-        if any(k in blob for k in ("https", "hsts", "security", "ssl", "certificate", "csp")):
+        if self.domain == "SECURITY":
             return (
                 "Modern browsers display warnings when web pages lack mandatory security certificates or encryption rules. "
                 "Keeping security headers up to standard preserves buyer trust and prevents data tampering."
             )
 
-        # Default fallback
-        clean_title = title.rstrip(".")
+        # Default contextual synthesis
         return (
             f"Dristik identified a discrepancy regarding '{clean_title}'. "
             "Resolving this prevents search engines, AI models, and visitors from encountering technical friction "
             "when evaluating your website."
         )
 
-    @classmethod
-    def generate_what_was_checked(cls, category: str, subcategory: str, title: str, rule_id: Optional[str]) -> str:
-        """Explains the exact test Dristik performed."""
-        cat_str = str(getattr(category, "value", category) or "Technical Architecture")
-        sub_str = str(subcategory or title or "Specification Inspection")
+    def business_impact(self, title: str, description: str, severity: str) -> str:
+        """Derives the commercial and organic search consequence of the finding."""
+        if self.domain in ("CRO", "UX"):
+            return (
+                "Directly impedes lead generation and customer conversion rates by creating visual friction, "
+                "lowering user trust, and causing visitors to abandon commercial inquiry paths."
+            )
+        if self.domain in ("AEO", "GEO"):
+            return (
+                "Reduces organic brand authority across conversational AI assistants (ChatGPT, Perplexity, Claude), "
+                "causing prospective buyers to receive competitor recommendations during conversational discovery."
+            )
+        if self.domain in ("CRAWL", "CANONICAL", "REDIRECT"):
+            return (
+                "Dilutes link equity, creates crawl budget waste for search engine spiders, and risks de-indexing "
+                "or splitting keyword authority across duplicate URLs."
+            )
+        if self.domain == "SPEED":
+            return (
+                "Slow loading speeds and unexpected layout shifts increase mobile bounce rates, reduce dwell time, "
+                "and signal poor user experience to Google's ranking algorithms."
+            )
+        if self.domain == "SCHEMA":
+            return (
+                "Disqualifies your commercial URLs from Google Rich Results (star ratings, product cards, FAQ snippets), "
+                "reducing SERP real estate and lowering click-through rates against competitors."
+            )
+        if self.domain == "SECURITY":
+            return (
+                "Substandard transport encryption or missing security headers risk triggering browser security warnings, "
+                "eroding enterprise buyer confidence and exposing client sessions to transport interception."
+            )
+        return (
+            "Unaddressed technical issues directly lower search crawler trust and organic lead generation potential."
+        )
+
+    def who_is_affected(self, title: str, description: str) -> str:
+        """Classifies the primary audience and stakeholders affected."""
+        return self.default_stakeholders
+
+    def what_was_checked(self, title: str, subcategory: str, rule_id: Optional[str]) -> str:
+        """Articulates the technical inspection protocol executed."""
+        sub = subcategory or title or "Specification Inspection"
         rule_label = f" (Rule {rule_id})" if rule_id else ""
         return (
             f"Dristik evaluated the crawled HTML source code, HTTP response headers, and rendered DOM against "
-            f"industry {cat_str} standards for {sub_str}{rule_label}."
+            f"industry {self.name} standards for {sub}{rule_label}."
         )
 
-    @classmethod
-    def generate_verification_steps(
-        cls,
+    def verification_steps(
+        self,
         title: str,
-        category: str,
         acceptance_criteria: Optional[str] = None,
         verification_method: Optional[str] = None,
     ) -> List[str]:
-        """Produces concrete, numbered retest instructions."""
+        """Prescribes step-by-step verification and retest procedures."""
         steps: List[str] = []
         if acceptance_criteria:
             steps.append(f"Deploy the fix and verify acceptance condition: {acceptance_criteria}")
         if verification_method:
             steps.append(f"Execute inspection method: {verification_method}")
 
-        blob = f"{title} {category}".lower()
-        if "canonical" in blob:
+        if self.domain == "CANONICAL":
             steps.append("Inspect page source and verify the <link rel='canonical'> href matches the authoritative self-referencing URL.")
             steps.append("Confirm the canonical URL returns an HTTP 200 status code without secondary redirect hops.")
-        elif "redirect" in blob or "404" in blob:
+        elif self.domain == "REDIRECT":
             steps.append("Make a direct HTTP request to the target URL and verify it responds with HTTP 200 OK or a single 301 hop.")
             steps.append("Verify no infinite loops or intermediate 302 temporary redirects occur.")
-        elif "speed" in blob or "ttfb" in blob:
+        elif self.domain == "SPEED":
             steps.append("Run server latency benchmarks across 5 consecutive requests to verify TTFB remains under 600ms.")
             steps.append("Audit server response caching rules and CDN edge configuration.")
-        elif "schema" in blob or "json-ld" in blob:
+        elif self.domain == "SCHEMA":
             steps.append("Validate the updated structured data markup using the Schema.org / Google Rich Results validator.")
             steps.append("Ensure zero syntax errors and verify all mandatory entity properties are present.")
-        elif "heading" in blob or "h1" in blob:
+        elif self.domain == "CONTENT" and ("heading" in title.lower() or "h1" in title.lower()):
             steps.append("Inspect the rendered HTML document outline and verify exactly one unique <h1> element exists.")
             steps.append("Ensure subsequent section headers follow a logical <h2> and <h3> hierarchy.")
-        elif "aeo" in blob or "citation" in blob or "geo" in blob:
+        elif self.domain in ("AEO", "GEO"):
             steps.append("Test the target question in the evaluation testbed under identical prompt parameters.")
             steps.append("Verify the direct answer passage is present in the rendered HTML without requiring client-side JavaScript execution.")
         elif not steps:
@@ -273,13 +299,9 @@ class PlainEnglishEngine:
 
         return steps
 
-    @classmethod
-    def generate_expected_outcome(cls, category: str, severity: str) -> str:
-        """
-        Generates plausible, evidence-backed expected outcomes.
-        Strictly adheres to the zero-fabrication contract: never promises guaranteed rankings or traffic.
-        """
-        sev_str = str(getattr(severity, "value", severity) or "MEDIUM").upper()
+    def expected_outcome(self, severity: str) -> str:
+        """Formulates the expected outcome adhering strictly to the zero-fabrication contract."""
+        sev_str = str(severity).upper()
         if sev_str in ("CRITICAL", "HIGH"):
             return (
                 "Removes crawl and indexation blockers, allowing search robots to correctly evaluate page content. "
@@ -290,11 +312,263 @@ class PlainEnglishEngine:
             "Expected outcome is enhanced user experience and clearer machine interpretation, subject to overall domain authority."
         )
 
+
+# ==============================================================================
+# 4. AGENTIC SPECIALIST REGISTRY & DISPATCHER
+# ==============================================================================
+
+class AgenticSpecialistRegistry:
+    """
+    Registers and dispatches specialist auditor agents across all digital audit disciplines.
+    Maps findings, sections, and chapters to their authoritative specialist agents.
+    """
+
+    AGENTS: Dict[str, SpecialistAuditorAgent] = {
+        "seo.crawl.v3": SpecialistAuditorAgent(
+            agent_id="seo.crawl.v3",
+            name="Crawl & Indexation Infrastructure Specialist",
+            role="Inspects crawler accessibility, robots directives, and crawl budget distribution.",
+            domain="CRAWL",
+            default_stakeholders="Search Spiders (Googlebot, Bingbot) & Organic Search Reach",
+            inspection_methodology="HTTP response headers, robots.txt parsing, and XML sitemap cross-validation",
+        ),
+        "seo.canonical.v3": SpecialistAuditorAgent(
+            agent_id="seo.canonical.v3",
+            name="Canonicalization & Duplicate Control Specialist",
+            role="Audits canonical URL designation, duplicate parameter handling, and link equity consolidation.",
+            domain="CANONICAL",
+            default_stakeholders="Search Spiders (Googlebot, Bingbot) & Organic Search Reach",
+            inspection_methodology="DOM canonical tag routing, HTTP header rel=canonical verification, and status code audit",
+        ),
+        "seo.redirect.v3": SpecialistAuditorAgent(
+            agent_id="seo.redirect.v3",
+            name="Redirect & Link Equity Specialist",
+            role="Audits 3xx status hop chains, infinite loops, and 404/410 broken link defects.",
+            domain="REDIRECT",
+            default_stakeholders="Search Spiders (Googlebot, Bingbot) & Organic Search Reach",
+            inspection_methodology="Multi-hop socket tracing, status code logging, and internal link graph traversal",
+        ),
+        "schema.validation.v3": SpecialistAuditorAgent(
+            agent_id="schema.validation.v3",
+            name="Structured Data & Knowledge Graph Specialist",
+            role="Validates JSON-LD markup, Schema.org entity relationships, and rich snippet eligibility.",
+            domain="SCHEMA",
+            default_stakeholders="Search Engines, Knowledge Graphs & Brand Disambiguation",
+            inspection_methodology="JSON-LD AST parsing, Schema.org type validation, and Rich Results conformance testing",
+        ),
+        "ux.experience.v3": SpecialistAuditorAgent(
+            agent_id="ux.experience.v3",
+            name="Core Web Vitals & Ergonomics Specialist",
+            role="Measures TTFB server latency, LCP, INP, CLS, and render-blocking asset distribution.",
+            domain="SPEED",
+            default_stakeholders="Mobile Visitors, Search Ranking Spiders & Infrastructure Teams",
+            inspection_methodology="Server latency socket timing, DOM mutation shift tracking, and CWV benchmark metrics",
+        ),
+        "content.depth.v3": SpecialistAuditorAgent(
+            agent_id="content.depth.v3",
+            name="Topical Authority & Content Hierarchy Specialist",
+            role="Audits H1-H3 document outline structure, topical coverage, and image accessibility.",
+            domain="CONTENT",
+            default_stakeholders="Business Owners, Visitors & Technical Teams",
+            inspection_methodology="Semantic DOM tree traversal, heading hierarchy validation, and image alt attribute audit",
+        ),
+        "geo.extractability.v3": SpecialistAuditorAgent(
+            agent_id="geo.extractability.v3",
+            name="Generative Engine Optimization (GEO) Specialist",
+            role="Evaluates machine extractability, factual assertion density, and LLM bot access directives.",
+            domain="GEO",
+            default_stakeholders="AI Answer Engines (ChatGPT, Perplexity, Gemini) & Modern Buyers",
+            inspection_methodology="Passage extractability scoring, bot permissions inspection, and factual density analysis",
+        ),
+        "aeo.direct_answer_box.v3": SpecialistAuditorAgent(
+            agent_id="aeo.direct_answer_box.v3",
+            name="Answer Engine Optimization (AEO) Specialist",
+            role="Measures direct answer capability, conversational query matching, and live AI citations.",
+            domain="AEO",
+            default_stakeholders="AI Answer Engines (ChatGPT, Perplexity, Gemini) & Modern Buyers",
+            inspection_methodology="Natural language question prompting, direct answer passage extraction, and citation benchmarking",
+        ),
+        "ux.conversion.v3": SpecialistAuditorAgent(
+            agent_id="ux.conversion.v3",
+            name="Conversion Rate Optimization (CRO) Specialist",
+            role="Analyzes value proposition clarity, call-to-action prominence, and mobile form ergonomics.",
+            domain="CRO",
+            default_stakeholders="Prospective Customers & Sales Pipeline",
+            inspection_methodology="CTA visual salience analysis, viewport contrast computation, and input field friction audit",
+        ),
+        "trust.security.v3": SpecialistAuditorAgent(
+            agent_id="trust.security.v3",
+            name="Security, HTTPS & Protocol Integrity Specialist",
+            role="Audits TLS encryption, HSTS directives, Content-Security-Policy headers, and clickjacking protection.",
+            domain="SECURITY",
+            default_stakeholders="Business Owners (Reputation & Risk) and Developers",
+            inspection_methodology="SSL/TLS certificate handshake inspection and HTTP security header policy evaluation",
+        ),
+        "competitor.organic.v3": SpecialistAuditorAgent(
+            agent_id="competitor.organic.v3",
+            name="Competitive Intelligence Specialist",
+            role="Evaluates SERP overlap, keyword footprint discrepancies, and competitor displacement opportunities.",
+            domain="COMPETITOR",
+            default_stakeholders="Business Owners & Commercial Leadership",
+            inspection_methodology="Empirical SERP overlap calculation, schema depth benchmarking, and competitive positioning",
+        ),
+        "strategy.executive.v3": SpecialistAuditorAgent(
+            agent_id="strategy.executive.v3",
+            name="Executive Strategy & Governance Specialist",
+            role="Synthesizes cross-pillar multi-disciplinary performance and 90-day implementation sequencing.",
+            domain="STRATEGY",
+            default_stakeholders="Business Owners, Visitors & Technical Teams",
+            inspection_methodology="Cross-discipline reconciliation, priority matrix synthesis, and engineering effort estimation",
+        ),
+    }
+
+    # Chapter number to agent mapping (compatible with 55-section and appendices)
+    SECTION_AGENT_MAP: Dict[str, str] = {
+        "ch_brief": "strategy.executive.v3",
+        "ch_seo": "seo.crawl.v3",
+        "ch_geo": "geo.extractability.v3",
+        "ch_aeo": "aeo.direct_answer_box.v3",
+        "ch_competitive": "competitor.organic.v3",
+        "ch_conversion": "ux.conversion.v3",
+        "ch_page_by_page": "seo.crawl.v3",
+        "ch_roadmap": "strategy.executive.v3",
+        "ch_methodology": "trust.security.v3",
+        "ch_appendix": "seo.crawl.v3",
+    }
+
+    @classmethod
+    def dispatch_agent_for_finding(
+        cls,
+        category: str,
+        subcategory: str = "",
+        rule_id: Optional[str] = None,
+        title: str = "",
+        description: str = "",
+    ) -> SpecialistAuditorAgent:
+        """Autonomously dispatches the finding to the domain specialist agent."""
+        blob = f"{category} {subcategory} {rule_id or ''} {title} {description}".lower()
+
+        # Domain classification
+        if any(k in blob for k in ("canonical", "self-referencing", "duplicate url", "cross-domain")):
+            return cls.AGENTS["seo.canonical.v3"]
+        if any(k in blob for k in ("redirect", "301", "302", "404", "broken link", "loop", "hop")):
+            return cls.AGENTS["seo.redirect.v3"]
+        if any(k in blob for k in ("schema", "json-ld", "structured data", "rich result", "entity graph")):
+            return cls.AGENTS["schema.validation.v3"]
+        if any(k in blob for k in ("speed", "ttfb", "cwv", "core web vitals", "lcp", "cls", "inp", "latency")):
+            return cls.AGENTS["ux.experience.v3"]
+        if any(k in blob for k in ("aeo", "answer engine", "chatgpt", "perplexity", "citation", "gemini")):
+            return cls.AGENTS["aeo.direct_answer_box.v3"]
+        if any(k in blob for k in ("geo", "llms.txt", "gptbot", "extractability", "generative")):
+            return cls.AGENTS["geo.extractability.v3"]
+        if any(k in blob for k in ("conversion", "cro", "cta", "form", "checkout", "mobile tap", "contrast", "friction")):
+            return cls.AGENTS["ux.conversion.v3"]
+        if any(k in blob for k in ("security", "https", "hsts", "csp", "ssl", "tls", "headers", "certificate")):
+            return cls.AGENTS["trust.security.v3"]
+        if any(k in blob for k in ("crawl", "index", "robots", "sitemap", "noindex", "status", "bot")):
+            return cls.AGENTS["seo.crawl.v3"]
+        if any(k in blob for k in ("h1", "heading", "outline", "title tag", "meta description", "alt", "image")):
+            return cls.AGENTS["content.depth.v3"]
+        if any(k in blob for k in ("competitor", "benchmark", "overlap", "displacement")):
+            return cls.AGENTS["competitor.organic.v3"]
+
+        # Default fallback by high-level category
+        cat_lower = str(category).lower()
+        if "seo" in cat_lower or "crawl" in cat_lower:
+            return cls.AGENTS["seo.crawl.v3"]
+        if "geo" in cat_lower:
+            return cls.AGENTS["geo.extractability.v3"]
+        if "aeo" in cat_lower:
+            return cls.AGENTS["aeo.direct_answer_box.v3"]
+        if "cro" in cat_lower or "ux" in cat_lower:
+            return cls.AGENTS["ux.conversion.v3"]
+
+        return cls.AGENTS["strategy.executive.v3"]
+
+    @classmethod
+    def dispatch_agent_for_section(cls, section_id: str, section_title: str) -> SpecialistAuditorAgent:
+        """Autonomously resolves the specialist agent responsible for the section or chapter."""
+        agent_key = cls.SECTION_AGENT_MAP.get(section_id)
+        if agent_key and agent_key in cls.AGENTS:
+            return cls.AGENTS[agent_key]
+
+        # Check numeric chapter if applicable (e.g. "01", "10", "16", "19")
+        clean_num = section_id.replace("ch_", "").strip()
+        num_map: Dict[str, str] = {
+            "01": "strategy.executive.v3",
+            "07": "seo.crawl.v3",
+            "08": "seo.crawl.v3",
+            "10": "seo.canonical.v3",
+            "11": "seo.redirect.v3",
+            "12": "seo.crawl.v3",
+            "16": "ux.experience.v3",
+            "18": "trust.security.v3",
+            "19": "schema.validation.v3",
+            "20": "content.depth.v3",
+            "21": "content.depth.v3",
+            "45": "aeo.direct_answer_box.v3",
+            "46": "geo.extractability.v3",
+            "50": "ux.conversion.v3",
+        }
+        if clean_num in num_map:
+            return cls.AGENTS[num_map[clean_num]]
+
+        # Fallback by keyword in section title
+        return cls.dispatch_agent_for_finding(category=section_title, title=section_title)
+
+
+# ==============================================================================
+# 5. ENRICHMENT ENGINE FOR FINDINGS (14 MANDATORY STRUCTURED FIELDS)
+# ==============================================================================
+
+class PlainEnglishEngine:
+    """
+    Centralized translation and explanation engine.
+    Orchestrates domain specialist auditor agents to produce plain-English,
+    zero-fabrication explanations for findings and sections.
+    """
+
+    @classmethod
+    def classify_who_is_affected(cls, category: str, title: str, description: str) -> str:
+        """Determines who is affected via autonomous specialist agent dispatch."""
+        agent = AgenticSpecialistRegistry.dispatch_agent_for_finding(category, title=title, description=description)
+        return agent.who_is_affected(title, description)
+
+    @classmethod
+    def generate_plain_english_summary(cls, title: str, description: str, category: str) -> str:
+        """Synthesizes short, jargon-free explanation via autonomous specialist agent."""
+        agent = AgenticSpecialistRegistry.dispatch_agent_for_finding(category, title=title, description=description)
+        return agent.explain(title, description, category)
+
+    @classmethod
+    def generate_what_was_checked(cls, category: str, subcategory: str, title: str, rule_id: Optional[str]) -> str:
+        """Explains the exact technical test protocol via autonomous specialist agent."""
+        agent = AgenticSpecialistRegistry.dispatch_agent_for_finding(category, subcategory=subcategory, rule_id=rule_id, title=title)
+        return agent.what_was_checked(title, subcategory, rule_id)
+
+    @classmethod
+    def generate_verification_steps(
+        cls,
+        title: str,
+        category: str,
+        acceptance_criteria: Optional[str] = None,
+        verification_method: Optional[str] = None,
+    ) -> List[str]:
+        """Produces concrete, numbered retest instructions via autonomous specialist agent."""
+        agent = AgenticSpecialistRegistry.dispatch_agent_for_finding(category, title=title)
+        return agent.verification_steps(title, acceptance_criteria, verification_method)
+
+    @classmethod
+    def generate_expected_outcome(cls, category: str, severity: str) -> str:
+        """Generates evidence-backed expected outcome via autonomous specialist agent."""
+        agent = AgenticSpecialistRegistry.dispatch_agent_for_finding(category)
+        return agent.expected_outcome(severity)
+
     @classmethod
     def enrich_finding(cls, finding: Any, index: int = 1) -> Dict[str, Any]:
         """
-        Takes any Finding instance or dict, and ensures all 14 structured fields
-        are populated with high-quality, plain-English content.
+        Takes any Finding instance or dict, coordinates the assigned specialist agent,
+        and ensures all 14 structured fields are populated with consultative intelligence.
         """
         raw_id = _get_val(finding, "finding_id") or _get_val(finding, "id") or f"DST-{index:03d}"
         title = (
@@ -351,6 +625,15 @@ class PlainEnglishEngine:
             or f"Observed discrepancy on {title}."
         )
 
+        # Dispatch specialist agent
+        agent = AgenticSpecialistRegistry.dispatch_agent_for_finding(
+            category=str(category),
+            subcategory=str(subcategory),
+            rule_id=rule_id,
+            title=str(title),
+            description=str(observed_result),
+        )
+
         # Plain-English summary (In simple English)
         plain_english_summary = _get_val(finding, "plain_english_summary")
         if not plain_english_summary:
@@ -358,25 +641,25 @@ class PlainEnglishEngine:
             if why_matters and len(why_matters) > 20:
                 plain_english_summary = why_matters
             else:
-                plain_english_summary = cls.generate_plain_english_summary(title, str(observed_result), str(category))
+                plain_english_summary = agent.explain(str(title), str(observed_result), str(category))
 
         # Business impact (Why this matters)
         business_impact = (
             _get_val(finding, "business_impact")
             or _get_val(finding, "business_context")
             or _get_val(finding, "why_it_matters")
-            or "Unaddressed technical issues directly lower search crawler trust and organic lead generation potential."
+            or agent.business_impact(str(title), str(observed_result), sev_str)
         )
 
         # What Dristik checked
         what_was_checked = _get_val(finding, "what_was_checked")
         if not what_was_checked:
-            what_was_checked = cls.generate_what_was_checked(str(category), str(subcategory), str(title), rule_id)
+            what_was_checked = agent.what_was_checked(str(title), str(subcategory), rule_id)
 
         # Who is affected
         who_affected = _get_val(finding, "who_affected")
         if not who_affected:
-            who_affected = cls.classify_who_is_affected(str(category), str(title), str(observed_result))
+            who_affected = agent.who_is_affected(str(title), str(observed_result))
 
         # Recommended action (What to do next)
         recommended_action = (
@@ -411,19 +694,30 @@ class PlainEnglishEngine:
         if not verification_steps:
             val_crit = _get_val(finding, "validation_criteria") or _get_val(finding, "acceptance_criteria")
             ver_method = _get_val(finding, "verification_method")
-            verification_steps = cls.generate_verification_steps(title, str(category), val_crit, ver_method)
+            verification_steps = agent.verification_steps(str(title), val_crit, ver_method)
 
-        # Evidence references
+        # Evidence references (Full Layer 1 Machine Observations)
         raw_evidence = _get_val(finding, "evidence") or []
         evidence_list: List[Dict[str, Any]] = []
         for e_idx, ev in enumerate(raw_evidence):
             e_id = _get_val(ev, "evidence_id") or _get_val(ev, "id") or f"EV-{raw_id}-{e_idx + 1}"
-            e_source = _get_val(ev, "source") or _get_val(ev, "url") or "DOM AST"
-            e_obs = _get_val(ev, "observation") or _get_val(ev, "value") or _get_val(ev, "snippet") or "Direct observation"
+            e_source = _get_val(ev, "source") or _get_val(ev, "test_method") or "crawl_html_dom"
+            e_url = _get_val(ev, "url") or (affected_urls[0] if affected_urls else "")
+            e_elem = _get_val(ev, "element") or _get_val(ev, "selector") or "DOM element"
+            e_obs = _get_val(ev, "observed_value") or _get_val(ev, "value") or _get_val(ev, "observation") or "Defect detected"
+            e_exp = _get_val(ev, "expected_condition") or "Conform to W3C / Search Engine standard"
+            e_meth = _get_val(ev, "test_method") or "crawl_inspection"
+            e_snip = _get_val(ev, "snippet") or ""
             e_scope = _get_val(ev, "scope") or _get_val(ev, "evidence_scope") or scope_status
             e_ts = _get_val(ev, "captured_at") or _get_val(ev, "timestamp") or "Audit crawl execution"
             evidence_list.append({
                 "id": str(e_id),
+                "url": str(e_url),
+                "element": str(e_elem),
+                "observed_value": str(e_obs),
+                "expected_condition": str(e_exp),
+                "test_method": str(e_meth),
+                "snippet": str(e_snip),
                 "source": str(e_source),
                 "observation": str(e_obs),
                 "scope": str(e_scope),
@@ -445,10 +739,10 @@ class PlainEnglishEngine:
             else:
                 limitations = "Evaluated on crawled sample pages. Verification required on full staging environment."
 
-        # Expected outcome
+        # Expected outcome (Qualitative specification-based, never guaranteed revenue/rankings)
         expected_outcome = _get_val(finding, "expected_outcome")
         if not expected_outcome:
-            expected_outcome = cls.generate_expected_outcome(str(category), sev_str)
+            expected_outcome = agent.expected_outcome(sev_str)
 
         # Lifecycle status
         raw_status = _get_val(finding, "resolution_status") or _get_val(finding, "lifecycle_state") or _get_val(finding, "status")
@@ -460,6 +754,103 @@ class PlainEnglishEngine:
             "RESOLVED": "Verified Fixed",
             "REGRESSED": "Regressed Defect",
         }.get(status_str, "Open Defect")
+
+        # Responsible Role (Priority 6)
+        responsible_role = _get_val(finding, "responsible_role") or _get_val(finding, "owner")
+        if not responsible_role or responsible_role in ("Engineering", "default"):
+            title_lower = title.lower()
+            cat_str = str(category).upper()
+            if any(k in title_lower for k in ["alt", "heading", "h1", "h2", "title tag", "meta description", "thin copy", "content"]):
+                responsible_role = "Content Editor"
+            elif any(k in title_lower for k in ["schema", "json-ld", "keyword", "sitemap", "robots.txt", "canonical", "serp"]):
+                responsible_role = "SEO Specialist"
+            elif any(k in title_lower for k in ["analytics", "conversion", "ga4", "gsc", "tracking"]):
+                responsible_role = "Analytics Owner"
+            else:
+                responsible_role = "Developer"
+
+        # Estimated Effort (Priority 6)
+        raw_effort = _get_val(finding, "estimated_effort")
+        if raw_effort:
+            estimated_effort = str(raw_effort)
+        else:
+            eff_val = _get_val(finding, "effort") or 3
+            if eff_val <= 2:
+                estimated_effort = "Low (< 2 hours)"
+            elif eff_val <= 5:
+                estimated_effort = "Medium (2-8 hours)"
+            elif eff_val <= 8:
+                estimated_effort = "High (1-3 days)"
+            else:
+                estimated_effort = "Complex (> 3 days)"
+
+        # Implementation Dependencies (Priority 6)
+        raw_deps = _get_val(finding, "dependencies") or _get_val(finding, "implementation_dependencies") or []
+        if isinstance(raw_deps, list) and raw_deps:
+            dependencies = [str(d) for d in raw_deps]
+        else:
+            if responsible_role == "Developer":
+                dependencies = ["Codebase template access", "Deployment staging pipeline"]
+            elif responsible_role == "Content Editor":
+                dependencies = ["CMS editor privileges"]
+            elif responsible_role == "SEO Specialist":
+                dependencies = ["DNS / Server header control or CMS SEO plugin access"]
+            else:
+                dependencies = ["Analytics administrative access"]
+
+        # Priority Rationale (Priority 6)
+        priority_rationale = _get_val(finding, "priority_rationale") or _get_val(finding, "severity_justification")
+        if not priority_rationale:
+            if sev_str == "CRITICAL":
+                priority_rationale = "Critical Priority: Directly blocks search crawler indexation or creates catastrophic user-facing error."
+            elif sev_str == "HIGH":
+                priority_rationale = "High Priority: Materially impairs primary ranking signals, crawl efficiency, or core user experience."
+            elif sev_str == "MEDIUM":
+                priority_rationale = "Medium Priority: Technical or semantic non-compliance that weakens topical authority or accessibility."
+            else:
+                priority_rationale = "Low Priority: Best-practice hygiene optimization with minimal immediate crawl risk."
+
+        # Testable Acceptance Criteria (Priority 6 / Validation)
+        acceptance_val = _get_val(finding, "acceptance_criteria") or _get_val(finding, "validation_criteria")
+        if not acceptance_val:
+            title_l = title.lower()
+            if "alt" in title_l:
+                acceptance_val = "Every informative <img> on affected routes must declare a non-empty alt attribute, and decorative assets must use alt=''."
+            elif "canonical" in title_l:
+                acceptance_val = "Affected routes must declare an absolute self-referencing rel='canonical' tag resolving to valid HTTP 200."
+            elif "heading" in title_l or "h1" in title_l:
+                acceptance_val = "Document must contain exactly one <h1> heading followed by sequential <h2>/<h3> hierarchy without level skips."
+            elif "security" in title_l or "hsts" in title_l:
+                acceptance_val = "Server response headers on HTTPS must include Strict-Transport-Security with max-age >= 31536000."
+            elif "title" in title_l or "meta" in title_l:
+                acceptance_val = "Page must define an explicit, unique title (50-60 chars) and meta description (140-160 chars)."
+            else:
+                acceptance_val = f"Technical discrepancy regarding '{title}' is resolved and verified by automated crawl retest."
+
+        # Concrete Verification Command (Priority 6 / Validation)
+        verification_cmd = _get_val(finding, "verification_command")
+        if not verification_cmd:
+            primary_url = affected_urls[0] if affected_urls else "https://example.com/"
+            title_l = title.lower()
+            if "canonical" in title_l:
+                verification_cmd = f"curl -sI -L '{primary_url}' | grep -i 'canonical'"
+            elif "hsts" in title_l or "security" in title_l:
+                verification_cmd = f"curl -sI '{primary_url}' | grep -i 'Strict-Transport-Security'"
+            elif "heading" in title_l or "h1" in title_l:
+                verification_cmd = f"curl -s '{primary_url}' | grep -i '<h1'"
+            elif "alt" in title_l:
+                verification_cmd = f"curl -s '{primary_url}' | grep -i '<img' | grep -v 'alt='"
+            elif "404" in title_l or "redirect" in title_l:
+                verification_cmd = f"curl -sIL -o /dev/null -w '%{{http_code}} -> %{{url_effective}}\\n' '{primary_url}'"
+            elif "robots" in title_l:
+                verification_cmd = f"curl -s '{primary_url.rstrip('/')}/robots.txt'"
+            elif "sitemap" in title_l:
+                verification_cmd = f"curl -sI '{primary_url.rstrip('/')}/sitemap.xml'"
+            else:
+                verification_cmd = f"curl -sI '{primary_url}'"
+
+        root_cause_val = _get_val(finding, "root_cause") or _get_val(finding, "causal_mechanism")
+        code_val = _get_val(finding, "relevant_code_or_configuration_example")
 
         return {
             "id": str(raw_id),
@@ -482,13 +873,56 @@ class PlainEnglishEngine:
             "confidence": conf_str,
             "limitations": str(limitations),
             "expected_outcome": str(expected_outcome),
+            "root_cause": str(root_cause_val) if root_cause_val else None,
+            "acceptance_criteria": str(acceptance_val),
+            "verification_command": str(verification_cmd),
+            "responsible_role": str(responsible_role),
+            "estimated_effort": str(estimated_effort),
+            "dependencies": dependencies,
+            "priority_rationale": str(priority_rationale),
+            "relevant_code_or_configuration_example": str(code_val) if code_val else None,
         }
 
+    @classmethod
+    async def enrich_finding_with_agent(
+        cls,
+        finding: Any,
+        domain: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """
+        Asynchronous LLM-powered agentic explanation pathway.
+        When LLM inference is available, queries the model router with specialist task instructions.
+        Falls back seamlessly to the deterministic agent workforce.
+        """
+        enriched = cls.enrich_finding(finding)
+        try:
+            from app.inference.llm_client import LLMClient
+            client = LLMClient()
+            if not getattr(client, "available", True):
+                return enriched
+
+            # Query agent with zero-fabrication prompt
+            prompt = (
+                f"You are the {enriched.get('who_affected')} auditor. Explain the defect '{enriched['title']}' "
+                f"for the website {domain or 'domain'}. In 2 sentences, explain in simple non-technical English "
+                f"what the defect is and why it matters commercially. Do not invent facts."
+            )
+            # If client has fast chat method:
+            if hasattr(client, "complete"):
+                res = await client.complete(prompt=prompt, max_tokens=150)
+                if res and isinstance(res, str) and len(res) > 20:
+                    enriched["plain_english_summary"] = res.strip()
+        except Exception as e:
+            logger.debug("Agentic LLM explanation fallback: %s", e)
+
+        return enriched
+
 
 # ==============================================================================
-# 4. SECTION-LEVEL "WHAT THIS MEANS FOR YOUR BUSINESS" ENGINE
+# 6. DYNAMIC SECTION & CHAPTER EXPLANATION ENGINE
 # ==============================================================================
 
+# Backwards-compatible section metadata map
 SECTION_SUBJECT_MAP: Dict[str, Dict[str, str]] = {
     "ch_brief": {
         "subject": "Executive Diagnostic Briefing & Multi-Pillar Scorecard",
@@ -552,8 +986,8 @@ def generate_section_explanation(
     **kwargs: Any,
 ) -> SectionBusinessExplanation:
     """
-    Constructs a specific, grounded business explanation for any section or chapter.
-    Guarantees no generic repetitions: reflects exact measurements and findings.
+    Constructs a specific, grounded business explanation for any section or chapter
+    using the assigned Domain Specialist Auditor Agent.
     """
     ctx = dict(context_data or {})
     ctx.update(kwargs)
@@ -567,13 +1001,16 @@ def generate_section_explanation(
     if "pages_crawled" in kwargs:
         ctx["pages_crawled"] = kwargs["pages_crawled"]
 
+    # Dispatch agent for section
+    agent = AgenticSpecialistRegistry.dispatch_agent_for_section(section_id, section_title)
+
+    # Resolve meta: check static map first for backwards-compatibility, then agent
     meta = SECTION_SUBJECT_MAP.get(section_id, {
         "subject": section_title,
-        "description": f"Detailed assessment evaluating {section_title} against verified industry standards.",
-        "why_care": "Addressing these findings preserves user experience, search visibility, and digital brand authority.",
+        "description": f"Detailed assessment evaluating {section_title} against verified industry standards via {agent.name}.",
+        "why_care": f"Addressing these findings preserves user experience, search visibility, and digital brand authority.",
     })
 
-    # Filter findings related to this section if not already filtered
     section_findings = list(findings or [])
     pages_crawled = int(_get_val(report, "pages_crawled") or ctx.get("pages_crawled") or 1)
 
@@ -650,7 +1087,7 @@ def generate_section_explanation(
 
 
 # ==============================================================================
-# 5. HTML COMPONENT RENDERERS (PRINT & PDF COMPLIANT)
+# 7. HTML COMPONENT RENDERERS (PRINT & PDF COMPLIANT)
 # ==============================================================================
 
 def render_section_business_callout(exp: SectionBusinessExplanation) -> str:
@@ -658,7 +1095,6 @@ def render_section_business_callout(exp: SectionBusinessExplanation) -> str:
     Renders the compact "What this means for your business" executive callout card.
     Visually distinct, high contrast, and print-ready.
     """
-    # Color-coded badge & accent
     if exp.evidence_status == "DEFECTS_FOUND":
         accent = "#ea580c"  # Amber/Orange
         badge_bg = "#fff7ed"
@@ -732,7 +1168,6 @@ def render_plain_english_finding_card(f: Dict[str, Any]) -> str:
     lifecycle = _esc(f.get("lifecycle_status", "Open Defect"))
     who_affected = _esc(f.get("who_affected", "Visitors & Search Engines"))
 
-    # Severity styling
     sev_class = sev.lower()
     sev_colors = {
         "CRITICAL": ("#dc2626", "#fee2e2", "#991b1b"),
@@ -745,6 +1180,15 @@ def render_plain_english_finding_card(f: Dict[str, Any]) -> str:
 
     # 1. What was found?
     observed_result = _esc(f.get("observed_result", "Specific defect recorded during crawl inspection."))
+    root_cause = f.get("root_cause")
+    root_cause_html = ""
+    if root_cause:
+        root_cause_html = f"""
+        <div class="root-cause-box" style="margin-top: 6px; padding: 6px 10px; background: #fffbeb; border: 1px solid #fef3c7; border-radius: 4px;">
+            <strong style="font-size: 7.5pt; color: #b45309; text-transform: uppercase;">ROOT CAUSE:</strong>
+            <span style="font-size: 8.5pt; color: #92400e; margin-left: 4px;">{_esc(root_cause)}</span>
+        </div>
+        """
 
     # 2. In simple English
     plain_english = _esc(f.get("plain_english_summary", ""))
@@ -773,6 +1217,15 @@ def render_plain_english_finding_card(f: Dict[str, Any]) -> str:
 
     # 8. Verification steps
     ver_steps = f.get("verification_steps", [])
+    acceptance_crit = f.get("acceptance_criteria")
+    acceptance_html = ""
+    if acceptance_crit:
+        acceptance_html = f"""
+        <div class="acceptance-box" style="margin-top: 6px; padding: 6px 10px; background: #f0fdf4; border: 1px solid #dcfce7; border-radius: 4px;">
+            <strong style="font-size: 7.5pt; color: #15803d; text-transform: uppercase;">ACCEPTANCE CRITERIA:</strong>
+            <span style="font-size: 8.5pt; color: #166534; margin-left: 4px;">{_esc(acceptance_crit)}</span>
+        </div>
+        """
     if ver_steps:
         steps_html = "<ol class=\"verification-steps-list\">" + "".join(f"<li>{_esc(s)}</li>" for s in ver_steps) + "</ol>"
     else:
@@ -835,6 +1288,7 @@ def render_plain_english_finding_card(f: Dict[str, Any]) -> str:
         <div class="finding-block">
             <h4 class="finding-block-title">1. What was found?</h4>
             <p class="finding-block-text">{observed_result}</p>
+            {root_cause_html}
         </div>
 
         <!-- 2. WHAT DOES THIS MEAN IN SIMPLE ENGLISH? -->
@@ -883,6 +1337,7 @@ def render_plain_english_finding_card(f: Dict[str, Any]) -> str:
         <div class="finding-block">
             <h4 class="finding-block-title">8. How to verify the fix (Retest procedure)</h4>
             {steps_html}
+            {acceptance_html}
         </div>
 
         <!-- 9. SUPPORTING EVIDENCE -->

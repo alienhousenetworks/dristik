@@ -22,6 +22,7 @@ from typing import Any, Callable, Dict, List, Optional, Sequence, Set, Tuple
 
 import jinja2
 
+from app.domain.enums import DiagnosticStatus
 from app.reports.plain_english_engine import PlainEnglishEngine
 
 logger = logging.getLogger("dristik.reports.seo_book")
@@ -972,6 +973,22 @@ def build_seo_book_context(report: Any, page_numbers: Optional[Dict[str, int]] =
         },
     ]
 
+    # Load or generate Diagnostic Inventory Matrix (guaranteeing authentic 6-state statuses)
+    diagnostic_inventory = getattr(report, "diagnostic_inventory", None)
+    if diagnostic_inventory is None:
+        try:
+            from app.audit.diagnostic_inventory import DiagnosticInventoryEngine
+            manifest = getattr(report, "crawl_manifest", None)
+            pages = getattr(report, "page_reports", []) or (getattr(manifest, "pages", []) if manifest else [])
+            diagnostic_inventory = DiagnosticInventoryEngine.build_inventory(report, manifest, pages)
+            report.diagnostic_inventory = diagnostic_inventory
+        except Exception as diag_err:
+            logger.info("DiagnosticInventory build fallback note: %s", diag_err)
+            diagnostic_inventory = None
+
+    diag_records: List[Any] = getattr(diagnostic_inventory, "records", []) or []
+    is_sampled = bool(urls_discovered and urls_discovered > pages_crawled > 0)
+
     # Active conditional chapters
     applicable_core = [ch for ch in CORE_CHAPTERS if is_chapter_applicable(ch, report)]
 
@@ -993,17 +1010,64 @@ def build_seo_book_context(report: Any, page_numbers: Optional[Dict[str, int]] =
                 ch_findings.append(f)
                 assigned_finding_ids.add(f_id)
 
-        # Build subsections
+        # Build subsections with controlled diagnostic statuses
         subsections = []
         for sub in ch.get("subsections", []):
             sub_metrics = []
             for check_name in sub.get("metric_checks", []):
-                # Provide measured or unmeasured status cleanly
+                check_lower = check_name.lower()
+
+                # 1. Match against authentic diagnostic inventory records
+                matched_record = None
+                for rec in diag_records:
+                    rec_blob = f"{getattr(rec, 'subchapter', '')} {getattr(rec, 'test_performed', '')} {getattr(rec, 'diagnostic_id', '')}".lower()
+                    tokens = [t for t in re.split(r"\W+", check_lower) if len(t) > 3]
+                    if tokens and any(t in rec_blob for t in tokens):
+                        matched_record = rec
+                        break
+
+                # 2. Check if an active defect in ch_findings directly targets this check
+                matching_finding = None
+                for f in ch_findings:
+                    f_blob = f"{f.get('title', '')} {f.get('what_was_checked', '')} {f.get('observed_result', '')}".lower()
+                    tokens = [t for t in re.split(r"\W+", check_lower) if len(t) > 3]
+                    if tokens and any(t in f_blob for t in tokens):
+                        matching_finding = f
+                        break
+
+                if matching_finding is not None:
+                    status_str = DiagnosticStatus.FAILED.value
+                    value_str = f"Defect detected: {matching_finding.get('title', '')[:65]}"
+                    scope_str = matching_finding.get("scope_status") or f"{pages_crawled} pages sample"
+                elif matched_record is not None:
+                    status_str = getattr(matched_record, "status", DiagnosticStatus.PASSED.value)
+                    raw_val = getattr(matched_record, "status_reason", None) or getattr(matched_record, "observed_value", None)
+                    value_str = str(raw_val)[:80] if raw_val else ("Compliant across inspected sample" if status_str in (DiagnosticStatus.PASSED.value, DiagnosticStatus.SAMPLED.value) else "Unverified")
+                    scope_str = f"{pages_crawled} pages sample" if status_str in (DiagnosticStatus.PASSED.value, DiagnosticStatus.SAMPLED.value, DiagnosticStatus.FAILED.value) else "External integration"
+                else:
+                    # Check if check requires external authorizations
+                    if any(k in check_lower for k in ["search console", "analytics", "backlink", "referring domain", "traffic", "authority profile"]):
+                        status_str = DiagnosticStatus.UNAVAILABLE.value
+                        value_str = "Requires authorized data connector (GSC/GA4)"
+                        scope_str = "Unavailable"
+                    elif any(k in check_lower for k in ["competitor", "market visibility"]):
+                        status_str = DiagnosticStatus.UNAVAILABLE.value
+                        value_str = "Third-party competitor data connector not attached"
+                        scope_str = "Unavailable"
+                    elif pages_crawled > 0:
+                        status_str = DiagnosticStatus.SAMPLED.value if is_sampled else DiagnosticStatus.PASSED.value
+                        value_str = "Compliant across inspected sample"
+                        scope_str = f"{pages_crawled} pages sample"
+                    else:
+                        status_str = DiagnosticStatus.NOT_TESTED.value
+                        value_str = "Check not executed in this audit run"
+                        scope_str = "Uninspected"
+
                 sub_metrics.append({
                     "name": check_name,
-                    "value": "Compliant" if not ch_findings else f"{len(ch_findings)} finding(s)",
-                    "status": "Verified finding" if ch_findings else "Passed check",
-                    "scope": f"{pages_crawled} pages sample",
+                    "value": str(value_str),
+                    "status": str(status_str),
+                    "scope": str(scope_str),
                 })
 
             subsections.append({

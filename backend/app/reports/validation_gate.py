@@ -724,11 +724,54 @@ class ValidationGate:
                     if "audited every url" in all_prose_low or "all urls tested" in all_prose_low or "comprehensive audit of all pages" in all_prose_low:
                         inventory_discrepancies.append("Narrative claims comprehensive audit of all pages despite sampled crawl")
 
+        # -------------------------------------------------------------
+        # 14. ZERO CROSS-WIRED EVIDENCE ENFORCEMENT
+        # -------------------------------------------------------------
+        cross_wired_evidence = []
+        for f in (report.findings or []):
+            if getattr(f, "held_from_executive", False):
+                continue
+            fid = (f.finding_id or "").lower()
+            if "missing_image_alt" in fid:
+                for ev in getattr(f, "evidence", []) or []:
+                    desc = f"{getattr(ev, 'description', '') or ''} {getattr(ev, 'snippet', '') or ''} {getattr(ev, 'observed_value', '') or ''} {getattr(ev, 'value', '') or ''}".lower()
+                    elem = (getattr(ev, "element", "") or "").lower()
+                    if ("layout shift" in desc or "missing dimensions" in desc or "width" in desc) and "alt" not in desc and "alt" not in elem:
+                        cross_wired_evidence.append(f"{f.finding_id}: Alt text finding cites CLS layout shift evidence without alt defect: '{desc}'")
+            elif "missing_canonical" in fid or "broken_canonical" in fid:
+                for ev in getattr(f, "evidence", []) or []:
+                    desc = f"{getattr(ev, 'description', '') or ''} {getattr(ev, 'snippet', '') or ''} {getattr(ev, 'observed_value', '') or ''} {getattr(ev, 'value', '') or ''}".lower()
+                    if "robots.txt" in desc or "sitemap" in desc:
+                        cross_wired_evidence.append(f"{f.finding_id}: Canonical finding cites robots/sitemap evidence: '{desc}'")
+
         record(
-            "crawl_and_url_inventory_reconciled",
-            len(inventory_discrepancies) == 0,
-            "; ".join(inventory_discrepancies) if inventory_discrepancies else ""
+            "zero_cross_wired_evidence",
+            len(cross_wired_evidence) == 0,
+            f"Cross-wired evidence detected: {'; '.join(cross_wired_evidence[:3])}" if cross_wired_evidence else ""
         )
+
+        # 32. Crawl and URL Inventory Reconciled (sampling disclosure)
+        if manifest:
+            c_inv = getattr(manifest, "crawl_inventory", {}) or {}
+            if hasattr(c_inv, "discovered_total"):
+                disc_total = int(getattr(c_inv, "discovered_total", 0) or 0)
+                tested_pages = int(getattr(c_inv, "tested_pages", 0) or 0)
+            elif isinstance(c_inv, dict):
+                disc_total = int(c_inv.get("discovered_total", 0) or 0)
+                tested_pages = int(c_inv.get("tested_pages", 0) or 0)
+            else:
+                disc_total = 0
+                tested_pages = 0
+            sampling_status = str(getattr(manifest, "sampling_status", "") or "")
+            is_sampled = sampling_status == "SAMPLED_AUDIT" or (disc_total > tested_pages and tested_pages > 0)
+            story_low = (report.story_summary or "").lower()
+            overclaims = ["audited every url", "all urls tested", "comprehensive audit of all pages"]
+            has_overclaim = is_sampled and any(o in story_low for o in overclaims)
+            record(
+                "crawl_and_url_inventory_reconciled",
+                not has_overclaim,
+                f"Sampled audit ({tested_pages}/{disc_total} URLs) contains un-reconciled comprehensive coverage overclaim in story_summary" if has_overclaim else ""
+            )
 
         is_valid = len(failed) == 0
         return ValidationResult(
@@ -1274,6 +1317,13 @@ class ValidationGate:
         # 11c. Quarantine unbacked findings or findings that only possessed placeholder evidence
         clean_backed_findings = []
         for f in report.findings:
+            fid = (f.finding_id or "").lower()
+            # Clean cross-wired evidence if present
+            if "missing_image_alt" in fid and f.evidence:
+                f.evidence = [
+                    ev for ev in f.evidence
+                    if not (("layout shift" in (getattr(ev, "description", "") or "").lower() or "missing dimensions" in (getattr(ev, "description", "") or "").lower()) and "alt" not in (getattr(ev, "description", "") or "").lower())
+                ]
             ev_cnt = len(getattr(f, "evidence", None) or [])
             valid_refs = [r for r in (getattr(f, "evidence_refs", None) or getattr(f, "evidence_ids", None) or []) if not placeholder_pat.search(str(r)) and str(r).strip() not in ["", "none", "null"]]
             if ev_cnt == 0 and len(valid_refs) == 0:

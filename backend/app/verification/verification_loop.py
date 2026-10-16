@@ -17,7 +17,50 @@ from typing import Dict, Any, List, Optional, Tuple
 from urllib.parse import urlparse, urljoin
 
 import httpx
-from bs4 import BeautifulSoup
+try:
+    from bs4 import BeautifulSoup
+except ImportError:
+    class _FallbackTag:
+        def __init__(self, text="", attrs=None):
+            self._text = text
+            self._attrs = attrs or {}
+        def get_text(self, strip=True):
+            return self._text.strip() if strip else self._text
+        def get(self, key, default=""):
+            return self._attrs.get(key, default)
+        @property
+        def string(self):
+            return self._text
+
+    class _FallbackSoup:
+        def __init__(self, html: str):
+            self.html = html or ""
+            self._scripts = re.findall(r'<script[^>]*type=[\'"]application/ld\+json[\'"][^>]*>(.*?)</script>', self.html, re.DOTALL | re.IGNORECASE)
+            self._h1s = re.findall(r'<h1[^>]*>(.*?)</h1>', self.html, re.DOTALL | re.IGNORECASE)
+            self._titles = re.findall(r'<title[^>]*>(.*?)</title>', self.html, re.DOTALL | re.IGNORECASE)
+            self._meta_descs = re.findall(r'<meta[^>]*name=[\'"]description[\'"][^>]*content=[\'"](.*?)[\'"]', self.html, re.IGNORECASE)
+
+        def find_all(self, tag, attrs=None):
+            if tag == "script" and attrs and attrs.get("type") == "application/ld+json":
+                return [_FallbackTag(s) for s in self._scripts]
+            if tag == "h1":
+                return [_FallbackTag(re.sub(r'<[^>]+>', '', h)) for h in self._h1s]
+            return []
+
+        def find(self, tag, attrs=None):
+            if tag == "title":
+                return _FallbackTag(re.sub(r'<[^>]+>', '', self._titles[0])) if self._titles else None
+            if tag == "meta" and attrs and attrs.get("name") == "description":
+                return _FallbackTag(attrs={"content": self._meta_descs[0]}) if self._meta_descs else None
+            if tag == "link" and attrs and attrs.get("rel") == "canonical":
+                match = re.search(r'<link[^>]*rel=[\'"]canonical[\'"][^>]*href=[\'"](.*?)[\'"]', self.html, re.IGNORECASE)
+                if not match:
+                    match = re.search(r'<link[^>]*href=[\'"](.*?)[\'"][^>]*rel=[\'"]canonical[\'"]', self.html, re.IGNORECASE)
+                return _FallbackTag(attrs={"href": match.group(1)}) if match else None
+            return None
+
+    def BeautifulSoup(html, parser="html.parser"):
+        return _FallbackSoup(html)
 
 from app.domain.models import Finding, RemediationVerificationReport, VerificationCheckItem
 from app.domain.enums import Category

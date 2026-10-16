@@ -181,6 +181,12 @@ class EvidenceStore:
         selector: Optional[str] = None,
         content_sha256: Optional[str] = None,
         evidence_id: Optional[str] = None,
+        element: Optional[str] = None,
+        expected_condition: Optional[str] = None,
+        test_method: Optional[str] = None,
+        response_status: Optional[int] = None,
+        snippet: Optional[str] = None,
+        metadata: Optional[Dict[str, Any]] = None,
     ) -> MachineObservation:
         """
         Record an immutable Layer 1 Machine Observation.
@@ -201,6 +207,8 @@ class EvidenceStore:
             fetch = self._current_fetch or {}
             content_sha256 = fetch.get("content_sha256") or compute_raw_source_hash(value)
 
+        meta = dict(metadata or {})
+
         obs = MachineObservation(
             type="observation",
             attribute=attribute,
@@ -209,6 +217,12 @@ class EvidenceStore:
             evidence_id=evidence_id,
             url=url,
             selector=selector,
+            element=element,
+            expected_condition=expected_condition,
+            test_method=test_method,
+            response_status=response_status,
+            snippet=snippet,
+            metadata=meta,
             content_sha256=content_sha256,
             timestamp=datetime.now(timezone.utc),
         )
@@ -217,6 +231,17 @@ class EvidenceStore:
         self._observations[evidence_id.upper()] = obs
 
         # Backward compatibility registration in legacy Evidence table
+        legacy_meta = {"attribute": attribute, "is_machine_observation": True}
+        if element:
+            legacy_meta["element"] = element
+        if expected_condition:
+            legacy_meta["expected_condition"] = expected_condition
+        if test_method:
+            legacy_meta["test_method"] = test_method
+        if response_status:
+            legacy_meta["response_status"] = response_status
+        legacy_meta.update(meta)
+
         ev_legacy = Evidence(
             id=evidence_id,
             source_type=source,
@@ -229,7 +254,7 @@ class EvidenceStore:
             content_sha256=content_sha256 or "",
             fetched_at=datetime.now(timezone.utc),
             raw_snapshot_id=(self._current_fetch or {}).get("raw_snapshot_id"),
-            metadata={"attribute": attribute, "is_machine_observation": True},
+            metadata=legacy_meta,
         )
         self._evidence[evidence_id] = ev_legacy
         self._evidence[evidence_id.lower()] = ev_legacy

@@ -10,7 +10,9 @@ Audits HTML canonical directives across crawled pages against Google Search Cent
 - Cross-domain canonicals
 """
 from __future__ import annotations
+import hashlib
 from typing import List, Dict, Any, Optional, Tuple
+
 from urllib.parse import urlparse
 from pydantic import BaseModel, Field
 
@@ -202,6 +204,24 @@ class CanonicalAuditor:
 
         # Create structured Findings if critical/high issues detected
         if rollup.broken_canonical_count > 0:
+            broken_items = [item for item in rollup.items if item.status == "broken"]
+            ev_list = []
+            for item in broken_items[:10]:
+                ev_id = f"EV-CAN-BRK-{hashlib.sha256(f'{item.url}:{item.canonical_url}'.encode()).hexdigest()[:8]}"
+                ev_list.append(FindingEvidence(
+                    evidence_id=ev_id,
+                    url=item.url,
+                    element="link[rel='canonical']",
+                    value=item.canonical_url or "",
+                    observed_value=item.canonical_url or "",
+                    expected_condition="Canonical target must resolve to valid HTTP 200 indexable URL",
+                    snippet=item.detail or f'<link rel="canonical" href="{item.canonical_url}">',
+                    test_method="crawl_html_head",
+                    source="crawl",
+                ))
+
+            aff_urls = [item.url for item in broken_items]
+            routes_preview = ", ".join(aff_urls[:3]) + ("..." if len(aff_urls) > 3 else "")
             findings.append(Finding(
                 finding_id="finding_broken_canonicals",
                 category=Category.TECHNICAL_SEO,
@@ -209,28 +229,47 @@ class CanonicalAuditor:
                 title=f"{rollup.broken_canonical_count} Page(s) Point to Broken Canonical Targets",
                 description=(
                     f"Discovered {rollup.broken_canonical_count} page(s) where the canonical tag points to an HTTP 4xx/5xx error target. "
-                    "This breaks Google indexation and drops page rankings."
+                    "This prevents search engines from indexing the canonical target and leads search crawlers to disregard the canonical directive."
                 ),
-                recommendation="Update rel='canonical' href values to point strictly to valid HTTP 200 URLs.",
+                recommendation=f"Update rel='canonical' href values on affected routes ({routes_preview}) to point strictly to valid HTTP 200 URLs.",
                 why_it_matters="Search engines will discard invalid canonical tags, potentially indexing incorrect duplicate parameter URLs.",
                 validation_criteria="Every canonical target must return HTTP 200 OK.",
-                evidence=[
-                    FindingEvidence(
-                        url=item.url,
-                        element="link[rel='canonical']",
-                        value=item.canonical_url or "",
-                        snippet=item.detail,
-                        source="crawl"
-                    )
-                    for item in rollup.items if item.status == "broken"
-                ],
-                evidence_refs=["canonical_audit"],
+                owner="Developer",
+                responsible_role="Developer",
+                estimated_effort="Low (< 2 hours)",
+                dependencies=["Codebase template access", "Routing configuration"],
+                priority_rationale="Critical: Directs search engines to dead error endpoints, breaking canonical indexation.",
+                verification_command=f"curl -sI -L '{broken_items[0].canonical_url}' | grep -E '^HTTP/[0-9.]+ 200'",
+                evidence=ev_list,
+                evidence_refs=[ev.evidence_id for ev in ev_list if ev.evidence_id] or ["canonical_audit"],
+                evidence_ids=[ev.evidence_id for ev in ev_list if ev.evidence_id],
+                affected_urls=aff_urls,
+                affected_sample_count=len(aff_urls),
+                scope_classification="PAGE_VERIFIED" if len(aff_urls) <= 3 else "SAMPLE_VERIFIED",
                 impact=9,
                 effort=3,
                 priority=9
             ))
 
         if rollup.missing_canonical_count > 0:
+            missing_items = [item for item in rollup.items if item.status == "missing"]
+            ev_list = []
+            for item in missing_items[:10]:
+                ev_id = f"EV-CAN-MISS-{hashlib.sha256(item.url.encode()).hexdigest()[:8]}"
+                ev_list.append(FindingEvidence(
+                    evidence_id=ev_id,
+                    url=item.url,
+                    element="head",
+                    value="Missing <link rel='canonical'>",
+                    observed_value="No canonical tag declared in HTML <head>",
+                    expected_condition="Page must specify an absolute, self-referencing <link rel='canonical'> tag",
+                    snippet=item.detail or "HTML <head> lacks <link rel='canonical'>",
+                    test_method="crawl_html_head",
+                    source="crawl",
+                ))
+
+            aff_urls = [item.url for item in missing_items]
+            routes_preview = ", ".join(aff_urls[:3]) + ("..." if len(aff_urls) > 3 else "")
             findings.append(Finding(
                 finding_id="finding_missing_canonicals",
                 category=Category.TECHNICAL_SEO,
@@ -238,22 +277,23 @@ class CanonicalAuditor:
                 title=f"{rollup.missing_canonical_count} Page(s) Missing Canonical Tags",
                 description=(
                     f"{rollup.missing_canonical_count} page(s) do not define an explicit <link rel='canonical'> tag. "
-                    "Without canonical tags, URL parameters or trailing slashes cause duplicate content penalties."
+                    "Without canonical tags, URL parameters or trailing slashes dilute ranking signals across duplicate variants."
                 ),
-                recommendation="Implement self-referencing canonical link tags in the <head> of every indexable HTML page.",
+                recommendation=f"Implement self-referencing canonical link tags in the <head> of affected routes ({routes_preview}).",
                 why_it_matters="Google states that explicit self-referential canonicals are essential to protect indexation equity.",
                 validation_criteria="Every indexable HTML page must include an absolute self-referencing <link rel='canonical'> tag.",
-                evidence=[
-                    FindingEvidence(
-                        url=item.url,
-                        element="head",
-                        value="Missing <link rel='canonical'>",
-                        snippet=item.detail,
-                        source="crawl"
-                    )
-                    for item in rollup.items if item.status == "missing"
-                ],
-                evidence_refs=["canonical_audit"],
+                owner="Developer",
+                responsible_role="Developer",
+                estimated_effort="Low (< 2 hours)",
+                dependencies=["HTML template <head> access"],
+                priority_rationale="High: Protects against authority dilution from tracking parameters and alternative URL protocols.",
+                verification_command=f"curl -s '{missing_items[0].url}' | grep -i '<link.*rel=[\"\\']canonical'",
+                evidence=ev_list,
+                evidence_refs=[ev.evidence_id for ev in ev_list if ev.evidence_id] or ["canonical_audit"],
+                evidence_ids=[ev.evidence_id for ev in ev_list if ev.evidence_id],
+                affected_urls=aff_urls,
+                affected_sample_count=len(aff_urls),
+                scope_classification="PAGE_VERIFIED" if len(aff_urls) <= 3 else "SAMPLE_VERIFIED",
                 impact=7,
                 effort=2,
                 priority=7
@@ -261,6 +301,23 @@ class CanonicalAuditor:
 
         noindex_conflicts = [item for item in rollup.items if item.status == "noindex_conflict"]
         if noindex_conflicts:
+            ev_list = []
+            for item in noindex_conflicts[:10]:
+                ev_id = f"EV-CAN-NOIDX-{hashlib.sha256(f'{item.url}:{item.canonical_url}'.encode()).hexdigest()[:8]}"
+                ev_list.append(FindingEvidence(
+                    evidence_id=ev_id,
+                    url=item.url,
+                    element="head",
+                    value=item.canonical_url or "",
+                    observed_value="Both 'noindex' and rel='canonical' present",
+                    expected_condition="Pages with 'noindex' should not declare conflicting canonical directives",
+                    snippet=item.detail or f"Conflicting directives on {item.url}",
+                    test_method="crawl_html_head",
+                    source="crawl",
+                ))
+
+            aff_urls = [item.url for item in noindex_conflicts]
+            routes_preview = ", ".join(aff_urls[:3]) + ("..." if len(aff_urls) > 3 else "")
             findings.append(Finding(
                 finding_id="finding_canonical_noindex_conflict",
                 category=Category.TECHNICAL_SEO,
@@ -270,20 +327,15 @@ class CanonicalAuditor:
                     f"{len(noindex_conflicts)} page(s) specify both 'noindex' and a canonical tag. "
                     "This sends conflicting signals to search engine crawlers."
                 ),
-                recommendation="Remove self-referencing canonical tags from pages designated as 'noindex', or remove 'noindex' if the page is intended to be indexed.",
+                recommendation=f"Resolve directive conflicts on affected routes ({routes_preview}) by removing canonical tags from pages designated as 'noindex', or removing 'noindex' if the page is intended to be indexed.",
                 why_it_matters="Google warns that conflicting directives may cause crawler confusion and improper indexation consolidation.",
                 validation_criteria="Pages with 'noindex' should not have self-referencing canonicals.",
-                evidence=[
-                    FindingEvidence(
-                        url=item.url,
-                        element="head",
-                        value=item.canonical_url or "",
-                        snippet=item.detail,
-                        source="crawl"
-                    )
-                    for item in noindex_conflicts
-                ],
-                evidence_refs=["canonical_audit"],
+                evidence=ev_list,
+                evidence_refs=[ev.evidence_id for ev in ev_list if ev.evidence_id] or ["canonical_audit"],
+                evidence_ids=[ev.evidence_id for ev in ev_list if ev.evidence_id],
+                affected_urls=aff_urls,
+                affected_sample_count=len(aff_urls),
+                scope_classification="PAGE_VERIFIED" if len(aff_urls) <= 3 else "SAMPLE_VERIFIED",
                 impact=8,
                 effort=2,
                 priority=8

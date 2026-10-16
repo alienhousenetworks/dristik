@@ -1,125 +1,210 @@
-<article class="finding" id="finding-{{ finding.id }}" style="border: 1px solid var(--line); border-radius: 6px; padding: 14pt; margin: 14pt 0 20pt; background: #ffffff; break-inside: avoid; page-break-inside: avoid;">
+<article class="finding" id="finding-{{ finding.id }}" style="border: 1px solid var(--line); border-radius: 6px; padding: 14pt; margin: 16pt 0 22pt; background: #ffffff; break-inside: avoid; page-break-inside: avoid;">
 
-  <!-- FINDING HEADER & META BADGES -->
+  <!-- FINDING HEADER & META BADGES (Priority 6 Role-Based Metadata) -->
   <div style="display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 8pt; border-bottom: 2px solid #e2e8f0; padding-bottom: 8pt; margin-bottom: 12pt;">
-    <div style="font-size: 14pt; font-weight: 700; color: var(--ink);">
-      <span style="font-family: monospace; color: var(--brand); font-size: 12pt; margin-right: 6pt;">{{ finding.id }}</span>
+    <div style="font-size: 13.5pt; font-weight: 700; color: var(--ink);">
+      <span style="font-family: monospace; color: var(--brand); font-size: 11.5pt; margin-right: 6pt;">{{ finding.id }}</span>
       {{ finding.title }}
     </div>
-    <div class="finding-meta" style="display: flex; gap: 6pt; align-items: center; flex-wrap: wrap;">
-      <span class="status {{ finding.priority | lower }}" style="font-weight: 700; text-transform: uppercase; font-size: 8pt; padding: 2pt 8pt; border-radius: 4px;">
+    <div class="finding-meta" style="display: flex; gap: 5pt; align-items: center; flex-wrap: wrap;">
+      <span class="status {{ finding.priority | lower }}" style="font-weight: 700; text-transform: uppercase; font-size: 8pt; padding: 2pt 7pt; border-radius: 4px;">
         {{ finding.priority }}
       </span>
-      <span class="status info" style="font-size: 8pt; padding: 2pt 8pt; border-radius: 4px;">
+      <span class="status" style="font-size: 8pt; padding: 2pt 7pt; border-radius: 4px; background: #e0e7ff; color: #3730a3; font-weight: 700;">
+        Owner: {{ finding.responsible_role | default("Developer") }}
+      </span>
+      <span class="status" style="font-size: 8pt; padding: 2pt 7pt; border-radius: 4px; background: #fef3c7; color: #92400e; font-weight: 600;">
+        Effort: {{ finding.estimated_effort | default("Low (< 2h)") }}
+      </span>
+      <span class="status info" style="font-size: 8pt; padding: 2pt 7pt; border-radius: 4px;">
         {{ finding.scope_status | default("SAMPLE_VERIFIED") }}
       </span>
-      <span class="status" style="font-size: 8pt; padding: 2pt 8pt; border-radius: 4px; background: #f1f5f9; color: #475569;">
+      <span class="status" style="font-size: 8pt; padding: 2pt 7pt; border-radius: 4px; background: #f1f5f9; color: #475569;">
         {{ finding.lifecycle_status | default("Open Defect") }}
       </span>
-      {% if finding.who_affected %}
-      <span class="status" style="font-size: 8pt; padding: 2pt 8pt; border-radius: 4px; background: #e0f2fe; color: #0369a1; font-weight: 600;">
-        Impact: {{ finding.who_affected }}
-      </span>
-      {% endif %}
     </div>
   </div>
 
-  <!-- SECTION A: WHAT IS THE ISSUE? (SIMPLE NON-TECH EXPLANATION + DETAILED DESCRIPTION) -->
-  <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-left: 4px solid var(--brand); padding: 10pt 12pt; border-radius: 4px; margin-bottom: 12pt;">
-    <div style="font-size: 9pt; font-weight: 800; color: var(--brand); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 4pt;">
-      1. What is the issue? (What does this mean in simple English?)
+  <!-- PART 1: OBSERVATION (What Was Actually Detected) -->
+  <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-left: 4px solid var(--brand); padding: 9pt 12pt; border-radius: 4px; margin-bottom: 10pt;">
+    <div style="font-size: 8.5pt; font-weight: 800; color: var(--brand); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 4pt;">
+      1. Observation (What was detected / What does this mean in simple English?)
     </div>
-    <p style="font-size: 10.5pt; font-weight: 600; color: #0f172a; margin: 0 0 6pt; line-height: 1.5;">
+    <p style="font-size: 10pt; font-weight: 600; color: #0f172a; margin: 0 0 5pt; line-height: 1.5;">
       {{ finding.plain_english_summary }}
     </p>
-    <div style="font-size: 8pt; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; margin-top: 6pt; margin-bottom: 2pt;">
-      Detailed Empirical Observation:
+    <div style="font-size: 8pt; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 2pt;">
+      Measured Detail:
     </div>
-    <p style="font-size: 9pt; color: #334155; margin: 0; line-height: 1.5;">
+    <p style="font-size: 8.5pt; color: #334155; margin: 0; line-height: 1.45;">
       {{ finding.observed_result }}
     </p>
   </div>
 
-  <!-- SECTION B: WHY IS IT HAPPENING? (ROOT CAUSE & INSPECTION MECHANISM) -->
-  <div style="margin-bottom: 12pt; padding: 8pt 0; border-top: 1px dashed #e2e8f0; border-bottom: 1px dashed #e2e8f0;">
-    <div style="font-size: 9pt; font-weight: 800; color: #0369a1; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 4pt;">
-      2. Why is this happening? (Root Cause &amp; Inspection)
+  <!-- PART 2: EVIDENCE (Layer 1 Traceable Machine Observations) -->
+  {% if finding.evidence %}
+  <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 4px; padding: 9pt 12pt; margin-bottom: 10pt;">
+    <div style="font-size: 8.5pt; font-weight: 800; color: #0f766e; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 6pt;">
+      2. Traceable Machine Evidence (Layer 1 Observations)
     </div>
-    <p style="font-size: 9pt; color: #1e293b; margin: 0 0 6pt; line-height: 1.5;">
-      <strong>Inspection Mechanism:</strong> {{ finding.what_was_checked }}
-    </p>
-    {% if finding.affected_urls %}
-    <div style="font-size: 8.5pt; color: #475569;">
-      <strong>Affected URL(s):</strong>
-      <ul style="margin: 4pt 0 0; padding-left: 18pt;">
-        {% for url in finding.affected_urls %}
-        <li style="margin-bottom: 2pt;"><code style="font-size: 8pt; background: #f1f5f9; padding: 1pt 4pt; border-radius: 3px; word-break: break-all;">{{ url }}</code></li>
+    <table style="width: 100%; border-collapse: collapse; font-size: 8pt; margin: 0;">
+      <thead>
+        <tr style="background: #f1f5f9; text-align: left; color: #475569; border-bottom: 1px solid #cbd5e1;">
+          <th style="padding: 4pt 6pt;">Evidence ID</th>
+          <th style="padding: 4pt 6pt;">Target URL</th>
+          <th style="padding: 4pt 6pt;">Element / Header</th>
+          <th style="padding: 4pt 6pt;">Observed vs Expected</th>
+          <th style="padding: 4pt 6pt;">Test Method</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for ev in finding.evidence[:4] %}
+        <tr style="border-bottom: 1px solid #e2e8f0;">
+          <td style="padding: 4pt 6pt; font-family: monospace; color: var(--brand); font-weight: 600; white-space: nowrap;">{{ ev.id }}</td>
+          <td style="padding: 4pt 6pt; word-break: break-all; max-width: 160pt;"><code style="font-size: 7.5pt; background: #f8fafc; padding: 1pt 3pt; border-radius: 2px;">{{ ev.url }}</code></td>
+          <td style="padding: 4pt 6pt; font-family: monospace; color: #0369a1;">{{ ev.element }}</td>
+          <td style="padding: 4pt 6pt; color: #334155;">
+            <div><strong>Observed:</strong> {{ ev.observed_value | default(ev.observation) | truncate(70) }}</div>
+            <div style="color: #64748b; font-size: 7.5pt;"><strong>Expected:</strong> {{ ev.expected_condition | default("Specification compliance") | truncate(70) }}</div>
+          </td>
+          <td style="padding: 4pt 6pt; color: #64748b; font-size: 7.5pt;">{{ ev.test_method | default(ev.source) }}</td>
+        </tr>
+        {% if ev.snippet %}
+        <tr style="background: #f8fafc; border-bottom: 1px solid #e2e8f0;">
+          <td colspan="5" style="padding: 3pt 6pt 4pt; font-size: 7.5pt; color: #0f172a;">
+            <span style="font-weight: 700; color: #64748b;">Snippet:</span> <code style="font-family: monospace; color: #0f766e; word-break: break-all;">{{ ev.snippet | truncate(160) }}</code>
+          </td>
+        </tr>
+        {% endif %}
         {% endfor %}
-      </ul>
+      </tbody>
+    </table>
+    {% if finding.evidence | length > 4 %}
+    <div style="font-size: 7.5pt; color: #64748b; margin-top: 4pt; text-align: right;">
+      + {{ (finding.evidence | length) - 4 }} additional evidence record(s) indexed in raw audit ledger.
     </div>
     {% endif %}
   </div>
+  {% endif %}
 
-  <!-- SECTION C: WHY DOES THIS MATTER TO YOUR BUSINESS? -->
-  <div style="background: #fffbeb; border: 1px solid #fef3c7; border-left: 4px solid var(--medium); padding: 9pt 12pt; border-radius: 4px; margin-bottom: 12pt;">
-    <div style="font-size: 9pt; font-weight: 800; color: #92400e; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 4pt;">
-      3. Why does this matter to your business?
+  <!-- PART 3: DIAGNOSIS & ROOT CAUSE -->
+  <div style="margin-bottom: 10pt; padding: 8pt 10pt; background: #fafafa; border-radius: 4px; border: 1px dashed #cbd5e1;">
+    <div style="font-size: 8.5pt; font-weight: 800; color: #0369a1; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 4pt;">
+      3. Diagnosis &amp; Root Cause
     </div>
-    <p style="font-size: 9.5pt; color: #78350f; margin: 0; line-height: 1.5;">
-      {{ finding.business_impact }}
+    {% if finding.root_cause %}
+    <p style="font-size: 8.5pt; color: #0f172a; margin: 0 0 4pt; line-height: 1.45;">
+      <strong>Root Cause:</strong> {{ finding.root_cause }}
     </p>
+    {% endif %}
+    <p style="font-size: 8.5pt; color: #334155; margin: 0 0 4pt; line-height: 1.45;">
+      <strong>Inspection Protocol:</strong> {{ finding.what_was_checked }}
+    </p>
+    {% if finding.priority_rationale %}
+    <p style="font-size: 8pt; color: #475569; margin: 0; line-height: 1.4; font-style: italic;">
+      <strong>Priority Rationale:</strong> {{ finding.priority_rationale }}
+    </p>
+    {% endif %}
   </div>
 
-  <!-- SECTION D: ISSUE FIXING PLAN & SUGGESTIONS (HOW TO FIX IT) -->
-  <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-left: 4px solid var(--low); padding: 10pt 12pt; border-radius: 4px; margin-bottom: 12pt;">
-    <div style="font-size: 9pt; font-weight: 800; color: #166534; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 4pt;">
-      4. How to fix it: Remediation Plan &amp; Suggestions
+  <!-- PART 4: IMPACT (Search Visibility, Usability & Commercial Effect) -->
+  <div style="background: #fffbeb; border: 1px solid #fef3c7; border-left: 4px solid var(--medium); padding: 8pt 12pt; border-radius: 4px; margin-bottom: 10pt;">
+    <div style="font-size: 8.5pt; font-weight: 800; color: #92400e; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 3pt;">
+      4. Organic Search &amp; Usability Impact
     </div>
-    <p style="font-size: 9.5pt; font-weight: 600; color: #14532d; margin: 0 0 8pt; line-height: 1.5;">
+    <p style="font-size: 9pt; color: #78350f; margin: 0 0 4pt; line-height: 1.45;">
+      {{ finding.business_impact }}
+    </p>
+    {% if finding.who_affected %}
+    <div style="font-size: 8pt; color: #b45309;">
+      <strong>Affected Stakeholders:</strong> {{ finding.who_affected }}
+    </div>
+    {% endif %}
+    <div style="font-size: 7.5pt; color: #94a3b8; font-style: italic; margin-top: 3pt; border-top: 1px dashed #fde68a; padding-top: 2pt;">
+      Commercial Governance: Cause-and-effect impact grounded in search engine specifications; empirical ranking/revenue metrics require connected analytics.
+    </div>
+  </div>
+
+  <!-- PART 5: CONFIDENCE & AUDIT LIMITATIONS -->
+  <div style="display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8pt; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 4px; padding: 6pt 10pt; margin-bottom: 10pt; font-size: 8pt; color: #475569;">
+    <div>
+      <strong>Analytical Confidence:</strong> <span style="color: #0f172a; font-weight: 600;">{{ finding.confidence }}</span>
+    </div>
+    <div>
+      <strong>Audit Scope &amp; Limitations:</strong> <span>{{ finding.limitations }}</span>
+    </div>
+  </div>
+
+  <!-- PART 6: REMEDIATION ROADMAP (Exact Implementation Guidance) -->
+  <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-left: 4px solid var(--low); padding: 9pt 12pt; border-radius: 4px; margin-bottom: 10pt;">
+    <div style="font-size: 8.5pt; font-weight: 800; color: #166534; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 4pt;">
+      6. Remediation Roadmap: Actionable Solution
+    </div>
+    <p style="font-size: 9pt; font-weight: 600; color: #14532d; margin: 0 0 6pt; line-height: 1.45;">
       {{ finding.recommended_action }}
     </p>
 
+    <div style="display: flex; gap: 12pt; flex-wrap: wrap; font-size: 8pt; color: #166534; margin-bottom: 6pt;">
+      <div><strong>Assigned Owner:</strong> {{ finding.responsible_role | default("Developer") }}</div>
+      <div><strong>Estimated Effort:</strong> {{ finding.estimated_effort | default("Low (< 2h)") }}</div>
+      {% if finding.dependencies %}
+      <div><strong>Prerequisites:</strong> {{ finding.dependencies | join(", ") }}</div>
+      {% endif %}
+    </div>
+
     <!-- DEVELOPER INSTRUCTIONS & CODE SNIPPET -->
     {% if finding.developer_instructions %}
-    <div style="margin-top: 8pt;">
-      <div style="font-size: 8pt; font-weight: 700; color: #166534; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 3pt;">
-        Developer Implementation Directives:
+    <div style="margin-top: 6pt;">
+      <div style="font-size: 7.5pt; font-weight: 700; color: #166534; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 2pt;">
+        Implementation Directive &amp; Configuration:
       </div>
-      <pre style="background: #0f172a; color: #38bdf8; padding: 8pt 10pt; border-radius: 4px; font-size: 8pt; line-height: 1.45; white-space: pre-wrap; word-break: break-all; margin: 0;"><code>{{ finding.developer_instructions }}</code></pre>
+      <pre style="background: #0f172a; color: #38bdf8; padding: 7pt 9pt; border-radius: 4px; font-size: 7.5pt; line-height: 1.4; white-space: pre-wrap; word-break: break-all; margin: 0;"><code>{{ finding.developer_instructions }}</code></pre>
     </div>
     {% endif %}
 
-    <!-- VERIFICATION RETEST PROCEDURE -->
-    {% if finding.verification_steps %}
-    <div style="margin-top: 8pt;">
-      <div style="font-size: 8pt; font-weight: 700; color: #166534; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 3pt;">
-        How to Verify the Fix (Retest Checklist):
+    {% if finding.relevant_code_or_configuration_example %}
+    <div style="margin-top: 6pt;">
+      <div style="font-size: 7.5pt; font-weight: 700; color: #166534; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 2pt;">
+        Reference Code / Configuration Example:
       </div>
-      <ol style="margin: 0; padding-left: 18pt; font-size: 8.5pt; color: #15803d; line-height: 1.45;">
+      <pre style="background: #1e293b; color: #4ade80; padding: 6pt 9pt; border-radius: 4px; font-size: 7.5pt; line-height: 1.4; white-space: pre-wrap; word-break: break-all; margin: 0;"><code>{{ finding.relevant_code_or_configuration_example }}</code></pre>
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- PART 7: VALIDATION & ACCEPTANCE CRITERIA (Retest Checklist) -->
+  <div style="background: #f1f5f9; border: 1px solid #cbd5e1; border-left: 4px solid #64748b; padding: 8pt 12pt; border-radius: 4px;">
+    <div style="font-size: 8.5pt; font-weight: 800; color: #334155; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 4pt;">
+      7. Validation &amp; Retest Protocol
+    </div>
+    
+    {% if finding.acceptance_criteria %}
+    <p style="font-size: 8.5pt; color: #1e293b; margin: 0 0 6pt; line-height: 1.4;">
+      <strong>Acceptance Criteria:</strong> {{ finding.acceptance_criteria }}
+    </p>
+    {% endif %}
+
+    {% if finding.verification_command %}
+    <div style="margin-bottom: 6pt;">
+      <div style="font-size: 7.5pt; font-weight: 700; color: #475569; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 2pt;">
+        Verification Command (Terminal / Shell):
+      </div>
+      <code style="display: block; background: #0f172a; color: #a5f3fc; padding: 5pt 8pt; border-radius: 3px; font-size: 7.5pt; font-family: monospace; word-break: break-all;">{{ finding.verification_command }}</code>
+    </div>
+    {% endif %}
+
+    {% if finding.verification_steps %}
+    <div style="margin-top: 4pt;">
+      <div style="font-size: 7.5pt; font-weight: 700; color: #475569; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 2pt;">
+        Retest Procedure:
+      </div>
+      <ol style="margin: 0; padding-left: 16pt; font-size: 8pt; color: #334155; line-height: 1.4;">
         {% for step in finding.verification_steps %}
         <li style="margin-bottom: 2pt;">{{ step }}</li>
         {% endfor %}
       </ol>
     </div>
     {% endif %}
-
-    <!-- EXPECTED OUTCOME -->
-    {% if finding.expected_outcome %}
-    <div style="margin-top: 8pt; font-size: 8.5pt; color: #166534; border-top: 1px dashed #86efac; padding-top: 6pt;">
-      <strong>Expected Outcome:</strong> {{ finding.expected_outcome }}
-      <div style="font-size: 7.5pt; color: #64748b; font-style: italic; margin-top: 3pt;">
-        Commercial Disclaimer: Expected qualitative outcome based on search engine documentation, not an absolute guarantee of specific ranking positions or traffic.
-      </div>
-    </div>
-    {% endif %}
   </div>
-
-  <!-- EVIDENCE & CONFIDENCE (COMPACT) -->
-  {% if finding.evidence %}
-  <div style="margin-top: 6pt; font-size: 8pt; color: #64748b;">
-    <strong>Supporting Evidence:</strong>
-    <span style="font-family: monospace;">{{ finding.evidence[0].id }}</span> · {{ finding.evidence[0].source }} · {{ finding.evidence[0].observation }}
-  </div>
-  {% endif %}
 
 </article>

@@ -4,6 +4,7 @@ Evaluates H1-H6 tags per page and sitewide:
 - Detects missing_h1, multiple_h1, short_h1 (<10 chars), long_h1 (>70 chars), duplicate_h1 collisions
 - Evaluates H1 -> H2 -> H3 outline tree hierarchy to detect broken structures
 """
+import hashlib
 from typing import List, Dict, Any, Optional
 from collections import defaultdict
 from app.domain.models import PageEvidence, HeadingIssueItem, HeadingHierarchyRollup, Finding, FindingEvidence
@@ -152,6 +153,23 @@ class HeadingAnalyzer:
         findings: List[Finding] = []
 
         if rollup.missing_h1:
+            ev_list = []
+            for item in rollup.missing_h1[:8]:
+                ev_id = f"EV-HDG-MISS-{hashlib.sha256(item.url.encode()).hexdigest()[:8]}"
+                ev_list.append(FindingEvidence(
+                    evidence_id=ev_id,
+                    url=item.url,
+                    element="h1",
+                    value=item.detail or "Missing <h1> tag",
+                    observed_value="Zero <h1> elements found on page",
+                    expected_condition="Page must define exactly one primary <h1> heading summarizing its topic",
+                    snippet=f"No <h1> found in HTML body of {item.url}",
+                    test_method="crawl_html_headings",
+                    source="crawl",
+                ))
+
+            aff_urls = [item.url for item in rollup.missing_h1]
+            routes_preview = ", ".join(aff_urls[:3]) + ("..." if len(aff_urls) > 3 else "")
             findings.append(Finding(
                 finding_id="finding_heading_missing_h1",
                 category=Category.ON_PAGE_SEO,
@@ -161,25 +179,38 @@ class HeadingAnalyzer:
                     f"Identified {len(rollup.missing_h1)} crawled page(s) lacking an <h1> heading tag. "
                     "H1 tags are primary semantic anchors used by search engines and answer engines to interpret page intent."
                 ),
-                recommendation="Insert a single, concise <h1> heading above the primary hero section on each affected page.",
+                recommendation=f"Insert a single, concise <h1> heading above the primary hero section on each affected page ({routes_preview}).",
                 why_it_matters="Search engines give heavy weight to H1 content when determining topical relevance for keyword rankings.",
                 validation_criteria="Every indexable page must contain exactly one non-empty <h1> element.",
-                evidence=[
-                    FindingEvidence(
-                        url=item.url,
-                        element="h1",
-                        value=item.detail,
-                        source="crawl"
-                    )
-                    for item in rollup.missing_h1[:5]
-                ],
-                evidence_refs=["heading_audit"],
+                evidence=ev_list,
+                evidence_refs=[ev.evidence_id for ev in ev_list if ev.evidence_id] or ["heading_audit"],
+                evidence_ids=[ev.evidence_id for ev in ev_list if ev.evidence_id],
+                affected_urls=aff_urls,
+                affected_sample_count=len(aff_urls),
+                scope_classification="PAGE_VERIFIED" if len(aff_urls) <= 3 else "SAMPLE_VERIFIED",
                 impact=7,
                 effort=2,
                 priority=7
             ))
 
         if rollup.multiple_h1:
+            ev_list = []
+            for item in rollup.multiple_h1[:8]:
+                ev_id = f"EV-HDG-MULT-{hashlib.sha256(item.url.encode()).hexdigest()[:8]}"
+                ev_list.append(FindingEvidence(
+                    evidence_id=ev_id,
+                    url=item.url,
+                    element="h1",
+                    value=item.detail or "Multiple <h1> tags",
+                    observed_value=item.detail,
+                    expected_condition="Page should define only one top-level <h1> heading",
+                    snippet=f"Multiple <h1> instances found: {item.detail}",
+                    test_method="crawl_html_headings",
+                    source="crawl",
+                ))
+
+            aff_urls = [item.url for item in rollup.multiple_h1]
+            routes_preview = ", ".join(aff_urls[:3]) + ("..." if len(aff_urls) > 3 else "")
             findings.append(Finding(
                 finding_id="finding_heading_multiple_h1",
                 category=Category.ON_PAGE_SEO,
@@ -189,25 +220,46 @@ class HeadingAnalyzer:
                     f"Discovered {len(rollup.multiple_h1)} page(s) containing two or more <h1> tags. "
                     "Multiple top-level headings fracture document outline authority."
                 ),
-                recommendation="Preserve one primary <h1> representing page topic, and demote secondary section headings to <h2>.",
+                recommendation=f"Preserve one primary <h1> representing page topic, and demote secondary section headings to <h2> on affected routes ({routes_preview}).",
                 why_it_matters="Google recommends a single clear H1 per document to maintain an unambiguous semantic outline.",
-                validation_criteria="Demote secondary <h1> tags to <h2>.",
-                evidence=[
-                    FindingEvidence(
-                        url=item.url,
-                        element="h1",
-                        value=item.detail,
-                        source="crawl"
-                    )
-                    for item in rollup.multiple_h1[:5]
-                ],
-                evidence_refs=["heading_audit"],
+                validation_criteria="Every indexable page must contain exactly one <h1> heading.",
+                owner="Content Editor",
+                responsible_role="Content Editor",
+                estimated_effort="Low (< 2 hours)",
+                dependencies=["CMS template or page editor access"],
+                priority_rationale="Medium Priority: Dilutes semantic document outline and clarity of primary topical focus.",
+                verification_command=f"curl -s '{aff_urls[0]}' | grep -i '<h1'",
+                evidence=ev_list,
+                evidence_refs=[ev.evidence_id for ev in ev_list if ev.evidence_id] or ["heading_audit"],
+                evidence_ids=[ev.evidence_id for ev in ev_list if ev.evidence_id],
+                affected_urls=aff_urls,
+                affected_sample_count=len(aff_urls),
+                scope_classification="PAGE_VERIFIED" if len(aff_urls) <= 3 else "SAMPLE_VERIFIED",
                 impact=5,
                 effort=2,
                 priority=5
             ))
 
         if rollup.hierarchy_violations:
+            ev_list = []
+            for v in rollup.hierarchy_violations[:8]:
+                v_str = ", ".join(v.get("violations", []))
+                url_str = v.get("url", "")
+                ev_id = f"EV-HDG-SKIP-{hashlib.sha256(f'{url_str}:{v_str}'.encode()).hexdigest()[:8]}"
+                ev_list.append(FindingEvidence(
+                    evidence_id=ev_id,
+                    url=v.get("url", ""),
+                    element="h2/h3",
+                    value=v_str,
+                    observed_value=v_str,
+                    expected_condition="Heading structure must not skip parent levels (e.g. H1 -> H2 -> H3)",
+                    snippet=f"Heading hierarchy violation on {v.get('url')}: {v_str}",
+                    test_method="crawl_html_headings",
+                    source="crawl",
+                ))
+
+            aff_urls = [v.get("url") for v in rollup.hierarchy_violations if v.get("url")]
+            routes_preview = ", ".join(aff_urls[:3]) + ("..." if len(aff_urls) > 3 else "")
             findings.append(Finding(
                 finding_id="finding_heading_hierarchy_skips",
                 category=Category.ON_PAGE_SEO,
@@ -217,19 +269,21 @@ class HeadingAnalyzer:
                     f"{len(rollup.hierarchy_violations)} page(s) exhibit heading hierarchy skips (e.g. H3 tags without an H2 parent, "
                     "or long-form articles without subheadings)."
                 ),
-                recommendation="Structure headings sequentially: H1 -> H2 -> H3 without skipping levels.",
+                recommendation=f"Structure headings sequentially: H1 -> H2 -> H3 without skipping levels on affected routes ({routes_preview}).",
                 why_it_matters="Logical document hierarchy aids screen readers (WCAG 2.2) and assists search engine passage indexing.",
-                validation_criteria="All heading tags must follow logical parent-child levels.",
-                evidence=[
-                    FindingEvidence(
-                        url=v["url"],
-                        element="h2/h3",
-                        value=", ".join(v.get("violations", [])),
-                        source="crawl"
-                    )
-                    for v in rollup.hierarchy_violations[:5]
-                ],
-                evidence_refs=["heading_audit"],
+                validation_criteria="All heading tags must follow logical parent-child levels without level skipping.",
+                owner="Content Editor",
+                responsible_role="Content Editor",
+                estimated_effort="Low (< 2 hours)",
+                dependencies=["Page content formatting privileges"],
+                priority_rationale="Medium Priority: Improves screen reader accessibility and search engine passage extraction.",
+                verification_command=f"curl -s '{aff_urls[0]}' | grep -E '<h[1-6]'",
+                evidence=ev_list,
+                evidence_refs=[ev.evidence_id for ev in ev_list if ev.evidence_id] or ["heading_audit"],
+                evidence_ids=[ev.evidence_id for ev in ev_list if ev.evidence_id],
+                affected_urls=aff_urls,
+                affected_sample_count=len(aff_urls),
+                scope_classification="PAGE_VERIFIED" if len(aff_urls) <= 3 else "SAMPLE_VERIFIED",
                 impact=4,
                 effort=2,
                 priority=4

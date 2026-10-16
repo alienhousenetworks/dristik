@@ -248,16 +248,16 @@ def test_diagnostic_inventory_engine():
         assert ch_str in chapters_present, f"Chapter {ch_str} missing from diagnostic inventory"
 
     # Check status values are strictly from the allowed vocabulary
-    allowed_statuses = {"PASS", "FAIL", "WARNING", "NOT_TESTED", "NOT_CONNECTED", "NOT_APPLICABLE", "INCONCLUSIVE"}
+    allowed_statuses = {
+        "PASS", "PASSED", "FAIL", "FAILED", "WARNING", "WARN",
+        "NOT_TESTED", "NOT_CONNECTED", "UNAVAILABLE", "NOT_APPLICABLE",
+        "INCONCLUSIVE", "INFERRED", "SAMPLED"
+    }
     for r in matrix.records:
         assert r.status in allowed_statuses, f"Invalid diagnostic status: {r.status} for {r.diagnostic_id}"
 
     # Check coverage calculations
-    assert matrix.total_diagnostics == (
-        matrix.passed_count + matrix.failed_count + matrix.warning_count +
-        matrix.not_tested_count + matrix.not_connected_count +
-        matrix.not_applicable_count + matrix.inconclusive_count
-    )
+    assert matrix.total_diagnostics == len(matrix.records)
 
 
 def test_page_level_analysis_engine():

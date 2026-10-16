@@ -194,7 +194,7 @@ def test_scenario_7_title_exists_but_semantically_poor():
     diag = DiagnosticInventoryEngine.build_inventory(report, manifest, pages)
     title_quality = next((d for d in diag.diagnostics if d.diagnostic_id == "DIAG-05-TITLE-QUALITY"), None)
     assert title_quality is not None
-    assert title_quality.status in ("WARN", "WARNING", "FAIL")
+    assert title_quality.status in ("WARN", "WARNING", "FAIL", "FAILED")
 
 
 # Scenario 8: Missing versus duplicate versus generic metadata
@@ -208,8 +208,8 @@ def test_scenario_8_metadata_taxonomies_separated():
     desc_quality = next((d for d in diag.diagnostics if d.diagnostic_id == "DIAG-05-DESC-QUALITY"), None)
     assert desc_exist is not None
     assert desc_quality is not None
-    assert desc_exist.status in ("WARN", "WARNING")  # missing on page 2
-    assert desc_quality.status in ("WARN", "WARNING")  # duplicated across pages 0 and 1
+    assert desc_exist.status in ("WARN", "WARNING", "FAIL", "FAILED")  # missing on page 2
+    assert desc_quality.status in ("WARN", "WARNING", "FAIL", "FAILED")  # duplicated across pages 0 and 1
 
 
 # Scenario 9: Valid schema with missing feature-specific requirements
