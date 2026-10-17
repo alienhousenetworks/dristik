@@ -1,0 +1,15 @@
+[Unit]
+Description=Dristik 2.0 FastAPI Backend Service
+After=network.target
+
+[Service]
+Type=simple
+User=dristik
+WorkingDirectory=/opt/dristik/backend
+ExecStart=/opt/dristik/backend/venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8000
+Restart=always
+RestartSec=5
+EnvironmentFile=/opt/dristik/backend/.env
+
+[Install]
+WantedBy=multi-user.target

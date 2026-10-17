@@ -18,7 +18,7 @@ from bs4 import BeautifulSoup
 from pydantic import BaseModel, Field
 
 from app.core.security.ssrf import is_safe_url
-from app.external_authority.traffic_estimator import DomainTrafficSummary, estimate_domain_traffic
+from app.connectors.authority.traffic_estimator import DomainTrafficSummary, estimate_domain_traffic
 
 
 _HOST = re.compile(r"^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$")

@@ -20,9 +20,9 @@ from app.domain.models import (
     HonestScores,
 )
 from app.evidence.store import EvidenceStore
-from app.analyzers.media_asset_analyzer import MediaAssetAnalyzer
-from app.analyzers.canonical_auditor import CanonicalAuditor
-from app.analyzers.heading_analyzer import HeadingAnalyzer
+from app.seo.analyzers.media_asset_analyzer import MediaAssetAnalyzer
+from app.seo.analyzers.canonical_auditor import CanonicalAuditor
+from app.seo.analyzers.heading_analyzer import HeadingAnalyzer
 from app.audit.diagnostic_inventory import DiagnosticInventoryEngine
 from app.reports.validation_gate import ValidationGate
 from app.scoring.engine import ScoringEngine

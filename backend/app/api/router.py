@@ -17,7 +17,7 @@ from app.api.routes.platform.meta import router as meta_router
 from app.api.routes.platform.payments import router as payments_router
 from app.api.routes.platform.system import router as system_router
 from app.api.routes.platform.workspaces import router as workspaces_router
-from app.api.routes.intelligence.geo import router as geo_pipeline_router
+from app.geo.api.routes import router as geo_pipeline_router
 from app.api.routes.intelligence.keywords import router as keywords_router
 from app.api.routes.intelligence.outcomes import router as outcomes_router
 from app.api.routes.intelligence.radar import router as radar_router

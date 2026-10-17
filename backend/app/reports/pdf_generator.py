@@ -496,8 +496,8 @@ async def get_complete_seo_report(
     if not report:
         raise HTTPException(status_code=400, detail="Executive report not yet synthesized for this analysis run.")
 
-    from app.reports.seo_report_generator import seo_report_generator
-    from app.reports.seo_book_renderer import seo_audit_book_renderer
+    from app.seo.reporting import seo_report_generator
+    from app.seo.reporting import seo_audit_book_renderer
 
     if format.lower() == "json":
         return seo_report_generator.render_json_report(report)
@@ -573,7 +573,7 @@ async def get_audit_deliverables(
     if not report:
         raise HTTPException(status_code=400, detail="Executive report not yet synthesized for this analysis run.")
 
-    from app.reports.seo_report_generator import seo_report_generator
+    from app.seo.reporting import seo_report_generator
     json_rep = seo_report_generator.render_json_report(report)
     return {
         "analysis_id": analysis_id,
@@ -653,7 +653,7 @@ async def get_complete_geo_report(
     if not report:
         raise HTTPException(status_code=400, detail="Executive report not yet synthesized for this analysis run.")
 
-    from app.reports.geo_report_generator import geo_report_generator
+    from app.geo.reporting.geo_report_generator import geo_report_generator
 
     if format.lower() == "json":
         return geo_report_generator.render_json_report(report)
@@ -721,7 +721,7 @@ async def get_complete_aeo_report(
     if not report:
         raise HTTPException(status_code=400, detail="Executive report not yet synthesized for this analysis run.")
 
-    from app.reports.aeo_report_generator import aeo_report_generator
+    from app.aeo.reporting import aeo_report_generator
 
     if format.lower() == "json":
         return aeo_report_generator.render_json_report(report)
@@ -762,8 +762,7 @@ async def get_complete_cro_report(
     if not report:
         raise HTTPException(status_code=400, detail="Executive report not yet synthesized for this analysis run.")
 
-    from app.intelligence.cro import build_from_executive_report
-    from app.reports.cro_report_generator import cro_report_generator
+    from app.cro import build_from_executive_report, cro_report_generator
 
     intel = build_from_executive_report(report)
     kwargs = {
@@ -975,10 +974,10 @@ async def get_section_pdf_report(
     disposition = "attachment" if download else "inline"
 
     if section_key.lower() == "seo":
-        from app.reports.seo_book_renderer import seo_audit_book_renderer
+        from app.seo.reporting import seo_audit_book_renderer
         pdf_bytes = await seo_audit_book_renderer.render_book_pdf(report)
         if not pdf_bytes:
-            from app.reports.seo_report_generator import seo_report_generator
+            from app.seo.reporting import seo_report_generator
             pdf_bytes = await seo_report_generator.render_book_pdf(report)
         if not pdf_bytes:
             raise HTTPException(

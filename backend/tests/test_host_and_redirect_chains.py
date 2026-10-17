@@ -3,7 +3,7 @@ Unit tests for Canonical & Host-Variant Redirection Prober.
 """
 import pytest
 import httpx
-from app.analyzers.host_and_redirects import HostRedirectProber
+from app.seo.analyzers.host_and_redirects import HostRedirectProber
 
 
 @pytest.mark.asyncio

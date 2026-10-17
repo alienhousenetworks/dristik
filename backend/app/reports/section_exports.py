@@ -11,9 +11,9 @@ across the 6 primary workspaces:
 """
 from typing import Dict, Any, List, Optional
 from app.domain.models import ExecutiveReport
-from app.reports.aeo_audit_book import aeo_cover_figure, render_aeo_audit_book
-from app.reports.geo_audit_book import geo_cover_figure, render_geo_audit_book
-from app.reports.seo_audit_book import render_seo_audit_book
+from app.aeo.reporting import aeo_cover_figure, render_aeo_audit_book
+from app.geo.reporting import geo_cover_figure, render_geo_audit_book
+from app.seo.reporting import render_seo_audit_book
 from app.reports.plain_english_engine import (
     PlainEnglishEngine,
     generate_section_explanation,

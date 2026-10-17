@@ -2,8 +2,8 @@
 Unit tests for Meta Title & Description Rollup and Heading Hierarchy Analyzers.
 """
 from app.domain.models import PageEvidence
-from app.analyzers.meta_rollup import analyze_meta_rollup, estimate_pixel_width
-from app.analyzers.heading_analyzer import analyze_heading_hierarchy
+from app.seo.analyzers.meta_rollup import analyze_meta_rollup, estimate_pixel_width
+from app.seo.analyzers.heading_analyzer import analyze_heading_hierarchy
 
 
 def test_meta_title_buckets():

@@ -12,15 +12,15 @@ from unittest.mock import AsyncMock, patch
 from fastapi.testclient import TestClient
 
 from app.main import app
-from app.intelligence.geo.adapters.base import BaseGeoEngineAdapter, EngineRawResponse
-from app.intelligence.geo.adapters.perplexity import PerplexityAdapter
-from app.intelligence.geo.adapters.openai_search import OpenAISearchAdapter
-from app.intelligence.geo.adapters.gemini import GeminiAdapter
-from app.intelligence.geo.adapters.claude import ClaudeAdapter
-from app.intelligence.geo.adapters.groq import GroqAdapter
-from app.intelligence.geo.adapters.registry import get_adapter
-from app.intelligence.geo.benchmark_generator import benchmark_generator, BenchmarkSuite
-from app.intelligence.geo.benchmark_runner import benchmark_runner, GeoBenchmarkReport
+from app.geo.adapters.base import BaseGeoEngineAdapter, EngineRawResponse
+from app.geo.adapters.perplexity import PerplexityAdapter
+from app.geo.adapters.openai_search import OpenAISearchAdapter
+from app.geo.adapters.gemini import GeminiAdapter
+from app.geo.adapters.claude import ClaudeAdapter
+from app.geo.adapters.groq import GroqAdapter
+from app.geo.adapters.registry import get_adapter
+from app.geo.benchmark_generator import benchmark_generator, BenchmarkSuite
+from app.geo.benchmark_runner import benchmark_runner, GeoBenchmarkReport
 
 
 def test_engine_adapters_instantiation_and_defaults():
@@ -115,7 +115,7 @@ async def test_benchmark_runner_execution_and_metrics():
     """Tests running benchmark with mock adapter to verify mention, position, and source attribution."""
     mock_adapter = MockSuccessAdapter(api_key="mock-key")
 
-    with patch("app.intelligence.geo.benchmark_runner.get_available_adapters", return_value=[mock_adapter]):
+    with patch("app.geo.benchmark_runner.get_available_adapters", return_value=[mock_adapter]):
         report = await benchmark_runner.execute_benchmark(
             domain="alienhouse.ai",
             brand_name="AlienHouse Networks",

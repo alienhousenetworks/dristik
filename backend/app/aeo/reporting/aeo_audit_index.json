@@ -1,0 +1,1257 @@
+{
+  "parts": [
+    {
+      "id": "I",
+      "title": "Executive intelligence and strategic assessment"
+    },
+    {
+      "id": "II",
+      "title": "Question discovery and answer architecture"
+    },
+    {
+      "id": "III",
+      "title": "Answer-ready content and information quality"
+    },
+    {
+      "id": "IV",
+      "title": "Technical discoverability and answer-source eligibility"
+    },
+    {
+      "id": "V",
+      "title": "Answer engine and platform measurement"
+    },
+    {
+      "id": "VI",
+      "title": "Trust, source authority and competitive answer intelligence"
+    },
+    {
+      "id": "VII",
+      "title": "Business outcomes, remediation and governance"
+    },
+    {
+      "id": "A",
+      "title": "Appendices"
+    }
+  ],
+  "sections": [
+    {
+      "number": "01",
+      "part": "I",
+      "title": "Executive summary",
+      "checks": [
+        "Overall AEO readiness",
+        "Brand presence in answer-producing search systems",
+        "Questions tested versus questions in scope",
+        "Answers that mention the brand",
+        "Answers that recommend the brand",
+        "Answers that cite the brand's website",
+        "Answers that cite competitors instead",
+        "Missing and inaccurate brand information",
+        "Highest-priority answer coverage gaps",
+        "Commercial opportunities and risks",
+        "Recommended 30/60/90-day action plan"
+      ]
+    },
+    {
+      "number": "02",
+      "part": "I",
+      "title": "AEO health and performance scorecard",
+      "checks": [
+        "Question coverage score",
+        "Answer completeness score",
+        "Answer clarity and extractability score",
+        "Factual accuracy score",
+        "Source attribution and citation quality score",
+        "Brand entity consistency score",
+        "Answer-source accessibility score",
+        "Structured data quality score",
+        "Search answer appearance score",
+        "Live answer visibility score",
+        "Citation coverage score",
+        "Competitive answer share",
+        "Measurement confidence and data coverage"
+      ]
+    },
+    {
+      "number": "03",
+      "part": "I",
+      "title": "Business and answer ecosystem understanding",
+      "checks": [
+        "Business model and core offerings",
+        "Products and services",
+        "Target audiences and customer personas",
+        "Target countries, languages and regions",
+        "High-value customer questions",
+        "Buyer journey and decision stages",
+        "Brand positioning and differentiation",
+        "Pricing, availability and eligibility information",
+        "Support and troubleshooting questions",
+        "Brand facts and approved claims",
+        "High-risk claims requiring verification",
+        "Relevant answer platforms and surfaces"
+      ]
+    },
+    {
+      "number": "04",
+      "part": "I",
+      "title": "AEO risk assessment",
+      "checks": [
+        "Important questions with no useful answer",
+        "Incorrect or outdated answers",
+        "Missing brand recommendations",
+        "Competitors repeatedly cited instead",
+        "Unsupported product or service claims",
+        "Contradictory information across pages",
+        "Unclear product specifications",
+        "Missing evidence for factual claims",
+        "Unavailable or inaccessible answer sources",
+        "Stale pricing and policy information",
+        "Potentially misleading generated answers",
+        "Sensitive or regulated information risks"
+      ]
+    },
+    {
+      "number": "05",
+      "part": "I",
+      "title": "Question and answer competitive landscape",
+      "checks": [
+        "Direct business competitors",
+        "Brands returned for the same questions",
+        "Competitor answer coverage",
+        "Competitor source citations",
+        "Competitor-owned answer pages",
+        "Competitor comparison content",
+        "Competitor definitions and explanations",
+        "Competitor expertise and evidence",
+        "Question gaps by competitor",
+        "Brand recommendation differences",
+        "Citation destination comparison",
+        "Questions where the brand has a credible opportunity"
+      ]
+    },
+    {
+      "number": "06",
+      "part": "I",
+      "title": "Prioritization and strategic opportunity",
+      "checks": [
+        "Business value of each question",
+        "Search demand and customer relevance",
+        "Current answer visibility",
+        "Competitor strength",
+        "Answer quality gap",
+        "Evidence required to improve an answer",
+        "Implementation effort",
+        "Content and technical dependencies",
+        "Confidence in the recommendation",
+        "Quick wins and strategic improvements",
+        "Expected time to impact",
+        "Prioritized remediation roadmap"
+      ]
+    },
+    {
+      "number": "07",
+      "part": "II",
+      "title": "Question research and discovery",
+      "checks": [
+        "Search Console question queries",
+        "Search autocomplete questions",
+        "People Also Ask questions",
+        "Related searches",
+        "Customer support questions",
+        "Sales and pre-sales questions",
+        "Community and forum questions",
+        "Product documentation questions",
+        "Review and feedback questions",
+        "Competitor question coverage",
+        "Questions discovered from relevant search results",
+        "Questions discovered from live answer engines",
+        "Source and collection date for every question"
+      ]
+    },
+    {
+      "number": "08",
+      "part": "II",
+      "title": "Question intent classification",
+      "checks": [
+        "Definition questions",
+        "Explanatory questions",
+        "How-to questions",
+        "Troubleshooting questions",
+        "Comparison questions",
+        "Best-product or best-service questions",
+        "Recommendation questions",
+        "Pricing questions",
+        "Eligibility and qualification questions",
+        "Location and availability questions",
+        "Transactional questions",
+        "Navigational questions",
+        "Opinion and evaluation questions",
+        "Follow-up and clarification questions"
+      ]
+    },
+    {
+      "number": "09",
+      "part": "II",
+      "title": "Question clustering and topic taxonomy",
+      "checks": [
+        "Question deduplication",
+        "Semantic similarity grouping",
+        "Primary question identification",
+        "Supporting question mapping",
+        "Topic and subtopic relationships",
+        "Question intent clusters",
+        "Product-specific clusters",
+        "Industry-specific clusters",
+        "Brand-specific clusters",
+        "Competitor comparison clusters",
+        "Geographic and language clusters",
+        "Cluster-to-URL mapping",
+        "Unanswered subtopic identification"
+      ]
+    },
+    {
+      "number": "10",
+      "part": "II",
+      "title": "Question-to-page mapping",
+      "checks": [
+        "Existing page that answers each question",
+        "Best destination page for each answer",
+        "Multiple pages answering the same question",
+        "Questions with no appropriate destination",
+        "Misaligned page intent",
+        "Questions answered only indirectly",
+        "Content gaps within existing pages",
+        "Dedicated answer page opportunities",
+        "Documentation and support page opportunities",
+        "Internal link requirements",
+        "Canonical destination and page ownership",
+        "Page consolidation recommendations"
+      ]
+    },
+    {
+      "number": "11",
+      "part": "II",
+      "title": "Direct answer quality",
+      "checks": [
+        "Does the page answer the question explicitly?",
+        "Is the main answer easy to locate?",
+        "Is the answer correct and complete?",
+        "Does it address the actual user intent?",
+        "Does it avoid unnecessary introductions?",
+        "Are conditions and exceptions included?",
+        "Are technical terms explained?",
+        "Are limitations disclosed?",
+        "Does it distinguish facts from opinions?",
+        "Does it provide the next useful step?",
+        "Is the answer consistent with supporting details?",
+        "Does the page answer the question without requiring inference?"
+      ]
+    },
+    {
+      "number": "12",
+      "part": "II",
+      "title": "Answer completeness and depth",
+      "checks": [
+        "Core answer presence",
+        "Essential supporting facts",
+        "Relevant context",
+        "Important qualifications",
+        "Edge cases",
+        "Examples and practical steps",
+        "Comparison criteria",
+        "Alternatives",
+        "Pros and cons",
+        "Risks and limitations",
+        "Evidence and references",
+        "Follow-up question coverage",
+        "Missing information that could change the conclusion"
+      ]
+    },
+    {
+      "number": "13",
+      "part": "II",
+      "title": "Conversational question journeys",
+      "checks": [
+        "Initial question coverage",
+        "Natural follow-up questions",
+        "Clarification handling",
+        "Multi-step problem solving",
+        "Context-dependent questions",
+        "Comparison after discovery",
+        "Objection handling",
+        "Decision-stage questions",
+        "Purchase or conversion next steps",
+        "Support escalation paths",
+        "Consistency across a multi-turn interaction"
+      ]
+    },
+    {
+      "number": "14",
+      "part": "II",
+      "title": "FAQ and question-page optimization",
+      "checks": [
+        "Genuine user-question relevance",
+        "Question wording and specificity",
+        "Answer accuracy",
+        "Redundant FAQ detection",
+        "FAQ duplication across pages",
+        "Appropriate FAQ placement",
+        "Supporting evidence",
+        "Clear answers with necessary context",
+        "Internal links to detailed explanations",
+        "Product and policy FAQ accuracy",
+        "FAQ schema validity, when used",
+        "Eligibility expectations for FAQ rich results"
+      ]
+    },
+    {
+      "number": "15",
+      "part": "II",
+      "title": "Question prioritization and coverage gaps",
+      "checks": [
+        "High-value unanswered questions",
+        "Questions answered by competitors",
+        "Questions with weak existing answers",
+        "Questions with inaccurate existing answers",
+        "Questions with strong brand relevance",
+        "Questions with measurable search demand",
+        "Questions close to conversion",
+        "High-risk informational gaps",
+        "Low-value or redundant questions",
+        "Recommended question coverage by page and topic"
+      ]
+    },
+    {
+      "number": "16",
+      "part": "III",
+      "title": "Answer-focused content structure",
+      "checks": [
+        "Question-oriented headings",
+        "Clear opening answer",
+        "Logical H2 and H3 hierarchy",
+        "Definitions before advanced explanations",
+        "Step-by-step instructions",
+        "Scannable paragraphs",
+        "Tables for genuine comparisons",
+        "Lists for sequential actions",
+        "Consistent terminology",
+        "Relevant examples",
+        "Context surrounding concise answers",
+        "Clear distinction between summary and detail"
+      ]
+    },
+    {
+      "number": "17",
+      "part": "III",
+      "title": "Passage clarity and answer extractability",
+      "checks": [
+        "Standalone comprehensibility of passages",
+        "Clear subject references",
+        "Ambiguous pronoun detection",
+        "Undefined abbreviations",
+        "Missing units or measurement context",
+        "Answer fragments requiring distant context",
+        "Incomplete statements",
+        "Conflicting facts in nearby passages",
+        "Heading-to-answer relevance",
+        "Tables and list interpretation",
+        "Extractability without changing the intended meaning"
+      ]
+    },
+    {
+      "number": "18",
+      "part": "III",
+      "title": "Factual accuracy and verifiability",
+      "checks": [
+        "Factual claims inventory",
+        "Claims supported by evidence",
+        "Claims without identifiable sources",
+        "Outdated statistics",
+        "Incorrect product specifications",
+        "Incorrect dates or figures",
+        "Unsupported comparative claims",
+        "Contradictory claims across pages",
+        "Factual ambiguity",
+        "Unclear source attribution",
+        "Claims that require human expert review",
+        "Fact-checking and correction recommendations"
+      ]
+    },
+    {
+      "number": "19",
+      "part": "III",
+      "title": "Expertise, experience and first-hand evidence",
+      "checks": [
+        "Author identity",
+        "Relevant expertise",
+        "First-hand experience where appropriate",
+        "Original research",
+        "Product testing evidence",
+        "Demonstrations and screenshots",
+        "Customer case studies",
+        "Expert review",
+        "Methodology transparency",
+        "Source quality",
+        "Disclosure of limitations",
+        "Evidence distinguishing the page from generic alternatives"
+      ]
+    },
+    {
+      "number": "20",
+      "part": "III",
+      "title": "Freshness and temporal accuracy",
+      "checks": [
+        "Publication date",
+        "Last meaningful update",
+        "Outdated claims",
+        "Time-sensitive statistics",
+        "Expired offers",
+        "Changed product capabilities",
+        "Current pricing and availability",
+        "Changed policies",
+        "Broken or superseded references",
+        "Time-sensitive industry guidance",
+        "Date accuracy in structured data",
+        "Refresh recommendations based on actual change risk"
+      ]
+    },
+    {
+      "number": "21",
+      "part": "III",
+      "title": "Content originality and information gain",
+      "checks": [
+        "Unique factual contributions",
+        "Original examples",
+        "Proprietary research",
+        "Original data",
+        "Distinctive expertise",
+        "Repetition of widely available information",
+        "Unsupported paraphrasing",
+        "Content indistinguishable from competitors",
+        "Missing primary evidence",
+        "Missing practical detail",
+        "Redundant content sections",
+        "Opportunities to contribute genuinely new information"
+      ]
+    },
+    {
+      "number": "22",
+      "part": "III",
+      "title": "Entity and terminology clarity",
+      "checks": [
+        "Brand name and aliases",
+        "Product and service names",
+        "Organization identity",
+        "Founder and author identities",
+        "Industry terminology",
+        "Product category definitions",
+        "Acronym expansion",
+        "Entity relationship clarity",
+        "Ambiguous names",
+        "Conflicting entity descriptions",
+        "Consistency of product terminology",
+        "Entity references across relevant pages"
+      ]
+    },
+    {
+      "number": "23",
+      "part": "III",
+      "title": "Comparative and decision-support content",
+      "checks": [
+        "Product comparison criteria",
+        "Feature comparison accuracy",
+        "Pricing comparison context",
+        "Use-case differences",
+        "Advantages and limitations",
+        "Suitability by customer type",
+        "Alternatives and substitutes",
+        "Compatibility information",
+        "Evidence supporting recommendations",
+        "Comparison table accuracy",
+        "Conflicts of interest and disclosures",
+        "Clear decision criteria"
+      ]
+    },
+    {
+      "number": "24",
+      "part": "III",
+      "title": "Content trust and editorial governance",
+      "checks": [
+        "Editorial standards",
+        "Fact-checking workflow",
+        "Author and reviewer accountability",
+        "Claims approval",
+        "Source retention",
+        "Product and policy update ownership",
+        "AI-assisted content review",
+        "Correction history",
+        "Content version control",
+        "High-risk content review",
+        "Removal of stale information",
+        "Change monitoring for critical pages"
+      ]
+    },
+    {
+      "number": "25",
+      "part": "IV",
+      "title": "Crawlability and answer-source accessibility",
+      "checks": [
+        "Robots.txt access",
+        "HTTP response status",
+        "Important page accessibility",
+        "HTML content availability",
+        "Crawler-specific access behavior",
+        "Authentication barriers",
+        "Rate limits and bot protection",
+        "CDN and firewall restrictions",
+        "Resource accessibility",
+        "Content availability across regions",
+        "Source URL stability",
+        "Differences between browser and crawler access"
+      ]
+    },
+    {
+      "number": "26",
+      "part": "IV",
+      "title": "Indexability and search eligibility",
+      "checks": [
+        "Indexable answer pages",
+        "Robots meta directives",
+        "X-Robots-Tag headers",
+        "Canonical URL correctness",
+        "Search engine indexing status",
+        "Important question pages missing from the index",
+        "Duplicate answer pages",
+        "Noindex conflicts",
+        "Search Console evidence",
+        "Indexing status versus actual answer appearance"
+      ]
+    },
+    {
+      "number": "27",
+      "part": "IV",
+      "title": "Rendering and content visibility",
+      "checks": [
+        "Raw HTML versus rendered DOM",
+        "Server-side rendered answers",
+        "Client-side generated answers",
+        "JavaScript-dependent content",
+        "Hydration errors",
+        "Rendered headings and links",
+        "Lazy-loaded answer content",
+        "Dynamic tabs and accordions",
+        "Content hidden behind interactions",
+        "Rendering failures on mobile",
+        "Structured data rendering",
+        "Rendering consistency across page templates"
+      ]
+    },
+    {
+      "number": "28",
+      "part": "IV",
+      "title": "Internal links and answer discovery",
+      "checks": [
+        "Links to key answer pages",
+        "Contextual internal links",
+        "Topic hub relationships",
+        "Orphaned answer pages",
+        "Click depth",
+        "Anchor text clarity",
+        "Breadcrumb navigation",
+        "Links from product to support documentation",
+        "Links between related questions",
+        "Links to source evidence",
+        "Broken or redirected links",
+        "Discovery of updated content"
+      ]
+    },
+    {
+      "number": "29",
+      "part": "IV",
+      "title": "Structured data and machine-readable information",
+      "checks": [
+        "Organization schema",
+        "Person schema",
+        "Article and BlogPosting",
+        "BreadcrumbList",
+        "Product and Offer",
+        "LocalBusiness",
+        "VideoObject",
+        "Relevant supported content-specific types",
+        "Schema consistency with visible content",
+        "Entity identifiers and relationships",
+        "Duplicate structured data",
+        "Invalid properties",
+        "Misleading markup",
+        "Structured data eligibility and limitations"
+      ]
+    },
+    {
+      "number": "30",
+      "part": "IV",
+      "title": "Semantic HTML and information structure",
+      "checks": [
+        "Descriptive page titles",
+        "Heading hierarchy",
+        "Paragraph and list structure",
+        "Meaningful table headers",
+        "Descriptive links",
+        "Semantic landmarks",
+        "Clear labels",
+        "Accessible names for relevant controls",
+        "Content order",
+        "Machine-readable dates and values where appropriate",
+        "Distinction between navigation and substantive content"
+      ]
+    },
+    {
+      "number": "31",
+      "part": "IV",
+      "title": "Page performance and user experience",
+      "checks": [
+        "Core Web Vitals",
+        "Mobile usability",
+        "Rendering latency",
+        "Resource loading",
+        "Layout stability",
+        "Readability",
+        "Navigation clarity",
+        "Interstitials and obstructive overlays",
+        "Accessibility barriers",
+        "Embedded media performance",
+        "Performance of documentation and support pages"
+      ]
+    },
+    {
+      "number": "32",
+      "part": "IV",
+      "title": "Content architecture and URL stability",
+      "checks": [
+        "URL consistency",
+        "Answer page hierarchy",
+        "Canonicalization",
+        "Redirect chains",
+        "Duplicate content",
+        "Page migrations",
+        "Broken citation destinations",
+        "Sitemap coverage",
+        "Pagination",
+        "International page variants",
+        "Versioned documentation",
+        "Stable URLs for key facts and references"
+      ]
+    },
+    {
+      "number": "33",
+      "part": "V",
+      "title": "Featured snippets and traditional search answers",
+      "checks": [
+        "Featured snippet opportunities",
+        "Current featured snippet ownership",
+        "Query-to-snippet relevance",
+        "Answer accuracy",
+        "Source page suitability",
+        "Snippet format compatibility",
+        "List and table answer opportunities",
+        "Paragraph answer quality",
+        "Competitor snippet comparison",
+        "Search appearance changes over time"
+      ]
+    },
+    {
+      "number": "34",
+      "part": "V",
+      "title": "People Also Ask and related questions",
+      "checks": [
+        "Relevant question discovery",
+        "Question coverage gaps",
+        "Existing answer page quality",
+        "Source URL visibility",
+        "Competitor ownership",
+        "Related question clusters",
+        "Answer consistency across questions",
+        "Changes in question sets",
+        "Query and market segmentation",
+        "Repeatable monitoring methodology"
+      ]
+    },
+    {
+      "number": "35",
+      "part": "V",
+      "title": "Google Search answer experiences",
+      "checks": [
+        "Featured snippets",
+        "AI Overviews",
+        "AI Mode",
+        "Other relevant Google answer surfaces",
+        "Brand mention frequency",
+        "Source citation frequency",
+        "Citation destination URLs",
+        "Answer accuracy",
+        "Competitor citations",
+        "Question-level visibility",
+        "Device, location and language context",
+        "Observation date and test conditions"
+      ]
+    },
+    {
+      "number": "36",
+      "part": "V",
+      "title": "Conversational AI and answer platforms",
+      "checks": [
+        "ChatGPT search experiences",
+        "Perplexity",
+        "Gemini",
+        "Microsoft Copilot",
+        "Claude search or research capabilities, where available",
+        "Platform-specific query coverage",
+        "Brand mention presence",
+        "Source citations",
+        "Recommendation context",
+        "Source retrieval behavior",
+        "Incorrect brand descriptions",
+        "Differences between search-enabled and non-search responses",
+        "Platform capabilities and measurement limitations"
+      ]
+    },
+    {
+      "number": "37",
+      "part": "V",
+      "title": "Voice and assistant-style answers",
+      "checks": [
+        "Spoken question coverage",
+        "Concise spoken answer clarity",
+        "Local intent",
+        "Device and assistant differences",
+        "Follow-up question support",
+        "Pronunciation of brand and product names",
+        "Answer source availability",
+        "Voice-specific result measurement where accessible",
+        "Unsupported assumptions about voice assistant selection"
+      ]
+    },
+    {
+      "number": "38",
+      "part": "V",
+      "title": "Documentation, knowledge bases and support answers",
+      "checks": [
+        "Help center discoverability",
+        "Product documentation completeness",
+        "Troubleshooting answer quality",
+        "Error-message coverage",
+        "Version-specific instructions",
+        "Documentation search usability",
+        "Support article duplication",
+        "Article freshness",
+        "Links to authoritative product information",
+        "Public versus private content access",
+        "Source references for support answers"
+      ]
+    },
+    {
+      "number": "39",
+      "part": "V",
+      "title": "Multilingual and regional answer coverage",
+      "checks": [
+        "Questions in target languages",
+        "Localized question intent",
+        "Translation quality",
+        "Regional terminology",
+        "Local product names",
+        "Currency and measurement consistency",
+        "Country-specific pricing",
+        "Regional policies",
+        "hreflang and canonical consistency",
+        "Language-specific answer accuracy",
+        "Citation variation by language and market"
+      ]
+    },
+    {
+      "number": "40",
+      "part": "V",
+      "title": "Live answer testing and benchmark reliability",
+      "checks": [
+        "Test question inventory",
+        "Question selection methodology",
+        "Platform and model identification",
+        "Search-enabled status",
+        "Geographic and language settings",
+        "Run count per question and engine",
+        "Response timestamps",
+        "Raw response retention",
+        "Citation URL capture",
+        "Repeat-run variation",
+        "Error and unavailable response handling",
+        "Confidence intervals where statistically appropriate",
+        "Benchmark versioning",
+        "Reproducibility and audit trail"
+      ]
+    },
+    {
+      "number": "41",
+      "part": "VI",
+      "title": "Source credibility and evidence quality",
+      "checks": [
+        "Primary-source availability",
+        "First-party documentation",
+        "Official product specifications",
+        "Independent research",
+        "Expert sources",
+        "Supporting references",
+        "Source relevance to the claim",
+        "Citation traceability",
+        "Conflicting source resolution",
+        "Evidence freshness",
+        "Unsupported claims",
+        "Source provenance and limitations"
+      ]
+    },
+    {
+      "number": "42",
+      "part": "VI",
+      "title": "Citation and source selection analysis",
+      "checks": [
+        "Brand-owned citations",
+        "Competitor-owned citations",
+        "Third-party editorial citations",
+        "Community and forum citations",
+        "Documentation citations",
+        "Government and academic sources where relevant",
+        "Citation frequency by question",
+        "Citation URL distribution",
+        "Citation position and context",
+        "Citation relevance",
+        "Citation accuracy",
+        "Repeated citations across runs",
+        "Citation share by engine",
+        "Pages cited despite weak or outdated content"
+      ]
+    },
+    {
+      "number": "43",
+      "part": "VI",
+      "title": "Brand entity and knowledge consistency",
+      "checks": [
+        "Official brand name",
+        "Alternative names and spelling variants",
+        "Organization description",
+        "Product and service relationships",
+        "Founder and leadership information",
+        "Official website references",
+        "Product specifications",
+        "Business location and contact information",
+        "Conflicting descriptions across sources",
+        "Duplicate or ambiguous entities",
+        "Knowledge panel presence where applicable",
+        "Consistency of verified brand facts"
+      ]
+    },
+    {
+      "number": "44",
+      "part": "VI",
+      "title": "Brand mentions and recommendation quality",
+      "checks": [
+        "Brand mentioned or omitted",
+        "Brand recommended or merely listed",
+        "Recommendation context",
+        "Correct product category",
+        "Correct target audience",
+        "Accurate differentiators",
+        "Accurate strengths and limitations",
+        "Pricing accuracy",
+        "Unsupported superlatives",
+        "False or misleading claims",
+        "Brand comparison accuracy",
+        "Positive, neutral and negative framing"
+      ]
+    },
+    {
+      "number": "45",
+      "part": "VI",
+      "title": "Misinformation and hallucination risk",
+      "checks": [
+        "Incorrect product features",
+        "Invented pricing",
+        "Incorrect company details",
+        "False affiliations",
+        "Misattributed quotations",
+        "Unsupported performance claims",
+        "Outdated policy information",
+        "Confusion with similarly named entities",
+        "Incorrect competitor comparisons",
+        "False claims about availability",
+        "Evidence used to classify an answer as inaccurate",
+        "Human verification requirements and correction priorities"
+      ]
+    },
+    {
+      "number": "46",
+      "part": "VI",
+      "title": "Third-party reputation and source ecosystem",
+      "checks": [
+        "Independent brand mentions",
+        "Relevant industry publications",
+        "Review sites",
+        "Expert commentary",
+        "Industry directories",
+        "Community discussions",
+        "Authoritative documentation",
+        "Original research citations",
+        "Brand fact consistency across sources",
+        "Outdated third-party information",
+        "Reputational risks",
+        "Legitimate opportunities to improve public information"
+      ]
+    },
+    {
+      "number": "47",
+      "part": "VI",
+      "title": "Competitive answer share and source gaps",
+      "checks": [
+        "Questions answered by competitors",
+        "Competitor brand recommendation rate",
+        "Competitor citation frequency",
+        "Citation share by question cluster",
+        "Competitor source page quality",
+        "Missing first-party evidence",
+        "Unique information competitors provide",
+        "Questions with no strong source",
+        "Brand-owned versus third-party citation balance",
+        "Changes in competitor visibility",
+        "Defensible opportunities to become a useful source"
+      ]
+    },
+    {
+      "number": "48",
+      "part": "VII",
+      "title": "AEO traffic and referral analytics",
+      "checks": [
+        "Organic search traffic to answer pages",
+        "Referral traffic from answer platforms",
+        "Landing pages receiving AI referrals",
+        "Referral engagement",
+        "New versus returning visitors",
+        "Branded search changes",
+        "Search Console question performance",
+        "Traffic by engine where identifiable",
+        "Referral attribution limitations",
+        "Missing or unclassified referrals",
+        "Before-and-after comparisons",
+        "Changes in traffic quality"
+      ]
+    },
+    {
+      "number": "49",
+      "part": "VII",
+      "title": "Conversion and commercial impact",
+      "checks": [
+        "Conversions from answer pages",
+        "Qualified leads",
+        "Product discovery",
+        "Demo and contact requests",
+        "Assisted conversions",
+        "Ecommerce transactions",
+        "Revenue attribution",
+        "Conversion rate by landing page",
+        "Lead quality",
+        "Branded demand and pipeline",
+        "AI referral conversions where measurable",
+        "Attribution confidence and blind spots"
+      ]
+    },
+    {
+      "number": "50",
+      "part": "VII",
+      "title": "AEO opportunity and forecasting model",
+      "checks": [
+        "Priority question demand",
+        "Current answer visibility",
+        "Estimated addressable audience",
+        "Potential citation opportunities",
+        "Page improvement effort",
+        "Evidence production cost",
+        "Conversion assumptions",
+        "Expected time to impact",
+        "Conservative, base and upside scenarios",
+        "Confidence ranges",
+        "Platform and algorithm uncertainty",
+        "Risks of confusing correlation with causation"
+      ]
+    },
+    {
+      "number": "51",
+      "part": "VII",
+      "title": "Page-level answer optimization plan",
+      "checks": [
+        "URL and page template",
+        "Questions the page should answer",
+        "Current answer quality",
+        "Missing facts and context",
+        "Recommended content changes",
+        "Evidence or references to add",
+        "Structured data corrections",
+        "Internal link recommendations",
+        "Technical changes",
+        "Editorial review requirements",
+        "Success metrics",
+        "Validation method"
+      ]
+    },
+    {
+      "number": "52",
+      "part": "VII",
+      "title": "Question-level remediation register",
+      "checks": [
+        "Question ID",
+        "Question text",
+        "Intent and topic cluster",
+        "Existing answer URL",
+        "Observed answer-engine result",
+        "Competitor source, if observed",
+        "Verified answer gap",
+        "Proposed fix",
+        "Priority and business value",
+        "Required evidence",
+        "Owner and estimated effort",
+        "Completion status",
+        "Retest conditions"
+      ]
+    },
+    {
+      "number": "53",
+      "part": "VII",
+      "title": "Content implementation and verification",
+      "checks": [
+        "Before-and-after content snapshots",
+        "Factual review",
+        "Source validation",
+        "Page rendering validation",
+        "Canonical and indexability checks",
+        "Structured data revalidation",
+        "Internal link checks",
+        "Published-content verification",
+        "Live answer retesting",
+        "Citation change measurement",
+        "Verified versus unverified improvements",
+        "Rollback and correction procedures"
+      ]
+    },
+    {
+      "number": "54",
+      "part": "VII",
+      "title": "Continuous AEO monitoring",
+      "checks": [
+        "Scheduled question benchmarks",
+        "Platform availability checks",
+        "Brand mention changes",
+        "Citation gains and losses",
+        "New competitor citations",
+        "Incorrect answer alerts",
+        "Outdated product information",
+        "Newly emerging customer questions",
+        "Content freshness alerts",
+        "Referral traffic changes",
+        "Question-level trend history",
+        "Repeat-run variance",
+        "Monthly and quarterly reporting"
+      ]
+    },
+    {
+      "number": "55",
+      "part": "VII",
+      "title": "Methodology, governance and evidence integrity",
+      "checks": [
+        "Audit scope and limitations",
+        "Question sampling methodology",
+        "Engine selection criteria",
+        "Test environment",
+        "Model and platform versions when available",
+        "Raw answer and citation retention",
+        "Evidence timestamps",
+        "Source provenance",
+        "Scoring definitions",
+        "Missing-data handling",
+        "Confidence and uncertainty reporting",
+        "Human review requirements",
+        "Data privacy and retention",
+        "Audit version history",
+        "Reproducibility and change log"
+      ]
+    },
+    {
+      "number": "A",
+      "part": "A",
+      "title": "Audit scope",
+      "checks": [
+        "Domain",
+        "Business",
+        "Products",
+        "Markets",
+        "Languages",
+        "Platforms",
+        "Exclusions"
+      ]
+    },
+    {
+      "number": "B",
+      "part": "A",
+      "title": "Question inventory",
+      "checks": [
+        "Discovered questions",
+        "Sources",
+        "Intent",
+        "Priority",
+        "Collection date"
+      ]
+    },
+    {
+      "number": "C",
+      "part": "A",
+      "title": "Question-to-page map",
+      "checks": [
+        "Questions",
+        "Existing URLs",
+        "Recommended destination pages",
+        "Coverage gaps"
+      ]
+    },
+    {
+      "number": "D",
+      "part": "A",
+      "title": "Answer quality dataset",
+      "checks": [
+        "Evaluated answers",
+        "Completeness",
+        "Accuracy",
+        "Clarity",
+        "Supporting evidence"
+      ]
+    },
+    {
+      "number": "E",
+      "part": "A",
+      "title": "Live benchmark dataset",
+      "checks": [
+        "Engine",
+        "Query",
+        "Run",
+        "Timestamp",
+        "Raw response",
+        "Test conditions"
+      ]
+    },
+    {
+      "number": "F",
+      "part": "A",
+      "title": "Citation inventory",
+      "checks": [
+        "Cited URLs",
+        "Source types",
+        "Source owners",
+        "Citation context"
+      ]
+    },
+    {
+      "number": "G",
+      "part": "A",
+      "title": "Brand facts registry",
+      "checks": [
+        "Verified names",
+        "Products",
+        "Prices",
+        "Policies",
+        "Claims",
+        "Source references"
+      ]
+    },
+    {
+      "number": "H",
+      "part": "A",
+      "title": "Competitor inventory",
+      "checks": [
+        "Competitors",
+        "Comparison criteria",
+        "Observed answer presence"
+      ]
+    },
+    {
+      "number": "I",
+      "part": "A",
+      "title": "Technical evidence",
+      "checks": [
+        "Crawl",
+        "Rendering",
+        "Indexability",
+        "Structured data",
+        "HTTP results"
+      ]
+    },
+    {
+      "number": "J",
+      "part": "A",
+      "title": "Content remediation backlog",
+      "checks": [
+        "Page-specific changes",
+        "Content briefs",
+        "Owners",
+        "Statuses"
+      ]
+    },
+    {
+      "number": "K",
+      "part": "A",
+      "title": "Score methodology",
+      "checks": [
+        "Metric definitions",
+        "Denominators",
+        "Weights",
+        "Confidence",
+        "Exclusions"
+      ]
+    },
+    {
+      "number": "L",
+      "part": "A",
+      "title": "Business measurement",
+      "checks": [
+        "Traffic",
+        "Referrals",
+        "Conversions",
+        "Revenue",
+        "Attribution limitations"
+      ]
+    },
+    {
+      "number": "M",
+      "part": "A",
+      "title": "Evidence ledger",
+      "checks": [
+        "Evidence IDs",
+        "Collection dates",
+        "Source provenance",
+        "Verification history"
+      ]
+    },
+    {
+      "number": "N",
+      "part": "A",
+      "title": "Limitations",
+      "checks": [
+        "Unavailable engines",
+        "Missing integrations",
+        "Sample coverage",
+        "Unresolved questions"
+      ]
+    },
+    {
+      "number": "O",
+      "part": "A",
+      "title": "Glossary",
+      "checks": [
+        "AEO terminology",
+        "Metric definitions",
+        "Scoring interpretation"
+      ]
+    }
+  ]
+}

@@ -22,7 +22,7 @@ from app.audit.diagnostic_inventory import DiagnosticInventoryEngine
 from app.audit.page_analysis import PageLevelAnalysisEngine
 from app.audit.consistency_engine import CrossChapterConsistencyEngine
 from app.reports.validation_gate import ValidationGate
-from app.reports.seo_book_renderer import seo_audit_book_renderer
+from app.seo.reporting.seo_book_renderer import seo_audit_book_renderer
 from app.domain.models import ExecutiveReport, CrawlManifest
 
 

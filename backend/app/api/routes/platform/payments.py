@@ -2,8 +2,6 @@
 Dristik AI Payment & Razorpay Gateway Integration
 Handles order creation, signature verification, and plan catalog management for India & global pricing.
 """
-import hmac
-import hashlib
 import time
 import uuid
 import httpx
@@ -12,6 +10,8 @@ from fastapi import APIRouter, HTTPException, status, Request
 from pydantic import BaseModel, Field
 
 from app.core.config import settings
+from app.payments.gst_billing import GST_RATE, gst_amount_inr
+from app.payments.razorpay import payment_signature
 
 router = APIRouter(prefix="/payments", tags=["Payments & Pricing"])
 
@@ -454,7 +454,7 @@ async def get_plans():
         "subscription_hypotheses_note": PLANNING_NOTE,
         "default_flagship": "diagnostic",
         "currency": "INR",
-        "gst_rate": 0.0,
+        "gst_rate": GST_RATE,
         "value_proposition": "Investigates your website like a dedicated cross-functional team of technical, SEO, GEO, AI-search, and business analysts—with verified evidence for every conclusion."
     }
 
@@ -530,7 +530,7 @@ async def create_order(req: CreateOrderRequest):
                         plan_name=plan["name"],
                         target_url=req.target_url,
                         is_test_mode=settings.RAZORPAY_KEY_ID.startswith("rzp_test_"),
-                        gst_amount_inr=0,
+                        gst_amount_inr=gst_amount_inr(base_price, req.gstin),
                         total_amount_inr=total_inr,
                         upi_intent_url=upi_intent,
                         upi_qr_data=upi_intent,
@@ -579,7 +579,7 @@ async def create_order(req: CreateOrderRequest):
             plan_name=plan["name"],
             target_url=req.target_url,
             is_test_mode=True,
-            gst_amount_inr=0,
+            gst_amount_inr=gst_amount_inr(base_price, req.gstin),
             total_amount_inr=total_inr,
             upi_intent_url=upi_intent,
             upi_qr_data=upi_intent,
@@ -636,11 +636,11 @@ async def verify_payment(req: VerifyPaymentRequest):
 
     # HMAC Signature Verification
     if settings.RAZORPAY_KEY_SECRET:
-        generated_signature = hmac.new(
-            settings.RAZORPAY_KEY_SECRET.encode("utf-8"),
-            f"{req.razorpay_order_id}|{req.razorpay_payment_id}".encode("utf-8"),
-            hashlib.sha256
-        ).hexdigest()
+        generated_signature = payment_signature(
+            settings.RAZORPAY_KEY_SECRET,
+            req.razorpay_order_id,
+            req.razorpay_payment_id,
+        )
 
         if generated_signature != req.razorpay_signature:
             raise HTTPException(

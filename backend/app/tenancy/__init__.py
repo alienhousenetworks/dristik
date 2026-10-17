@@ -1,1 +1,0 @@
-"""Dristik backend package."""

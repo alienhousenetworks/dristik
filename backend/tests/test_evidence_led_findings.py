@@ -20,7 +20,7 @@ from app.domain.models import (
     PageEvidence,
 )
 from app.reports.plain_english_engine import PlainEnglishEngine
-from app.reports.seo_book_renderer import build_seo_book_context, normalize_finding
+from app.seo.reporting.seo_book_renderer import build_seo_book_context, normalize_finding
 
 
 def test_plain_english_engine_enriches_7_part_analytical_structure():
@@ -179,9 +179,9 @@ def test_chapter_subsections_render_honest_statuses_from_diagnostic_inventory():
 
 def test_zero_unbacked_ranking_or_revenue_claims_in_analyzer_findings():
     """Verify that analyzers do not generate unbacked claims of lost rankings or revenue."""
-    from app.analyzers.canonical_auditor import analyze_canonicals
-    from app.analyzers.heading_analyzer import HeadingAnalyzer, analyze_heading_hierarchy
-    from app.analyzers.media_asset_analyzer import MediaAssetAnalyzer, analyze_media_assets
+    from app.seo.analyzers.canonical_auditor import analyze_canonicals
+    from app.seo.analyzers.heading_analyzer import HeadingAnalyzer, analyze_heading_hierarchy
+    from app.seo.analyzers.media_asset_analyzer import MediaAssetAnalyzer, analyze_media_assets
 
     page = PageEvidence(
         url="https://example.com/",

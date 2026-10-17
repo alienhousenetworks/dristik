@@ -8,9 +8,9 @@ from typing import Dict, List, Set
 from bs4 import BeautifulSoup
 
 from tests.fixtures.golden_corpus import get_golden_fixtures, GoldenFixtureSite, SeededDefect
-from app.analyzers.canonical_redirect_consistency import CanonicalRedirectConsistencyAnalyzer
-from app.analyzers.heading_analyzer import HeadingAnalyzer
-from app.analyzers.meta_rollup import MetaRollupAnalyzer
+from app.seo.analyzers.canonical_redirect_consistency import CanonicalRedirectConsistencyAnalyzer
+from app.seo.analyzers.heading_analyzer import HeadingAnalyzer
+from app.seo.analyzers.meta_rollup import MetaRollupAnalyzer
 from app.domain.models import PageEvidence, Finding
 from app.domain.enums import Category, Severity
 

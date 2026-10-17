@@ -21,13 +21,13 @@ from app.domain.models import (
     SerpAppearanceReport,
     ThreeWayComparison,
 )
-from app.reports.seo_print_report import (
+from app.seo.reporting.seo_print_report import (
     SeoPrintReportRenderer,
     calculate_chapter_page_numbers,
     render_svg_donut_chart,
     render_svg_score_gauge,
 )
-from app.reports.seo_report_generator import CompleteSeoReportGenerator, seo_report_generator
+from app.seo.reporting.seo_report_generator import CompleteSeoReportGenerator, seo_report_generator
 
 
 def _make_sample_report(ecommerce_detected: bool = True) -> ExecutiveReport:

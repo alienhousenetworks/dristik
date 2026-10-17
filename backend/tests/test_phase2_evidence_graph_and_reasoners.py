@@ -22,8 +22,8 @@ from app.domain.models import (
     Claim,
 )
 from app.domain.enums import Category, Severity, RubricConfidence
-from app.analyzers.canonical_redirect_consistency import CanonicalRedirectConsistencyAnalyzer
-from app.analyzers.sitemap_orphan_analyzer import SitemapOrphanAnalyzer
+from app.seo.analyzers.canonical_redirect_consistency import CanonicalRedirectConsistencyAnalyzer
+from app.seo.analyzers.sitemap_orphan_analyzer import SitemapOrphanAnalyzer
 from app.evidence.coverage import EvidenceCoverageCalculator, VectorObservationStatus
 from app.agents.runtime.reasoners import (
     TechnicalReasonerAgent,

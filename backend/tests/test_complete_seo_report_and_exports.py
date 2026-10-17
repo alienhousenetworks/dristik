@@ -14,10 +14,10 @@ from app.domain.models import (
     SerpAppearanceReport,
     ThreeWayComparison,
 )
-from app.analyzers.ecommerce_seo import analyze_ecommerce_seo
-from app.analyzers.serp_appearance import analyze_serp_appearance
+from app.seo.analyzers.ecommerce_seo import analyze_ecommerce_seo
+from app.seo.analyzers.serp_appearance import analyze_serp_appearance
 from app.reports.export_service import generate_urls_csv, generate_remediation_tracker_csv
-from app.reports.seo_report_generator import seo_report_generator
+from app.seo.reporting.seo_report_generator import seo_report_generator
 
 
 def _make_dummy_report() -> ExecutiveReport:

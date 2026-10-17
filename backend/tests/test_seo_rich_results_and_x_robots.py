@@ -6,7 +6,7 @@ from bs4 import BeautifulSoup
 from app.domain.models import PageEvidence
 from app.evidence.store import EvidenceStore
 from app.crawl.analyzers.meta import analyze_meta_tags
-from app.analyzers.schema_validator import analyze_schema_rich_results, validate_schema_entity
+from app.seo.analyzers.schema_validator import analyze_schema_rich_results, validate_schema_entity
 
 
 def test_meta_analyzer_extracts_x_robots_tag():

@@ -49,7 +49,9 @@ def test_no_hardcoded_requery_fallback_scores_in_frontend():
 
 def test_no_radar_fake_formula():
     """Verify that radar.py does not use the synthetic formula min(98.0, 75.0 + deltas * 1.5)."""
-    target = REPO_ROOT / "backend" / "app" / "intelligence" / "monitoring" / "radar.py"
+    target = REPO_ROOT / "backend" / "app" / "core" / "monitoring" / "radar.py"
+    if not target.exists():
+        target = REPO_ROOT / "backend" / "app" / "intelligence" / "monitoring" / "radar.py"
     assert target.exists()
     content = target.read_text(encoding="utf-8")
     assert "75.0 + deltas" not in content

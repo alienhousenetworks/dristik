@@ -22,182 +22,52 @@ export function ExecutiveTopActions({
       return report.top_10_actions;
     }
 
-    // Dynamic synthesis fallback
+    // Derive actions purely from real crawl findings — zero fake fallbacks
     const findings = report.findings || [];
-    const findingsMap: Record<string, string> = {};
-    for (const f of findings) {
-      const text = `${f.title} ${f.finding} ${f.description || ''}`.toLowerCase();
-      if (!findingsMap.positioning && (text.includes('h1') || text.includes('positioning') || text.includes('headline'))) {
-        findingsMap.positioning = f.finding_id;
-      }
-      if (!findingsMap.taxonomy && (text.includes('taxonomy') || text.includes('service') || text.includes('entity'))) {
-        findingsMap.taxonomy = f.finding_id;
-      }
-      if (!findingsMap.schema && (text.includes('schema') || text.includes('json-ld') || text.includes('structured data'))) {
-        findingsMap.schema = f.finding_id;
-      }
-      if (!findingsMap.duplicate_meta && (text.includes('duplicate') || text.includes('canonical') || text.includes('meta'))) {
-        findingsMap.duplicate_meta = f.finding_id;
-      }
-      if (!findingsMap.icp && (text.includes('icp') || text.includes('audience') || text.includes('landing'))) {
-        findingsMap.icp = f.finding_id;
-      }
-      if (!findingsMap.trust && (text.includes('case study') || text.includes('trust') || text.includes('proof'))) {
-        findingsMap.trust = f.finding_id;
-      }
-      if (!findingsMap.crawl && (text.includes('sitemap') || text.includes('robots') || text.includes('crawl'))) {
-        findingsMap.crawl = f.finding_id;
-      }
-      if (!findingsMap.answerability && (text.includes('answer') || text.includes('faq') || text.includes('question') || text.includes('citation'))) {
-        findingsMap.answerability = f.finding_id;
-      }
-      if (!findingsMap.performance && (text.includes('vitals') || text.includes('ttfb') || text.includes('speed'))) {
-        findingsMap.performance = f.finding_id;
-      }
-      if (!findingsMap.hierarchy && (text.includes('hierarchy') || text.includes('heading') || text.includes('h2'))) {
-        findingsMap.hierarchy = f.finding_id;
-      }
+    if (findings.length > 0) {
+      const severityMap: Record<string, { priority: 'P0' | 'P1' | 'P2'; impact: string; effort: string; hours: number }> = {
+        CRITICAL: { priority: 'P0', impact: 'Very High', effort: 'Low', hours: 4 },
+        HIGH: { priority: 'P1', impact: 'High', effort: 'Medium', hours: 3 },
+        MEDIUM: { priority: 'P2', impact: 'Medium', effort: 'Low', hours: 2 },
+        LOW: { priority: 'P2', impact: 'Low', effort: 'Low', hours: 1 },
+        INFO: { priority: 'P2', impact: 'Informational', effort: 'Low', hours: 1 },
+      };
+
+      const sortedFindings = [...findings].sort((a, b) => {
+        const order: Record<string, number> = { CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3, INFO: 4 };
+        return (order[a.severity] ?? 5) - (order[b.severity] ?? 5);
+      });
+
+      const dynamicActions: ExecutiveActionItem[] = sortedFindings.slice(0, 10).map((f, idx) => {
+        const meta = severityMap[f.severity] || { priority: 'P2' as const, impact: 'Medium', effort: 'Low', hours: 2 };
+        return {
+          rank: idx + 1,
+          priority: meta.priority,
+          action: f.title || f.finding || 'Remediate detected defect',
+          impact: meta.impact,
+          effort: meta.effort,
+          expected_outcome: f.recommendation || 'Resolve defect in compliance with zero-fake standards',
+          estimated_engineer_hours: meta.hours,
+          dependencies: [],
+          validation: `Automated retest: ${f.title || 'Finding'} verified fixed against live DOM`,
+          category: f.category || 'TECHNICAL_SEO',
+          related_finding_id: f.finding_id,
+        };
+      });
+
+      const totalHours = dynamicActions.reduce((acc, a) => acc + a.estimated_engineer_hours, 0);
+      return {
+        actions: dynamicActions,
+        total_engineer_hours: totalHours,
+        dependencies_flow: dynamicActions.slice(0, 3).map((a) => a.action).join(' → ') || 'Linear remediation',
+        validation_mode: 'automated_retest',
+      };
     }
 
-    const defaultActions: ExecutiveActionItem[] = [
-      {
-        rank: 1,
-        priority: 'P0',
-        action: 'Define service taxonomy',
-        impact: 'Very High',
-        effort: 'Low',
-        expected_outcome: 'Category clarity & unambiguous entity mapping',
-        estimated_engineer_hours: 4,
-        dependencies: [],
-        validation: 'Automated retest: Taxonomy terms registered in DOM AST and canonical URL paths',
-        category: 'GEO',
-        related_finding_id: findingsMap.taxonomy,
-      },
-      {
-        rank: 2,
-        priority: 'P0',
-        action: 'Rewrite homepage positioning',
-        impact: 'Very High',
-        effort: 'Low',
-        expected_outcome: 'Improve visitor comprehension & instant value recognition',
-        estimated_engineer_hours: 3,
-        dependencies: [],
-        validation: 'Automated retest: Homepage H1 & title contain explicit service category',
-        category: 'UX_CONVERSION',
-        related_finding_id: findingsMap.positioning,
-      },
-      {
-        rank: 3,
-        priority: 'P1',
-        action: 'Create service schema',
-        impact: 'High',
-        effort: 'Medium',
-        expected_outcome: 'Better entity understanding & AI knowledge graph ingestion',
-        estimated_engineer_hours: 5,
-        dependencies: ['Define service taxonomy'],
-        validation: 'Automated retest: Schema Validator verifies valid Service & Organization JSON-LD',
-        category: 'SCHEMA',
-        related_finding_id: findingsMap.schema,
-      },
-      {
-        rank: 4,
-        priority: 'P1',
-        action: 'Fix metadata duplication',
-        impact: 'High',
-        effort: 'Low',
-        expected_outcome: 'Better page differentiation & clean SERP snippets',
-        estimated_engineer_hours: 3,
-        dependencies: [],
-        validation: 'Automated retest: 100% unique <title> and meta descriptions across crawled URLs',
-        category: 'ON_PAGE_SEO',
-        related_finding_id: findingsMap.duplicate_meta,
-      },
-      {
-        rank: 5,
-        priority: 'P1',
-        action: 'Add ICP landing pages',
-        impact: 'High',
-        effort: 'Medium',
-        expected_outcome: 'Better commercial qualification & dedicated intent routes',
-        estimated_engineer_hours: 6,
-        dependencies: ['Define service taxonomy'],
-        validation: 'Automated retest: Target ICP paths return HTTP 200 with >400 words depth',
-        category: 'CONTENT',
-        related_finding_id: findingsMap.icp,
-      },
-      {
-        rank: 6,
-        priority: 'P1',
-        action: 'Add case studies & proof points',
-        impact: 'High',
-        effort: 'Medium',
-        expected_outcome: 'Trust validation & decision confidence',
-        estimated_engineer_hours: 5,
-        dependencies: ['Add ICP landing pages'],
-        validation: 'Automated retest: Social proof elements and quantifiable metrics identified',
-        category: 'TRUST_AUTHORITY',
-        related_finding_id: findingsMap.trust,
-      },
-      {
-        rank: 7,
-        priority: 'P2',
-        action: 'Configure sitemap & robots directives',
-        impact: 'Medium',
-        effort: 'Low',
-        expected_outcome: 'Crawlability & zero index waste',
-        estimated_engineer_hours: 2,
-        dependencies: [],
-        validation: 'Automated retest: robots.txt allows AI/search bots; sitemap.xml returns 200',
-        category: 'TECHNICAL_SEO',
-        related_finding_id: findingsMap.crawl,
-      },
-      {
-        rank: 8,
-        priority: 'P2',
-        action: 'Format structured Q&A for answer engines',
-        impact: 'High',
-        effort: 'Medium',
-        expected_outcome: 'AI Search citation readiness & snippet extraction',
-        estimated_engineer_hours: 4,
-        dependencies: ['Define service taxonomy'],
-        validation: 'Automated retest: FAQPage schema or semantic Q&A blocks verified in AST',
-        category: 'AI_SEARCH',
-        related_finding_id: findingsMap.answerability,
-      },
-      {
-        rank: 9,
-        priority: 'P2',
-        action: 'Remediate TTFB & Core Web Vitals bottlenecks',
-        impact: 'Medium',
-        effort: 'Medium',
-        expected_outcome: 'Page experience & crawl budget optimization',
-        estimated_engineer_hours: 4,
-        dependencies: [],
-        validation: 'Automated retest: Server response TTFB < 400ms across tested endpoints',
-        category: 'TECHNICAL_SEO',
-        related_finding_id: findingsMap.performance,
-      },
-      {
-        rank: 10,
-        priority: 'P2',
-        action: 'Standardize semantic heading hierarchy',
-        impact: 'Medium',
-        effort: 'Low',
-        expected_outcome: 'Content scannability & assistive parsing integrity',
-        estimated_engineer_hours: 2,
-        dependencies: [],
-        validation: 'Automated retest: DOM heading tree has single H1 and sequential H2/H3 levels',
-        category: 'ON_PAGE_SEO',
-        related_finding_id: findingsMap.hierarchy,
-      },
-    ];
-
-    const totalHours = defaultActions.reduce((acc, a) => acc + a.estimated_engineer_hours, 0);
-
     return {
-      actions: defaultActions,
-      total_engineer_hours: totalHours,
-      dependencies_flow: 'Define service taxonomy → Create service schema → Add ICP landing pages → Add case studies',
+      actions: [],
+      total_engineer_hours: 0,
+      dependencies_flow: 'None required',
       validation_mode: 'automated_retest',
     };
   }, [report]);
@@ -351,7 +221,14 @@ export function ExecutiveTopActions({
             </tr>
           </thead>
           <tbody className="divide-y divide-line">
-            {filteredActions.map((item) => {
+            {filteredActions.length === 0 ? (
+              <tr>
+                <td colSpan={8} className="p-8 text-center text-ink-500 font-mono text-xs">
+                  No prioritized action items found for this crawl sample.
+                </td>
+              </tr>
+            ) : (
+              filteredActions.map((item) => {
               const isSelected = selectedActionRank === item.rank;
 
               return (
@@ -479,7 +356,8 @@ export function ExecutiveTopActions({
                   )}
                 </React.Fragment>
               );
-            })}
+            })
+          )}
           </tbody>
         </table>
       </div>

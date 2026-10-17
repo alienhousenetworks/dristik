@@ -1,13 +1,20 @@
 """Evidence rules for the 55-section CRO audit."""
 from types import SimpleNamespace
 
-from app.analyzers.cro_analyzer import analyze_cro
+from app.cro import (
+    analyze_cro,
+    build_cro_intelligence,
+    build_from_executive_report,
+    cro_report_generator,
+    catalog,
+    APPENDICES,
+    EVIDENCE_STATES,
+    METRIC_CATALOG,
+    PARTS,
+    SPECIALISTS,
+)
 from app.domain.enums import Category
 from app.domain.models import PageEvidence
-from app.intelligence.cro.engine import build_cro_intelligence, build_from_executive_report
-from app.intelligence.cro.metrics import METRIC_CATALOG
-from app.intelligence.cro.taxonomy import APPENDICES, EVIDENCE_STATES, PARTS, SPECIALISTS, catalog
-from app.reports.cro_report_generator import cro_report_generator
 
 
 ALLOWED = set(EVIDENCE_STATES)

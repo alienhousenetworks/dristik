@@ -13,8 +13,8 @@ import logging
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
-from app.external_authority.service import ExternalAuthorityService
-from app.external_authority.store import ExternalStore
+from app.connectors.authority.service import ExternalAuthorityService
+from app.connectors.authority.store import ExternalStore
 from app.intelligence.serp_tracker import serp_tracking_engine
 
 logger = logging.getLogger("dristik.scheduler")

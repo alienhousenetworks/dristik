@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 
 from app.reports.section_exports import section_report_generator
-from app.reports.geo_audit_book import geo_cover_figure, render_geo_audit_book
+from app.geo.reporting import geo_cover_figure, render_geo_audit_book
 from app.agents.runtime.registry import list_geo_specialists, get_agent_definition
 from app.domain.models import (
     ExecutiveReport,

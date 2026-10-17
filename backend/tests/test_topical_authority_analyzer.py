@@ -3,7 +3,7 @@ Unit tests for Topical Authority & Content Quality Analyzer (Information Gain, u
 """
 import pytest
 from app.domain.models import PageEvidence
-from app.analyzers.topical_authority_analyzer import analyze_topical_authority
+from app.seo.analyzers.topical_authority_analyzer import analyze_topical_authority
 
 
 def test_topical_authority_high_information_gain():

@@ -2,9 +2,9 @@
 Unit tests for Click-Depth Histogram, Orphan Page Detector, Anchor Text, Form, and Media Analyzers.
 """
 from app.domain.models import PageEvidence
-from app.analyzers.link_depth import LinkDepthAnalyzer
+from app.seo.analyzers.link_depth import LinkDepthAnalyzer
 from app.analyzers.form_analyzer import FormAccessibilityAnalyzer
-from app.analyzers.media_asset_analyzer import MediaAssetAnalyzer
+from app.seo.analyzers.media_asset_analyzer import MediaAssetAnalyzer
 
 
 def test_click_depth_histogram():

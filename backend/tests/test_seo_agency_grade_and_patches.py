@@ -21,11 +21,11 @@ from app.domain.models import (
 from app.domain.enums import Category, Severity, ReleaseStatus, PatchRiskLevel
 from app.remediation.patch_generator import RemediationPatcher
 from app.remediation.patch_engine import UniversalPatchEngine
-from app.analyzers.canonical_auditor import analyze_canonicals
-from app.analyzers.sitemap_orphan_analyzer import SitemapOrphanAnalyzer
-from app.analyzers.heading_analyzer import HeadingAnalyzer, analyze_heading_hierarchy
-from app.analyzers.media_asset_analyzer import MediaAssetAnalyzer, analyze_media_assets
-from app.analyzers.link_depth import LinkDepthAnalyzer, analyze_link_depth_and_orphans
+from app.seo.analyzers.canonical_auditor import analyze_canonicals
+from app.seo.analyzers.sitemap_orphan_analyzer import SitemapOrphanAnalyzer
+from app.seo.analyzers.heading_analyzer import HeadingAnalyzer, analyze_heading_hierarchy
+from app.seo.analyzers.media_asset_analyzer import MediaAssetAnalyzer, analyze_media_assets
+from app.seo.analyzers.link_depth import LinkDepthAnalyzer, analyze_link_depth_and_orphans
 
 
 def test_grounded_remediation_patcher_url_specific():

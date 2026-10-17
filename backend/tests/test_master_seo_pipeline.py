@@ -16,8 +16,8 @@ from app.domain.models import (
     ThreeWayComparison,
 )
 from app.domain.enums import Category, Severity
-from app.analyzers.rendering_disparity import analyze_rendering_disparity, RenderingDisparityAnalyzer
-from app.reports.seo_report_generator import CompleteSeoReportGenerator
+from app.seo.analyzers.rendering_disparity import analyze_rendering_disparity, RenderingDisparityAnalyzer
+from app.seo.reporting.seo_report_generator import CompleteSeoReportGenerator
 from app.reports.adaptive_audit_book import render_adaptive_audit_book_html
 from app.agents.runtime.specialist import SpecialistAgent
 from app.agents.runtime.registry import AGENT_REGISTRY

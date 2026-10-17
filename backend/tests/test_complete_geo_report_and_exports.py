@@ -18,7 +18,7 @@ from app.domain.models import (
     ThreeWayComparison,
 )
 from app.reports.export_service import generate_geo_remediation_csv
-from app.reports.geo_report_generator import geo_report_generator
+from app.geo.reporting.geo_report_generator import geo_report_generator
 
 
 def _make_dummy_geo_report() -> ExecutiveReport:

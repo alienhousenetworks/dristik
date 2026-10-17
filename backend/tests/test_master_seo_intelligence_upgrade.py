@@ -36,8 +36,8 @@ from app.audit.diagnostic_inventory import DiagnosticInventoryEngine
 from app.audit.consistency_engine import CrossChapterConsistencyEngine
 from app.audit.page_analysis import PageLevelAnalysisEngine
 from app.reports.validation_gate import ValidationGate
-from app.reports.seo_print_report import seo_print_renderer
-from app.reports.seo_report_generator import CompleteSeoReportGenerator
+from app.seo.reporting.seo_print_report import seo_print_renderer
+from app.seo.reporting.seo_report_generator import CompleteSeoReportGenerator
 
 
 def _build_base_report(num_pages=5, disc_total=5, domain="alienhousenetworks.com"):

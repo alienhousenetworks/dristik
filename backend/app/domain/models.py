@@ -43,7 +43,8 @@ from app.domain.enums import (
     ClaimSourceType,
     FindingStatus,
 )
-from app.evidence.models import EvidenceRef
+from app.domain.evidence.models import EvidenceRef
+
 
 class FindingEvidence(BaseModel):
     evidence_id: Optional[str] = None

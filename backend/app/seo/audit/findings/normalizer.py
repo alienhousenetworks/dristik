@@ -1,0 +1,2 @@
+class FindingNormalizer:
+    pass

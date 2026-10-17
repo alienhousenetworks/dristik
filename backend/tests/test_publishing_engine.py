@@ -352,7 +352,7 @@ class TestAdaptiveAuditBookIntegration:
         assert "Table of Contents" in html_out
 
     def test_print_html_report_renders_with_commercial_evaluations(self):
-        from app.reports.seo_report_generator import seo_report_generator
+        from app.seo.reporting.seo_report_generator import seo_report_generator
         from app.domain.models import CommercialQueryEvaluation, OverallScoreResult, ThreeWayComparison, BusinessProfile
 
         comm_evals = [

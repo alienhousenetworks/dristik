@@ -97,7 +97,7 @@ class GoogleAnalytics4Connector(BaseConnector, ExternalTelemetryConnector):
         # Check if Google OAuth or server service account credentials already authorize this workspace
         try:
             from app.connectors.store import connector_store
-            from app.integrations.google_connectors import ga4_connector as singleton_ga4
+            from app.connectors.google.google_connectors import ga4_connector as singleton_ga4
             has_auth = False
             for integ in connector_store.list_integrations():
                 if integ.provider in (ConnectorType.GOOGLE_ANALYTICS_4, ConnectorType.GOOGLE_ANALYTICS):
@@ -198,7 +198,7 @@ class GoogleAnalytics4Connector(BaseConnector, ExternalTelemetryConnector):
             property_id = str(parsed.get("property_id") or "")
         if not property_id:
             try:
-                from app.integrations.google_connectors import ga4_connector as singleton_ga4
+                from app.connectors.google.google_connectors import ga4_connector as singleton_ga4
                 property_id = singleton_ga4.property_id or ""
             except Exception:
                 pass
@@ -208,7 +208,7 @@ class GoogleAnalytics4Connector(BaseConnector, ExternalTelemetryConnector):
         # If token missing but service account present or in store
         if not token and is_sa:
             try:
-                from app.integrations.google_api import service_account_access_token
+                from app.connectors.google.google_api import service_account_access_token
                 token = service_account_access_token(parsed, ["https://www.googleapis.com/auth/analytics.readonly"])
             except Exception as sa_exc:
                 logger.warning("[GA4] Service account token generation failed: %s", sa_exc)
@@ -231,7 +231,7 @@ class GoogleAnalytics4Connector(BaseConnector, ExternalTelemetryConnector):
                                 property_id = str(p_c.get("property_id") or "")
                             break
                         elif isinstance(p_c, dict) and p_c.get("type") == "service_account":
-                            from app.integrations.google_api import service_account_access_token
+                            from app.connectors.google.google_api import service_account_access_token
                             token = service_account_access_token(p_c, ["https://www.googleapis.com/auth/analytics.readonly"])
                             if not property_id:
                                 property_id = str(p_c.get("property_id") or "")
@@ -258,7 +258,7 @@ class GoogleAnalytics4Connector(BaseConnector, ExternalTelemetryConnector):
                 provenance_label="UNCONNECTED_FALLBACK",
             )
         try:
-            from app.integrations.google_api import query_ga4_with_token, refresh_google_access_token
+            from app.connectors.google.google_api import query_ga4_with_token, refresh_google_access_token
             try:
                 payload = query_ga4_with_token(str(token), property_id)
             except RuntimeError as exc:

@@ -4,11 +4,11 @@ Unit tests for Dristik AI GEO/AEO Time-Series Pipeline Store & Runner.
 import os
 import tempfile
 import pytest
-from app.intelligence.geo.pipeline_store import (
+from app.geo.pipeline_store import (
     GeoPipelineStore,
     GeoQueryRecord,
 )
-from app.intelligence.geo.pipeline_runner import (
+from app.geo.pipeline_runner import (
     _extract_ordinal_position,
     FIXED_PROMPT_SET,
 )

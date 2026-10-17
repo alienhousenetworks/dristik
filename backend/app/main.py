@@ -24,7 +24,7 @@ async def lifespan(_app: FastAPI):
     validate_production_configuration(settings)
     get_store().seed_system()
     try:
-        from app.external_authority.store import ExternalStore
+        from app.connectors.authority.store import ExternalStore
         ExternalStore().ensure_schema()
     except Exception as exc:
         logging.getLogger(__name__).info("external authority schema init skipped: %s", type(exc).__name__)

@@ -31,7 +31,7 @@ from app.intelligence.monitoring.timeline import WebsiteIntelligenceTimeline
 from app.inference.model_router import ModelRouter
 from app.inference.telemetry import TelemetryTracker
 from app.crawl.crawler import CrawlerService
-from app.mission.director import MissionDirector
+from app.orchestration.mission.director import MissionDirector
 from app.orchestration.team_orchestrator import TeamOrchestrator
 from app.orchestration.agent_pool import AgentPool
 from app.scoring.engine import ScoringEngine
@@ -857,24 +857,24 @@ class AnalysisOrchestrator:
 
             eval_pages = (manifest.pages if manifest else None) or blackboard.pages or []
             from app.intelligence.ux.visual_ux_tester import visual_ux_tester
-            from app.analyzers.canonical_auditor import analyze_canonicals
-            from app.analyzers.http_status_auditor import analyze_http_statuses
-            from app.analyzers.heading_analyzer import HeadingAnalyzer, analyze_heading_hierarchy
-            from app.analyzers.media_asset_analyzer import MediaAssetAnalyzer, analyze_media_assets
-            from app.analyzers.link_depth import LinkDepthAnalyzer, analyze_link_depth_and_orphans
-            from app.analyzers.meta_rollup import analyze_meta_rollup
+            from app.seo.analyzers.canonical_auditor import analyze_canonicals
+            from app.seo.analyzers.http_status_auditor import analyze_http_statuses
+            from app.seo.analyzers.heading_analyzer import HeadingAnalyzer, analyze_heading_hierarchy
+            from app.seo.analyzers.media_asset_analyzer import MediaAssetAnalyzer, analyze_media_assets
+            from app.seo.analyzers.link_depth import LinkDepthAnalyzer, analyze_link_depth_and_orphans
+            from app.seo.analyzers.meta_rollup import analyze_meta_rollup
             from app.analyzers.form_analyzer import analyze_forms
             from app.analyzers.security_analyzer import analyze_security_headers
-            from app.analyzers.schema_validator import analyze_schema_rich_results
-            from app.analyzers.local_seo_analyzer import analyze_local_seo
-            from app.analyzers.international_seo_analyzer import analyze_international_seo
-            from app.analyzers.topical_authority_analyzer import analyze_topical_authority
-            from app.analyzers.ecommerce_seo import analyze_ecommerce_seo
-            from app.analyzers.serp_appearance import analyze_serp_appearance
+            from app.seo.analyzers.schema_validator import analyze_schema_rich_results
+            from app.seo.analyzers.local_seo_analyzer import analyze_local_seo
+            from app.seo.analyzers.international_seo_analyzer import analyze_international_seo
+            from app.seo.analyzers.topical_authority_analyzer import analyze_topical_authority
+            from app.seo.analyzers.ecommerce_seo import analyze_ecommerce_seo
+            from app.seo.analyzers.serp_appearance import analyze_serp_appearance
             from app.intelligence.accessibility.wcag_auditor import DeepWcagAuditor
             from app.intelligence.indexation.classifier import indexation_classifier
             from app.intelligence.competitive.benchmark import build_competitor_seo_parity_matrix
-            from app.analyzers.host_and_redirects import probe_host_and_redirects
+            from app.seo.analyzers.host_and_redirects import probe_host_and_redirects
             from app.remediation.deduplicator import FindingDeduplicator
             from app.remediation.patch_engine import patch_engine
 
@@ -901,7 +901,7 @@ class AnalysisOrchestrator:
 
             meta_rollup_rep = analyze_meta_rollup(eval_pages)
             form_audit_rep = analyze_forms(eval_pages)
-            from app.analyzers.cro_analyzer import analyze_cro
+            from app.cro import analyze_cro
             cro_audit_rep, cro_findings = analyze_cro(
                 eval_pages,
                 raw_html_map=getattr(blackboard, "raw_html_map", None),
@@ -954,7 +954,7 @@ class AnalysisOrchestrator:
                         raw_findings.append(f)
 
             # Raw HTML vs Rendered DOM Disparity Findings
-            from app.analyzers.rendering_disparity import analyze_rendering_disparity
+            from app.seo.analyzers.rendering_disparity import analyze_rendering_disparity
             for p in eval_pages:
                 if getattr(p, "raw_html", None) and getattr(p, "rendered_html", None):
                     try:
@@ -1131,7 +1131,7 @@ class AnalysisOrchestrator:
             }
             has_external_authority_connected = False
             try:
-                from app.external_authority.audit_bridge import build_audit_attachment
+                from app.connectors.authority.audit_bridge import build_audit_attachment
                 attachment = build_audit_attachment(
                     project_id=getattr(run, "org_id", None) or "org_default",
                     domain=domain,
@@ -1576,7 +1576,7 @@ class AnalysisOrchestrator:
                 }
 
             try:
-                from app.intelligence.cro import build_cro_intelligence
+                from app.cro import build_cro_intelligence
                 competitor_domains = []
                 if competitor_seo_parity_rep is not None:
                     for competitor in getattr(competitor_seo_parity_rep, "competitors", []) or []:

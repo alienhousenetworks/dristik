@@ -146,7 +146,7 @@ class GoogleSearchConsoleConnector(BaseConnector, ExternalTelemetryConnector):
                 provenance_label="UNCONNECTED_FALLBACK",
             )
         try:
-            from app.integrations.google_api import query_search_analytics_token, refresh_google_access_token
+            from app.connectors.google.google_api import query_search_analytics_token, refresh_google_access_token
             try:
                 payload = query_search_analytics_token(str(token), domain, days=days)
             except RuntimeError as exc:

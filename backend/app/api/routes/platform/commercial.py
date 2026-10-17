@@ -24,7 +24,7 @@ from app.commercial.outcomes import FlywheelObservation, gross_margin_pct, verif
 from app.commercial.plans import PLANNING_NOTE, SUBSCRIPTION_HYPOTHESES
 from app.commercial.remediation_policy import deployment_decision
 from app.commercial.workflow import project_operating_workflow
-from app.intelligence.geo.adapters.registry import get_adapter
+from app.geo.adapters.registry import get_adapter
 
 router = APIRouter(prefix="/commercial", tags=["Commercial product"])
 

@@ -24,7 +24,7 @@ from app.domain.models import (
     SerpAppearanceReport,
     ThreeWayComparison,
 )
-from app.reports.seo_book_renderer import (
+from app.seo.reporting.seo_book_renderer import (
     CORE_CHAPTERS,
     SeoAuditBookRenderer,
     build_seo_book_context,

@@ -257,7 +257,7 @@ start_backend() {
     (
         cd "${BACKEND_DIR}" && \
         export PYTHONUNBUFFERED=1 && \
-        exec "${BACKEND_DIR}/venv/bin/uvicorn" app.main:app \
+        exec "${BACKEND_DIR}/venv/bin/python" -m uvicorn app.main:app \
             --host 0.0.0.0 \
             --port 8000 \
             "${reload_args[@]}" \

@@ -12,7 +12,7 @@ from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, Field
 
 from app.core.config import settings
-from app.external_authority.crypto import EncryptionKeyMissing
+from app.connectors.authority.crypto import EncryptionKeyMissing
 from app.identity.authorizer import Authorizer, UserIdentity
 from app.identity.deps import get_current_user_optional
 
@@ -83,7 +83,7 @@ class SyncRequest(BaseModel):
 
 
 def _service():
-    from app.external_authority.service import get_service
+    from app.connectors.authority.service import get_service
     return get_service()
 
 

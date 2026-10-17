@@ -10,7 +10,7 @@ Tests:
 import pytest
 from app.domain.models import PageEvidence, BusinessProfile
 from app.domain.enums import Category, Severity
-from app.analyzers.cro_analyzer import CroAnalyzer, analyze_cro
+from app.cro import CroAnalyzer, analyze_cro
 from app.agents.runtime.reasoners import CroExperienceReasonerAgent
 
 

@@ -22,7 +22,7 @@ from app.intelligence.competitive.engine import competitive_intelligence_engine
 from app.intelligence.competitive.models import DristikCompetitiveReport
 from app.intelligence.business.search_console import search_console_engine, SearchConsoleAttributionReport
 from app.intelligence.citations.tracker import ai_citation_tracker, AiCitationTrackingDashboard
-from app.intelligence.geo.benchmark_runner import benchmark_runner, GeoBenchmarkReport
+from app.geo.benchmark_runner import benchmark_runner, GeoBenchmarkReport
 from app.intelligence.business.lead_gen import lead_gen_engine, CommercialOpportunity
 from app.tenancy.agency import agency_manager, AgencyWorkspaceSummary, AgencyClientAccount
 router = APIRouter(prefix="/intelligence", tags=["Strategic Commercial Intelligence"])

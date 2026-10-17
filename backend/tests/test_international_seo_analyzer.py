@@ -3,7 +3,7 @@ Unit tests for International SEO Analyzer (hreflang, ISO codes, return tags, x-d
 """
 import pytest
 from app.domain.models import PageEvidence
-from app.analyzers.international_seo_analyzer import analyze_international_seo
+from app.seo.analyzers.international_seo_analyzer import analyze_international_seo
 
 
 def test_intl_seo_single_locale_not_applicable():

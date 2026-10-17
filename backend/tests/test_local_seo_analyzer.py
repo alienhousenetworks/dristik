@@ -3,7 +3,7 @@ Unit tests for Local SEO Analyzer (Google Business Profile, NAP Consistency, Loc
 """
 import pytest
 from app.domain.models import PageEvidence
-from app.analyzers.local_seo_analyzer import analyze_local_seo
+from app.seo.analyzers.local_seo_analyzer import analyze_local_seo
 
 
 def test_local_seo_not_applicable_when_no_local_signals():

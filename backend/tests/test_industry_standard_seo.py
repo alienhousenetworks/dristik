@@ -13,8 +13,8 @@ from app.crawl.analyzers.pixel_calculator import (
     evaluate_title_pixel_status,
     evaluate_meta_pixel_status,
 )
-from app.analyzers.canonical_auditor import analyze_canonicals
-from app.analyzers.http_status_auditor import analyze_http_statuses
+from app.seo.analyzers.canonical_auditor import analyze_canonicals
+from app.seo.analyzers.http_status_auditor import analyze_http_statuses
 from app.intelligence.competitive.benchmark import build_competitor_seo_parity_matrix
 
 

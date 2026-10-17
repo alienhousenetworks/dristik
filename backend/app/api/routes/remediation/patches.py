@@ -16,8 +16,8 @@ from app.remediation.patch_engine import patch_engine
 from app.remediation.diff_engine import diff_engine
 from app.remediation.approval import approval_manager
 from app.connectors.store import connector_store
-from app.verification.verifier import verification_engine
-from app.verification.verification_loop import verification_loop_service
+from app.remediation.verifier import verification_engine
+from app.remediation.verification_loop import verification_loop_service
 from app.orchestration.orchestrator import orchestrator
 
 router = APIRouter(prefix="/remediation", tags=["Remediation & Universal Patches"])

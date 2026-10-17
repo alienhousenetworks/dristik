@@ -9,7 +9,7 @@ import asyncio
 import logging
 from datetime import datetime, timezone
 import xml.etree.ElementTree as ET
-from urllib.parse import urlparse, urljoin, urldefrag
+from urllib.parse import urlparse, urljoin
 from typing import List, Dict, Any, Set, Tuple, Optional, Callable
 import httpx
 try:
@@ -26,7 +26,15 @@ from app.evidence.store import EvidenceStore
 
 # Deterministic Analyzers
 from app.crawl.analyzers.html import analyze_html_content, distill_semantic_content
-from app.crawl.analyzers.meta import analyze_meta_tags
+from app.crawl.analyzers.metadata import analyze_meta_tags
+from app.crawl.robots import declared_sitemaps
+from app.crawl.url_frontier import (
+    classify_page_type,
+    normalize_url,
+    order_for_roles,
+    page_priority,
+    url_role,
+)
 from app.crawl.analyzers.dom import analyze_dom_structure
 from app.crawl.analyzers.schema import analyze_schema_markup
 from app.crawl.analyzers.links import analyze_link_graph
@@ -53,136 +61,24 @@ class CrawlerService:
         }
 
     def _classify_page_type(self, path: str) -> str:
-        p = path.lower().strip("/")
-        if not p or p == "":
-            return "homepage"
-        if any(k in p for k in ["privacy", "terms", "legal", "cookie", "gdpr", "compliance"]):
-            return "legal"
-        if any(k in p for k in ["blog", "news", "articles", "posts", "insights", "resources"]):
-            return "blog"
-        if any(k in p for k in ["pricing", "price", "plans", "tier", "subscription", "cost"]):
-            return "pricing"
-        if any(k in p for k in ["docs", "documentation", "guide", "learn", "developer"]):
-            return "docs"
-        if any(k in p for k in ["contact", "support", "help", "sales", "demo"]):
-            return "contact"
-        if any(k in p for k in ["features", "product", "solutions", "platform", "integrations", "services"]):
-            return "product"
-        if any(k in p for k in ["about", "team", "story", "mission", "leadership", "careers"]):
-            return "about"
-        return "general"
+        return classify_page_type(path)
 
     def _url_role(self, url: str) -> str:
         """Role slot used to keep a short crawl representative."""
-        parsed = urlparse(url)
-        ptype = self._classify_page_type(parsed.path)
-        if ptype == "homepage":
-            return "homepage"
-        if ptype == "product":
-            return "commercial"
-        if ptype in ("pricing", "contact"):
-            return "high_intent"
-        if ptype == "about":
-            return "proof"
-        return "other"
+        return url_role(url)
 
     def _order_for_roles(self, urls: List[str], crawled_pages: List[Any]) -> List[str]:
         """
         Fill unfilled roles before spending the remaining budget on the priority queue.
         Homepage, primary commercial, high-intent, a second commercial URL, then proof.
         """
-        commercial_count = 0
-        filled = set()
-        for page in crawled_pages:
-            role = self._url_role(getattr(page, "url", "") or "")
-            if role == "commercial":
-                commercial_count += 1
-                filled.add("commercial")
-                if commercial_count >= 2:
-                    filled.add("secondary_commercial")
-            elif role != "other":
-                filled.add(role)
-
-        def rank(url: str) -> int:
-            role = self._url_role(url)
-            bonus = 0
-            if role == "homepage" and "homepage" not in filled:
-                bonus = 5000
-            elif role == "commercial" and "commercial" not in filled:
-                bonus = 4000
-            elif role == "high_intent" and "high_intent" not in filled:
-                bonus = 3000
-            elif role == "commercial" and "secondary_commercial" not in filled:
-                bonus = 2000
-            elif role == "proof" and "proof" not in filled:
-                bonus = 1000
-            return bonus + self._get_page_priority(url)
-
-        return sorted(urls, key=rank, reverse=True)
+        return order_for_roles(urls, crawled_pages)
 
     def _get_page_priority(self, url: str) -> int:
-        parsed = urlparse(url)
-        ptype = self._classify_page_type(parsed.path)
-        weights = {
-            "homepage": 100,
-            "pricing": 95,
-            "product": 85,
-            "about": 80,
-            "contact": 75,
-            "docs": 70,
-            "blog": 55,
-            "legal": 45,
-            "general": 40
-        }
-        return weights.get(ptype, 30)
+        return page_priority(url)
 
     def _normalize_url(self, raw_url: str, base_domain: str, base_origin: str) -> Optional[str]:
-        if not raw_url or raw_url.startswith(("javascript:", "mailto:", "tel:", "#", "data:")):
-            return None
-        joined = urljoin(base_origin, raw_url)
-        clean_url, _ = urldefrag(joined)
-        parsed = urlparse(clean_url)
-        if parsed.scheme.lower() not in ["http", "https"]:
-            return None
-
-        # Clean netloc & default ports
-        netloc = parsed.netloc.lower()
-        if ":" in netloc:
-            parts = netloc.split(":", 1)
-            if (parsed.scheme.lower() == "http" and parts[1] == "80") or (parsed.scheme.lower() == "https" and parts[1] == "443"):
-                netloc = parts[0]
-
-        # Must match base domain or root domain (www and apex are the same site)
-        def _host(value: str) -> str:
-            host = (value or "").lower().split(":")[0]
-            return host[4:] if host.startswith("www.") else host
-
-        base_dom = _host(base_domain)
-        if _host(netloc) != base_dom and not _host(netloc).endswith("." + base_dom):
-            return None
-
-        # Strip index.html / index.php files that point to folder root
-        path = parsed.path
-        if path.endswith(("/index.html", "/index.htm", "/index.php")):
-            path = path.rsplit("/", 1)[0]
-
-        # Standardize path: always strip trailing slash consistently
-        path = path.rstrip("/")
-
-        # Filter tracking and analytics query parameters
-        query = parsed.query
-        if query:
-            filtered_params = []
-            for param in query.split("&"):
-                k = param.split("=")[0].lower()
-                if not any(k.startswith(p) for p in ["utm_", "fbclid", "gclid", "ref", "mc_cid"]):
-                    filtered_params.append(param)
-            query = "&".join(filtered_params)
-
-        normalized = f"{parsed.scheme.lower()}://{netloc}{path}"
-        if query:
-            normalized += f"?{query}"
-        return normalized
+        return normalize_url(raw_url, base_domain, base_origin)
 
     async def _fetch_robots_txt(self, base_origin: str, client: httpx.AsyncClient) -> Tuple[bool, Optional[str], List[str]]:
         robots_url = f"{base_origin}/robots.txt"
@@ -191,11 +87,7 @@ class CrawlerService:
             resp = await client.get(robots_url, headers=self.headers, timeout=5.0)
             if resp.status_code == 200 and resp.text:
                 content = resp.text
-                for line in content.splitlines():
-                    if line.lower().startswith("sitemap:"):
-                        s_url = line.split(":", 1)[1].strip()
-                        if s_url.startswith("http"):
-                            sitemap_urls.append(s_url)
+                sitemap_urls.extend(declared_sitemaps(content))
                 return True, content[:2000], sitemap_urls
         except Exception:
             pass
@@ -576,7 +468,7 @@ class CrawlerService:
 
                             # Perform deep Raw HTML vs Rendered DOM Disparity Evaluation
                             try:
-                                from app.analyzers.rendering_disparity import analyze_rendering_disparity
+                                from app.seo.analyzers.rendering_disparity import analyze_rendering_disparity
                                 rendering_disparity_data, _ = analyze_rendering_disparity(
                                     raw_html=raw_http_content,
                                     rendered_html=rendered_dom_content,
