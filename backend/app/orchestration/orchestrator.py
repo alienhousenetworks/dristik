@@ -1006,6 +1006,7 @@ class AnalysisOrchestrator:
             geo_readiness = None
             agent_readiness = None
             geo_bench_report = None
+            ai_citation_dash = None
             should_run_geo_live = effective_pillars is None or bool(effective_pillars.intersection({"geo", "aeo"}))
             if should_run_geo_live:
                 try:
