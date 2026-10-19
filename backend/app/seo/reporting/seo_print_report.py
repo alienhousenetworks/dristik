@@ -953,8 +953,8 @@ table.data-table tr:nth-child(even) td {
     border-radius: 6px;
     padding: 4mm 5mm;
     margin-bottom: 4mm;
-    break-inside: avoid;
-    page-break-inside: avoid;
+    break-inside: auto;
+    page-break-inside: auto;
 }
 
 .finding-card.critical { border-left-color: #ef4444; }

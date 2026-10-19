@@ -29,9 +29,13 @@ SEO_BOOK_PRINT_CSS = """
     page-break-before: always;
     padding-top: 4mm;
 }
-.report-avoid-break, .check, .finding-card, .finding-card-v2, .data-table-wrap, .agent-consulting-dossier, .chapter-panel {
+.check {
     break-inside: avoid;
     page-break-inside: avoid;
+}
+.report-avoid-break, .finding-card, .finding-card-v2, .data-table-wrap, .agent-consulting-dossier, .agent-analysis-card, .chapter-panel, pre, article, table {
+    break-inside: auto !important;
+    page-break-inside: auto !important;
 }
 .part-divider-banner {
     break-before: page;
@@ -876,7 +880,8 @@ class SectionReportGenerator:
             padding: 14px;
             margin-bottom: 12px;
             background: #ffffff;
-            page-break-inside: avoid;
+            page-break-inside: auto;
+            break-inside: auto;
         }}
         .finding-card.CRITICAL {{ border-left-color: #ef4444; }}
         .finding-card.HIGH {{ border-left-color: #f97316; }}
@@ -1061,7 +1066,8 @@ class SectionReportGenerator:
             border-radius: 6px;
             padding: 16px 18px;
             margin: 14px 0 20px;
-            page-break-inside: avoid;
+            page-break-inside: auto;
+            break-inside: auto;
         }}
         .agent-header-strip {{
             display: flex;
@@ -1243,7 +1249,8 @@ class SectionReportGenerator:
             border-radius: 6px;
             margin: 12px 0 18px;
             background: #ffffff;
-            page-break-inside: avoid;
+            page-break-inside: auto;
+            break-inside: auto;
             box-shadow: 0 1px 3px rgba(0,0,0,0.05);
         }}
         .finding-card-v2.critical {{ border-left-color: #ef4444; }}
@@ -1359,7 +1366,8 @@ class SectionReportGenerator:
             border-radius: 6px;
             padding: 14px 16px;
             margin: 12px 0 16px;
-            page-break-inside: avoid;
+            page-break-inside: auto;
+            break-inside: auto;
         }}
         .agent-badge-bar {{
             display: flex;

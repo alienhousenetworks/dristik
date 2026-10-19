@@ -4,6 +4,8 @@ Executes dynamic client-side JavaScript, waiting for database-driven content
 to hydrate into the DOM. Uses high-performance asset blocking (images, media, fonts)
 for fast execution and minimal CPU/memory overhead.
 """
+import os
+import signal
 import time
 import asyncio
 import logging
@@ -25,6 +27,9 @@ class BrowserRenderService:
     _playwright: Optional[Any] = None
     _browser: Optional[Any] = None
     _lock = asyncio.Lock()
+    # One print job at a time. A second download waits instead of piling
+    # onto a Chromium process that is already inside page.pdf().
+    _render_lock = asyncio.Lock()
 
     @classmethod
     def is_available(cls) -> bool:
@@ -264,47 +269,134 @@ class BrowserRenderService:
                     pass
 
     @classmethod
-    async def render_pdf(cls, html: str, timeout_ms: int = 60000) -> Optional[bytes]:
+    def _kill_process_tree(cls, pid: int) -> None:
+        """SIGKILL a process and its children. Used when Chromium ignores cancellation."""
+        children: list[int] = []
+        for entry in os.listdir("/proc"):
+            if not entry.isdigit():
+                continue
+            try:
+                stat = open(f"/proc/{entry}/stat", "r", encoding="utf-8", errors="replace").read()
+                ppid = int(stat.rsplit(")", 1)[1].split()[1])
+            except (OSError, IndexError, ValueError):
+                continue
+            if ppid == pid:
+                children.append(int(entry))
+        for child in children:
+            cls._kill_process_tree(child)
+        try:
+            os.kill(pid, signal.SIGKILL)
+        except OSError:
+            pass
+
+    @classmethod
+    def _kill_playwright_driver(cls, playwright: Any) -> None:
+        try:
+            proc = playwright._impl_obj._connection._transport._proc
+            pid = getattr(proc, "pid", None)
+        except Exception:
+            return
+        if pid:
+            cls._kill_process_tree(int(pid))
+
+    @classmethod
+    async def _discard_browser(cls) -> None:
+        """Drop a wedged Chromium so the next PDF download can launch a fresh one."""
+        async with cls._lock:
+            browser = cls._browser
+            playwright = cls._playwright
+            cls._browser = None
+            cls._playwright = None
+        if playwright is not None:
+            cls._kill_playwright_driver(playwright)
+        for closer in (
+            getattr(browser, "close", None),
+            getattr(playwright, "stop", None),
+        ):
+            if closer is None:
+                continue
+            try:
+                result = closer()
+                if asyncio.iscoroutine(result) or asyncio.isfuture(result):
+                    task = asyncio.create_task(result)
+                    await asyncio.wait({task}, timeout=2)
+            except Exception:
+                pass
+
+    @classmethod
+    async def render_pdf(cls, html: str, timeout_ms: int = 90000) -> Optional[bytes]:
         """
         Renders standalone HTML to a PDF using headless Chromium.
         Honors the document's CSS @page size/margins and preserves backgrounds.
-        Returns None when the browser is unavailable or rendering fails.
+        Returns None when the browser is unavailable, rendering fails, or the
+        print job exceeds timeout_ms. A timed-out job is killed so it cannot
+        block later downloads.
         """
-        browser = await cls.get_browser()
-        if browser is None:
-            return None
-        context = None
-        page = None
-        try:
-            context = await browser.new_context()
-            page = await context.new_page()
-            await page.set_content(html, wait_until="domcontentloaded", timeout=timeout_ms)
-            await page.emulate_media(media="print")
+        async with cls._render_lock:
+            browser = await cls.get_browser()
+            if browser is None:
+                return None
+            context = None
+            page = None
+            pdf_task: Optional[asyncio.Task] = None
+            timed_out = False
             try:
-                await asyncio.wait_for(page.evaluate("document.fonts && document.fonts.ready"), timeout=2.0)
-            except Exception:
-                pass
-            pdf_coro = page.pdf(
-                prefer_css_page_size=True,
-                print_background=True,
-            )
-            if timeout_ms and timeout_ms > 0:
-                return await asyncio.wait_for(pdf_coro, timeout=timeout_ms / 1000.0)
-            return await pdf_coro
-        except Exception as exc:
-            logger.warning("Failed to render PDF with Playwright: %s", exc)
-            return None
-        finally:
-            if page:
-                try:
-                    await page.close()
-                except Exception:
-                    pass
-            if context:
-                try:
-                    await context.close()
-                except Exception:
-                    pass
+                context = await browser.new_context()
+                page = await context.new_page()
+                content_timeout = timeout_ms if timeout_ms and timeout_ms > 0 else 30000
+                await page.set_content(html, wait_until="domcontentloaded", timeout=content_timeout)
+                await page.emulate_media(media="print")
+                # System fonts only. document.fonts.ready is not awaited: a font
+                # that never settles would block the print, and cancelling that
+                # Playwright call does not return on Python 3.12.
+                pdf_task = asyncio.create_task(page.pdf(
+                    prefer_css_page_size=True,
+                    print_background=True,
+                ))
+                if timeout_ms and timeout_ms > 0:
+                    done, _pending = await asyncio.wait({pdf_task}, timeout=timeout_ms / 1000.0)
+                    if pdf_task not in done:
+                        timed_out = True
+                        logger.warning(
+                            "PDF render exceeded %ss; recycling headless browser",
+                            timeout_ms / 1000.0,
+                        )
+                        return None
+                else:
+                    await pdf_task
+                exc = pdf_task.exception()
+                if exc is not None:
+                    logger.warning("Failed to render PDF with Playwright: %s", exc)
+                    return None
+                return pdf_task.result()
+            except Exception as exc:
+                logger.warning("Failed to render PDF with Playwright: %s", exc)
+                return None
+            finally:
+                if timed_out or (pdf_task is not None and not pdf_task.done()):
+                    if pdf_task is not None and not pdf_task.done():
+                        def _swallow_pdf_task(task: asyncio.Task) -> None:
+                            if task.cancelled():
+                                return
+                            try:
+                                task.exception()
+                            except Exception:
+                                pass
+                        pdf_task.add_done_callback(_swallow_pdf_task)
+                        pdf_task.cancel()
+                    # page.close() waits on the stuck print. Kill the browser instead.
+                    await cls._discard_browser()
+                else:
+                    if page is not None:
+                        try:
+                            await page.close()
+                        except Exception:
+                            pass
+                    if context is not None:
+                        try:
+                            await context.close()
+                        except Exception:
+                            pass
 
     @classmethod
     async def shutdown(cls):

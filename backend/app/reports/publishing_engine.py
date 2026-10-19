@@ -539,9 +539,16 @@ def get_publishing_css() -> str:
         margin-bottom: 8mm;
     }
 
-    .report-avoid-break, .finding-card, .business-explanation-card, .chapter-chart, .kpi-card, .data-table-wrapper, .evidence-box, .score-panel, figure {
+    .chapter-chart, .kpi-card, .score-panel, figure {
         break-inside: avoid;
         page-break-inside: avoid;
+    }
+
+    /* Cards, tables, and evidence blocks are often taller than one A4 page.
+       Forcing them to stay intact makes Chromium page.pdf() hang. */
+    .report-avoid-break, .finding-card, .business-explanation-card, .data-table-wrapper, .evidence-box, pre, article, table {
+        break-inside: auto !important;
+        page-break-inside: auto !important;
     }
 
     h1, h2, h3, h4, .section-kicker, .chapter-header, .finding-block-title, figcaption {
@@ -939,8 +946,8 @@ def get_publishing_css() -> str:
         padding: 16px 18px;
         margin-bottom: 20px;
         box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
-        break-inside: avoid;
-        page-break-inside: avoid;
+        break-inside: auto;
+        page-break-inside: auto;
     }
 
     .finding-card.sev-critical { border-left-color: #dc2626; }
@@ -1152,8 +1159,8 @@ def get_publishing_css() -> str:
     }
 
     table.print-table tr {
-        break-inside: avoid;
-        page-break-inside: avoid;
+        break-inside: auto;
+        page-break-inside: auto;
     }
 
     .chart-explanation-note {

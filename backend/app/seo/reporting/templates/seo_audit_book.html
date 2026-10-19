@@ -213,8 +213,8 @@ thead {
 }
 
 tr {
-  break-inside: avoid;
-  page-break-inside: avoid;
+  break-inside: auto;
+  page-break-inside: auto;
 }
 
 th {
@@ -259,7 +259,7 @@ tbody tr:nth-child(even) {
 
 .finding-block {
   margin-top: 10pt;
-  break-inside: avoid;
+  break-inside: auto;
 }
 
 .finding-block h4 {
@@ -288,7 +288,8 @@ pre {
   background: #f5f7fa;
   border: 1px solid var(--line);
   padding: 10pt;
-  break-inside: avoid;
+  break-inside: auto;
+  page-break-inside: auto;
 }
 
 .chapter {
@@ -452,8 +453,17 @@ pre {
     color: inherit;
   }
 
-  .panel, .metric, .plain-english, .evidence {
+  /* Keep only boxes that fit on one page unbreakable.
+     break-inside:avoid on a finding, table, or code block taller than
+     the page makes Chromium's print layout spin until nginx returns 504. */
+  .metric, .toc-list li {
     break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .finding, .finding-card, article, pre, table, .panel, .plain-english, .evidence {
+    break-inside: auto !important;
+    page-break-inside: auto !important;
   }
 }
 </style>
