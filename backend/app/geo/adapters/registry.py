@@ -22,13 +22,16 @@ def _adapter_from_configured_engine(eng: Dict[str, Any]) -> Optional[BaseGeoEngi
     model = eng.get("model") or ""
     eid = eng.get("id") or ""
     name = eng.get("name") or eid
-    if provider in ("openrouter", "together"):
+    if provider in ("openrouter", "together", "togetherapi", "nvidia", "nvidiaapi", "nim"):
         if provider == "openrouter":
             base = "https://openrouter.ai/api/v1"
             headers = {
                 "HTTP-Referer": getattr(settings, "OPENROUTER_SITE_URL", None) or "https://dristik.ai",
                 "X-Title": getattr(settings, "OPENROUTER_SITE_NAME", None) or "Dristik AI",
             }
+        elif provider in ("nvidia", "nvidiaapi", "nim"):
+            base = getattr(settings, "NVIDIA_BASE_URL", None) or "https://integrate.api.nvidia.com/v1"
+            headers = {}
         else:
             base = getattr(settings, "TOGETHER_BASE_URL", None) or "https://api.together.xyz/v1"
             headers = {}
@@ -51,7 +54,7 @@ def _configured_live_adapters() -> List[BaseGeoEngineAdapter]:
     for eng in get_configured_ai_engines():
         if not eng.get("active") or not eng.get("api_key"):
             continue
-        if (eng.get("provider") or "").lower() not in ("openrouter", "together"):
+        if (eng.get("provider") or "").lower() not in ("openrouter", "together", "togetherapi", "nvidia", "nvidiaapi", "nim"):
             continue
         adapter = _adapter_from_configured_engine(eng)
         if adapter and adapter.is_configured():

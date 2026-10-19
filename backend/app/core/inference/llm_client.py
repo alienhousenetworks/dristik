@@ -108,6 +108,7 @@ _GLOBAL_RATE_LIMITERS: Dict[str, TokenBucketRateLimiter] = {
     # Groq on-demand / free tier enforces strict 8,000 TPM limit on openai/gpt-oss-* models.
     "groq": TokenBucketRateLimiter(rpm=30, tpm=7500),
     "together": TokenBucketRateLimiter(rpm=60, tpm=50000),
+    "nvidia": TokenBucketRateLimiter(rpm=60, tpm=60000),
     "openrouter": TokenBucketRateLimiter(rpm=60, tpm=60000),
     "gemini": TokenBucketRateLimiter(rpm=60, tpm=100000),
     "anthropic": TokenBucketRateLimiter(rpm=getattr(settings, "ANTHROPIC_RPM", 15), tpm=getattr(settings, "ANTHROPIC_TPM", 40000)),
@@ -169,8 +170,9 @@ class LLMClient:
         timeout: Optional[int] = None,
         provider: Optional[str] = None
     ):
-        creds = settings.get_llm_credentials()
-        self.provider = provider or creds.get("provider", "together")
+        prov = provider or settings.get_active_provider()
+        creds = settings.get_llm_credentials(provider_override=prov)
+        self.provider = creds.get("provider", "together")
         self.api_key = api_key or creds.get("api_key")
         self.base_url = (base_url or creds.get("base_url", "https://api.together.xyz/v1")).rstrip("/")
         self.timeout = timeout or settings.LLM_TIMEOUT_SECONDS
@@ -449,16 +451,29 @@ class LLMClient:
                     cascade_chain.append("anthropic")
                 if settings.TOGETHER_API_KEY and "together" not in cascade_chain:
                     cascade_chain.append("together")
+                if settings.NVIDIA_API_KEY and "nvidia" not in cascade_chain:
+                    cascade_chain.append("nvidia")
                 if settings.OPENROUTER_API_KEY and "openrouter" not in cascade_chain:
                     cascade_chain.append("openrouter")
+            elif primary_prov in ("nvidia", "nvidiaapi", "nim"):
+                if (settings.ANTHROPIC_API_KEY or settings.CLAUDE_API_KEY) and "anthropic" not in cascade_chain:
+                    cascade_chain.append("anthropic")
+                if settings.OPENROUTER_API_KEY and "openrouter" not in cascade_chain:
+                    cascade_chain.append("openrouter")
+                if settings.TOGETHER_API_KEY and "together" not in cascade_chain:
+                    cascade_chain.append("together")
             elif primary_prov == "together":
                 if (settings.ANTHROPIC_API_KEY or settings.CLAUDE_API_KEY) and "anthropic" not in cascade_chain:
                     cascade_chain.append("anthropic")
+                if settings.NVIDIA_API_KEY and "nvidia" not in cascade_chain:
+                    cascade_chain.append("nvidia")
                 if settings.OPENROUTER_API_KEY and "openrouter" not in cascade_chain:
                     cascade_chain.append("openrouter")
             elif primary_prov in ("anthropic", "claude"):
                 if settings.OPENROUTER_API_KEY and "openrouter" not in cascade_chain:
                     cascade_chain.append("openrouter")
+                if settings.NVIDIA_API_KEY and "nvidia" not in cascade_chain:
+                    cascade_chain.append("nvidia")
                 if settings.GROQ_API_KEY and "groq" not in cascade_chain:
                     cascade_chain.append("groq")
 
@@ -479,6 +494,11 @@ class LLMClient:
                     "x-api-key": curr_api_key or ""
                 }
                 curr_model = ANTHROPIC_DEFAULT_FAST
+            elif current_prov in ("nvidia", "nvidiaapi", "nim"):
+                curr_api_key = settings.NVIDIA_API_KEY
+                curr_base_url = settings.NVIDIA_BASE_URL or "https://integrate.api.nvidia.com/v1"
+                curr_headers = {}
+                curr_model = settings.NVIDIA_MODEL or settings.NVIDIA_MODEL_REASONING or "meta/llama-3.2-11b-vision-instruct"
             elif current_prov == "together":
                 curr_api_key = settings.TOGETHER_API_KEY
                 curr_base_url = settings.TOGETHER_BASE_URL or "https://api.together.xyz/v1"

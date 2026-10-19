@@ -1006,61 +1006,64 @@ class AnalysisOrchestrator:
             geo_readiness = None
             agent_readiness = None
             geo_bench_report = None
-            ai_citation_dash = None
-            try:
-                from app.intelligence.geo.audit_monitor import run_audit_visibility
-                profile = blackboard.business_profile
-                b_name = getattr(profile, "business_name", None) or domain
-                b_ind = getattr(profile, "industry", None) or getattr(profile, "niche", None) or "Software & Technology"
-                vis_res = await run_audit_visibility(
-                    domain=domain,
-                    brand_name=b_name,
-                    industry=b_ind,
-                    services=list(getattr(profile, "services", None) or []) or list(getattr(profile, "products", None) or []),
-                    locations=[profile.geography] if getattr(profile, "geography", None) else None,
-                    audience=getattr(profile, "target_audience", None),
-                    max_pages=max_pages,
-                )
-                if isinstance(vis_res, tuple):
-                    monitored, geo_bench_obj = vis_res
-                else:
-                    monitored, geo_bench_obj = vis_res, None
+            should_run_geo_live = effective_pillars is None or bool(effective_pillars.intersection({"geo", "aeo"}))
+            if should_run_geo_live:
+                try:
+                    from app.intelligence.geo.audit_monitor import run_audit_visibility
+                    profile = blackboard.business_profile
+                    b_name = getattr(profile, "business_name", None) or domain
+                    b_ind = getattr(profile, "industry", None) or getattr(profile, "niche", None) or "Software & Technology"
+                    vis_res = await run_audit_visibility(
+                        domain=domain,
+                        brand_name=b_name,
+                        industry=b_ind,
+                        services=list(getattr(profile, "services", None) or []) or list(getattr(profile, "products", None) or []),
+                        locations=[profile.geography] if getattr(profile, "geography", None) else None,
+                        audience=getattr(profile, "target_audience", None),
+                        max_pages=max_pages,
+                    )
+                    if isinstance(vis_res, tuple):
+                        monitored, geo_bench_obj = vis_res
+                    else:
+                        monitored, geo_bench_obj = vis_res, None
 
-                if monitored is not None:
-                    ai_visibility_scorecard = monitored
-                    if monitored.status == "MEASURED" and monitored.citation_rate_pct is not None:
-                        visibility_measured = True
-                        live_citation_score = float(monitored.citation_rate_pct)
-                        visibility_detail = (
-                            f"Live AI citation visibility {live_citation_score:.0f}/100 "
-                            f"from {monitored.successful_runs} successful responses "
-                            f"across {monitored.engines_measured} engine(s), "
-                            f"{monitored.queries} queries, {monitored.repeats} run(s). "
-                            "This is not the on-page GEO Readiness score."
-                        )
-                if geo_bench_obj is not None:
-                    geo_bench_report = geo_bench_obj.model_dump() if hasattr(geo_bench_obj, "model_dump") else geo_bench_obj
-            except Exception as e:
-                logger.warning("run_audit_visibility error: %s", e)
-                ai_visibility_scorecard = None
-                geo_bench_report = None
+                    if monitored is not None:
+                        ai_visibility_scorecard = monitored
+                        if monitored.status == "MEASURED" and monitored.citation_rate_pct is not None:
+                            visibility_measured = True
+                            live_citation_score = float(monitored.citation_rate_pct)
+                            visibility_detail = (
+                                f"Live AI citation visibility {live_citation_score:.0f}/100 "
+                                f"from {monitored.successful_runs} successful responses "
+                                f"across {monitored.engines_measured} engine(s), "
+                                f"{monitored.queries} queries, {monitored.repeats} run(s). "
+                                "This is not the on-page GEO Readiness score."
+                            )
+                    if geo_bench_obj is not None:
+                        geo_bench_report = geo_bench_obj.model_dump() if hasattr(geo_bench_obj, "model_dump") else geo_bench_obj
+                except Exception as e:
+                    logger.warning("run_audit_visibility error: %s", e)
+                    ai_visibility_scorecard = None
+                    geo_bench_report = None
 
-            try:
-                from app.intelligence.citations.tracker import ai_citation_tracker
-                profile = blackboard.business_profile
-                b_name = getattr(profile, "business_name", None) or domain
-                b_ind = getattr(profile, "industry", None) or getattr(profile, "niche", None) or "Software & Technology"
-                ai_citation_dash_obj = await ai_citation_tracker.track_buyer_queries(
-                    domain=domain,
-                    biz_name=b_name,
-                    niche=b_ind,
-                    analysis_id=analysis_id,
-                )
-                if ai_citation_dash_obj is not None:
-                    ai_citation_dash = ai_citation_dash_obj.model_dump() if hasattr(ai_citation_dash_obj, "model_dump") else ai_citation_dash_obj
-            except Exception as cit_e:
-                logger.warning("ai_citation_tracker runtime execution note: %s", cit_e)
-                ai_citation_dash = None
+                try:
+                    from app.intelligence.citations.tracker import ai_citation_tracker
+                    profile = blackboard.business_profile
+                    b_name = getattr(profile, "business_name", None) or domain
+                    b_ind = getattr(profile, "industry", None) or getattr(profile, "niche", None) or "Software & Technology"
+                    ai_citation_dash_obj = await ai_citation_tracker.track_buyer_queries(
+                        domain=domain,
+                        biz_name=b_name,
+                        niche=b_ind,
+                        analysis_id=analysis_id,
+                    )
+                    if ai_citation_dash_obj is not None:
+                        ai_citation_dash = ai_citation_dash_obj.model_dump() if hasattr(ai_citation_dash_obj, "model_dump") else ai_citation_dash_obj
+                except Exception as cit_e:
+                    logger.warning("ai_citation_tracker runtime execution note: %s", cit_e)
+                    ai_citation_dash = None
+            else:
+                visibility_detail = "Live AI visibility benchmark skipped in selective non-GEO execution."
 
             blackboard.blackboard_state["geo_benchmark_report"] = geo_bench_report
             blackboard.blackboard_state["ai_citation_dashboard"] = ai_citation_dash

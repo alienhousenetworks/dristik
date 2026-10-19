@@ -79,8 +79,8 @@ class Settings(BaseSettings):
     HOST: str = "0.0.0.0"
     
     # Multi-Provider LLM Gateway Configuration
-    # Supported providers: "auto" | "gemini" | "groq" | "openrouter" | "together"
-    LLM_PROVIDER: str = Field(default="auto", description="Active LLM Provider: auto | anthropic | gemini | groq | openrouter | together")
+    # Supported providers: "auto" | "anthropic" | "gemini" | "groq" | "openrouter" | "together" | "nvidia"
+    LLM_PROVIDER: str = Field(default="auto", description="Active LLM Provider: auto | anthropic | gemini | groq | openrouter | together | nvidia")
     
     # Provider-Specific API Keys
     ANTHROPIC_API_KEY: Optional[str] = Field(default=None, description="Anthropic API Key (Claude)")
@@ -90,6 +90,7 @@ class Settings(BaseSettings):
     GROQ_API_KEY: Optional[str] = Field(default=None, description="Groq API Key (Free tier available)")
     OPENROUTER_API_KEY: Optional[str] = Field(default=None, description="OpenRouter API Key (Multi-model aggregator)")
     TOGETHER_API_KEY: Optional[str] = Field(default=None, description="Together AI API Key")
+    NVIDIA_API_KEY: Optional[str] = Field(default=None, description="NVIDIA API Key (integrate.api.nvidia.com)")
     OPENAI_API_KEY: Optional[str] = Field(default=None, description="OpenAI API Key")
     DEEPSEEK_API_KEY: Optional[str] = Field(default=None, description="DeepSeek API Key")
     PERPLEXITY_API_KEY: Optional[str] = Field(default=None, description="Perplexity API Key")
@@ -121,6 +122,10 @@ class Settings(BaseSettings):
     OPENROUTER_SITE_URL: Optional[str] = Field(default="https://dristik.ai", description="HTTP-Referer header for OpenRouter rankings")
     OPENROUTER_SITE_NAME: Optional[str] = Field(default="Dristik AI", description="X-Title header for OpenRouter rankings")
     TOGETHER_MODEL: Optional[str] = None
+    NVIDIA_BASE_URL: str = Field(default="https://integrate.api.nvidia.com/v1", description="NVIDIA NIM Base URL")
+    NVIDIA_MODEL: Optional[str] = None
+    NVIDIA_MODEL_FAST: Optional[str] = None
+    NVIDIA_MODEL_REASONING: Optional[str] = None
 
     # AI Citation Tracker Engine Configuration
     AI_CITATION_PROVIDER: Optional[str] = Field(default=None, description="Default provider for AI citation engines (e.g. openrouter)")
@@ -169,6 +174,11 @@ class Settings(BaseSettings):
     AI_CITATION_KIMI_PROVIDER: Optional[str] = None
     AI_CITATION_KIMI_API_KEY: Optional[str] = None
     AI_CITATION_KIMI_MODEL: Optional[str] = None
+
+    AI_CITATION_NVIDIA_ACTIVE: Optional[bool] = None
+    AI_CITATION_NVIDIA_PROVIDER: Optional[str] = None
+    AI_CITATION_NVIDIA_API_KEY: Optional[str] = None
+    AI_CITATION_NVIDIA_MODEL: Optional[str] = None
 
     # Legacy Together AI fields for backwards compatibility
     TOGETHER_BASE_URL: str = "https://api.together.xyz/v1"
@@ -494,6 +504,8 @@ class Settings(BaseSettings):
             configured.append("openrouter")
         if self.TOGETHER_API_KEY:
             configured.append("together")
+        if self.NVIDIA_API_KEY:
+            configured.append("nvidia")
         if self.LLM_API_KEY:
             configured.append("custom")
         return configured
@@ -501,10 +513,15 @@ class Settings(BaseSettings):
     def get_active_provider(self) -> str:
         """Determines active provider based on LLM_PROVIDER setting or available keys."""
         prov = (self.LLM_PROVIDER or "auto").lower().strip()
+        if prov in ("togetherapi", "together.ai"):
+            prov = "together"
+        elif prov in ("nvidia", "nvidiaapi", "nim", "integrate.api.nvidia.com"):
+            prov = "nvidia"
+
         if prov != "auto" and prov != "":
             return prov
             
-        # Auto-selection priority: anthropic -> gemini -> groq -> openrouter -> together -> custom
+        # Auto-selection priority: anthropic -> gemini -> groq -> openrouter -> together -> nvidia -> custom
         if self.ANTHROPIC_API_KEY or self.CLAUDE_API_KEY:
             return "anthropic"
         if self.GEMINI_API_KEY or self.GOOGLE_API_KEY:
@@ -515,15 +532,21 @@ class Settings(BaseSettings):
             return "openrouter"
         if self.TOGETHER_API_KEY:
             return "together"
+        if self.NVIDIA_API_KEY:
+            return "nvidia"
         if self.LLM_API_KEY:
             return "custom"
         return "none"
 
-    def get_llm_credentials(self) -> dict:
+    def get_llm_credentials(self, provider_override: Optional[str] = None) -> dict:
         """
         Resolves (api_key, base_url, model_fast, model_reasoning, provider_name).
         """
-        provider = self.get_active_provider()
+        provider = (provider_override or self.get_active_provider()).lower().strip()
+        if provider in ("togetherapi", "together.ai"):
+            provider = "together"
+        elif provider in ("nvidia", "nvidiaapi", "nim", "integrate.api.nvidia.com"):
+            provider = "nvidia"
         
         # 0. Anthropic Claude
         if provider in ["anthropic", "claude"]:
@@ -614,7 +637,24 @@ class Settings(BaseSettings):
                 }
             }
             
-        # 4. Together AI (or fallback default)
+        # 4. NVIDIA NIM
+        elif provider in ["nvidia", "nvidiaapi", "nim"]:
+            api_key = self.NVIDIA_API_KEY or self.LLM_API_KEY
+            base_url = self.LLM_BASE_URL or self.NVIDIA_BASE_URL or "https://integrate.api.nvidia.com/v1"
+            model_override = self.LLM_MODEL or self.NVIDIA_MODEL
+            fast_model = self.NVIDIA_MODEL_FAST or self.LLM_MODEL_FAST or model_override or "meta/llama-3.2-11b-vision-instruct"
+            reasoning_model = self.NVIDIA_MODEL_REASONING or self.LLM_MODEL_REASONING or model_override or "meta/llama-3.2-11b-vision-instruct"
+            return {
+                "provider": "nvidia",
+                "display_name": "NVIDIA NIM",
+                "api_key": api_key,
+                "base_url": base_url,
+                "model_fast": fast_model,
+                "model_reasoning": reasoning_model,
+                "extra_headers": {}
+            }
+
+        # 5. Together AI (or fallback default)
         else:
             api_key = self.TOGETHER_API_KEY or self.LLM_API_KEY
             base_url = self.LLM_BASE_URL or self.TOGETHER_BASE_URL or "https://api.together.xyz/v1"

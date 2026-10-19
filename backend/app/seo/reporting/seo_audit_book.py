@@ -2200,6 +2200,8 @@ def render_seo_audit_book(report: Any) -> str:
     toc_html = _render_seo_toc(payload, page_numbers, domain, report_ref, book.sample)
     mix_chart = evidence_mix_chart(tally)
     back_matter = _render_seo_back_matter(domain, report_ref, brand_name)
+    from app.seo.enterprise.report_html import render_enterprise_appendix
+    enterprise_html = render_enterprise_appendix(report)
 
     return "\n".join([
         toolbar,
@@ -2209,6 +2211,7 @@ def render_seo_audit_book(report: Any) -> str:
         mix_chart,
         toc_html,
         *blocks,
+        enterprise_html,
         back_matter,
     ])
 

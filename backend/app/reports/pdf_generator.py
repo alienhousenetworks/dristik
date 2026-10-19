@@ -475,6 +475,25 @@ async def get_presentation_deck_manifest(
     }
 
 
+@router.get("/{analysis_id}/seo/enterprise")
+async def get_enterprise_seo_assessment(
+    analysis_id: str,
+    user: UserIdentity = Depends(get_current_user),
+):
+    """Enterprise SEO assessment for one sealed run.
+
+    The caller must already be allowed to read the analysis. Another
+    organization's run is rejected by require_analysis.
+    """
+    run = require_analysis(analysis_id, user)
+    report = getattr(run, "report", None)
+    if not report:
+        raise HTTPException(status_code=400, detail="Executive report not yet synthesized for this analysis run.")
+    from app.seo.enterprise import build_enterprise_seo
+
+    return build_enterprise_seo(report).model_dump()
+
+
 @router.get("/{analysis_id}/seo-report")
 async def get_complete_seo_report(
     analysis_id: str,

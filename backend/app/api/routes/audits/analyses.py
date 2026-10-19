@@ -179,7 +179,7 @@ async def start_analysis(
             status_code=400,
             detail=(
                 f"No LLM API key configured for active provider '{active_prov}'. "
-                f"Please set GEMINI_API_KEY, GROQ_API_KEY, OPENROUTER_API_KEY, or TOGETHER_API_KEY in backend/.env."
+                f"Please set GEMINI_API_KEY, GROQ_API_KEY, OPENROUTER_API_KEY, TOGETHER_API_KEY, or NVIDIA_API_KEY in backend/.env."
             )
         )
 

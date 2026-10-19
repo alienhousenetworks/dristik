@@ -58,6 +58,10 @@ _LIST_USD_PER_MILLION: Dict[Tuple[str, str], Tuple[float, float]] = {
     ("together", "meta-llama/Llama-3.2-3B-Instruct-Turbo"): (0.06, 0.06),
     ("together", "deepseek-ai/DeepSeek-V3"): (0.60, 1.25),
     ("together", "deepseek-ai/DeepSeek-R1"): (3.00, 7.00),
+    # NVIDIA NIM
+    ("nvidia", "meta/llama-3.3-70b-instruct"): (0.70, 0.70),
+    ("nvidia", "meta/llama-3.1-8b-instruct"): (0.15, 0.15),
+    ("nvidia", "meta/llama-3.1-70b-instruct"): (0.70, 0.70),
     # OpenAI
     ("openai", "gpt-4o"): (2.50, 10.00),
     ("openai", "gpt-4o-2024-08-06"): (2.50, 10.00),
@@ -101,6 +105,7 @@ _KNOWN_PROVIDERS = {
     "perplexity",
     "xai",
     "moonshot",
+    "nvidia",
     "custom",
 }
 
@@ -120,6 +125,10 @@ def canonical_provider(provider: Optional[str]) -> str:
         return "anthropic"
     if name == "google":
         return "gemini"
+    if name in ("togetherapi", "together.ai"):
+        return "together"
+    if name in ("nvidiaapi", "nim", "integrate.api.nvidia.com"):
+        return "nvidia"
     return name or "unknown"
 
 

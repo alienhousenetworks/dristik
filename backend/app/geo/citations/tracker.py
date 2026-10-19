@@ -132,6 +132,7 @@ def _provider_family(provider: str) -> set:
         {"openrouter"},
         {"openai"},
         {"together"},
+        {"nvidia", "nvidiaapi", "nim"},
         {"perplexity"},
         {"deepseek"},
         {"xai", "grok"},
@@ -175,7 +176,7 @@ def main_citation_gateway() -> Optional[Tuple[str, str]]:
         chosen = env_llm or settings_llm
     if chosen in ("", "auto"):
         chosen = (settings.get_active_provider() or "").lower().strip()
-    if chosen not in ("openrouter", "together"):
+    if chosen not in ("openrouter", "together", "nvidia", "nvidiaapi", "nim"):
         citation = (
             os.environ.get("AI_CITATION_PROVIDER")
             or getattr(settings, "AI_CITATION_PROVIDER", "")
@@ -184,12 +185,14 @@ def main_citation_gateway() -> Optional[Tuple[str, str]]:
         cross = os.environ.get("AI_CITATION_CROSS_PROVIDER")
         if cross is None and getattr(settings, "AI_CITATION_CROSS_PROVIDER", False):
             cross = str(settings.AI_CITATION_CROSS_PROVIDER)
-        if citation in ("openrouter", "together") and _parse_bool(cross, default=False):
+        if citation in ("openrouter", "together", "nvidia", "nvidiaapi", "nim") and _parse_bool(cross, default=False):
             chosen = citation
         else:
             return None
     if chosen == "openrouter":
         key = settings.OPENROUTER_API_KEY or os.environ.get("OPENROUTER_API_KEY") or ""
+    elif chosen in ("nvidia", "nvidiaapi", "nim"):
+        key = settings.NVIDIA_API_KEY or os.environ.get("NVIDIA_API_KEY") or ""
     else:
         key = settings.TOGETHER_API_KEY or os.environ.get("TOGETHER_API_KEY") or ""
     key = str(key or "").strip()
@@ -212,7 +215,7 @@ def _route_six_through_main_gateway(engines: List[Dict[str, Any]]) -> None:
         explicit_provider = (os.environ.get(flag) or getattr(settings, flag, None) or "").lower().strip()
         explicit_key = (os.environ.get(f"AI_CITATION_{str(eid).upper()}_API_KEY") or "").strip()
         # A filled native key is an intentional direct connection. Leave it alone.
-        if explicit_provider and explicit_provider not in ("openrouter", "together") and explicit_key:
+        if explicit_provider and explicit_provider not in ("openrouter", "together", "nvidia", "nvidiaapi", "nim") and explicit_key:
             continue
         raw_model = (
             os.environ.get(f"AI_CITATION_{str(eid).upper()}_MODEL")
@@ -220,7 +223,7 @@ def _route_six_through_main_gateway(engines: List[Dict[str, Any]]) -> None:
             or ""
         )
         raw_model = str(raw_model).strip()
-        if raw_model and ("/" in raw_model or explicit_provider in ("openrouter", "together")):
+        if raw_model and ("/" in raw_model or explicit_provider in ("openrouter", "together", "nvidia", "nvidiaapi", "nim")):
             model = raw_model
         else:
             model = GATEWAY_MODEL_DEFAULTS[eid]
@@ -437,14 +440,16 @@ def get_configured_ai_engines() -> List[Dict[str, Any]]:
     if grok_provider == "openrouter" and grok_model == "grok-2-latest":
         grok_model = "x-ai/grok-2-1212"
 
-    # 9. Meta Llama — Dedicated Groq / Together or OpenRouter
+    # 9. Meta Llama — Dedicated Groq / Together or OpenRouter / NVIDIA
     llama_explicit_key = os.environ.get("AI_CITATION_LLAMA_API_KEY")
     groq_key = settings.GROQ_API_KEY or os.environ.get("GROQ_API_KEY") or ""
     together_key = settings.TOGETHER_API_KEY or os.environ.get("TOGETHER_API_KEY") or ""
+    nvidia_key = settings.NVIDIA_API_KEY or os.environ.get("NVIDIA_API_KEY") or ""
     llama_provider = (
         os.environ.get("AI_CITATION_LLAMA_PROVIDER")
         or (default_citation_provider if default_citation_provider else None)
-        or ("groq" if groq_key else ("together" if together_key else "groq"))
+        or ("nvidia" if settings.LLM_PROVIDER in ("nvidia", "nvidiaapi", "nim") else None)
+        or ("groq" if groq_key else ("together" if together_key else ("nvidia" if nvidia_key else "groq")))
     ).lower()
     if llama_provider == "openrouter":
         llama_key = llama_explicit_key or _or_key_if("openrouter")
@@ -452,12 +457,16 @@ def get_configured_ai_engines() -> List[Dict[str, Any]]:
         llama_key = llama_explicit_key or groq_key
     elif llama_provider == "together":
         llama_key = llama_explicit_key or together_key
+    elif llama_provider in ("nvidia", "nvidiaapi", "nim"):
+        llama_key = llama_explicit_key or nvidia_key
     else:
         llama_key = llama_explicit_key or _or_key_if(llama_provider)
     llama_active = _engine_active("AI_CITATION_LLAMA_ACTIVE", bool(llama_key))
     llama_model = os.environ.get("AI_CITATION_LLAMA_MODEL") or (
         GROQ_DEFAULT_REASONING if llama_provider == "groq"
-        else ("meta-llama/Llama-3.3-70B-Instruct-Turbo" if llama_provider == "together" else "meta-llama/llama-3.3-70b-instruct")
+        else ("meta-llama/Llama-3.3-70B-Instruct-Turbo" if llama_provider == "together"
+              else "meta/llama-3.3-70b-instruct" if llama_provider in ("nvidia", "nvidiaapi", "nim")
+              else "meta-llama/llama-3.3-70b-instruct")
     )
     if llama_provider == "groq":
         llama_model = Settings._coerce_groq_model(llama_model, GROQ_DEFAULT_REASONING)
@@ -773,8 +782,10 @@ class AiCitationTracker:
             return await self._query_openai_compatible_engine(query, model, api_key, "https://api.moonshot.cn/v1", client=client)
         elif provider in ["qwen", "alibaba", "dashscope"]:
             return await self._query_openai_compatible_engine(query, model, api_key, "https://dashscope.aliyuncs.com/compatible-mode/v1", client=client)
-        elif provider == "together":
-            return await self._query_openai_compatible_engine(query, model, api_key, "https://api.together.xyz/v1", client=client)
+        elif provider in ["together", "togetherapi"]:
+            return await self._query_openai_compatible_engine(query, model, api_key, getattr(settings, "TOGETHER_BASE_URL", "https://api.together.xyz/v1"), client=client)
+        elif provider in ["nvidia", "nvidiaapi", "nim"]:
+            return await self._query_openai_compatible_engine(query, model, api_key, getattr(settings, "NVIDIA_BASE_URL", "https://integrate.api.nvidia.com/v1"), client=client)
         else:
             return await self._query_openrouter_engine(query, model, api_key, client)
 
