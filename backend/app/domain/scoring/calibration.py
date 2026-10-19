@@ -7,11 +7,18 @@ may be described as stopping an outcome only when `blocks` names that outcome.
 """
 from __future__ import annotations
 
+import asyncio
+import json
+import logging
 import re
-from typing import Dict, List, Optional, Sequence, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Tuple
+
+from pydantic import BaseModel, Field
 
 from app.domain.enums import ConfidenceBand, ImpactLevel, RubricConfidence, Severity
 from app.domain.models import Finding, FindingCalibratedImpact, OutcomeImpact
+
+logger = logging.getLogger("dristik.scoring.calibration")
 
 _SEV_RANK = {
     Severity.INFO: 0,
@@ -70,7 +77,6 @@ _BY_ROOT = {
     "RC_IMAGE_ACCESSIBILITY": "alt",
     "RC_HOMEPAGE_POSITIONING": "positioning",
 }
-_GENERIC_WHY = "collectively impair user experience, trust, and organic discoverability"
 
 _OVERCLAIM_RE = re.compile(
     r"("
@@ -287,31 +293,18 @@ _FAMILY_SPECS: Dict[str, dict] = {
         "blocks": [],
         "floor": ConfidenceBand.HIGH,
         "cap": None,
-        "why": (
-            "Missing HSTS, CSP, or related response headers is a transport-security defect "
-            "with medium business impact. It does not block indexing, buyer conversion, or AI citations."
-        ),
     },
     "positioning": {
         "outcomes": [("buyer_conversion", ImpactLevel.HIGH)],
         "blocks": [],
         "floor": None,
         "cap": ConfidenceBand.MEDIUM,
-        "why": (
-            "A weak or missing primary call to action, or an unclear value proposition, is a "
-            "buyer-conversion defect. Without analytics this commercial reading is medium confidence. "
-            "It does not block indexing or AI citations."
-        ),
     },
     "robots_missing": {
         "outcomes": [("crawl_hygiene", ImpactLevel.MEDIUM)],
         "blocks": [],
         "floor": ConfidenceBand.HIGH,
         "cap": None,
-        "why": (
-            "A missing robots.txt file is a crawl-hygiene gap. It does not block indexing the way a "
-            "sitewide Disallow does, and it does not block buyer conversion or AI citations."
-        ),
     },
     "alt": {
         "outcomes": [
@@ -321,59 +314,250 @@ _FAMILY_SPECS: Dict[str, dict] = {
         "blocks": [],
         "floor": ConfidenceBand.HIGH,
         "cap": None,
-        "why": (
-            "Missing alt text is an accessibility defect. Buyer-conversion and AI-citation impact "
-            "stay low. It does not block other SEO or design work."
-        ),
     },
     "entity_graph_contradiction": {
         "outcomes": [("entity_clarity", ImpactLevel.HIGH)],
         "blocks": [],
         "floor": ConfidenceBand.HIGH,
         "cap": None,
-        "why": (
-            "A machine-readable name or URL disagrees across schema and page metadata. "
-            "Answer engines can attach the wrong name to the entity. This does not block indexing."
-        ),
     },
     "entity_graph_gap": {
         "outcomes": [("entity_clarity", ImpactLevel.MEDIUM)],
         "blocks": [],
         "floor": ConfidenceBand.HIGH,
         "cap": None,
-        "why": (
-            "The sampled entity graph leaves applicable identity properties unstated. "
-            "Answer engines have less to resolve. This does not block indexing."
-        ),
     },
     "indexation_block": {
         "outcomes": [("indexation", ImpactLevel.HIGH)],
         "blocks": ["indexation"],
         "floor": ConfidenceBand.HIGH,
         "cap": None,
-        "why": (
-            "This defect blocks indexation. Crawlers cannot index until it is removed. "
-            "Buyer conversion and AI citations are separate findings."
-        ),
     },
 }
 
 
+class AIFindingExplanation(BaseModel):
+    """
+    AI-generated explanation and calibration for a finding in simple, non-technical language.
+    """
+    what_is_this: str = Field(
+        ...,
+        description="A concise summary (1-2 sentences) of what the technical issue is in simple, non-technical plain English.",
+    )
+    why_to_change: str = Field(
+        ...,
+        description="A concise explanation (1-2 sentences) of why fixing this issue matters commercially, for UX, or for organic search in simple language without jargon or overclaims.",
+    )
+    how_to_change: str = Field(
+        ...,
+        description="Actionable, step-by-step guidance (1-2 sentences) on how to fix or remediate this issue in plain English.",
+    )
+    business_impact: ImpactLevel = Field(
+        default=ImpactLevel.MEDIUM,
+        description="Estimated business impact level: Critical, High, Medium, Low, or Info.",
+    )
+    is_blocking: bool = Field(
+        default=False,
+        description="True ONLY if this defect directly blocks crawlers from indexing the site or users from loading it.",
+    )
+    blocks: List[str] = Field(
+        default_factory=list,
+        description="List of outcomes blocked (e.g. ['indexation']). Must be empty if is_blocking is False.",
+    )
+    blocking_reason: Optional[str] = Field(
+        default=None,
+        description="Specific reason why this defect blocks the named outcome.",
+    )
+    affected_outcomes: List[str] = Field(
+        default_factory=list,
+        description="List of outcomes affected, e.g. ['security_posture', 'buyer_conversion', 'accessibility', 'crawl_hygiene', 'entity_clarity'].",
+    )
+
+
+async def calibrate_and_explain_finding_ai(
+    finding: Finding,
+    domain: Optional[str] = None,
+    client: Optional[Any] = None,
+) -> Finding:
+    """
+    Asynchronous AI-powered calibration and plain-language explanation for a finding.
+
+    Uses LLMClient / ModelRouter to generate:
+    - what_is_this: simple plain-English explanation of the issue
+    - why_to_change: commercial / UX / organic search consequence
+    - how_to_change: concrete, actionable remediation steps
+    while calibrating business impact, confidence, and blocking behavior.
+
+    Gracefully falls back to deterministic calibrate_finding if LLM is unavailable or fails.
+    """
+    # 1. Deterministic baseline to establish fallback values & confidence band
+    calibrate_finding(finding)
+    band = _band_from_rubric(finding)
+
+    try:
+        if client is None:
+            from app.core.inference.llm_client import LLMClient
+            client = LLMClient()
+
+        if not getattr(client, "available", True):
+            return finding
+
+        evidence_snippets: List[str] = []
+        for ev in (finding.evidence or [])[:3]:
+            snip = getattr(ev, "snippet", "") or getattr(ev, "observation", "") or ""
+            if snip:
+                evidence_snippets.append(str(snip)[:150])
+
+        urls = (finding.affected_urls or [])[:2]
+
+        system_prompt = (
+            "You are a principal website intelligence auditor explaining a technical defect to business stakeholders and developers.\n"
+            "Explain everything in simple, clear, non-technical language.\n\n"
+            "Requirements:\n"
+            "1. what_is_this: Explain in 1-2 plain sentences what the defect is.\n"
+            "2. why_to_change: Explain in 1-2 plain sentences why the business stakeholder should care (commercial, user trust, or search visibility consequence). "
+            "Never guarantee rankings, traffic, or revenue. Do not claim this defect freezes unrelated pillars.\n"
+            "3. how_to_change: Provide 1-2 plain sentences describing concrete, actionable steps to resolve it.\n"
+            "4. business_impact: Assign 'Critical', 'High', 'Medium', 'Low', or 'Info'. Note: technical severity does not automatically dictate business impact.\n"
+            "5. is_blocking: Set to true ONLY if this defect stops crawlers or users from accessing/indexing the site (e.g. sitewide robots.txt Disallow: /, sitewide noindex, 5xx server crash, DNS/TLS failure). Security headers, missing alt text, missing CTAs, or missing schema are NEVER blocking.\n"
+            "6. blocks: List of blocked outcomes (e.g. ['indexation']) if is_blocking is true, else empty list.\n"
+            "7. blocking_reason: Explanation if is_blocking is true, else null.\n"
+            "8. affected_outcomes: List of affected outcome areas (e.g. ['security_posture', 'buyer_conversion', 'accessibility', 'crawl_hygiene', 'entity_clarity']).\n"
+            "Output MUST be a single valid JSON object matching the requested schema."
+        )
+
+        user_prompt = (
+            f"Website: {domain or 'audited site'}\n"
+            f"Finding ID: {finding.finding_id}\n"
+            f"Title: {finding.title}\n"
+            f"Technical Severity: {finding.severity.value if hasattr(finding.severity, 'value') else str(finding.severity)}\n"
+            f"Category: {finding.category.value if hasattr(finding.category, 'value') else str(finding.category)}\n"
+            f"Technical Description: {finding.description}\n"
+            f"Affected URLs: {', '.join(urls) if urls else 'N/A'}\n"
+            f"Evidence Snippets: {' | '.join(evidence_snippets) if evidence_snippets else 'N/A'}\n"
+            'Return JSON matching: {"what_is_this": "...", "why_to_change": "...", "how_to_change": "...", "business_impact": "...", "is_blocking": false, "blocks": [], "blocking_reason": null, "affected_outcomes": ["..."]}'
+        )
+
+        model = getattr(client, "model", None) or "gpt-4o-mini"
+        if hasattr(client, "generate_chat_completion"):
+            response = await client.generate_chat_completion(
+                model=model,
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
+                temperature=0.1,
+                max_tokens=600,
+                response_format="DEFAULT",
+            )
+            raw_text = response.get("text", "") if isinstance(response, dict) else str(response)
+        elif hasattr(client, "complete"):
+            raw_text = await client.complete(prompt=f"{system_prompt}\n\n{user_prompt}", max_tokens=600)
+        else:
+            return finding
+
+        from app.core.inference.json_repair import repair_and_parse_json
+        parsed = repair_and_parse_json(raw_text)
+        if not parsed:
+            return finding
+
+        raw_impact = str(parsed.get("business_impact", "")).upper()
+        impact_level = {
+            "CRITICAL": ImpactLevel.CRITICAL,
+            "HIGH": ImpactLevel.HIGH,
+            "MEDIUM": ImpactLevel.MEDIUM,
+            "LOW": ImpactLevel.LOW,
+            "INFO": ImpactLevel.INFO,
+        }.get(raw_impact, ImpactLevel.MEDIUM)
+
+        is_blocking = bool(parsed.get("is_blocking", False))
+        blocks = [str(b) for b in parsed.get("blocks", [])] if is_blocking else []
+        blocking_reason = str(parsed.get("blocking_reason")) if is_blocking and parsed.get("blocking_reason") else None
+
+        # Guardrail: non-blocking categories must never be blocking
+        text_blob = f"{finding.title} {finding.description} {finding.rule_id or ''}".lower()
+        if any(term in text_blob for term in ("hsts", "security", "alt text", "missing alt", "cta", "positioning", "schema", "entity")):
+            is_blocking = False
+            blocks = []
+            blocking_reason = None
+
+        what_is_this = str(parsed.get("what_is_this", "")).strip()
+        why_to_change = str(parsed.get("why_to_change", "")).strip()
+        how_to_change = str(parsed.get("how_to_change", "")).strip()
+
+        # Sanitize outcome overclaims
+        clean_replacement = "Resolving this defect improves technical compliance and organic search visibility."
+        what_is_this, _ = rewrite_outcome_overclaims(what_is_this, "")
+        why_to_change, _ = rewrite_outcome_overclaims(why_to_change, clean_replacement)
+
+        if what_is_this:
+            finding.description = what_is_this
+            if hasattr(finding, "plain_english_summary"):
+                finding.plain_english_summary = what_is_this
+
+        if why_to_change:
+            finding.why_it_matters = why_to_change
+            if hasattr(finding, "business_impact"):
+                finding.business_impact = why_to_change
+
+        if how_to_change:
+            finding.recommendation = how_to_change
+            if hasattr(finding, "recommended_action"):
+                finding.recommended_action = how_to_change
+
+        affected = [str(o) for o in parsed.get("affected_outcomes", [])]
+        outcomes = [OutcomeImpact(outcome=o, level=impact_level) for o in affected] if affected else [OutcomeImpact(outcome="general_health", level=impact_level)]
+
+        label = _LEVEL_NAME.get(impact_level, "Medium")
+        finding.calibrated_impact = FindingCalibratedImpact(
+            technical_severity=finding.severity,
+            business_impact=impact_level,
+            business_impact_label=label,
+            confidence=float(finding.confidence or 0.0),
+            confidence_band=band,
+            is_blocking=is_blocking,
+            blocks=blocks,
+            blocking_reason=blocking_reason,
+            affected_outcomes=outcomes,
+        )
+        finding.impact = _IMPACT_POINTS.get(impact_level, 5)
+        setattr(finding, "_ai_calibrated", True)
+
+    except Exception as exc:
+        logger.debug("[calibrate_and_explain_finding_ai] AI explanation fallback: %s", exc)
+
+    return finding
+
+
+async def batch_calibrate_and_explain_findings_ai(
+    findings: Sequence[Finding],
+    domain: Optional[str] = None,
+    concurrency_limit: int = 5,
+) -> List[Finding]:
+    """Calibrate and explain multiple findings concurrently with bounded concurrency."""
+    sem = asyncio.Semaphore(concurrency_limit)
+
+    async def _cal(f: Finding) -> Finding:
+        async with sem:
+            return await calibrate_and_explain_finding_ai(f, domain=domain)
+
+    return list(await asyncio.gather(*[_cal(f) for f in findings]))
+
+
 def calibrate_finding(finding: Finding) -> Finding:
     """Stamp an independent calibration record and align the 1–10 impact integer with business impact."""
+    if getattr(finding, "_ai_calibrated", False) and finding.calibrated_impact is not None:
+        return finding
+
     family, reason = _family_and_reason(finding)
     band = _band_from_rubric(finding)
     if family == "unknown":
         headline = _STEP_DOWN.get(finding.severity, ImpactLevel.LOW)
         outcomes: List[Tuple[str, ImpactLevel]] = []
         blocks: List[str] = []
-        why = None
     else:
         spec = _FAMILY_SPECS[family]
         outcomes = list(spec["outcomes"])
         headline = _headline([level for _, level in outcomes])
         blocks = list(spec["blocks"])
-        why = spec["why"]
         if spec["floor"] == ConfidenceBand.HIGH and band != ConfidenceBand.LOW and _observed(finding):
             band = ConfidenceBand.HIGH
         if spec["cap"] == ConfidenceBand.MEDIUM and not _analytics_connected(finding) and band == ConfidenceBand.HIGH:
@@ -396,9 +580,6 @@ def calibrate_finding(finding: Finding) -> Finding:
         affected_outcomes=[OutcomeImpact(outcome=name, level=level) for name, level in outcomes],
     )
     finding.impact = _IMPACT_POINTS[headline]
-    current_why = finding.why_it_matters or ""
-    if why and (not current_why.strip() or _GENERIC_WHY in current_why.lower()):
-        finding.why_it_matters = why
     return finding
 
 

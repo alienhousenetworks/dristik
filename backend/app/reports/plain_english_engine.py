@@ -123,131 +123,17 @@ class SpecialistAuditorAgent:
     inspection_methodology: str
 
     def explain(self, title: str, description: str, category: str) -> str:
-        """Agentic synthesis of finding in plain, intelligent, non-technical English."""
-        # Clean title for natural phrasing
+        """Contextual synthesis of finding in plain, non-technical English."""
         clean_title = title.rstrip(".")
         desc = description.strip() if description else ""
-
-        if self.domain == "CANONICAL":
-            return (
-                "Search engines require one definitive address for each page. When multiple versions exist "
-                "or canonical links point elsewhere, search engines split ranking authority between duplicates, "
-                "diluting the page's search prominence."
-            )
-        if self.domain == "REDIRECT":
-            if "404" in title or "broken" in title.lower() or "not found" in desc.lower():
-                return (
-                    "Visitors and search engine crawlers encountered broken links that lead nowhere. "
-                    "This frustrates prospective buyers, wastes crawler inspection budgets, and weakens "
-                    "internal authority distribution."
-                )
-            return (
-                "A link redirects to another page, which redirects again before arriving at the final destination. "
-                "Every redirect adds latency for mobile visitors and can cause search crawlers to abandon the page."
-            )
-        if self.domain == "CRAWL":
-            if "noindex" in title.lower() or "robots" in title.lower():
-                return (
-                    "Your web server instructions tell search engines not to display this page in search results. "
-                    "Unless this page is intentionally private, it cannot appear in organic search queries."
-                )
-            return (
-                f"Search engine crawlers face friction discovering or crawling pages related to '{clean_title}'. "
-                "Resolving this ensures all valuable commercial URLs are efficiently crawled and indexed."
-            )
-        if self.domain == "SPEED":
-            return (
-                "The web server takes too long to deliver the initial page, or visual elements shift while loading. "
-                "Mobile visitors often leave slow pages before reading your offers, and Google penalizes slow experiences."
-            )
-        if self.domain == "SCHEMA":
-            return (
-                "Search engines rely on structured data tags to understand your business details, products, and articles. "
-                "Without valid markup, your website misses out on star ratings, FAQs, and rich search snippets."
-            )
-        if self.domain == "CONTENT":
-            if "h1" in title.lower() or "heading" in title.lower():
-                return (
-                    "Every page needs a clear, unique main title (H1) explaining its central topic. "
-                    "Missing or multiple H1 titles confuse both human visitors and automated search engines."
-                )
-            if "title" in title.lower() or "meta description" in title.lower():
-                return (
-                    "The headline and preview summary that appear in Google search results are either missing, "
-                    "cut off, or generic. Clear previews directly increase how many searchers click your link."
-                )
-            if "alt" in title.lower() or "image" in title.lower():
-                return (
-                    "Images on this page lack text descriptions. Search engines cannot 'see' what images depict without descriptions, "
-                    "and visitors using screen readers cannot understand the visual content."
-                )
-            return (
-                f"Content structure for '{clean_title}' lacks optimal semantic clarity or topical depth. "
-                "Refining this copy helps search crawlers and human readers quickly comprehend your core value."
-            )
-        if self.domain == "AEO":
-            return (
-                "AI answer assistants like ChatGPT and Perplexity look for concise, factual definitions to answer user questions. "
-                "When your content lacks direct answer paragraphs or structured facts, AI engines cite competitors instead."
-            )
-        if self.domain == "GEO":
-            return (
-                "Autonomous AI crawlers extract knowledge to feed generative models. "
-                "Explicit AI bot directives and clean text access ensure your brand is represented accurately in generative answers."
-            )
-        if self.domain == "CRO":
-            return (
-                "The path for visitors to contact you or make a purchase has friction, unclear wording, or hidden buttons. "
-                "Clarifying the primary action directly increases inquiries from your current visitor traffic."
-            )
-        if self.domain == "SECURITY":
-            return (
-                "Modern browsers display warnings when web pages lack mandatory security certificates or encryption rules. "
-                "Keeping security headers up to standard preserves buyer trust and prevents data tampering."
-            )
-
-        # Default contextual synthesis
-        return (
-            f"Dristik identified a discrepancy regarding '{clean_title}'. "
-            "Resolving this prevents search engines, AI models, and visitors from encountering technical friction "
-            "when evaluating your website."
-        )
+        if desc and desc.lower() != clean_title.lower() and len(desc) > 15:
+            return desc
+        return f"Inspection identified a discrepancy regarding '{clean_title}'. Resolving this ensures standard compliance for {self.domain.lower()} across affected URLs."
 
     def business_impact(self, title: str, description: str, severity: str) -> str:
-        """Derives the commercial and organic search consequence of the finding."""
-        if self.domain in ("CRO", "UX"):
-            return (
-                "Directly impedes lead generation and customer conversion rates by creating visual friction, "
-                "lowering user trust, and causing visitors to abandon commercial inquiry paths."
-            )
-        if self.domain in ("AEO", "GEO"):
-            return (
-                "Reduces organic brand authority across conversational AI assistants (ChatGPT, Perplexity, Claude), "
-                "causing prospective buyers to receive competitor recommendations during conversational discovery."
-            )
-        if self.domain in ("CRAWL", "CANONICAL", "REDIRECT"):
-            return (
-                "Dilutes link equity, creates crawl budget waste for search engine spiders, and risks de-indexing "
-                "or splitting keyword authority across duplicate URLs."
-            )
-        if self.domain == "SPEED":
-            return (
-                "Slow loading speeds and unexpected layout shifts increase mobile bounce rates, reduce dwell time, "
-                "and signal poor user experience to Google's ranking algorithms."
-            )
-        if self.domain == "SCHEMA":
-            return (
-                "Disqualifies your commercial URLs from Google Rich Results (star ratings, product cards, FAQ snippets), "
-                "reducing SERP real estate and lowering click-through rates against competitors."
-            )
-        if self.domain == "SECURITY":
-            return (
-                "Substandard transport encryption or missing security headers risk triggering browser security warnings, "
-                "eroding enterprise buyer confidence and exposing client sessions to transport interception."
-            )
-        return (
-            "Unaddressed technical issues directly lower search crawler trust and organic lead generation potential."
-        )
+        """Derives the commercial and search consequence based on the finding context."""
+        clean_title = title.rstrip(".")
+        return f"Unresolved defect in '{clean_title}' affects {self.default_stakeholders}, impairing technical health and organic visibility."
 
     def who_is_affected(self, title: str, description: str) -> str:
         """Classifies the primary audience and stakeholders affected."""
@@ -634,20 +520,24 @@ class PlainEnglishEngine:
             description=str(observed_result),
         )
 
-        # Plain-English summary (In simple English)
-        plain_english_summary = _get_val(finding, "plain_english_summary")
+        # Plain-English summary (In simple English: What is this)
+        plain_english_summary = (
+            _get_val(finding, "plain_english_summary")
+            or _get_val(finding, "what_is_this")
+        )
         if not plain_english_summary:
-            why_matters = _get_val(finding, "why_it_matters")
-            if why_matters and len(why_matters) > 20:
-                plain_english_summary = why_matters
+            desc_val = _get_val(finding, "description") or ""
+            if desc_val and desc_val.strip() and desc_val.strip().lower() != str(title).strip().lower():
+                plain_english_summary = desc_val.strip()
             else:
                 plain_english_summary = agent.explain(str(title), str(observed_result), str(category))
 
-        # Business impact (Why this matters)
+        # Business impact (In simple English: Why to change)
         business_impact = (
             _get_val(finding, "business_impact")
-            or _get_val(finding, "business_context")
             or _get_val(finding, "why_it_matters")
+            or _get_val(finding, "why_to_change")
+            or _get_val(finding, "business_context")
             or agent.business_impact(str(title), str(observed_result), sev_str)
         )
 
@@ -661,9 +551,10 @@ class PlainEnglishEngine:
         if not who_affected:
             who_affected = agent.who_is_affected(str(title), str(observed_result))
 
-        # Recommended action (What to do next)
+        # Recommended action (In simple English: How to change)
         recommended_action = (
             _get_val(finding, "recommended_action")
+            or _get_val(finding, "how_to_change")
             or _get_val(finding, "recommended_solution")
             or _get_val(finding, "recommendation")
             or _get_val(finding, "suggested_fix")
@@ -891,31 +782,20 @@ class PlainEnglishEngine:
     ) -> Dict[str, Any]:
         """
         Asynchronous LLM-powered agentic explanation pathway.
-        When LLM inference is available, queries the model router with specialist task instructions.
-        Falls back seamlessly to the deterministic agent workforce.
+        Uses calibrate_and_explain_finding_ai to generate simple-language
+        'what is this', 'why to change', and 'how to change' using AI,
+        then returns the enriched dictionary for report rendering.
+        Falls back seamlessly to the deterministic agent workforce when offline.
         """
-        enriched = cls.enrich_finding(finding)
         try:
-            from app.inference.llm_client import LLMClient
-            client = LLMClient()
-            if not getattr(client, "available", True):
-                return enriched
-
-            # Query agent with zero-fabrication prompt
-            prompt = (
-                f"You are the {enriched.get('who_affected')} auditor. Explain the defect '{enriched['title']}' "
-                f"for the website {domain or 'domain'}. In 2 sentences, explain in simple non-technical English "
-                f"what the defect is and why it matters commercially. Do not invent facts."
-            )
-            # If client has fast chat method:
-            if hasattr(client, "complete"):
-                res = await client.complete(prompt=prompt, max_tokens=150)
-                if res and isinstance(res, str) and len(res) > 20:
-                    enriched["plain_english_summary"] = res.strip()
+            from app.scoring.calibration import calibrate_and_explain_finding_ai
+            from app.domain.models import Finding
+            if isinstance(finding, Finding):
+                await calibrate_and_explain_finding_ai(finding, domain=domain)
         except Exception as e:
-            logger.debug("Agentic LLM explanation fallback: %s", e)
+            logger.debug("Agentic AI explanation fallback: %s", e)
 
-        return enriched
+        return cls.enrich_finding(finding)
 
 
 # ==============================================================================
