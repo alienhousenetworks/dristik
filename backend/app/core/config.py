@@ -642,8 +642,8 @@ class Settings(BaseSettings):
             api_key = self.NVIDIA_API_KEY or self.LLM_API_KEY
             base_url = self.LLM_BASE_URL or self.NVIDIA_BASE_URL or "https://integrate.api.nvidia.com/v1"
             model_override = self.LLM_MODEL or self.NVIDIA_MODEL
-            fast_model = self.NVIDIA_MODEL_FAST or self.LLM_MODEL_FAST or model_override or "meta/llama-3.2-11b-vision-instruct"
-            reasoning_model = self.NVIDIA_MODEL_REASONING or self.LLM_MODEL_REASONING or model_override or "meta/llama-3.2-11b-vision-instruct"
+            fast_model = self.NVIDIA_MODEL_FAST or self.LLM_MODEL_FAST or model_override or "nvidia/nemotron-3-super-120b-a12b"
+            reasoning_model = self.NVIDIA_MODEL_REASONING or self.LLM_MODEL_REASONING or model_override or "nvidia/nemotron-3-super-120b-a12b"
             return {
                 "provider": "nvidia",
                 "display_name": "NVIDIA NIM",
