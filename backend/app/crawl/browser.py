@@ -281,7 +281,7 @@ class BrowserRenderService:
             await page.set_content(html, wait_until="domcontentloaded", timeout=timeout_ms)
             await page.emulate_media(media="print")
             try:
-                await page.evaluate("document.fonts && document.fonts.ready")
+                await asyncio.wait_for(page.evaluate("document.fonts && document.fonts.ready"), timeout=2.0)
             except Exception:
                 pass
             pdf_coro = page.pdf(

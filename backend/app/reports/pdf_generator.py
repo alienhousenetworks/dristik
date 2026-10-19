@@ -966,6 +966,9 @@ async def _html_to_pdf_response(html_content: str, filename: str, disposition: s
     )
 
 
+_SECTION_PDF_CACHE: Dict[str, bytes] = {}
+
+
 @router.get("/{analysis_id}/sections/{section_key}/pdf")
 async def get_section_pdf_report(
     analysis_id: str,
@@ -991,6 +994,15 @@ async def get_section_pdf_report(
 
     domain_clean = (report.domain or "website").replace("https://", "").replace("http://", "").split("/")[0]
     disposition = "attachment" if download else "inline"
+    cache_key = f"{analysis_id}:{section_key.lower()}"
+    filename = f"{domain_clean}_{section_key.lower()}_audit_book.pdf" if section_key.lower() == "seo" else f"{domain_clean}_{section_key.lower()}_audit.pdf"
+
+    if cache_key in _SECTION_PDF_CACHE:
+        return Response(
+            content=_SECTION_PDF_CACHE[cache_key],
+            media_type="application/pdf",
+            headers={"Content-Disposition": f'{disposition}; filename="{filename}"'},
+        )
 
     if section_key.lower() == "seo":
         from app.seo.reporting import seo_audit_book_renderer
@@ -1004,13 +1016,17 @@ async def get_section_pdf_report(
                 detail="PDF rendering engine is currently unavailable or timed out. "
                        "You can open the report with ?format=print and select 'Print / Save as PDF' in your browser.",
             )
+        _SECTION_PDF_CACHE[cache_key] = pdf_bytes
         return Response(
             content=pdf_bytes,
             media_type="application/pdf",
-            headers={"Content-Disposition": f'{disposition}; filename="{domain_clean}_seo_audit_book.pdf"'},
+            headers={"Content-Disposition": f'{disposition}; filename="{filename}"'},
         )
 
-    return await _html_to_pdf_response(html_content, f"{domain_clean}_{section_key.lower()}_audit.pdf", disposition=disposition)
+    resp = await _html_to_pdf_response(html_content, filename, disposition=disposition)
+    if resp.body:
+        _SECTION_PDF_CACHE[cache_key] = resp.body
+    return resp
 
 
 

@@ -1423,13 +1423,33 @@ class SeoAuditBookRenderer:
         self,
         report: Any,
         render_fn: Optional[Callable[[str], Any]] = None,
+        two_pass: bool = False,
     ) -> Optional[bytes]:
         """
-        Generates the complete publication-grade PDF using two-pass layout.
+        Generates the complete publication-grade PDF.
+        By default (two_pass=False), performs a single-pass render with estimated page numbers
+        to stay well within web server / reverse proxy timeout budgets (e.g. Nginx 60s).
         """
         if render_fn is None:
             from app.crawl.browser import BrowserRenderService
             render_fn = BrowserRenderService.render_pdf
+
+        context = build_seo_book_context(report)
+        chapter_ids = [item["id"] for item in context["toc_items"]]
+
+        if not two_pass:
+            resolved_pages = self._estimate_fallback_pages(chapter_ids)
+            html = self.render_html_report(report, page_numbers=resolved_pages)
+            pdf = await render_fn(html)
+            if not pdf or len(pdf) < 100:
+                return pdf
+            domain = _get_val(report, "domain") or "Website"
+            return self.inject_pdf_bookmarks_and_metadata(
+                pdf,
+                domain=domain,
+                resolved_pages=resolved_pages,
+                toc_items=context["toc_items"],
+            )
 
         # Pass 1: Render HTML with placeholder TOC
         pass1_html = self.render_html_report(report)
@@ -1438,10 +1458,6 @@ class SeoAuditBookRenderer:
         if not pass1_pdf or len(pass1_pdf) < 100:
             logger.warning("Pass 1 PDF generation returned empty or invalid bytes.")
             return pass1_pdf
-
-        # Collect chapter IDs
-        context = build_seo_book_context(report)
-        chapter_ids = [item["id"] for item in context["toc_items"]]
 
         # Resolve physical page numbers from Pass 1 PDF
         resolved_pages = self.resolve_physical_pages(pass1_pdf, chapter_ids)
@@ -1453,14 +1469,12 @@ class SeoAuditBookRenderer:
 
         # Post-Process: Inject bookmarks & metadata
         domain = _get_val(report, "domain") or "Website"
-        processed_pdf = self.inject_pdf_bookmarks_and_metadata(
+        return self.inject_pdf_bookmarks_and_metadata(
             final_pdf_raw,
             domain=domain,
             resolved_pages=resolved_pages,
             toc_items=context["toc_items"],
         )
-
-        return processed_pdf
 
 
 # Singleton instance for application-wide use
