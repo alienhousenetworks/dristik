@@ -282,11 +282,18 @@ class ModelRouter:
                     logger.warning("[ModelRouter][%s][%s] %s Preview: %s", capability, agent_role, last_error, raw[:300].replace("\n", " "))
                     if stop_reason in ("max_tokens", "length") and max_tokens < 8192:
                         max_tokens = min(max_tokens * 2, 8192)
-                    user_prompt = (
-                        f"{prompts['user']}\n\n"
-                        "PREVIOUS OUTPUT WAS NOT VALID JSON. Return a single JSON object only. "
-                        "No markdown fences, no preamble, no trailing commentary."
-                    )
+                        user_prompt = (
+                            f"{prompts['user']}\n\n"
+                            "CRITICAL: PREVIOUS OUTPUT WAS CUT OFF BY TOKEN LIMIT. "
+                            "Be extremely concise, minimize internal reasoning/chain-of-thought, "
+                            "and output ONLY the valid JSON object immediately without preamble or commentary."
+                        )
+                    else:
+                        user_prompt = (
+                            f"{prompts['user']}\n\n"
+                            "PREVIOUS OUTPUT WAS NOT VALID JSON. Return a single JSON object only. "
+                            "No markdown fences, no preamble, no trailing commentary."
+                        )
                     continue
 
             except RateLimitException as rle:

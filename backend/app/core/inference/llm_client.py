@@ -402,7 +402,11 @@ class LLMClient:
                 raise RuntimeError(f"Connection failed to LLM endpoint ({provider}): {str(e)}")
 
         choice = data.get("choices", [{}])[0]
-        content = choice.get("message", {}).get("content", "")
+        msg = choice.get("message", {}) or {}
+        content = msg.get("content", "") or ""
+        reasoning = msg.get("reasoning_content", "") or ""
+        if not content.strip() and reasoning:
+            content = reasoning
         usage = data.get("usage", {}) or {}
         return {
             "content": content,
