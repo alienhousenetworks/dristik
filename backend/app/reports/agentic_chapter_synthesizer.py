@@ -9,7 +9,12 @@ real crawl telemetry, and fail-closed disclosures.
 from __future__ import annotations
 
 import html
+import logging
 from typing import Any, Dict, List, Optional, Tuple
+
+from pydantic import BaseModel, Field
+
+logger = logging.getLogger("dristik.agentic_chapter_synthesizer")
 
 def _esc(value: Any) -> str:
     return html.escape("" if value is None else str(value), quote=True)
@@ -20,6 +25,65 @@ def _get(obj: Any, name: str, default: Any = None) -> Any:
     if isinstance(obj, dict):
         return obj.get(name, default)
     return getattr(obj, name, default)
+
+def _sev_str(f: Any) -> str:
+    raw = _get(f, "severity", "")
+    if hasattr(raw, "value"):
+        return str(raw.value).upper()
+    if hasattr(raw, "name"):
+        return str(raw.name).upper()
+    s = str(raw or "").upper()
+    if "." in s:
+        s = s.split(".")[-1]
+    return s
+
+
+class AIChapterExplanation(BaseModel):
+    """
+    Structured AI output for executive and technical chapter synthesis.
+    Directly answers non-technical questions for leadership while providing
+    grounded architecture details for engineering teams.
+    """
+    executive_summary: str = Field(
+        ...,
+        description="2-3 sentence executive synthesis answering what was evaluated and what was found in plain, non-technical English.",
+    )
+    business_risk: str = Field(
+        ...,
+        description="Plain-English explanation of commercial, revenue, customer experience, or visibility risks.",
+    )
+    commercial_opportunity: str = Field(
+        ...,
+        description="Plain-English explanation of growth, pipeline, conversion, or citation opportunities unlocked by fixing issues.",
+    )
+    why_reader_should_care: str = Field(
+        ...,
+        description="Direct answer to 'Why does this matter to our bottom line?' for a non-technical executive.",
+    )
+    recommended_action: str = Field(
+        ...,
+        description="Clear, non-technical strategic recommendation and next steps for leadership.",
+    )
+    priority_tier: str = Field(
+        default="P2 (TACTICAL OPTIMIZATION)",
+        description="Priority classification: P0 (CRITICAL BLOCKER), P1 (HIGH BUSINESS IMPACT), P2 (TACTICAL OPTIMIZATION), or P3 (MAINTAIN & MONITOR).",
+    )
+    technical_mechanics: str = Field(
+        ...,
+        description="Technical and crawler mechanics for engineering and technical teams.",
+    )
+    root_cause_analysis: str = Field(
+        ...,
+        description="Technical root cause analysis based on observed crawl telemetry and AST attributes.",
+    )
+    prescriptive_fix: str = Field(
+        ...,
+        description="Actionable, prescriptive engineering or copy fix instructions.",
+    )
+    verification_protocol: str = Field(
+        ...,
+        description="Step-by-step verification and retest procedure to confirm the fix.",
+    )
 
 
 class AgenticChapterSynthesizer:
@@ -186,6 +250,148 @@ class AgenticChapterSynthesizer:
         )
 
     @classmethod
+    async def synthesize_chapter_narrative_ai(
+        cls,
+        book: Any,
+        number: str,
+        section: Dict[str, Any],
+        findings: List[Any],
+        is_geo: bool = False,
+        client: Optional[Any] = None,
+    ) -> Dict[str, str]:
+        """
+        Asynchronously synthesizes an AI-driven consultative review for a chapter.
+        Uses the assigned domain specialist agent persona and LLMClient to directly
+        answer non-technical questions for executive leadership while providing
+        concrete technical diagnostics for engineering.
+        Falls back to the deterministic agent synthesis when offline or on error.
+        """
+        agent_id, agent_name, agent_role = cls.get_geo_agent(number) if is_geo else cls.get_seo_agent(number)
+        domain = str(_get(book, "domain", "audited domain"))
+        pages = list(_get(book, "pages", []))
+        crawled_count = len(pages)
+        sec_title = section.get("title", f"Chapter {number}")
+
+        # Resolve LLM client
+        if client is None:
+            try:
+                from app.core.inference.llm_client import LLMClient
+                client = LLMClient()
+            except Exception as e:
+                logger.debug("LLMClient unavailable for chapter narrative: %s", e)
+                client = None
+
+        if client is None or not getattr(client, "available", True):
+            return cls.synthesize_narrative(book, number, section, findings, is_geo=is_geo)
+
+        defects = [
+            f for f in (findings or [])
+            if _sev_str(f) in {"CRITICAL", "HIGH", "MEDIUM", "LOW"}
+            and str(_get(f, "confidence_rubric", "")).upper() != "GUESSING"
+        ]
+
+        defect_summaries = []
+        for f in defects[:6]:
+            t = str(_get(f, "title", "") or _get(f, "finding_title", "")).strip()
+            sev = str(_get(f, "severity", "MEDIUM")).upper()
+            why = str(_get(f, "why_it_matters", "") or _get(f, "description", "")).strip()
+            defect_summaries.append(f"- [{sev}] {t}: {why[:150]}")
+
+        discipline = "Generative Engine Optimization (GEO)" if is_geo else "Technical Search Engine Optimization (SEO)"
+
+        system_prompt = (
+            f"You are {agent_name} ({agent_id}), an authoritative domain specialist auditor in {discipline}.\n"
+            f"Role: {agent_role}.\n"
+            "Deliver a consultative audit synthesis for this chapter that answers core questions for two distinct audiences:\n"
+            "1. Non-Technical Executive Leadership (CEO, Founder, CMO, VP):\n"
+            "   - executive_summary: 2-3 clear, jargon-free sentences explaining what was evaluated on this website and what was found.\n"
+            "   - business_risk: 1-2 plain-English sentences explaining the real commercial, user trust, or visibility risk.\n"
+            "   - commercial_opportunity: 1-2 plain-English sentences explaining the commercial growth upside unlocked by fixing this.\n"
+            "   - why_reader_should_care: 1 sentence summarizing why this matters to the company's bottom line.\n"
+            "   - recommended_action: 1-2 sentences giving high-level, strategic next steps for leadership.\n"
+            "2. Technical & Architecture Teams:\n"
+            "   - technical_mechanics: 1-2 sentences on crawler/browser and DOM behavior.\n"
+            "   - root_cause_analysis: 1-2 sentences identifying the likely code/template origin.\n"
+            "   - prescriptive_fix: Concrete technical or template fix instructions.\n"
+            "   - verification_protocol: Retest procedure to verify the fix.\n"
+            "   - priority_tier: Exactly one of 'P0 (CRITICAL BLOCKER)', 'P1 (HIGH BUSINESS IMPACT)', 'P2 (TACTICAL OPTIMIZATION)', 'P3 (MAINTAIN & MONITOR)'.\n\n"
+            "Zero-Fabrication Contract: Never invent competitor names, market percentages, or specific revenue numbers not in evidence. "
+            "Never guarantee rankings or traffic. Output MUST be valid JSON only matching the schema."
+        )
+
+        user_prompt = (
+            f"Website: {domain}\n"
+            f"Chapter: {number} — {sec_title}\n"
+            f"Sampled Pages Crawled: {crawled_count}\n"
+            f"Total Defects Recorded: {len(defects)}\n"
+            f"Defect Details:\n{chr(10).join(defect_summaries) if defect_summaries else 'None (Clean evaluation)'}\n\n"
+            'Return a JSON object with keys: "executive_summary", "business_risk", "commercial_opportunity", "why_reader_should_care", "recommended_action", "priority_tier", "technical_mechanics", "root_cause_analysis", "prescriptive_fix", "verification_protocol".'
+        )
+
+        try:
+            model = getattr(client, "model", None) or "gpt-4o-mini"
+            if hasattr(client, "generate_chat_completion"):
+                response = await client.generate_chat_completion(
+                    model=model,
+                    system_prompt=system_prompt,
+                    user_prompt=user_prompt,
+                    temperature=0.2,
+                    max_tokens=800,
+                    response_format="DEFAULT",
+                )
+                raw_text = response.get("text", "") if isinstance(response, dict) else str(response)
+            elif hasattr(client, "complete"):
+                raw_text = await client.complete(prompt=f"{system_prompt}\n\n{user_prompt}", max_tokens=800)
+            else:
+                return cls.synthesize_narrative(book, number, section, findings, is_geo=is_geo)
+
+            from app.core.inference.json_repair import repair_and_parse_json
+            parsed = repair_and_parse_json(raw_text)
+            if not parsed or not isinstance(parsed, dict):
+                return cls.synthesize_narrative(book, number, section, findings, is_geo=is_geo)
+
+            try:
+                from app.scoring.calibration import rewrite_outcome_overclaims
+            except ImportError:
+                from app.domain.scoring.calibration import rewrite_outcome_overclaims
+
+            exec_summary, _ = rewrite_outcome_overclaims(str(parsed.get("executive_summary", "")), "")
+            biz_risk, _ = rewrite_outcome_overclaims(str(parsed.get("business_risk", "")), "")
+            comm_opp, _ = rewrite_outcome_overclaims(str(parsed.get("commercial_opportunity", "")), "")
+            why_care, _ = rewrite_outcome_overclaims(str(parsed.get("why_reader_should_care", "")), "")
+            rec_action, _ = rewrite_outcome_overclaims(str(parsed.get("recommended_action", "")), "")
+
+            fallback_narrative = cls.synthesize_narrative(book, number, section, findings, is_geo=is_geo)
+
+            return {
+                "agent_id": agent_id,
+                "agent_name": agent_name,
+                "agent_role": agent_role,
+                "executive_summary": exec_summary or fallback_narrative["executive_summary"],
+                "diagnostic_overview": exec_summary or fallback_narrative["executive_summary"],
+                "overview": exec_summary or fallback_narrative["executive_summary"],
+                "business_risk": biz_risk or fallback_narrative["business_risk"],
+                "risk": biz_risk or fallback_narrative["business_risk"],
+                "commercial_opportunity": comm_opp or fallback_narrative["commercial_opportunity"],
+                "opp": comm_opp or fallback_narrative["commercial_opportunity"],
+                "why_reader_should_care": why_care or fallback_narrative.get("why_reader_should_care", ""),
+                "why_care": why_care or fallback_narrative.get("why_care", ""),
+                "recommended_action": rec_action or fallback_narrative.get("recommended_action", ""),
+                "priority_tier": str(parsed.get("priority_tier", fallback_narrative["priority_tier"])),
+                "technical_mechanics": str(parsed.get("technical_mechanics", fallback_narrative["technical_mechanics"])),
+                "mechanics": str(parsed.get("technical_mechanics", fallback_narrative["technical_mechanics"])),
+                "root_cause_analysis": str(parsed.get("root_cause_analysis", fallback_narrative["root_cause_analysis"])),
+                "root_cause": str(parsed.get("root_cause_analysis", fallback_narrative["root_cause_analysis"])),
+                "prescriptive_fix": str(parsed.get("prescriptive_fix", fallback_narrative["prescriptive_fix"])),
+                "remediation": str(parsed.get("prescriptive_fix", fallback_narrative["prescriptive_fix"])),
+                "verification_protocol": str(parsed.get("verification_protocol", fallback_narrative["verification_protocol"])),
+                "verification": str(parsed.get("verification_protocol", fallback_narrative["verification_protocol"])),
+            }
+        except Exception as e:
+            logger.warning("Chapter AI synthesis failed for Chapter %s (%s): %s", number, sec_title, e)
+            return cls.synthesize_narrative(book, number, section, findings, is_geo=is_geo)
+
+    @classmethod
     def synthesize_narrative(
         cls,
         book: Any,
@@ -196,9 +402,9 @@ class AgenticChapterSynthesizer:
     ) -> Dict[str, str]:
         """
         Dynamically synthesizes an evidence-grounded consultative review.
-        Eliminates 3,000+ lines of hardcoded canned paragraphs by computing
-        factual analysis directly from domain facts, finding severity distribution,
-        affected URLs, and empirical audit observations.
+        Directly answers non-technical questions for executive leadership while
+        providing grounded architecture details for engineering teams.
+        Eliminates robotic mad-libs strings in favor of domain-specialist reasoning.
         """
         agent_id, agent_name, agent_role = cls.get_geo_agent(number) if is_geo else cls.get_seo_agent(number)
         domain = str(_get(book, "domain", "audited domain"))
@@ -209,11 +415,11 @@ class AgenticChapterSynthesizer:
         # Filter real defects vs notes
         defects = [
             f for f in (findings or [])
-            if str(_get(f, "severity", "")).upper() in {"CRITICAL", "HIGH", "MEDIUM", "LOW"}
+            if _sev_str(f) in {"CRITICAL", "HIGH", "MEDIUM", "LOW"}
             and str(_get(f, "confidence_rubric", "")).upper() != "GUESSING"
         ]
-        crit_defects = [f for f in defects if str(_get(f, "severity", "")).upper() == "CRITICAL"]
-        high_defects = [f for f in defects if str(_get(f, "severity", "")).upper() == "HIGH"]
+        crit_defects = [f for f in defects if _sev_str(f) == "CRITICAL"]
+        high_defects = [f for f in defects if _sev_str(f) == "HIGH"]
 
         # Priority Tier
         if crit_defects:
@@ -236,20 +442,143 @@ class AgenticChapterSynthesizer:
                 if u and str(u) not in affected_url_samples:
                     affected_url_samples.append(str(u))
 
-        # Dynamic Executive Summary
+        # Domain classification for contextual intelligence
+        agent_lower = f"{agent_id} {agent_name} {sec_title}".lower()
+
+        # 1. Executive Summary (Non-Technical)
         if defects:
             exec_summary = (
                 f"The {agent_name} audit of {domain} identified {len(defects)} verified defect(s) "
-                f"({len(crit_defects)} critical, {len(high_defects)} high severity) across the representative sample of {crawled_count} URL(s). "
-                f"Primary attention is required on: {'; '.join(top_defect_titles[:2])}."
+                f"({len(crit_defects)} critical, {len(high_defects)} high severity) across {crawled_count} representative page(s). "
+                f"Primary executive attention is required on: {'; '.join(top_defect_titles[:2])}."
             )
         else:
             exec_summary = (
-                f"The {agent_name} inspection of {domain} confirmed zero defects across the evaluated sample of {crawled_count} URL(s) "
-                f"for {sec_title}. Baseline parameters adhere to target {('generative engine' if is_geo else 'search engine')} standards."
+                f"The {agent_name} inspection of {domain} confirmed zero defects across {crawled_count} evaluated page(s) "
+                f"for {sec_title}. Baseline infrastructure satisfies target {('generative engine' if is_geo else 'search engine')} standards."
             )
 
-        # Dynamic Mechanics Explanation
+        # 2. Business Risk (Non-Technical: Why does this matter to the bottom line?)
+        if "security" in agent_lower or "https" in agent_lower:
+            if defects:
+                risk = (
+                    "Missing security directives do not prevent search robots from indexing your pages, but leave client connections "
+                    "vulnerable to transport downgrade attacks and risk triggering browser security badges that undermine buyer trust."
+                )
+            else:
+                risk = "TLS transport integrity and protocol directives remain compliant, safeguarding visitor sessions."
+        elif "speed" in agent_lower or "experience" in agent_lower or "vitals" in agent_lower:
+            if defects:
+                risk = (
+                    "Elevated server response times or visual layout shifts frustrate mobile visitors, increasing bounce rates and "
+                    "dampening search visibility across Google mobile ranking algorithms."
+                )
+            else:
+                risk = "Server response and page stability metrics adhere to optimal user experience thresholds."
+        elif "canonical" in agent_lower or "redirect" in agent_lower or "crawl" in agent_lower or "index" in agent_lower:
+            if crit_defects:
+                risk = (
+                    f"Critical crawl or indexation blocker: {len(crit_defects)} defect(s) directly prevent search engine spiders "
+                    f"from discovering or correctly indexing commercial landing pages on {domain}."
+                )
+            elif defects:
+                risk = (
+                    "URL normalization and link routing discrepancies waste search engine crawl allocation and risk splitting "
+                    "ranking authority between duplicate page variants."
+                )
+            else:
+                risk = "Crawl topology and indexation paths operate smoothly without authority dilution."
+        elif "schema" in agent_lower or "structured" in agent_lower:
+            if defects:
+                risk = (
+                    "Missing or incomplete structured data prevents Google and AI engines from recognizing your organizational identity, "
+                    "disqualifying commercial URLs from rich search snippets (star ratings, product cards, FAQ boxes)."
+                )
+            else:
+                risk = "Entity relationships and structured markup cleanly communicate business attributes to search crawlers."
+        elif "cro" in agent_lower or "conversion" in agent_lower:
+            if defects:
+                risk = (
+                    "Ambiguous calls-to-action or friction in layout ergonomics allow high-intent visitors to leave without taking action, "
+                    "suppressing lead generation from current traffic."
+                )
+            else:
+                risk = "Conversion pathways and call-to-action hierarchy guide prospective customers effectively."
+        elif "geo" in agent_lower or "aeo" in agent_lower or "ai_search" in agent_lower:
+            if defects:
+                risk = (
+                    "Absence of concise, self-contained definition blocks prevents conversational AI assistants (ChatGPT, Perplexity) "
+                    "from extracting and citing your brand during prospective buyer inquiries."
+                )
+            else:
+                risk = "Content architecture allows generative engines to extract authoritative brand citations cleanly."
+        elif defects:
+            risk = (
+                f"Unresolved discrepancies in {sec_title} impair overall technical health and create friction for visitors "
+                f"and automated evaluation systems."
+            )
+        else:
+            risk = "Maintaining current operational configuration poses negligible commercial risk under existing traffic conditions."
+
+        # 3. Commercial Opportunity (Non-Technical: What growth does fixing this unlock?)
+        if defects:
+            if "cro" in agent_lower or "conversion" in agent_lower:
+                opp = (
+                    f"Clarifying value propositions and calls-to-action immediately lifts visitor conversion velocity, "
+                    f"generating more inquiries from existing organic and paid traffic across {domain}."
+                )
+            elif "geo" in agent_lower or "aeo" in agent_lower:
+                opp = (
+                    f"Structuring machine-quotable factual content positions {domain} to capture high-intent recommendations "
+                    f"across modern conversational AI discovery tools."
+                )
+            elif "security" in agent_lower:
+                opp = (
+                    f"Enforcing strict transport encryption builds corporate buyer confidence and satisfies vendor compliance reviews."
+                )
+            else:
+                opp = (
+                    f"Resolving the {len(defects)} recorded issue(s) restores full search engine compliance, "
+                    f"protecting organic visibility and capturing high-intent search demand across {domain}."
+                )
+        else:
+            opp = (
+                f"With baseline technical hygiene established for {sec_title}, commercial focus can advance toward "
+                f"topical authority expansion and aggressive market capture."
+            )
+
+        # 4. Why Reader Should Care (Non-Technical Executive Takeaway)
+        if defects:
+            why_care = (
+                f"Addressing these {len(defects)} defect(s) protects customer trust, prevents search crawler waste, "
+                f"and ensures prospective buyers find and convert on {domain}."
+            )
+        else:
+            why_care = (
+                f"Compliant infrastructure in {sec_title} ensures enterprise marketing investments are not undermined "
+                f"by underlying technical leaks."
+            )
+
+        # 5. Recommended Action (Non-Technical Executive Strategic Direction)
+        if crit_defects:
+            recommended_action = (
+                f"Prioritize immediate engineering sprint allocation to resolve the {len(crit_defects)} critical defect(s) "
+                f"blocking optimal page accessibility."
+            )
+        elif high_defects:
+            recommended_action = (
+                f"Schedule remediation of high-priority findings in the upcoming sprint cycle to prevent search authority loss."
+            )
+        elif defects:
+            recommended_action = (
+                f"Incorporate the {len(defects)} tactical optimization(s) into regular template maintenance workflows."
+            )
+        else:
+            recommended_action = (
+                "Maintain continuous monitoring surveillance to prevent configuration regressions in future deployments."
+            )
+
+        # Technical Lens: Mechanics Explanation
         discipline = "Generative Engine Optimization (GEO)" if is_geo else "Technical Search Engine Optimization (SEO)"
         mechanics = (
             f"{agent_role} enforces strict {discipline} standards across evaluated assets. "
@@ -257,7 +586,7 @@ class AgenticChapterSynthesizer:
             f"Zero speculative metrics are assumed; unmeasured dimensions remain explicitly designated as DATA_UNAVAILABLE."
         )
 
-        # Dynamic Root Cause Analysis
+        # Technical Lens: Root Cause Analysis
         if defects:
             causes = []
             for f in defects[:3]:
@@ -274,38 +603,7 @@ class AgenticChapterSynthesizer:
         else:
             root_cause = "No structural failure or architectural defect was recorded in the baseline sample."
 
-        # Dynamic Risk Formulation
-        if crit_defects:
-            risk = (
-                f"Critical blocker: {len(crit_defects)} high-severity defect(s) threaten indexation integrity, "
-                f"risking traffic loss and commercial visibility suppression for {domain}."
-            )
-        elif high_defects:
-            risk = (
-                f"Elevated business risk: Unresolved issues in {sec_title} dilute organic prominence and "
-                f"allow competing alternatives to capture commercial search inquiries."
-            )
-        elif defects:
-            risk = (
-                f"Tactical friction: Minor defects in {sec_title} impede full crawl efficiency or rich result eligibility, "
-                f"preventing optimal performance across target landing pages."
-            )
-        else:
-            risk = "Maintaining current configuration poses negligible organic search risk under existing traffic conditions."
-
-        # Dynamic Commercial Opportunity
-        if defects:
-            opp = (
-                f"Resolving the {len(defects)} recorded issue(s) restores full architectural compliance, "
-                f"protecting search visibility and capturing high-intent organic demand across {domain}."
-            )
-        else:
-            opp = (
-                f"Expanding depth and authority on clean templates enables {domain} to advance competitive share "
-                f"and capture new long-tail commercial search reach."
-            )
-
-        # Dynamic Prescriptive Fix Recipes
+        # Technical Lens: Prescriptive Fix
         if defects:
             recs = []
             for f in defects[:2]:
@@ -322,7 +620,7 @@ class AgenticChapterSynthesizer:
         else:
             remediation = "No remedial code changes required. Maintain continuous monitoring against regression."
 
-        # Dynamic Verification Protocol
+        # Technical Lens: Verification Protocol
         if defects:
             verification = (
                 f"Execute regression re-crawl targeting affected URLs ({len(affected_url_samples)} identified). "
@@ -342,6 +640,9 @@ class AgenticChapterSynthesizer:
             "risk": risk,
             "commercial_opportunity": opp,
             "opp": opp,
+            "why_reader_should_care": why_care,
+            "why_care": why_care,
+            "recommended_action": recommended_action,
             "priority_tier": p_tier,
             "technical_mechanics": mechanics,
             "mechanics": mechanics,

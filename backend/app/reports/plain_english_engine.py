@@ -126,18 +126,141 @@ class SpecialistAuditorAgent:
         """Contextual synthesis of finding in plain, non-technical English."""
         clean_title = title.rstrip(".")
         desc = description.strip() if description else ""
-        if desc and desc.lower() != clean_title.lower() and len(desc) > 15:
+        if desc and desc.lower() != clean_title.lower() and len(desc) > 20:
             return desc
-        return f"Inspection identified a discrepancy regarding '{clean_title}'. Resolving this ensures standard compliance for {self.domain.lower()} across affected URLs."
+
+        domain = self.domain.upper()
+        if domain == "CANONICAL":
+            return (
+                "Search engines require a single definitive URL address for each page. Discrepancies in canonical tags "
+                "cause search engines to split ranking authority between duplicate versions, diluting page search prominence."
+            )
+        if domain == "REDIRECT":
+            return (
+                "A link redirects through intermediate hops or points to a non-existent page, causing mobile visitors and "
+                "search crawlers to encounter delays or reach dead ends."
+            )
+        if domain == "CRAWL":
+            return (
+                f"Search engine crawlers face friction discovering or crawling pages related to '{clean_title}'. "
+                "Resolving this ensures all valuable commercial URLs are efficiently discovered and indexed."
+            )
+        if domain == "SCHEMA":
+            return (
+                "Structured data (JSON-LD) is missing or malformed, preventing search engines and AI tools from recognizing "
+                "key business entities, products, and rich snippet attributes."
+            )
+        if domain == "SPEED":
+            return (
+                "Pages experience elevated server latency (TTFB) or layout shifts during loading, degrading visitor responsiveness "
+                "and mobile user experience."
+            )
+        if domain == "CONTENT":
+            return (
+                f"Heading outline or content depth regarding '{clean_title}' lacks clear topical hierarchy, "
+                "making it harder for search engines and readers to understand page themes."
+            )
+        if domain in ("AEO", "GEO"):
+            return (
+                "Content lacks concise, self-contained definition passages, reducing extractability for conversational AI "
+                "search engines (ChatGPT, Perplexity, Claude)."
+            )
+        if domain == "CRO":
+            return (
+                "Calls-to-action or value propositions are ambiguous or poorly positioned, causing prospective customers to "
+                "drop out of the conversion funnel."
+            )
+        if domain == "SECURITY":
+            return (
+                "Web server responses lack recommended HTTP security headers (such as HSTS or Content-Security-Policy), "
+                "which safeguard transport integrity and protect user sessions."
+            )
+        if domain == "COMPETITOR":
+            return (
+                f"Market benchmark identified an organic reach or citation discrepancy regarding '{clean_title}' relative to peers."
+            )
+
+        return f"Technical inspection identified an issue with '{clean_title}'. Resolving this ensures standard compliance and improves digital performance across affected URLs."
 
     def business_impact(self, title: str, description: str, severity: str) -> str:
         """Derives the commercial and search consequence based on the finding context."""
         clean_title = title.rstrip(".")
+        domain = self.domain.upper()
+
+        if domain == "CANONICAL":
+            return "Dilutes link equity across duplicate URLs and confuses search engines about which page should rank for commercial queries."
+        if domain == "REDIRECT":
+            return "Frustrates prospective buyers with broken links or slow multi-hop redirects while wasting search engine crawl budgets."
+        if domain == "CRAWL":
+            return "Blocks or delays search engine crawlers from discovering and indexing valuable commercial content across your domain."
+        if domain == "SCHEMA":
+            return "Disqualifies commercial pages from Google Rich Results (star ratings, FAQ accordions) and weakens brand knowledge graph recognition."
+        if domain == "SPEED":
+            return "Slow page speeds and visual instability increase visitor bounce rates, reduce conversion rates, and negatively impact mobile search rankings."
+        if domain == "CONTENT":
+            return "Weak heading structure and content gaps allow competing alternatives to outrank your key service pages for primary search terms."
+        if domain in ("AEO", "GEO"):
+            return "Reduces brand authority in conversational AI search tools, causing AI assistants to recommend competitor alternatives to prospective buyers."
+        if domain == "CRO":
+            return "Lowers conversion rates from existing marketing traffic, reducing inquiries and sales velocity without increasing ad spend."
+        if domain == "SECURITY":
+            return "Substandard transport headers risk triggering browser security warnings, reducing enterprise buyer trust during vendor evaluations."
+        if domain == "COMPETITOR":
+            return "Unaddressed competitor gaps allow category rivals to capture search market share and organic customer demand."
+
         return f"Unresolved defect in '{clean_title}' affects {self.default_stakeholders}, impairing technical health and organic visibility."
 
     def who_is_affected(self, title: str, description: str) -> str:
         """Classifies the primary audience and stakeholders affected."""
+        domain = self.domain.upper()
+        if domain == "CANONICAL":
+            return "Search Spiders (Googlebot, Bingbot) & Organic Search Reach"
+        if domain == "REDIRECT":
+            return "Visitors clicking navigation links and search engine crawlers"
+        if domain == "CRAWL":
+            return "Search Spiders (Googlebot, Bingbot) & Organic Search Reach"
+        if domain == "SCHEMA":
+            return "Search Engines, Knowledge Graphs & Brand Disambiguation"
+        if domain == "SPEED":
+            return "Mobile Visitors, Search Ranking Spiders & Infrastructure Teams"
+        if domain == "CONTENT":
+            return "Prospective Customers & Organic Search Discoverability"
+        if domain in ("AEO", "GEO"):
+            return "AI Answer Engines (ChatGPT, Perplexity, Gemini) & Modern Buyers"
+        if domain == "CRO":
+            return "Prospective Customers & Sales Pipeline"
+        if domain == "SECURITY":
+            return "Business Owners (Reputation & Risk) and Enterprise Buyers"
+        if domain == "COMPETITOR":
+            return "Business Owners & Commercial Leadership"
+
         return self.default_stakeholders
+
+    def recommended_action(self, title: str) -> str:
+        """Prescribes a non-technical strategic remediation action."""
+        domain = self.domain.upper()
+        if domain == "CANONICAL":
+            return "Ensure each canonical tag points to the single authoritative URL and returns HTTP 200 without redirect hops."
+        if domain == "REDIRECT":
+            return "Update internal links to point directly to final destination URLs, removing redirect chains and fixing broken 404 links."
+        if domain == "CRAWL":
+            return "Review crawler directives and XML sitemaps to ensure all valuable commercial URLs are accessible to search bots."
+        if domain == "SCHEMA":
+            return "Deploy validated JSON-LD structured data markup for Organization and Product/Service entities."
+        if domain == "SPEED":
+            return "Enable CDN edge caching, optimize server response (TTFB), and defer non-critical render-blocking assets."
+        if domain == "CONTENT":
+            return "Structure key landing pages with one descriptive H1 heading and logical H2/H3 subheadings answering user intent."
+        if domain in ("AEO", "GEO"):
+            return "Add concise, factual definition blocks and direct answer summaries to core service and product pages."
+        if domain == "CRO":
+            return "Position clear, prominent call-to-action buttons above the fold and simplify form fields on mobile viewports."
+        if domain == "SECURITY":
+            return "Add missing HTTP security headers (Strict-Transport-Security, X-Content-Type-Options) in web server or CDN configuration."
+        if domain == "COMPETITOR":
+            return "Target identified competitor keyword and content gaps with authoritative landing pages."
+
+        return f"Apply the recommended configuration or code adjustment for '{title}' across affected templates."
 
     def what_was_checked(self, title: str, subcategory: str, rule_id: Optional[str]) -> str:
         """Articulates the technical inspection protocol executed."""
@@ -558,7 +681,7 @@ class PlainEnglishEngine:
             or _get_val(finding, "recommended_solution")
             or _get_val(finding, "recommendation")
             or _get_val(finding, "suggested_fix")
-            or "Implement the recommended fix across all affected templates."
+            or agent.recommended_action(str(title))
         )
 
         # Developer instructions (separated from plain-English explanation)
@@ -964,6 +1087,141 @@ def generate_section_explanation(
         sample_size=pages_crawled,
         pages_affected=0,
     )
+
+
+async def generate_section_explanation_ai(
+    section_id: str,
+    section_title: str,
+    report: Any = None,
+    findings: Optional[Sequence[Any]] = None,
+    domain: Optional[str] = None,
+    client: Optional[Any] = None,
+    **kwargs: Any,
+) -> SectionBusinessExplanation:
+    """
+    Asynchronously generates an AI-powered SectionBusinessExplanation using LLMClient.
+    Directly answers executive non-technical questions (plain English subject,
+    why the reader should care, key observation, and recommended action).
+    Falls back to generate_section_explanation when offline or on error.
+    """
+    base_explanation = generate_section_explanation(
+        section_id=section_id,
+        section_title=section_title,
+        report=report,
+        findings=findings,
+        **kwargs,
+    )
+
+    # If section was not tested or missing connector, respect fail-closed governance
+    if base_explanation.evidence_status == "NOT_TESTED":
+        return base_explanation
+
+    if client is None:
+        try:
+            from app.core.inference.llm_client import LLMClient
+            client = LLMClient()
+        except Exception as e:
+            logger.debug("LLMClient unavailable for section explanation: %s", e)
+            client = None
+
+    if client is None or not getattr(client, "available", True):
+        return base_explanation
+
+    agent = AgenticSpecialistRegistry.dispatch_agent_for_section(section_id, section_title)
+    section_findings = list(findings or [])
+    top_defects = []
+    for f in section_findings[:4]:
+        t = str(_get_val(f, "title") or _get_val(f, "finding_title") or "").strip()
+        sev = str(_get_val(f, "severity") or "MEDIUM").upper()
+        top_defects.append(f"[{sev}] {t}")
+
+    system_prompt = (
+        f"You are {agent.name}, a specialist auditor explaining a section of a website audit to business executives.\n"
+        "Explain everything in simple, clear, non-technical plain English.\n"
+        "Requirements:\n"
+        "1. plain_english_subject: 1 sentence explaining what this section evaluates without jargon.\n"
+        "2. key_result: 1-2 sentences summarizing the empirical observation (defects found or clean pass).\n"
+        "3. why_reader_should_care: 1-2 sentences explaining why this matters to the business bottom line, buyer conversion, or search reach.\n"
+        "4. recommended_action: 1-2 sentences explaining the high-level business action to take.\n"
+        "Never guarantee rankings or traffic. Output JSON only matching the schema."
+    )
+
+    user_prompt = (
+        f"Website: {domain or 'audited website'}\n"
+        f"Section: {section_title} ({section_id})\n"
+        f"Defects Identified: {len(section_findings)}\n"
+        f"Sample Details: {', '.join(top_defects) if top_defects else 'Clean evaluation'}\n\n"
+        'Return JSON: {"plain_english_subject": "...", "key_result": "...", "why_reader_should_care": "...", "recommended_action": "..."}'
+    )
+
+    try:
+        model = getattr(client, "model", None) or "gpt-4o-mini"
+        if hasattr(client, "generate_chat_completion"):
+            resp = await client.generate_chat_completion(
+                model=model,
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
+                temperature=0.2,
+                max_tokens=500,
+                response_format="DEFAULT",
+            )
+            raw_text = resp.get("text", "") if isinstance(resp, dict) else str(resp)
+        elif hasattr(client, "complete"):
+            raw_text = await client.complete(prompt=f"{system_prompt}\n\n{user_prompt}", max_tokens=500)
+        else:
+            return base_explanation
+
+        from app.core.inference.json_repair import repair_and_parse_json
+        parsed = repair_and_parse_json(raw_text)
+        if not parsed or not isinstance(parsed, dict):
+            return base_explanation
+
+        try:
+            from app.scoring.calibration import rewrite_outcome_overclaims
+        except ImportError:
+            from app.domain.scoring.calibration import rewrite_outcome_overclaims
+
+        subj = str(parsed.get("plain_english_subject", "")).strip()
+        key_res = str(parsed.get("key_result", "")).strip()
+        why_care = str(parsed.get("why_reader_should_care", "")).strip()
+        rec_act = str(parsed.get("recommended_action", "")).strip()
+
+        why_care, _ = rewrite_outcome_overclaims(why_care, base_explanation.why_reader_should_care)
+
+        if subj:
+            base_explanation.plain_english_subject = subj
+        if key_res:
+            base_explanation.key_result = key_res
+        if why_care:
+            base_explanation.why_reader_should_care = why_care
+        if rec_act:
+            base_explanation.recommended_action = rec_act
+
+        return base_explanation
+    except Exception as e:
+        logger.warning("generate_section_explanation_ai failed for %s: %s", section_id, e)
+        return base_explanation
+
+
+async def batch_enrich_report_agentic(
+    report: Any,
+    domain: Optional[str] = None,
+    client: Optional[Any] = None,
+) -> Any:
+    """
+    Asynchronously enriches all findings in a report using AI calibration
+    and explanation before report rendering.
+    Directly addresses non-technical questions across findings.
+    """
+    try:
+        from app.scoring.calibration import batch_calibrate_and_explain_findings_ai
+        findings = list(getattr(report, "findings", []) or [])
+        if findings:
+            await batch_calibrate_and_explain_findings_ai(findings, domain=domain, client=client)
+    except Exception as e:
+        logger.debug("batch_enrich_report_agentic finding calibration fallback: %s", e)
+
+    return report
 
 
 # ==============================================================================

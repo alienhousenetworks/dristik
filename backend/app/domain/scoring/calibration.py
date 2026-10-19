@@ -531,13 +531,14 @@ async def batch_calibrate_and_explain_findings_ai(
     findings: Sequence[Finding],
     domain: Optional[str] = None,
     concurrency_limit: int = 5,
+    client: Optional[Any] = None,
 ) -> List[Finding]:
     """Calibrate and explain multiple findings concurrently with bounded concurrency."""
     sem = asyncio.Semaphore(concurrency_limit)
 
     async def _cal(f: Finding) -> Finding:
         async with sem:
-            return await calibrate_and_explain_finding_ai(f, domain=domain)
+            return await calibrate_and_explain_finding_ai(f, domain=domain, client=client)
 
     return list(await asyncio.gather(*[_cal(f) for f in findings]))
 

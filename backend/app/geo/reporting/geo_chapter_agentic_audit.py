@@ -39,6 +39,27 @@ def get_chapter_agent(number: str) -> Tuple[str, str, str]:
     return AgenticChapterSynthesizer.get_geo_agent(number)
 
 
+async def generate_chapter_narrative_ai(
+    book: Any,
+    number: str,
+    section: Dict[str, Any],
+    findings: List[Any],
+    client: Optional[Any] = None,
+) -> Dict[str, str]:
+    """
+    Asynchronously generates an in-depth, consultative agent review for the chapter
+    using LLM-powered domain agent intelligence to answer non-technical questions.
+    """
+    return await AgenticChapterSynthesizer.synthesize_chapter_narrative_ai(
+        book=book,
+        number=number,
+        section=section,
+        findings=findings,
+        is_geo=True,
+        client=client,
+    )
+
+
 def generate_chapter_narrative(
     book: Any,
     number: str,

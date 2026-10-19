@@ -91,3 +91,4 @@ MAX_CRAWL_PAGES=5
 - **Answerability Simulation**: Simulates commercial query answering across ChatGPT / Perplexity / Gemini perspectives.
 - **Drop-in Code Fixes**: Direct copy-paste JSON-LD Organization/Product schemas, OpenGraph meta tags, and robots.txt directives inside the interactive Evidence Drawer.
 # dristik
+# dristik
