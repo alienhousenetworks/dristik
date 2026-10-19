@@ -14,11 +14,18 @@ class ClaimRegistry:
         self._counter: int = 0
         self._contra_counter: int = 0
 
+    def add_claim(self, claim: Claim) -> Claim:
+        if not getattr(claim, "id", None):
+            self._counter += 1
+            claim.id = f"claim_{self._counter:03d}"
+        self._claims[claim.id] = claim
+        return claim
+
     def register_claim(
         self,
-        agent_id: str,
-        statement: str,
-        category: Category,
+        agent_id: Any,
+        statement: Optional[str] = None,
+        category: Optional[Category] = None,
         severity: Severity = Severity.MEDIUM,
         claim_type: ClaimType = ClaimType.FACT,
         evidence_refs: Optional[List[str]] = None,
@@ -30,6 +37,13 @@ class ClaimRegistry:
         observation_type: Optional[Any] = None,
         provenance_hash: Optional[str] = None
     ) -> Claim:
+        if isinstance(agent_id, Claim):
+            return self.add_claim(agent_id)
+        if isinstance(agent_id, dict):
+            try:
+                return self.add_claim(Claim(**agent_id))
+            except Exception:
+                pass
         self._counter += 1
         claim_id = f"claim_{self._counter:03d}"
         

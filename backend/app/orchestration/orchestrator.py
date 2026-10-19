@@ -1890,7 +1890,7 @@ class AnalysisOrchestrator:
             persisted_claims = self.repository.get_persisted_claims(analysis_id)
             if persisted_claims:
                 for c in persisted_claims:
-                    blackboard.claim_registry.register_claim(c)
+                    blackboard.claim_registry.add_claim(c)
 
         run = self.runs.get(analysis_id)
         if not run:
@@ -1951,7 +1951,7 @@ class AnalysisOrchestrator:
             for ev in self.repository.get_persisted_evidence_items(analysis_id):
                 blackboard.evidence_store.add_observation(ev.analyzer, ev.text or ev.value, source=ev.source_type, url=ev.url, selector=ev.selector)
             for c in self.repository.get_persisted_claims(analysis_id):
-                blackboard.claim_registry.register_claim(c)
+                blackboard.claim_registry.add_claim(c)
 
         controller.mark_node_status(node_id, GraphNodeStatus.RUNNING)
         controller.log_activity(node_id, "running", "node.manual_run", f"Running step '{node_id}' independently...")
