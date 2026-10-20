@@ -458,6 +458,15 @@ class AgenticSpecialistRegistry:
         blob = f"{category} {subcategory} {rule_id or ''} {title} {description}".lower()
 
         # Domain classification
+        cat_lower = str(category).lower()
+        subcat_lower = str(subcategory).lower()
+
+        # Prioritize Content and Heading findings
+        if any(k in blob for k in ("h1", "heading", "outline", "title tag", "meta description", "alt text", "missing alt", "thin copy", "word count")) or cat_lower in ("content", "on_page_seo"):
+            # Check if canonical or redirect specific
+            if not any(k in blob for k in ("canonical", "redirect", "301", "302", "404")):
+                return cls.AGENTS["content.depth.v3"]
+
         if any(k in blob for k in ("canonical", "self-referencing", "duplicate url", "cross-domain")):
             return cls.AGENTS["seo.canonical.v3"]
         if any(k in blob for k in ("redirect", "301", "302", "404", "broken link", "loop", "hop")):
@@ -470,27 +479,28 @@ class AgenticSpecialistRegistry:
             return cls.AGENTS["aeo.direct_answer_box.v3"]
         if any(k in blob for k in ("geo", "llms.txt", "gptbot", "extractability", "generative")):
             return cls.AGENTS["geo.extractability.v3"]
-        if any(k in blob for k in ("conversion", "cro", "cta", "form", "checkout", "mobile tap", "contrast", "friction")):
+        if any(k in blob for k in ("conversion", "cro", "cta", "form", "checkout", "mobile tap", "contrast", "friction", "pricing", "persona")):
             return cls.AGENTS["ux.conversion.v3"]
-        if any(k in blob for k in ("security", "https", "hsts", "csp", "ssl", "tls", "headers", "certificate")):
+        if any(k in blob for k in ("strict-transport-security", "hsts", "content-security-policy", "csp", "x-frame-options", "x-content-type", "ssl certificate", "tls encryption", "mixed content", "security header")):
             return cls.AGENTS["trust.security.v3"]
         if any(k in blob for k in ("crawl", "index", "robots", "sitemap", "noindex", "status", "bot")):
             return cls.AGENTS["seo.crawl.v3"]
-        if any(k in blob for k in ("h1", "heading", "outline", "title tag", "meta description", "alt", "image")):
-            return cls.AGENTS["content.depth.v3"]
-        if any(k in blob for k in ("competitor", "benchmark", "overlap", "displacement")):
+        if any(k in blob for k in ("competitor", "benchmark", "overlap", "displacement", "peer set")):
             return cls.AGENTS["competitor.organic.v3"]
 
         # Default fallback by high-level category
-        cat_lower = str(category).lower()
         if "seo" in cat_lower or "crawl" in cat_lower:
             return cls.AGENTS["seo.crawl.v3"]
+        if "content" in cat_lower or "on_page" in cat_lower:
+            return cls.AGENTS["content.depth.v3"]
         if "geo" in cat_lower:
             return cls.AGENTS["geo.extractability.v3"]
         if "aeo" in cat_lower:
             return cls.AGENTS["aeo.direct_answer_box.v3"]
         if "cro" in cat_lower or "ux" in cat_lower:
             return cls.AGENTS["ux.conversion.v3"]
+        if "competitor" in cat_lower or "competitive" in cat_lower:
+            return cls.AGENTS["competitor.organic.v3"]
 
         return cls.AGENTS["strategy.executive.v3"]
 
@@ -648,6 +658,14 @@ class PlainEnglishEngine:
             _get_val(finding, "plain_english_summary")
             or _get_val(finding, "what_is_this")
         )
+        # Sanitize if a generic security explanation was mistakenly persisted on a non-security finding
+        if plain_english_summary and any(phrase in str(plain_english_summary) for phrase in (
+            "Modern browsers display warnings",
+            "mandatory security certificates",
+            "encryption rules",
+        )) and agent.domain != "SECURITY":
+            plain_english_summary = None
+
         if not plain_english_summary:
             desc_val = _get_val(finding, "description") or ""
             if desc_val and desc_val.strip() and desc_val.strip().lower() != str(title).strip().lower():
@@ -663,15 +681,22 @@ class PlainEnglishEngine:
             or _get_val(finding, "business_context")
             or agent.business_impact(str(title), str(observed_result), sev_str)
         )
+        if business_impact and any(phrase in str(business_impact) for phrase in (
+            "Modern browsers display warnings",
+            "mandatory security certificates",
+            "encryption rules",
+            "browser security warnings",
+        )) and agent.domain != "SECURITY":
+            business_impact = agent.business_impact(str(title), str(observed_result), sev_str)
 
         # What Dristik checked
         what_was_checked = _get_val(finding, "what_was_checked")
-        if not what_was_checked:
+        if not what_was_checked or ("Security, HTTPS & Protocol Integrity Specialist" in str(what_was_checked) and agent.domain != "SECURITY"):
             what_was_checked = agent.what_was_checked(str(title), str(subcategory), rule_id)
 
         # Who is affected
         who_affected = _get_val(finding, "who_affected")
-        if not who_affected:
+        if not who_affected or ("Reputation & Risk" in str(who_affected) and agent.domain != "SECURITY"):
             who_affected = agent.who_is_affected(str(title), str(observed_result))
 
         # Recommended action (In simple English: How to change)
@@ -710,10 +735,16 @@ class PlainEnglishEngine:
             ver_method = _get_val(finding, "verification_method")
             verification_steps = agent.verification_steps(str(title), val_crit, ver_method)
 
-        # Evidence references (Full Layer 1 Machine Observations)
+        # Evidence references (Full Layer 1 Machine Observations, strictly filtered for semantic compatibility)
+        from app.seo.audit.evidence.compatibility_gate import EvidenceCompatibilityGate
         raw_evidence = _get_val(finding, "evidence") or []
+        compatible_evidence = [
+            ev for ev in raw_evidence
+            if EvidenceCompatibilityGate.is_evidence_compatible(str(title), str(category), ev)
+        ]
+
         evidence_list: List[Dict[str, Any]] = []
-        for e_idx, ev in enumerate(raw_evidence):
+        for e_idx, ev in enumerate(compatible_evidence):
             e_id = _get_val(ev, "evidence_id") or _get_val(ev, "id") or f"EV-{raw_id}-{e_idx + 1}"
             e_source = _get_val(ev, "source") or _get_val(ev, "test_method") or "crawl_html_dom"
             e_url = _get_val(ev, "url") or (affected_urls[0] if affected_urls else "")
@@ -736,6 +767,21 @@ class PlainEnglishEngine:
                 "observation": str(e_obs),
                 "scope": str(e_scope),
                 "timestamp": str(e_ts),
+            })
+
+        if not evidence_list:
+            evidence_list.append({
+                "id": f"EV-{raw_id}-01",
+                "url": str(affected_urls[0] if affected_urls else ""),
+                "element": str(agent.domain.lower()),
+                "observed_value": str(observed_result),
+                "expected_condition": "Conform to published SEO specification",
+                "test_method": "deterministic_inspection",
+                "snippet": str(observed_result)[:120],
+                "source": "crawl_inspection",
+                "observation": str(observed_result),
+                "scope": scope_status,
+                "timestamp": "Audit crawl execution",
             })
 
         # Confidence & Limitations
@@ -844,24 +890,32 @@ class PlainEnglishEngine:
         # Concrete Verification Command (Priority 6 / Validation)
         verification_cmd = _get_val(finding, "verification_command")
         if not verification_cmd:
-            primary_url = affected_urls[0] if affected_urls else "https://example.com/"
+            primary_url = affected_urls[0] if affected_urls else None
             title_l = title.lower()
             if "canonical" in title_l:
-                verification_cmd = f"curl -sI -L '{primary_url}' | grep -i 'canonical'"
+                verification_cmd = f"curl -sI -L '{primary_url}' | grep -i 'canonical'" if primary_url else "Verify canonical target URL returns HTTP 200 without redirect loops."
             elif "hsts" in title_l or "security" in title_l:
-                verification_cmd = f"curl -sI '{primary_url}' | grep -i 'Strict-Transport-Security'"
+                verification_cmd = f"curl -sI '{primary_url}' | grep -i 'Strict-Transport-Security'" if primary_url else "Inspect HTTPS response headers for Strict-Transport-Security."
             elif "heading" in title_l or "h1" in title_l:
-                verification_cmd = f"curl -s '{primary_url}' | grep -i '<h1'"
+                verification_cmd = f"curl -sL '{primary_url}' | grep -ioE '<h[1-6][^>]*>.*?</h[1-6]>'" if primary_url else "Audit rendered DOM heading hierarchy."
             elif "alt" in title_l:
-                verification_cmd = f"curl -s '{primary_url}' | grep -i '<img' | grep -v 'alt='"
+                verification_cmd = f"curl -sL '{primary_url}' | grep -ioE '<img[^>]*>' | grep -v 'alt='" if primary_url else "Re-crawl and inspect all img elements for valid alt text attributes."
+            elif "meta" in title_l or "title" in title_l:
+                verification_cmd = f"curl -sL '{primary_url}' | grep -iE '<(title|meta name=\"description\")'" if primary_url else "Inspect document head title and meta tags."
+            elif "thin" in title_l or "word" in title_l:
+                verification_cmd = f"Extract body text nodes from '{primary_url}' and calculate informative word count." if primary_url else "Audit page body content volume and topical completeness."
             elif "404" in title_l or "redirect" in title_l:
-                verification_cmd = f"curl -sIL -o /dev/null -w '%{{http_code}} -> %{{url_effective}}\\n' '{primary_url}'"
+                verification_cmd = f"curl -sIL -o /dev/null -w '%{{http_code}} -> %{{url_effective}}\\n' '{primary_url}'" if primary_url else "Inspect link destination HTTP status codes."
             elif "robots" in title_l:
-                verification_cmd = f"curl -s '{primary_url.rstrip('/')}/robots.txt'"
+                verification_cmd = f"curl -s '{primary_url.rstrip('/')}/robots.txt'" if primary_url else "Fetch and parse /robots.txt directives."
             elif "sitemap" in title_l:
-                verification_cmd = f"curl -sI '{primary_url.rstrip('/')}/sitemap.xml'"
+                verification_cmd = f"curl -sI '{primary_url.rstrip('/')}/sitemap.xml'" if primary_url else "Verify /sitemap.xml accessibility and HTTP 200 response."
+            elif "ttfb" in title_l or "speed" in title_l or "latency" in title_l:
+                verification_cmd = f"curl -s -o /dev/null -w 'TTFB: %{{time_starttransfer}}s\\n' '{primary_url}'" if primary_url else "Execute latency benchmarks under controlled test conditions."
+            elif "schema" in title_l or "json-ld" in title_l:
+                verification_cmd = f"curl -sL '{primary_url}' | grep -i 'application/ld+json'" if primary_url else "Validate JSON-LD structured data syntax and Schema.org properties."
             else:
-                verification_cmd = f"curl -sI '{primary_url}'"
+                verification_cmd = f"Execute automated verification retest for '{title}' on {primary_url}" if primary_url else f"Automated inspection and retest for '{title}'."
 
         root_cause_val = _get_val(finding, "root_cause") or _get_val(finding, "causal_mechanism")
         code_val = _get_val(finding, "relevant_code_or_configuration_example")

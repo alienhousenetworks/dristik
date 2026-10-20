@@ -296,7 +296,11 @@ class FindingDeduplicator:
                     )
                 )
 
+                from app.seo.audit.evidence.compatibility_gate import EvidenceCompatibilityGate
+
                 for ev in (f.evidence or []):
+                    if not EvidenceCompatibilityGate.is_evidence_compatible(f.title, str(f.category), ev):
+                        continue
                     ev_key = f"{ev.evidence_id or ''}:{ev.url or ''}:{ev.selector or ''}:{ev.value or ''}:{ev.snippet or ''}"
                     if ev_key not in seen_ev_selectors:
                         seen_ev_selectors.add(ev_key)
@@ -371,7 +375,9 @@ class FindingDeduplicator:
                 existing = seen_titles[clean_title]
                 if f.title not in existing.sub_observations:
                     existing.sub_observations.append(f.title)
-                primary_ev = f.evidence[0] if (f.evidence and len(f.evidence) > 0) else None
+                from app.seo.audit.evidence.compatibility_gate import EvidenceCompatibilityGate
+                comp_evs = [ev for ev in (f.evidence or []) if EvidenceCompatibilityGate.is_evidence_compatible(f.title, str(f.category), ev)]
+                primary_ev = comp_evs[0] if comp_evs else None
                 existing.detailed_observations.append(
                     SubObservation(
                         observation_id=f.finding_id,
@@ -396,7 +402,9 @@ class FindingDeduplicator:
             if not f.sub_observations:
                 f.sub_observations = [f.title]
             if not f.detailed_observations:
-                primary_ev = f.evidence[0] if (f.evidence and len(f.evidence) > 0) else None
+                from app.seo.audit.evidence.compatibility_gate import EvidenceCompatibilityGate
+                comp_evs = [ev for ev in (f.evidence or []) if EvidenceCompatibilityGate.is_evidence_compatible(f.title, str(f.category), ev)]
+                primary_ev = comp_evs[0] if comp_evs else None
                 f.detailed_observations = [
                     SubObservation(
                         observation_id=f.finding_id,

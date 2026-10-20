@@ -251,7 +251,7 @@ class TestTwoPassPaginationAndPdf:
         mock_pdf_pass2 = b"%PDF-1.4 final rendered publication pdf bytes" + (b" " * 150)
         mock_render_fn.side_effect = [mock_pdf_pass1, mock_pdf_pass2]
 
-        pdf_result = await renderer.render_book_pdf(report, render_fn=mock_render_fn)
+        pdf_result = await renderer.render_book_pdf(report, render_fn=mock_render_fn, two_pass=True)
 
         assert mock_render_fn.call_count == 2
         assert pdf_result is not None

@@ -538,7 +538,9 @@ async def batch_calibrate_and_explain_findings_ai(
 
     async def _cal(f: Finding) -> Finding:
         async with sem:
-            return await calibrate_and_explain_finding_ai(f, domain=domain, client=client)
+            if client is not None:
+                return await calibrate_and_explain_finding_ai(f, domain=domain, client=client)
+            return await calibrate_and_explain_finding_ai(f, domain=domain)
 
     return list(await asyncio.gather(*[_cal(f) for f in findings]))
 

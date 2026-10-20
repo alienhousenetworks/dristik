@@ -72,6 +72,10 @@ def _preferred_binding(statement: str) -> tuple:
         return "external", "crux"
     if "form" in text or "label" in text:
         return "dom", "form"
+    if any(k in text for k in ("pricing", "persona", "buyer", "refund", "commercial")):
+        return "commercial_analysis", "commercial"
+    if any(k in text for k in ("competitor", "market share", "benchmark", "parity")):
+        return "competitive_analysis", "competitor"
     return "audit_observation", "observation"
 
 
@@ -99,27 +103,59 @@ def _is_external(ev: Any) -> bool:
 def _incompatible_evidence(statement: str, ev: Any) -> bool:
     text = (statement or "").lower()
     selector = str(getattr(ev, "selector", None) or "").strip().lower()
-    image = any(token in text for token in _IMAGE_CLAIM)
-    header = any(token in text for token in _HEADER_CLAIM) or "(csp)" in text
-    if image and (selector in _TITLE_SELECTORS or selector.startswith("meta[name")):
+    element = str(getattr(ev, "element", None) or "").strip().lower()
+    blob = _evidence_blob(ev)
+
+    is_img_ev = (
+        selector == "img"
+        or element == "img"
+        or "alt text" in blob
+        or "missing alt" in blob
+        or "image(s) are missing" in blob
+        or "15 image" in blob
+    )
+    is_img_claim = any(token in text for token in _IMAGE_CLAIM)
+
+    # 1. Image evidence can ONLY support image claims
+    if is_img_ev and not is_img_claim:
         return True
-    if image and _is_external(ev) and selector != "img":
+
+    # 2. Image claims cannot be supported by non-image selectors
+    if is_img_claim and not is_img_ev:
         return True
-    if header and (selector in _TITLE_SELECTORS or selector == "img"):
+
+    # 3. Security header claims cannot be supported by title, h1, or img
+    header_claim = any(token in text for token in _HEADER_CLAIM) or "(csp)" in text or "hsts" in text
+    if header_claim and (selector in _TITLE_SELECTORS or selector == "img" or element == "img"):
         return True
+
+    # 4. Canonical claims cannot be supported by img or headers
+    if "canonical" in text and (selector == "img" or element == "img"):
+        return True
+
+    # 5. Heading claims (h1, h2, h3) must not bind to img
+    if any(h in text for h in ("heading", "h1", "h2", "h3")) and (selector == "img" or element == "img"):
+        return True
+
+    # 6. Pricing, buyer persona, competitor claims must NOT bind to img or robots or headers
+    if any(term in text for term in ("pricing", "persona", "competitor", "buyer", "conversion", "commercial")) and (
+        is_img_ev or selector in ("robots.txt", "strict-transport-security", "content-security-policy")
+    ):
+        return True
+
     return False
 
 
 def _evidence_overlaps(statement: str, ev: Any, selector: str) -> bool:
     blob = _evidence_blob(ev)
     hint = (selector or "").split("[", 1)[0].lower()
-    if hint and hint in blob:
+    if hint and hint not in ("observation", "audit_observation", "dom", "commercial_analysis", "competitive_analysis") and hint in blob:
         return True
     text = (statement or "").lower()
     for token in (
         "alt", "sitemap", "robots", "canonical", "hsts", "strict-transport",
-        "content-security-policy", "x-frame", "x-content-type", "h1", "schema",
-        "json-ld", "crux", "title", "meta description", "viewport",
+        "content-security-policy", "x-frame", "x-content-type", "h1", "h2", "h3",
+        "schema", "json-ld", "crux", "title", "meta description", "viewport",
     ):
         if token in text and token in blob:
             return True
@@ -1008,14 +1044,17 @@ class SpecialistAgent(BaseAgent):
 
         elif aid == "competitor.head_to_head_parity.v3":
             # Competitor SEO & Technical Parity Specialist
-            competitors = blackboard.blackboard_state.get("competitors") or ["industry-peer.com"]
+            competitors = blackboard.blackboard_state.get("competitors") or []
             observations["benchmarked_competitors"] = competitors
             observations["target_page_inventory"] = len(pages)
-            add(
-                f"Technical hygiene and indexable content breadth benchmarked against industry peer set ({', '.join(competitors[:3])}).",
-                Severity.LOW,
-                "Monitor competitor sitemap inventory growth and schema coverage to preserve organic share of voice."
-            )
+            if competitors:
+                add(
+                    f"Technical hygiene and indexable content breadth benchmarked against industry peer set ({', '.join(competitors[:3])}).",
+                    Severity.LOW,
+                    "Monitor competitor sitemap inventory growth and schema coverage to preserve organic share of voice."
+                )
+            else:
+                observations["competitor_data_status"] = "DATA_UNAVAILABLE"
 
         elif aid == "competitor.answer_bakeoff.v3":
             # AI Answer Engine Bake-Off Specialist

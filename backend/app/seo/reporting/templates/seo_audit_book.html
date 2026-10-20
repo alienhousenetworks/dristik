@@ -861,9 +861,15 @@ pre {
     {% endfor %}
   </div>
   {% else %}
+  {% if section.has_failed_metrics %}
+  <div class="empty-state" style="margin-top: 12pt; padding: 10pt 14pt; background: #fffbeb; border: 1px solid #fef3c7; border-left: 4px solid #f59e0b; border-radius: 4px; font-size: 9pt; color: #92400e;">
+    <strong>Diagnostic Threshold Failure Identified:</strong> One or more tests in this chapter failed target performance/infrastructure thresholds (see metrics matrix above). Dedicated finding card was omitted to avoid redundant defect rollups, but remediation is required.
+  </div>
+  {% else %}
   <div class="empty-state" style="margin-top: 12pt; padding: 10pt 14pt; background: #f8fafc; border: 1px dashed #cbd5e1; border-radius: 4px; font-size: 9pt;">
     <strong>No Verified Defects in This Chapter:</strong> What was tested on the inspected sample passed target criteria. Uninspected pages remain unverified.
   </div>
+  {% endif %}
   {% endif %}
 
   <h3>Section conclusion</h3>
@@ -882,7 +888,7 @@ pre {
 <section class="chapter chapter-start" id="findings-register">
   <span class="chapter-marker" style="display:inline; font-size: 0pt; color: transparent; line-height: 0;">[[chapter_ref:findings-register]]</span>
   <div class="chapter-opener">
-    <div class="chapter-number">Chapter 37</div>
+    <div class="chapter-number">{{ findings_register_chapter_label | default("Chapter 37") }}</div>
     <h2>Consolidated Findings Register</h2>
     <p class="section-intro">
       One place to review the recorded issues, their severity, affected
@@ -929,7 +935,7 @@ pre {
 <section class="chapter chapter-start" id="roadmap">
   <span class="chapter-marker" style="display:inline; font-size: 0pt; color: transparent; line-height: 0;">[[chapter_ref:roadmap]]</span>
   <div class="chapter-opener">
-    <div class="chapter-number">Chapter 38</div>
+    <div class="chapter-number">{{ roadmap_chapter_label | default("Chapter 38") }}</div>
     <h2>SEO Implementation Roadmap</h2>
     <p class="section-intro">
       An evidence-based order for addressing issues and verifying changes.

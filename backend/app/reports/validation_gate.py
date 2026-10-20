@@ -727,27 +727,44 @@ class ValidationGate:
         # -------------------------------------------------------------
         # 14. ZERO CROSS-WIRED EVIDENCE ENFORCEMENT
         # -------------------------------------------------------------
+        # 14. ZERO INCOMPATIBLE / CROSS-WIRED EVIDENCE ENFORCEMENT
+        from app.seo.audit.evidence.compatibility_gate import EvidenceCompatibilityGate
         cross_wired_evidence = []
         for f in (report.findings or []):
             if getattr(f, "held_from_executive", False):
                 continue
-            fid = (f.finding_id or "").lower()
-            if "missing_image_alt" in fid:
-                for ev in getattr(f, "evidence", []) or []:
-                    desc = f"{getattr(ev, 'description', '') or ''} {getattr(ev, 'snippet', '') or ''} {getattr(ev, 'observed_value', '') or ''} {getattr(ev, 'value', '') or ''}".lower()
-                    elem = (getattr(ev, "element", "") or "").lower()
-                    if ("layout shift" in desc or "missing dimensions" in desc or "width" in desc) and "alt" not in desc and "alt" not in elem:
-                        cross_wired_evidence.append(f"{f.finding_id}: Alt text finding cites CLS layout shift evidence without alt defect: '{desc}'")
-            elif "missing_canonical" in fid or "broken_canonical" in fid:
-                for ev in getattr(f, "evidence", []) or []:
-                    desc = f"{getattr(ev, 'description', '') or ''} {getattr(ev, 'snippet', '') or ''} {getattr(ev, 'observed_value', '') or ''} {getattr(ev, 'value', '') or ''}".lower()
-                    if "robots.txt" in desc or "sitemap" in desc:
-                        cross_wired_evidence.append(f"{f.finding_id}: Canonical finding cites robots/sitemap evidence: '{desc}'")
+            is_valid, compat_reasons = EvidenceCompatibilityGate.validate_finding(f)
+            if not is_valid:
+                cross_wired_evidence.extend(compat_reasons)
 
         record(
             "zero_cross_wired_evidence",
             len(cross_wired_evidence) == 0,
-            f"Cross-wired evidence detected: {'; '.join(cross_wired_evidence[:3])}" if cross_wired_evidence else ""
+            f"Incompatible / cross-wired evidence detected: {'; '.join(cross_wired_evidence[:3])}" if cross_wired_evidence else ""
+        )
+
+        # 15. ZERO PLACEHOLDER DOMAINS OR GENERIC COMMANDS ENFORCEMENT
+        placeholder_violations = []
+        BANNED_PLACEHOLDERS = ["industry-peer.com", "example.com"]
+        for f in (report.findings or []):
+            if getattr(f, "held_from_executive", False):
+                continue
+            f_text = f"{f.title} {f.description} {getattr(f, 'recommended_action', '')} {' '.join(getattr(f, 'verification_steps', []) or [])}".lower()
+            for b_dom in BANNED_PLACEHOLDERS:
+                if b_dom in f_text:
+                    placeholder_violations.append(f"Finding '{f.title}' contains placeholder '{b_dom}'")
+
+        ca = getattr(report, "competitor_audit", None)
+        if ca:
+            ca_text = str(ca).lower()
+            for b_dom in BANNED_PLACEHOLDERS:
+                if b_dom in ca_text:
+                    placeholder_violations.append(f"Competitor audit contains placeholder '{b_dom}'")
+
+        record(
+            "zero_placeholder_domains",
+            len(placeholder_violations) == 0,
+            f"Placeholder domain(s) detected: {'; '.join(placeholder_violations[:3])}" if placeholder_violations else ""
         )
 
         # 32. Crawl and URL Inventory Reconciled (sampling disclosure)
@@ -1186,14 +1203,43 @@ class ValidationGate:
             report, ledger_repairs = ClaimLedgerBuilder.sanitize_unsupported_facts(report, report.claim_ledger)
             repairs_made.extend(ledger_repairs)
 
+        # 9b. Filter incompatible evidence and sanitize placeholder domains
+        from app.seo.audit.evidence.compatibility_gate import EvidenceCompatibilityGate
+        domain_str = (report.domain or report.website_url or "").replace("https://", "").replace("http://", "").split("/")[0] or "target-site.com"
         clean_ev_findings = []
         for f in report.findings:
+            if getattr(f, "held_from_executive", False):
+                continue
+            if f.evidence:
+                orig_len = len(f.evidence)
+                f.evidence = EvidenceCompatibilityGate.filter_compatible_evidence(f)
+                if len(f.evidence) < orig_len:
+                    repairs_made.append(f"Filtered out {orig_len - len(f.evidence)} incompatible evidence record(s) from finding {f.finding_id} ('{f.title}').")
+
+            if f.verification_steps:
+                new_vsteps = []
+                for step in f.verification_steps:
+                    if "example.com" in step or "industry-peer.com" in step:
+                        step = step.replace("https://example.com/", f"https://{domain_str}/").replace("https://example.com", f"https://{domain_str}").replace("industry-peer.com", f"{domain_str}")
+                        repairs_made.append(f"Replaced placeholder domain in verification step for finding {f.finding_id}.")
+                    new_vsteps.append(step)
+                f.verification_steps = new_vsteps
+
             ev_cnt = len(f.evidence_ids or f.evidence_refs or f.evidence or [])
             if ev_cnt == 0:
                 repairs_made.append(f"Quarantined unbacked finding {f.finding_id} ('{f.title}') from executive facts.")
             else:
                 clean_ev_findings.append(f)
         report.findings = clean_ev_findings
+
+        if getattr(report, "competitor_audit", None):
+            ca = report.competitor_audit
+            if hasattr(ca, "competitors") and ca.competitors:
+                ca.competitors = [c for c in ca.competitors if "industry-peer.com" not in str(c).lower() and "example.com" not in str(c).lower()]
+                if not ca.competitors:
+                    if hasattr(ca, "status"):
+                        ca.status = "DATA_UNAVAILABLE"
+                    repairs_made.append("Removed placeholder competitor 'industry-peer.com' and set status to DATA_UNAVAILABLE.")
 
         # 10. Clean code patches (remove Disallow /_next/, SearchAction, preload, ellipses)
         for patch in (report.code_patches or []):

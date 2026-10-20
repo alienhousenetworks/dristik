@@ -166,7 +166,7 @@ def test_deterministic_chapter_narrative_consultative_answers():
     assert "server response times" in speed_narrative["business_risk"].lower() or "layout shifts" in speed_narrative["business_risk"].lower()
 
     # 3. CRO Chapter
-    cro_finding = _sample_finding(title="No Primary CTA on Hero Viewport", severity="HIGH", category="CRO")
+    cro_finding = _sample_finding(title="No Primary CTA on Hero Viewport", severity="HIGH", category=Category.UX_CONVERSION)
     cro_narrative = AgenticChapterSynthesizer.synthesize_narrative(
         book=book,
         number="50",
@@ -211,7 +211,7 @@ async def test_section_explanation_ai():
 
 def test_specialist_auditor_agent_domain_intelligence():
     """Verify SpecialistAuditorAgent provides high-fidelity domain intelligence for non-technical questions."""
-    agent = AgenticSpecialistRegistry.dispatch_agent_for_section("ch_seo", "Canonicalization")
+    agent = AgenticSpecialistRegistry.dispatch_agent_for_section("ch_10", "Canonicalization & Duplicate Control")
     assert agent.domain == "CANONICAL"
 
     # 1. Plain English explanation
