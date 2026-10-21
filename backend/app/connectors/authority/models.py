@@ -199,6 +199,11 @@ VENDOR_METRIC_LABELS = {
     ("semrush", "authority_score"): "Semrush Authority Score",
     ("majestic", "trust_flow"): "Majestic Trust Flow",
     ("majestic", "citation_flow"): "Majestic Citation Flow",
+    ("moz", "domain_authority"): "Moz Domain Authority",
+    ("moz", "page_authority"): "Moz Page Authority",
+    ("moz", "spam_score"): "Moz Spam Score",
+    ("commoncrawl", "pagerank"): "Common Crawl Web Graph PageRank",
+    ("commoncrawl", "harmonic_centrality"): "Common Crawl Harmonic Centrality",
 }
 
 

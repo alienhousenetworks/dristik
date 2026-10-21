@@ -790,6 +790,91 @@ class ValidationGate:
                 f"Sampled audit ({tested_pages}/{disc_total} URLs) contains un-reconciled comprehensive coverage overclaim in story_summary" if has_overclaim else ""
             )
 
+        # -------------------------------------------------------------
+        # 16. ZERO DEPRECATED SCHEMA TYPES & UNREPLACED BRACKET/BARE PLACEHOLDERS
+        # -------------------------------------------------------------
+        deprecated_schema_types = {
+            "howto": "HowTo (deprecated September 2023)",
+            "specialannouncement": "SpecialAnnouncement (deprecated July 31, 2025)",
+            "courseinfo": "CourseInfo (retired June 2025)",
+            "estimatedsalary": "EstimatedSalary (retired June 2025)",
+            "learningvideo": "LearningVideo (retired June 2025)",
+            "claimreview": "ClaimReview (retired June 2025)",
+            "vehiclelisting": "VehicleListing (retired June 2025)",
+        }
+        schema_violations = []
+        for patch in (report.code_patches or []):
+            snip = patch.after_snippet or ""
+            for dt, reason in deprecated_schema_types.items():
+                if re.search(r'["\']@type["\']\s*:\s*["\']' + dt + r'["\']', snip, re.IGNORECASE):
+                    schema_violations.append(f"Patch {patch.patch_id} proposes deprecated schema: {reason}")
+            for bracket in ["[Business Name]", "[City]", "[State]", "[Phone]", "[Address]", "[URL]", "[Email]"]:
+                if bracket.lower() in snip.lower():
+                    schema_violations.append(f"Patch {patch.patch_id} contains unreplaced placeholder '{bracket}'")
+            if re.search(r'\bREPLACE(?:_[A-Z]+)*\b', snip):
+                schema_violations.append(f"Patch {patch.patch_id} contains bare placeholder 'REPLACE_'")
+
+        for f in (report.findings or []):
+            if getattr(f, "held_from_executive", False):
+                continue
+            rec_text = f"{f.title} {f.description} {getattr(f, 'recommendation', '')} {getattr(f, 'recommended_action', '')}".lower()
+            for dt, reason in deprecated_schema_types.items():
+                if f"add {dt}" in rec_text or f"implement {dt}" in rec_text or f"generate {dt}" in rec_text:
+                    schema_violations.append(f"Finding {f.finding_id} recommends deprecated schema: {reason}")
+            for bracket in ["[business name]", "[phone]", "[address]"]:
+                if bracket in rec_text:
+                    schema_violations.append(f"Finding {f.finding_id} contains unreplaced placeholder '{bracket}'")
+
+        record(
+            "schema_no_deprecated_types_or_placeholders",
+            len(schema_violations) == 0,
+            f"Schema deprecation/placeholder violations detected: {'; '.join(schema_violations[:3])}" if schema_violations else ""
+        )
+
+        # -------------------------------------------------------------
+        # 17. INP EXCLUSIVITY (STRICT INP OVER LEGACY FID)
+        # -------------------------------------------------------------
+        # Google officially retired FID in favor of INP on March 12, 2024.
+        fid_violations = []
+        all_narrative_and_findings = (
+            f"{report.story_summary or ''} {report.primary_strategic_opportunity or ''} "
+            f"{report.consultant_advice_what_to_ignore or ''} "
+            + " ".join(f"{f.title} {f.description} {getattr(f, 'recommended_action', '')}" for f in (report.findings or []))
+        )
+        if re.search(r'\bFID\b', all_narrative_and_findings):
+            fid_violations.append("Legacy metric 'FID' (First Input Delay) detected; INP must be used exclusively.")
+        if re.search(r'\bfirst input delay\b', all_narrative_and_findings, re.IGNORECASE):
+            fid_violations.append("Legacy 'First Input Delay' detected; INP is Google's sole official interactivity Core Web Vital.")
+
+        record(
+            "inp_exclusive_no_legacy_fid",
+            len(fid_violations) == 0,
+            "; ".join(fid_violations) if fid_violations else ""
+        )
+
+        # -------------------------------------------------------------
+        # 18. EXTERNAL METRIC SOURCE CONFIDENCE & PROVENANCE
+        # -------------------------------------------------------------
+        unlabeled_external_claims = []
+        ext_terms = ["backlinks", "referring domains", "domain rating", "domain authority", "search volume"]
+        for f in (report.findings or []):
+            if getattr(f, "held_from_executive", False):
+                continue
+            f_blob = f"{f.title} {f.description}".lower()
+            if any(term in f_blob for term in ext_terms):
+                f_evidence = getattr(f, "evidence", []) or []
+                f_prov = getattr(f, "provenance", None) or getattr(f, "source_confidence", None) or ""
+                f_conf_basis = getattr(f, "confidence_basis", None) or ""
+                has_label = bool(f_prov or f_conf_basis or any(getattr(ev, "source_type", None) or getattr(ev, "evidence_type", None) for ev in f_evidence))
+                if not has_label:
+                    unlabeled_external_claims.append(f"Finding {f.finding_id} cites external metrics without explicit source confidence or provenance label.")
+
+        record(
+            "external_metric_source_confidence",
+            len(unlabeled_external_claims) == 0,
+            "; ".join(unlabeled_external_claims[:3]) if unlabeled_external_claims else ""
+        )
+
         is_valid = len(failed) == 0
         return ValidationResult(
             is_valid=is_valid,
@@ -1407,6 +1492,67 @@ class ValidationGate:
                                 flags=re.IGNORECASE
                             )
                             repairs_made.append("Reconciled sampled crawl coverage claims in story_summary.")
+
+        # 11e. Modern Standards & Schema Deprecation Repair:
+        # Strip deprecated schema blocks from code patches, resolve bracket placeholders, and enforce INP exclusively
+        deprecated_schema_types = {
+            "howto": "HowTo",
+            "specialannouncement": "SpecialAnnouncement",
+            "courseinfo": "CourseInfo",
+            "estimatedsalary": "EstimatedSalary",
+            "learningvideo": "LearningVideo",
+            "claimreview": "ClaimReview",
+            "vehiclelisting": "VehicleListing",
+        }
+        biz_name = (report.business_profile.business_name if report.business_profile else "") or (report.resolved_entity.name if getattr(report, "resolved_entity", None) else "") or "Our Company"
+        domain_name = (report.domain or report.website_url or "target-site.com").replace("https://", "").replace("http://", "").split("/")[0]
+        site_url = report.website_url or f"https://{domain_name}"
+
+        for patch in (report.code_patches or []):
+            if patch.after_snippet:
+                snip = patch.after_snippet
+                for dt, label in deprecated_schema_types.items():
+                    if re.search(r'["\']@type["\']\s*:\s*["\']' + dt + r'["\']', snip, re.IGNORECASE):
+                        snip = re.sub(r'{\s*["\']@context["\'][^}]*["\']@type["\']\s*:\s*["\']' + dt + r'["\'][^}]*},?\s*', '', snip, flags=re.IGNORECASE)
+                        snip = re.sub(r'{\s*["\']@type["\']\s*:\s*["\']' + dt + r'["\'][^}]*},?\s*', '', snip, flags=re.IGNORECASE)
+                        repairs_made.append(f"Removed deprecated schema type '{label}' from patch {patch.patch_id}.")
+                if "[Business Name]" in snip:
+                    snip = snip.replace("[Business Name]", biz_name)
+                    repairs_made.append(f"Resolved placeholder [Business Name] in patch {patch.patch_id} with '{biz_name}'.")
+                if "[URL]" in snip:
+                    snip = snip.replace("[URL]", site_url)
+                    repairs_made.append(f"Resolved placeholder [URL] in patch {patch.patch_id} with '{site_url}'.")
+                patch.after_snippet = snip
+
+        # Replace legacy FID with INP across narrative and findings
+        fid_pattern = re.compile(r'\bFID\b')
+        first_input_delay_pattern = re.compile(r'\bFirst Input Delay\b', re.IGNORECASE)
+        for field_name in ["story_summary", "primary_strategic_opportunity", "consultant_advice_what_to_ignore"]:
+            val = getattr(report, field_name, "") or ""
+            if fid_pattern.search(val) or first_input_delay_pattern.search(val):
+                cleaned = first_input_delay_pattern.sub("Interaction to Next Paint (INP)", val)
+                cleaned = fid_pattern.sub("INP", cleaned)
+                setattr(report, field_name, cleaned)
+                repairs_made.append(f"Replaced legacy FID with official INP Core Web Vital in {field_name}.")
+
+        for f in report.findings:
+            f_changed = False
+            if fid_pattern.search(f.title or "") or first_input_delay_pattern.search(f.title or ""):
+                f.title = first_input_delay_pattern.sub("Interaction to Next Paint (INP)", f.title)
+                f.title = fid_pattern.sub("INP", f.title)
+                f_changed = True
+            if fid_pattern.search(f.description or "") or first_input_delay_pattern.search(f.description or ""):
+                f.description = first_input_delay_pattern.sub("Interaction to Next Paint (INP)", f.description)
+                f.description = fid_pattern.sub("INP", f.description)
+                f_changed = True
+            rec = getattr(f, "recommended_action", "") or ""
+            if fid_pattern.search(rec) or first_input_delay_pattern.search(rec):
+                rec = first_input_delay_pattern.sub("Interaction to Next Paint (INP)", rec)
+                rec = fid_pattern.sub("INP", rec)
+                f.recommended_action = rec
+                f_changed = True
+            if f_changed:
+                repairs_made.append(f"Normalized finding {f.finding_id} from legacy FID to INP.")
 
         # 12. Pre-Render Donut & Visual Intelligence Re-synchronization
         # Re-synthesize visual intelligence using post-gate finalized findings

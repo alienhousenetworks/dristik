@@ -16,7 +16,9 @@ import httpx
 from app.domain.models import AgentReadinessReport, AgentReadinessSignal, CrawlManifest, PageEvidence
 from app.core.security.ssrf import is_safe_url
 
-_AI_BOTS = ("gptbot", "google-extended", "perplexitybot", "claudebot", "anthropic-ai", "ccbot")
+_AI_SEARCH_BOTS = {"oai-searchbot", "perplexitybot", "claude-searchbot"}
+_AI_TRAINING_BOTS = {"gptbot", "claudebot", "google-extended", "applebot-extended", "ccbot", "anthropic-ai"}
+_AI_BOTS = _AI_SEARCH_BOTS | _AI_TRAINING_BOTS
 
 
 def _signal(key: str, status: str, summary: str) -> AgentReadinessSignal:
@@ -31,28 +33,74 @@ def _robots_signal(manifest: Optional[CrawlManifest]) -> AgentReadinessSignal:
     text = (manifest.robots_txt_content or "").lower()
     if not text.strip():
         return _signal("ai_bot_robots", "NOT_MEASURED", "robots.txt was reported present but its body was not stored.")
-    blocked = []
-    current = None
+
+    # RFC 9309 Group parser: specific bot groups take precedence over '*'
+    groups: dict[str, list[tuple[str, str]]] = {}
+    current_agents: list[str] = []
+
     for raw in text.splitlines():
         line = raw.split("#", 1)[0].strip()
         if not line or ":" not in line:
             continue
         key, value = [part.strip() for part in line.split(":", 1)]
         if key == "user-agent":
-            current = value
-        elif key == "disallow" and value == "/" and current:
-            if current == "*" or any(bot in current for bot in _AI_BOTS):
-                blocked.append(current)
-    if blocked:
+            current_agents.append(value)
+            if value not in groups:
+                groups[value] = []
+        elif key in ("allow", "disallow"):
+            for agent in current_agents:
+                groups[agent].append((key, value))
+        else:
+            current_agents = []
+
+    # Check search bots and training bots individually
+    wildcard_rules = groups.get("*", [])
+    wildcard_blocked = any(k == "disallow" and v in ("/", "/*") for k, v in wildcard_rules)
+
+    blocked_search = []
+    allowed_search = []
+    for bot in _AI_SEARCH_BOTS:
+        bot_rules = groups.get(bot)
+        if bot_rules is not None:
+            if any(k == "disallow" and v in ("/", "/*") for k, v in bot_rules):
+                blocked_search.append(bot)
+            elif any(k == "allow" and v in ("/", "/*") for k, v in bot_rules):
+                allowed_search.append(bot)
+        elif wildcard_blocked:
+            blocked_search.append(bot)
+
+    blocked_training = []
+    for bot in _AI_TRAINING_BOTS:
+        bot_rules = groups.get(bot)
+        if bot_rules is not None:
+            if any(k == "disallow" and v in ("/", "/*") for k, v in bot_rules):
+                blocked_training.append(bot)
+        elif wildcard_blocked:
+            blocked_training.append(bot)
+
+    if allowed_search and not any(groups.get(bot) and any(k == "disallow" and v in ("/", "/*") for k, v in groups[bot]) for bot in _AI_SEARCH_BOTS):
+        return _signal(
+            "ai_bot_robots",
+            "PRESENT",
+            f"robots.txt permits AI search crawlers ({', '.join(sorted(allowed_search))}) overriding general rules.",
+        )
+    elif blocked_search:
         return _signal(
             "ai_bot_robots",
             "MISSING",
-            f"robots.txt disallows all paths for: {', '.join(sorted(set(blocked))[:6])}.",
+            f"robots.txt disallows search crawlers: {', '.join(sorted(blocked_search))}.",
         )
+    elif blocked_training:
+        return _signal(
+            "ai_bot_robots",
+            "PRESENT",
+            f"robots.txt permits AI search bots while selectively restricting training bots ({', '.join(sorted(blocked_training)[:3])}).",
+        )
+
     return _signal(
         "ai_bot_robots",
         "PRESENT",
-        "robots.txt does not disallow the whole site for GPTBot, Google-Extended, PerplexityBot, or ClaudeBot.",
+        "robots.txt does not disallow the whole site for AI search or training bots (GPTBot, OAI-SearchBot, PerplexityBot, ClaudeBot).",
     )
 
 

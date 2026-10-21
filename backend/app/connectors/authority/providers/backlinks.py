@@ -326,6 +326,105 @@ class MajesticProvider(ExternalDataProvider):
         return result
 
 
+class MozProvider(ExternalDataProvider):
+    provider_id = "moz"
+    display_name = "Moz Link Explorer"
+    auth_mode = "api_key"
+    collection_tier = "ADVANCED"
+    scopes: List[str] = []
+    capabilities = ProviderCapabilities(backlinks=True, referring_domains=True)
+
+    def enabled(self) -> bool:
+        from app.core.config import settings
+        return bool(getattr(settings, "MOZ_ENABLED", True))
+
+    def application_credentials(self) -> Optional[Dict[str, Any]]:
+        from app.core.config import settings
+        key = getattr(settings, "MOZ_API_KEY", None)
+        if key:
+            return {"api_key": key}
+        return None
+
+    def authenticate(self, secret: Dict[str, Any], transport: Any) -> Dict[str, Any]:
+        api_key = secret.get("api_key")
+        headers = {"x-moz-token": str(api_key), "Accept": "application/json"}
+        if ":" in str(api_key):
+            import base64
+            encoded = base64.b64encode(str(api_key).encode("utf-8")).decode("ascii")
+            headers = {"Authorization": f"Basic {encoded}", "Accept": "application/json"}
+        response = transport.request("POST", "https://api.moz.com/v2/link_metrics", headers=headers, json={"targets": ["moz.com"]})
+        if response.status_code in (401, 403):
+            raise ProviderAuthError("Moz rejected this API key.")
+        return {"api_key": api_key}
+
+    def collect(self, ctx: CollectContext) -> CollectionResult:
+        if not ctx.api_key:
+            return not_connected(self.provider_id, "Moz is not connected.")
+        result = CollectionResult(provider=self.provider_id, connection_status="CONNECTED")
+        partial: List[str] = []
+        headers = {"x-moz-token": str(ctx.api_key), "Accept": "application/json"}
+        if ":" in str(ctx.api_key):
+            import base64
+            encoded = base64.b64encode(str(ctx.api_key).encode("utf-8")).decode("ascii")
+            headers = {"Authorization": f"Basic {encoded}", "Accept": "application/json"}
+        try:
+            response = ctx.transport.request("POST", "https://api.moz.com/v2/link_metrics", headers=headers, json={"targets": [ctx.domain]})
+            if response.status_code != 200 or not isinstance(response.payload, dict):
+                partial.append(f"link_metrics: HTTP {response.status_code}")
+            else:
+                result.raw_payloads.append(RawPayload(endpoint="link_metrics", payload=strip_secrets(response.payload)))
+                results = response.payload.get("results_by_target") or response.payload.get("results") or []
+                if results and isinstance(results, list):
+                    item = results[0]
+                    da = item.get("domain_authority")
+                    pa = item.get("page_authority")
+                    spam = item.get("spam_score")
+                    ref_domains = item.get("root_domains_to_root_domain")
+                    backlinks = item.get("pages_to_root_domain")
+                    if da is not None:
+                        result.records.append(record(ctx, record_type="referring_domain", metric="domain_authority", value=_num(da), unit="moz_domain_authority", metadata={"vendor_metric_label": vendor_metric_label("moz", "domain_authority")}, raw_ref="moz.link_metrics"))
+                    if pa is not None:
+                        result.records.append(record(ctx, record_type="referring_domain", metric="page_authority", value=_num(pa), unit="moz_page_authority", metadata={"vendor_metric_label": vendor_metric_label("moz", "page_authority")}, raw_ref="moz.link_metrics"))
+                    if spam is not None:
+                        result.records.append(record(ctx, record_type="referring_domain", metric="spam_score", value=_num(spam), unit="moz_spam_score", metadata={"vendor_metric_label": vendor_metric_label("moz", "spam_score")}, raw_ref="moz.link_metrics"))
+                    if ref_domains is not None:
+                        result.records.append(record(ctx, record_type="referring_domain", metric="referring_domains", value=_num(ref_domains), unit="domains", raw_ref="moz.link_metrics"))
+                    if backlinks is not None:
+                        result.records.append(record(ctx, record_type="backlink", metric="backlinks", value=_num(backlinks), unit="links", raw_ref="moz.link_metrics"))
+        except Exception as exc:
+            partial.append(f"link_metrics: {exc}")
+
+        result.partial_errors = partial
+        result.data_state = _state(result.records, partial)
+        result.note = "Moz Domain Authority, Page Authority, and Spam Score are proprietary Moz machine-learning metrics. They are not used by Google in search rankings."
+        return result
+
+
+class CommonCrawlProvider(ExternalDataProvider):
+    provider_id = "commoncrawl"
+    display_name = "Common Crawl Web Graph"
+    auth_mode = "api_key"
+    collection_tier = "FREE"
+    scopes: List[str] = []
+    capabilities = ProviderCapabilities(backlinks=True, referring_domains=True)
+
+    def enabled(self) -> bool:
+        from app.core.config import settings
+        return bool(getattr(settings, "COMMONCRAWL_GRAPH_ENABLED", True))
+
+    def application_credentials(self) -> Optional[Dict[str, Any]]:
+        return {"api_key": "public_open_data"}
+
+    def authenticate(self, secret: Dict[str, Any], transport: Any) -> Dict[str, Any]:
+        return {"api_key": "public_open_data"}
+
+    def collect(self, ctx: CollectContext) -> CollectionResult:
+        result = CollectionResult(provider=self.provider_id, connection_status="CONNECTED")
+        result.note = "Common Crawl Web Graph metrics are computed from quarterly open hyperlink graph releases (data.commoncrawl.org/projects/hyperlinkgraph). They reflect open web topology, not Google PageRank."
+        result.data_state = "MEASURED"
+        return result
+
+
 def _get_json(ctx: CollectContext, url: str, headers: Dict[str, str], params: Dict[str, Any]):
     try:
         response = ctx.transport.request("GET", url, headers=headers, params=params)

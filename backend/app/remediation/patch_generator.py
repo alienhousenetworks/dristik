@@ -83,7 +83,7 @@ def _format_meta_description(page_path: str, biz_name: str, val_prop: str, audie
         desc = f"{biz_name} delivers {clean_vp}. Engineered specifically for {audience} with guaranteed precision, high performance, and rapid time-to-value."
 
     if len(desc) < 140:
-        desc = f"{desc} Learn more and get started today."
+        desc = f"{desc} Complete technical specifications and architectural guidelines."
     if len(desc) > 160:
         from app.remediation.serp_text import fit_serp_text
         desc = fit_serp_text(desc, 160)

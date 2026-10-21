@@ -586,19 +586,19 @@ class AnalysisOrchestrator:
                 if not aid:
                     return None
                 aid_low = aid.lower()
-                if "seo.crawl" in aid_low or "seo.indexability" in aid_low:
+                if "seo.crawl" in aid_low or "seo.indexability" in aid_low or "seo.drift" in aid_low:
                     return "node_seo_crawl_indexing"
                 if "seo.security" in aid_low or "seo.performance" in aid_low or "seo.assets" in aid_low:
                     return "node_seo_technical_health"
-                if "seo.html" in aid_low or "seo.internal_links" in aid_low or aid_low.startswith("content."):
+                if "seo.html" in aid_low or "seo.internal_links" in aid_low or "seo.cluster" in aid_low or "seo.sxo" in aid_low or aid_low.startswith("content."):
                     return "node_seo_onpage_content"
-                if aid_low.startswith("schema."):
+                if aid_low.startswith("schema.") or "seo.ecommerce" in aid_low:
                     return "node_seo_schema_ast"
                 if "geo.brand_identity" in aid_low or "geo.wikidata" in aid_low or "geo.entity" in aid_low:
                     return "node_geo_entity_grounding"
-                if "geo.local" in aid_low or "geo.citations" in aid_low or "geo.extractability" in aid_low:
+                if "geo.local" in aid_low or "geo.citations" in aid_low or "geo.extractability" in aid_low or "maps_intelligence" in aid_low:
                     return "node_geo_local_signals"
-                if "geo.llms_txt" in aid_low or "geo.synthesis" in aid_low:
+                if "geo.llms_txt" in aid_low or "geo.synthesis" in aid_low or "agentic_readiness" in aid_low:
                     return "node_geo_llm_footprint"
                 if "ai_search.citability" in aid_low:
                     return "node_aeo_citability_matrix"

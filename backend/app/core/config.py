@@ -377,6 +377,15 @@ class Settings(BaseSettings):
     MAJESTIC_ENABLED: bool = True
     MAJESTIC_API_KEY: Optional[str] = None
 
+    MOZ_ENABLED: bool = True
+    MOZ_API_KEY: Optional[str] = None
+
+    COMMONCRAWL_GRAPH_ENABLED: bool = True
+
+    INDEXNOW_ENABLED: bool = True
+    INDEXNOW_KEY: Optional[str] = None
+    INDEXNOW_KEY_LOCATION: Optional[str] = None
+
     SEO_DATA_PROVIDER: Optional[str] = None
     DATAFORSEO_ENABLED: bool = False
     SERPAPI_ENABLED: bool = False

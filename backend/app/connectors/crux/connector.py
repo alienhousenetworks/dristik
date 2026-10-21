@@ -158,6 +158,12 @@ class CruxConnector(BaseConnector, ExternalTelemetryConnector):
                         "p75_cls": _extract_metric("cumulative_layout_shift"),
                         "p75_fcp_ms": _extract_metric("first_contentful_paint"),
                         "p75_ttfb_ms": _extract_metric("experimental_time_to_first_byte"),
+                        "lcp_subparts": {
+                            "image_ttfb_ms": _extract_metric("largest_contentful_paint_image_time_to_first_byte"),
+                            "image_resource_load_delay_ms": _extract_metric("largest_contentful_paint_image_resource_load_delay"),
+                            "image_resource_load_duration_ms": _extract_metric("largest_contentful_paint_image_resource_load_duration"),
+                            "image_element_render_delay_ms": _extract_metric("largest_contentful_paint_image_element_render_delay"),
+                        },
                         "origin_eligibility": True,
                         "device_breakdown": {},
                         "distributions": {

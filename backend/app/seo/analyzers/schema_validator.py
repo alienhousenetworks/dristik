@@ -9,8 +9,14 @@ Supported core types:
 - FAQPage
 - BreadcrumbList
 """
+import json
 from typing import List, Dict, Any, Set
 from app.domain.models import PageEvidence, SchemaIssue, SchemaValidationReport
+from app.seo.audit.schema_validator import (
+    DEPRECATED_SCHEMA_TYPES,
+    BRACKET_PLACEHOLDERS,
+    BARE_PLACEHOLDER_RE,
+)
 
 
 def _clean_type(stype: Any) -> str:
@@ -33,6 +39,39 @@ def validate_schema_entity(entity: Dict[str, Any], url: str) -> List[SchemaIssue
             message="JSON-LD object is missing the mandatory '@type' property."
         ))
         return issues
+
+    # 0a. Check deprecated schema types
+    clean_stype = stype.rsplit("/", 1)[-1].rsplit("#", 1)[-1]
+    if clean_stype in DEPRECATED_SCHEMA_TYPES:
+        issues.append(SchemaIssue(
+            url=url,
+            schema_type=stype,
+            severity="ERROR",
+            field="@type",
+            message=f"Schema type '{stype}' is {DEPRECATED_SCHEMA_TYPES[clean_stype]}."
+        ))
+
+    # 0b. Check for template placeholder text
+    entity_str = json.dumps(entity, ensure_ascii=False)
+    for p in BRACKET_PLACEHOLDERS:
+        if p.lower() in entity_str.lower():
+            issues.append(SchemaIssue(
+                url=url,
+                schema_type=stype,
+                severity="ERROR",
+                field="content",
+                message=f"Schema contains unreplaced template placeholder '{p}'."
+            ))
+            break
+    for ph in BARE_PLACEHOLDER_RE.findall(entity_str):
+        issues.append(SchemaIssue(
+            url=url,
+            schema_type=stype,
+            severity="ERROR",
+            field="content",
+            message=f"Schema contains unreplaced template placeholder '{ph}'."
+        ))
+        break
 
     LOCAL_BUSINESS_TYPES = {
         "LocalBusiness", "Store", "Restaurant", "MedicalBusiness", "Dentist",

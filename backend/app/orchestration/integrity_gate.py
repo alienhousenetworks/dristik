@@ -5,12 +5,18 @@ before scoring and executive synthesis.
 """
 from typing import List, Dict, Any, Optional, Set
 import logging
+import re
 from pydantic import BaseModel, Field
 
 from app.domain.models import Claim
 from app.domain.enums import ClaimType, SourceIntegrityLabel, VerificationStatus
 from app.evidence.store import EvidenceStore
 from app.cognition.ground_truth import apply_ground_truth_feed
+from app.seo.audit.schema_validator import (
+    DEPRECATED_SCHEMA_TYPES,
+    BRACKET_PLACEHOLDERS,
+    BARE_PLACEHOLDER_RE,
+)
 
 logger = logging.getLogger("dristik.orchestration.integrity_gate")
 
@@ -117,6 +123,60 @@ class EvidenceIntegrityValidator:
                     ))
                     result.is_valid = False
                     adjusted = True
+
+            # 3a. Check for deprecated schema types in recommendations
+            rec_text = (claim.recommendation or "").lower()
+            stmt_text = claim.statement.lower()
+            for dep_type, dep_reason in DEPRECATED_SCHEMA_TYPES.items():
+                dep_lower = dep_type.lower()
+                if dep_lower in rec_text or (dep_lower in stmt_text and any(w in stmt_text for w in ["recommend", "implement", "add", "missing schema", "deploy"])):
+                    claim.verification_status = VerificationStatus.REJECTED
+                    claim.confidence = 0.0
+                    claim.held_from_executive = True
+                    result.violations.append(IntegrityViolation(
+                        agent_id=claim.agent_id,
+                        claim_id=claim.id,
+                        violation_type="DEPRECATED_SCHEMA_RECOMMENDED",
+                        description=f"Claim recommends deprecated schema type '{dep_type}' ({dep_reason}).",
+                        action_taken="Flagged schema deprecation violation and marked REJECTED."
+                    ))
+                    result.is_valid = False
+                    adjusted = True
+                    break
+
+            # 3b. Check for bracketed or unreplaced placeholders in recommendation
+            for placeholder in BRACKET_PLACEHOLDERS:
+                if placeholder.lower() in rec_text:
+                    claim.verification_status = VerificationStatus.REJECTED
+                    claim.confidence = 0.0
+                    claim.held_from_executive = True
+                    result.violations.append(IntegrityViolation(
+                        agent_id=claim.agent_id,
+                        claim_id=claim.id,
+                        violation_type="PLACEHOLDER_IN_RECOMMENDATION",
+                        description=f"Claim recommendation contains unreplaced template placeholder '{placeholder}'.",
+                        action_taken="Flagged placeholder violation and marked REJECTED."
+                    ))
+                    result.is_valid = False
+                    adjusted = True
+                    break
+
+            # 3c. Check for outdated Core Web Vitals metric (FID retired March 2024, replaced by INP)
+            if re.search(r"\bfirst input delay\b|\b\(fid\)\b", text_to_scan) and any(
+                w in text_to_scan for w in ["core web vital", "cwv", "metric", "threshold", "vitals"]
+            ):
+                claim.verification_status = VerificationStatus.REJECTED
+                claim.confidence = 0.0
+                claim.held_from_executive = True
+                result.violations.append(IntegrityViolation(
+                    agent_id=claim.agent_id,
+                    claim_id=claim.id,
+                    violation_type="OUTDATED_CWV_METRIC_FID",
+                    description="Claim asserts First Input Delay (FID) as a current Core Web Vital; FID was retired in March 2024 and replaced by INP.",
+                    action_taken="Flagged outdated metric violation and marked REJECTED."
+                ))
+                result.is_valid = False
+                adjusted = True
 
             # 4. Check for contradictory claims or contradiction status
             if claim.verification_status == VerificationStatus.CONTRADICTED or (

@@ -24,6 +24,7 @@ from app.crawl.analyzers.pixel_calculator import (
     GOOGLE_TITLE_MAX_PX,
     GOOGLE_META_MAX_PX,
 )
+from app.seo.analyzers.metadata_template import analyse_pages_metadata
 
 
 def estimate_pixel_width(text: Optional[str]) -> int:
@@ -153,12 +154,23 @@ class MetaRollupAnalyzer:
             f"{len(duplicate_titles)} duplicates across URLs."
         )
 
+        # -------------------------------------------------------------
+        # 4. Templated Metadata & Scaled Content Abuse (Google QRG §4.6.5)
+        # -------------------------------------------------------------
+        templated_analysis = analyse_pages_metadata(pages)
+        templated_count = templated_analysis.get("templated_count", 0)
+        templated_findings = [p for p in templated_analysis.get("pages", []) if p.get("templated") or p.get("flags")]
+        templated_urls = [p["url"] for p in templated_findings if p.get("url")]
+        site_templated_risk = templated_analysis.get("site_risk", "none")
+
         desc_summary = (
             f"Evaluated {total} pages: {len(optimal_descriptions)} optimal (150-160 chars), "
             f"{len(missing_descriptions)} missing, {len(too_short_descriptions)} short (<70), "
             f"{len(too_long_descriptions)} long (>160), {len(truncated_pixel_descriptions)} exceed Google 960px width, "
             f"{len(duplicate_descriptions)} duplicates."
         )
+        if templated_count > 0:
+            desc_summary += f" Flagged {templated_count} pages with templated metadata / stock CTAs (Google QRG §4.6.5 risk: {site_templated_risk})."
 
         return MetaBucketRollup(
             total_pages_evaluated=total,
@@ -178,6 +190,10 @@ class MetaRollupAnalyzer:
             truncated_pixel_descriptions=truncated_pixel_descriptions,
             h1_title_collision_count=len(h1_title_collision_urls),
             h1_title_collision_urls=h1_title_collision_urls,
+            templated_metadata_count=templated_count,
+            templated_metadata_urls=templated_urls,
+            templated_metadata_findings=templated_findings,
+            site_templated_risk=site_templated_risk,
             title_summary=title_summary,
             description_summary=desc_summary
         )

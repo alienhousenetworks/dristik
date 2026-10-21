@@ -3,7 +3,13 @@ from __future__ import annotations
 
 from typing import Dict, List
 
-from app.connectors.authority.providers.backlinks import AhrefsProvider, MajesticProvider, SemrushProvider
+from app.connectors.authority.providers.backlinks import (
+    AhrefsProvider,
+    CommonCrawlProvider,
+    MajesticProvider,
+    MozProvider,
+    SemrushProvider,
+)
 from app.connectors.authority.providers.base import ExternalDataProvider
 from app.connectors.authority.providers.bing import BingWebmasterProvider
 from app.connectors.authority.providers.citations import CitationProvider
@@ -22,6 +28,8 @@ _PROVIDERS: Dict[str, ExternalDataProvider] = {
         AhrefsProvider(),
         SemrushProvider(),
         MajesticProvider(),
+        MozProvider(),
+        CommonCrawlProvider(),
         DataForSeoProvider(),
         SerpApiProvider(),
         GoogleBusinessProfileProvider(),
@@ -34,7 +42,7 @@ JOB_PROVIDERS = {
     "sync_gsc_data": ["google_search_console"],
     "sync_ga4_data": ["google_analytics_4"],
     "sync_bing_data": ["bing_webmaster"],
-    "sync_backlinks": ["ahrefs", "semrush", "majestic", "dataforseo"],
+    "sync_backlinks": ["ahrefs", "semrush", "majestic", "moz", "commoncrawl", "dataforseo"],
     "sync_gbp_data": ["google_business_profile"],
     "sync_brand_mentions": ["brand_mentions"],
     "sync_citations": ["citations"],

@@ -3,7 +3,7 @@ Dristik AI Domain Models & Pydantic Schemas
 Strict typed models for Evidence, Claims, Findings, Scores, Reports, and Telemetry.
 """
 from __future__ import annotations
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Dict, Any, Optional, Union, Tuple
 from pydantic import BaseModel, Field, field_validator, model_validator, ConfigDict
 from app.domain.enums import (
@@ -82,8 +82,8 @@ class FindingEvidence(BaseModel):
 
 class CodePatch(BaseModel):
     patch_id: str
-    title: str
-    category: Category
+    title: str = ""
+    category: Category = Category.TECHNICAL_SEO
     target_file: str  # e.g., "index.html", "schema.json", "robots.txt"
     before_snippet: Optional[str] = None
     after_snippet: str
@@ -1242,7 +1242,7 @@ class CategoryScore(BaseModel):
     weighted_score: float = 0.0 # score * weight
     strengths: List[str] = Field(default_factory=list)
     weaknesses: List[str] = Field(default_factory=list)
-    summary: str
+    summary: str = ""
     deductions: List[Dict[str, Any]] = Field(default_factory=list)
     formula_breakdown: List[Dict[str, Any]] = Field(default_factory=list)
     check_results: List[CheckResult] = Field(default_factory=list)
@@ -1253,8 +1253,8 @@ class OverallScoreResult(BaseModel):
     overall_score: float # 0 - 100
     overall_confidence: float = 0.90 # 0 - 1.00
     evidence_coverage: float = 0.88 # 0 - 1.00
-    grade: str # A+, A, B, C, D, F
-    health_label: str # Excellent, Good, Moderate, Needs Attention, Critical
+    grade: str = "B" # A+, A, B, C, D, F
+    health_label: str = "Good" # Excellent, Good, Moderate, Needs Attention, Critical
     category_scores: Dict[str, CategoryScore] = Field(default_factory=dict)
     intent_adjusted_weights: Dict[str, float] = Field(default_factory=dict)
     mathematical_derivation: List[Dict[str, Any]] = Field(default_factory=list)
@@ -1870,6 +1870,11 @@ class MetaBucketRollup(BaseModel):
     # Title / H1 Collision
     h1_title_collision_count: int = 0
     h1_title_collision_urls: List[str] = Field(default_factory=list)
+    # Templated Metadata & Scaled Content Abuse (Google QRG §4.6.5)
+    templated_metadata_count: int = 0
+    templated_metadata_urls: List[str] = Field(default_factory=list)
+    templated_metadata_findings: List[Dict[str, Any]] = Field(default_factory=list)
+    site_templated_risk: str = "none"
     title_summary: str = ""
     description_summary: str = ""
 
@@ -2582,8 +2587,8 @@ class ExecutiveReport(BaseModel):
     mission_id: Optional[str] = None
     website_url: str
     domain: str
-    generated_at: str
-    business_profile: BusinessProfile
+    generated_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    business_profile: Optional[BusinessProfile] = None
     resolved_entity: Optional[ResolvedEntity] = None
     scores: OverallScoreResult
     story_summary: str
@@ -2591,7 +2596,7 @@ class ExecutiveReport(BaseModel):
     what_is_holding_it_back: List[str] = Field(default_factory=list)
     primary_strategic_opportunity: str
     consultant_advice_what_to_ignore: str
-    three_way_comparison: ThreeWayComparison
+    three_way_comparison: Optional[ThreeWayComparison] = None
     ai_search_matrix: List[AiSearchQueryEvaluation] = Field(default_factory=list)
     findings: List[Finding] = Field(default_factory=list)
     claims: List[Claim] = Field(default_factory=list)

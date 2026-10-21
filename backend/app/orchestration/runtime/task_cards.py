@@ -684,6 +684,7 @@ Produce a coherent business representation downstream Dristik specialists can tr
 
     "AUDIT DIMENSIONS: Evaluate robots.txt availability, retrieval status, syntax or directives where parsed, "
     "user-agent-specific allow/disallow rules, sitemap declarations, sitemap accessibility and parse results, "
+    "IndexNow protocol adoption (for Bing, Yandex, and Naver automated submission), raw-vs-rendered DOM disparity, "
     "HTTP status distribution, redirect chains, loops, chains terminating in errors, internal links to redirecting "
     "or failing destinations, crawl depth, discovered-versus-crawled URL differences, and explicit AI crawler rules. "
     "Inspect GPTBot, ClaudeBot, PerplexityBot, Google-Extended, and other relevant agents only when their directives "
@@ -859,6 +860,10 @@ Produce a coherent business representation downstream Dristik specialists can tr
     "CrUX records, and other authorized field telemetry. Preserve collection method, URL or origin scope, timestamp, "
     "device class, connection conditions, test repetitions, and evidence tokens whenever supplied. Never fabricate "
     "LCP, INP, CLS, FCP, TTFB, CrUX values, resource sizes, or performance results. "
+    "Never reference First Input Delay (FID) in any output. FID was permanently retired in March 2024 and removed "
+    "from CrUX in September 2024; Interaction to Next Paint (INP) is the only active CWV responsiveness metric. "
+    "Reference Lighthouse 13.5.0 and CrUX Vis standards, and break down LCP into subparts (TTFB, resource load delay, "
+    "resource load duration, element render delay) when diagnostic evidence permits. "
 
     "LABORATORY AUDIT: Evaluate observed server response time, redirects affecting navigation, render-blocking CSS "
     "and JavaScript, resource priorities, image and font payloads, script and stylesheet transfer sizes, third-party "
@@ -1014,7 +1019,13 @@ Produce a coherent business representation downstream Dristik specialists can tr
     "TYPE AND PROPERTY DISCIPLINE: Require a schema type only when relevant to the evidenced entity and page "
     "purpose. Do not require Product markup on a service business, FAQPage on every page containing questions, "
     "sameAs on every Organization, or BreadcrumbList where no appropriate hierarchy is established. Distinguish "
-    "Service from Product. Do not add prices, ratings, reviews, availability, author credentials, organizational "
+    "Service from Product. Never recommend deprecated or retired Schema.org types: HowTo (deprecated Sept 2023), "
+    "SpecialAnnouncement (deprecated July 31, 2025), CourseInfo, EstimatedSalary, LearningVideo, ClaimReview, "
+    "and VehicleListing (all retired June 2025). FAQPage rich results were retired for all sites in May 2026; "
+    "do not promise FAQ rich-result features. Never output unreplaced template placeholders like [Business Name], "
+    "[City], [Phone], [URL], or REPLACE_ in schema recommendations. In single-page applications, audit whether "
+    "JSON-LD is present in raw server HTML or client-side injected by scripts. "
+    "Do not add prices, ratings, reviews, availability, author credentials, organizational "
     "identifiers, or claims that are not independently supported by supplied business evidence. An @id reference "
     "is not broken merely because its target is absent from the current sample; determine whether the supplied "
     "graph and crawl scope establish a real inconsistency. "
@@ -1220,7 +1231,12 @@ Produce a coherent business representation downstream Dristik specialists can tr
     "Do not invent a HIGH confidence label or any other confidence/status value that the canonical contract does "
     "not support. "
     "Evaluate experience, expertise, authority, and trust as distinct evidence dimensions rather than assuming one "
-    "signal proves all four. Assess whether high-consequence claims have appropriate sourcing and visible accountability "
+    "signal proves all four. Follow Google Quality Rater Guidelines (QRG) weighting where Trustworthiness is the "
+    "central, non-negotiable pillar (Experience ~20%, Expertise ~25%, Authoritativeness ~25%, Trustworthiness ~30%). "
+    "Without verified Trust, high Experience/Expertise cannot compensate. Note that the Helpful Content System was "
+    "absorbed into Google's core ranking system in March 2024. Evaluate minimum substantive copy thresholds by page "
+    "intent: Homepage 500+ words, Service/Solution 800+ words, In-depth Guide/Article 1500+ words, Product 300+ words, "
+    "Location 500-600 words. Assess whether high-consequence claims have appropriate sourcing and visible accountability "
     "only where the page topic and available evidence justify that assessment. Do not make medical, financial, legal, "
     "or other high-stakes content conclusions without the relevant content and source evidence. Do not infer a site-wide "
     "trust deficit from one page or assume that a missing author, credential, policy, or external profile is inherently "
@@ -1390,6 +1406,11 @@ Produce a coherent business representation downstream Dristik specialists can tr
     "claims, and excessive dependence on surrounding paragraphs only when demonstrated by the supplied content. "
     "Distinguish actual HTML semantics from visual appearance and do not infer underlying markup from screenshots or "
     "plain-text excerpts. "
+    "Maintain empirical distinction across AI crawler roles: OAI-SearchBot (ChatGPT Search retrieval) vs GPTBot (training); "
+    "Claude-SearchBot (search retrieval) vs ClaudeBot (training); Google-Extended (Gemini training, NOT Search/AIO). "
+    "Note that llms.txt is an optional experimental convention, not a confirmed search engine ranking or citation lever. "
+    "Evaluate self-contained answer blocks against the 130-170 word benchmark where proposition, entity subject, and "
+    "empirical proof converge into optimal machine extractability. "
     "For every finding, provide the exact URL, quoted passage or DOM selector where available, applicable rubric dimension, "
     "observed defect, scope, evidence identifiers, and a concrete remediation that preserves factual meaning. Recommend "
     "specific HTML structures or revised answer passages only when appropriate to the content. Do not add artificial FAQs, "
@@ -4086,6 +4107,74 @@ Produce a coherent business representation downstream Dristik specialists can tr
         "(4) Mobile web to native app handover journeys and deferred deep linking indexability; "
         "(5) Mobile app landing page content indexing parity.\n"
         "Report verified app link configurations, meta tags, and schema without inferring download figures or store rankings."
+    ),
+
+    "seo.drift.v3": (
+        "TASK CONTRACT: SEO DRIFT & HISTORICAL REGRESSION SPECIALIST\n"
+        "Audit page element drift and regressions against stored historical baselines using the 17 canonical comparison rules.\n"
+        "Verify: (1) CRITICAL regressions: supported schema completely removed, canonical URL changed or removed, noindex directive added, H1 tag removed or changed >50%, title removed, HTTP status code changed to 4xx/5xx;\n"
+        "(2) WARNING regressions: title text changed, meta description changed, Core Web Vitals metric regressed >20%, performance score dropped 10+ points, Open Graph tags removed, schema JSON-LD content modified;\n"
+        "(3) INFO changes: new schema added, H2 structure changed, HTML body content hash changed;\n"
+        "(4) Report every triggered rule with severity (CRITICAL, WARNING, INFO), exact old_value, new_value, and recommended remediation action;\n"
+        "(5) If no baseline exists for this URL, report BASELINE_NOT_FOUND and record current state as the initial baseline.\n"
+        "Ground all drift findings strictly in verified DOM comparisons, HTTP headers, and cryptographic snapshot hashes."
+    ),
+
+    "seo.ecommerce.v3": (
+        "TASK CONTRACT: E-COMMERCE SEO & MERCHANT LISTING SPECIALIST\n"
+        "Audit product page structured data, merchant listing eligibility, marketplace pricing signals, and product content quality.\n"
+        "Verify: (1) Product schema completeness against Google Merchant Center requirements: offers (price, priceCurrency, availability, priceValidUntil), sku, gtin/mpn, brand, review, and aggregateRating;\n"
+        "(2) Client-side vs server-side JSON-LD injection disparities by comparing raw HTML with rendered DOM;\n"
+        "(3) Product image optimization: high-resolution imagery (>=800px), descriptive alt text, modern formats (WebP/AVIF), and IPTC DigitalSourceType AI metadata labels;\n"
+        "(4) Content originality: detect manufacturer copy-paste descriptions, boilerplate product specs, and thin product copy (<300 words);\n"
+        "(5) E-commerce navigation: breadcrumb structured data, related products interlinking, category hierarchy depth, and out-of-stock canonical handling.\n"
+        "Ground all findings strictly in parsed product DOM elements, schema JSON-LD objects, and verified price tags."
+    ),
+
+    "seo.agentic_readiness.v3": (
+        "TASK CONTRACT: AGENTIC READINESS & AI BROWSING AUDIT SPECIALIST\n"
+        "Judge how well autonomous AI browsing agents (OpenAI Operator, Claude in Chrome, Gemini Auto Browse, Perplexity Comet) can access, navigate, and interact with the site.\n"
+        "Verify: (1) Lighthouse Agentic Browsing fraction (reported strictly as X/N with Lighthouse version and form factor; never convert to an assumed percentage);\n"
+        "(2) robots.txt AI agent policy: evaluate named groups for OAI-SearchBot, GPTBot, Claude-SearchBot, ClaudeBot, PerplexityBot, Google-Extended, and Applebot-Extended. Report training, search indexing, and user-triggered agent access on separate lines;\n"
+        "(3) Content-Signal HTTP headers and meta tags; note standards status (draft/proposal);\n"
+        "(4) /llms.txt and /llms-full.txt discovery, Markdown negotiation (Accept: text/markdown), and ARD conformance (ai-catalog.json, /.well-known/ai-catalog.json);\n"
+        "(5) WebMCP markup: inspect declarative form attributes and modelContext.registerTool invocations in scripts;\n"
+        "(6) Accessibility tree readability for agents: semantic landmarks, button labels, form field accessible names.\n"
+        "Report missing WebMCP or ai-catalog.json as opportunities, never as defects. Never promise ranking or citation improvements."
+    ),
+
+    "seo.sxo.v3": (
+        "TASK CONTRACT: SEARCH EXPERIENCE OPTIMIZATION (SXO) SPECIALIST\n"
+        "Perform SERP backwards analysis to detect page-type mismatches and determine why well-optimized content fails to satisfy searcher intent.\n"
+        "Verify: (1) Target page classification using standard taxonomy (e-commerce product, category grid, SaaS landing, editorial guide, tool/calculator, comparison);\n"
+        "(2) SERP dominant intent consensus: compare target page against top-ranking organic competitors. Rate page-type mismatch severity (CRITICAL, HIGH, MEDIUM, ALIGNED). If mismatch exists, lead with it as the primary finding;\n"
+        "(3) User story derivation: derive 3-5 user stories citing specific SERP signals (PAA questions, featured snippets, related searches) across awareness, consideration, and decision stages;\n"
+        "(4) 7-dimension SXO Gap Score (100 points total): Page Type (15), Content Depth (15), UX Signals (15), Schema (15), Media (15), Authority (15), Freshness (10);\n"
+        "(5) Persona evaluation: score 4-7 target buyer personas across Relevance, Clarity, Trust, and Action (25 pts each).\n"
+        "Label SXO score separately from technical SEO health as 'SXO Gap Score'."
+    ),
+
+    "seo.cluster.v3": (
+        "TASK CONTRACT: SEMANTIC TOPIC CLUSTERING & CONTENT ARCHITECTURE SPECIALIST\n"
+        "Design hub-and-spoke content architectures using pairwise SERP overlap data and prevent semantic keyword cannibalization.\n"
+        "Verify: (1) Seed keyword expansion into 30-50 related long-tail, question, and intent variants;\n"
+        "(2) Intent classification: group by Informational, Commercial, Transactional, Navigational;\n"
+        "(3) Pairwise SERP overlap thresholds: 7-10 shared URLs = same single post, 4-6 shared URLs = same topic cluster, 2-3 shared URLs = interlink between clusters, 0-1 shared URLs = separate topics;\n"
+        "(4) Hub-and-spoke architecture: designate 1 comprehensive pillar page (2,500-4,000 words) and 2-4 supporting spoke posts (1,200-1,800 words) per cluster;\n"
+        "(5) Internal link adjacency matrix: mandatory bidirectional link between every spoke and pillar; spoke-to-spoke links within cluster; zero orphan pages;\n"
+        "(6) Cannibalization audit: ensure no two pages target the same primary query.\n"
+        "Ground all cluster groupings in verified heading trees, URL paths, and internal link graph evidence."
+    ),
+
+    "seo.maps_intelligence.v3": (
+        "TASK CONTRACT: MAPS & LOCAL INTELLIGENCE SPECIALIST\n"
+        "Audit Google Business Profile (GBP) optimization, review velocity, and localized competitive presence for physical and service-area businesses.\n"
+        "Verify: (1) 25-field GBP profile completeness checklist: primary category (highest ranking impact), secondary categories, business description, operating hours, special hours, service area, website link, phone, attributes;\n"
+        "(2) Review health snapshot: total rating, review count, review velocity cadence, owner response rate, and sentiment balance;\n"
+        "(3) Cross-platform NAP consistency: check alignment across Google Maps, Bing Places, Apple Maps, and OpenStreetMap listings;\n"
+        "(4) Local competitor radius mapping: benchmark target business against top 3-5 local competitors in category radius;\n"
+        "(5) Maps Health Score (0-100): 25% Geo-Grid / Local Visibility, 20% GBP Completeness, 20% Review Health, 15% NAP Presence, 10% Competitor Position, 10% Schema & AI Readiness.\n"
+        "Ground all findings strictly in verified GBP embed markup, LocalBusiness structured data, and contact page text."
     ),
 }
 

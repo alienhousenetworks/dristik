@@ -6,6 +6,7 @@ and generates regression alerts for ongoing retainer clients.
 """
 import uuid
 from datetime import datetime, timedelta
+from difflib import SequenceMatcher
 from typing import List, Dict, Optional, Any
 from urllib.parse import urlparse
 from pydantic import BaseModel, Field
@@ -37,6 +38,7 @@ class RadarDiffResult(BaseModel):
     score_deltas: Dict[str, float] = Field(default_factory=dict)
     current_scores: Dict[str, float] = Field(default_factory=dict)
     dom_changes: List[Dict[str, Any]] = Field(default_factory=list)
+    drift_findings: List[Dict[str, Any]] = Field(default_factory=list)
     prompt_evaluations: List[Dict[str, Any]] = Field(default_factory=list)
     regression_alerts: List[Dict[str, Any]] = Field(default_factory=list)
     executive_delta_digest: str
@@ -51,6 +53,296 @@ DEFAULT_SAVED_PROMPTS = [
     "Can I trust {domain}? What customer proof or certifications exist?",
     "What is the expected ROI and payback time of {domain}?"
 ]
+
+def evaluate_seo_drift(prev: Dict[str, Any], curr: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """
+    Evaluates 17 comparison rules across 3 severity levels (CRITICAL, WARNING, INFO)
+    between a stored baseline snapshot and current page state.
+    Adapted from Claude SEO drift monitoring.
+    """
+    findings: List[Dict[str, Any]] = []
+
+    def _get_h1(snap):
+        h1 = snap.get("h1")
+        if isinstance(h1, list):
+            return h1[0] if h1 else None
+        return h1
+
+    # --- CRITICAL (Immediate Action Required) ---
+    # Rule 1: Schema/JSON-LD Completely Removed
+    prev_schema = prev.get("schema") or (["schema_present"] if prev.get("has_schema") else [])
+    curr_schema = curr.get("schema") or (["schema_present"] if curr.get("has_schema") else [])
+    if prev_schema and not curr_schema:
+        findings.append({
+            "rule_id": 1,
+            "rule_name": "Schema/JSON-LD Completely Removed",
+            "severity": "CRITICAL",
+            "field": "Schema.org JSON-LD",
+            "old": "Active",
+            "new": "Missing",
+            "status": "REMOVED",
+            "impact": "Structured data removed. Eligible rich results (Product, Review, LocalBusiness) risk dropping from SERPs quickly.",
+            "cross_ref": "schema.validation.v3"
+        })
+
+    # Rule 2: Canonical URL Changed
+    prev_canon = prev.get("canonical")
+    curr_canon = curr.get("canonical")
+    if prev_canon and curr_canon and str(prev_canon).strip().rstrip("/") != str(curr_canon).strip().rstrip("/"):
+        findings.append({
+            "rule_id": 2,
+            "rule_name": "Canonical URL Changed",
+            "severity": "CRITICAL",
+            "field": "Canonical URL",
+            "old": prev_canon,
+            "new": curr_canon,
+            "status": "MODIFIED",
+            "impact": "Canonical destination changed. Verify target URL is intentional; incorrect canonicals transfer equity away.",
+            "cross_ref": "seo.indexability.v3"
+        })
+
+    # Rule 3: Canonical URL Removed
+    if prev_canon and not curr_canon:
+        findings.append({
+            "rule_id": 3,
+            "rule_name": "Canonical URL Removed",
+            "severity": "CRITICAL",
+            "field": "Canonical URL",
+            "old": prev_canon,
+            "new": None,
+            "status": "REMOVED",
+            "impact": "Canonical tag missing. Search engines will guess canonical target, risking duplicate indexation.",
+            "cross_ref": "seo.indexability.v3"
+        })
+
+    # Rule 4: Noindex Directive Added
+    prev_robots = str(prev.get("meta_robots") or "").lower()
+    curr_robots = str(curr.get("meta_robots") or "").lower()
+    if "noindex" not in prev_robots and "noindex" in curr_robots:
+        findings.append({
+            "rule_id": 4,
+            "rule_name": "Noindex Directive Added",
+            "severity": "CRITICAL",
+            "field": "Meta Robots Directive",
+            "old": prev.get("meta_robots") or "index,follow",
+            "new": curr.get("meta_robots"),
+            "status": "ADDED",
+            "impact": "Unintentional noindex will deindex this URL from search engines within days.",
+            "cross_ref": "seo.indexability.v3"
+        })
+
+    # Rule 5: H1 Tag Removed Entirely
+    prev_h1 = _get_h1(prev)
+    curr_h1 = _get_h1(curr)
+    if prev_h1 and not curr_h1:
+        findings.append({
+            "rule_id": 5,
+            "rule_name": "H1 Tag Removed Entirely",
+            "severity": "CRITICAL",
+            "field": "H1 Heading",
+            "old": prev_h1,
+            "new": None,
+            "status": "REMOVED",
+            "impact": "Primary topical heading signal missing. Impairs on-page semantic relevance and extractability.",
+            "cross_ref": "seo.html.v3"
+        })
+
+    # Rule 6: H1 Text Changed Significantly
+    elif prev_h1 and curr_h1 and prev_h1.strip() != curr_h1.strip():
+        ratio = SequenceMatcher(None, prev_h1.strip().lower(), curr_h1.strip().lower()).ratio()
+        if ratio < 0.5:
+            findings.append({
+                "rule_id": 6,
+                "rule_name": "H1 Text Changed Significantly",
+                "severity": "CRITICAL",
+                "field": "H1 Heading",
+                "old": prev_h1,
+                "new": curr_h1,
+                "status": "MODIFIED",
+                "impact": f"H1 changed substantially (similarity: {ratio:.0%}). Verify alignment with target commercial intent.",
+                "cross_ref": "seo.html.v3"
+            })
+
+    # Rule 7: Title Tag Removed Entirely
+    prev_title = prev.get("title")
+    curr_title = curr.get("title")
+    if prev_title and not curr_title:
+        findings.append({
+            "rule_id": 7,
+            "rule_name": "Title Tag Removed Entirely",
+            "severity": "CRITICAL",
+            "field": "Page Title",
+            "old": prev_title,
+            "new": None,
+            "status": "REMOVED",
+            "impact": "Title tag removed. Search engines will auto-generate SERP titles, typically degrading CTR.",
+            "cross_ref": "seo.html.v3"
+        })
+
+    # Rule 8: HTTP Status Code Changed to Error
+    prev_code = prev.get("status_code", 200)
+    curr_code = curr.get("status_code", 200)
+    if prev_code and curr_code and prev_code < 400 and curr_code >= 400:
+        findings.append({
+            "rule_id": 8,
+            "rule_name": "HTTP Status Code Error",
+            "severity": "CRITICAL",
+            "field": "HTTP Status Code",
+            "old": prev_code,
+            "new": curr_code,
+            "status": "REGRESSED",
+            "impact": f"HTTP status regressed to {curr_code}. Broken page will be dropped from index.",
+            "cross_ref": "seo.crawl.v3"
+        })
+
+    # --- WARNING (Investigate Within 1 Week) ---
+    # Rule 9: Title Text Changed
+    if prev_title and curr_title and prev_title.strip() != curr_title.strip():
+        findings.append({
+            "rule_id": 9,
+            "rule_name": "Title Text Changed",
+            "severity": "WARNING",
+            "field": "Page Title",
+            "old": prev_title,
+            "new": curr_title,
+            "status": "MODIFIED",
+            "impact": "SERP title text modified. Monitor organic CTR and impressions in Search Console.",
+            "cross_ref": "seo.html.v3"
+        })
+
+    # Rule 10: Meta Description Changed
+    prev_desc = prev.get("meta_description")
+    curr_desc = curr.get("meta_description")
+    if prev_desc and curr_desc and prev_desc.strip() != curr_desc.strip():
+        findings.append({
+            "rule_id": 10,
+            "rule_name": "Meta Description Changed",
+            "severity": "WARNING",
+            "field": "Meta Description",
+            "old": prev_desc,
+            "new": curr_desc,
+            "status": "MODIFIED",
+            "impact": "Meta description modified. Ensure CTA and commercial keywords remain intact.",
+            "cross_ref": "seo.html.v3"
+        })
+
+    # Rule 11: Core Web Vitals Metric Regressed >20%
+    prev_cwv = prev.get("cwv") or {}
+    curr_cwv = curr.get("cwv") or {}
+    for metric_key, metric_name in [("lcp", "LCP"), ("inp", "INP"), ("cls", "CLS")]:
+        prev_val = prev_cwv.get(metric_key)
+        curr_val = curr_cwv.get(metric_key)
+        if prev_val is not None and curr_val is not None and prev_val > 0:
+            pct_change = (curr_val - prev_val) / prev_val
+            if pct_change > 0.20:
+                findings.append({
+                    "rule_id": 11,
+                    "rule_name": f"Core Web Vitals {metric_name} Regressed >20%",
+                    "severity": "WARNING",
+                    "field": f"CWV {metric_name}",
+                    "old": prev_val,
+                    "new": curr_val,
+                    "status": "REGRESSED",
+                    "impact": f"{metric_name} worsened by {pct_change:.1%}. Check recent script or asset additions.",
+                    "cross_ref": "seo.performance.v3"
+                })
+
+    # Rule 12: Lighthouse Performance Score Dropped >= 10 Points
+    prev_perf = prev.get("performance_score")
+    curr_perf = curr.get("performance_score")
+    if prev_perf is not None and curr_perf is not None and (prev_perf - curr_perf) >= 10:
+        findings.append({
+            "rule_id": 12,
+            "rule_name": "Lighthouse Performance Score Dropped >=10 Points",
+            "severity": "WARNING",
+            "field": "Performance Score",
+            "old": prev_perf,
+            "new": curr_perf,
+            "status": "REGRESSED",
+            "impact": f"Lighthouse performance dropped by {prev_perf - curr_perf:.0f} points.",
+            "cross_ref": "seo.performance.v3"
+        })
+
+    # Rule 13: OG Tags Removed
+    prev_og = prev.get("open_graph") or prev.get("og_tags")
+    curr_og = curr.get("open_graph") or curr.get("og_tags")
+    if prev_og and not curr_og:
+        findings.append({
+            "rule_id": 13,
+            "rule_name": "Open Graph Tags Removed",
+            "severity": "WARNING",
+            "field": "Open Graph Metadata",
+            "old": "Active",
+            "new": "Missing",
+            "status": "REMOVED",
+            "impact": "Social sharing cards will render with generic or blank previews.",
+            "cross_ref": "seo.html.v3"
+        })
+
+    # Rule 14: Schema/JSON-LD Content Modified
+    prev_hash = prev.get("schema_hash")
+    curr_hash = curr.get("schema_hash")
+    if prev_schema and curr_schema and prev_hash and curr_hash and prev_hash != curr_hash:
+        findings.append({
+            "rule_id": 14,
+            "rule_name": "Schema/JSON-LD Content Modified",
+            "severity": "WARNING",
+            "field": "Schema.org JSON-LD",
+            "old": prev_hash[:8],
+            "new": curr_hash[:8],
+            "status": "MODIFIED",
+            "impact": "Schema markup was updated. Validate required properties and syntax.",
+            "cross_ref": "schema.validation.v3"
+        })
+
+    # --- INFO (Awareness Only) ---
+    # Rule 15: New Schema/JSON-LD Added
+    if not prev_schema and curr_schema:
+        findings.append({
+            "rule_id": 15,
+            "rule_name": "New Schema/JSON-LD Added",
+            "severity": "INFO",
+            "field": "Schema.org JSON-LD",
+            "old": "Missing",
+            "new": "Active",
+            "status": "ADDED",
+            "impact": "Structured data added. Entity clarity and extractability improved.",
+            "cross_ref": "schema.validation.v3"
+        })
+
+    # Rule 16: H2 Structure Changed
+    prev_h2 = prev.get("h2") or []
+    curr_h2 = curr.get("h2") or []
+    if prev_h2 != curr_h2 and (len(prev_h2) > 0 or len(curr_h2) > 0):
+        findings.append({
+            "rule_id": 16,
+            "rule_name": "H2 Subheading Structure Changed",
+            "severity": "INFO",
+            "field": "H2 Headings",
+            "old": f"{len(prev_h2)} headings",
+            "new": f"{len(curr_h2)} headings",
+            "status": "MODIFIED",
+            "impact": "H2 subheading hierarchy changed. Verify topic coverage remains complete.",
+            "cross_ref": "content.topic_coverage.v3"
+        })
+
+    # Rule 17: Content Hash Changed
+    prev_body = prev.get("html_hash") or prev.get("body_hash")
+    curr_body = curr.get("html_hash") or curr.get("body_hash")
+    if prev_body and curr_body and prev_body != curr_body:
+        findings.append({
+            "rule_id": 17,
+            "rule_name": "Body Content Hash Changed",
+            "severity": "INFO",
+            "field": "Body HTML Hash",
+            "old": prev_body[:8],
+            "new": curr_body[:8],
+            "status": "MODIFIED",
+            "impact": "General body copy update detected.",
+            "cross_ref": "content.depth.v3"
+        })
+
+    return findings
 
 class RadarService:
     def __init__(self):
@@ -196,11 +488,14 @@ class RadarService:
                 })
 
 
+        # Evaluate 17 SEO drift comparison rules
+        drift_findings = evaluate_seo_drift(prev_snapshot, curr_snap)
+
         # Determine overall alert severity
         alert_sev = "NONE"
-        if regressions:
-            alert_sev = "CRITICAL" if len(regressions) > 1 else "HIGH"
-        elif deltas.get("ai_citation", 0) <= -10.0 or any(c["status"] == "REMOVED" for c in dom_changes):
+        if any(f["severity"] == "CRITICAL" for f in drift_findings) or len(regressions) > 1:
+            alert_sev = "CRITICAL"
+        elif regressions or any(f["severity"] == "WARNING" for f in drift_findings) or deltas.get("ai_citation", 0) <= -10.0 or any(c["status"] == "REMOVED" for c in dom_changes):
             alert_sev = "HIGH"
         elif deltas.get("ai_citation", 0) < 0 or deltas.get("human", 0) < -5:
             alert_sev = "MEDIUM"
@@ -241,6 +536,12 @@ class RadarService:
         digest_lines.append(f"• Tracked Buyer Prompts: {len(sub.saved_prompts)} prompts active.")
         if dom_changes:
             digest_lines.append(f"• DOM Changes Detected: {len(dom_changes)} key structural updates recorded.")
+        critical_drifts = [f for f in drift_findings if f["severity"] == "CRITICAL"]
+        warning_drifts = [f for f in drift_findings if f["severity"] == "WARNING"]
+        if critical_drifts:
+            digest_lines.append(f"🚨 CRITICAL SEO Drift: {len(critical_drifts)} urgent regressions detected ({', '.join(f['field'] for f in critical_drifts[:3])}).")
+        if warning_drifts:
+            digest_lines.append(f"⚠️ SEO Drift Warnings: {len(warning_drifts)} notable change(s) detected.")
         if regressions:
             digest_lines.append(f"⚠️ Regression Alert: {len(regressions)} prompt(s) experienced citability drops.")
         else:
@@ -257,6 +558,7 @@ class RadarService:
             score_deltas=deltas,
             current_scores=curr_scores,
             dom_changes=dom_changes,
+            drift_findings=drift_findings,
             prompt_evaluations=prompt_evals,
             regression_alerts=regressions,
             executive_delta_digest=digest,

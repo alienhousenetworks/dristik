@@ -193,6 +193,20 @@ SPECIALIST_AGENTS_V3: Dict[str, AgentDefinition] = {
         timeout_sec=15,
         required_evidence=["img_tags", "media_elements"]
     ),
+    "seo.drift.v3": AgentDefinition(
+        agent_id="seo.drift.v3",
+        agent_name="SEO Drift Monitoring Specialist",
+        domain="TECHNICAL_SEO",
+        worker_type="analyst_worker",
+        description="Detects regressions against historical baselines using 17 comparison rules across 3 severity tiers.",
+        capabilities=["seo_drift_detection", "regression_analysis", "baseline_comparison"],
+        allowed_models=["deterministic", "reasoning_model"],
+        token_budget=3500,
+        risk_level="low",
+        timeout_sec=20,
+        dependencies=[],
+        required_evidence=["homepage_dom", "meta_descriptions", "schema_types", "status_code"],
+    ),
 
     # DOMAIN 3: STRUCTURED DATA / ENTITY
     "schema.validation.v3": AgentDefinition(
@@ -207,6 +221,20 @@ SPECIALIST_AGENTS_V3: Dict[str, AgentDefinition] = {
         risk_level="low",
         timeout_sec=15,
         required_evidence=["raw_schema_jsonld", "microdata_nodes"]
+    ),
+    "seo.ecommerce.v3": AgentDefinition(
+        agent_id="seo.ecommerce.v3",
+        agent_name="E-Commerce SEO Specialist",
+        domain="STRUCTURED_DATA",
+        worker_type="analyst_worker",
+        description="Validates Product schema against merchant listing requirements, analyzes pricing competitiveness, and reviews product content originality.",
+        capabilities=["product_schema_validation", "merchant_center_audit", "pricing_competitiveness"],
+        allowed_models=["reasoning_model", "fast_slm"],
+        token_budget=4000,
+        risk_level="medium",
+        timeout_sec=20,
+        dependencies=[],
+        required_evidence=["product_dom", "schema_types", "pricing_table"],
     ),
     "entity.graph.v3": AgentDefinition(
         agent_id="entity.graph.v3",
@@ -304,6 +332,20 @@ SPECIALIST_AGENTS_V3: Dict[str, AgentDefinition] = {
         timeout_sec=20,
         required_evidence=["page_manifest", "all_page_titles", "canonical_links"]
     ),
+    "seo.cluster.v3": AgentDefinition(
+        agent_id="seo.cluster.v3",
+        agent_name="Topic Cluster & Semantic Architecture Specialist",
+        domain="CONTENT",
+        worker_type="analyst_worker",
+        description="Designs hub-and-spoke content architecture using pairwise SERP overlap thresholds (7-10 same post, 4-6 same cluster) and generates internal linking matrices.",
+        capabilities=["serp_overlap_clustering", "hub_spoke_architecture", "link_matrix_generation", "cannibalization_prevention"],
+        allowed_models=["reasoning_model", "judge_model"],
+        token_budget=5500,
+        risk_level="medium",
+        timeout_sec=30,
+        dependencies=["business.discovery.v3", "content.topic_coverage.v3"],
+        required_evidence=["headings", "internal_links", "topic_tree"],
+    ),
 
     # DOMAIN 5: GEO (GENERATIVE ENGINE OPTIMIZATION)
     "geo.extractability.v3": AgentDefinition(
@@ -358,6 +400,34 @@ SPECIALIST_AGENTS_V3: Dict[str, AgentDefinition] = {
         risk_level="low",
         timeout_sec=20,
         required_evidence=["headings", "first_paragraph_texts", "faq_blocks"]
+    ),
+    "seo.agentic_readiness.v3": AgentDefinition(
+        agent_id="seo.agentic_readiness.v3",
+        agent_name="Agentic Readiness Specialist",
+        domain="GEO",
+        worker_type="analyst_worker",
+        description="Audits site readability for AI browsing agents: Lighthouse Agentic Browsing fraction (X/N), accessibility tree, llms.txt, Content-Signal, and WebMCP discovery.",
+        capabilities=["agentic_browsing_score", "llms_txt_audit", "webmcp_detection", "agent_access_policy"],
+        allowed_models=["reasoning_model", "fast_slm"],
+        token_budget=4000,
+        risk_level="low",
+        timeout_sec=25,
+        dependencies=[],
+        required_evidence=["robots_txt", "llms_txt", "a11y_tree", "headers"],
+    ),
+    "seo.maps_intelligence.v3": AgentDefinition(
+        agent_id="seo.maps_intelligence.v3",
+        agent_name="Maps & Local Intelligence Specialist",
+        domain="GEO",
+        worker_type="analyst_worker",
+        description="Audits Google Business Profile completeness against a 25-field checklist, analyzes review velocity, and maps local competitor radius.",
+        capabilities=["gbp_profile_audit", "geo_grid_tracking", "review_velocity_analysis", "maps_health_score"],
+        allowed_models=["reasoning_model", "fast_slm"],
+        token_budget=4500,
+        risk_level="low",
+        timeout_sec=25,
+        dependencies=["business.discovery.v3"],
+        required_evidence=["local_schema", "nap_data", "gbp_signals"],
     ),
 
     # DOMAIN 6: AI SEARCH
@@ -447,6 +517,20 @@ SPECIALIST_AGENTS_V3: Dict[str, AgentDefinition] = {
         risk_level="low",
         timeout_sec=15,
         required_evidence=["dom_elements", "nav_structure", "viewport"]
+    ),
+    "seo.sxo.v3": AgentDefinition(
+        agent_id="seo.sxo.v3",
+        agent_name="Search Experience Optimization Specialist",
+        domain="EXPERIENCE",
+        worker_type="analyst_worker",
+        description="Performs SERP backwards analysis to identify page-type mismatches, user story fulfillment, and multi-persona alignment.",
+        capabilities=["page_type_mismatch", "sxo_gap_scoring", "persona_satisfaction", "user_story_mapping"],
+        allowed_models=["reasoning_model", "judge_model"],
+        token_budget=5000,
+        risk_level="medium",
+        timeout_sec=25,
+        dependencies=["business.discovery.v3", "business.intent.v3"],
+        required_evidence=["headings", "meta_descriptions", "page_type", "serp_consensus"],
     ),
     "cro.conversion.v3": AgentDefinition(
         agent_id="cro.conversion.v3",
