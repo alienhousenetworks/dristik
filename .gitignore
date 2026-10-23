@@ -15,3 +15,4 @@ backend/reports/
 *.db
 *.sqlite
 *.sqlite3
+claude-seo-main/

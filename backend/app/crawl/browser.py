@@ -271,19 +271,23 @@ class BrowserRenderService:
     @classmethod
     def _kill_process_tree(cls, pid: int) -> None:
         """SIGKILL a process and its children. Used when Chromium ignores cancellation."""
-        children: list[int] = []
-        for entry in os.listdir("/proc"):
-            if not entry.isdigit():
-                continue
+        if os.path.exists("/proc"):
             try:
-                stat = open(f"/proc/{entry}/stat", "r", encoding="utf-8", errors="replace").read()
-                ppid = int(stat.rsplit(")", 1)[1].split()[1])
-            except (OSError, IndexError, ValueError):
-                continue
-            if ppid == pid:
-                children.append(int(entry))
-        for child in children:
-            cls._kill_process_tree(child)
+                children: list[int] = []
+                for entry in os.listdir("/proc"):
+                    if not entry.isdigit():
+                        continue
+                    try:
+                        stat = open(f"/proc/{entry}/stat", "r", encoding="utf-8", errors="replace").read()
+                        ppid = int(stat.rsplit(")", 1)[1].split()[1])
+                    except (OSError, IndexError, ValueError):
+                        continue
+                    if ppid == pid:
+                        children.append(int(entry))
+                for child in children:
+                    cls._kill_process_tree(child)
+            except Exception:
+                pass
         try:
             os.kill(pid, signal.SIGKILL)
         except OSError:
