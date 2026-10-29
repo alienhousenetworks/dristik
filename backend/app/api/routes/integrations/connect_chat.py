@@ -40,16 +40,26 @@ class ConnectChatRequest(BaseModel):
 
 
 def _detect_handshake_content(text: str) -> bool:
-    return any(
-        marker in text.lower()
-        for marker in [
-            "json:dristik-connection",
-            "webhook_url",
-            "connection_mode",
-            "supported_capabilities",
-            "ready to pair with dristik",
-        ]
-    ) or bool(re.search(r"(?i)\b(?:webhook|callback)\s*[:=]\s*['\"]?https?://", text))
+    markers = [
+        "json:dristik-connection",
+        "webhook_url",
+        "websocket_url",
+        "connection_mode",
+        "supported_capabilities",
+        "integration_code",
+        "ready to pair with dristik",
+        "auth_headers",
+        "dristik-connection",
+        "client_name",
+    ]
+    low = text.lower()
+    if any(m in low for m in markers):
+        return True
+    if re.search(r"(?i)\b(?:webhook|callback|endpoint|websocket)\s*[:=]\s*['\"]?(?:https?|wss?)://", text):
+        return True
+    if re.search(r"```(?:python|javascript|typescript)\b.*?(?:FastAPI|express|createServer|app\.post)", text, re.DOTALL):
+        return True
+    return False
 
 
 @router.post("")
@@ -57,18 +67,38 @@ async def chat_with_connect(body: ConnectChatRequest, user: UserIdentity = Depen
     user_msg = body.message.strip()
     now = time.time()
 
-    # 1. Check if user pasted an AI handshake response into the chat
+    # 1. Check if user pasted an AI handshake response or credentials into the chat
     if _detect_handshake_content(user_msg):
-        # Determine target connection
         target_conn_id = body.connection_id
-        if not target_conn_id:
-            with uc._db() as conn:
-                row = conn.execute(
-                    "SELECT id FROM uc_ai_connections WHERE org_id=? AND status='active' ORDER BY created_at DESC LIMIT 1",
-                    (user.org_id,),
-                ).fetchone()
+        conn_name = None
+        with uc._db() as conn:
+            if target_conn_id:
+                row = conn.execute("SELECT id, name FROM uc_ai_connections WHERE id=? AND org_id=?", (target_conn_id, user.org_id)).fetchone()
                 if row:
-                    target_conn_id = row["id"]
+                    conn_name = row["name"]
+            if not target_conn_id or not conn_name:
+                extracted_meta = onboarding._extract_handshake_payload(user_msg)
+                name_hint = extracted_meta.get("client_name") or ""
+                prov_hint = extracted_meta.get("provider") or ""
+                candidate = None
+                if name_hint:
+                    candidate = conn.execute(
+                        "SELECT id, name FROM uc_ai_connections WHERE org_id=? AND status='active' AND name LIKE ? ORDER BY created_at DESC LIMIT 1",
+                        (user.org_id, f"%{name_hint}%"),
+                    ).fetchone()
+                if not candidate and prov_hint:
+                    candidate = conn.execute(
+                        "SELECT id, name FROM uc_ai_connections WHERE org_id=? AND status='active' AND name LIKE ? ORDER BY created_at DESC LIMIT 1",
+                        (user.org_id, f"%{prov_hint}%"),
+                    ).fetchone()
+                if not candidate:
+                    candidate = conn.execute(
+                        "SELECT id, name FROM uc_ai_connections WHERE org_id=? AND status='active' ORDER BY created_at DESC LIMIT 1",
+                        (user.org_id,),
+                    ).fetchone()
+                if candidate:
+                    target_conn_id = candidate["id"]
+                    conn_name = candidate["name"]
 
         if target_conn_id:
             try:
@@ -78,14 +108,23 @@ async def chat_with_connect(body: ConnectChatRequest, user: UserIdentity = Depen
                     user,
                 )
                 status_str = "Verified Active (200 OK)" if ingest_res["handshake_status"] == "verified_active" else ingest_res["handshake_status"]
+                
+                code_note = ""
+                if ingest_res.get("code_staged"):
+                    code_note = (
+                        f"\n\n📦 **Bridge Listener Code Staged Safely:**\n"
+                        f"An inbound bridge script was detected and recorded. You can run it on your listener host:\n"
+                        f"```bash\n# Run the staged integration bridge listener\npython3 integration_bridge.py\n```"
+                    )
+
                 reply = (
                     f"🎉 **AI Connection Ingested & Configured!**\n\n"
-                    f"- **Connection ID:** `{target_conn_id}`\n"
-                    f"- **Mode:** `{ingest_res['connection_mode']}`\n"
-                    f"- **Webhook URL:** `{ingest_res['webhook_url'] or 'Not provided (MCP Client mode)'}`\n"
-                    f"- **Handshake Status:** **{status_str}**\n"
-                    f"- **Bridge Code:** {'Staged safely for review' if ingest_res.get('code_staged') else 'Not required (Direct credentials used)'}\n\n"
-                    f"{ingest_res['message']} You can now exchange tasks, stream audit reports, and chat bidirectional."
+                    f"- **Connection:** `{conn_name or target_conn_id}`\n"
+                    f"- **Connection Mode:** `{ingest_res['connection_mode']}`\n"
+                    f"- **Webhook Endpoint:** `{ingest_res['webhook_url'] or 'Not provided (MCP Client mode)'}`\n"
+                    f"- **Handshake Status:** **{status_str}**"
+                    f"{code_note}\n\n"
+                    f"🚀 **Next steps:** {ingest_res['message']} You can now exchange tasks, stream audit reports, or chat directly in this window."
                 )
                 return {
                     "role": "assistant",

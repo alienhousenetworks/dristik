@@ -97,38 +97,49 @@ class OnboardingResponse(BaseModel):
     limitations: list[str] = Field(default_factory=list, max_length=50)
 
 def _prompt(provider: str, name: str, endpoint: str, email: str, scopes: list[str], goal: str) -> str:
-    return f"""You are establishing a direct, authorized two-way connection with Dristik Autonomous Growth OS for connection profile "{name}".
+    return f"""You are establishing a sovereign two-way connection with Dristik Autonomous Growth OS for connection profile "{name}".
 Selected AI/client: {provider}
-Dristik MCP & API endpoint: {endpoint}
+Dristik MCP & API Gateway: {endpoint}
 Connection identity: {email}
 Granted scopes: {json.dumps(scopes)}
 Onboarding goal: {goal}
 
-Dristik is a sovereign AI Brain orchestrating 105 specialist agents, 12 domains, a deterministic DAG pipeline, blackboard memory, and live cross-engine citation benchmarking.
+Dristik is an autonomous growth engine operating 105 specialist agents, 12 domains, a deterministic DAG execution pipeline, shared blackboard memory, and multi-engine citation benchmarking.
 
 === STEP 1: CONFIGURE DRISTIK CREDENTIALS IN YOUR CLIENT ===
-1. Authenticate to Dristik at {endpoint} using:
-   - Header "Authorization: Bearer <YOUR_DRISTIK_API_KEY>" (Paste the one-time API key provided separately by the user in your client secret settings; do NOT write this key in plaintext responses).
-   - Header "X-Dristik-Connection-Email: {email}".
-2. Test tool discovery using MCP `tools/list` or ping with `dristik_ping`.
+1. In your client's settings, configure the Dristik MCP endpoint:
+   - Endpoint URL: {endpoint}
+   - Header: X-Dristik-Connection-Email: {email}
+   - Header: Authorization: Bearer <PASTE_DRISTIK_API_KEY_HERE>
+   (Note: Use the one-time API key provided separately by the user in your client secret settings; do NOT output this key in plaintext responses).
+2. Test discovery using MCP `tools/list` or ping with `dristik_ping`.
 
-=== STEP 2: PROVIDE YOUR CONNECTION DETAILS FOR TWO-WAY BIDIRECTIONAL LINK ===
-To allow Dristik to push audit findings, tasks, blackboard updates, and messages back to you, reply to the user with your inbound connection parameters.
-Format your reply with a clean JSON block labeled ```json:dristik-connection containing:
+=== STEP 2: PROVIDE YOUR INBOUND CONNECTION DETAILS FOR TWO-WAY LINK ===
+To enable Dristik to push audit findings, tasks, blackboard updates, and messages back to you, reply to the user with your inbound connection parameters.
+Choose either Option A or Option B:
+
+[Option A: Direct Webhook / WebSocket]
+If you have an active webhook or WebSocket endpoint, supply the URL and any required authorization headers.
+
+[Option B: Standalone Integration Bridge Code]
+If you do not have a public webhook, provide a complete, runnable Python (FastAPI/uvicorn) or Node.js (Express) bridge script that listens on a local port (e.g., 8088) and relays messages to you.
+
+=== STEP 3: FORMAT YOUR RESPONSE ===
+Output your response inside a single code block labeled ```json:dristik-connection:
 {{
   "client_name": "{name}",
   "provider": "{provider}",
-  "connection_mode": "webhook" | "websocket" | "mcp_client" | "custom_bridge",
-  "webhook_url": "<YOUR_INBOUND_WEBHOOK_OR_CALLBACK_URL_OR_NONE>",
-  "websocket_url": "<YOUR_WEBSOCKET_URL_OR_NONE>",
-  "auth_scheme": "bearer" | "api_key" | "none",
-  "auth_headers": {{ "Authorization": "Bearer <YOUR_AI_OR_CALLBACK_TOKEN>" }},
-  "supported_capabilities": ["tasks.receive", "audit.stream", "two_way_chat"],
-  "integration_code": "<Optional concise script (Node.js/Python) if you are deploying a bridge listener, or null>",
-  "status_summary": "Ready to pair with Dristik Brain"
+  "connection_mode": "webhook" | "websocket" | "bridge_code" | "custom_bot",
+  "webhook_url": "https://your-webhook-or-callback-url.com/inbound" | null,
+  "websocket_url": "wss://your-websocket-url.com" | null,
+  "auth_headers": {{ "Authorization": "Bearer <YOUR_AI_OR_SERVICE_TOKEN>" }},
+  "supported_capabilities": ["task_updates", "audit_alerts", "chat"],
+  "integration_code": "Complete runnable Python or Node.js script if Option B was selected, or null if Option A",
+  "status_summary": "Ready to pair with Dristik Brain",
+  "pairing_instructions": "Brief instructions on what was configured"
 }}
 
-Distinguish real live endpoints from proposed configurations. Do not fabricate external URLs. Do not ask Dristik to run arbitrary shell commands automatically. The user will copy your entire response directly into Dristik Connect to automatically verify two-way connectivity."""
+Do not fabricate external URLs. The user will copy your entire response and paste it directly into Dristik's Connect Chatbot to automatically verify and establish the bidirectional channel."""
 
 def _tool_inventory(scopes: list[str]) -> list[dict[str, str]]:
     return [dict(tool) for tool in TOOL_CATALOG if "*" in scopes or tool["scope"] in scopes]
@@ -290,16 +301,41 @@ def _extract_handshake_payload(raw_text: str) -> dict[str, Any]:
         if code_match:
             integration_code = code_match.group(1)
 
-    clean_webhook = str(webhook_url).strip() if webhook_url and str(webhook_url).strip().lower() not in ("none", "null", "<your_inbound_webhook_or_callback_url_or_none>") else None
-    clean_ws = str(websocket_url).strip() if websocket_url and str(websocket_url).strip().lower() not in ("none", "null", "<your_websocket_url_or_none>") else None
+    clean_webhook = (
+        str(webhook_url).strip()
+        if webhook_url
+        and str(webhook_url).strip().lower()
+        not in (
+            "none",
+            "null",
+            "<your_inbound_webhook_or_callback_url_or_none>",
+            "https://your-webhook-or-callback-url.com/inbound",
+        )
+        else None
+    )
+    clean_ws = (
+        str(websocket_url).strip()
+        if websocket_url
+        and str(websocket_url).strip().lower()
+        not in (
+            "none",
+            "null",
+            "<your_websocket_url_or_none>",
+            "wss://your-websocket-url.com",
+        )
+        else None
+    )
 
     return {
+        "client_name": parsed.get("client_name"),
+        "provider": parsed.get("provider"),
         "webhook_url": clean_webhook,
         "websocket_url": clean_ws,
         "auth_headers": auth_headers if isinstance(auth_headers, dict) else {},
         "connection_mode": connection_mode,
         "summary": summary,
         "integration_code": integration_code,
+        "pairing_instructions": parsed.get("pairing_instructions"),
         "parsed_json": parsed,
     }
 

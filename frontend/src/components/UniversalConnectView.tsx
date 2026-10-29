@@ -1325,24 +1325,30 @@ export function UniversalConnectView() {
                   e.preventDefault();
                   void sendChatMessage();
                 }}
-                className="flex gap-2 pt-1"
+                className="flex items-end gap-2 pt-1"
               >
-                <input
-                  type="text"
+                <textarea
+                  rows={chatInput.includes('\n') ? 3 : 1}
                   placeholder={
                     chatTargetConnectionId
-                      ? "Send message or command to connected AI (or paste pairing response)..."
-                      : "Ask Copilot or paste your AI's response here to auto-pair..."
+                      ? "Send message to external AI or paste its handshake pairing response..."
+                      : "Paste external AI response/credentials here or ask Copilot for pairing help..."
                   }
                   value={chatInput}
                   onChange={(e) => setChatInput(e.target.value)}
-                  className="input flex-1 text-xs"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      void sendChatMessage();
+                    }
+                  }}
+                  className="input flex-1 resize-y py-2 text-xs leading-relaxed"
                   disabled={chatBusy}
                 />
                 <button
                   type="submit"
                   disabled={chatBusy || !chatInput.trim()}
-                  className="inline-flex items-center gap-1 rounded-lg bg-ink px-3 py-1.5 text-xs font-medium text-white shadow-xs hover:bg-ink-800 disabled:opacity-50"
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-ink px-3.5 py-2 text-xs font-semibold text-white shadow-xs hover:bg-ink-800 disabled:opacity-50 shrink-0"
                 >
                   <Send size={13} />
                   <span>Send</span>
@@ -1361,9 +1367,11 @@ export function UniversalConnectView() {
                 type="button"
                 disabled={busy}
                 onClick={() => void cleanupRevokedConnections()}
-                className="inline-flex items-center gap-1 rounded-lg border border-red-200 bg-red-50/50 px-2.5 py-1 text-xs font-medium text-red-700 hover:bg-red-100 disabled:opacity-50"
+                className="inline-flex items-center gap-1.5 rounded-lg border border-red-300 bg-red-50/80 px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-100 disabled:opacity-50 transition shadow-2xs"
+                title="Permanently remove all revoked connections"
               >
-                <Trash2 size={12} /> Clean up revoked ({aiConnections.filter((c) => c.status === 'revoked').length})
+                <Trash2 size={13} className="text-red-600" />
+                <span>Clean up all revoked connections ({aiConnections.filter((c) => c.status === 'revoked').length})</span>
               </button>
             )}
           </div>
@@ -1473,16 +1481,28 @@ export function UniversalConnectView() {
                         </button>
                       </>
                     )}
-                    <button
-                      type="button"
-                      disabled={busy}
-                      onClick={() => void deleteAIConnection(c.id, c.name)}
-                      className="inline-flex items-center gap-1 rounded-lg border border-line px-2.5 py-1.5 text-xs font-medium text-ink-500 hover:text-red-700 hover:bg-red-50 disabled:opacity-50"
-                      title="Permanently delete this connection"
-                    >
-                      <Trash2 size={12} />
-                      {c.status === 'revoked' ? ' Delete' : ''}
-                    </button>
+                    {c.status === 'revoked' ? (
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => void deleteAIConnection(c.id, c.name)}
+                        className="inline-flex items-center gap-1 rounded-lg border border-red-300 bg-red-50/80 px-2.5 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-100 disabled:opacity-50 transition shadow-2xs"
+                        title="Permanently delete this revoked connection"
+                      >
+                        <Trash2 size={12} className="text-red-600" />
+                        <span>Delete</span>
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => void deleteAIConnection(c.id, c.name)}
+                        className="inline-flex items-center gap-1 rounded-lg border border-line px-2.5 py-1.5 text-xs font-medium text-ink-400 hover:text-red-700 hover:border-red-200 hover:bg-red-50 disabled:opacity-50 transition"
+                        title="Permanently delete this connection"
+                      >
+                        <Trash2 size={12} />
+                      </button>
+                    )}
                   </div>
                 </div>
 

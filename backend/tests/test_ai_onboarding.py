@@ -220,3 +220,28 @@ def test_connect_chat_copilot_guidance_and_handshake_auto_ingest(isolated_db):
     assert ingest_chat_res["action"] == "handshake_ingested"
     assert "AI Connection Ingested" in ingest_chat_res["content"]
 
+
+def test_handshake_pairing_extracts_bridge_code_and_stages(isolated_db):
+    created = asyncio.run(uc.create_ai_connection(
+        uc.AIConnectionCreate(name="Custom Bridge", grant_profile="full_access"), owner(), request()
+    ))
+    code_response = """
+```json:dristik-connection
+{
+  "client_name": "Custom Listener",
+  "provider": "custom",
+  "connection_mode": "bridge_code",
+  "integration_code": "from fastapi import FastAPI\\napp = FastAPI()\\n@app.post('/inbound')\\ndef handle(data: dict): return {'ok': True}"
+}
+```
+"""
+    result = asyncio.run(onboarding.pair_ai_connection(
+        created["id"],
+        onboarding.HandshakeIngestRequest(raw_response=code_response, auto_verify_ping=False),
+        owner(),
+    ))
+    assert result["connection_id"] == created["id"]
+    assert result["code_staged"] is True
+    assert result["connection_mode"] == "bridge_code"
+
+
