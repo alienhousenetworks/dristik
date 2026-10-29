@@ -1287,6 +1287,10 @@ class RoadmapItem(BaseModel):
     category: Category
     related_finding_id: Optional[str] = None
     code_snippet: Optional[str] = None
+    owner_role: Optional[str] = "Technical Lead"
+    estimated_hours: Optional[str] = "2-4 hours"
+    verification_step: Optional[str] = None
+    priority_badge: Optional[str] = "P1"
 
     @property
     def rationale(self) -> str:

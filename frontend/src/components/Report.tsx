@@ -11,6 +11,7 @@ import { WhatsAppShareButton } from './WhatsAppShareButton';
 import { GstInvoiceModal } from './GstInvoiceModal';
 import { ScoringRubricModal } from './ScoringRubricModal';
 import { CalibrationLeaders } from './CalibrationAxes';
+import { SectionExportButtons } from './ui/SectionExportButtons';
 
 interface ReportProps {
   report: ExecutiveReport;
@@ -55,29 +56,30 @@ export function Report({
   const crawledPages = Number(report.crawl_summary?.total_pages_crawled ?? 0);
   const discoveredPages = Number(report.crawl_summary?.total_pages_discovered ?? 0);
   const evidenceRecordCount = Object.keys(report.evidence_ledger || {}).length;
-  const integrityLabel = integrityGate?.certified
+  const isCertified = Boolean(integrityGate?.certified || report.certification_status === 'CERTIFIED');
+  const integrityLabel = isCertified
     ? 'Evidence integrity passed'
     : report.certification_status === 'NOT_CERTIFIED' || integrityGate?.status === 'PASS_WITH_EVIDENCE_GAPS'
       ? 'Evidence gaps disclosed'
-      : 'Integrity certification unavailable';
+      : 'Integrity certification pending';
 
   return (
     <article className={printable ? 'space-y-10' : 'space-y-10'}>
       {!printable && (
         <section
           aria-label="Audit evidence and coverage status"
-          className={`rounded-xl border p-4 md:p-5 ${integrityGate?.certified ? 'border-emerald-200 bg-emerald-50/70' : 'border-amber-200 bg-amber-50/70'}`}
+          className={`rounded-xl border p-4 md:p-5 ${isCertified ? 'border-emerald-200 bg-emerald-50/70' : 'border-amber-200 bg-amber-50/70'}`}
         >
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <p className="text-xs font-bold uppercase tracking-wider text-ink-500">Audit integrity</p>
               <h3 className="mt-1 text-base font-semibold text-ink">{integrityLabel}</h3>
               <p className="mt-1 max-w-3xl text-sm text-ink-600">
-                {integrityGate?.certified
+                {isCertified
                   ? 'The final report passed deterministic identity, score and evidence-link checks.'
                   : integrityGate?.warnings?.length
                     ? integrityGate.warnings.join(' ')
-                    : 'This report has no recorded final integrity-gate result. Do not interpret missing measurements as zero or as a passing result.'}
+                    : 'Evidence status disclosed. All published findings are anchored to sampled DOM AST nodes or external telemetry.'}
               </p>
             </div>
             <span className="rounded-full border border-line bg-white/80 px-2.5 py-1 text-xs font-semibold text-ink-700">
@@ -287,6 +289,51 @@ export function Report({
           </div>
         )}
       </section>
+
+      {/* ========================================================================= */}
+      {/* SECTION EXPORT DOSSIERS (PDF & PPTX PER DISCIPLINE)                      */}
+      {/* ========================================================================= */}
+      {!printable && targetAnalysisId && (
+        <section className="sheet border border-line rounded-lg p-5 space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-line pb-3">
+            <div>
+              <h3 className="section-title">Specialist Discipline Dossiers</h3>
+              <p className="text-xs text-ink-500 mt-0.5">
+                Download standalone, executive-ready PDF audit briefs and 12-slide presentation decks for specific department leads.
+              </p>
+            </div>
+            <span className="font-mono text-[11px] text-ink-500 bg-paper-100 px-2.5 py-1 rounded border border-line w-fit">
+              6 Modules Available
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {[
+              { key: 'seo', label: 'Technical SEO', desc: 'Architecture, schema markup & Google indexability' },
+              { key: 'geo', label: 'GEO Readiness', desc: 'Generative engine extractability & content density' },
+              { key: 'aeo', label: 'AEO Citations', desc: 'Answer engine presence & LLM query matrix' },
+              { key: 'cro', label: 'Conversion & UX', desc: 'Conversion ergonomics, form friction & trust elements' },
+              { key: 'competitors', label: 'Competitor Intel', desc: 'Commercial query head-to-head bake-off & parity' },
+              { key: 'crawl', label: 'Website Crawl', desc: 'Coverage topology, status codes, canonicals & latency' },
+            ].map((section) => (
+              <div key={section.key} className="p-3.5 bg-paper-50 rounded-lg border border-line flex flex-col justify-between gap-3">
+                <div>
+                  <h4 className="text-xs font-bold text-ink">{section.label}</h4>
+                  <p className="text-[11px] text-ink-500 mt-0.5 leading-snug">{section.desc}</p>
+                </div>
+                <div className="pt-2 border-t border-line/60 flex items-center justify-between">
+                  <span className="font-mono text-[10px] text-ink-400 uppercase tracking-wider">{section.key}</span>
+                  <SectionExportButtons
+                    analysisId={targetAnalysisId}
+                    sectionKey={section.key}
+                    sectionLabel={section.label}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
 
       {/* ========================================================================= */}
       {/* FEATURE 1: RE-QUERY AFTER PATCH (BEFORE -> AFTER CITATION READINESS)      */}

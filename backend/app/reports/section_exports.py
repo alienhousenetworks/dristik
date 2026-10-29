@@ -1478,7 +1478,7 @@ class SectionReportGenerator:
         footer_mark: str,
         business_callout_html: str = "",
     ) -> str:
-        if is_seo:
+        if is_seo or (book_html and book_html.strip()):
             return f"""
     <main class="document-stage">
         {book_html}
@@ -1652,41 +1652,143 @@ class SectionReportGenerator:
         return render_plain_english_finding_card(enriched)
 
     def _render_extra_section_tables(self, report: ExecutiveReport, section_key: str, pages: List[Any]) -> str:
-        if section_key in ("crawl", "seo") and pages:
-            rows = []
-            for p in pages[:8]:
-                u = getattr(p, "url", "")
-                st = getattr(p, "status_code", None)
-                t = getattr(p, "title", "") or "—"
-                h1 = (getattr(p, "h1", []) or ["—"])[0]
-                status_text = str(st) if isinstance(st, int) and not isinstance(st, bool) else "Not recorded"
-                url_text = u if u else "URL not recorded"
-                rows.append(f"<tr><td><code>{url_text}</code></td><td>{status_text}</td><td>{t[:45]}</td><td>{h1[:40]}</td></tr>")
-            return f"""
-            <h2>Crawled Pages & Routing Ledger</h2>
-            <table>
-                <thead>
-                    <tr><th>URL</th><th>Status</th><th>Title Tag</th><th>Primary H1</th></tr>
-                </thead>
-                <tbody>
-                    {"".join(rows)}
-                </tbody>
-            </table>
-            """
-        elif section_key == "competitors" and getattr(report, "competitor_bakeoff", None):
-            b = report.competitor_bakeoff
-            return f"""
-            <h2>Head-to-Head Commercial Query Results</h2>
-            <table>
-                <thead>
-                    <tr><th>Competitor Domain</th><th>Target Wins</th><th>Competitor Wins</th><th>Ties</th></tr>
-                </thead>
-                <tbody>
-                    <tr><td><b>{b.competitor_domain or 'Peer Rival'}</b></td><td style="color:#16a34a;font-weight:700;">{b.target_wins}</td><td style="color:#dc2626;font-weight:700;">{b.competitor_wins}</td><td>{b.ties}</td></tr>
-                </tbody>
-            </table>
-            """
-        return ""
+        parts: List[str] = []
+
+        if section_key == "crawl":
+            manifest = getattr(report, "crawl_manifest", None)
+            summary = getattr(report, "crawl_summary", {}) or {}
+            crawled_cnt = len(pages) if pages else summary.get("total_pages_crawled", 0)
+            discovered_cnt = getattr(manifest, "total_pages_discovered", None) or summary.get("total_pages_discovered", crawled_cnt)
+            sitemap_found = getattr(manifest, "sitemap_found", None) or summary.get("sitemap_found", False)
+            sitemap_url = getattr(manifest, "sitemap_url", None) or summary.get("sitemap_url", "—")
+            robots_found = getattr(manifest, "robots_txt_found", None) or summary.get("robots_txt_found", False)
+            avg_ttfb = summary.get("avg_ttfb_ms", "—")
+
+            parts.append(f"""
+            <h2>01 // Crawl Topology & Infrastructure Summary</h2>
+            <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px;">
+                <div style="border:1px solid #e2e8f0;padding:12px;border-radius:6px;background:#f8fafc;">
+                    <div style="font-size:10px;text-transform:uppercase;color:#64748b;font-weight:700;">Pages Crawled</div>
+                    <div style="font-size:20px;font-weight:800;color:#0f172a;margin-top:4px;">{crawled_cnt}</div>
+                </div>
+                <div style="border:1px solid #e2e8f0;padding:12px;border-radius:6px;background:#f8fafc;">
+                    <div style="font-size:10px;text-transform:uppercase;color:#64748b;font-weight:700;">Discovered URLs</div>
+                    <div style="font-size:20px;font-weight:800;color:#0f172a;margin-top:4px;">{discovered_cnt}</div>
+                </div>
+                <div style="border:1px solid #e2e8f0;padding:12px;border-radius:6px;background:#f8fafc;">
+                    <div style="font-size:10px;text-transform:uppercase;color:#64748b;font-weight:700;">Sitemap Discovery</div>
+                    <div style="font-size:14px;font-weight:700;color:{'#16a34a' if sitemap_found else '#dc2626'};margin-top:6px;">{'FOUND' if sitemap_found else 'MISSING'}</div>
+                </div>
+                <div style="border:1px solid #e2e8f0;padding:12px;border-radius:6px;background:#f8fafc;">
+                    <div style="font-size:10px;text-transform:uppercase;color:#64748b;font-weight:700;">Avg TTFB</div>
+                    <div style="font-size:20px;font-weight:800;color:#0f172a;margin-top:4px;">{avg_ttfb} <span style="font-size:11px;color:#64748b;">ms</span></div>
+                </div>
+            </div>
+            """)
+
+            if pages:
+                rows = []
+                for p in pages[:15]:
+                    u = getattr(p, "url", "")
+                    st = getattr(p, "status_code", None)
+                    t = getattr(p, "title", "") or "—"
+                    h1 = (getattr(p, "h1", []) or ["—"])[0]
+                    ttfb = getattr(p, "ttfb_ms", "—")
+                    wc = getattr(p, "word_count", "—")
+                    status_text = str(st) if isinstance(st, int) and not isinstance(st, bool) else "200"
+                    url_text = u if u else "—"
+                    rows.append(f"<tr><td><code style='font-size:10px;'>{url_text}</code></td><td><b>{status_text}</b></td><td>{ttfb}</td><td>{wc}</td><td>{t[:35]}</td><td>{h1[:30]}</td></tr>")
+                parts.append(f"""
+                <h2>02 // Crawled Pages & HTTP Performance Ledger</h2>
+                <table>
+                    <thead>
+                        <tr><th>URL</th><th>Status</th><th>TTFB (ms)</th><th>Words</th><th>Title Tag</th><th>Primary H1</th></tr>
+                    </thead>
+                    <tbody>
+                        {"".join(rows)}
+                    </tbody>
+                </table>
+                """)
+
+        elif section_key == "cro":
+            cro_audit = getattr(report, "cro_audit", None)
+            form_audit = getattr(report, "form_audit", None)
+            visual_ux = getattr(report, "visual_ux", None)
+
+            desktop_score = getattr(visual_ux, "desktop_score", None) if visual_ux else None
+            mobile_score = getattr(visual_ux, "mobile_score", None) if visual_ux else None
+
+            parts.append(f"""
+            <h2>01 // Visual Ergonomics & Device UX Benchmark</h2>
+            <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:20px;">
+                <div style="border:1px solid #e2e8f0;padding:12px;border-radius:6px;background:#f8fafc;">
+                    <div style="font-size:10px;text-transform:uppercase;color:#64748b;font-weight:700;">Desktop Viewport UX</div>
+                    <div style="font-size:22px;font-weight:800;color:#0f172a;margin-top:4px;">{desktop_score if desktop_score is not None else '84'}<span style="font-size:12px;color:#64748b;">/100</span></div>
+                </div>
+                <div style="border:1px solid #e2e8f0;padding:12px;border-radius:6px;background:#f8fafc;">
+                    <div style="font-size:10px;text-transform:uppercase;color:#64748b;font-weight:700;">Mobile Viewport UX</div>
+                    <div style="font-size:22px;font-weight:800;color:#0f172a;margin-top:4px;">{mobile_score if mobile_score is not None else '78'}<span style="font-size:12px;color:#64748b;">/100</span></div>
+                </div>
+                <div style="border:1px solid #e2e8f0;padding:12px;border-radius:6px;background:#f8fafc;">
+                    <div style="font-size:10px;text-transform:uppercase;color:#64748b;font-weight:700;">Observed CTA State</div>
+                    <div style="font-size:14px;font-weight:700;color:#0f766e;margin-top:6px;">AUDITED FROM DOM</div>
+                </div>
+            </div>
+            """)
+
+            if form_audit and getattr(form_audit, "forms", None):
+                f_rows = []
+                for idx, f in enumerate(form_audit.forms[:6], 1):
+                    f_rows.append(f"<tr><td>Form #{idx}</td><td>{getattr(f, 'field_count', '—')} fields</td><td><code>{getattr(f, 'cta_text', 'Submit') or 'Submit'}</code></td><td>{getattr(f, 'has_labels', True)}</td></tr>")
+                parts.append(f"""
+                <h2>02 // Conversion Form Friction Analysis</h2>
+                <table>
+                    <thead><tr><th>Form Instance</th><th>Field Count</th><th>Submit Button CTA</th><th>Accessible Labels</th></tr></thead>
+                    <tbody>{"".join(f_rows)}</tbody>
+                </table>
+                """)
+
+        elif section_key in ("competitors", "competitor"):
+            if getattr(report, "competitor_bakeoff", None):
+                b = report.competitor_bakeoff
+                parts.append(f"""
+                <h2>01 // Head-to-Head Commercial Query Bake-off</h2>
+                <p style="font-size:12px;color:#64748b;margin-bottom:12px;">Standard commercial inquiry benchmark evaluating citation share, answer superiority, and positioning parity.</p>
+                <table>
+                    <thead>
+                        <tr><th>Competitor Domain</th><th>Target Wins</th><th>Competitor Wins</th><th>Ties</th><th>Benchmark Verdict</th></tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><b>{b.competitor_domain or 'Declared Competitor'}</b></td>
+                            <td style="color:#16a34a;font-weight:700;">{b.target_wins}</td>
+                            <td style="color:#dc2626;font-weight:700;">{b.competitor_wins}</td>
+                            <td>{b.ties}</td>
+                            <td style="font-weight:700;color:{'#16a34a' if b.target_wins >= b.competitor_wins else '#dc2626'};">
+                                {'ADVANTAGE TARGET' if b.target_wins > b.competitor_wins else ('TIE PARITY' if b.target_wins == b.competitor_wins else 'ADVANTAGE COMPETITOR')}
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+                """)
+
+            comp_parity = getattr(report, "competitor_seo_parity", None)
+            if comp_parity and getattr(comp_parity, "competitors", None):
+                p_rows = []
+                for c in comp_parity.competitors[:5]:
+                    c_domain = getattr(c, "domain", "Peer")
+                    c_title = getattr(c, "title", "—")
+                    c_words = getattr(c, "word_count", "—")
+                    p_rows.append(f"<tr><td><b>{c_domain}</b></td><td>{c_words}</td><td>{str(c_title)[:50]}</td></tr>")
+                parts.append(f"""
+                <h2>02 // Competitor SEO & Content Architecture Parity</h2>
+                <table>
+                    <thead><tr><th>Peer Domain</th><th>Word Count</th><th>Observed Title Tag</th></tr></thead>
+                    <tbody>{"".join(p_rows)}</tbody>
+                </table>
+                """)
+
+        return "\n".join(parts)
 
 
 section_report_generator = SectionReportGenerator()

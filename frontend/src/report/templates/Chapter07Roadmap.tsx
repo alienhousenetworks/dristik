@@ -118,54 +118,110 @@ export function Chapter07Roadmap({
 
           {/* Editorial NOW / NEXT / ONGOING Roadmap Tree */}
           <div className="p-4 rounded bg-paper-100 border border-line space-y-4">
-            <span className="font-mono text-[8pt] font-bold uppercase tracking-[0.04em] text-ink-700 block pb-1 border-b border-line">
-              Editorial 90-Day Implementation Timeline
-            </span>
+            <div className="flex items-center justify-between pb-1 border-b border-line">
+              <span className="font-mono text-[8pt] font-bold uppercase tracking-[0.04em] text-ink-700">
+                Remediation Roadmap by Time Horizon
+              </span>
+              <span className="font-mono text-[7pt] text-ink-500">
+                Total Items: {(priorities.roadmapNow?.length || 0) + (priorities.roadmapNext?.length || 0) + (priorities.roadmapOngoing?.length || 0)}
+              </span>
+            </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-[8pt]">
               {/* NOW (Days 1 - 7) */}
-              <div className="space-y-1.5 p-3 bg-paper-50 border border-line rounded">
-                <span className="font-mono text-[7.5pt] font-bold uppercase px-2 py-0.5 rounded bg-bad/10 text-bad border border-bad/30 block w-fit">
-                  PHASE 1 // NOW (DAYS 1–7)
-                </span>
-                <strong className="font-sans text-[9pt] text-ink block pt-1">
-                  Fix Technical Blockers
-                </strong>
-                <ul className="text-ink-600 space-y-1 list-disc pl-4 font-sans text-[7.5pt]">
-                  <li>Deploy canonical 301 consolidation patches</li>
-                  <li>Resolve broken redirect chains and 404 targets</li>
-                  <li>Publish /llms.txt AI crawler permission manifesto</li>
-                </ul>
+              <div className="space-y-2 p-3 bg-paper-50 border border-line rounded flex flex-col justify-between">
+                <div>
+                  <span className="font-mono text-[7.5pt] font-bold uppercase px-2 py-0.5 rounded bg-bad/10 text-bad border border-bad/30 block w-fit">
+                    PHASE 1 // NOW (DAYS 1–7)
+                  </span>
+                  <strong className="font-sans text-[9pt] text-ink block pt-1.5 pb-1">
+                    Critical Blockers &amp; Quick Wins
+                  </strong>
+                  {priorities.roadmapNow && priorities.roadmapNow.length > 0 ? (
+                    <ul className="text-ink-600 space-y-2 font-sans text-[7.5pt]">
+                      {priorities.roadmapNow.slice(0, 4).map((item, i) => (
+                        <li key={i} className="border-l-2 border-bad/40 pl-2 py-0.5">
+                          <div className="font-semibold text-ink leading-tight">
+                            {item.title || item.description}
+                          </div>
+                          <div className="font-mono text-[7pt] text-ink-500 mt-0.5 flex flex-wrap gap-1.5 items-center">
+                            {item.priority_badge && (
+                              <span className="text-bad font-bold">{item.priority_badge}</span>
+                            )}
+                            {item.owner_role && <span>· {item.owner_role}</span>}
+                            {item.estimated_hours && <span>· {item.estimated_hours}</span>}
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="text-ink-500 font-sans text-[7.5pt] italic">No immediate blockers identified in current scan.</p>
+                  )}
+                </div>
               </div>
 
               {/* NEXT (Days 8 - 30) */}
-              <div className="space-y-1.5 p-3 bg-paper-50 border border-line rounded">
-                <span className="font-mono text-[7.5pt] font-bold uppercase px-2 py-0.5 rounded bg-warn/10 text-warn border border-warn/30 block w-fit">
-                  PHASE 2 // NEXT (DAYS 8–30)
-                </span>
-                <strong className="font-sans text-[9pt] text-ink block pt-1">
-                  Strengthen Entity Signals
-                </strong>
-                <ul className="text-ink-600 space-y-1 list-disc pl-4 font-sans text-[7.5pt]">
-                  <li>Deploy JSON-LD Organization &amp; Service schemas</li>
-                  <li>Implement character-safe title and meta tag pairs</li>
-                  <li>Inject factual entity attribution passages</li>
-                </ul>
+              <div className="space-y-2 p-3 bg-paper-50 border border-line rounded flex flex-col justify-between">
+                <div>
+                  <span className="font-mono text-[7.5pt] font-bold uppercase px-2 py-0.5 rounded bg-warn/10 text-warn border border-warn/30 block w-fit">
+                    PHASE 2 // NEXT (DAYS 8–30)
+                  </span>
+                  <strong className="font-sans text-[9pt] text-ink block pt-1.5 pb-1">
+                    Entity &amp; Architecture Foundations
+                  </strong>
+                  {priorities.roadmapNext && priorities.roadmapNext.length > 0 ? (
+                    <ul className="text-ink-600 space-y-2 font-sans text-[7.5pt]">
+                      {priorities.roadmapNext.slice(0, 4).map((item, i) => (
+                        <li key={i} className="border-l-2 border-warn/40 pl-2 py-0.5">
+                          <div className="font-semibold text-ink leading-tight">
+                            {item.title || item.description}
+                          </div>
+                          <div className="font-mono text-[7pt] text-ink-500 mt-0.5 flex flex-wrap gap-1.5 items-center">
+                            {item.priority_badge && (
+                              <span className="text-warn font-bold">{item.priority_badge}</span>
+                            )}
+                            {item.owner_role && <span>· {item.owner_role}</span>}
+                            {item.estimated_hours && <span>· {item.estimated_hours}</span>}
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="text-ink-500 font-sans text-[7.5pt] italic">Foundation elements meet baseline standards.</p>
+                  )}
+                </div>
               </div>
 
               {/* ONGOING (Days 31 - 90) */}
-              <div className="space-y-1.5 p-3 bg-paper-50 border border-line rounded">
-                <span className="font-mono text-[7.5pt] font-bold uppercase px-2 py-0.5 rounded bg-good/10 text-good border border-good/30 block w-fit">
-                  PHASE 3 // ONGOING (DAYS 31–90)
-                </span>
-                <strong className="font-sans text-[9pt] text-ink block pt-1">
-                  Assurance &amp; Governance
-                </strong>
-                <ul className="text-ink-600 space-y-1 list-disc pl-4 font-sans text-[7.5pt]">
-                  <li>Closed-loop remediation verification against AST</li>
-                  <li>Continuous regression monitoring across 100 queries</li>
-                  <li>Monthly answer engine citation re-evaluation</li>
-                </ul>
+              <div className="space-y-2 p-3 bg-paper-50 border border-line rounded flex flex-col justify-between">
+                <div>
+                  <span className="font-mono text-[7.5pt] font-bold uppercase px-2 py-0.5 rounded bg-good/10 text-good border border-good/30 block w-fit">
+                    PHASE 3 // ONGOING (DAYS 31–90)
+                  </span>
+                  <strong className="font-sans text-[9pt] text-ink block pt-1.5 pb-1">
+                    Strategic CRO &amp; AI Dominance
+                  </strong>
+                  {priorities.roadmapOngoing && priorities.roadmapOngoing.length > 0 ? (
+                    <ul className="text-ink-600 space-y-2 font-sans text-[7.5pt]">
+                      {priorities.roadmapOngoing.slice(0, 4).map((item, i) => (
+                        <li key={i} className="border-l-2 border-good/40 pl-2 py-0.5">
+                          <div className="font-semibold text-ink leading-tight">
+                            {item.title || item.description}
+                          </div>
+                          <div className="font-mono text-[7pt] text-ink-500 mt-0.5 flex flex-wrap gap-1.5 items-center">
+                            {item.priority_badge && (
+                              <span className="text-good font-bold">{item.priority_badge}</span>
+                            )}
+                            {item.owner_role && <span>· {item.owner_role}</span>}
+                            {item.estimated_hours && <span>· {item.estimated_hours}</span>}
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="text-ink-500 font-sans text-[7.5pt] italic">Continuous monitoring and regression verification active.</p>
+                  )}
+                </div>
               </div>
             </div>
           </div>

@@ -190,8 +190,7 @@ class CrawlerService:
                     break
                 if not loc:
                     continue
-                is_nested = loc.lower().split("?", 1)[0].endswith(".xml") or "sitemap" in loc.lower()
-                if is_index and is_nested:
+                if is_index:
                     nested_url = urljoin(sitemap_url, loc)
                     if nested_url in visited_xml_sitemaps or len(visited_xml_sitemaps) >= 25:
                         continue
@@ -215,7 +214,8 @@ class CrawlerService:
                             if at_cap():
                                 break
                 else:
-                    add_page(loc)
+                    if not (loc.lower().split("?", 1)[0].endswith(".xml") or "sitemap" in loc.lower()):
+                        add_page(loc)
             if discovered_urls:
                 return True, found_sitemap_url, discovered_urls[:max_sitemap_urls], truncated
 

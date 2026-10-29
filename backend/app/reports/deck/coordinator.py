@@ -68,7 +68,19 @@ class DeckOrchestrator:
         'crawl', 'seo', 'geo', 'aeo', 'cro', or 'competitors'.
         """
         blueprint = self.build_blueprint(report)
-        section_key = (section_key or "").lower().strip()
+        norm_key = (section_key or "").lower().strip()
+        alias_map = {
+            "crawling": "crawl",
+            "infrastructure": "crawl",
+            "search": "seo",
+            "generative": "geo",
+            "answer": "aeo",
+            "conversion": "cro",
+            "ux": "cro",
+            "competitor": "competitors",
+            "competitive": "competitors",
+        }
+        norm_key = alias_map.get(norm_key, norm_key)
 
         SECTION_MODULE_MAP = {
             "crawl": {"mod_04"},
@@ -77,25 +89,33 @@ class DeckOrchestrator:
             "aeo": {"mod_03", "mod_06"},
             "cro": {"mod_07"},
             "competitors": {"mod_08"},
-            "competitor": {"mod_08"},
         }
-        target_mods = SECTION_MODULE_MAP.get(section_key, {"mod_01", "mod_02"})
+        target_mods = SECTION_MODULE_MAP.get(norm_key, {"mod_04"})
 
         from app.reports.deck.models import SlideLayoutType
         filtered_slides = []
         for s in blueprint.slides:
             if s.layout == SlideLayoutType.COVER:
                 copy_s = s.model_copy(deep=True)
-                copy_s.subtitle = f"{section_key.upper()} SPECIFICATION & STRATEGIC EXECUTIVE AUDIT"
+                copy_s.subtitle = f"{norm_key.upper()} STRATEGIC SPECIFICATION & EXECUTIVE REMEDIATION BLUEPRINT"
                 filtered_slides.append(copy_s)
             elif s.module_id in target_mods:
+                filtered_slides.append(s.model_copy(deep=True))
+            elif s.module_id == "mod_10" and s.layout == SlideLayoutType.TIMELINE_PHASES:
+                # Include roadmap slide for actionable execution
                 filtered_slides.append(s.model_copy(deep=True))
             elif s.layout == SlideLayoutType.GOVERNANCE_SEAL:
                 filtered_slides.append(s.model_copy(deep=True))
 
-        if len(filtered_slides) <= 2:
-            # Fallback if specific module didn't match: include first 10 slides
-            filtered_slides = [s.model_copy(deep=True) for s in blueprint.slides[:12]]
+        if len(filtered_slides) <= 3:
+            # Fallback to thematic match rather than unrelated first 12 slides
+            for s in blueprint.slides:
+                if s not in filtered_slides and (
+                    norm_key in (s.title or "").lower()
+                    or norm_key in (s.kicker or "").lower()
+                    or norm_key in (s.thematic_focus or "").lower()
+                ):
+                    filtered_slides.append(s.model_copy(deep=True))
 
         # Re-number slides sequentially
         for idx, slide in enumerate(filtered_slides, 1):

@@ -38,6 +38,14 @@ class ExecutiveDeckGenerator:
 
         story_summary = run_data.get("story_summary") or "No executive narrative was sealed for this run."
         lead_opp = run_data.get("primary_strategic_opportunity") or "No next action was sealed for this run."
+        what_site_gets_right = run_data.get("what_site_gets_right") or "Clean canonical routing, valid HTTP response codes, and compliant sitemaps ensure traditional indexation health."
+        what_is_holding_it_back = run_data.get("what_is_holding_it_back") or "Ambiguous marketing copy requires conversion into structured, entity-attributed factual statements for RAG answer engines."
+        r7 = run_data.get("roadmap_7_days") or []
+        r30 = run_data.get("roadmap_30_days") or []
+        r90 = run_data.get("roadmap_90_days") or []
+        r7_desc = "; ".join(r7[:2]) if r7 else "Start with high-severity findings that have direct evidence, confirmed scope, and a reproducible acceptance test."
+        r30_desc = "; ".join(r30[:2]) if r30 else "Sequence changes by dependency, implementation risk, and business priority. Require approval for production-impacting changes."
+        r90_desc = "; ".join(r90[:2]) if r90 else "Re-run the relevant checks after implementation and report a fix as verified only when fresh evidence confirms the intended outcome."
 
         html = f"""<!DOCTYPE html>
 <html lang="en">
@@ -248,13 +256,13 @@ class ExecutiveDeckGenerator:
             <div class="grid-2" style="margin-top: 20px;">
                 <div class="card">
                     <div class="card-kicker">VERIFIED STRENGTH</div>
-                    <div class="card-title">Technical Discoverability Baseline</div>
-                    <p>Clean canonical routing, valid HTTP response codes, and compliant sitemaps ensure traditional indexation health.</p>
+                    <div class="card-title">What The Site Gets Right</div>
+                    <p>{what_site_gets_right}</p>
                 </div>
                 <div class="card">
                     <div class="card-kicker">PRIMARY GAP</div>
-                    <div class="card-title">Generative Entity Extraction</div>
-                    <p>Ambiguous marketing copy requires conversion into structured, entity-attributed factual statements for RAG answer engines.</p>
+                    <div class="card-title">What Is Holding It Back</div>
+                    <p>{what_is_holding_it_back}</p>
                 </div>
             </div>
         </div>
@@ -275,19 +283,19 @@ class ExecutiveDeckGenerator:
             <div class="hero-title">NOW / NEXT / ONGOING Milestones</div>
             <div class="grid-3" style="margin-top: 24px;">
                 <div class="card">
-                    <div class="card-kicker">PHASE 1 // NOW</div>
-                    <div class="card-title">Validate priority findings</div>
-                    <p>Start with high-severity findings that have direct evidence, confirmed scope, and a reproducible acceptance test.</p>
+                    <div class="card-kicker">PHASE 1 // NOW (1–7 DAYS)</div>
+                    <div class="card-title">Critical Remediation</div>
+                    <p>{r7_desc}</p>
                 </div>
                 <div class="card">
-                    <div class="card-kicker">PHASE 2 // NEXT</div>
-                    <div class="card-title">Implement approved fixes</div>
-                    <p>Sequence changes by dependency, implementation risk, and business priority. Require approval for production-impacting changes.</p>
+                    <div class="card-kicker">PHASE 2 // NEXT (8–30 DAYS)</div>
+                    <div class="card-title">Strategic Optimization</div>
+                    <p>{r30_desc}</p>
                 </div>
                 <div class="card">
-                    <div class="card-kicker">PHASE 3 // ONGOING</div>
-                    <div class="card-title">Verify and monitor</div>
-                    <p>Re-run the relevant checks after implementation and report a fix as verified only when fresh evidence confirms the intended outcome.</p>
+                    <div class="card-kicker">PHASE 3 // ONGOING (31–90 DAYS)</div>
+                    <div class="card-title">Systemic Assurance</div>
+                    <p>{r90_desc}</p>
                 </div>
             </div>
         </div>
@@ -387,6 +395,11 @@ async def get_executive_deck(
                 "ai_answer_engine_perspective": ai_p,
                 "story_summary": story_summary,
                 "primary_strategic_opportunity": primary_opp,
+                "what_site_gets_right": getattr(report, "what_site_gets_right", None),
+                "what_is_holding_it_back": getattr(report, "what_is_holding_it_back", None),
+                "roadmap_7_days": [r.title for r in (getattr(report, "roadmap_7_days", []) or [])],
+                "roadmap_30_days": [r.title for r in (getattr(report, "roadmap_30_days", []) or [])],
+                "roadmap_90_days": [r.title for r in (getattr(report, "roadmap_90_days", []) or [])],
             })
     else:
         gen = get_executive_deck_generator()

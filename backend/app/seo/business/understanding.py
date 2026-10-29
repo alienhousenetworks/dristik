@@ -471,13 +471,19 @@ class BusinessUnderstandingOrchestrator:
         mismatch = False
         mismatch_reason = ""
 
-        # Case 1: User declared SaaS, but site is clearly an Agency / Consulting firm
-        if ud in ("saas",) and ("agency" in detected_model or "consulting" in detected_model or "service" in detected_model or "professional" in detected_model):
-            # Verify if there's self-serve software pricing or app login
+        has_saas_signals = (
+            "saas" in detected_model
+            or "software" in detected_model
+            or "platform" in detected_model
+            or any("software" in str(exc).lower() or "platform" in str(exc).lower() for exc in (commercial.evidence_excerpts or []))
+        )
+
+        # Case 1: User declared SaaS, but site has no software signals and is purely an Agency / Consulting firm
+        if ud in ("saas",) and not has_saas_signals and ("agency" in detected_model or "consulting" in detected_model or "professional services" in detected_model):
             mismatch = True
             mismatch_reason = (
                 f"User declared website type as '{declared_label}', but verified website evidence reveals "
-                f"a B2B consulting & professional services firm ({commercial.primary_model}) "
+                f"a professional consulting & advisory services firm ({commercial.primary_model}) "
                 f"with consultative sales inquiries and no self-serve software platform."
             )
 
@@ -489,8 +495,8 @@ class BusinessUnderstandingOrchestrator:
                 f"a {commercial.primary_model} model without a direct consumer cart or checkout system."
             )
 
-        # Case 3: User declared Agency / Services, but site is a pure self-serve SaaS
-        elif ud in ("agency_services", "agency") and ("saas" in detected_model or "software" in detected_model) and "self_serve" in commercial.commercial_motion:
+        # Case 3: User declared Agency / Services, but site is a pure self-serve SaaS with no custom services
+        elif ud in ("agency_services", "agency") and ("saas" in detected_model or "software" in detected_model) and "self_serve" in commercial.commercial_motion and not ("service" in detected_model or "agency" in detected_model):
             mismatch = True
             mismatch_reason = (
                 f"User declared website type as '{declared_label}', but verified website evidence reveals "

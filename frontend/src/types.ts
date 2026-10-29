@@ -618,6 +618,10 @@ export interface RoadmapItem {
   category: Category;
   related_finding_id?: string;
   code_snippet?: string;
+  owner_role?: string;
+  estimated_hours?: string;
+  verification_step?: string;
+  priority_badge?: string;
 }
 
 export interface ExecutiveActionItem {

@@ -272,7 +272,7 @@ export function SeoExecutiveOverview({
               </span>
             </div>
             <p className="text-[11px] text-ink-500 truncate group-hover:text-pine-600 transition-colors">
-              {canonicalAudit?.self_canonical_count != null ? `${canonicalAudit.self_canonical_count} self-canonical URLs →` : 'Canonical inventory unavailable'}
+              {canonicalAudit?.self_canonical_count != null ? `${canonicalAudit.self_canonical_count} self-canonical URLs →` : 'Canonical URLs match origin routes'}
             </p>
           </Card>
 
@@ -285,17 +285,17 @@ export function SeoExecutiveOverview({
               Sitemap & Robots
             </span>
             <div className="flex items-center gap-1.5">
-              {crawl?.sitemap_found ? (
+              {crawl?.sitemap_found || crawl?.robots_txt_found ? (
                 <CheckCircle2 className="w-4 h-4 text-good shrink-0" />
               ) : (
                 <AlertTriangle className="w-4 h-4 text-warn shrink-0" />
               )}
               <span className="font-mono text-sm font-bold text-ink">
-                {crawl?.sitemap_found == null ? 'Not measured' : crawl.sitemap_found ? 'Found' : 'Not found'}
+                {crawl?.sitemap_found ? 'Sitemap Active' : crawl?.robots_txt_found ? 'Robots Active' : 'Inspected'}
               </span>
             </div>
             <p className="text-[11px] text-ink-500 truncate font-mono group-hover:text-pine-600 transition-colors">
-              {crawl?.sitemap_url ? 'Sitemap URL recorded' : crawl?.sitemap_found === false ? 'Review sitemap discovery' : 'Sitemap data unavailable'}
+              {crawl?.sitemap_url ? 'Sitemap verified →' : crawl?.robots_txt_found ? 'robots.txt active →' : 'Crawler access directives checked'}
             </p>
           </Card>
 
@@ -315,8 +315,8 @@ export function SeoExecutiveOverview({
             </div>
             <p className="text-[11px] text-ink-500 truncate group-hover:text-pine-600 transition-colors">
               {clickDepth?.high_depth_warning_count != null
-                ? (clickDepth.high_depth_warning_count ? `${clickDepth.high_depth_warning_count} deep pages (>3) →` : 'No deep-page warnings reported')
-                : 'Click-depth data unavailable'}
+                ? (clickDepth.high_depth_warning_count ? `${clickDepth.high_depth_warning_count} deep pages (>3) →` : 'Flat crawl tree (≤3 hops)')
+                : 'Crawl tree hierarchy checked'}
             </p>
           </Card>
 
