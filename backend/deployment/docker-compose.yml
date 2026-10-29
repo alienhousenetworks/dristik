@@ -1,0 +1,17 @@
+services:
+  api:
+    build:
+      context: ..
+      dockerfile: deployment/Dockerfile
+    ports:
+      - "${BACKEND_PORT:-8000}:8000"
+    shm_size: "1gb"
+    env_file:
+      - ../.env
+    environment:
+      ENVIRONMENT: ${ENVIRONMENT:-production}
+      DEBUG: ${DEBUG:-false}
+      PRODUCTION_DATA_INTEGRITY_MODE: ${PRODUCTION_DATA_INTEGRITY_MODE:-true}
+      PLAYWRIGHT_BROWSERS_PATH: /ms-playwright
+      PLAYWRIGHT_SKIP_FFMPEG_INSTALL: "1"
+    restart: unless-stopped

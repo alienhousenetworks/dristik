@@ -1,0 +1,234 @@
+import React from 'react';
+import { ReportTheme } from '../brandTheme';
+import { NormalizedReport } from '../models/normalizedReport';
+import { ChapterOpener } from './ChapterOpener';
+import { PageHeader, PageFooter } from './PageHeaderFooter';
+
+interface MethodologyChapterProps {
+  theme: ReportTheme;
+  report: NormalizedReport;
+  pageNumber?: number | string;
+  chapterNumber?: string;
+}
+
+export function MethodologyChapter({
+  theme,
+  report,
+  pageNumber,
+  chapterNumber = '08',
+}: MethodologyChapterProps) {
+  const { methodology, meta } = report;
+  const detailsPageNumber = typeof pageNumber === 'number' ? pageNumber + 1 : pageNumber;
+
+  return (
+    <>
+      {/* 1. Full-Page Chapter Opener */}
+      <ChapterOpener
+        theme={theme}
+        chapterNumber={chapterNumber}
+        subtitle="RESEARCH METHODOLOGY &amp; SAMPLING PROTOCOL"
+        title="Inspection Methodology &amp; Governance"
+        description="Formal operational specifications governing crawler parameters, AST decomposition rules, multi-model query sampling, and cryptographic evidence hashing standards."
+        domain={meta.domain}
+        whyThisMatters="Institutional assurance mandates transparent, repeatable measurement protocols with explicit limitations and zero synthetic data interpolation."
+        howWeMeasuredIt="Headless Chromium DOM crawling, deterministic AST traversal, verbatim multi-model prompt execution, and SHA-256 evidence hashing."
+        whatWasAnalyzed="Origin crawl boundaries, response latency curves, 100-question commercial sandbox models, and WCAG accessibility standards."
+        pageNumber={typeof pageNumber === 'number' ? pageNumber : undefined}
+      />
+
+      {/* 2. Methodology Details Page */}
+      <section
+        id="ch_methodology"
+        data-chapter-id="ch_methodology"
+        className="report-page-break p-8 md:p-14 min-h-[960px] flex flex-col justify-between bg-paper-50 border-b-2 border-line text-ink"
+      >
+        <PageHeader
+          theme={theme}
+          domain={meta.domain}
+          chapterTitle="08 / METHODOLOGY // SPECIFICATIONS & SAMPLING"
+        />
+
+        <div className="space-y-6 max-w-4xl">
+          <div>
+            <span className="font-mono text-[8pt] font-bold uppercase tracking-[0.04em] text-ink-500 block mb-1">
+              Inspection Specifications
+            </span>
+            <h2 className="font-serif text-[22pt] font-normal tracking-tight text-ink">
+              Audit Scope &amp; Assurance Standards
+            </h2>
+            <div className="bg-ink w-10 h-px mt-2" />
+          </div>
+
+          {/* Core Methodology Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-[8.5pt]">
+            <div className="p-4 rounded bg-paper-100 border border-line space-y-2">
+              <span className="font-mono text-[8pt] font-bold uppercase tracking-[0.04em] text-ink-700 block">
+                01 // CRAWL SCOPE &amp; BOUNDARIES
+              </span>
+              <p className="text-ink-700 font-sans leading-relaxed">
+                The audit analyzed {methodology.sampledPagesCount} URL{methodology.sampledPagesCount === 1 ? '' : 's'}. That sample is not a claim that every discovered URL was audited. Crawl directives follow the site&apos;s robots rules, with concurrency and timeout limits on the crawl.
+              </p>
+            </div>
+
+            <div className="p-4 rounded bg-paper-100 border border-line space-y-2">
+              <span className="font-mono text-[8pt] font-bold uppercase tracking-[0.04em] text-ink-700 block">
+                02 // CRYPTOGRAPHIC ZERO-FAKE SEAL
+              </span>
+              <p className="text-ink-700 font-sans leading-relaxed">
+                Every extracted statement is hashed with SHA-256 and stamped with an exact DOM selector. Synthesizing or fabricating findings without traceable evidence violates Dristik's core governance engine.
+              </p>
+            </div>
+
+            <div className="p-4 rounded bg-paper-100 border border-line space-y-2">
+              <span className="font-mono text-[8pt] font-bold uppercase tracking-[0.04em] text-ink-700 block">
+                03 // AI ANSWER ENGINE TESTING PROTOCOL
+              </span>
+              <p className="text-ink-700 font-sans leading-relaxed">
+                Live citation tests run only for engines that were actually queried. Engines that were not queried are labeled not executed. On-page answerability is a separate check and is not reported as a live mention or citation rate.
+              </p>
+            </div>
+
+            <div className="p-4 rounded bg-paper-100 border border-line space-y-2">
+              <span className="font-mono text-[8pt] font-bold uppercase tracking-[0.04em] text-ink-700 block">
+                04 // SCORING ENGINE &amp; MATHEMATICAL TRANSPARENCY
+              </span>
+              <p className="text-ink-700 font-sans leading-relaxed">
+                The cover score, the grade, and the calculation ledger are the same total. Nominal weights are Technical Discoverability 30%, Generative Extractability 25%, live citations 25%, and CRO 20%. A citation rate of zero stays in the total only when an engine on this run returned a response. An engine that was not executed, and a provider that did not respond, are excluded and the remaining weights are scaled to 100%. Attempted queries are not counted as completed tests.
+              </p>
+            </div>
+          </div>
+
+          {/* 16-Stage Dristik Enterprise Pipeline Architecture (Point 18) */}
+          <div className="p-4 rounded bg-paper-100 border border-line space-y-2 text-[8pt]">
+            <div className="flex items-center justify-between pb-1 border-b border-line">
+              <span className="font-mono text-[8pt] font-bold uppercase tracking-[0.04em] text-ink-700">
+                End-to-End Enterprise Intelligence Pipeline (16-Stage Deterministic Graph)
+              </span>
+              <span className="font-mono text-[7pt] text-ink-500">
+                Every Output Retains an Immutable EvidenceRef
+              </span>
+            </div>
+
+            <div className="p-3 bg-paper-50 border border-line rounded font-mono text-[7pt] overflow-x-auto text-ink-700 leading-relaxed whitespace-pre-wrap">
+              DISCOVER → CRAWL → NORMALIZE → EVIDENCE GRAPH → COVERAGE ANALYSIS → DETERMINISTIC MEASUREMENT
+                 ↓
+              REASONERS: [ Technical SEO ∥ GEO Extraction ∥ CRO Conversion ]
+                 ↓
+              CROSS-ANALYST CORRELATION → CONTRADICTION ENGINE &amp; CRITIC → SYNTHESIS &amp; SCORING
+                 ↓
+              DEFECT PRIORITIZATION → REMEDIATION PATCH GENERATOR → STAGING APPLY → AUTOMATED RECRAWL → VERIFY → MONITOR
+            </div>
+          </div>
+
+          {/* 4-Layer AI Visibility Architecture (Point 10) */}
+          <div className="p-4 rounded bg-paper-100 border border-line space-y-2 text-[8pt]">
+            <span className="font-mono text-[8pt] font-bold uppercase tracking-[0.04em] text-ink-700 block pb-1 border-b border-line">
+              4-Layer AI Visibility &amp; Citability Architecture
+            </span>
+
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-2.5 font-sans text-[7.5pt]">
+              <div className="bg-paper-50 p-2.5 rounded border border-line space-y-1">
+                <span className="font-mono font-bold text-[7pt] text-ink-500 block">LAYER 1 // SURFACE</span>
+                <strong className="text-ink block">Website Evidence</strong>
+                <p className="text-ink-600 text-[7pt]">
+                  DOM AST, HTML structure, HTTP headers, Schema.org, robots.txt, and TTFB latency.
+                </p>
+              </div>
+
+              <div className="bg-paper-50 p-2.5 rounded border border-line space-y-1">
+                <span className="font-mono font-bold text-[7pt] text-ink-500 block">LAYER 2 // EXTRACTION</span>
+                <strong className="text-ink block">Extractability</strong>
+                <p className="text-ink-600 text-[7pt]">
+                  Ability of LLM parsers &amp; search spiders to cleanly extract entity facts without ambiguity.
+                </p>
+              </div>
+
+              <div className="bg-paper-50 p-2.5 rounded border border-line space-y-1">
+                <span className="font-mono font-bold text-[7pt] text-ink-500 block">LAYER 3 // CITATION</span>
+                <strong className="text-ink block">Retrieval &amp; Citation</strong>
+                <p className="text-ink-600 text-[7pt]">
+                  Empirical frequency with which live answer engines cite the domain on buyer queries.
+                </p>
+              </div>
+
+              <div className="bg-paper-50 p-2.5 rounded border border-line space-y-1">
+                <span className="font-mono font-bold text-[7pt] text-ink-500 block">LAYER 4 // ACCURACY</span>
+                <strong className="text-ink block">Answer Quality</strong>
+                <p className="text-ink-600 text-[7pt]">
+                  Degree to which AI-generated answers accurately convey ICP, capabilities, and pricing.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* 5-Tier Epistemic Evidence Classification (Point 9) */}
+          <div className="p-4 rounded bg-paper-100 border border-line space-y-2 text-[8pt]">
+            <span className="font-mono text-[8pt] font-bold uppercase tracking-[0.04em] text-ink-700 block pb-1 border-b border-line">
+              5-Tier Epistemic Evidence Classification
+            </span>
+
+            <div className="grid grid-cols-1 md:grid-cols-5 gap-2 font-mono text-[7pt]">
+              <div className="bg-paper-50 p-2 rounded border border-line">
+                <span className="text-good font-bold block">1. OBSERVED</span>
+                <p className="font-sans text-[6.8pt] text-ink-600 mt-0.5">
+                  Directly captured DOM text, HTTP headers, status codes, SHA-256 sealed.
+                </p>
+              </div>
+
+              <div className="bg-paper-50 p-2 rounded border border-line">
+                <span className="text-ink-700 font-bold block">2. MEASURED</span>
+                <p className="font-sans text-[6.8pt] text-ink-600 mt-0.5">
+                  Calculated directly from observed data (e.g. latency, extractability index).
+                </p>
+              </div>
+
+              <div className="bg-paper-50 p-2 rounded border border-line">
+                <span className="text-warn font-bold block">3. DERIVED</span>
+                <p className="font-sans text-[6.8pt] text-ink-600 mt-0.5">
+                  Model-derived estimations (commercial value at risk, query answerability).
+                </p>
+              </div>
+
+              <div className="bg-paper-50 p-2 rounded border border-line">
+                <span className="text-ink-700 font-bold block">4. RECOMMENDED</span>
+                <p className="font-sans text-[6.8pt] text-ink-600 mt-0.5">
+                  Prescriptive code remediation patches and strategic architecture proposals.
+                </p>
+              </div>
+
+              <div className="bg-paper-50 p-2 rounded border border-line">
+                <span className="text-ink-700 font-bold block">5. UNMEASURED</span>
+                <p className="font-sans text-[6.8pt] text-ink-600 mt-0.5">
+                  Unexecuted dimensions explicitly labeled rather than estimated or simulated.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Known Operational Limitations & What Dristik Does NOT Know */}
+          <div className="p-4 rounded bg-paper-100 border border-line space-y-2 text-[8.5pt]">
+            <span className="font-mono text-[8pt] font-bold uppercase tracking-[0.04em] text-ink-700 block">
+              Known Operational Limitations &amp; Epistemic Boundaries
+            </span>
+            <ul className="text-ink-700 space-y-1.5 list-disc pl-4 font-sans text-[8pt] leading-relaxed">
+              {methodology.knownLimitations.map((lim, i) => (
+                <li key={i}>{lim}</li>
+              ))}
+              <li>
+                <strong>Epistemic Boundary ("What Dristik Does NOT Know"):</strong> Uncrawled routes, private intranet endpoints, authenticated portals, and third-party commercial transaction databases remain strictly outside this audit. Absence of public proof (e.g. SOC 2 attestation) does not establish absence of institutional compliance.
+              </li>
+            </ul>
+          </div>
+        </div>
+
+        <PageFooter
+          theme={theme}
+          domain={meta.domain}
+          pageNumber={detailsPageNumber}
+          reportId={meta.analysisId}
+          dateStr={meta.generatedAt}
+        />
+      </section>
+    </>
+  );
+}

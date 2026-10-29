@@ -1,0 +1,15 @@
+Name one root bottleneck using Theory of Constraints.
+The bottleneck must be the constraint that, if removed, most increases buyer-to-opportunity velocity.
+
+causes_chain must be 3–5 bullets, each either citing a verified claim id or a Wave-0 fact. It must be causal, not a laundry list.
+
+Propose up to 3 growth levers with impact, confidence, ease (1-10) and a one-line basis each.
+Each lever must name the page or asset to change and the buyer task it unblocks.
+
+Ignore vanity work that does not remove the bottleneck (rebrand, bulk backlinks, animation, extra blog posts unless content is the constraint).
+
+what_to_ignore stays one sharp paragraph naming the discarded tactics and why they do not fix this constraint.
+
+Max 3 strategic_claims, each pointing at a verified claim id when possible.
+
+Do not invent competitors, market size, CAC, or citation lift percentages.

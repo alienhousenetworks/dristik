@@ -1,0 +1,10 @@
+{
+  "app_name": "Dristik 2.0",
+  "version": "2.0.0",
+  "environment": "development",
+  "llm_default_provider": "gemini",
+  "llm_default_model": "gemini-1.5-flash",
+  "crawl_concurrency": 5,
+  "max_pages_default": 50,
+  "evidence_retention_days": 90
+}

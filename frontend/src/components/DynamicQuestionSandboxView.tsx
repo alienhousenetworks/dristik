@@ -1,0 +1,1128 @@
+import React, { useState, useMemo } from 'react';
+import {
+  DynamicSandboxQuestionEvaluation,
+  FiveDimensionAiVisibility,
+  KieGraphSummary,
+  KieClaimGroundingResult,
+  KieAnswerRisk,
+  AiThinkingStep,
+  SystemExecutionLogEntry,
+} from '../types';
+import { sandboxAnswers } from '../lib/sandboxAnswers';
+import {
+  Sparkles,
+  Search,
+  CheckCircle2,
+  AlertTriangle,
+  XCircle,
+  RefreshCw,
+  ExternalLink,
+  ChevronDown,
+  ChevronUp,
+  HelpCircle,
+  Quote,
+  Target,
+  Database,
+  GitBranch,
+  ShieldCheck,
+  BarChart3,
+  BookOpen,
+  Link2,
+  Terminal,
+  Cpu,
+  Zap,
+  X,
+} from 'lucide-react';
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Sub-components
+// ─────────────────────────────────────────────────────────────────────────────
+
+function GroundingBar({ ratio, size = 'sm' }: { ratio: number; size?: 'sm' | 'lg' }) {
+  const pct = Math.round(ratio * 100);
+  const color =
+    pct >= 60 ? 'bg-good' : pct >= 30 ? 'bg-warn' : 'bg-bad';
+  const h = size === 'lg' ? 'h-2.5' : 'h-1.5';
+  return (
+    <div className={`flex items-center gap-2`}>
+      <div className={`flex-1 bg-paper-200 ${h} rounded-full overflow-hidden`}>
+        <div className={`${h} ${color} transition-all`} style={{ width: `${pct}%` }} />
+      </div>
+      <span className="font-mono text-[11px] font-bold text-ink w-9 text-right">{pct}%</span>
+    </div>
+  );
+}
+
+function AnswerRiskBadge({ risk }: { risk?: KieAnswerRisk | string | null }) {
+  if (!risk) return null;
+  const config = {
+    HIGH: 'bg-bad/10 text-bad border-bad/30',
+    MEDIUM: 'bg-warn/10 text-warn border-warn/30',
+    LOW: 'bg-good/10 text-good border-good/30',
+  }[risk] ?? 'bg-paper-100 text-ink-600 border-line';
+  return (
+    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-semibold border ${config}`}>
+      Answer Risk: {risk}
+    </span>
+  );
+}
+
+function ClaimDecompositionPanel({ claims }: { claims: KieClaimGroundingResult[] }) {
+  if (!claims || claims.length === 0) return null;
+  const statusConfig = {
+    SUPPORTED: { color: 'text-good bg-good/10 border-good/30', icon: '✓' },
+    PARTIALLY_SUPPORTED: { color: 'text-warn bg-warn/10 border-warn/30', icon: '◐' },
+    UNSUPPORTED: { color: 'text-bad bg-bad/10 border-bad/30', icon: '✗' },
+  } as Record<string, { color: string; icon: string }>;
+  return (
+    <div className="space-y-1.5">
+      <div className="text-[11px] font-semibold text-ink-600 flex items-center gap-1.5">
+        <GitBranch className="w-3 h-3" />
+        Claim-Level Grounding Verification
+      </div>
+      {claims.map((c, i) => {
+        const cfg = statusConfig[c.status] ?? statusConfig.UNSUPPORTED;
+        return (
+          <div key={i} className={`p-2.5 rounded border text-[11px] ${cfg.color}`}>
+            <div className="flex items-start gap-2">
+              <span className="font-mono font-bold mt-0.5 text-xs">{cfg.icon}</span>
+              <div className="flex-1 space-y-1">
+                <p className="leading-relaxed">{c.claim_text}</p>
+                {c.evidence_snippet && (
+                  <blockquote className="border-l-2 border-current pl-2 opacity-80 font-mono text-[10px]">
+                    "{c.evidence_snippet.slice(0, 120)}"
+                  </blockquote>
+                )}
+                {c.evidence_url && (
+                  <a
+                    href={c.evidence_url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1 text-[10px] underline opacity-70 hover:opacity-100"
+                  >
+                    <Link2 className="w-2.5 h-2.5" /> Source
+                  </a>
+                )}
+              </div>
+              <span className="font-mono text-[10px] opacity-70 shrink-0">
+                {Math.round(c.confidence * 100)}%
+              </span>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 5-Dimension Scorecard Panel
+// ─────────────────────────────────────────────────────────────────────────────
+
+function FiveDimensionPanel({ dims }: { dims: FiveDimensionAiVisibility }) {
+  const dimensions = [
+    {
+      key: 'knowledge_coverage',
+      label: 'Knowledge Coverage',
+      value: dims.knowledge_coverage,
+      icon: <BookOpen className="w-3.5 h-3.5" />,
+      description: 'Proportion of the 10-facet taxonomy with ≥2 supporting atomic claims',
+    },
+    {
+      key: 'retrieval_coverage',
+      label: 'Retrieval Coverage',
+      value: dims.retrieval_coverage,
+      icon: <Search className="w-3.5 h-3.5" />,
+      description: 'Share of questions where the Hybrid Retriever found at least one evidence chunk',
+    },
+    {
+      key: 'evidence_quality',
+      label: 'Evidence Quality',
+      value: dims.evidence_quality,
+      icon: <ShieldCheck className="w-3.5 h-3.5" />,
+      description: 'Share of claims backed by HIGH-strength FACT or CAPABILITY evidence from authoritative pages',
+    },
+    {
+      key: 'answer_grounding',
+      label: 'Answer Grounding',
+      value: dims.answer_grounding,
+      icon: <Target className="w-3.5 h-3.5" />,
+      description: 'Average grounding ratio across all simulated answers (supported / total claims)',
+    },
+    {
+      key: 'citation_quality',
+      label: 'Citation Quality',
+      value: dims.citation_quality,
+      icon: <Link2 className="w-3.5 h-3.5" />,
+      description: 'Share of supported claims with a canonical source URL for disambiguation',
+    },
+  ] as const;
+
+  return (
+    <div className="rounded-lg border border-line bg-paper-100 p-5 space-y-4">
+      <div className="flex items-center gap-2">
+        <BarChart3 className="w-4 h-4 text-ink-700" />
+        <h4 className="font-semibold text-sm text-ink-700">
+          5-Dimension AI Visibility Scorecard
+        </h4>
+        <span className="ml-auto text-[10px] font-mono text-ink-700 border border-line rounded px-1.5 py-0.5">
+          {dims.weighting_profile}
+        </span>
+      </div>
+      <p className="text-[11px] text-ink-700">
+        Each dimension is measured independently. No arbitrary equal-weighting or composite rollup is applied.
+        An aggregate index, if shown, is explicitly labelled with its weighting profile.
+      </p>
+      <div className="space-y-3">
+        {dimensions.map((d) => (
+          <div key={d.key}>
+            <div className="flex items-center justify-between mb-1">
+              <div className="flex items-center gap-1.5 text-[11px] font-semibold text-ink-700">
+                {d.icon}
+                {d.label}
+              </div>
+              <span className="font-mono text-xs font-bold text-ink-700">{d.value}%</span>
+            </div>
+            <GroundingBar ratio={d.value / 100} size="lg" />
+            <p className="text-[10px] text-ink-700 mt-0.5">{d.description}</p>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Knowledge Graph Summary Panel
+// ─────────────────────────────────────────────────────────────────────────────
+
+function KieGraphSummaryPanel({ summary }: { summary: KieGraphSummary }) {
+  return (
+    <div className="rounded-lg border border-line bg-paper-50 p-4 space-y-3">
+      <div className="flex items-center gap-2">
+        <Database className="w-4 h-4 text-ink-700" />
+        <h4 className="font-semibold text-sm text-ink">Website Knowledge Graph</h4>
+        <span className="text-[10px] text-ink-400 ml-1">— {summary.domain}</span>
+      </div>
+      <div className="grid grid-cols-3 sm:grid-cols-6 gap-2 text-center">
+        {[
+          { label: 'Pages', value: summary.total_pages_classified },
+          { label: 'Claims', value: summary.total_claims_extracted },
+          { label: 'Entities', value: summary.total_entities },
+          { label: 'Relations', value: summary.total_relationships },
+          {
+            label: 'Contradictions',
+            value: summary.total_contradictions,
+            alert: summary.total_contradictions > 0,
+          },
+        ].map((stat) => (
+          <div
+            key={stat.label}
+            className={`p-2 rounded border ${
+              stat.alert
+                ? 'bg-bad/10 border-bad/30 text-bad'
+                : 'bg-paper border-line text-ink'
+            }`}
+          >
+            <div className="text-lg font-bold font-mono">{stat.value}</div>
+            <div className="text-[10px] font-medium opacity-70">{stat.label}</div>
+          </div>
+        ))}
+        {Object.entries(summary.entity_categories || {}).slice(0, 1).map(([cat, count]) => (
+          <div key={cat} className="p-2 rounded border bg-paper border-line text-ink">
+            <div className="text-lg font-bold font-mono">{count}</div>
+            <div className="text-[10px] font-medium opacity-70">{cat}</div>
+          </div>
+        ))}
+      </div>
+      {summary.total_contradictions > 0 && (
+        <div className="text-[11px] text-bad bg-bad/10 border border-bad/30 rounded p-2 flex items-start gap-1.5">
+          <AlertTriangle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+          <span>
+            {summary.total_contradictions} cross-page knowledge conflict{summary.total_contradictions > 1 ? 's' : ''} detected
+            (ICP, pricing, or headcount inconsistency). AI answer engines may hallucinate
+            from conflicting signals.
+          </span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Antigravity-Style AI Thinking Process Panel
+// ─────────────────────────────────────────────────────────────────────────────
+
+function AiThinkingPanel({ steps }: { steps?: AiThinkingStep[] | null }) {
+  const [isOpen, setIsOpen] = useState(false);
+  if (!steps || steps.length === 0) return null;
+
+  return (
+    <div className="rounded-md border border-line bg-paper-100/70 overflow-hidden">
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        className="w-full px-3.5 py-2 flex items-center justify-between text-left hover:bg-paper-200/50 transition-colors"
+      >
+        <div className="flex items-center gap-2">
+          <div className="p-1 rounded bg-pine/10 text-pine">
+            <Cpu className="w-3.5 h-3.5" />
+          </div>
+          <span className="font-semibold text-xs text-ink flex items-center gap-1.5">
+            AI Thinking Process (System Log)
+          </span>
+          <span className="text-[10px] font-mono bg-paper border border-line px-1.5 py-0.2 rounded text-ink-600">
+            {steps.length} cognitive steps
+          </span>
+        </div>
+        <div className="flex items-center gap-1 text-xs text-ink-500">
+          <span className="text-[10px] font-mono">{isOpen ? 'Hide Trace' : 'View Trace'}</span>
+          {isOpen ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+        </div>
+      </button>
+
+      {isOpen && (
+        <div className="p-3.5 pt-1 space-y-2 border-t border-line/60 bg-paper-50 font-mono text-xs">
+          <div className="text-[10px] text-ink-500 flex items-center gap-1 mb-2 font-sans">
+            <Terminal className="w-3 h-3 text-pine" />
+            <span>Agent Cognitive Execution Trace & Evidence Verification</span>
+          </div>
+          {steps.map((st, idx) => {
+            const isLast = idx === steps.length - 1;
+            const statusConfig = {
+              complete: { dot: 'bg-emerald-500', text: 'text-good' },
+              warning: { dot: 'bg-amber-500', text: 'text-warn' },
+              action_required: { dot: 'bg-rose-500', text: 'text-bad' },
+            }[st.status || 'complete'] || { dot: 'bg-pine', text: 'text-pine' };
+
+            return (
+              <div key={idx} className="relative pl-6 pb-2 last:pb-0">
+                {!isLast && (
+                  <div className="absolute left-2.5 top-3.5 bottom-0 w-px bg-line" />
+                )}
+                <div className={`absolute left-1 top-1 w-3 h-3 rounded-full border-2 border-paper ${statusConfig.dot}`} />
+                <div className="bg-paper p-2.5 rounded border border-line space-y-1">
+                  <div className="flex items-center justify-between text-[11px] font-semibold">
+                    <span className="text-ink flex items-center gap-1.5">
+                      <span className="text-[10px] font-mono opacity-60">Step {st.step}:</span>
+                      {st.title}
+                    </span>
+                    <span className={`text-[10px] font-mono uppercase ${statusConfig.text}`}>
+                      {st.status || 'complete'}
+                    </span>
+                  </div>
+                  <p className="text-[11px] font-sans text-ink-700 leading-relaxed">
+                    {st.thought}
+                  </p>
+                  {st.details && Object.keys(st.details).length > 0 && (
+                    <div className="pt-1 flex flex-wrap gap-1.5 text-[10px] text-ink-600 font-mono">
+                      {Object.entries(st.details).map(([k, v]) => (
+                        v !== null && v !== undefined && v !== '' ? (
+                          <span key={k} className="bg-paper-100 border border-line/80 px-1.5 py-0.5 rounded">
+                            {k}: {typeof v === 'object' ? JSON.stringify(v) : String(v)}
+                          </span>
+                        ) : null
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Source Attribution & Section Remediation Update Panel
+// ─────────────────────────────────────────────────────────────────────────────
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 4-Pillar Unified Inquiry Audit Panel
+// ─────────────────────────────────────────────────────────────────────────────
+
+function FourPillarInquiryAuditPanel({ item }: { item: DynamicSandboxQuestionEvaluation }) {
+  const answers = sandboxAnswers(item);
+  const sourceUrl = item.source_url || item.evidence_url;
+  const retrievalCount = item.retrieval_evidence_count ?? (item.is_answerable ? 1 : 0);
+  const retrievalStatus = item.retrieval_status || (retrievalCount > 0 ? (item.answerability_status === 'PARTIAL' ? 'PARTIAL' : 'RETRIEVED') : 'NOT_RETRIEVED');
+  const grounding = item.grounding_ratio ?? null;
+  const requiresOwner = item.requires_owner_confirmation || (
+    (item.facet?.toLowerCase().includes('pricing') || item.facet?.toLowerCase().includes('trust') || item.buyer_intent?.toLowerCase().includes('pricing')) &&
+    !item.is_answerable
+  );
+
+  return (
+    <div className="space-y-4 font-sans text-xs">
+      {/* ── PILLAR 1: Semantic Search & Retrieval ── */}
+      <div className="p-3.5 bg-paper border border-line rounded-md space-y-2">
+        <div className="flex items-center justify-between border-b border-line pb-2">
+          <div className="flex items-center gap-2">
+            <span className="font-mono text-[10px] font-bold px-1.5 py-0.5 rounded bg-pine/10 text-pine border border-pine/30 uppercase">
+              Pillar 1
+            </span>
+            <span className="font-semibold text-ink text-xs flex items-center gap-1.5">
+              <Search className="w-3.5 h-3.5 text-pine" /> Semantic Search &amp; Retrieval
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className={`font-mono text-[10px] font-bold px-2 py-0.5 rounded border ${
+              retrievalStatus === 'RETRIEVED'
+                ? 'bg-good/10 text-good border-good/30'
+                : retrievalStatus === 'PARTIAL'
+                ? 'bg-warn/10 text-warn border-warn/30'
+                : 'bg-bad/10 text-bad border-bad/30'
+            }`}>
+              {retrievalStatus}
+            </span>
+            <span className="font-mono text-[10px] text-ink-500">
+              {retrievalCount} evidence chunk{retrievalCount === 1 ? '' : 's'}
+            </span>
+          </div>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] text-ink-600">
+          <div>
+            <span className="text-ink-400">Classified Intent: </span>
+            <span className="font-medium text-ink">{item.buyer_intent || 'General buyer intent'}</span>
+          </div>
+          <div>
+            <span className="text-ink-400">Retrieval Target: </span>
+            <span className="font-mono text-ink-700 bg-paper-100 px-1.5 py-0.5 rounded border border-line">
+              {item.facet}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* ── PILLAR 2: Verified Source Attribution ── */}
+      <div className="p-3.5 bg-paper border border-line rounded-md space-y-2">
+        <div className="flex items-center justify-between border-b border-line pb-2">
+          <div className="flex items-center gap-2">
+            <span className="font-mono text-[10px] font-bold px-1.5 py-0.5 rounded bg-ink/10 text-ink border border-ink/20 uppercase">
+              Pillar 2
+            </span>
+            <span className="font-semibold text-ink text-xs flex items-center gap-1.5">
+              <Link2 className="w-3.5 h-3.5 text-ink-700" /> Verified Source Attribution
+            </span>
+          </div>
+          <span className="font-mono text-[10px] text-ink-500">
+            {sourceUrl ? 'First-Party Crawl Snapshot' : 'Unattributed'}
+          </span>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] text-ink-700">
+          <div>
+            <span className="text-ink-400">Observed Page: </span>
+            <span className="font-semibold text-ink">{item.source_page_title || (sourceUrl ? 'Crawled Domain Page' : 'No first-party page')}</span>
+          </div>
+          <div>
+            <span className="text-ink-400">Observed Heading: </span>
+            <span className={`font-mono px-1.5 py-0.5 rounded border ${
+              item.source_section ? 'bg-paper-100 text-ink-700 border-line' : 'bg-paper-200 text-ink-500 border-dashed border-line'
+            }`}>
+              {item.source_section || 'No heading detected (body flow)'}
+            </span>
+          </div>
+        </div>
+        {sourceUrl && (
+          <div className="pt-1">
+            <a
+              href={sourceUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1 text-[11px] text-pine underline hover:opacity-80"
+            >
+              <span>{sourceUrl}</span>
+              <ExternalLink className="w-3 h-3" />
+            </a>
+          </div>
+        )}
+      </div>
+
+      {/* ── PILLAR 3: Grounded Answer vs. Raw Extract ── */}
+      <div className="p-3.5 bg-paper border border-line rounded-md space-y-3">
+        <div className="flex items-center justify-between border-b border-line pb-2">
+          <div className="flex items-center gap-2">
+            <span className="font-mono text-[10px] font-bold px-1.5 py-0.5 rounded bg-pine/10 text-pine border border-pine/30 uppercase">
+              Pillar 3
+            </span>
+            <span className="font-semibold text-ink text-xs flex items-center gap-1.5">
+              <BookOpen className="w-3.5 h-3.5 text-ink-700" /> Grounded Answer vs. Raw Extract
+            </span>
+          </div>
+          {grounding !== null && (
+            <div className="flex items-center gap-2">
+              <span className="font-mono text-[10px] text-ink-500">Claim Grounding:</span>
+              <span className="font-mono font-bold text-xs text-ink">{Math.round(grounding * 100)}%</span>
+            </div>
+          )}
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          {/* Current Page Extract */}
+          <div className="p-3 bg-paper-50 rounded border border-line space-y-1.5">
+            <div className="flex items-center gap-1.5 font-semibold text-ink text-[11px]">
+              <Quote className="w-3 h-3 text-ink-600" /> Current Crawled Page Extract
+            </div>
+            <p className="text-[10px] text-ink-400">Verbatim passage as captured by the crawl.</p>
+            <blockquote className="text-ink-700 leading-relaxed border-l-2 border-line pl-2.5 italic">
+              {answers.currentExtract}
+            </blockquote>
+          </div>
+
+          {/* Knowledge-Base Constrained Answer */}
+          <div className="p-3 bg-paper-50 rounded border border-line space-y-1.5">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-1.5 font-semibold text-ink text-[11px]">
+                <Target className="w-3 h-3 text-pine" /> Knowledge-Base Constrained Answer
+              </div>
+              {answers.abstained && (
+                <span className="text-[10px] font-semibold uppercase tracking-wide text-bad">Unanswered</span>
+              )}
+            </div>
+            <p className="text-[10px] text-ink-400">
+              {answers.abstained
+                ? 'Explicit abstention: crawled pages do not state this fact.'
+                : 'Strict synthesis constrained solely to retrieved evidence chunks.'}
+            </p>
+            <p className="text-ink leading-relaxed font-medium">{answers.ragAnswer}</p>
+          </div>
+        </div>
+
+        {/* Claim Decomposition */}
+        {item.claim_decomposition && item.claim_decomposition.length > 0 && (
+          <ClaimDecompositionPanel claims={item.claim_decomposition} />
+        )}
+      </div>
+
+      {/* ── PILLAR 4: Actionable Content Remediation ── */}
+      <div className="p-3.5 bg-paper border border-line rounded-md space-y-2.5">
+        <div className="flex items-center justify-between border-b border-line pb-2">
+          <div className="flex items-center gap-2">
+            <span className="font-mono text-[10px] font-bold px-1.5 py-0.5 rounded bg-warn/10 text-warn border border-warn/30 uppercase">
+              Pillar 4
+            </span>
+            <span className="font-semibold text-ink text-xs flex items-center gap-1.5">
+              <Zap className="w-3.5 h-3.5 text-warn" /> Actionable Content Remediation
+            </span>
+          </div>
+          {requiresOwner ? (
+            <span className="font-mono text-[9px] font-bold px-2 py-0.5 rounded bg-amber-500/10 text-amber-600 border border-amber-500/30">
+              Owner Confirmation Required
+            </span>
+          ) : (
+            <span className="font-mono text-[9px] font-bold px-2 py-0.5 rounded bg-good/10 text-good border border-good/30">
+              Ready for Copywriting Patch
+            </span>
+          )}
+        </div>
+
+        {/* Owner Confirmation Alert if fact is sensitive and unstated */}
+        {requiresOwner && (
+          <div className="p-2.5 rounded border border-amber-500/30 bg-amber-500/5 text-amber-800 text-[11px] space-y-1">
+            <div className="font-semibold flex items-center gap-1.5">
+              <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />
+              <span>Anti-Fabrication Policy: Authoritative Business Confirmation Required</span>
+            </div>
+            <p className="leading-relaxed text-[10.5px]">
+              {item.owner_confirmation_brief ||
+                'Pricing tiers, security accreditations, or service SLAs cannot be fabricated. Obtain verified values from the business owner before publishing.'}
+            </p>
+          </div>
+        )}
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] text-ink-700">
+          <div>
+            <span className="text-ink-400">Target Page: </span>
+            <span className="font-mono text-pine font-semibold">{item.target_update_page || '/services'}</span>
+          </div>
+          <div>
+            <span className="text-ink-400">Target Heading: </span>
+            <span className="font-mono text-ink-700 bg-paper-100 px-1.5 py-0.5 rounded border border-line">
+              {item.target_update_section || '## Core Overview & Specifications'}
+            </span>
+          </div>
+        </div>
+
+        <div className="p-2.5 bg-paper-50 rounded border border-line text-[11px] space-y-1">
+          <span className="font-medium text-ink-500 block text-[10px] uppercase tracking-wide">
+            Recommended Patch Content Brief
+          </span>
+          <p className="text-ink-700 leading-relaxed">
+            {item.section_update_recommendation || answers.contentBrief || (
+              item.is_answerable
+                ? 'The crawled passages already answer this question. No new fact is required.'
+                : `Add authoritative, machine-extractable content on ${item.target_update_page || 'the target page'} addressing this inquiry.`
+            )}
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Global System Execution Log Viewer Modal (Antigravity Style)
+// ─────────────────────────────────────────────────────────────────────────────
+
+function SystemExecutionLogModal({
+  isOpen,
+  onClose,
+  logs,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  logs: SystemExecutionLogEntry[];
+}) {
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
+      <div className="w-full max-w-3xl max-h-[85vh] bg-paper rounded-lg shadow-xl border border-line flex flex-col overflow-hidden">
+        {/* Header */}
+        <div className="p-4 border-b border-line flex items-center justify-between bg-paper-50">
+          <div className="flex items-center gap-2">
+            <Terminal className="w-4 h-4 text-pine" />
+            <h3 className="font-semibold text-sm text-ink">
+              AI Question Sandbox — System Execution Log
+            </h3>
+            <span className="text-[10px] font-mono bg-paper border border-line px-2 py-0.5 rounded text-ink-600">
+              Antigravity Trace
+            </span>
+          </div>
+          <button
+            onClick={onClose}
+            className="p-1 rounded text-ink-500 hover:text-ink hover:bg-paper-100"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        {/* Log stream */}
+        <div className="p-4 overflow-y-auto space-y-2 font-mono text-xs bg-paper-100/50 flex-1">
+          {logs.length === 0 ? (
+            <div className="text-center py-8 text-ink-400">
+              No active execution logs recorded yet. Click "Synthesize 100 Questions" to generate a live trace.
+            </div>
+          ) : (
+            logs.map((log, i) => {
+              const levelColor = {
+                SUCCESS: 'text-good bg-good/10 border-good/20',
+                WARNING: 'text-warn bg-warn/10 border-warn/20',
+                ERROR: 'text-bad bg-bad/10 border-bad/20',
+                INFO: 'text-ink-700 bg-paper border-line',
+              }[log.level] || 'text-ink-700 bg-paper border-line';
+
+              return (
+                <div
+                  key={i}
+                  className="p-2.5 rounded border bg-paper flex items-start gap-3 transition-colors hover:border-pine/40"
+                >
+                  <span className="text-[10px] text-ink-400 shrink-0 font-mono mt-0.5">
+                    {log.timestamp}
+                  </span>
+                  <span className={`text-[9px] px-1.5 py-0.5 rounded border uppercase shrink-0 font-bold ${levelColor}`}>
+                    {log.phase}
+                  </span>
+                  <p className="text-[11px] font-sans text-ink flex-1 leading-relaxed">
+                    {log.message}
+                  </p>
+                </div>
+              );
+            })
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="p-3 border-t border-line bg-paper-50 flex items-center justify-between text-xs text-ink-500">
+          <span>{logs.length} logged system events</span>
+          <button onClick={onClose} className="btn-secondary text-xs px-3 py-1.5 rounded">
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Main Component
+// ─────────────────────────────────────────────────────────────────────────────
+
+interface DynamicQuestionSandboxViewProps {
+  analysisId: string;
+  initialEvaluations?: DynamicSandboxQuestionEvaluation[];
+  initialKieGraphSummary?: KieGraphSummary | null;
+  initialFiveDimensions?: FiveDimensionAiVisibility | null;
+  onEvaluationsUpdate?: (updated: DynamicSandboxQuestionEvaluation[]) => void;
+}
+
+export function DynamicQuestionSandboxView({
+  analysisId,
+  initialEvaluations = [],
+  initialKieGraphSummary = null,
+  initialFiveDimensions = null,
+  onEvaluationsUpdate,
+}: DynamicQuestionSandboxViewProps) {
+  const [evaluations, setEvaluations] = useState<DynamicSandboxQuestionEvaluation[]>(initialEvaluations);
+  const [kieGraphSummary, setKieGraphSummary] = useState<KieGraphSummary | null>(initialKieGraphSummary);
+  const [fiveDimensions, setFiveDimensions] = useState<FiveDimensionAiVisibility | null>(initialFiveDimensions);
+  const [selectedFacet, setSelectedFacet] = useState<string>('all');
+  const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [searchQuery, setSearchQuery] = useState<string>('');
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [error, setError] = useState<string | null>(null);
+  const [showDimensions, setShowDimensions] = useState<boolean>(true);
+  const [systemLogs, setSystemLogs] = useState<SystemExecutionLogEntry[]>([]);
+  const [showSystemLogModal, setShowSystemLogModal] = useState<boolean>(false);
+
+  const facets = useMemo(() => {
+    const list = Array.from(new Set(evaluations.map((e) => e.facet))).filter(Boolean);
+    return list.length > 0 ? list : [
+      'Identity, Category & Core Mission',
+      'Target Audience, ICP & Disqualifiers',
+      'Pricing, Packaging & Commercial Model',
+      'Core Capabilities, Features & Product Mechanics',
+      'Technology Stack, Architecture & Integrations',
+      'Competitive Moat, Differentiation & Alternatives',
+      'Trust, Enterprise Security & Regulatory Compliance',
+      'Customer Proof, Case Studies & Quantified ROI',
+      'Implementation, Support & Customer Success',
+      'High-Intent Purchase & Conversion Paths',
+    ];
+  }, [evaluations]);
+
+  const isGap = (e: DynamicSandboxQuestionEvaluation) =>
+    e.answerability_status === 'EVIDENCE_GAP' ||
+    e.answerability_status === 'UNANSWERABLE' ||
+    (!e.is_answerable && e.answerability_status !== 'PARTIAL');
+
+  const totalCount = evaluations.length;
+  const answerableCount = evaluations.filter((e) => e.answerability_status === 'ANSWERABLE' || (e.is_answerable && e.answerability_status !== 'PARTIAL')).length;
+  const partialCount = evaluations.filter((e) => e.answerability_status === 'PARTIAL').length;
+  const unanswerableCount = evaluations.filter(isGap).length;
+
+  const validGroundings = evaluations.filter((e) => e.grounding_ratio != null);
+  const avgGrounding =
+    validGroundings.length > 0
+      ? Math.round((validGroundings.reduce((acc, e) => acc + (e.grounding_ratio ?? 0), 0) / validGroundings.length) * 100)
+      : null;
+  const highRiskCount = evaluations.filter((e) => e.answer_risk === 'HIGH').length;
+
+  const filteredEvaluations = useMemo(() => {
+    return evaluations.filter((item) => {
+      if (selectedFacet !== 'all' && item.facet !== selectedFacet) return false;
+      if (statusFilter === 'answerable' && item.answerability_status !== 'ANSWERABLE' && !item.is_answerable) return false;
+      if (statusFilter === 'partial' && item.answerability_status !== 'PARTIAL') return false;
+      if (statusFilter === 'unanswerable' && !isGap(item)) return false;
+      if (statusFilter === 'high_risk' && item.answer_risk !== 'HIGH') return false;
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase();
+        if (
+          !item.generated_question.toLowerCase().includes(q) &&
+          !(item.crawled_answer || '').toLowerCase().includes(q) &&
+          !(item.rag_answer || '').toLowerCase().includes(q) &&
+          !(item.buyer_intent || '').toLowerCase().includes(q) &&
+          !item.question_id.toLowerCase().includes(q)
+        )
+          return false;
+      }
+      return true;
+    });
+  }, [evaluations, selectedFacet, statusFilter, searchQuery]);
+
+  const handleGenerateOrRefresh = async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/v1/analyses/${analysisId}/dynamic-sandbox`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => null);
+        throw new Error(errJson?.detail || `Server returned ${res.status}: ${res.statusText}`);
+      }
+      const data = await res.json();
+      if (data.evaluations && Array.isArray(data.evaluations)) {
+        setEvaluations(data.evaluations);
+        if (onEvaluationsUpdate) onEvaluationsUpdate(data.evaluations);
+      }
+      if (data.kie_graph_summary) setKieGraphSummary(data.kie_graph_summary);
+      if (data.five_dimension_ai_visibility) setFiveDimensions(data.five_dimension_ai_visibility);
+      if (data.system_execution_log && Array.isArray(data.system_execution_log)) {
+        setSystemLogs(data.system_execution_log);
+      }
+    } catch (err: any) {
+      setError(err.message || 'Error executing dynamic sandbox evaluation');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const getStatusBadge = (status: string) => {
+    switch (status) {
+      case 'ANSWERABLE':
+        return (
+          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-xs font-medium bg-good/10 text-good border border-good/30">
+            <CheckCircle2 className="w-3 h-3 text-good" /> Answerable
+          </span>
+        );
+      case 'PARTIAL':
+        return (
+          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-xs font-medium bg-warn/10 text-warn border border-warn/30">
+            <AlertTriangle className="w-3 h-3 text-warn" /> Partial Evidence
+          </span>
+        );
+      case 'CONFLICTING':
+        return (
+          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-xs font-medium bg-paper-100 text-ink-700 border border-line">
+            <AlertTriangle className="w-3 h-3 text-ink-700" /> Conflicting Evidence
+          </span>
+        );
+      default:
+        return (
+          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-md text-xs font-medium bg-bad/10 text-bad border border-bad/30">
+            <XCircle className="w-3 h-3 text-bad" /> Evidence Gap
+          </span>
+        );
+    }
+  };
+
+  return (
+    <div className="sheet border border-line rounded-lg p-6 space-y-6">
+      {/* ── Header ── */}
+      <div className="flex flex-wrap items-start justify-between gap-4 border-b border-line pb-4">
+        <div className="space-y-1">
+          <div className="flex items-center gap-2">
+            <Sparkles className="w-5 h-5 text-ink-700" />
+            <h3 className="font-sans text-xl text-ink">
+              Dynamic AI Question Sandbox — KIE Grounded Answer Check
+            </h3>
+          </div>
+          <p className="text-xs text-ink-500 max-w-3xl">
+            {totalCount > 0 ? totalCount : '100'} buyer questions answered from the crawled pages as the knowledge base.
+            Each question shows the passage retrieved from the crawl and an answer written only from that passage.
+            When the crawl does not state the fact, the answer is left unanswered.
+            Grounding is the share of answer claims that match a retrieved passage.
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowSystemLogModal(true)}
+            className="btn-secondary text-xs flex items-center gap-1.5 px-3 py-2 rounded-md transition-colors border border-line hover:border-pine/50"
+            title="View Antigravity AI Agent System Execution Trace"
+          >
+            <Terminal className="w-3.5 h-3.5 text-pine" />
+            <span>AI System Log</span>
+            {systemLogs.length > 0 && (
+              <span className="font-mono text-[10px] bg-paper-200 px-1.5 py-0.2 rounded text-ink-700">
+                {systemLogs.length}
+              </span>
+            )}
+          </button>
+          <button
+            id="sandbox-generate-btn"
+            onClick={handleGenerateOrRefresh}
+            disabled={isLoading}
+            className="btn-secondary text-xs flex items-center gap-2 px-3 py-2 rounded-md transition-colors"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin text-ink-700' : ''}`} />
+            {isLoading ? 'Building Knowledge Graph...' : totalCount > 0 ? 'Re-Evaluate Inquiries' : 'Synthesize 100 Questions'}
+          </button>
+        </div>
+      </div>
+
+      {error && (
+        <div className="p-3.5 bg-bad/10 border border-bad/30 text-bad text-xs rounded-md flex items-center justify-between gap-3">
+          <span>{error}</span>
+          <button
+            onClick={handleGenerateOrRefresh}
+            className="underline text-xs font-medium hover:opacity-80 shrink-0"
+          >
+            Retry
+          </button>
+        </div>
+      )}
+
+      {/* ── KIE Knowledge Graph Summary ── */}
+      {kieGraphSummary && <KieGraphSummaryPanel summary={kieGraphSummary} />}
+
+      {/* ── 5-Dimension Scorecard ── */}
+      {fiveDimensions && (
+        <div>
+          <button
+            className="text-xs font-semibold text-ink-700 hover:underline flex items-center gap-1.5 mb-2"
+            onClick={() => setShowDimensions(!showDimensions)}
+          >
+            <BarChart3 className="w-3.5 h-3.5" />
+            {showDimensions ? 'Hide' : 'Show'} 5-Dimension AI Visibility Scorecard
+          </button>
+          {showDimensions && <FiveDimensionPanel dims={fiveDimensions} />}
+        </div>
+      )}
+
+      {/* ── Uninitialized / Empty Sandbox: Readiness Card ── */}
+      {totalCount === 0 ? (
+        <div className="rounded-xl border border-line bg-paper-50 p-6 md:p-8 space-y-6">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="space-y-1.5">
+              <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-medium bg-pine/10 text-pine border border-pine/30">
+                <span className="w-1.5 h-1.5 rounded-full bg-pine animate-pulse" />
+                Knowledge Graph Standby · Ready for Inquiry Synthesis
+              </div>
+              <h4 className="text-base font-semibold text-ink">
+                100-Question Dynamic AI Sandbox & Grounding Check
+              </h4>
+              <p className="text-xs text-ink-600 max-w-2xl leading-relaxed">
+                Synthesize 100 buyer questions across 10 facets. Each question is answered from the crawled pages. The card shows the retrieved passage and the knowledge-base answer, then checks whether each claim in that answer appears in the passage.
+              </p>
+            </div>
+            <button
+              onClick={handleGenerateOrRefresh}
+              disabled={isLoading}
+              className="btn-primary text-xs px-4 py-3 rounded-lg shadow-sm flex items-center justify-center gap-2 shrink-0 transition-transform active:scale-95"
+            >
+              <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
+              {isLoading ? 'Synthesizing 100 Questions...' : 'Synthesize 100 AI Inquiries & Check Grounding'}
+            </button>
+          </div>
+
+          {/* 3-Pillar Readiness Inspection Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-2">
+            <div className="p-3.5 rounded-lg border border-line bg-paper space-y-1.5">
+              <div className="flex items-center gap-2 text-xs font-semibold text-ink">
+                <Database className="w-4 h-4 text-pine" />
+                <span>1. Knowledge Graph Extraction</span>
+              </div>
+              <p className="text-[11px] text-ink-500 leading-normal">
+                Maps entities, relationships, and first-party claims from crawled pages to construct the domain authority graph.
+              </p>
+            </div>
+            <div className="p-3.5 rounded-lg border border-line bg-paper space-y-1.5">
+              <div className="flex items-center gap-2 text-xs font-semibold text-ink">
+                <Search className="w-4 h-4 text-pine" />
+                <span>2. Hybrid Evidence Retriever</span>
+              </div>
+              <p className="text-[11px] text-ink-500 leading-normal">
+                Runs Query Planner to retrieve top-5 evidence chunks per inquiry using semantic vector + lexical BM25 matching.
+              </p>
+            </div>
+            <div className="p-3.5 rounded-lg border border-line bg-paper space-y-1.5">
+              <div className="flex items-center gap-2 text-xs font-semibold text-ink">
+                <GitBranch className="w-4 h-4 text-pine" />
+                <span>3. Claim-Level Grounding Verifier</span>
+              </div>
+              <p className="text-[11px] text-ink-500 leading-normal">
+                Decomposes candidate answers into atomic claims to audit citation accuracy, calculating Grounding Ratio and Answer Risk.
+              </p>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <>
+          {/* ── Aggregate Scorecards ── */}
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+            <div className="p-3 bg-paper-50 border border-line rounded-md text-center">
+              <span className="label text-[10px] text-ink-400 block">Total Questions</span>
+              <span className="text-xl font-bold font-mono text-ink">{totalCount}</span>
+            </div>
+            <div className="p-3 bg-good/10 border border-good/30 rounded-md text-center">
+              <span className="label text-[10px] text-good block">Answerable</span>
+              <span className="text-xl font-bold font-mono text-good">
+                {answerableCount}{' '}
+                <span className="text-xs font-normal">({Math.round((answerableCount / totalCount) * 100)}%)</span>
+              </span>
+            </div>
+            <div className="p-3 bg-warn/10 border border-warn/30 rounded-md text-center">
+              <span className="label text-[10px] text-warn block">Partial Evidence</span>
+              <span className="text-xl font-bold font-mono text-warn">
+                {partialCount}{' '}
+                <span className="text-xs font-normal">({Math.round((partialCount / totalCount) * 100)}%)</span>
+              </span>
+            </div>
+            <div className="p-3 bg-bad/10 border border-bad/30 rounded-md text-center">
+              <span className="label text-[10px] text-bad block">Evidence Gaps</span>
+              <span className="text-xl font-bold font-mono text-bad">
+                {unanswerableCount}{' '}
+                <span className="text-xs font-normal">({Math.round((unanswerableCount / totalCount) * 100)}%)</span>
+              </span>
+            </div>
+            <div className="p-3 bg-paper-100 border border-line rounded-md text-center col-span-2 md:col-span-1">
+              <span className="label text-[10px] text-ink-700 block">Avg Grounding</span>
+              <span className="text-xl font-bold font-mono text-ink-700">
+                {avgGrounding !== null ? `${avgGrounding}%` : '—'}
+              </span>
+            </div>
+          </div>
+
+          {/* ── Filters ── */}
+          <div className="flex flex-wrap items-center justify-between gap-3 bg-paper-50 p-3 rounded-md border border-line">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-xs font-medium text-ink-600">Filter:</span>
+              {[
+                { key: 'all', label: `All (${evaluations.length})` },
+                { key: 'answerable', label: `Answerable (${answerableCount})`, color: 'emerald' },
+                { key: 'partial', label: `Partial (${partialCount})`, color: 'amber' },
+                { key: 'unanswerable', label: `Gaps (${unanswerableCount})`, color: 'rose' },
+                ...(highRiskCount > 0 ? [{ key: 'high_risk', label: `High Risk (${highRiskCount})`, color: 'rose' }] : []),
+              ].map(({ key, label, color }) => (
+                <button
+                  key={key}
+                  onClick={() => setStatusFilter(key)}
+                  className={`px-2.5 py-1 text-xs rounded-md font-mono transition-colors ${
+                    statusFilter === key
+                      ? color ? `bg-${color}-700 text-white font-semibold` : 'bg-pine text-white font-semibold'
+                      : color ? `bg-paper text-${color}-800 hover:bg-${color}-50 border border-${color}-200` : 'bg-paper text-ink-600 hover:bg-paper-100 border border-line'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            <div className="relative w-full sm:w-64">
+              <Search className="w-3.5 h-3.5 text-ink-400 absolute left-2.5 top-2.5" />
+              <input
+                type="text"
+                placeholder="Search questions..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pl-8 pr-3 py-1.5 text-xs bg-paper border border-line rounded-md focus:outline-none focus:border-pine"
+              />
+            </div>
+          </div>
+
+          {/* ── Facet Tabs ── */}
+          <div className="flex items-center gap-1 overflow-x-auto pb-1 text-xs border-b border-line scrollbar-thin">
+            <button
+              onClick={() => setSelectedFacet('all')}
+              className={`px-3 py-1.5 whitespace-nowrap rounded-t-md font-medium transition-colors ${
+                selectedFacet === 'all'
+                  ? 'border-b-2 border-line text-ink-700 bg-paper-50 font-semibold'
+                  : 'text-ink-500 hover:text-ink hover:bg-paper-50'
+              }`}
+            >
+              All Facets ({totalCount})
+            </button>
+            {facets.map((facet) => {
+              const facetCount = evaluations.filter((e) => e.facet === facet).length;
+              const shortFacet = facet.split(',')[0].split('&')[0].trim();
+              return (
+                <button
+                  key={facet}
+                  onClick={() => setSelectedFacet(facet)}
+                  className={`px-3 py-1.5 whitespace-nowrap rounded-t-md font-medium transition-colors ${
+                    selectedFacet === facet
+                      ? 'border-b-2 border-line text-ink-700 bg-paper-50 font-semibold'
+                      : 'text-ink-500 hover:text-ink hover:bg-paper-50'
+                  }`}
+                >
+                  {shortFacet} ({facetCount})
+                </button>
+              );
+            })}
+          </div>
+
+          {/* ── Question Cards or Filter Empty State ── */}
+          {filteredEvaluations.length === 0 ? (
+            <div className="text-center py-10 bg-paper-50 rounded-md border border-line space-y-2">
+              <HelpCircle className="w-8 h-8 text-ink-300 mx-auto" />
+              <p className="text-sm font-medium text-ink-700">No questions match the current filters.</p>
+              <p className="text-xs text-ink-500">
+                {statusFilter !== 'all' ? `Status: ${statusFilter}. ` : ''}
+                {selectedFacet !== 'all' ? `Facet: ${selectedFacet.split(',')[0]}. ` : ''}
+                {searchQuery ? `Search: "${searchQuery}".` : ''}
+              </p>
+              <button
+                onClick={() => {
+                  setStatusFilter('all');
+                  setSelectedFacet('all');
+                  setSearchQuery('');
+                }}
+                className="text-xs text-pine font-medium underline hover:opacity-80 pt-1"
+              >
+                Reset all filters and clear search
+              </button>
+            </div>
+          ) : (
+        <div className="space-y-3">
+          {filteredEvaluations.map((item) => {
+            const isExpanded = expandedId === item.question_id;
+            const grounding = item.grounding_ratio ?? null;
+            const answers = sandboxAnswers(item);
+            return (
+              <div key={item.question_id} className="border border-line rounded-md bg-paper transition-shadow hover:shadow-sm">
+                {/* ── Collapsed Header ── */}
+                <div
+                  onClick={() => setExpandedId(isExpanded ? null : item.question_id)}
+                  className="p-4 flex items-start justify-between gap-3 cursor-pointer select-none"
+                >
+                  <div className="space-y-1.5 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="font-mono text-xs font-bold text-ink-700 bg-paper-200 px-2 py-0.5 rounded">
+                        {item.question_id}
+                      </span>
+                      <span className="text-[11px] font-medium text-ink-500 bg-paper-100 px-2 py-0.5 rounded">
+                        {item.facet.split(',')[0].trim()}
+                      </span>
+                      {getStatusBadge(item.answerability_status)}
+                      <AnswerRiskBadge risk={item.answer_risk} />
+                    </div>
+                    <h4 className="text-sm font-semibold text-ink leading-snug">{item.generated_question}</h4>
+                    <p className="text-xs text-ink-500 italic line-clamp-1">Intent: {item.buyer_intent}</p>
+                    {/* Inline grounding bar in collapsed view */}
+                    {grounding !== null && (
+                      <div className="pt-1 max-w-xs">
+                        <GroundingBar ratio={grounding} />
+                      </div>
+                    )}
+                  </div>
+                  <button className="text-ink-400 hover:text-ink pt-1">
+                    {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                  </button>
+                </div>
+
+                {/* ── Expanded Details: 4-Pillar Unified Inquiry Audit ── */}
+                {isExpanded && (
+                  <div className="border-t border-line bg-paper-50 p-4 space-y-4 text-xs">
+                    <FourPillarInquiryAuditPanel item={item} />
+
+                    {/* Antigravity AI Thinking & Cognitive Trace */}
+                    <AiThinkingPanel steps={item.ai_thinking_steps} />
+
+                    <div className="flex items-center justify-between pt-2 border-t border-line/50 text-[11px] gap-3">
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium text-ink">Citability Score:</span>
+                        <div className="w-24 bg-paper-200 h-2 rounded-full overflow-hidden">
+                          <div
+                            className={`h-full ${item.citability_score >= 7 ? 'bg-good' : item.citability_score >= 4 ? 'bg-warn' : 'bg-bad'}`}
+                            style={{ width: `${item.citability_score * 10}%` }}
+                          />
+                        </div>
+                        <span className="font-mono font-bold text-ink">{item.citability_score}/10</span>
+                      </div>
+                      <p className="text-[10px] text-ink-500 text-right max-w-xs">
+                        Share of this answer supported by the crawl. Not a live citation rate.
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+        </>
+      )}
+
+      {/* ── Global System Execution Log Modal ── */}
+      <SystemExecutionLogModal
+        isOpen={showSystemLogModal}
+        onClose={() => setShowSystemLogModal(false)}
+        logs={systemLogs}
+      />
+    </div>
+  );
+}

@@ -1,0 +1,2 @@
+class SnapshotArchive:
+    pass

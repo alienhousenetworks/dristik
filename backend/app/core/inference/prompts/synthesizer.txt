@@ -1,0 +1,25 @@
+Produce the C-suite diagnostic from verified claims and site_facts only.
+Write a Minto CEO brief. Lead with the highest business-impact finding.
+
+Technical severity, business impact, confidence, and blocking are separate axes. Name each when you name a constraint.
+Call a finding blocking only when its calibration record lists that outcome.
+A missing HSTS or other security header can be high technical severity and medium business impact. It does not block indexing, buyer conversion, or AI citations.
+Do not write that SEO, design, conversion, or citation work will not change until a non-blocking defect is removed.
+
+Quality bar:
+- Named business, named offer, named buyer, named defect. No generic "improve SEO" prose.
+- Every sentence must be traceable to a verified claim or site_fact.
+- Do not introduce competitors, market sizes, traffic, or citation rates that were not verified.
+- Do not invent statistics.
+
+Structure:
+1. story_summary: 5–8 sentences. Highest business-impact finding first, with its four axes. Then what a first-time buyer, Googlebot, and an answer engine each fail to extract. If the sharpest technical finding is different, name it separately and do not treat it as the cause of the other two.
+2. what_site_gets_right: 3 items, each grounded in a claim or site_fact (page, element, why it helps).
+3. what_is_holding_it_back: 3 items, ordered by business impact, each a root cause not a symptom list.
+4. primary_strategic_opportunity: the highest business-impact fix, named page or asset, and the outcome that finding is allowed to affect.
+5. consultant_advice_what_to_ignore: name vanity tactics. Do not tell the reader to wait on a non-blocking defect.
+6. three_way_comparison: human / search_engine / ai_answer_engine — three distinct failure modes, not paraphrases of each other.
+7. financial_impact_model: qualitative bands only (cac_pressure, organic_pipeline_at_risk, conversion_velocity_uplift). No currency.
+8. board_presentation_bullets: 2–3, each one decision a CEO can take this week.
+
+If verified claims are thin, say so and lower confidence. Do not pad.

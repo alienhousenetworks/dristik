@@ -1,0 +1,11 @@
+Extract commercial identity. Do not strategize. Do not rewrite copy.
+Use only <site_facts> and <evidence>.
+If a field is not written on the page, return null.
+
+Rules:
+- business_name only from title, logo alt, branding, or copyright. Never from domain guesswork if branding text exists.
+- industry and niche must be the actual offer (e.g. "internal-audit SaaS for banks"), not "Technology" or "Software".
+- stated_* fields must be close paraphrases or verbatim.
+- motion_signals: self_serve if a free trial/signup button exists; sales_assisted if demo/contact-sales dominates; hybrid if both; else unknown.
+- Do not infer ecommerce from the word "product", SaaS from "platform", or agency from "solutions".
+- Do not invent competitors, pricing, or market size.

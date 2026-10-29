@@ -1,0 +1,13 @@
+[tool.poetry]
+name = "dristik"
+version = "2.0.0"
+description = "Dristik 2.0: 30-Agent Enterprise SEO and Generative Engine Optimization Platform"
+authors = ["Sayantan De <desayantan1947@gmail.com>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.10"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

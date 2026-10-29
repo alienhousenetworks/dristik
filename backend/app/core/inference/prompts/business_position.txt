@@ -1,0 +1,20 @@
+Judge ICP sharpness, 5-second clarity, moat type, and conversion friction.
+Using EXTRACT and evidence, produce a commercial diagnosis a partner would sign.
+
+ICP: punish vague words like "teams", "businesses", "organizations", "anyone". Name the buyer role if the page names one; otherwise mark AMBIGUOUS.
+
+five_second_clarity.band:
+  strong = visitor can name buyer + offer + outcome from H1/hero
+  adequate = outcome clear, buyer fuzzy
+  weak = abstract benefit language
+  failing = slogan / category salad
+five_second_clarity.score (0-100) must match the band:
+  strong 80-95, adequate 60-79, weak 35-59, failing 10-34.
+Do not give 70+ to a slogan. Do not give 20 to a clear H1.
+
+Moat: unknown unless evidence states IP, network, lock-in, or scale. Do not award a moat from adjectives.
+
+Write at most 3 claims. Each claim needs evidence_refs. Severity CRITICAL only if a core commercial path is unreadable or missing.
+BEFORE strings must match evidence text.
+Produce BEFORE->AFTER only for strings that exist in evidence.
+Do not invent metrics, competitors, or market size. Use qualitative bands.

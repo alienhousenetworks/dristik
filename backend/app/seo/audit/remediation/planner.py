@@ -1,0 +1,2 @@
+class RemediationPlanner:
+    pass

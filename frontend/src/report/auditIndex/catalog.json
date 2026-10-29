@@ -1,0 +1,1317 @@
+{
+  "parts": [
+    {
+      "id": "I",
+      "title": "Executive intelligence and strategic assessment"
+    },
+    {
+      "id": "II",
+      "title": "Technical SEO and website infrastructure"
+    },
+    {
+      "id": "III",
+      "title": "On-page SEO and content intelligence"
+    },
+    {
+      "id": "IV",
+      "title": "Off-page SEO, authority and competitive visibility"
+    },
+    {
+      "id": "V",
+      "title": "Specialized SEO and emerging search surfaces"
+    },
+    {
+      "id": "VI",
+      "title": "Conversion, analytics and business outcomes"
+    },
+    {
+      "id": "VII",
+      "title": "Remediation, validation and continuous improvement"
+    },
+    {
+      "id": "A",
+      "title": "Appendices"
+    }
+  ],
+  "sections": [
+    {
+      "number": "01",
+      "part": "I",
+      "title": "Executive summary",
+      "checks": [
+        "Website and business overview",
+        "Primary business objectives",
+        "Organic search health summary",
+        "Top critical errors and opportunities",
+        "Search visibility and traffic trends",
+        "Content and authority strengths",
+        "AI search visibility summary",
+        "Conversion and revenue opportunities",
+        "Competitor position overview",
+        "Immediate action recommendations"
+      ]
+    },
+    {
+      "number": "02",
+      "part": "I",
+      "title": "Website health and SEO scorecard",
+      "checks": [
+        "Overall SEO health score",
+        "Technical SEO score",
+        "Crawlability and indexability score",
+        "On-page SEO score",
+        "Content quality score",
+        "Internal linking score",
+        "Backlink and authority score",
+        "User experience and performance score",
+        "Local SEO score, where applicable",
+        "International SEO score, where applicable",
+        "AEO/GEO measurement score",
+        "Measurement confidence and evidence coverage"
+      ]
+    },
+    {
+      "number": "03",
+      "part": "I",
+      "title": "Business and website understanding",
+      "checks": [
+        "Business model and revenue streams",
+        "Products, services and core offerings",
+        "Target audience and customer personas",
+        "Target locations and markets",
+        "Website type and platform",
+        "Main conversion actions",
+        "Search demand aligned with business goals",
+        "Revenue-critical landing pages",
+        "Regulatory or industry-specific requirements"
+      ]
+    },
+    {
+      "number": "04",
+      "part": "I",
+      "title": "Risk and opportunity assessment",
+      "checks": [
+        "Critical technical risks",
+        "Search visibility risks",
+        "Content decay and quality risks",
+        "Potential search-policy violations",
+        "Traffic decline risks",
+        "Competitor displacement risks",
+        "Conversion leakage",
+        "Index bloat and crawl waste",
+        "Brand reputation and misinformation risks",
+        "High-value growth opportunities"
+      ]
+    },
+    {
+      "number": "05",
+      "part": "I",
+      "title": "Competitive landscape",
+      "checks": [
+        "Direct business competitors",
+        "Organic search competitors",
+        "SERP competitors",
+        "Content competitors",
+        "Local competitors",
+        "AI citation competitors",
+        "Keyword overlap and keyword gaps",
+        "Competitor landing page comparison",
+        "Content depth and topic coverage",
+        "Backlink and referring-domain comparison",
+        "Competitor search-feature ownership"
+      ]
+    },
+    {
+      "number": "06",
+      "part": "I",
+      "title": "Prioritization and business impact",
+      "checks": [
+        "Issue severity and affected URLs",
+        "Business importance of each page",
+        "Search demand and opportunity",
+        "Implementation effort",
+        "Technical dependencies",
+        "Expected impact and uncertainty",
+        "Quick wins versus strategic projects",
+        "30/60/90-day roadmap",
+        "Recommended owners and deadlines"
+      ]
+    },
+    {
+      "number": "07",
+      "part": "II",
+      "title": "Crawlability and discovery",
+      "checks": [
+        "Crawler access and HTTP responses",
+        "Robots.txt validation",
+        "Robots meta directives",
+        "X-Robots-Tag headers",
+        "Crawlable internal links",
+        "Orphan page discovery",
+        "Sitemap discovery",
+        "Important resource accessibility",
+        "Crawl traps and infinite URL spaces",
+        "Faceted navigation and parameter handling",
+        "Crawl budget and server load for large sites",
+        "Googlebot and other crawler access differences"
+      ]
+    },
+    {
+      "number": "08",
+      "part": "II",
+      "title": "Indexability and index coverage",
+      "checks": [
+        "Indexable versus non-indexable URLs",
+        "Indexed versus discovered URLs",
+        "Crawled but not indexed pages",
+        "Excluded pages and their reasons",
+        "Accidental noindex directives",
+        "Canonical conflicts",
+        "Soft 404s",
+        "Duplicate and near-duplicate URLs",
+        "Thin or low-value indexable pages",
+        "Indexation of staging or development URLs",
+        "Search Console URL inspection evidence",
+        "Important pages missing from the index"
+      ]
+    },
+    {
+      "number": "09",
+      "part": "II",
+      "title": "URL architecture and normalization",
+      "checks": [
+        "URL naming conventions",
+        "URL depth and hierarchy",
+        "Trailing slash consistency",
+        "HTTP/HTTPS normalization",
+        "WWW/non-WWW normalization",
+        "Uppercase and lowercase URL handling",
+        "Query parameters and tracking parameters",
+        "Session IDs in URLs",
+        "Duplicate URL variants",
+        "Pagination URL structure",
+        "Slug readability and descriptive naming",
+        "Legacy URL patterns"
+      ]
+    },
+    {
+      "number": "10",
+      "part": "II",
+      "title": "Canonicalization and duplicate control",
+      "checks": [
+        "Canonical tag presence and validity",
+        "Self-referencing canonicals",
+        "Canonical destination response codes",
+        "Canonical chains and loops",
+        "Conflicting canonical signals",
+        "Canonical versus sitemap consistency",
+        "Canonical versus internal link consistency",
+        "Cross-domain canonicalization",
+        "Syndicated content",
+        "Product and category duplicates",
+        "Parameterized duplicate pages",
+        "Duplicate content caused by localization"
+      ]
+    },
+    {
+      "number": "11",
+      "part": "II",
+      "title": "Redirects and broken URLs",
+      "checks": [
+        "3xx redirect inventory",
+        "Redirect chains",
+        "Redirect loops",
+        "Temporary versus permanent redirects",
+        "Internal links to redirected URLs",
+        "Broken internal links",
+        "Broken external links",
+        "404 and 410 handling",
+        "Soft 404 detection",
+        "Redirect mapping for migrations",
+        "Redirect destination relevance",
+        "HTTP-to-HTTPS redirect consistency"
+      ]
+    },
+    {
+      "number": "12",
+      "part": "II",
+      "title": "XML sitemaps",
+      "checks": [
+        "Sitemap index validity",
+        "XML syntax and encoding",
+        "URL response status",
+        "Canonical URL consistency",
+        "Indexable URL inclusion",
+        "Noindex and redirected URL exclusion",
+        "Last-modified accuracy",
+        "Sitemap size and splitting",
+        "Image and video sitemap coverage",
+        "News sitemap eligibility and freshness",
+        "International sitemap annotations, where relevant",
+        "Sitemap submission and processing status"
+      ]
+    },
+    {
+      "number": "13",
+      "part": "II",
+      "title": "Site architecture and internal link structure",
+      "checks": [
+        "Main navigation and hierarchy",
+        "Information architecture",
+        "Click depth of important pages",
+        "Crawl depth distribution",
+        "Orphan pages",
+        "Internal link distribution",
+        "Contextual links",
+        "Breadcrumb implementation",
+        "Hub-and-spoke topic clusters",
+        "Category-to-detail relationships",
+        "Anchor text relevance",
+        "Important pages with insufficient internal links",
+        "Broken or redirected internal link paths"
+      ]
+    },
+    {
+      "number": "14",
+      "part": "II",
+      "title": "HTTP status, hosting and server reliability",
+      "checks": [
+        "200, 3xx, 4xx and 5xx response patterns",
+        "Server error frequency",
+        "DNS resolution",
+        "TLS certificate validity",
+        "HTTPS configuration",
+        "Time to first byte",
+        "Server response latency",
+        "CDN configuration and cache behavior",
+        "Compression",
+        "Cache-control policies",
+        "Origin server reliability",
+        "Rate limiting and crawler blocking",
+        "Geographic delivery performance"
+      ]
+    },
+    {
+      "number": "15",
+      "part": "II",
+      "title": "JavaScript SEO and rendering",
+      "checks": [
+        "Raw HTML versus rendered DOM",
+        "Server-side rendering",
+        "Static rendering and prerendering",
+        "Client-side navigation",
+        "Content unavailable without JavaScript",
+        "JavaScript-generated metadata",
+        "JavaScript-generated canonical tags",
+        "JavaScript-generated structured data",
+        "Lazy-loaded content",
+        "Infinite scroll crawlability",
+        "JavaScript errors affecting content",
+        "Hydration failures",
+        "Blocked JavaScript or CSS resources",
+        "Rendered internal links and pagination"
+      ]
+    },
+    {
+      "number": "16",
+      "part": "II",
+      "title": "Core Web Vitals and page speed",
+      "checks": [
+        "Largest Contentful Paint (LCP)",
+        "Interaction to Next Paint (INP)",
+        "Cumulative Layout Shift (CLS)",
+        "Field data versus laboratory data",
+        "Mobile and desktop performance",
+        "Performance by page template",
+        "Image and font loading",
+        "Render-blocking CSS and JavaScript",
+        "Main-thread blocking",
+        "Unused JavaScript and CSS",
+        "Third-party script impact",
+        "Caching and compression",
+        "Resource priorities",
+        "Performance regressions",
+        "Field thresholds used for interpretation: LCP at or below 2.5 seconds, INP at or below 200 milliseconds, and CLS at or below 0.1 at the 75th percentile. Laboratory data is not field data. Crawl response time is not a Core Web Vital."
+      ]
+    },
+    {
+      "number": "17",
+      "part": "II",
+      "title": "Mobile SEO and responsive behavior",
+      "checks": [
+        "Mobile-first rendering",
+        "Responsive layout",
+        "Content parity between mobile and desktop",
+        "Metadata parity",
+        "Structured data parity",
+        "Mobile navigation",
+        "Tap target usability",
+        "Viewport configuration",
+        "Mobile overlays and interstitials",
+        "Mobile page speed",
+        "Form usability",
+        "Mobile content truncation",
+        "Mobile-specific broken links"
+      ]
+    },
+    {
+      "number": "18",
+      "part": "II",
+      "title": "HTTPS, security and website integrity",
+      "checks": [
+        "HTTPS coverage",
+        "Mixed content",
+        "Certificate expiration",
+        "Insecure internal resources",
+        "Malware and security warnings",
+        "Unexpected injected pages",
+        "Suspicious redirects",
+        "Compromised sitemap or robots.txt",
+        "Security headers as supporting diagnostics",
+        "Staging environment exposure",
+        "Authentication and private page indexation",
+        "Content integrity and unauthorized changes",
+        "This is a header and transport baseline, not a penetration test or a malware certification."
+      ]
+    },
+    {
+      "number": "19",
+      "part": "II",
+      "title": "Structured data and search appearance",
+      "checks": [
+        "JSON-LD, Microdata and RDFa validation",
+        "Schema syntax and property validity",
+        "Structured data matching visible content",
+        "Organization",
+        "LocalBusiness",
+        "Person and ProfilePage",
+        "Article and BlogPosting",
+        "Product and Offer",
+        "BreadcrumbList",
+        "Event",
+        "Recipe",
+        "VideoObject",
+        "JobPosting",
+        "Course and relevant supported types",
+        "Review and AggregateRating eligibility",
+        "Merchant listings and product snippets",
+        "Rich result eligibility and enhancement errors",
+        "Only schema that matches the visible content is in scope. Valid structured data does not guarantee a rich result."
+      ]
+    },
+    {
+      "number": "20",
+      "part": "III",
+      "title": "Title tags and search snippets",
+      "checks": [
+        "Missing titles",
+        "Duplicate titles",
+        "Title length and truncation risk",
+        "Search intent alignment",
+        "Brand placement",
+        "Descriptive specificity",
+        "Keyword targeting",
+        "Misleading or boilerplate titles",
+        "Title differences across page templates",
+        "Meta descriptions",
+        "Duplicate or missing descriptions",
+        "Snippet quality and relevance",
+        "Search-result title rewrites"
+      ]
+    },
+    {
+      "number": "21",
+      "part": "III",
+      "title": "Headings and document structure",
+      "checks": [
+        "H1 presence and relevance",
+        "Multiple or missing primary headings where problematic",
+        "H1-to-title alignment",
+        "H2/H3 hierarchy",
+        "Heading duplication",
+        "Heading text quality",
+        "Section discoverability",
+        "Descriptive subheadings",
+        "Semantic HTML structure",
+        "Hidden or misleading heading text"
+      ]
+    },
+    {
+      "number": "22",
+      "part": "III",
+      "title": "Keyword research and search intent",
+      "checks": [
+        "Primary keyword mapping",
+        "Secondary keyword mapping",
+        "Long-tail queries",
+        "Informational intent",
+        "Commercial investigation",
+        "Transactional intent",
+        "Navigational intent",
+        "Branded and non-branded demand",
+        "Question-based queries",
+        "Keyword difficulty and opportunity",
+        "Search volume source and date",
+        "Seasonal demand",
+        "Keyword-to-URL mapping",
+        "Keyword cannibalization",
+        "Unserved search demand"
+      ]
+    },
+    {
+      "number": "23",
+      "part": "III",
+      "title": "Content quality and usefulness",
+      "checks": [
+        "Originality and unique value",
+        "Completeness of the topic",
+        "Accuracy and factual support",
+        "First-hand experience and expertise",
+        "Author identification and qualifications",
+        "Editorial review",
+        "Source quality and citations",
+        "Content freshness",
+        "Outdated claims, statistics and links",
+        "Generic or interchangeable content",
+        "Thin content",
+        "Excessive repetition",
+        "Unsubstantiated claims",
+        "Content created primarily to manipulate rankings",
+        "Content usefulness compared with competing results"
+      ]
+    },
+    {
+      "number": "24",
+      "part": "III",
+      "title": "Search intent and content-to-query alignment",
+      "checks": [
+        "Query-to-page relevance",
+        "Intent mismatch",
+        "Content format mismatch",
+        "Missing decision-making information",
+        "Missing definitions or explanations",
+        "Missing comparison criteria",
+        "Pricing and availability information",
+        "Product or service detail gaps",
+        "User journey alignment",
+        "SERP format expectations",
+        "Landing page suitability",
+        "Pages attracting irrelevant traffic"
+      ]
+    },
+    {
+      "number": "25",
+      "part": "III",
+      "title": "Topical authority and semantic coverage",
+      "checks": [
+        "Core topic inventory",
+        "Topic cluster completeness",
+        "Supporting content coverage",
+        "Entity relationships",
+        "Subject-specific terminology",
+        "Related concepts and subtopics",
+        "Missing supporting pages",
+        "Competing pages targeting the same topic",
+        "Hub-page quality",
+        "Internal topical relationships",
+        "Content depth versus genuine user need",
+        "Topical gaps versus real competitors"
+      ]
+    },
+    {
+      "number": "26",
+      "part": "III",
+      "title": "Content duplication, cannibalization and decay",
+      "checks": [
+        "Exact duplication",
+        "Near-duplicate content",
+        "Template-generated repetition",
+        "Keyword cannibalization",
+        "Competing URLs with similar intent",
+        "Outdated pages",
+        "Declining impressions and clicks",
+        "Stale statistics and references",
+        "Content consolidation opportunities",
+        "Redirect or canonical decisions",
+        "Pages to refresh, merge, retain or remove",
+        "Traffic and link equity risks before removal"
+      ]
+    },
+    {
+      "number": "27",
+      "part": "III",
+      "title": "Internal linking and anchor text",
+      "checks": [
+        "Contextual link opportunities",
+        "Descriptive anchor text",
+        "Generic anchors such as click here",
+        "Excessive exact-match anchors",
+        "Broken links",
+        "Links to redirects",
+        "Deep-page link gaps",
+        "Important page prominence",
+        "Related content modules",
+        "Breadcrumb links",
+        "Footer and navigation link usefulness",
+        "Internal link recommendations supported by topical relevance"
+      ]
+    },
+    {
+      "number": "28",
+      "part": "III",
+      "title": "Images and visual SEO",
+      "checks": [
+        "Image discoverability",
+        "Descriptive file names",
+        "Appropriate alt text",
+        "Decorative image handling",
+        "Image dimensions and compression",
+        "Modern image formats",
+        "Responsive image delivery",
+        "Lazy-loading implementation",
+        "Image sitemap coverage",
+        "Image indexing restrictions",
+        "Captions and surrounding context",
+        "Original visual assets",
+        "Product image quality",
+        "Open Graph and social sharing images"
+      ]
+    },
+    {
+      "number": "29",
+      "part": "III",
+      "title": "Video SEO",
+      "checks": [
+        "Video accessibility to crawlers",
+        "Video landing page quality",
+        "VideoObject structured data",
+        "Thumbnail accessibility",
+        "Video title and description",
+        "Captions and transcripts",
+        "Video indexing eligibility",
+        "Watch-page indexing",
+        "Video sitemap",
+        "Key moments where supported",
+        "Embedded versus hosted video considerations",
+        "Video loading and page performance",
+        "Video search visibility"
+      ]
+    },
+    {
+      "number": "30",
+      "part": "III",
+      "title": "Content governance and editorial operations",
+      "checks": [
+        "Editorial calendar",
+        "Content ownership",
+        "Publishing workflow",
+        "Editorial quality checks",
+        "Author and reviewer information",
+        "Content update frequency",
+        "Fact verification",
+        "Content briefs",
+        "Cannibalization checks before publishing",
+        "AI-assisted content review",
+        "Content inventory and lifecycle",
+        "Content change tracking",
+        "Refresh and retirement policies"
+      ]
+    },
+    {
+      "number": "31",
+      "part": "IV",
+      "title": "Backlink profile",
+      "checks": [
+        "Total backlinks and referring domains",
+        "New and lost links",
+        "Linking domain relevance",
+        "Link placement and context",
+        "Link destination quality",
+        "Anchor text distribution",
+        "Follow and nofollow attributes",
+        "Redirected and broken backlinks",
+        "Links to important commercial pages",
+        "Competitor backlink gaps",
+        "Link acquisition opportunities",
+        "Link spam indicators",
+        "Paid links and link scheme risks",
+        "Manual action evidence where available",
+        "A missing provider is not a toxicity score. Relevance, provenance, and documented policy risk are the evidence."
+      ]
+    },
+    {
+      "number": "32",
+      "part": "IV",
+      "title": "Digital PR, brand mentions and authority signals",
+      "checks": [
+        "Unlinked brand mentions",
+        "Industry publication coverage",
+        "Expert commentary",
+        "Original research citations",
+        "Relevant editorial links",
+        "Press release quality",
+        "Partner and supplier mentions",
+        "Brand consistency",
+        "Reputation and sentiment",
+        "Entity references across reputable sources",
+        "Earned media opportunities",
+        "Evidence of brand recognition"
+      ]
+    },
+    {
+      "number": "33",
+      "part": "IV",
+      "title": "Competitor SEO benchmarking",
+      "checks": [
+        "Organic keyword overlap",
+        "Keyword gap analysis",
+        "Competitor landing pages",
+        "Ranking distribution",
+        "Content velocity",
+        "Content format differences",
+        "Backlink gaps",
+        "Internal linking comparisons",
+        "SERP feature comparisons",
+        "Local pack comparisons",
+        "Competitor brand mentions",
+        "AI answer citation comparisons",
+        "Competitor change monitoring"
+      ]
+    },
+    {
+      "number": "34",
+      "part": "IV",
+      "title": "SERP visibility and ranking performance",
+      "checks": [
+        "Ranking distribution by query",
+        "Branded and non-branded rankings",
+        "Ranking changes over time",
+        "Impressions and clicks",
+        "CTR by query and page",
+        "Search appearance features",
+        "Featured snippets",
+        "People Also Ask",
+        "Image and video results",
+        "Shopping results where relevant",
+        "Local pack and map results",
+        "AI search appearances where measurable",
+        "Search intent and device segmentation",
+        "Geographic ranking differences"
+      ]
+    },
+    {
+      "number": "35",
+      "part": "IV",
+      "title": "Local SEO and Google Business Profile",
+      "checks": [
+        "Business name, address and phone consistency",
+        "Google Business Profile completeness",
+        "Primary and secondary categories",
+        "Business hours",
+        "Service areas",
+        "Location landing pages",
+        "Local keyword targeting",
+        "Map pack visibility",
+        "Reviews, recency and response practices",
+        "Duplicate or conflicting listings",
+        "Local citations",
+        "Location-specific backlinks",
+        "LocalBusiness structured data",
+        "Multi-location consistency",
+        "Local competitor analysis",
+        "Proximity limitations and ranking variability"
+      ]
+    },
+    {
+      "number": "36",
+      "part": "IV",
+      "title": "International and multilingual SEO",
+      "checks": [
+        "Market and language targeting",
+        "Country and language URL architecture",
+        "hreflang validity",
+        "Reciprocal hreflang references",
+        "Self-referencing language variants",
+        "x-default usage where appropriate",
+        "Canonical and hreflang conflicts",
+        "Translated versus genuinely localized content",
+        "Currency, pricing and measurement localization",
+        "Region-specific metadata",
+        "Language switching and navigation",
+        "Country-specific domains and subdirectories",
+        "Geotargeting limitations",
+        "International backlinks and search visibility"
+      ]
+    },
+    {
+      "number": "37",
+      "part": "IV",
+      "title": "Search spam and policy compliance",
+      "checks": [
+        "Cloaking",
+        "Sneaky redirects",
+        "Scaled content abuse indicators",
+        "Expired domain abuse indicators",
+        "Site reputation abuse risks",
+        "Keyword stuffing",
+        "Hidden text or links",
+        "Link spam",
+        "Doorway pages",
+        "Scraped or copied content",
+        "Misleading structured data",
+        "Automatically generated low-value pages",
+        "Reputation and security incidents",
+        "Manual action evidence",
+        "Recovery and reconsideration workflow, if applicable",
+        "Pattern detection marks a risk for review. It does not confirm a policy violation without evidence."
+      ]
+    },
+    {
+      "number": "38",
+      "part": "V",
+      "title": "E-commerce SEO",
+      "checks": [
+        "Product and category indexability",
+        "Product title and description quality",
+        "Product variant URLs",
+        "Out-of-stock and discontinued product handling",
+        "Product filters and faceted navigation",
+        "Pagination and infinite scroll",
+        "Product canonicalization",
+        "Product and Offer schema",
+        "Merchant Center feed consistency",
+        "Price, availability and shipping information",
+        "Reviews and ratings eligibility",
+        "Product image SEO",
+        "Category content quality",
+        "Internal merchandising links",
+        "Shopping search visibility",
+        "Duplicate manufacturer descriptions",
+        "Seasonal product lifecycle"
+      ]
+    },
+    {
+      "number": "39",
+      "part": "V",
+      "title": "Publisher, editorial and news SEO",
+      "checks": [
+        "Article and news metadata",
+        "Author and publication information",
+        "Publication and modification dates",
+        "Article structured data",
+        "News sitemap eligibility",
+        "Canonical handling for syndication",
+        "Article freshness and update integrity",
+        "Paywall structured data where relevant",
+        "News source transparency",
+        "Editorial standards",
+        "Google News and Top Stories visibility where measurable",
+        "Archive and tag page indexation",
+        "Pagination and article series",
+        "Breaking-news publishing workflow"
+      ]
+    },
+    {
+      "number": "40",
+      "part": "V",
+      "title": "Programmatic SEO and large-scale websites",
+      "checks": [
+        "URL template quality",
+        "Search demand validation",
+        "Unique value per generated page",
+        "Template-level duplication",
+        "Location and category combinations",
+        "Index bloat",
+        "Thin programmatic pages",
+        "Crawl traps",
+        "Faceted navigation",
+        "Pagination coverage",
+        "Internal linking at scale",
+        "Rendering and infrastructure limits",
+        "Sitemap partitioning",
+        "Page generation quality gates",
+        "Sampled versus complete template coverage"
+      ]
+    },
+    {
+      "number": "41",
+      "part": "V",
+      "title": "SaaS, B2B and lead-generation SEO",
+      "checks": [
+        "Product and solution landing pages",
+        "Industry-specific landing pages",
+        "Integration pages",
+        "Use-case pages",
+        "Comparison and alternative pages",
+        "Pricing and feature pages",
+        "Documentation and help centers",
+        "Demo and contact funnels",
+        "Lead magnet indexability",
+        "Case studies and customer evidence",
+        "Author expertise and trust",
+        "CRM-connected organic lead attribution",
+        "Search-driven pipeline and qualified leads"
+      ]
+    },
+    {
+      "number": "42",
+      "part": "V",
+      "title": "App store optimization and app discovery",
+      "checks": [
+        "App title and subtitle",
+        "Store listing descriptions",
+        "Keywords and category relevance",
+        "Screenshots and preview videos",
+        "Ratings and reviews",
+        "App indexing and deep links",
+        "Web-to-app discovery",
+        "App landing pages",
+        "Android App Links and Apple Universal Links",
+        "Installation funnel measurement",
+        "Included only when the business has a mobile application or an app acquisition goal."
+      ]
+    },
+    {
+      "number": "43",
+      "part": "V",
+      "title": "Accessibility and semantic experience",
+      "checks": [
+        "Semantic HTML",
+        "Accessible heading hierarchy",
+        "Image alternatives",
+        "Form labels",
+        "Keyboard navigation",
+        "Accessible navigation landmarks",
+        "Link purpose and names",
+        "Focus visibility",
+        "Color contrast",
+        "Responsive text and layout",
+        "Assistive technology compatibility",
+        "Accessibility-related interaction failures",
+        "Automated screening is not a WCAG certificate and it is not a ranking score."
+      ]
+    },
+    {
+      "number": "44",
+      "part": "V",
+      "title": "Voice, conversational and multimodal search",
+      "checks": [
+        "Natural-language query coverage",
+        "Question-based content",
+        "Concise and complete answers",
+        "Local and mobile search intent",
+        "Speech-friendly content structure",
+        "Video and image discovery",
+        "Visual search context",
+        "Product and location information",
+        "Conversational query journeys",
+        "Performance measurement where actual data is available"
+      ]
+    },
+    {
+      "number": "45",
+      "part": "V",
+      "title": "Answer engine optimization",
+      "checks": [
+        "Question-to-answer coverage",
+        "Direct answer quality",
+        "Definition and explanation coverage",
+        "FAQ usefulness",
+        "Comparison and decision support",
+        "Source citations and factual grounding",
+        "Answer completeness",
+        "Answer consistency across pages",
+        "Entity clarity",
+        "Brand and product fact consistency",
+        "Answer extraction and readability",
+        "Search-result answer appearances",
+        "Measured answer visibility",
+        "Unsupported answer claims"
+      ]
+    },
+    {
+      "number": "46",
+      "part": "V",
+      "title": "Generative engine optimization",
+      "checks": [
+        "Brand discoverability in generative answers",
+        "Topic and intent coverage",
+        "Source retrieval eligibility",
+        "Original research and distinctive evidence",
+        "Expert attribution",
+        "Quotable factual passages",
+        "Entity consistency",
+        "Brand differentiation",
+        "Competitor substitution analysis",
+        "Citation share by topic",
+        "Citation quality and destination",
+        "Source selection patterns",
+        "Brand recommendation context",
+        "Factual accuracy in generated responses",
+        "Repeatability across queries and runs"
+      ]
+    },
+    {
+      "number": "47",
+      "part": "V",
+      "title": "AI search visibility and citation intelligence",
+      "checks": [
+        "Google AI Overviews and AI Mode",
+        "ChatGPT search experiences",
+        "Perplexity",
+        "Gemini",
+        "Microsoft Copilot",
+        "Claude search or research experiences where available",
+        "Prompt and query panel design",
+        "Engine-specific run counts",
+        "Brand mention rate",
+        "Citation frequency",
+        "Citation share versus competitors",
+        "Citation URL distribution",
+        "Recommendation and ranking position",
+        "Positive, neutral and negative brand descriptions",
+        "Hallucinated brand claims",
+        "Source freshness",
+        "Geographic and language variations",
+        "Repeat-run variance",
+        "Confidence intervals",
+        "Referral traffic from AI platforms",
+        "Measurement coverage and limitations",
+        "AI search presence is reported only from engines that were queried. An ordinary SEO score is not an AI citation rate."
+      ]
+    },
+    {
+      "number": "48",
+      "part": "VI",
+      "title": "Google Search Console intelligence",
+      "checks": [
+        "Clicks, impressions, CTR and average position",
+        "Query-level performance",
+        "Page-level performance",
+        "Device segmentation",
+        "Country and language segmentation",
+        "Search appearance",
+        "Indexing and sitemap reports",
+        "Manual actions and security issues",
+        "Crawl statistics",
+        "URL inspection",
+        "Search performance anomalies",
+        "Branded versus non-branded performance",
+        "Historical comparison and seasonality"
+      ]
+    },
+    {
+      "number": "49",
+      "part": "VI",
+      "title": "Analytics and conversion tracking",
+      "checks": [
+        "GA4 configuration",
+        "Organic landing page sessions",
+        "Engaged sessions",
+        "Key event configuration",
+        "Lead and purchase tracking",
+        "Ecommerce event integrity",
+        "Cross-domain tracking",
+        "Consent and privacy configuration",
+        "Attribution model",
+        "UTM and campaign integrity",
+        "Referral exclusions",
+        "Duplicate or missing events",
+        "Server-side tracking where appropriate",
+        "Search Console and GA4 reconciliation"
+      ]
+    },
+    {
+      "number": "50",
+      "part": "VI",
+      "title": "Conversion rate optimization",
+      "checks": [
+        "Landing page message match",
+        "CTA visibility and clarity",
+        "Form length and friction",
+        "Mobile conversion experience",
+        "Navigation and information scent",
+        "Trust signals and proof",
+        "Pricing clarity",
+        "Product or service differentiation",
+        "Objection handling",
+        "Page-specific conversion paths",
+        "User experience barriers",
+        "Funnel abandonment",
+        "A/B testing opportunities",
+        "Conversion impact of SEO recommendations"
+      ]
+    },
+    {
+      "number": "51",
+      "part": "VI",
+      "title": "Organic revenue and attribution",
+      "checks": [
+        "Organic lead volume",
+        "Qualified organic leads",
+        "Organic-assisted conversions",
+        "Ecommerce revenue",
+        "Conversion rate by landing page",
+        "Revenue per organic session",
+        "Lead-to-customer conversion",
+        "Customer acquisition cost where measurable",
+        "Organic pipeline contribution",
+        "Branded versus non-branded revenue",
+        "AI referral conversions",
+        "Attribution confidence",
+        "Missing tracking and data limitations"
+      ]
+    },
+    {
+      "number": "52",
+      "part": "VI",
+      "title": "Forecasting and opportunity modeling",
+      "checks": [
+        "Addressable keyword demand",
+        "Current ranking and traffic baseline",
+        "CTR assumptions",
+        "Traffic opportunity scenarios",
+        "Conversion-rate assumptions",
+        "Revenue-per-conversion assumptions",
+        "Content production cost",
+        "Engineering implementation cost",
+        "Confidence ranges",
+        "Seasonal adjustments",
+        "Cannibalization and traffic displacement risk",
+        "Expected time to impact",
+        "Conservative, base and upside scenarios",
+        "A forecast is an estimate with stated assumptions. This audit does not promise a ranking or a revenue gain."
+      ]
+    },
+    {
+      "number": "53",
+      "part": "VII",
+      "title": "Detailed issue register and remediation plan",
+      "checks": [
+        "Finding ID and category",
+        "Severity and priority",
+        "Affected URLs",
+        "Exact observed issue",
+        "Evidence and collection timestamp",
+        "Expected impact",
+        "Root cause, if established",
+        "Recommended fix",
+        "Implementation instructions",
+        "Responsible team",
+        "Dependencies",
+        "Effort estimate",
+        "Business value",
+        "Confidence level",
+        "Validation method",
+        "Current remediation status"
+      ]
+    },
+    {
+      "number": "54",
+      "part": "VII",
+      "title": "Post-fix verification and regression testing",
+      "checks": [
+        "Before-and-after evidence",
+        "HTTP and redirect verification",
+        "Canonical and robots verification",
+        "Rendered content verification",
+        "Structured data revalidation",
+        "Performance retesting",
+        "Indexability checks",
+        "Sitemap updates",
+        "Search Console follow-up",
+        "Regression tests by template",
+        "Automated CI checks",
+        "Rollback recommendations",
+        "Verified, partially verified and unverified outcomes"
+      ]
+    },
+    {
+      "number": "55",
+      "part": "VII",
+      "title": "Monitoring, governance and ongoing SEO operations",
+      "checks": [
+        "Scheduled crawls",
+        "Daily and weekly anomaly monitoring",
+        "Monthly SEO performance reports",
+        "Ranking and SERP monitoring",
+        "Backlink changes",
+        "Content decay monitoring",
+        "Technical regression alerts",
+        "AI citation tracking",
+        "Competitor movement",
+        "Organic conversion trends",
+        "Issue ownership and SLAs",
+        "Change history",
+        "Evidence retention",
+        "Audit comparison over time",
+        "Quarterly strategic review"
+      ]
+    },
+    {
+      "number": "A",
+      "part": "A",
+      "title": "Audit scope",
+      "checks": [
+        "Domain and subdomain architecture",
+        "Crawled URL scope and boundaries",
+        "Target languages and regional markets",
+        "Crawl limits, depth thresholds and robot exclusions"
+      ]
+    },
+    {
+      "number": "B",
+      "part": "A",
+      "title": "Methodology",
+      "checks": [
+        "Headless DOM crawling and rendering methods",
+        "Evidence collection tools and telemetry",
+        "Testing conditions, device emulation and user agents",
+        "11-dimension scoring rubric and weighting rules"
+      ]
+    },
+    {
+      "number": "C",
+      "part": "A",
+      "title": "URL inventory",
+      "checks": [
+        "Discovered URL inventory",
+        "Crawled URL routing and status codes",
+        "Indexable vs non-indexable URL ledger",
+        "Excluded, redirected and untested URLs"
+      ]
+    },
+    {
+      "number": "D",
+      "part": "A",
+      "title": "Page-level audit",
+      "checks": [
+        "Page-level findings and observations",
+        "DOM evidence and snippet proof",
+        "URL-specific prescriptive fixes",
+        "Validation acceptance criteria per page"
+      ]
+    },
+    {
+      "number": "E",
+      "part": "A",
+      "title": "Keyword inventory",
+      "checks": [
+        "Target keyword and query inventory",
+        "Search intent categorization",
+        "Current rank baseline and SERP features",
+        "Keyword-to-landing-page mapping"
+      ]
+    },
+    {
+      "number": "F",
+      "part": "A",
+      "title": "Competitor inventory",
+      "checks": [
+        "Direct business competitors",
+        "Organic search and SERP rivals",
+        "AI citation competitors",
+        "Competitor selection methodology and justification"
+      ]
+    },
+    {
+      "number": "G",
+      "part": "A",
+      "title": "Backlink inventory",
+      "checks": [
+        "Referring domain inventory and authority",
+        "Backlink provenance and link context",
+        "Anchor text distribution and follow attributes",
+        "Live provider integration and gap status"
+      ]
+    },
+    {
+      "number": "H",
+      "part": "A",
+      "title": "Structured data results",
+      "checks": [
+        "Detected Schema.org entity types",
+        "JSON-LD syntax and property validation",
+        "Rich result eligibility and enhancement warnings",
+        "Entity graph completeness"
+      ]
+    },
+    {
+      "number": "I",
+      "part": "A",
+      "title": "Performance evidence",
+      "checks": [
+        "Field Core Web Vitals (CrUX LCP, INP, CLS)",
+        "Laboratory Lighthouse diagnostics",
+        "Device segmentation (Mobile vs Desktop)",
+        "Template-level performance ledger"
+      ]
+    },
+    {
+      "number": "J",
+      "part": "A",
+      "title": "Search Console evidence",
+      "checks": [
+        "Connected Search Console property",
+        "Date range and historical comparison window",
+        "Clicks, impressions, CTR and query coverage",
+        "Index coverage and crawl statistics"
+      ]
+    },
+    {
+      "number": "K",
+      "part": "A",
+      "title": "AI benchmark evidence",
+      "checks": [
+        "AI search engines tested (ChatGPT, Perplexity, Gemini, Copilot, AI Overviews)",
+        "Buyer inquiry prompt panel and execution runs",
+        "Citation frequency, destination URLs and share of voice",
+        "Measurement limitations and confidence intervals"
+      ]
+    },
+    {
+      "number": "L",
+      "part": "A",
+      "title": "Remediation backlog",
+      "checks": [
+        "Master finding register (Finding IDs)",
+        "Severity, priority and effort triage",
+        "Assigned team ownership (Engineering, Content, DevOps)",
+        "Remediation lifecycle status and acceptance criteria"
+      ]
+    },
+    {
+      "number": "M",
+      "part": "A",
+      "title": "Change log",
+      "checks": [
+        "Historical audit comparison baseline",
+        "Resolved defects and regression alerts",
+        "New findings and status delta",
+        "Audit version changelog"
+      ]
+    },
+    {
+      "number": "N",
+      "part": "A",
+      "title": "Limitations",
+      "checks": [
+        "Missing external integrations (GSC, GA4, Backlinks)",
+        "Crawl sampling scope and uninspected URLs",
+        "Data gaps and measurement limitations",
+        "Inference disclosures and uncertainty parameters"
+      ]
+    },
+    {
+      "number": "O",
+      "part": "A",
+      "title": "Glossary",
+      "checks": [
+        "Technical SEO terminology glossary",
+        "Core Web Vitals metrics and threshold definitions",
+        "Answer Engine Optimization (AEO) and GEO concepts",
+        "Scorecard interpretation and confidence grading"
+      ]
+    }
+  ]
+}
