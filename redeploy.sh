@@ -94,8 +94,11 @@ else
 fi
 
 # ------------------------------------------------------------------------------
-# 2. Optional Git Pull
+# 2. Git Synchronization (alienhousenetworks/dristik:main)
 # ------------------------------------------------------------------------------
+REPO_URL="https://github.com/alienhousenetworks/dristik.git"
+REPO_BRANCH="main"
+
 SKIP_PULL=false
 for arg in "$@"; do
     if [ "$arg" = "--no-pull" ]; then
@@ -103,10 +106,42 @@ for arg in "$@"; do
     fi
 done
 
-if [ "$SKIP_PULL" = false ] && [ -d "${ROOT_DIR}/.git" ]; then
-    echo -e "${CYAN}▶ Pulling latest code from git repository...${RESET}"
-    git pull origin main 2>/dev/null || echo -e "  ${YELLOW}⚠ Git pull skipped (working directory dirty or branch up-to-date).${RESET}"
-    echo ""
+if [ "$SKIP_PULL" = false ]; then
+    if [ -d "${ROOT_DIR}/.git" ]; then
+        echo -e "${CYAN}▶ Verifying and syncing with repository (${BOLD}${REPO_URL}${RESET})...${RESET}"
+        CURRENT_ORIGIN=$(git config --get remote.origin.url 2>/dev/null || true)
+        
+        # Ensure remote origin is configured and points to the official repository
+        if [ -z "$CURRENT_ORIGIN" ]; then
+            git remote add origin "$REPO_URL" 2>/dev/null || true
+            echo -e "  ${GREEN}✓ Added remote origin: ${REPO_URL}${RESET}"
+        elif [ "$CURRENT_ORIGIN" != "$REPO_URL" ] && [ "$CURRENT_ORIGIN" != "git@github.com:alienhousenetworks/dristik.git" ]; then
+            echo -e "  ${YELLOW}⚡ Updating git remote origin: ${CURRENT_ORIGIN} -> ${REPO_URL}${RESET}"
+            git remote set-url origin "$REPO_URL" 2>/dev/null || true
+        fi
+
+        # Fetch and sync latest code from main branch
+        git fetch origin "$REPO_BRANCH" 2>/dev/null || true
+        CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "$REPO_BRANCH")
+        if [ "$CURRENT_BRANCH" != "$REPO_BRANCH" ]; then
+            git checkout "$REPO_BRANCH" 2>/dev/null || true
+        fi
+
+        if git pull --ff-only origin "$REPO_BRANCH" 2>/dev/null; then
+            echo -e "  ${GREEN}✓ Successfully synced latest changes from ${REPO_BRANCH}.${RESET}"
+        elif git pull origin "$REPO_BRANCH" 2>/dev/null; then
+            echo -e "  ${GREEN}✓ Merged latest updates from ${REPO_BRANCH}.${RESET}"
+        else
+            echo -e "  ${YELLOW}⚠ Git pull skipped or encountered local workspace changes; proceeding with local code.${RESET}"
+        fi
+
+        LATEST_COMMIT=$(git log -1 --format="%h — %s (%ci)" 2>/dev/null || echo "HEAD")
+        echo -e "  ${GREEN}✓ Deploying revision: ${BOLD}${LATEST_COMMIT}${RESET}"
+        echo ""
+    else
+        echo -e "  ${DIM}ℹ Standalone directory detected (no .git repository). Skipping git sync.${RESET}"
+        echo ""
+    fi
 fi
 
 # ------------------------------------------------------------------------------

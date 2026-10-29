@@ -700,8 +700,9 @@ dristik/
 ├── .env.example                       # Example configuration; inspect before use
 ├── docker-compose.yml                 # Docker Compose configuration where present
 ├── setup.sh                           # Environment bootstrap script where present
-├── start.sh / run.sh                  # Development launch scripts where present
-└── redeploy.sh                        # Deployment helper where present
+├── deploy.sh                          # Primary production deployment script
+├── redeploy.sh                        # Deployment & update helper
+└── start.sh / run.sh                  # Development launch scripts where present
 ```
 
 **Do not assume** every path above exists or that every item is included in a release. Confirm paths and scripts against the checked-out branch before running commands.
@@ -766,7 +767,7 @@ Open the local Vite URL printed by the command. The backend health endpoint and 
 
 ### 12.5 Automated scripts
 
-The repository documentation references `setup.sh`, `start.sh`, `run.sh`, `redeploy.sh` and `update_citation_models.sh`. Inspect a script before executing it, confirm its flags against the current version, and run with least privilege. Do not assume flags described by an older revision remain available.
+The repository documentation references `deploy.sh`, `setup.sh`, `start.sh`, `run.sh`, `redeploy.sh` and `update_citation_models.sh`. Inspect a script before executing it, confirm its flags against the current version, and run with least privilege. Do not assume flags described by an older revision remain available.
 
 ---
 

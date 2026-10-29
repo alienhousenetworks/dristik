@@ -149,8 +149,8 @@ with open('${ENV_FILE}', 'w') as f:
     echo -e "  ${GREEN}✓ Generated secure production .env successfully.${RESET}"
 fi
 
-# Ensure redeploy.sh and start.sh are executable
-chmod +x "${ROOT_DIR}/redeploy.sh" "${ROOT_DIR}/setup.sh" "${ROOT_DIR}/start.sh" 2>/dev/null || true
+# Ensure deploy.sh, redeploy.sh and start.sh are executable
+chmod +x "${ROOT_DIR}/deploy.sh" "${ROOT_DIR}/redeploy.sh" "${ROOT_DIR}/setup.sh" "${ROOT_DIR}/start.sh" 2>/dev/null || true
 
 echo ""
 echo "================================================================"
@@ -168,6 +168,6 @@ echo -e "1. Edit ${BOLD}.env${RESET} to insert your LLM API Key (OpenRouter, Ant
 echo -e "   ${CYAN}nano .env${RESET}"
 echo ""
 echo -e "2. Run the deployment script to build and launch the site:"
-echo -e "   ${GREEN}./redeploy.sh${RESET}"
+echo -e "   ${GREEN}./deploy.sh${RESET}  (or ./redeploy.sh)"
 echo "================================================================"
 echo ""
