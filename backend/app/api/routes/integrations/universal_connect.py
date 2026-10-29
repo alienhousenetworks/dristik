@@ -86,6 +86,16 @@ def _db():
         columns = {row["name"] for row in conn.execute("PRAGMA table_info(uc_ai_connections)").fetchall()}
         if "name" not in columns:
             conn.execute("ALTER TABLE uc_ai_connections ADD COLUMN name TEXT NOT NULL DEFAULT 'Dristik AI connection'")
+        if "webhook_url" not in columns:
+            conn.execute("ALTER TABLE uc_ai_connections ADD COLUMN webhook_url TEXT")
+        if "outbound_headers_json" not in columns:
+            conn.execute("ALTER TABLE uc_ai_connections ADD COLUMN outbound_headers_json TEXT")
+        if "connection_mode" not in columns:
+            conn.execute("ALTER TABLE uc_ai_connections ADD COLUMN connection_mode TEXT DEFAULT 'mcp_server'")
+        if "handshake_status" not in columns:
+            conn.execute("ALTER TABLE uc_ai_connections ADD COLUMN handshake_status TEXT DEFAULT 'unpaired'")
+        if "last_handshake_at" not in columns:
+            conn.execute("ALTER TABLE uc_ai_connections ADD COLUMN last_handshake_at REAL")
         yield conn
         conn.commit()
     finally:
@@ -438,12 +448,17 @@ def _connection_domain() -> str:
 
 
 def _public_ai_connection(row: sqlite3.Row) -> dict[str, Any]:
+    row_keys = row.keys() if hasattr(row, "keys") else ()
     return {
         "id": row["id"], "name": row["name"], "connection_email": row["connection_email"],
         "grant_profile": row["grant_profile"], "scopes": json.loads(row["scopes_json"]),
         "status": row["status"], "expires_at": row["expires_at"],
         "created_at": row["created_at"], "updated_at": row["updated_at"],
         "last_used_at": row["last_used_at"],
+        "webhook_url": row["webhook_url"] if "webhook_url" in row_keys else None,
+        "connection_mode": row["connection_mode"] if "connection_mode" in row_keys else "mcp_server",
+        "handshake_status": row["handshake_status"] if "handshake_status" in row_keys else "unpaired",
+        "last_handshake_at": row["last_handshake_at"] if "last_handshake_at" in row_keys else None,
     }
 
 
@@ -652,6 +667,31 @@ async def revoke_ai_connection(connection_id: str, user: UserIdentity = Depends(
             ("uce_" + uuid.uuid4().hex, connection_id, user.org_id, "revoked", now, "{}"),
         )
     return {"id": connection_id, "status": "revoked"}
+
+
+@router.delete("/connect/ai-connections/{connection_id}")
+@router.delete("/ai-connections/{connection_id}")
+async def delete_ai_connection(connection_id: str, user: UserIdentity = Depends(require_permission("org:manage"))):
+    with _db() as conn:
+        row = conn.execute("SELECT id FROM uc_ai_connections WHERE id=? AND org_id=?", (connection_id, user.org_id)).fetchone()
+        if row is None:
+            raise HTTPException(status_code=404, detail="Connection not found.")
+        conn.execute("DELETE FROM uc_ai_connections WHERE id=? AND org_id=?", (connection_id, user.org_id))
+        conn.execute("DELETE FROM uc_ai_connection_events WHERE connection_id=? AND org_id=?", (connection_id, user.org_id))
+    return {"id": connection_id, "deleted": True}
+
+
+@router.delete("/connect/ai-connections/cleanup-revoked")
+@router.delete("/ai-connections/cleanup-revoked")
+async def cleanup_revoked_connections(user: UserIdentity = Depends(require_permission("org:manage"))):
+    with _db() as conn:
+        revoked = conn.execute("SELECT id FROM uc_ai_connections WHERE status='revoked' AND org_id=?", (user.org_id,)).fetchall()
+        revoked_ids = [r["id"] for r in revoked]
+        if revoked_ids:
+            placeholders = ",".join("?" for _ in revoked_ids)
+            conn.execute(f"DELETE FROM uc_ai_connections WHERE id IN ({placeholders})", revoked_ids)
+            conn.execute(f"DELETE FROM uc_ai_connection_events WHERE connection_id IN ({placeholders})", revoked_ids)
+    return {"deleted_count": len(revoked_ids), "status": "revoked_connections_cleaned"}
 
 
 def _log_connection_event(

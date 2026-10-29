@@ -130,3 +130,93 @@ def test_submission_rejects_detected_secret_and_privileged_shell(isolated_db):
     with pytest.raises(HTTPException) as exc:
         asyncio.run(onboarding.submit_ai_response(command_body, owner()))
     assert exc.value.status_code == 422
+
+
+def test_delete_and_cleanup_revoked_connections(isolated_db):
+    conn_a = asyncio.run(uc.create_ai_connection(
+        uc.AIConnectionCreate(name="To Delete", grant_profile="read_only"), owner(), request()
+    ))
+    conn_b = asyncio.run(uc.create_ai_connection(
+        uc.AIConnectionCreate(name="To Revoke", grant_profile="read_only"), owner(), request()
+    ))
+    # Revoke conn_b
+    asyncio.run(uc.revoke_ai_connection(conn_b["id"], owner()))
+
+    # Direct delete conn_a
+    del_res = asyncio.run(uc.delete_ai_connection(conn_a["id"], owner()))
+    assert del_res["deleted"] is True
+
+    # Cleanup revoked
+    cleanup_res = asyncio.run(uc.cleanup_revoked_connections(owner()))
+    assert cleanup_res["deleted_count"] >= 1
+
+    # Verify both are deleted
+    list_res = asyncio.run(uc.list_ai_connections(owner()))
+    ids = {c["id"] for c in list_res["connections"]}
+    assert conn_a["id"] not in ids
+    assert conn_b["id"] not in ids
+
+
+def test_handshake_pairing_extracts_webhook_and_updates_status(isolated_db):
+    created = asyncio.run(uc.create_ai_connection(
+        uc.AIConnectionCreate(name="Claude Handshake", grant_profile="audit_operator"), owner(), request()
+    ))
+    sample_ai_response = """
+Here is my inbound connection configuration for Dristik:
+```json:dristik-connection
+{
+  "client_name": "Claude Desktop",
+  "provider": "claude",
+  "connection_mode": "webhook",
+  "webhook_url": "https://api.claude.ai/v1/webhook/callback",
+  "auth_scheme": "bearer",
+  "auth_headers": {
+    "Authorization": "Bearer test-claude-token-123"
+  },
+  "supported_capabilities": ["tasks.receive", "audit.stream"]
+}
+```
+"""
+    result = asyncio.run(onboarding.pair_ai_connection(
+        created["id"],
+        onboarding.HandshakeIngestRequest(raw_response=sample_ai_response, auto_verify_ping=False),
+        owner(),
+    ))
+    assert result["connection_id"] == created["id"]
+    assert result["webhook_url"] == "https://api.claude.ai/v1/webhook/callback"
+    assert result["connection_mode"] == "webhook"
+
+    # Verify in database
+    with uc._db() as conn:
+        row = conn.execute("SELECT webhook_url,handshake_status FROM uc_ai_connections WHERE id=?", (created["id"],)).fetchone()
+    assert row["webhook_url"] == "https://api.claude.ai/v1/webhook/callback"
+
+
+def test_connect_chat_copilot_guidance_and_handshake_auto_ingest(isolated_db):
+    from app.api.routes.integrations import connect_chat
+    created = asyncio.run(uc.create_ai_connection(
+        uc.AIConnectionCreate(name="Grok Chat Test", grant_profile="full_access"), owner(), request()
+    ))
+    # Test guidance
+    chat_res = asyncio.run(connect_chat.chat_with_connect(
+        connect_chat.ConnectChatRequest(message="How do I connect Claude?"),
+        owner(),
+    ))
+    assert "Claude Desktop" in chat_res["content"]
+
+    # Test pasting handshake in chat
+    raw_pasted = f"""
+```json:dristik-connection
+{{
+  "webhook_url": "https://api.x.ai/webhook/grok",
+  "connection_mode": "webhook"
+}}
+```
+"""
+    ingest_chat_res = asyncio.run(connect_chat.chat_with_connect(
+        connect_chat.ConnectChatRequest(message=raw_pasted, connection_id=created["id"]),
+        owner(),
+    ))
+    assert ingest_chat_res["action"] == "handshake_ingested"
+    assert "AI Connection Ingested" in ingest_chat_res["content"]
+

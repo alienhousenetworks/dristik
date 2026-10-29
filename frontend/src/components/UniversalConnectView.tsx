@@ -23,11 +23,42 @@ import {
   ShieldCheck,
   Sparkles,
   Terminal,
+  Trash2,
 } from 'lucide-react';
 
 type Provider = { id: string; provider: string; label: string; model: string; status: string; created_at: number };
 type Task = { id: string; goal: string; status: string; created_at: number; execution_started?: boolean };
-type AIConnection = { id: string; name: string; connection_email: string; grant_profile: string; status: string; expires_at?: number | null; last_used_at?: number | null };
+type AIConnection = {
+  id: string;
+  name: string;
+  connection_email: string;
+  grant_profile: string;
+  status: string;
+  expires_at?: number | null;
+  last_used_at?: number | null;
+  webhook_url?: string | null;
+  connection_mode?: string;
+  handshake_status?: string;
+  last_handshake_at?: number | null;
+};
+type HandshakeResult = {
+  connection_id: string;
+  handshake_status: string;
+  webhook_url: string | null;
+  websocket_url: string | null;
+  connection_mode: string;
+  ping_result: { success: boolean; status_code?: number; error?: string } | null;
+  code_staged: boolean;
+  summary: string;
+  message: string;
+};
+type ChatMsg = {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  timestamp: number;
+  action?: string;
+};
 type IssuedCredential = { id: string; name?: string; connection_email: string; api_key: string; grant_profile?: string; scopes?: string[]; mcp_endpoint?: string; mcp_endpoint_is_absolute?: boolean; mcp_config?: { url: string; headers: Record<string, string> }; key_display_policy?: string };
 type ToolInventoryItem = { name: string; scope: string };
 type OnboardingPrompts = Partial<Record<ClientTab, string>>;
@@ -143,6 +174,27 @@ export function UniversalConnectView() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
+
+  // Two-way handshake & ingestion state
+  const [handshakeInput, setHandshakeInput] = useState('');
+  const [handshakeResult, setHandshakeResult] = useState<HandshakeResult | null>(null);
+  const [handshakeBusy, setHandshakeBusy] = useState(false);
+  const [activeHandshakeConnId, setActiveHandshakeConnId] = useState<string | null>(null);
+
+  // Connect Copilot & Live Chat state
+  const [chatOpen, setChatOpen] = useState(true);
+  const [chatMessages, setChatMessages] = useState<ChatMsg[]>([
+    {
+      id: 'msg-init',
+      role: 'assistant',
+      content:
+        '👋 **Welcome to Dristik Connect Copilot.** I can guide your connection setup, automatically pair external AIs when you paste their response here, or test live bidirectional messaging across all 105 specialist agents.',
+      timestamp: Date.now(),
+    },
+  ]);
+  const [chatInput, setChatInput] = useState('');
+  const [chatBusy, setChatBusy] = useState(false);
+  const [chatTargetConnectionId, setChatTargetConnectionId] = useState<string>('');
 
   const sendTestProbe = async (connectionId: string) => {
     setProbeBusy(true);
@@ -357,6 +409,122 @@ export function UniversalConnectView() {
       setError(e instanceof Error ? e.message : 'Could not revoke connection.');
     } finally {
       setBusy(false);
+    }
+  };
+
+  const deleteAIConnection = async (id: string, name?: string) => {
+    if (!window.confirm(`Permanently delete connection "${name || id}"? This will remove its credentials and history.`)) return;
+    setBusy(true);
+    setError('');
+    setNotice('');
+    try {
+      await request(`/api/v1/connect/ai-connections/${id}`, { method: 'DELETE' });
+      setNotice(`Connection "${name || id}" permanently deleted.`);
+      if (issuedCredential?.id === id) {
+        setIssuedCredential(null);
+        clearIssuedPrompt();
+      }
+      if (savedPrompt?.connectionId === id) setSavedPrompt(null);
+      if (activeActivityId === id) setActiveActivityId(null);
+      if (activeHandshakeConnId === id) setActiveHandshakeConnId(null);
+      await refresh();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not delete connection.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const cleanupRevokedConnections = async () => {
+    const revokedCount = aiConnections.filter((c) => c.status === 'revoked').length;
+    if (revokedCount === 0) return;
+    if (!window.confirm(`Delete all ${revokedCount} revoked connections permanently?`)) return;
+    setBusy(true);
+    setError('');
+    setNotice('');
+    try {
+      const res = await request<{ deleted_count: number }>(`/api/v1/connect/ai-connections/cleanup-revoked`, { method: 'DELETE' });
+      setNotice(`Cleaned up ${res.deleted_count} revoked connection(s).`);
+      await refresh();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not clean up revoked connections.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const submitHandshake = async (connectionId: string, rawText: string) => {
+    if (!rawText.trim()) {
+      setError('Please paste the external AI response containing connection parameters or code.');
+      return;
+    }
+    setHandshakeBusy(true);
+    setError('');
+    setNotice('');
+    try {
+      const res = await request<HandshakeResult>(`/api/v1/connect/ai-onboarding/handshake/${connectionId}`, {
+        method: 'POST',
+        body: JSON.stringify({ raw_response: rawText, auto_verify_ping: true }),
+      });
+      setHandshakeResult(res);
+      setNotice(res.message);
+      await refresh();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not process handshake response.');
+    } finally {
+      setHandshakeBusy(false);
+    }
+  };
+
+  const sendChatMessage = async (overrideText?: string) => {
+    const text = (overrideText !== undefined ? overrideText : chatInput).trim();
+    if (!text || chatBusy) return;
+    const userMsg: ChatMsg = {
+      id: 'msg_' + Date.now(),
+      role: 'user',
+      content: text,
+      timestamp: Date.now(),
+    };
+    setChatMessages((prev) => [...prev, userMsg]);
+    if (overrideText === undefined) setChatInput('');
+    setChatBusy(true);
+
+    try {
+      const activeConn = chatTargetConnectionId || (aiConnections.find((c) => c.status === 'active')?.id ?? undefined);
+      const res = await request<{ role: string; content: string; action?: string; connection_id?: string; handshake?: HandshakeResult }>(
+        '/api/v1/connect/chat',
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            message: text,
+            connection_id: activeConn,
+            history: chatMessages.slice(-6).map((m) => ({ role: m.role, content: m.content })),
+          }),
+        },
+      );
+      const assistantMsg: ChatMsg = {
+        id: 'msg_' + Date.now() + '_res',
+        role: 'assistant',
+        content: res.content,
+        timestamp: Date.now(),
+        action: res.action,
+      };
+      setChatMessages((prev) => [...prev, assistantMsg]);
+      if (res.action === 'handshake_ingested') {
+        await refresh();
+      }
+    } catch (e) {
+      setChatMessages((prev) => [
+        ...prev,
+        {
+          id: 'msg_' + Date.now() + '_err',
+          role: 'assistant',
+          content: '⚠️ ' + (e instanceof Error ? e.message : 'Could not contact Connect Copilot.'),
+          timestamp: Date.now(),
+        },
+      ]);
+    } finally {
+      setChatBusy(false);
     }
   };
 
@@ -1005,12 +1173,200 @@ export function UniversalConnectView() {
 
             {/* Interactive multi-AI client connection guide */}
             {renderClientGuide()}
+
+            {/* Step 2: Two-way handshake response ingestion */}
+            <div className="mt-4 rounded-xl border border-line bg-surface/70 p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-ink">
+                  <RefreshCw size={14} className="text-emerald-600" /> Step 2: Establish Two-Way Handshake
+                </div>
+                <span className="text-[11px] text-ink-500">Auto-detects webhooks & credentials</span>
+              </div>
+              <p className="text-xs text-ink-500">
+                Paste the response from your AI client ({CLIENT_LABELS[activeClientTab]}) below. Dristik will parse its webhook URL, test a live handshake ping, and activate the bidirectional link.
+              </p>
+              <textarea
+                aria-label="Paste AI client response"
+                placeholder="Paste the JSON or configuration response received from the external AI here..."
+                value={handshakeInput}
+                onChange={(e) => setHandshakeInput(e.target.value)}
+                className="input min-h-28 w-full resize-y font-mono text-[11px] leading-relaxed"
+              />
+              <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+                <button
+                  type="button"
+                  disabled={handshakeBusy || !handshakeInput.trim()}
+                  onClick={() => void submitHandshake(issuedCredential.id, handshakeInput)}
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3.5 py-1.5 text-xs font-medium text-white shadow-xs hover:bg-emerald-700 disabled:opacity-50"
+                >
+                  {handshakeBusy ? <Loader2 size={13} className="animate-spin" /> : <CheckCircle2 size={13} />}
+                  {handshakeBusy ? 'Verifying two-way link...' : 'Analyze & Establish Two-Way Connection'}
+                </button>
+                {handshakeResult && (
+                  <div className="flex flex-wrap items-center gap-2 text-xs">
+                    <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-medium border ${
+                      handshakeResult.handshake_status === 'verified_active'
+                        ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                        : 'bg-blue-50 text-blue-700 border-blue-200'
+                    }`}>
+                      <CheckCircle2 size={11} /> {handshakeResult.handshake_status}
+                    </span>
+                    {handshakeResult.webhook_url && (
+                      <span className="text-[11px] text-ink-500 font-mono truncate max-w-xs">
+                        Endpoint: {handshakeResult.webhook_url}
+                      </span>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
         )}
 
+        {/* Dristik Connect Copilot & Live Chatbot */}
+        <div className="rounded-xl border border-line bg-surface/60 shadow-xs overflow-hidden">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line bg-surface-2/40 px-4 py-3">
+            <div className="flex items-center gap-2">
+              <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-600 text-white shadow-xs">
+                <Bot size={16} />
+              </div>
+              <div>
+                <h3 className="text-sm font-semibold text-ink flex items-center gap-1.5">
+                  Dristik Connect Copilot
+                  <span className="inline-block h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+                </h3>
+                <p className="text-[11px] text-ink-500">
+                  Interactive pairing assistant & live bidirectional AI messaging
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              {aiConnections.filter((c) => c.status === 'active').length > 0 && (
+                <select
+                  value={chatTargetConnectionId}
+                  onChange={(e) => setChatTargetConnectionId(e.target.value)}
+                  className="rounded-lg border border-line bg-surface px-2.5 py-1 text-xs text-ink focus:outline-none"
+                  aria-label="Select target connection for chat"
+                >
+                  <option value="">Copilot (General Guidance)</option>
+                  {aiConnections.filter((c) => c.status === 'active').map((c) => (
+                    <option key={c.id} value={c.id}>
+                      Chat with: {c.name} ({c.handshake_status === 'verified_active' ? 'Verified' : 'Active'})
+                    </option>
+                  ))}
+                </select>
+              )}
+              <button
+                type="button"
+                onClick={() => setChatOpen(!chatOpen)}
+                className="rounded-lg border border-line bg-surface px-2.5 py-1 text-xs font-medium text-ink hover:bg-surface-2"
+              >
+                {chatOpen ? 'Collapse chat' : 'Open chat'}
+              </button>
+            </div>
+          </div>
+
+          {chatOpen && (
+            <div className="p-4 space-y-3">
+              {/* Message Thread */}
+              <div className="max-h-72 min-h-44 overflow-y-auto space-y-2.5 pr-1 font-sans text-xs">
+                {chatMessages.map((m) => (
+                  <div
+                    key={m.id}
+                    className={`flex gap-2.5 ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                  >
+                    {m.role === 'assistant' && (
+                      <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-emerald-600 text-white mt-0.5">
+                        <Bot size={13} />
+                      </div>
+                    )}
+                    <div
+                      className={`max-w-[85%] rounded-xl px-3.5 py-2.5 leading-relaxed ${
+                        m.role === 'user'
+                          ? 'bg-ink text-white'
+                          : 'bg-surface border border-line text-ink'
+                      }`}
+                    >
+                      <div className="whitespace-pre-wrap">{m.content}</div>
+                    </div>
+                  </div>
+                ))}
+                {chatBusy && (
+                  <div className="flex items-center gap-2 text-xs text-ink-500 py-1">
+                    <Loader2 size={13} className="animate-spin text-emerald-600" />
+                    <span>Copilot is thinking...</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Suggestion Chips */}
+              <div className="flex flex-wrap gap-1.5 pt-1 border-t border-line/60">
+                {[
+                  'How do I connect Claude?',
+                  'How do I connect Grok?',
+                  'Clean up revoked connections',
+                  'Tell me about the 105 specialist agents',
+                ].map((chip) => (
+                  <button
+                    key={chip}
+                    type="button"
+                    disabled={chatBusy}
+                    onClick={() => void sendChatMessage(chip)}
+                    className="rounded-full border border-line bg-surface px-2.5 py-0.5 text-[11px] text-ink-600 hover:bg-surface-2 transition-colors disabled:opacity-50"
+                  >
+                    {chip}
+                  </button>
+                ))}
+              </div>
+
+              {/* Chat Input */}
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  void sendChatMessage();
+                }}
+                className="flex gap-2 pt-1"
+              >
+                <input
+                  type="text"
+                  placeholder={
+                    chatTargetConnectionId
+                      ? "Send message or command to connected AI (or paste pairing response)..."
+                      : "Ask Copilot or paste your AI's response here to auto-pair..."
+                  }
+                  value={chatInput}
+                  onChange={(e) => setChatInput(e.target.value)}
+                  className="input flex-1 text-xs"
+                  disabled={chatBusy}
+                />
+                <button
+                  type="submit"
+                  disabled={chatBusy || !chatInput.trim()}
+                  className="inline-flex items-center gap-1 rounded-lg bg-ink px-3 py-1.5 text-xs font-medium text-white shadow-xs hover:bg-ink-800 disabled:opacity-50"
+                >
+                  <Send size={13} />
+                  <span>Send</span>
+                </button>
+              </form>
+            </div>
+          )}
+        </div>
+
         {/* Saved AI connections list */}
         <div className="space-y-2">
-          <h3 className="text-sm font-semibold text-ink">Configured external AI connections</h3>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h3 className="text-sm font-semibold text-ink">Configured external AI connections</h3>
+            {aiConnections.some((c) => c.status === 'revoked') && (
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => void cleanupRevokedConnections()}
+                className="inline-flex items-center gap-1 rounded-lg border border-red-200 bg-red-50/50 px-2.5 py-1 text-xs font-medium text-red-700 hover:bg-red-100 disabled:opacity-50"
+              >
+                <Trash2 size={12} /> Clean up revoked ({aiConnections.filter((c) => c.status === 'revoked').length})
+              </button>
+            )}
+          </div>
           {aiConnections.length === 0 ? (
             <p className="text-sm text-ink-500">No external AI credentials created yet.</p>
           ) : (
@@ -1018,45 +1374,76 @@ export function UniversalConnectView() {
               <div key={c.id} className="space-y-2 rounded-lg border border-line p-3">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>
-                    <p className="text-sm font-medium text-ink">{c.name}</p>
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm font-medium text-ink">{c.name}</p>
+                      {c.handshake_status === 'verified_active' ? (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-medium text-emerald-700 border border-emerald-200">
+                          <CheckCircle2 size={10} /> Verified Two-Way
+                        </span>
+                      ) : c.webhook_url ? (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-medium text-blue-700 border border-blue-200">
+                          Webhook Configured
+                        </span>
+                      ) : null}
+                    </div>
                     <p className="text-xs text-ink-500">
-                      {c.connection_email} · {c.grant_profile.replace(/_/g, ' ')} · {c.status}
+                      {c.connection_email} · {c.grant_profile.replace(/_/g, ' ')} ·{' '}
+                      <span className={c.status === 'active' ? 'text-emerald-600 font-medium' : 'text-red-500'}>
+                        {c.status}
+                      </span>
+                      {c.webhook_url ? ` · Inbound: ${c.webhook_url}` : ''}
                     </p>
                     <p className="text-xs text-ink-500">
                       {c.last_used_at ? `Last used ${new Date(c.last_used_at * 1000).toLocaleString()}` : 'Not used yet'}
                     </p>
                   </div>
-                  <div className="flex gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
                     {c.status === 'active' && (
-                      <button
-                        type="button"
-                        disabled={busy}
-                        onClick={() => {
-                          if (savedPrompt?.connectionId === c.id) {
-                            setSavedPrompt(null);
-                            return;
-                          }
-                          setBusy(true);
-                          setError('');
-                          void fetchOnboardingPrompt(c.id, savedPromptTab)
-                            .then((bundle) => {
-                              setSavedPrompt({
-                                connectionId: c.id,
-                                prompts: bundle.prompts || {},
-                                tools: bundle.tool_inventory || [],
-                                nextStep: bundle.next_step || '',
-                              });
-                              if (bundle.provider) setSavedPromptTab(bundle.provider);
-                            })
-                            .catch((e: unknown) => {
-                              setError(e instanceof Error ? e.message : 'Could not load the onboarding prompt.');
-                            })
-                            .finally(() => setBusy(false));
-                        }}
-                        className="inline-flex items-center gap-1 rounded-lg border border-line px-2.5 py-1.5 text-xs font-medium text-ink disabled:opacity-50"
-                      >
-                        <Sparkles size={12} /> {savedPrompt?.connectionId === c.id ? 'Hide prompt' : 'Onboarding prompt'}
-                      </button>
+                      <>
+                        <button
+                          type="button"
+                          disabled={busy}
+                          onClick={() => {
+                            if (savedPrompt?.connectionId === c.id) {
+                              setSavedPrompt(null);
+                              return;
+                            }
+                            setBusy(true);
+                            setError('');
+                            void fetchOnboardingPrompt(c.id, savedPromptTab)
+                              .then((bundle) => {
+                                setSavedPrompt({
+                                  connectionId: c.id,
+                                  prompts: bundle.prompts || {},
+                                  tools: bundle.tool_inventory || [],
+                                  nextStep: bundle.next_step || '',
+                                });
+                                if (bundle.provider) setSavedPromptTab(bundle.provider);
+                              })
+                              .catch((e: unknown) => {
+                                setError(e instanceof Error ? e.message : 'Could not load the onboarding prompt.');
+                              })
+                              .finally(() => setBusy(false));
+                          }}
+                          className="inline-flex items-center gap-1 rounded-lg border border-line px-2.5 py-1.5 text-xs font-medium text-ink disabled:opacity-50"
+                        >
+                          <Sparkles size={12} /> {savedPrompt?.connectionId === c.id ? 'Hide prompt' : 'Onboarding prompt'}
+                        </button>
+                        <button
+                          type="button"
+                          disabled={busy}
+                          onClick={() => {
+                            setActiveHandshakeConnId(activeHandshakeConnId === c.id ? null : c.id);
+                          }}
+                          className={`inline-flex items-center gap-1 rounded-lg border px-2.5 py-1.5 text-xs font-medium transition-colors ${
+                            activeHandshakeConnId === c.id
+                              ? 'border-emerald-500 bg-emerald-50 text-emerald-800'
+                              : 'border-line text-ink hover:bg-surface-2'
+                          }`}
+                        >
+                          <RefreshCw size={12} /> {c.handshake_status === 'verified_active' ? 'Re-pair' : 'Pair response'}
+                        </button>
+                      </>
                     )}
                     <button
                       type="button"
@@ -1086,8 +1473,56 @@ export function UniversalConnectView() {
                         </button>
                       </>
                     )}
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => void deleteAIConnection(c.id, c.name)}
+                      className="inline-flex items-center gap-1 rounded-lg border border-line px-2.5 py-1.5 text-xs font-medium text-ink-500 hover:text-red-700 hover:bg-red-50 disabled:opacity-50"
+                      title="Permanently delete this connection"
+                    >
+                      <Trash2 size={12} />
+                      {c.status === 'revoked' ? ' Delete' : ''}
+                    </button>
                   </div>
                 </div>
+
+                {/* Handshake Ingestion Panel */}
+                {activeHandshakeConnId === c.id && (
+                  <div className="space-y-2.5 rounded-lg border border-emerald-200 bg-emerald-50/20 p-3.5">
+                    <div className="flex items-center justify-between">
+                      <p className="text-xs font-semibold text-ink flex items-center gap-1.5">
+                        <RefreshCw size={13} className="text-emerald-600" /> Two-Way Handshake Pairing for {c.name}
+                      </p>
+                      <span className="text-[11px] text-ink-500">Paste response from {c.name}</span>
+                    </div>
+                    <p className="text-[11px] text-ink-500">
+                      Paste the JSON or configuration response received from {c.name}. Dristik will extract the webhook URL, run a verification ping, and establish the two-way bridge.
+                    </p>
+                    <textarea
+                      aria-label={`Paste ${c.name} response`}
+                      placeholder={`Paste the response from ${c.name} (containing webhook_url, credentials, or bridge code)...`}
+                      value={handshakeInput}
+                      onChange={(e) => setHandshakeInput(e.target.value)}
+                      className="input min-h-24 w-full resize-y font-mono text-[11px] leading-relaxed"
+                    />
+                    <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+                      <button
+                        type="button"
+                        disabled={handshakeBusy || !handshakeInput.trim()}
+                        onClick={() => void submitHandshake(c.id, handshakeInput)}
+                        className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white shadow-xs hover:bg-emerald-700 disabled:opacity-50"
+                      >
+                        {handshakeBusy ? <Loader2 size={12} className="animate-spin" /> : <CheckCircle2 size={12} />}
+                        {handshakeBusy ? 'Verifying link...' : 'Analyze & Establish Two-Way Connection'}
+                      </button>
+                      {c.webhook_url && (
+                        <span className="text-[11px] text-emerald-700 font-mono">
+                          Current Webhook: {c.webhook_url}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                )}
                 {savedPrompt?.connectionId === c.id && (
                   <div className="space-y-2 rounded-lg border border-line bg-surface/50 p-3">
                     <div className="flex flex-wrap gap-1.5">

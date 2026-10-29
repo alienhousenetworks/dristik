@@ -97,18 +97,38 @@ class OnboardingResponse(BaseModel):
     limitations: list[str] = Field(default_factory=list, max_length=50)
 
 def _prompt(provider: str, name: str, endpoint: str, email: str, scopes: list[str], goal: str) -> str:
-    return f"""You are helping configure an external AI client named {name} to connect to Dristik.
+    return f"""You are establishing a direct, authorized two-way connection with Dristik Autonomous Growth OS for connection profile "{name}".
 Selected AI/client: {provider}
-Dristik MCP endpoint: {endpoint}
+Dristik MCP & API endpoint: {endpoint}
 Connection identity: {email}
 Granted scopes: {json.dumps(scopes)}
-Goal: {goal}
+Onboarding goal: {goal}
 
-Implement only a real, documented integration supported by your current environment. First explain whether this AI surface can act as an MCP client and invoke tools, or whether it only supports ordinary model API requests. Do not claim callbacks, webhooks, tool execution, credential creation, or connection success unless the relevant capability is actually available.
+Dristik is a sovereign AI Brain orchestrating 105 specialist agents, 12 domains, a deterministic DAG pipeline, blackboard memory, and live cross-engine citation benchmarking.
 
-Dristik uses authenticated MCP JSON-RPC at the endpoint above. Send Authorization: Bearer <Dristik-issued key> and X-Dristik-Connection-Email: {email}. The key is supplied separately by the user and MUST NOT be written into code, returned in your response, or logged. Discover tools with tools/list, then test with dristik_ping or dristik_capabilities_list. Invoke only tools permitted by the granted scopes.
+=== STEP 1: CONFIGURE DRISTIK CREDENTIALS IN YOUR CLIENT ===
+1. Authenticate to Dristik at {endpoint} using:
+   - Header "Authorization: Bearer <YOUR_DRISTIK_API_KEY>" (Paste the one-time API key provided separately by the user in your client secret settings; do NOT write this key in plaintext responses).
+   - Header "X-Dristik-Connection-Email: {email}".
+2. Test tool discovery using MCP `tools/list` or ping with `dristik_ping`.
 
-Return a JSON object with keys: summary, files (array of {{path,content}}), setup_commands, dependencies, environment_variable_names, test_plan, limitations. Include complete proposed file contents. Do not fabricate URLs or provider credentials. Do not include secrets in files. Do not ask Dristik to run arbitrary shell commands automatically. Clearly identify any manual setup required and distinguish a proposed implementation from a verified live connection."""
+=== STEP 2: PROVIDE YOUR CONNECTION DETAILS FOR TWO-WAY BIDIRECTIONAL LINK ===
+To allow Dristik to push audit findings, tasks, blackboard updates, and messages back to you, reply to the user with your inbound connection parameters.
+Format your reply with a clean JSON block labeled ```json:dristik-connection containing:
+{{
+  "client_name": "{name}",
+  "provider": "{provider}",
+  "connection_mode": "webhook" | "websocket" | "mcp_client" | "custom_bridge",
+  "webhook_url": "<YOUR_INBOUND_WEBHOOK_OR_CALLBACK_URL_OR_NONE>",
+  "websocket_url": "<YOUR_WEBSOCKET_URL_OR_NONE>",
+  "auth_scheme": "bearer" | "api_key" | "none",
+  "auth_headers": {{ "Authorization": "Bearer <YOUR_AI_OR_CALLBACK_TOKEN>" }},
+  "supported_capabilities": ["tasks.receive", "audit.stream", "two_way_chat"],
+  "integration_code": "<Optional concise script (Node.js/Python) if you are deploying a bridge listener, or null>",
+  "status_summary": "Ready to pair with Dristik Brain"
+}}
+
+Distinguish real live endpoints from proposed configurations. Do not fabricate external URLs. Do not ask Dristik to run arbitrary shell commands automatically. The user will copy your entire response directly into Dristik Connect to automatically verify two-way connectivity."""
 
 def _tool_inventory(scopes: list[str]) -> list[dict[str, str]]:
     return [dict(tool) for tool in TOOL_CATALOG if "*" in scopes or tool["scope"] in scopes]
@@ -229,3 +249,148 @@ async def get_submission(submission_id: str, user: UserIdentity = Depends(get_cu
             "environment_variable_names": payload["environment_variable_names"],
             "test_plan": payload["test_plan"], "limitations": payload["limitations"],
             "execution_performed": False}
+
+
+class HandshakeIngestRequest(BaseModel):
+    raw_response: str = Field(min_length=1, max_length=250_000)
+    auto_verify_ping: bool = Field(default=True)
+
+
+def _extract_handshake_payload(raw_text: str) -> dict[str, Any]:
+    tagged_match = re.search(r"```(?:json:dristik-connection|json)?\s*(\{.*?\})\s*```", raw_text, re.DOTALL | re.IGNORECASE)
+    parsed = {}
+    if tagged_match:
+        try:
+            parsed = json.loads(tagged_match.group(1))
+        except Exception:
+            pass
+    if not parsed:
+        json_match = re.search(r"(\{[\s\S]*\"(?:webhook_url|provider|client_name|connection_mode)\"[\s\S]*\})", raw_text)
+        if json_match:
+            try:
+                parsed = json.loads(json_match.group(1))
+            except Exception:
+                pass
+
+    webhook_url = parsed.get("webhook_url") or parsed.get("callback_url") or parsed.get("endpoint")
+    websocket_url = parsed.get("websocket_url")
+    auth_headers = parsed.get("auth_headers") or {}
+    connection_mode = parsed.get("connection_mode") or ("webhook" if webhook_url else "mcp_client")
+    summary = parsed.get("status_summary") or parsed.get("summary") or "External AI configuration parsed"
+    integration_code = parsed.get("integration_code") or ""
+
+    if not webhook_url:
+        url_match = re.search(r"(?i)\b(?:webhook|callback|endpoint)\s*[:=]\s*['\"]?(https?://[^\s'\"<>]+)", raw_text)
+        if url_match:
+            webhook_url = url_match.group(1)
+            connection_mode = "webhook"
+
+    if not integration_code:
+        code_match = re.search(r"```(?:python|javascript|typescript|bash|sh)\s*\n(.*?)\n```", raw_text, re.DOTALL)
+        if code_match:
+            integration_code = code_match.group(1)
+
+    clean_webhook = str(webhook_url).strip() if webhook_url and str(webhook_url).strip().lower() not in ("none", "null", "<your_inbound_webhook_or_callback_url_or_none>") else None
+    clean_ws = str(websocket_url).strip() if websocket_url and str(websocket_url).strip().lower() not in ("none", "null", "<your_websocket_url_or_none>") else None
+
+    return {
+        "webhook_url": clean_webhook,
+        "websocket_url": clean_ws,
+        "auth_headers": auth_headers if isinstance(auth_headers, dict) else {},
+        "connection_mode": connection_mode,
+        "summary": summary,
+        "integration_code": integration_code,
+        "parsed_json": parsed,
+    }
+
+
+@router.post("/handshake/{connection_id}")
+async def pair_ai_connection(
+    connection_id: str,
+    body: HandshakeIngestRequest,
+    user: UserIdentity = Depends(require_permission("org:manage")),
+):
+    with uc._db() as conn:
+        row = conn.execute("SELECT * FROM uc_ai_connections WHERE id=? AND org_id=?", (connection_id, user.org_id)).fetchone()
+        if row is None:
+            raise HTTPException(status_code=404, detail="Connection not found.")
+
+    extracted = _extract_handshake_payload(body.raw_response)
+    webhook_url = extracted["webhook_url"]
+    auth_headers = extracted["auth_headers"]
+    connection_mode = extracted["connection_mode"]
+    integration_code = extracted["integration_code"]
+
+    now = time.time()
+    ping_result = None
+    handshake_status = "credentials_saved"
+
+    if webhook_url:
+        is_valid_public = True
+        try:
+            uc._validate_public_audit_url(webhook_url)
+        except Exception:
+            is_valid_public = False
+
+        if is_valid_public and body.auto_verify_ping:
+            try:
+                import httpx
+                async with httpx.AsyncClient(timeout=httpx.Timeout(6.0, connect=3.0), follow_redirects=False) as client:
+                    ping_payload = {
+                        "event": "dristik_handshake_ping",
+                        "connection_id": connection_id,
+                        "connection_email": row["connection_email"],
+                        "timestamp": now,
+                        "message": "Dristik Brain Handshake Verification Ping",
+                    }
+                    req_headers = {"Content-Type": "application/json", **auth_headers}
+                    resp = await client.post(webhook_url, json=ping_payload, headers=req_headers)
+                    ping_result = {"success": resp.status_code < 400, "status_code": resp.status_code}
+                    handshake_status = "verified_active" if resp.status_code < 400 else "ping_non_2xx"
+            except Exception as exc:
+                ping_result = {"success": False, "error": str(exc)}
+                handshake_status = "unverified_endpoint"
+        else:
+            handshake_status = "unverified_endpoint" if not is_valid_public else "pending_verification"
+
+    if integration_code:
+        for pattern in SECRET_PATTERNS:
+            if pattern.search(integration_code):
+                raise HTTPException(status_code=422, detail="Potential secret detected in integration code; please use environment variables.")
+        if any(re.search(r"(?i)(curl\s+.*\|\s*(sh|bash)|rm\s+-rf\s+[/~]|sudo\s+|docker\s+run\s+.*--privileged)", cmd) for cmd in integration_code.splitlines()):
+            raise HTTPException(status_code=422, detail="Privileged or destructive commands detected in code snippet.")
+        submission_id = "uobs_" + uuid.uuid4().hex
+        digest = hashlib.sha256(integration_code.encode("utf-8")).hexdigest()
+        encoded = json.dumps({"summary": extracted["summary"], "files": [{"path": "integration_bridge.py", "content": integration_code}], "setup_commands": [], "dependencies": []})
+        conn_sub = _db()
+        try:
+            conn_sub.execute("INSERT INTO uc_ai_onboarding_submissions VALUES (?,?,?,?,?,?,?,?,?,?)",
+                             (submission_id, user.org_id, user.user_id, connection_id, row["name"],
+                              "staged_bridge", digest, encoded, now, now))
+            conn_sub.commit()
+        finally:
+            conn_sub.close()
+
+    with uc._db() as conn:
+        conn.execute(
+            "UPDATE uc_ai_connections SET webhook_url=?, outbound_headers_json=?, connection_mode=?, handshake_status=?, last_handshake_at=?, updated_at=? WHERE id=?",
+            (webhook_url, json.dumps(auth_headers), connection_mode, handshake_status, now if ping_result and ping_result.get("success") else None, now, connection_id)
+        )
+        conn.execute(
+            "INSERT INTO uc_ai_connection_events VALUES (?,?,?,?,?,?)",
+            ("uce_" + uuid.uuid4().hex, connection_id, user.org_id, "handshake_paired", now, json.dumps({
+                "webhook_url": webhook_url, "handshake_status": handshake_status, "ping": ping_result
+            }))
+        )
+
+    return {
+        "connection_id": connection_id,
+        "handshake_status": handshake_status,
+        "webhook_url": webhook_url,
+        "websocket_url": extracted["websocket_url"],
+        "connection_mode": connection_mode,
+        "ping_result": ping_result,
+        "code_staged": bool(integration_code),
+        "summary": extracted["summary"],
+        "message": "Handshake verified and two-way connection active." if handshake_status == "verified_active" else "Connection parameters saved.",
+    }
