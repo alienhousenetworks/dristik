@@ -1287,7 +1287,14 @@ class PdfPaginationResolver:
         Returns a mapping of chapter_id -> actual_page_number.
         """
         if pypdf is None or not pdf_bytes or len(pdf_bytes) < 100:
-            return {ch.id: idx * 2 + starting_body_page for idx, ch in enumerate(chapters)}
+            est_pages = {}
+            curr = starting_body_page
+            for ch in chapters:
+                est_pages[ch.id] = curr
+                length = len(ch.html_content or "")
+                span = max(1, math.ceil(length / 2400)) if length > 0 else 1
+                curr += span
+            return est_pages
 
         resolved: Dict[str, int] = {}
         try:
@@ -1300,6 +1307,7 @@ class PdfPaginationResolver:
                 clean_title = re.sub(r"\s+", " ", ch.title.lower()).strip()
                 patterns[ch.id] = [
                     f"[[chapter_ref:{ch.id.lower()}",
+                    f"chapter_ref:{ch.id.lower()}",
                     f"chapter {ch.num}",
                     f"{ch.num}. {clean_title}",
                     clean_title[:30] if len(clean_title) >= 15 else clean_title,
@@ -1322,18 +1330,26 @@ class PdfPaginationResolver:
                             resolved[ch.id] = phys_page_num
                             break
 
-            # Fill any unmatched chapters with monotonic fallback
-            last_known = starting_body_page - 2
+            # Fill any unmatched chapters with monotonic content-aware fallback
+            last_known = starting_body_page - 1
             for ch in chapters:
                 if ch.id in resolved:
                     last_known = resolved[ch.id]
                 else:
-                    last_known += 2
+                    length = len(ch.html_content or "")
+                    span = max(1, math.ceil(length / 2400)) if length > 0 else 1
+                    last_known += span
                     resolved[ch.id] = last_known
 
         except Exception as e:
-            # Fallback to estimated pages
-            return {ch.id: idx * 2 + starting_body_page for idx, ch in enumerate(chapters)}
+            est_pages = {}
+            curr = starting_body_page
+            for ch in chapters:
+                est_pages[ch.id] = curr
+                length = len(ch.html_content or "")
+                span = max(1, math.ceil(length / 2400)) if length > 0 else 1
+                curr += span
+            return est_pages
 
         return resolved
 

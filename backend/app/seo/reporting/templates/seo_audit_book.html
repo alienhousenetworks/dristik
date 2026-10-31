@@ -320,10 +320,10 @@ pre {
 
 .toc-list li {
   display: flex;
+  align-items: baseline;
   justify-content: space-between;
-  gap: 12pt;
-  padding: 6pt 0;
-  border-bottom: 1px dotted #b9c2d0;
+  padding: 5pt 0;
+  border-bottom: 1px dotted #cbd5e1;
   break-inside: avoid;
 }
 
@@ -332,55 +332,182 @@ pre {
   font-size: 9.5pt;
 }
 
-.toc-page {
-  white-space: nowrap;
-  color: var(--muted);
+.toc-link {
+  color: var(--ink);
+  font-weight: 600;
+  text-decoration: none;
 }
 
-/* Cover uses its own page and no running chapter header. */
+.toc-dots {
+  flex: 1;
+  border-bottom: 1px dotted #94a3b8;
+  margin: 0 8pt;
+  min-width: 15pt;
+}
+
+.toc-page {
+  white-space: nowrap;
+  color: var(--brand);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+/* =========================================================
+   ENTERPRISE COVER PAGE & READING GUIDE
+   ========================================================= */
 .cover {
-  min-height: 245mm;
+  min-height: 270mm;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
   padding: 24mm 20mm;
-  color: white;
-  background: linear-gradient(160deg, #0f294d 0%, #173e73 60%, #1e4b8a 100%);
+  color: #f8fafc;
+  background: #0b1320;
+  border: 1px solid #1e293b;
   page-break-after: always;
   break-after: page;
+  position: relative;
 }
 
 .cover * {
-  color: white;
+  color: inherit;
+}
+
+.cover-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  border-bottom: 1px solid #1e293b;
+  padding-bottom: 14pt;
 }
 
 .cover-brand {
-  font-size: 14pt;
+  font-size: 15pt;
   letter-spacing: 3.5pt;
+  font-weight: 800;
+  color: #ffffff;
+}
+
+.cover-badge {
+  display: inline-block;
+  padding: 4pt 8pt;
+  background: rgba(56, 189, 248, 0.12);
+  border: 1px solid rgba(56, 189, 248, 0.35);
+  border-radius: 4px;
+  font-size: 8pt;
   font-weight: 700;
+  letter-spacing: 1pt;
+  text-transform: uppercase;
+  color: #38bdf8;
 }
 
 .cover h1 {
-  font-size: 36pt;
-  max-width: 520px;
-  margin: 0 0 14pt;
+  font-size: 32pt;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+  color: #ffffff;
+  margin: 16pt 0 10pt;
 }
 
 .cover-subtitle {
-  font-size: 13.5pt;
-  max-width: 500px;
-  opacity: .94;
+  font-size: 12pt;
+  line-height: 1.55;
+  color: #94a3b8;
+  max-width: 600px;
+  margin: 0 0 16pt;
 }
 
-.cover-rule {
-  width: 75px;
-  border-top: 4px solid white;
-  margin: 18pt 0;
+.cover-meta-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8pt;
+  margin: 16pt 0;
+  border-top: 1px solid #1e293b;
+  border-bottom: 1px solid #1e293b;
+  padding: 12pt 0;
 }
 
-.cover-meta {
-  font-size: 10pt;
-  line-height: 1.85;
+.cover-meta-cell {
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid #1e293b;
+  border-radius: 4px;
+  padding: 8pt 10pt;
+}
+
+.cover-meta-cell .meta-label {
+  display: block;
+  font-size: 7.5pt;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.8pt;
+  color: #64748b;
+  margin-bottom: 3pt;
+}
+
+.cover-meta-cell .meta-val {
+  font-size: 9.5pt;
+  font-weight: 700;
+  color: #f1f5f9;
+}
+
+.cover-footer {
+  border-top: 1px solid #1e293b;
+  padding-top: 10pt;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 8pt;
+  color: #64748b;
+}
+
+.reading-track-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12pt;
+  margin: 12pt 0 16pt;
+}
+
+.reading-track-card {
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  padding: 12pt;
+  background: #ffffff;
+  break-inside: avoid;
+}
+
+.reading-track-card.executive {
+  border-left: 4px solid var(--brand);
+}
+
+.reading-track-card.engineering {
+  border-left: 4px solid #0f766e;
+}
+
+.reading-track-card h4 {
+  margin-top: 0;
+  margin-bottom: 6pt;
+  font-size: 11pt;
+}
+
+.severity-matrix-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 12pt 0 16pt;
+  font-size: 8.5pt;
+}
+
+.severity-matrix-table th {
+  background: #0f172a;
+  color: #ffffff;
+  padding: 6pt 8pt;
+  font-weight: 700;
+}
+
+.severity-matrix-table td {
+  padding: 6pt 8pt;
+  border: 1px solid var(--line);
+  vertical-align: top;
 }
 
 .part-banner {
@@ -536,38 +663,66 @@ pre {
      01. COVER
      ====================================================== -->
 <section class="cover book-cover">
-  <div>
-    <div class="cover-brand">
-      DRISTIK
+  <div class="cover-header">
+    <div>
+      <div class="cover-brand">DRISTIK</div>
+      <div style="font-size: 8pt; color: #94a3b8; letter-spacing: 0.16em; text-transform: uppercase; margin-top: 3pt;">
+        WEBSITE INTELLIGENCE · ENTERPRISE AUDIT PUBLICATION
+      </div>
     </div>
-    <div class="cover-rule"></div>
-    <div class="eyebrow" style="color: #93c5fd;">Enterprise SEO Intelligence Report · Master Architecture v2.0</div>
+    <div class="cover-badge">
+      STRICTLY CONFIDENTIAL // C-SUITE DOSSIER
+    </div>
   </div>
 
   <div>
+    <div class="eyebrow" style="color: #38bdf8; margin-bottom: 8pt;">Enterprise SEO Intelligence &amp; Architecture Audit</div>
     <h1>Comprehensive SEO Audit</h1>
     <p class="cover-subtitle">
-      Executive business alignment, technical SEO diagnostics, search demand &amp; intent mapping,
-      page-by-page optimization dossiers, and prioritized implementation roadmap.
+      Executive commercial alignment, deep technical crawl diagnostics, search demand &amp; intent mapping,
+      page-by-page optimization dossiers, and prioritized 90-day engineering implementation roadmap.
     </p>
-    <div class="cover-rule"></div>
-    <div class="cover-meta">
-      <strong>Website:</strong> {{ report.domain }}<br>
-      <strong>Report ID:</strong> {{ report.run_id }}<br>
-      <strong>Audit date:</strong> {{ report.audit_date }}<br>
-      <strong>Audit scope:</strong> {{ report.scope_label }}<br>
-      <strong>SEO Score:</strong> {{ report.seo_score if report.seo_score is not none else "Unmeasured" }}/100 {% if report.grade and report.grade != '—' %}[GRADE {{ report.grade }} · {{ report.grade_label }}]{% endif %}<br>
-      <strong>Report version:</strong> {{ report.report_version | default("2.0 — Enterprise SEO Intelligence") }}
+
+    <div class="cover-meta-grid">
+      <div class="cover-meta-cell">
+        <span class="meta-label">TARGET PROPERTY</span>
+        <span class="meta-val">{{ report.domain }}</span>
+      </div>
+      <div class="cover-meta-cell">
+        <span class="meta-label">AUDIT EXECUTION</span>
+        <span class="meta-val">{{ report.audit_date }}</span>
+      </div>
+      <div class="cover-meta-cell">
+        <span class="meta-label">REPORT REFERENCE</span>
+        <span class="meta-val">{{ report.run_id }} · {{ report.report_version | default("v2.0 Enterprise Edition") }}</span>
+      </div>
+      <div class="cover-meta-cell">
+        <span class="meta-label">CRAWL SAMPLE RATIO</span>
+        <span class="meta-val">{{ report.pages_crawled }} crawled / {{ report.urls_discovered }} discovered</span>
+      </div>
+      <div class="cover-meta-cell">
+        <span class="meta-label">COMPOSITE SEO INDEX</span>
+        <span class="meta-val" style="color: #38bdf8;">
+          {{ report.seo_score if report.seo_score is not none else "UNMEASURED" }}/100
+          {% if report.grade and report.grade != '—' %}[GRADE {{ report.grade }} · {{ report.grade_label }}]{% endif %}
+        </span>
+      </div>
+      <div class="cover-meta-cell">
+        <span class="meta-label">VERIFIED FINDINGS</span>
+        <span class="meta-val">
+          <span style="color: var(--critical);">{{ report.critical_count }} Crit</span> ·
+          <span style="color: var(--high);">{{ report.high_count }} High</span> ·
+          <span style="color: var(--medium);">{{ report.medium_count }} Med</span> ·
+          <span style="color: var(--low);">{{ report.low_count }} Low</span>
+        </span>
+      </div>
     </div>
   </div>
 
-  <div>
-    <p>
-      Prepared by Dristik Website Intelligence
-    </p>
-    <p class="small" style="color: #cbd5e1;">
-      Evidence-First Governance: Findings are strictly grounded in live crawled DOM/HTTP evidence. Unconnected telemetry (GSC/GA4/Backlinks) is reported as UNAVAILABLE and never fabricated or scored as zero.
-    </p>
+  <div class="cover-footer">
+    <div>CONFIDENTIAL &amp; PROPRIETARY // PREPARED EXCLUSIVELY FOR {{ report.domain | upper }}</div>
+    <div style="font-weight: 700; color: #cbd5e1;">ZERO-FABRICATION EVIDENCE POLICY // STATUS EXPLICIT IN REPORT</div>
+    <div>PAGE 1 (COVER) // UNNUMBERED</div>
   </div>
 </section>
 
@@ -577,53 +732,120 @@ pre {
 <section class="chapter chapter-start" id="reading-guide">
   <span class="chapter-marker" style="display:inline; font-size: 0pt; color: transparent; line-height: 0;">[[chapter_ref:reading-guide]]</span>
   <div class="chapter-opener">
-    <div class="chapter-number">Reader Guide</div>
+    <div class="chapter-number">Reader Orientation</div>
     <h2>How to Read This Report</h2>
     <p class="section-intro">
-      This report translates SEO checks into business implications,
-      evidence-backed findings, and practical next steps.
+      This publication provides a rigorous, consultative assessment of {{ report.domain }}'s organic search visibility,
+      technical crawlability, on-page architecture, and competitive positioning. Follow the reading guide below to extract
+      immediate value based on your organizational role.
     </p>
   </div>
 
+  <h3>Dual Reading Tracks</h3>
+  <div class="reading-track-grid">
+    <div class="reading-track-card executive">
+      <div class="eyebrow" style="color: var(--brand); margin-bottom: 4pt;">Track A // Leadership &amp; Strategy</div>
+      <h4 style="margin-top: 0; color: var(--brand);">Executive Briefing (10-Minute Read)</h4>
+      <p style="font-size: 9pt; color: var(--muted); margin-bottom: 8pt;">
+        Designed for Founders, CEOs, CMOs, and Commercial Directors focusing on revenue growth, risk, and resource allocation.
+      </p>
+      <ul style="font-size: 8.5pt; margin: 0; padding-left: 14pt;">
+        <li><strong>Chapter 01 (Executive Summary)</strong>: High-level commercial strengths, primary blockers, and immediate strategic opportunities.</li>
+        <li><strong>Chapter 02 (Audit Scope &amp; Scorecard)</strong>: Macro health index across technical, content, and search intent pillars.</li>
+        <li><strong>Consolidated Issue Register</strong>: Review the top P0/P1 defects requiring sprint commitment.</li>
+        <li><strong>Prioritized 90-Day Roadmap</strong>: Delivery phases (Days 1–7, 8–30, 31–90) with owner assignment and effort estimates.</li>
+      </ul>
+    </div>
+
+    <div class="reading-track-card engineering">
+      <div class="eyebrow" style="color: #0f766e; margin-bottom: 4pt;">Track B // Engineering &amp; Delivery</div>
+      <h4 style="margin-top: 0; color: #0f766e;">Technical Operations (Deep-Dive Implementation)</h4>
+      <p style="font-size: 9pt; color: var(--muted); margin-bottom: 8pt;">
+        Designed for Lead Engineers, DevOps, Full-Stack Developers, and SEO Specialists executing remediation.
+      </p>
+      <ul style="font-size: 8.5pt; margin: 0; padding-left: 14pt;">
+        <li><strong>Chapters 03–42 (Diagnostic Domains)</strong>: Empirical telemetry matrices showing exact status codes, TTFB latency, and canonical routing.</li>
+        <li><strong>Page Dossiers &amp; Specialist Copy</strong>: Production-ready copy rewrites (Title, Meta, H1, Hero, FAQ schema) per commercial URL.</li>
+        <li><strong>Finding Cards &amp; Code Diffs</strong>: Prescriptive code modifications, AST selectors, and configuration adjustments.</li>
+        <li><strong>Appendix A &amp; Verification Protocols</strong>: Automated retest procedures (`curl -I`, DOM inspectors, CI/CD gates) to verify fixes.</li>
+      </ul>
+    </div>
+  </div>
+
   <h3>Every finding has two layers</h3>
-  <div class="grid-2">
-    <div class="panel">
-      <h4>Business explanation</h4>
-      <p>
-        What was observed, why it matters, and what the business owner
-        should understand without needing technical knowledge.
+  <p style="font-size: 9pt;">
+    Every confirmed finding in this report is structured with two complementary layers to ensure seamless collaboration between commercial leadership and technical engineering:
+  </p>
+  <div class="grid-2" style="margin: 8pt 0 14pt;">
+    <div class="panel" style="border-left: 3px solid var(--brand);">
+      <h4 style="margin-top: 0; color: var(--brand);">Business explanation</h4>
+      <p style="font-size: 8.5pt; margin: 0;">
+        Explains what was observed, why it matters commercially, and how it impacts organic revenue, click-through rates, or search engine discovery without requiring technical jargon.
       </p>
     </div>
-    <div class="panel">
-      <h4>Implementation detail</h4>
-      <p>
-        The affected URL, technical evidence, recommended change,
-        verification method, and any limitations.
+    <div class="panel" style="border-left: 3px solid #0f766e;">
+      <h4 style="margin-top: 0; color: #0f766e;">Implementation detail</h4>
+      <p style="font-size: 8.5pt; margin: 0;">
+        Specifies the affected URL, raw crawl DOM/HTTP evidence, recommended code change or patch diff, responsible team role, estimated effort, and exact verification command.
       </p>
     </div>
   </div>
 
-  <h3>Evidence status definitions</h3>
-  <table>
-    <thead><tr><th>Status</th><th>Meaning</th></tr></thead>
+  <h3>Severity &amp; Action Protocol (P0 – P3)</h3>
+  <table class="severity-matrix-table">
+    <thead>
+      <tr>
+        <th style="width: 14%;">Severity Tier</th>
+        <th style="width: 22%;">SLA / Resolution Window</th>
+        <th style="width: 32%;">Defect Classification</th>
+        <th>Expected Business Impact</th>
+      </tr>
+    </thead>
     <tbody>
-      <tr><td>Verified finding</td><td>A specific issue was observed in the stated evidence.</td></tr>
-      <tr><td>Passed check</td><td>The stated test ran and met its defined criteria.</td></tr>
-      <tr><td>Not tested</td><td>The check was not performed. This does not mean the website passed or failed.</td></tr>
-      <tr><td>Unavailable</td><td>The required source, permission, service, or measurement was unavailable.</td></tr>
-      <tr><td>Sampled</td><td>The result applies to the inspected sample, not necessarily every page.</td></tr>
-      <tr><td>Inferred</td><td>A reasoned interpretation, not a directly observed fact.</td></tr>
-      <tr><td>Fixed — pending verification</td><td>A change was reported or applied, but the post-change check has not confirmed it.</td></tr>
-      <tr><td>Verified fixed</td><td>The same issue was retested after the change and the evidence supports resolution.</td></tr>
+      <tr>
+        <td><span class="status critical">P0 · Critical</span></td>
+        <td><strong>24 – 48 Hours</strong> (Immediate Hotline)</td>
+        <td>Total search crawler disallow, broken canonical loops, 5xx server failures, or unindexed commercial landing pages.</td>
+        <td>Prevents organic discovery; immediate search traffic collapse or revenue suppression.</td>
+      </tr>
+      <tr>
+        <td><span class="status high">P1 · High</span></td>
+        <td><strong>1 – 7 Days</strong> (Current Sprint)</td>
+        <td>Missing canonical tags, duplicate H1/metadata, slow server response (&gt;800ms TTFB), or uncompressed hero images.</td>
+        <td>Direct dilution of ranking signals, reduced SERP CTR, and high visitor bounce rates.</td>
+      </tr>
+      <tr>
+        <td><span class="status medium">P2 · Medium</span></td>
+        <td><strong>8 – 30 Days</strong> (Next Sprint Cycle)</td>
+        <td>JSON-LD schema markup gaps, sub-optimal heading structures, missing image alt attributes, or click depth &gt; 3.</td>
+        <td>Limits rich snippet eligibility, topical authority comprehension, and UX conversion efficiency.</td>
+      </tr>
+      <tr>
+        <td><span class="status low">P3 · Low</span></td>
+        <td><strong>31 – 90 Days</strong> (Quarterly Backlog)</td>
+        <td>Minor copy hygiene, long-tail query alignment, trailing slash normalization, or legacy redirect consolidation.</td>
+        <td>Crawl efficiency optimization and long-term brand authority enhancement.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>Evidence Status Taxonomy (Epistemic Governance)</h3>
+  <table class="severity-matrix-table">
+    <thead><tr><th style="width: 24%;">Status Classification</th><th>Methodological Definition &amp; Epistemic Standard</th></tr></thead>
+    <tbody>
+      <tr><td><span class="status passed">Verified finding</span></td><td>A specific defect was directly observed in live crawled DOM, HTTP headers, or network timing telemetry.</td></tr>
+      <tr><td><span class="status passed" style="background:#f0fdf4; color:#15803d;">Passed check</span></td><td>The designated audit test was executed against the inspected sample and fully conformed to enterprise standards.</td></tr>
+      <tr><td><span class="status sampled">Sampled</span></td><td>The finding or score applies directly to the representative inspected URL sample (not necessarily 100% of the entire domain).</td></tr>
+      <tr><td><span class="status not-tested">Not tested</span></td><td>The test was not conducted in this audit run. This indicates unverified status—never assumed pass or fail.</td></tr>
+      <tr><td><span class="status unavailable">Unavailable</span></td><td>The required external data source (e.g. Google Search Console or GA4 API) is not connected. Never fabricated as 0.</td></tr>
+      <tr><td><span class="status inferred">Inferred</span></td><td>A reasoned strategic recommendation based on domain model patterns, rather than a direct binary observation.</td></tr>
     </tbody>
   </table>
 
   <div class="plain-english">
-    <strong>What this means for your business</strong>
-    <p>
-      A missing measurement is not proof of poor performance. The report
-      will distinguish confirmed problems from areas where more data is
-      needed before a reliable conclusion can be made.
+    <strong>Zero-Fabrication Commitment:</strong>
+    <p style="margin: 0; font-size: 8.5pt;">
+      Dristik operates under an uncompromising epistemic governance policy: unmeasured or unconnected data sources are never simulated, guessed, or assigned arbitrary scores. Confirmed defects are strictly grounded in verified crawl telemetry.
     </p>
   </div>
 </section>
@@ -635,27 +857,27 @@ pre {
 <section class="chapter chapter-start" id="contents">
   <span class="chapter-marker" style="display:inline; font-size: 0pt; color: transparent; line-height: 0;">[[chapter_ref:contents]]</span>
   <div class="chapter-opener">
-    <div class="chapter-number">Navigation</div>
+    <div class="chapter-number">Index &amp; Navigation</div>
     <h2>Table of Contents</h2>
     <p class="section-intro">
-      Use the chapter links to navigate the digital report. Final page
-      numbers must be generated from the rendered PDF.
+      This index reflects the complete, verified chapters compiled for {{ report.domain }}.
+      Click chapter titles in digital format to jump directly to specific sections.
     </p>
   </div>
 
   <ol class="toc-list">
     {% for item in toc_items %}
     <li class="{% if item.level == 2 %}toc-sub{% endif %}">
-      <a href="#{{ item.id }}">{{ item.title }}</a>
+      <a href="#{{ item.id }}" class="toc-link">{{ item.title }}</a>
+      <span class="toc-dots"></span>
       <span class="toc-page" data-page="{{ item.page_number | default('—') }}"></span>
     </li>
     {% endfor %}
   </ol>
 
   <p class="disclaimer">
-    Page references are populated by the report renderer after pagination.
-    If pagination has not been calculated, the page number must remain
-    unavailable rather than being guessed.
+    Physical page numbers are dynamically derived after rendering and pagination.
+    In unpaginated digital views, page references display as anchor references.
   </p>
 </section>
 

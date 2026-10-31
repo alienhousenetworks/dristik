@@ -1140,40 +1140,82 @@ def build_adaptive_publication_document(
             <div class="running-meta">{_esc(manifest['domain'])} · {_esc(manifest['report_ref'])}</div>
         </div>
 
-        <div style="margin: 20px 0;">
+        <div style="margin: 16px 0;">
             <span class="section-kicker">AUDIT PROTOCOL &amp; ORIENTATION</span>
-            <h2 class="serif" style="font-size: 22pt; margin: 4px 0 14px 0;">Scope, Standards &amp; Reader Orientation</h2>
+            <h2 class="serif" style="font-size: 20pt; margin: 4px 0 12px 0;">How to Read This Audit Book</h2>
             <div class="decorative-separator"></div>
 
-            <div class="grid-2">
-                <div class="card">
-                    <div class="card-kicker">01 // DOCUMENT SPECIFICATION</div>
-                    <div class="mono" style="font-size: 8pt; line-height: 1.8;">
-                        <div>• Publication: <strong>{_esc(manifest['title'])}</strong></div>
-                        <div>• Profile: <strong>{_esc(manifest['displayName'])}</strong></div>
-                        <div>• Target Entity: <strong>{_esc(manifest['brand_name'])}</strong></div>
-                        <div>• Target Host: <strong>{_esc(manifest['domain'])}</strong></div>
+            <div class="grid-2" style="margin-bottom: 12px;">
+                <div class="card" style="border-left: 3px solid #1e3a8a;">
+                    <div class="card-kicker" style="color: #1e3a8a;">TRACK A // EXECUTIVE BRIEFING (10 MINS)</div>
+                    <p style="font-size: 8pt; color: #475569; margin: 0 0 6px 0;">For C-Suite, Founders &amp; Commercial Leaders:</p>
+                    <div class="mono" style="font-size: 7.5pt; line-height: 1.6;">
+                        <div>• Focus on Executive Summary, Composite Scorecard &amp; Macro Health Index</div>
+                        <div>• Review Top P0/P1 Critical Bottlenecks impacting pipeline &amp; revenue</div>
+                        <div>• Execute 7/30/90-Day Prioritized Remediation Roadmap</div>
                     </div>
                 </div>
-                <div class="card">
-                    <div class="card-kicker">02 // SCOPE BOUNDARIES</div>
-                    <p style="font-size: 8pt; color: #334155; margin: 0;">
-                        {coverage_sentence} Findings apply only to the observed crawl window and tested query sets.
-                    </p>
+                <div class="card" style="border-left: 3px solid #0f766e;">
+                    <div class="card-kicker" style="color: #0f766e;">TRACK B // ENGINEERING &amp; DELIVERY</div>
+                    <p style="font-size: 8pt; color: #475569; margin: 0 0 6px 0;">For Tech Leads, DevOps &amp; Specialists:</p>
+                    <div class="mono" style="font-size: 7.5pt; line-height: 1.6;">
+                        <div>• Inspect Diagnostic Domain Chapters with empirical telemetry matrices</div>
+                        <div>• Review Code Diffs, AST DOM Selectors &amp; Remediation Patches</div>
+                        <div>• Execute Automated Verification Protocols (`curl -I`, CI/CD checks)</div>
+                    </div>
                 </div>
             </div>
 
-            <div class="card" style="margin-top: 14px;">
+            <div class="card" style="margin-bottom: 12px;">
+                <div class="card-kicker">SEVERITY &amp; ACTION PROTOCOL (P0 – P3)</div>
+                <table style="width: 100%; border-collapse: collapse; font-size: 7.5pt; margin-top: 6px;">
+                    <thead>
+                        <tr style="background: #0f172a; color: #fff;">
+                            <th style="padding: 4px 6px; text-align: left;">Tier</th>
+                            <th style="padding: 4px 6px; text-align: left;">SLA Window</th>
+                            <th style="padding: 4px 6px; text-align: left;">Defect Classification</th>
+                            <th style="padding: 4px 6px; text-align: left;">Business Impact</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td style="padding: 4px 6px; border: 1px solid #cbd5e1; font-weight: 700; color: #b91c1c;">P0 · Critical</td>
+                            <td style="padding: 4px 6px; border: 1px solid #cbd5e1;"><strong>24–48 Hours</strong></td>
+                            <td style="padding: 4px 6px; border: 1px solid #cbd5e1;">Crawl block, canonical loops, 5xx outages, fatal unindexed landing pages</td>
+                            <td style="padding: 4px 6px; border: 1px solid #cbd5e1;">Immediate discovery &amp; traffic collapse</td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 4px 6px; border: 1px solid #cbd5e1; font-weight: 700; color: #b45309;">P1 · High</td>
+                            <td style="padding: 4px 6px; border: 1px solid #cbd5e1;"><strong>1–7 Days</strong></td>
+                            <td style="padding: 4px 6px; border: 1px solid #cbd5e1;">Missing canonicals, duplicate H1/meta, severe latency (&gt;800ms TTFB)</td>
+                            <td style="padding: 4px 6px; border: 1px solid #cbd5e1;">Ranking dilution &amp; organic CTR loss</td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 4px 6px; border: 1px solid #cbd5e1; font-weight: 700; color: #854d0e;">P2 · Medium</td>
+                            <td style="padding: 4px 6px; border: 1px solid #cbd5e1;"><strong>8–30 Days</strong></td>
+                            <td style="padding: 4px 6px; border: 1px solid #cbd5e1;">JSON-LD schema gaps, heading outlines, missing alt text, click depth &gt; 3</td>
+                            <td style="padding: 4px 6px; border: 1px solid #cbd5e1;">Rich snippet loss &amp; UX friction</td>
+                        </tr>
+                        <tr>
+                            <td style="padding: 4px 6px; border: 1px solid #cbd5e1; font-weight: 700; color: #15803d;">P3 · Low</td>
+                            <td style="padding: 4px 6px; border: 1px solid #cbd5e1;"><strong>31–90 Days</strong></td>
+                            <td style="padding: 4px 6px; border: 1px solid #cbd5e1;">Copy hygiene, long-tail query alignment, trailing slash, 301 hop cleanups</td>
+                            <td style="padding: 4px 6px; border: 1px solid #cbd5e1;">Crawl efficiency &amp; authority growth</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="card" style="margin-top: 10px;">
                 <div class="card-kicker">EVIDENCE CONVENTIONS &amp; TAXONOMY</div>
-                <div style="display: flex; gap: 8px; font-family: monospace; font-size: 7.5pt; margin-top: 8px; flex-wrap: wrap;">
+                <div style="display: flex; gap: 6px; font-family: monospace; font-size: 7pt; margin-top: 6px; flex-wrap: wrap;">
                     <span class="ev-badge" style="background: #dcfce7; color: #166534; padding: 2px 6px; border-radius: 2px;">OBSERVED: DIRECT DOM/HTTP FACTS</span>
                     <span class="ev-badge" style="background: #e0f2fe; color: #075985; padding: 2px 6px; border-radius: 2px;">MEASURED: CALCULATED METRIC</span>
                     <span class="ev-badge" style="background: #f1f5f9; color: #334155; padding: 2px 6px; border-radius: 2px;">DERIVED: STRUCTURED INFERENCE</span>
                     <span class="ev-badge" style="background: #fef3c7; color: #92400e; padding: 2px 6px; border-radius: 2px;">RECOMMENDED: PROPOSED REMEDY</span>
                     <span class="ev-badge" style="background: #f1f5f9; color: #64748b; padding: 2px 6px; border-radius: 2px;">UNMEASURED: NOT TESTED (NOT ZERO)</span>
                 </div>
-                <p style="font-size: 7.5pt; color: #64748b; margin-top: 6px;">Cryptographic integrity is asserted only for evidence records whose SHA-256 hashes are present and successfully validated.</p>
-                <p style="font-size: 7.5pt; color: #334155; margin-top: 6px;"><strong>ZERO-FAKE EVIDENCE ATTESTATION:</strong> unavailable, inferred, simulated, or untested values must not be represented as verified measurements. This policy statement is not a claim that every evidence record in this report has been independently certified.</p>
+                <p style="font-size: 7pt; color: #334155; margin-top: 6px;"><strong>ZERO-FABRICATION EVIDENCE ATTESTATION:</strong> unmeasured, unavailable, or unconnected sources are never manufactured or assumed as zero. Findings are strictly grounded in live crawl telemetry.</p>
             </div>
         </div>
 

@@ -2528,20 +2528,31 @@ class SeoAuditBookRenderer:
         template = self.jinja_env.get_template("seo_audit_book.html")
         return template.render(**context)
 
-    def resolve_physical_pages(self, pdf_bytes: bytes, chapter_ids: Sequence[str]) -> Dict[str, int]:
+    def resolve_physical_pages(
+        self,
+        pdf_bytes: bytes,
+        chapter_ids: Sequence[str],
+        context: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, int]:
         """
         Extracts actual physical page numbers for each chapter marker from rendered PDF bytes.
         """
         if pypdf is None or not pdf_bytes or len(pdf_bytes) < 100:
-            # Deterministic fallback when pypdf is not installed
-            return self._estimate_fallback_pages(chapter_ids)
+            return self._estimate_fallback_pages(chapter_ids, context=context)
 
         resolved: Dict[str, int] = {}
         try:
             reader = pypdf.PdfReader(io.BytesIO(pdf_bytes))
             total_pages = len(reader.pages)
 
-            patterns = {ch_id: f"[[chapter_ref:{ch_id.lower()}]]" for ch_id in chapter_ids}
+            patterns: Dict[str, List[str]] = {}
+            for ch_id in chapter_ids:
+                clean_id = ch_id.lower().strip()
+                patterns[ch_id] = [
+                    f"[[chapter_ref:{clean_id}]]",
+                    f"chapter_ref:{clean_id}",
+                    f"[[chapter_ref:{clean_id}",
+                ]
 
             for page_idx in range(total_pages):
                 page_num = page_idx + 1  # 1-based page number
@@ -2551,33 +2562,95 @@ class SeoAuditBookRenderer:
                 except Exception:
                     continue
 
-                for ch_id, pattern in patterns.items():
-                    if ch_id not in resolved and pattern in text_lower:
-                        resolved[ch_id] = page_num
+                for ch_id, pat_list in patterns.items():
+                    if ch_id not in resolved:
+                        for pat in pat_list:
+                            if pat in text_lower:
+                                resolved[ch_id] = page_num
+                                break
 
             # Monotonic fallback for any unspotted chapters
+            fallback = self._estimate_fallback_pages(chapter_ids, context=context)
             last_page = 2
             for ch_id in chapter_ids:
                 if ch_id in resolved:
                     last_page = resolved[ch_id]
                 else:
-                    last_page += 1
+                    estimated = fallback.get(ch_id, last_page + 1)
+                    last_page = max(last_page + 1, estimated)
                     resolved[ch_id] = last_page
 
         except Exception as exc:
             logger.warning("pypdf physical page extraction failed: %s", exc)
-            return self._estimate_fallback_pages(chapter_ids)
+            return self._estimate_fallback_pages(chapter_ids, context=context)
 
         return resolved
 
-    def _estimate_fallback_pages(self, chapter_ids: Sequence[str]) -> Dict[str, int]:
-        """Fallback deterministic pagination when pypdf is unavailable."""
-        current = 3
-        pages = {}
+    def _estimate_fallback_pages(
+        self,
+        chapter_ids: Sequence[str],
+        context: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, int]:
+        """
+        Content-aware deterministic pagination estimator when pypdf is unavailable.
+        Calculates realistic sheet positions from actual chapter payloads, finding counts,
+        and page dossiers, avoiding naive uniform +2 increments.
+        """
+        pages: Dict[str, int] = {}
+        # Page 1: Cover (unnumbered)
+        # If front-matter is in chapter_ids: Reading Guide = 2, Contents = 3, Chapters = 4+
+        if "reading-guide" in chapter_ids:
+            current = 2
+            pages["reading-guide"] = current
+            if "contents" in chapter_ids:
+                current += 1
+                pages["contents"] = current
+            current += 1
+        else:
+            current = 3
+
+        sections_map = {}
+        if context and "seo_sections" in context:
+            for s in context["seo_sections"]:
+                sections_map[s["id"]] = s
+
         for ch_id in chapter_ids:
+            if ch_id in ("reading-guide", "contents"):
+                continue
+
             pages[ch_id] = current
-            current += 2
-        return pages
+
+            # Determine page length based on actual chapter content
+            if ch_id == "executive-summary":
+                current += 2
+            elif ch_id == "seo-health":
+                current += 2
+            elif ch_id in sections_map:
+                sec = sections_map[ch_id]
+                findings_count = len(sec.get("findings", []))
+                dossiers_count = len(sec.get("page_dossiers", []))
+                ch_pages = 1
+                if sec.get("empirical_table"):
+                    ch_pages += 1
+                if findings_count > 0:
+                    ch_pages += max(1, (findings_count + 1) // 2)
+                if dossiers_count > 0:
+                    ch_pages += max(1, dossiers_count * 2)
+                current += max(1, ch_pages)
+            elif ch_id == "findings-register":
+                findings = context.get("findings", []) if context else []
+                current += max(2, (len(findings) + 1) // 2)
+            elif ch_id == "roadmap":
+                current += 3
+            elif ch_id == "evidence-register":
+                evidence = context.get("evidence_records", []) if context else []
+                current += max(2, (len(evidence) + 14) // 15)
+            elif ch_id in ("glossary", "methodology"):
+                current += 2
+            else:
+                current += 2
+
+        return {ch_id: pages[ch_id] for ch_id in chapter_ids if ch_id in pages}
 
     def inject_pdf_bookmarks_and_metadata(
         self,
@@ -2633,8 +2706,9 @@ class SeoAuditBookRenderer:
     ) -> Optional[bytes]:
         """
         Generates the complete publication-grade PDF.
-        By default (two_pass=False), performs a single-pass render with estimated page numbers
-        to stay well within web server / reverse proxy timeout budgets (e.g. Nginx 60s).
+        When two_pass=True, executes Pass 1 to measure exact physical page locations,
+        then Pass 2 to inject real physical page numbers into the TOC.
+        When two_pass=False, uses the content-aware layout estimator.
         """
         if render_fn is None:
             from app.crawl.browser import BrowserRenderService
@@ -2644,7 +2718,7 @@ class SeoAuditBookRenderer:
         chapter_ids = [item["id"] for item in context["toc_items"]]
 
         if not two_pass:
-            resolved_pages = self._estimate_fallback_pages(chapter_ids)
+            resolved_pages = self._estimate_fallback_pages(chapter_ids, context=context)
             html = self.render_html_report(report, page_numbers=resolved_pages)
             pdf = await render_fn(html)
             if not pdf or len(pdf) < 100:
@@ -2657,8 +2731,9 @@ class SeoAuditBookRenderer:
                 toc_items=context["toc_items"],
             )
 
-        # Pass 1: Render HTML with placeholder TOC
-        pass1_html = self.render_html_report(report)
+        # Pass 1: Render HTML with estimated/placeholder TOC
+        pass1_pages = self._estimate_fallback_pages(chapter_ids, context=context)
+        pass1_html = self.render_html_report(report, page_numbers=pass1_pages)
         pass1_pdf = await render_fn(pass1_html)
 
         if not pass1_pdf or len(pass1_pdf) < 100:
@@ -2666,7 +2741,7 @@ class SeoAuditBookRenderer:
             return pass1_pdf
 
         # Resolve physical page numbers from Pass 1 PDF
-        resolved_pages = self.resolve_physical_pages(pass1_pdf, chapter_ids)
+        resolved_pages = self.resolve_physical_pages(pass1_pdf, chapter_ids, context=context)
 
         # Pass 2: Re-render HTML with resolved page numbers in TOC
         pass2_html = self.render_html_report(report, page_numbers=resolved_pages)
