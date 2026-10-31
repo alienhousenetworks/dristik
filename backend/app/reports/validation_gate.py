@@ -1069,6 +1069,8 @@ class ValidationGate:
 
         # 0. Rule 4.2: Cross-check 100-scores against findings and rescore
         if report.scores and report.scores.category_scores:
+            total_w = sum(c.weight for c in report.scores.category_scores.values() if c.weight is not None)
+            w_scale = 1.0 if total_w <= 1.05 else 100.0
             for cat_name, cat_obj in report.scores.category_scores.items():
                 if cat_obj.score is not None and cat_obj.score >= 99.5:
                     cat_defects = [
@@ -1078,18 +1080,17 @@ class ValidationGate:
                     if cat_defects:
                         deduction = sum(25.0 if "CRITICAL" in str(f.severity).upper() else 15.0 for f in cat_defects)
                         cat_obj.score = max(35.0, 100.0 - deduction)
-                        cat_obj.weighted_score = round((cat_obj.score * (cat_obj.weight or 0.0)) / 100.0, 2)
+                        cat_obj.weighted_score = round((cat_obj.score * (cat_obj.weight or 0.0)) / w_scale, 2)
                         repairs_made.append(f"Rescored {cat_name} from 100.0 to {cat_obj.score} due to {len(cat_defects)} HIGH/CRITICAL finding(s).")
 
         # 1. Reconcile scoring arithmetic
         if report.scores and report.scores.category_scores:
             total_weighted = 0.0
             total_weight = sum(c.weight for c in report.scores.category_scores.values() if c.weight is not None)
+            w_scale = 1.0 if total_weight <= 1.05 else 100.0
             for cat_key, cat_obj in report.scores.category_scores.items():
-                if 0.99 <= total_weight <= 1.01:
-                    cat_obj.weight = (cat_obj.weight or 0.0) * 100.0
                 score_val = float(cat_obj.score) if cat_obj.score is not None else 0.0
-                cat_obj.weighted_score = round((score_val * (cat_obj.weight or 0.0)) / 100.0, 2)
+                cat_obj.weighted_score = round((score_val * (cat_obj.weight or 0.0)) / w_scale, 2)
                 total_weighted += cat_obj.weighted_score
             new_overall = round(total_weighted, 1)
             curr_overall = report.scores.overall_score if report.scores.overall_score is not None else 0.0
@@ -1291,6 +1292,7 @@ class ValidationGate:
         # 9b. Filter incompatible evidence and sanitize placeholder domains
         from app.seo.audit.evidence.compatibility_gate import EvidenceCompatibilityGate
         domain_str = (report.domain or report.website_url or "").replace("https://", "").replace("http://", "").split("/")[0] or "target-site.com"
+        ledger_keys = set((getattr(report, "evidence_ledger", None) or {}).keys())
         clean_ev_findings = []
         for f in report.findings:
             if getattr(f, "held_from_executive", False):
@@ -1300,6 +1302,14 @@ class ValidationGate:
                 f.evidence = EvidenceCompatibilityGate.filter_compatible_evidence(f)
                 if len(f.evidence) < orig_len:
                     repairs_made.append(f"Filtered out {orig_len - len(f.evidence)} incompatible evidence record(s) from finding {f.finding_id} ('{f.title}').")
+
+            valid_ev_ids = {str(ev.evidence_id) for ev in (f.evidence or []) if getattr(ev, "evidence_id", None)} | ledger_keys
+            if getattr(f, "evidence_refs", None):
+                f.evidence_refs = [r for r in f.evidence_refs if str(r) in valid_ev_ids]
+            if getattr(f, "evidence_ids", None):
+                f.evidence_ids = [r for r in f.evidence_ids if str(r) in valid_ev_ids]
+            if getattr(f, "evidence_references", None):
+                f.evidence_references = [r for r in f.evidence_references if str(r) in valid_ev_ids]
 
             if f.verification_steps:
                 new_vsteps = []

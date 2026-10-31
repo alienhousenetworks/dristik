@@ -450,6 +450,7 @@ export function LiveExecutionConsole({ run, onRefreshRun }: LiveExecutionConsole
   // Poll graph state if active
   useEffect(() => {
     let isMounted = true;
+    let interval: ReturnType<typeof setInterval> | null = null;
     const fetchGraph = async () => {
       try {
         const data = await getExecutionGraph(run.analysis_id);
@@ -457,7 +458,10 @@ export function LiveExecutionConsole({ run, onRefreshRun }: LiveExecutionConsole
           setGraphState(data);
         }
       } catch {
-        /* ignore polling error */
+        if (interval) {
+          clearInterval(interval);
+          interval = null;
+        }
       }
     };
 
@@ -467,10 +471,10 @@ export function LiveExecutionConsole({ run, onRefreshRun }: LiveExecutionConsole
         isMounted = false;
       };
     }
-    const interval = setInterval(fetchGraph, 2500);
+    interval = setInterval(fetchGraph, 2500);
     return () => {
       isMounted = false;
-      clearInterval(interval);
+      if (interval) clearInterval(interval);
     };
   }, [run.analysis_id, run.status]);
 

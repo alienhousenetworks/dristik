@@ -335,6 +335,14 @@ class FindingDeduplicator:
                 best_impact = max((f.impact for f in group if f.impact is not None), default=7)
                 best_priority = max((f.priority for f in group if f.priority is not None), default=7)
 
+                capped_evidence = merged_evidence[:8]
+                kept_ev_ids = {ev.evidence_id for ev in capped_evidence if getattr(ev, "evidence_id", None)}
+                all_ev_ids = {ev.evidence_id for f in group for ev in (f.evidence or []) if getattr(ev, "evidence_id", None)}
+                dropped_ev_ids = all_ev_ids - kept_ev_ids
+                merged_refs = [
+                    ref for ref in dict.fromkeys(ref for f in group for ref in (f.evidence_refs or []))
+                    if ref not in dropped_ev_ids
+                ]
                 canonical_finding = Finding(
                     finding_id=f"ROOT_{c_id}",
                     category=cluster_def["category"],
@@ -347,8 +355,8 @@ class FindingDeduplicator:
                     title=cluster_def["title"],
                     description=cluster_def["unified_description"],
                     recommendation=cluster_def["unified_recommendation"],
-                    evidence=merged_evidence[:8],
-                    evidence_refs=list({ref for f in group for ref in (f.evidence_refs or [])}),
+                    evidence=capped_evidence,
+                    evidence_refs=merged_refs,
                     confidence=max((f.confidence for f in group), default=0.90),
                     impact=best_impact,
                     priority=best_priority,
