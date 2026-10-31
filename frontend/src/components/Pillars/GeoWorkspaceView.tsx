@@ -949,7 +949,7 @@ export function GeoWorkspaceView({
           <div className="flex items-center justify-between">
             <div>
               <h3 className="font-sans font-bold text-ink text-base">Inverted-Pyramid Quotable Rewrites</h3>
-              <p className="text-xs text-ink-500">Drop-in 40-60 word definitions designed for direct LLM extraction.</p>
+              <p className="text-xs text-ink-500">Rewrites appear only when a specialist wrote them. A word count is not a required band.</p>
             </div>
             {onOpenPatchPack && (
               <button

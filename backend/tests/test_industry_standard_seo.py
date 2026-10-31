@@ -25,9 +25,10 @@ def test_pixel_width_calculator():
     assert len(narrow) == len(wide)
     assert calculate_title_pixel_width(wide) > calculate_title_pixel_width(narrow) * 2
 
-    # Truncation threshold evaluation
+    # Width is measured. It is not graded short, optimal, or truncated.
     px, status = evaluate_title_pixel_status("Short Title")
-    assert status == "too_short"
+    assert status == "measured"
+    assert px > 0
 
     # 50 chars of wide characters will exceed 580px
     long_wide = "ENTERPRISE CLOUD SECURITY ARCHITECTURE PLATFORM & INFRASTRUCTURE"

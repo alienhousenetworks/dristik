@@ -1198,14 +1198,14 @@ class AgentReadinessReport(BaseModel):
 class CharacterSafeCopy(BaseModel):
     title: str = ""
     title_char_count: int = 0
-    title_status: str = "compliant" # "compliant" (50-60) | "too_short" (<50) | "too_long" (>60)
+    title_status: str = "unjudged"
     meta_description: str = ""
     meta_char_count: int = 0
-    meta_status: str = "compliant" # "compliant" (140-160) | "too_short" (<140) | "too_long" (>160)
+    meta_status: str = "unjudged"
     hero_headline: str = ""
     hero_subhead: str = ""
     hero_word_count: int = 0
-    hero_status: str = "compliant" # "compliant" (40-60 words) | "under_length" (<40) | "over_length" (>60)
+    hero_status: str = "unjudged"
     primary_cta: str = ""
 
 
@@ -1636,7 +1636,7 @@ class SuggestedCopy(BaseModel):
     notes: Optional[str] = None
 
 class PageSeoAudit(BaseModel):
-    score: float = 0.0
+    score: Optional[float] = None
     title_status: str = "missing"
     title_length: int = 0
     meta_status: str = "missing"
@@ -1689,7 +1689,7 @@ class PageReport(BaseModel):
     url: str
     page_type: str = "general"
     title: Optional[str] = None
-    overall_score: float = 0.0
+    overall_score: Optional[float] = None
     seo: PageSeoAudit = Field(default_factory=PageSeoAudit)
     copywriting: PageCopyAudit = Field(default_factory=PageCopyAudit)
     ux: PageUxSignals = Field(default_factory=PageUxSignals)

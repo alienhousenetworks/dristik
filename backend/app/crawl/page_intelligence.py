@@ -1,7 +1,6 @@
 """
 Per-page SEO, copywriting, and UX intelligence.
-Runs once for every crawled URL and returns a detailed page report
-with suggested copy even when the LLM is unavailable.
+The page specialist writes the judgment. Measurements remain when the model does not run.
 """
 from __future__ import annotations
 
@@ -77,153 +76,50 @@ def _status_len(value: Optional[str], low: int, high: int, missing: str = "missi
 
 
 def audit_page_seo(page: PageEvidence) -> PageSeoAudit:
-    issues: List[str] = []
-    strengths: List[str] = []
-    recs: List[str] = []
-    score = 100.0
-
+    """Record what is on the page. Do not grade it or write a fix."""
     title = (page.title or "").strip()
     meta = (page.meta_description or "").strip()
-    title_status = _status_len(title, 30, 60)
-    meta_status = _status_len(meta, 110, 160)
-    title_len = len(title)
-    meta_len = len(meta)
-
-    if title_status == "missing":
-        issues.append("Title tag is missing.")
-        recs.append("Write a unique 50–60 character title that names the page offer.")
-        score -= 18
-    elif title_status == "too_short":
-        issues.append(f"Title is short ({title_len} characters).")
-        recs.append("Expand the title with the primary keyword and a benefit.")
-        score -= 8
-    elif title_status == "too_long":
-        issues.append(f"Title may truncate in SERPs ({title_len} characters).")
-        recs.append("Shorten the title to about 50–60 characters.")
-        score -= 5
-    else:
-        strengths.append("Title length is in a healthy range.")
-
-    if meta_status == "missing":
-        issues.append("Meta description is missing.")
-        recs.append("Add a 140–160 character description with offer, proof, and CTA.")
-        score -= 14
-    elif meta_status == "too_short":
-        issues.append(f"Meta description is short ({meta_len} characters).")
-        recs.append("Write a fuller snippet so search listings are not auto-generated.")
-        score -= 6
-    elif meta_status == "too_long":
-        issues.append(f"Meta description may truncate ({meta_len} characters).")
-        recs.append("Keep the description under 160 characters.")
-        score -= 4
-    else:
-        strengths.append("Meta description length is usable.")
-
-    h1_count = len(page.h1)
-    if h1_count == 0:
-        h1_status = "missing"
-        issues.append("No H1 heading on the page.")
-        recs.append("Add one H1 that states the page promise in plain language.")
-        score -= 16
-    elif h1_count > 1:
-        h1_status = "multiple"
-        issues.append(f"{h1_count} H1 headings found; search engines prefer one.")
-        recs.append("Keep a single H1 and demote the rest to H2.")
-        score -= 8
-    else:
-        h1_status = "good"
-        strengths.append("Single H1 is present.")
-
+    h1_count = len(page.h1 or [])
     heading_bits = []
     if page.h2:
         heading_bits.append(f"{len(page.h2)} H2")
     if page.h3:
         heading_bits.append(f"{len(page.h3)} H3")
-    heading_structure = ", ".join(heading_bits) if heading_bits else "No subheadings"
-    if not page.h2 and page.word_count > 200:
-        issues.append("Long copy without H2 subheadings.")
-        recs.append("Break the page into scannable H2 sections.")
-        score -= 6
-    elif page.h2:
-        strengths.append("Subheadings give the page structure.")
-
-    if page.canonical_url:
-        canonical_status = "present"
-        strengths.append("Canonical URL is set.")
-    else:
-        canonical_status = "missing"
-        issues.append("Canonical tag is missing.")
-        recs.append("Add a self-referential canonical for this URL.")
-        score -= 7
-
     robots = (page.robots_meta or "").lower()
     if "noindex" in robots:
         robots_status = "noindex"
-        indexability = "blocked"
-        issues.append("robots meta is set to noindex.")
-        recs.append("Remove noindex if this page should rank.")
-        score -= 20
+        indexability = "noindex"
+    elif page.status_code and page.status_code >= 400:
+        robots_status = "observed"
+        indexability = f"http_{page.status_code}"
     else:
-        robots_status = "indexable"
-        indexability = "indexable"
-
-    if page.og_tags.get("og:title") or page.og_tags.get("og:description"):
-        og_status = "partial" if not (page.og_tags.get("og:title") and page.og_tags.get("og:description")) else "present"
-        strengths.append("Open Graph tags are present.")
+        robots_status = "observed"
+        indexability = "observed"
+    og_title = bool((page.og_tags or {}).get("og:title"))
+    og_description = bool((page.og_tags or {}).get("og:description"))
+    if og_title and og_description:
+        og_status = "present"
+    elif og_title or og_description:
+        og_status = "partial"
     else:
-        og_status = "missing"
-        issues.append("Open Graph tags are missing.")
-        recs.append("Add og:title, og:description, and og:image.")
-        score -= 5
-
-    if page.schema_types:
-        schema_status = "present"
-        strengths.append(f"Schema types: {', '.join(page.schema_types[:4])}.")
-    else:
-        schema_status = "missing"
-        issues.append("No structured data on this page.")
-        recs.append("Add JSON-LD that matches the page type (Organization, Product, FAQ, Article).")
-        score -= 8
-
-    if not page.viewport:
-        issues.append("Viewport meta is missing.")
-        recs.append("Add a mobile viewport tag.")
-        score -= 6
-
-    target = WORD_TARGETS.get(page.page_type, 250)
-    if page.word_count < max(80, int(target * 0.45)):
-        issues.append(f"Thin copy ({page.word_count} words; target ~{target}).")
-        recs.append("Add substance: proof, specifics, and answers to buyer questions.")
-        score -= 10
-    else:
-        strengths.append(f"{page.word_count} words of on-page copy.")
-
-    if page.images_without_alt and page.total_images:
-        issues.append(f"{page.images_without_alt}/{page.total_images} images missing alt text.")
-        recs.append("Write descriptive alt text for every meaningful image.")
-        score -= min(8, page.images_without_alt * 2)
-
-    if page.status_code and page.status_code >= 400:
-        issues.append(f"HTTP status {page.status_code}.")
-        score -= 25
-        indexability = "error"
+        og_status = "absent"
 
     return PageSeoAudit(
-        score=max(0.0, min(100.0, round(score, 1))),
-        title_status=title_status,
-        title_length=title_len,
-        meta_status=meta_status,
-        meta_length=meta_len,
-        h1_status=h1_status,
-        heading_structure=heading_structure,
-        canonical_status=canonical_status,
+        score=None,
+        title_status="present" if title else "absent",
+        title_length=len(title),
+        meta_status="present" if meta else "absent",
+        meta_length=len(meta),
+        h1_status="absent" if h1_count == 0 else ("multiple" if h1_count > 1 else "one"),
+        heading_structure=", ".join(heading_bits) if heading_bits else "no subheadings stored",
+        canonical_status="present" if (page.canonical_url or "").strip() else "absent",
         robots_status=robots_status,
         og_status=og_status,
-        schema_status=schema_status,
+        schema_status="present" if page.schema_types else "absent",
         indexability=indexability,
-        issues=issues,
-        strengths=strengths,
-        recommendations=recs,
+        issues=[],
+        strengths=[],
+        recommendations=[],
     )
 
 
@@ -302,6 +198,52 @@ def _answer_for_heading(body: str, heading: str) -> Optional[str]:
     return None
 
 
+# Names from the old fixed outline. A page may use one of these words, but the product
+# must not invent the block when the crawl did not find it.
+_TEMPLATE_SECTION_NAMES = {
+    "hero & opening hook",
+    "problem agitation & commercial friction",
+    "solution architecture & core capabilities",
+    "ai answer engine faq block",
+    "closing conversion banner",
+    "hero and value proposition",
+    "audience and problem",
+    "solution explanation",
+    "features and benefits",
+    "final conversion cta",
+}
+
+
+def _observed_sections(page: PageEvidence) -> List[Dict[str, str]]:
+    """Headings crawled on this URL. The names are the page's, not a template."""
+    found: List[Dict[str, str]] = []
+    seen = set()
+    for level, headings in (("h1", page.h1 or []), ("h2", page.h2 or []), ("h3", page.h3 or [])):
+        for heading in headings:
+            name = re.sub(r"\s+", " ", (heading or "").strip())
+            key = name.lower()
+            if not name or key in seen:
+                continue
+            seen.add(key)
+            found.append({"name": name, "level": level})
+    return found
+
+
+def _heading_blob(page: PageEvidence) -> str:
+    return " ".join(item["name"].lower() for item in _observed_sections(page))
+
+
+def _keep_page_section(section: CopySection, page: PageEvidence) -> bool:
+    """Keep copy written for a section this page actually has."""
+    copy = (section.suggested_copy or "").strip()
+    if not copy or copy.upper() == "NOT_IN_EVIDENCE":
+        return False
+    name = re.sub(r"\s+", " ", (section.section_name or "").strip()).lower()
+    if name in _TEMPLATE_SECTION_NAMES and name not in _heading_blob(page):
+        return False
+    return True
+
+
 def _build_default_sections(
     page: PageEvidence,
     profile: BusinessProfile,
@@ -312,110 +254,21 @@ def _build_default_sections(
     points: List[str],
     brand: str,
 ) -> List[CopySection]:
-    offer = profile.value_proposition if profile.value_proposition and "not clearly" not in profile.value_proposition.lower() else ""
-    brand_label = brand or (page.title or "this page")
-    current_h1 = page.h1[0] if page.h1 else (page.title or "No H1 on this URL")
-    hero_status = "NEEDS_REWRITE" if (not page.h1 or len(page.h1[0]) > 80 or len(page.h1[0]) < 15) else "UPDATE_RECOMMENDED"
-    body = page.body_text or ""
-    pain = _pain_sentences(body)
-    faq_on_page = "faq" in body.lower() or any("faq" in t.lower() for t in (page.schema_types or []))
-
-    if pain:
-        problem_status = "UPDATE_RECOMMENDED"
-        problem_preview = pain[0][:160]
-        problem_copy = " ".join(pain)
-    else:
-        problem_status = "NEEDS_REWRITE"
-        problem_preview = "[NOT_IN_EVIDENCE] No explicit buyer problem or pain statement detected in body text."
-        problem_copy = (
-            f"Many prospective clients seeking {offer or h1} struggle with fragmented, manual processes and inconsistent results. "
-            f"{brand_label} directly addresses this friction by providing a reliable, structured approach designed to achieve measurable outcomes."
+    """Unused by the live audit. Observed headings only, with no invented outline."""
+    del profile, h1, hero, primary_cta, secondary_cta, points, brand
+    sections: List[CopySection] = []
+    for item in _observed_sections(page):
+        sections.append(
+            CopySection(
+                section_id=item["level"],
+                section_name=item["name"],
+                status="INSUFFICIENT_EVIDENCE",
+                current_preview=item["name"],
+                suggested_copy="",
+                purpose="Heading crawled on this URL. A specialist has not written replacement copy.",
+            )
         )
-
-    if points:
-        solution_preview = ", ".join(points[:3])
-        solution_copy = (f"{brand_label}: {offer}\n" if offer else f"{brand_label}\n") + "\n".join(f"• {p}" for p in points[:4])
-        solution_status = "UPDATE_RECOMMENDED"
-    else:
-        solution_preview = "[NOT_IN_EVIDENCE] No structured H2 capability list detected on this URL."
-        solution_copy = (
-            f"{brand_label} Core Offerings:\n"
-            f"• Targeted Capabilities: Specialized solutions aligned with {offer or h1}\n"
-            f"• Reliable Execution: Built for operational clarity and high performance\n"
-            f"• Verified Results: Grounded delivery focused on measurable customer outcomes"
-        )
-        solution_status = "NEEDS_REWRITE"
-
-    faq_lines = []
-    for heading in points[:3]:
-        ans = _answer_for_heading(body, heading)
-        faq_lines.append(f"Q: What is {heading}?\nA: {ans}" if ans else f"Q: What is {heading}?\nA: {heading} represents a key capability of {brand_label}, structured to provide reliable results for clients looking for {offer or h1}.")
-    if not faq_lines:
-        faq_lines.append(
-            f"Q: What is {brand_label}?\nA: {offer or hero or h1 or f'{brand_label} delivers specialized solutions designed for client success.'}"
-        )
-    faq_status = "UPDATE_RECOMMENDED" if faq_on_page or any(bool(_answer_for_heading(body, h)) for h in points[:3]) else "NEEDS_REWRITE"
-
-    cta_preview = primary_cta or "[NOT_IN_EVIDENCE] No clear call-to-action detected."
-    cta_copy = (
-        f"Keep the observed action: {primary_cta}"
-        + (f"\nSecondary observed: {secondary_cta}" if secondary_cta else "")
-        if primary_cta
-        else f"Take the next step with {brand_label}: Contact our team to schedule an introductory consultation or request detailed pricing."
-    )
-
-    return [
-        CopySection(
-            section_id="hero",
-            section_name="Hero & Opening Hook",
-            status=hero_status,
-            current_preview=f"Headline: {current_h1[:90]}",
-            suggested_copy=f"Headline: {h1}\nSubhead: {hero or f'Discover how {brand_label} delivers verified solutions tailored to your operational goals.'}\nPrimary Action: {primary_cta or 'Get Started'}",
-            purpose="State buyer, offer, and outcome in the first screen using words already on the page.",
-            seo_geo_notes="Rewrite only from observed H1/title/body. Do not add metrics or features that were not crawled.",
-            keywords=[k for k in [brand_label, page.page_type] if k],
-        ),
-        CopySection(
-            section_id="problem",
-            section_name="Problem Agitation & Commercial Friction",
-            status=problem_status,
-            current_preview=problem_preview,
-            suggested_copy=problem_copy,
-            purpose="Quote the buyer problem if the page states it; otherwise mark the gap.",
-            seo_geo_notes="Pain copy must be a quote or [NOT_IN_EVIDENCE] marked. Never invent industry-generic bottlenecks.",
-            keywords=["problem"] + ([pain[0][:40]] if pain else []),
-        ),
-        CopySection(
-            section_id="solution",
-            section_name="Solution Architecture & Core Capabilities",
-            status=solution_status,
-            current_preview=solution_preview,
-            suggested_copy=solution_copy,
-            purpose="List only offerings that appear as H2s or stated value proposition.",
-            seo_geo_notes="Each bullet is an observed heading. Empty list = missing information architecture.",
-            keywords=points[:4],
-        ),
-        CopySection(
-            section_id="geo_faq",
-            section_name="AI Answer Engine FAQ Block",
-            status=faq_status,
-            current_preview="FAQ markup present." if faq_on_page else "No FAQPage schema or FAQ copy on this URL.",
-            suggested_copy="\n\n".join(faq_lines),
-            purpose="Give answer engines a Q/A pair only when the answer is on the page.",
-            seo_geo_notes="Answers must be written from real facts before FAQ schema is shipped.",
-            keywords=["FAQ"] + points[:3],
-        ),
-        CopySection(
-            section_id="cta_banner",
-            section_name="Closing Conversion Banner",
-            status="UPDATE_RECOMMENDED" if primary_cta else "NEEDS_REWRITE",
-            current_preview=cta_preview,
-            suggested_copy=cta_copy,
-            purpose="Repeat the observed primary action. Do not invent a trial if the page has none.",
-            seo_geo_notes="CTA text must match a crawled button or be labeled missing.",
-            keywords=[primary_cta] if primary_cta else [],
-        ),
-    ]
+    return sections
 
 
 def _build_default_faqs(
@@ -424,7 +277,7 @@ def _build_default_faqs(
     audience: str,
     page: Optional[PageEvidence] = None,
 ) -> List[CopyFaqItem]:
-    b = brand or ((page.title or "").split("|")[0].strip() if page else "") or "this site"
+    del brand
     headline = (page.h1[0] if page and page.h1 else (page.title if page else "") or "").strip()
     subtopics = [h.strip() for h in (page.h2 or []) if h.strip() and len(h.strip()) < 80][:4] if page else []
     meta_desc = (page.meta_description or "").strip() if page else ""
@@ -432,36 +285,16 @@ def _build_default_faqs(
     body = (page.body_text or "") if page else ""
     clean_offer = offer if (offer and "unknown" not in offer.lower() and "not clearly" not in offer.lower()) else (meta_desc or headline)
 
+    del audience, clean_offer, page_cta, meta_desc
     items: List[CopyFaqItem] = []
-    a1 = _answer_for_heading(body, headline) if headline else None
-    items.append(CopyFaqItem(
-        question=f"What is {b}?" if b else f"What is this page about?",
-        answer=a1 or clean_offer or f"{b} provides specialized solutions focused on {headline or 'delivering high-assurance outcomes'}.",
-        target_engine="ChatGPT / Perplexity / Gemini / Google AI Overviews",
-    ))
-
-    if audience and "unknown" not in audience.lower():
-        a2 = f"The page addresses {audience}." + (f" Offer stated as: {clean_offer}" if clean_offer else "")
-    else:
-        a2 = f"{b} is built for industry leaders, technical teams, and decision-makers seeking reliable {clean_offer or 'solutions'}."
-    items.append(CopyFaqItem(
-        question=f"Who is {b} for?" if b else "Who is this page for?",
-        answer=a2,
-        target_engine="Perplexity Search & Google AI Overviews",
-    ))
-
-    if page_cta:
-        a3 = f"The observed call to action on this URL is '{page_cta}'."
-    elif subtopics:
-        defined = [_answer_for_heading(body, h) for h in subtopics[:2]]
-        a3 = " ".join(d for d in defined if d) or f"Key capabilities covered on this page include {', '.join(subtopics)}."
-    else:
-        a3 = f"To begin, explore {b}'s core capabilities and connect with the team to discuss your project requirements."
-    items.append(CopyFaqItem(
-        question=f"How do I get started with {b}?" if page_cta else (f"What does {b} cover?" if subtopics else f"What should a buyer do on this page?"),
-        answer=a3,
-        target_engine="ChatGPT Search & Claude",
-    ))
+    if headline:
+        a1 = _answer_for_heading(body, headline)
+        if a1:
+            items.append(CopyFaqItem(question=headline if headline.endswith("?") else f"What is {headline}?", answer=a1))
+    for heading in subtopics:
+        answer = _answer_for_heading(body, heading)
+        if answer:
+            items.append(CopyFaqItem(question=heading if heading.endswith("?") else f"What is {heading}?", answer=answer))
     return items
 
 
@@ -613,77 +446,35 @@ def _compute_geo_score(page: PageEvidence) -> float:
 
 
 def fallback_copy_audit(page: PageEvidence, profile: BusinessProfile, seo: PageSeoAudit) -> PageCopyAudit:
-    issues: List[CopyIssue] = []
-    works: List[str] = []
-    score = 70.0
-
-    if not (page.title or "").strip():
-        issues.append(CopyIssue(area="title", severity="HIGH", issue="No title copy.", why_it_matters="Search listings and browser tabs have nothing unique to show."))
-        score -= 12
-    if not (page.meta_description or "").strip():
-        issues.append(CopyIssue(area="meta", severity="HIGH", issue="No meta description.", why_it_matters="Search engines invent a snippet from random sentences."))
-        score -= 10
-    if not page.h1:
-        issues.append(CopyIssue(area="h1", severity="HIGH", issue="No headline.", why_it_matters="Visitors and crawlers cannot tell the page promise."))
-        score -= 12
-    elif page.h1 and len(page.h1[0]) < 12:
-        issues.append(CopyIssue(area="h1", severity="MEDIUM", issue="Headline is too vague or short.", why_it_matters="It does not name the offer or the audience."))
-        score -= 6
-    else:
-        works.append(f"Headline: {page.h1[0]}")
-
-    if page.page_type != "legal":
-        if not page.ctas:
-            issues.append(CopyIssue(area="cta", severity="HIGH", issue="No clear call to action.", why_it_matters="The page does not tell the visitor what to do next."))
-            score -= 12
-        else:
-            works.append(f"CTA present: {', '.join(page.ctas[:3])}")
-
-    target = WORD_TARGETS.get(page.page_type, 250)
-    if page.word_count < max(80, int(target * 0.45)):
-        issues.append(CopyIssue(area="body", severity="HIGH", issue=f"Thin body copy ({page.word_count} words).", why_it_matters="There is not enough substance for SEO or for a buyer to decide."))
-        score -= 10
-    else:
-        works.append(f"{page.word_count} words of body copy.")
-
-    if page.readability_score and page.readability_score < 40 and page.page_type != "legal":
-        issues.append(CopyIssue(area="body", severity="MEDIUM", issue=f"Hard to read (score {page.readability_score:.0f}).", why_it_matters="Dense copy lowers conversion and extractability."))
-        score -= 6
-    elif page.readability_score:
-        works.append(f"Readability {page.readability_score:.0f}/100.")
-
+    """Offline page record. Measurements only. The copy specialist writes the judgment."""
+    h1 = page.h1[0] if page.h1 else ""
+    ctas = ", ".join((page.ctas or [])[:3]) or "none stored"
+    audience = (profile.target_audience or "").strip()
     analysis = (
-        f"Empirical page analysis across {page.word_count} words, "
-        f"{len(page.h1)} H1 heading(s), {len(page.h2)} H2 section(s), and {len(page.ctas or [])} detected CTA element(s). "
-        f"Deep multi-agent copywriting rewrites run dynamically via LLM."
+        f"Measured on {page.url}: title {len((page.title or '').strip())} characters "
+        f"({seo.title_status}), meta {len((page.meta_description or '').strip())} characters "
+        f"({seo.meta_status}), H1 {h1 or 'absent'}, {page.word_count} words, "
+        f"{len(page.h2 or [])} H2 headings, CTAs: {ctas}. "
+        "A copy specialist has not written a judgment for this page."
     )
-    if seo.issues:
-        analysis += " SEO gaps on this URL also weaken how the copy appears in search."
-
-    suggested = _fallback_suggested(page, profile)
-    geo_score = _compute_geo_score(page)
-    specialist_insights = {
-        "seo": f"Observed title {len((page.title or '').strip())} chars ({seo.title_status}); meta {len((page.meta_description or '').strip())} chars ({seo.meta_status}).",
-        "geo": f"GEO {geo_score:.0f}/100 from on-page structure (FAQ/schema/definition). Not a live citation rate.",
-        "cro": f"Observed CTAs: {', '.join(page.ctas[:3]) if page.ctas else 'none'}.",
-        "clarity": f"Readability {page.readability_score:.0f}/100; word count {page.word_count}.",
-        "sections": f"{len(suggested.sections)} sections mapped from this URL. Gaps labeled NOT_IN_EVIDENCE rather than filled with generic copy.",
-    }
-
     return PageCopyAudit(
-        score=max(0.0, min(100.0, round(score, 1))),
-        voice="Inferred from on-page headings and body; tighten toward the brand's spoken voice.",
-        clarity="Headlines and body need a sharper promise and fewer generic claims." if issues else "Core message is present.",
-        persuasion="Add proof, specifics, and a single primary action." if not page.ctas else "Action language exists; test a stronger primary CTA.",
-        audience_fit=profile.target_audience or "Audience is not explicit on the page.",
-        cta_quality="Missing" if not page.ctas else "Present",
-        geo_score=geo_score,
-        seo_score=seo.score,
-        issues=issues,
-        what_works=works,
+        score=None,
+        voice="",
+        clarity="",
+        persuasion="",
+        audience_fit=audience,
+        cta_quality="",
+        geo_score=None,
+        seo_score=0.0,
+        issues=[],
+        what_works=[],
         analysis=analysis,
-        suggested=suggested,
-        specialist_insights=specialist_insights,
+        suggested=None,
+        specialist_insights={
+            "seo": f"Title {len((page.title or '').strip())} characters ({seo.title_status}). Meta {len((page.meta_description or '').strip())} characters ({seo.meta_status}).",
+            "cro": f"CTAs stored: {ctas}.",
+            "clarity": f"Word count {page.word_count}. Readability {page.readability_score or 0:.0f}.",
+        },
         llm_status="skipped",
         llm_failure_reason=None,
         llm_failure_code=None,
@@ -691,69 +482,52 @@ def fallback_copy_audit(page: PageEvidence, profile: BusinessProfile, seo: PageS
 
 
 def validate_and_clip_copy(sug: SuggestedCopy, brand_name: Optional[str] = None) -> SuggestedCopy:
-    """
-    Clip over-length fields. Never pad with invented slogans.
-    If the title/meta is short, expand only with words already on this SuggestedCopy
-    (brand, h1, hero, supporting_points). If still short, leave it short.
-    """
-    title = (sug.title or "").strip()
-    brand = (brand_name or "").strip()
-    brand_ok = brand and brand.lower() not in {"unknown", "unknown business"}
-
-    if len(title) < 50:
-        extras = [sug.h1, sug.hero, *list(sug.supporting_points or [])]
-        for extra in extras:
-            extra = re.sub(r"\s+", " ", (extra or "").strip())
-            if not extra:
-                continue
-            candidate = f"{title} — {extra}" if title else extra
-            title = candidate
-            if len(title) >= 50:
-                break
-
-    if brand_ok and brand.lower() not in title.lower():
-        suffix = f" | {brand}"
-        if len(title) + len(suffix) <= 60:
-            title = f"{title}{suffix}" if title else brand
-        else:
-            budget = max(8, 60 - len(suffix))
-            core = title[:budget].rsplit(" ", 1)[0] or title[:budget]
-            title = f"{core}{suffix}"
-    elif len(title) > 60:
-        title = title[:60].rsplit(" ", 1)[0]
-    if len(title) > 60:
-        title = title[:60].rsplit(" ", 1)[0]
-    sug.title = title
-
-    meta = (sug.meta_description or "").strip()
-    if len(meta) > 160:
-        meta = meta[:157].rsplit(" ", 1)[0] + "..."
-    elif meta and len(meta) < 140:
-        extras = [sug.hero, sug.h1, *list(sug.supporting_points or []), sug.primary_cta]
-        for extra in extras:
-            extra = re.sub(r"\s+", " ", (extra or "").strip())
-            if not extra or extra.lower() in meta.lower():
-                continue
-            candidate = f"{meta} {extra}".strip()
-            if len(candidate) > 160:
-                candidate = candidate[:157].rsplit(" ", 1)[0] + "..."
-            meta = candidate
-            if len(meta) >= 140:
-                break
-    sug.meta_description = meta
-
-    hero = (sug.hero or "").strip()
-    words = hero.split()
-    if len(words) > 60:
-        sug.hero = " ".join(words[:60]) + "."
-    else:
-        sug.hero = hero
-
+    """Keep the specialist's words. Do not pad or trim them to a character band."""
+    del brand_name
+    sug.title = re.sub(r"\s+", " ", (sug.title or "").strip())
+    sug.meta_description = re.sub(r"\s+", " ", (sug.meta_description or "").strip())
+    sug.hero = re.sub(r"\s+", " ", (sug.hero or "").strip())
     return sug
 
 
+def _clean_text(value: Any, collapse: bool = True) -> str:
+    if not isinstance(value, str):
+        return ""
+    text = value.strip()
+    if collapse:
+        text = re.sub(r"\s+", " ", text)
+    return text
+
+
+def _first_text(blob: Dict[str, Any], *keys: str, collapse: bool = True) -> str:
+    for key in keys:
+        text = _clean_text(blob.get(key), collapse=collapse)
+        if text:
+            return text
+    return ""
+
+
+def _suggested_blob(raw: Dict[str, Any]) -> Dict[str, Any]:
+    """Find the rewrite object whether the model nested it or used title_tag."""
+    if not isinstance(raw, dict):
+        return {}
+    for key in ("suggested", "rewrite", "proposed", "recommendations", "copy"):
+        blob = raw.get(key)
+        if isinstance(blob, dict) and blob:
+            return blob
+    field_keys = (
+        "title", "title_tag", "proposed_title", "recommended_title",
+        "meta_description", "meta", "description",
+        "h1", "hero", "hook_3sec", "hook", "geo_snippet",
+        "primary_cta", "sections", "faq_items", "faqs",
+    )
+    if any(_clean_text(raw.get(key), collapse=False) or raw.get(key) for key in field_keys):
+        return raw
+    return {}
+
+
 def _parse_copy_result(raw: Dict[str, Any], fallback: PageCopyAudit, brand_name: Optional[str] = None) -> PageCopyAudit:
-    suggested_raw = raw.get("suggested") or {}
+    suggested_raw = _suggested_blob(raw)
     issues_raw = raw.get("issues") or []
     issues: List[CopyIssue] = []
     for item in issues_raw:
@@ -771,7 +545,7 @@ def _parse_copy_result(raw: Dict[str, Any], fallback: PageCopyAudit, brand_name:
             )
         )
 
-    sections_raw = suggested_raw.get("sections") or []
+    sections_raw = suggested_raw.get("sections") or suggested_raw.get("section_rewrites") or []
     sections: List[CopySection] = []
     if isinstance(sections_raw, list) and sections_raw:
         for s in sections_raw:
@@ -779,20 +553,20 @@ def _parse_copy_result(raw: Dict[str, Any], fallback: PageCopyAudit, brand_name:
                 continue
             sections.append(
                 CopySection(
-                    section_id=str(s.get("section_id") or "section"),
-                    section_name=str(s.get("section_name") or "Section"),
+                    section_id=str(s.get("section_id") or s.get("id") or "section"),
+                    section_name=_first_text(s, "section_name", "name", "section") or "Section",
                     status=str(s.get("status") or "UPDATE_RECOMMENDED"),
-                    current_preview=s.get("current_preview"),
-                    suggested_copy=str(s.get("suggested_copy") or ""),
+                    current_preview=s.get("current_preview") or s.get("current_copy"),
+                    suggested_copy=_first_text(s, "suggested_copy", "rewrite", "proposed_copy", "copy", "replacement", collapse=False),
                     purpose=str(s.get("purpose") or ""),
                     seo_geo_notes=s.get("seo_geo_notes"),
                     keywords=list(s.get("keywords") or []),
                 )
             )
-    if not sections:
+    if not sections and fallback.suggested is not None:
         sections = list(fallback.suggested.sections)
 
-    faqs_raw = suggested_raw.get("faq_items") or []
+    faqs_raw = suggested_raw.get("faq_items") or suggested_raw.get("faqs") or suggested_raw.get("faq") or []
     faq_items: List[CopyFaqItem] = []
     if isinstance(faqs_raw, list) and faqs_raw:
         for f in faqs_raw:
@@ -805,46 +579,41 @@ def _parse_copy_result(raw: Dict[str, Any], fallback: PageCopyAudit, brand_name:
                     target_engine=str(f.get("target_engine") or "ChatGPT / Perplexity / Google AI Overviews"),
                 )
             )
-    if not faq_items:
-        faq_items = list(fallback.suggested.faq_items)
+    prior = fallback.suggested
+    if not faq_items and prior is not None:
+        faq_items = list(prior.faq_items)
 
-    geo_snippet = str(suggested_raw.get("geo_snippet") or fallback.suggested.geo_snippet or "")
-    hook_3sec = str(suggested_raw.get("hook_3sec") or fallback.suggested.hook_3sec or "")
+    geo_snippet = _first_text(suggested_raw, "geo_snippet", "snippet", "citation_snippet", "definition") or (prior.geo_snippet if prior else "") or ""
+    hook_3sec = _first_text(suggested_raw, "hook_3sec", "hook", "three_second_hook", "first_impression") or (prior.hook_3sec if prior else "") or ""
 
     sug = SuggestedCopy(
-        title=str(suggested_raw.get("title") or fallback.suggested.title),
-        meta_description=str(suggested_raw.get("meta_description") or fallback.suggested.meta_description),
-        h1=str(suggested_raw.get("h1") or fallback.suggested.h1),
-        hero=str(suggested_raw.get("hero") or fallback.suggested.hero),
-        primary_cta=str(suggested_raw.get("primary_cta") or fallback.suggested.primary_cta),
-        secondary_cta=suggested_raw.get("secondary_cta") or fallback.suggested.secondary_cta,
-        supporting_points=list(suggested_raw.get("supporting_points") or fallback.suggested.supporting_points),
-        body_rewrite=str(suggested_raw.get("body_rewrite") or fallback.suggested.body_rewrite),
+        title=_first_text(suggested_raw, "title", "title_tag", "proposed_title", "recommended_title") or (prior.title if prior else ""),
+        meta_description=_first_text(suggested_raw, "meta_description", "proposed_meta_description", "meta", "description") or (prior.meta_description if prior else ""),
+        h1=_first_text(suggested_raw, "h1", "headline", "h1_headline", "proposed_h1") or (prior.h1 if prior else ""),
+        hero=_first_text(suggested_raw, "hero", "hero_subhead", "subheadline", "subhead") or (prior.hero if prior else ""),
+        primary_cta=_first_text(suggested_raw, "primary_cta", "cta", "primary_cta_text") or (prior.primary_cta if prior else ""),
+        secondary_cta=_first_text(suggested_raw, "secondary_cta", "secondary_cta_text") or (prior.secondary_cta if prior else None),
+        supporting_points=list(suggested_raw.get("supporting_points") or (prior.supporting_points if prior else [])),
+        body_rewrite=_first_text(suggested_raw, "body_rewrite", "full_rewrite", "body", collapse=False) or (prior.body_rewrite if prior else ""),
         geo_snippet=geo_snippet,
         hook_3sec=hook_3sec,
         sections=sections,
         faq_items=faq_items,
-        notes=suggested_raw.get("notes") or fallback.suggested.notes,
+        notes=suggested_raw.get("notes") or (prior.notes if prior else None),
     )
     sug = validate_and_clip_copy(sug, brand_name=brand_name)
 
-    score = raw.get("score")
-    try:
-        score_n = float(score)
-    except (TypeError, ValueError):
-        score_n = fallback.score
+    def _bounded(value: Any, fallback_value: Optional[float]) -> Optional[float]:
+        if value is None or value == "":
+            return fallback_value
+        try:
+            return max(0.0, min(100.0, round(float(value), 1)))
+        except (TypeError, ValueError):
+            return fallback_value
 
-    geo_sc = raw.get("geo_score")
-    try:
-        geo_score_n = float(geo_sc) if geo_sc is not None else fallback.geo_score
-    except (TypeError, ValueError):
-        geo_score_n = fallback.geo_score
-
-    seo_sc = raw.get("seo_score")
-    try:
-        seo_score_n = float(seo_sc) if seo_sc is not None else fallback.seo_score
-    except (TypeError, ValueError):
-        seo_score_n = fallback.seo_score
+    score_n = _bounded(raw.get("score"), fallback.score)
+    geo_score_n = _bounded(raw.get("geo_score"), fallback.geo_score)
+    seo_score_n = _bounded(raw.get("seo_score"), fallback.seo_score if fallback.seo_score else None)
 
     specialist_insights_raw = raw.get("specialist_insights") or {}
     insights = dict(fallback.specialist_insights)
@@ -853,17 +622,17 @@ def _parse_copy_result(raw: Dict[str, Any], fallback: PageCopyAudit, brand_name:
             insights[str(k)] = str(v)
 
     return PageCopyAudit(
-        score=max(0.0, min(100.0, round(score_n, 1))),
-        voice=str(raw.get("voice") or fallback.voice),
-        clarity=str(raw.get("clarity") or fallback.clarity),
-        persuasion=str(raw.get("persuasion") or fallback.persuasion),
-        audience_fit=str(raw.get("audience_fit") or fallback.audience_fit),
-        cta_quality=str(raw.get("cta_quality") or fallback.cta_quality),
-        geo_score=max(0.0, min(100.0, round(geo_score_n, 1))),
-        seo_score=max(0.0, min(100.0, round(seo_score_n, 1))),
-        issues=issues or fallback.issues,
-        what_works=list(raw.get("what_works") or fallback.what_works),
-        analysis=str(raw.get("analysis") or fallback.analysis),
+        score=score_n,
+        voice=str(raw.get("voice") or ""),
+        clarity=str(raw.get("clarity") or ""),
+        persuasion=str(raw.get("persuasion") or ""),
+        audience_fit=str(raw.get("audience_fit") or fallback.audience_fit or ""),
+        cta_quality=str(raw.get("cta_quality") or ""),
+        geo_score=geo_score_n,
+        seo_score=float(seo_score_n or 0.0),
+        issues=issues,
+        what_works=list(raw.get("what_works") or []),
+        analysis=str(raw.get("analysis") or ""),
         suggested=sug,
         specialist_insights=insights,
         llm_status="ok",
@@ -873,11 +642,10 @@ def _parse_copy_result(raw: Dict[str, Any], fallback: PageCopyAudit, brand_name:
 
 
 def _fail_copy_audit(copy: PageCopyAudit, seo: PageSeoAudit, reason: str, code: str) -> PageCopyAudit:
-    """Strip production-copy pretence when the model did not run. Keep crawl-based issues only."""
-    issues = list(copy.issues or [])
+    """The model did not write this page. Do not keep a checklist verdict in its place."""
     analysis = (
-        f"FAILED: copy rewrite did not run. {reason} "
-        f"SEO score {seo.score:.0f}/100 is from the crawl. Copy score is null."
+        f"The page specialist did not write a judgment. {reason} "
+        f"Title state {seo.title_status}, {seo.title_length} characters."
     )
     return PageCopyAudit(
         score=None,
@@ -885,10 +653,10 @@ def _fail_copy_audit(copy: PageCopyAudit, seo: PageSeoAudit, reason: str, code: 
         clarity="",
         persuasion="",
         audience_fit="",
-        cta_quality=copy.cta_quality,
+        cta_quality="",
         geo_score=None,
-        seo_score=seo.score,
-        issues=issues,
+        seo_score=0.0,
+        issues=[],
         what_works=list(copy.what_works or []),
         analysis=analysis,
         suggested=None,
@@ -930,28 +698,12 @@ class PageIntelligenceAgent(BaseAgent):
         blackboard.page_reports = reports
 
         for report in reports:
+            if report.copywriting.llm_status != "ok":
+                continue
             page_ev_ids = [ev.id for ev in blackboard.evidence_store.get_all() if getattr(ev, "url", None) == report.url][:3]
             if not page_ev_ids:
-                page_ev_ids = [ev.id for ev in blackboard.evidence_store.get_all()[:2]]
-            for idx, issue in enumerate(report.seo.issues[:3]):
-                severity = Severity.HIGH if report.seo.score < 55 else Severity.MEDIUM
-                rec_text = (
-                    report.seo.recommendations[idx]
-                    if idx < len(report.seo.recommendations)
-                    else (report.seo.recommendations[0] if report.seo.recommendations else "Fix on-page SEO for this URL.")
-                )
-                self.register_claim(
-                    blackboard=blackboard,
-                    statement=f"{report.url}: {issue}",
-                    category=Category.ON_PAGE_SEO,
-                    severity=severity,
-                    confidence=0.93,
-                    evidence_refs=page_ev_ids,
-                    recommendation=rec_text,
-                    impact=7,
-                    effort=3,
-                )
-            for copy_issue in report.copywriting.issues[:2]:
+                continue
+            for copy_issue in report.copywriting.issues[:4]:
                 sev = Severity.HIGH if copy_issue.severity == "HIGH" else Severity.MEDIUM
                 area_l = (copy_issue.area or "").lower()
                 sugg = report.copywriting.suggested
@@ -977,10 +729,12 @@ class PageIntelligenceAgent(BaseAgent):
                     effort=3,
                 )
 
+        scores = [r.overall_score for r in reports if r.overall_score is not None]
+        avg_score = round(sum(scores) / len(scores), 1) if scores else 0.0
         blackboard.log_step(
             "Per-page SEO and copy reports completed",
             self.agent_id,
-            {"pages": len(reports), "avg_score": round(sum(r.overall_score for r in reports) / len(reports), 1) if reports else 0},
+            {"pages": len(reports), "avg_score": avg_score},
         )
         return {"page_reports": len(reports)}
 
@@ -1043,22 +797,13 @@ class PageIntelligenceAgent(BaseAgent):
             except Exception as exc:
                 logger.warning("LLM page copy failed for %s: %s", page.url, exc)
                 copy = _fail_copy_audit(copy, seo, str(exc), "llm_exception")
-        if copy.llm_status == "ok" and copy.score is not None:
-            overall = round((seo.score * 0.45) + (copy.score * 0.4) + (min(100.0, 100 - min(ux.ttfb_ms / 20, 25)) * 0.15), 1)
-        else:
-            overall = round(seo.score, 1)
-        findings = []
-        findings.extend(seo.issues[:4])
-        findings.extend([i.issue for i in copy.issues[:3]])
-        if ux.cta_count == 0:
-            findings.append("No call to action detected.")
-        if ux.ttfb_ms and ux.ttfb_ms > 800:
-            findings.append(f"Slow TTFB ({int(ux.ttfb_ms)} ms).")
+        overall = round(copy.score, 1) if copy.llm_status == "ok" and copy.score is not None else None
+        findings = [i.issue for i in copy.issues[:6]] if copy.llm_status == "ok" else []
         return PageReport(
             url=page.url,
             page_type=page.page_type,
             title=page.title,
-            overall_score=max(0.0, min(100.0, overall)),
+            overall_score=overall,
             seo=seo,
             copywriting=copy,
             ux=ux,
@@ -1091,7 +836,9 @@ class PageIntelligenceAgent(BaseAgent):
             "title": page.title,
             "meta_description": page.meta_description,
             "h1": page.h1,
-            "h2": page.h2[:8],
+            "h2": page.h2[:12],
+            "h3": (page.h3 or [])[:12],
+            "observed_sections": _observed_sections(page),
             "ctas": page.ctas,
             "word_count": page.word_count,
             "readability": page.readability_score,
@@ -1103,39 +850,39 @@ class PageIntelligenceAgent(BaseAgent):
             "pillar_audit_gaps": pillar_gaps[:8],
         }
         evidence_list = self._page_to_evidence(page, blackboard)
-        specialist_card = "\n".join([
-            task_card_for("copywriting.seo.v3"),
-            task_card_for("copywriting.geo.v3"),
-            task_card_for("copywriting.cro.v3"),
-            task_card_for("copywriting.clarity.v3"),
-            task_card_for("copywriting.section.v3"),
-        ])
         page_prompt = load_prompt("page_intel")
+        observed = _observed_sections(page)
+        observed_names = ", ".join(item["name"] for item in observed) or "no headings were stored"
         result = await self.model_router.generate_structured(
             capability="content_intelligence",
-            agent_role="Page copy auditor. Five specialists: SEO, GEO, CRO, clarity, section architect. Evidence only.",
+            agent_role="Page copywriter. Write for this URL's own sections. Evidence only.",
             task_contract=(
                 (page_prompt + "\n\n") if page_prompt else ""
             ) + (
-                "Audit THIS URL as five specialists. Use only <evidence> and <site_facts>.\n"
-                "1. SEO: rewrite title 50-60 chars and meta 140-160 chars from observed offer + brand. Do not pad with generic 'enterprise platform' slogans.\n"
-                "2. GEO: 40-60 word definition from observed sentences. FAQ answers that are not on the page must be the string NOT_IN_EVIDENCE.\n"
-                "3. CRO: keep observed CTA text unless it is Submit/Click Here. Do not invent a free trial.\n"
-                "4. CLARITY: quote vague phrases and rewrite them without new facts.\n"
-                "5. SECTIONS: hero, problem, solution, geo_faq, cta_banner. Missing sections = NEEDS_REWRITE + NOT_IN_EVIDENCE, never a fake pain story.\n"
-                "AFTER copy may not introduce features, metrics, customers, timelines, or competitors absent from BEFORE/evidence."
+                "Write copy for THIS URL only. Use <evidence> and <site_facts>.\n"
+                f"Observed sections on this page: {observed_names}.\n"
+                "Every company has a different page structure. Do not reuse a hero, problem, solution, "
+                "features, FAQ, or closing-banner outline unless that block is one of the observed sections.\n"
+                "For each observed section that needs new wording, add one sections[] item. "
+                "section_name must be that section's name from this page. suggested_copy is the replacement "
+                "for that section only.\n"
+                "Omit a section that does not need a change. Do not invent a section the crawl did not find.\n"
+                "Write a title, meta description, H1, or call to action only when this page has that element "
+                "and it should change. Leave the field empty otherwise.\n"
+                "A question and answer belongs in faq_items only when this page already asks it and the answer "
+                "is in the crawled text.\n"
+                "Do not apply a character quota. Do not add features, metrics, customers, timelines, or offers "
+                "that are not already on the page."
             ),
-            task_card=specialist_card[:1200],
+            task_card=task_card_for("copywriting.section.v3"),
             evidence_list=evidence_list,
             site_facts=context,
             allow_fallback=False,
             rubric=(
-                "1. CLARITY OVER CLEVERNESS: The H1 and hero must communicate exactly what the product/service is within 3 seconds of scanning. Never rely on abstract metaphors or empty slogans.\n"
-                "2. AUDIENCE CALLOUT: High-converting copy immediately signals the specific target buyer (e.g. 'For Engineering Leaders', 'For High-Growth B2B Teams').\n"
-                "3. RIGOROUS SEO & GEO SPECIFICATIONS: Strict length compliance: Title (50-60 chars), Meta Description (140-160 chars), exactly one semantic H1, and direct citable GEO definition (40-60 words).\n"
-                "4. FRICTIONLESS CTAs: Replace weak, generic CTAs like 'Submit' or 'Click Here' with value-forward verbs like 'Explore Platform', 'Audit Your Site', 'Request Demo'.\n"
-                "5. ZERO FLUFF TOLERANCE: Ban empty consulting filler like 'seamless experience' or 'cutting-edge platform' in favor of concrete features and outcomes.\n"
-                "6. MODULAR SECTION COMPLETENESS: Each section must provide actionable current vs suggested copy and an explicit status (NEEDS_REWRITE, UPDATE_RECOMMENDED, or OPTIMIZED)."
+                "Judge only this URL. Name sections the way this page names them.\n"
+                "Write replacement copy only for a section that needs it.\n"
+                "Leave a field empty rather than filling a template or a character band.\n"
+                "Do not invent features, metrics, customers, or calls to action that are not on the page."
             ),
             output_schema_desc=(
                 "{\n"
@@ -1158,12 +905,12 @@ class PageIntelligenceAgent(BaseAgent):
                 '  "analysis": "2-4 sentence critique",\n'
                 '  "issues": [{"area": "title|meta|h1|hero|cta|body|faq|sections", "severity": "HIGH|MEDIUM|LOW", "issue": "string", "why_it_matters": "string"}],\n'
                 '  "suggested": {\n'
-                '    "title": "string (50-60 chars)",\n'
-                '    "meta_description": "string (140-160 chars)",\n'
+                '    "title": "string",\n'
+                '    "meta_description": "string",\n'
                 '    "h1": "string",\n'
-                '    "hero": "string (40-60 words)",\n'
+                '    "hero": "string",\n'
                 '    "hook_3sec": "string",\n'
-                '    "geo_snippet": "string (40-60 words)",\n'
+                '    "geo_snippet": "string",\n'
                 '    "primary_cta": "string",\n'
                 '    "secondary_cta": "string",\n'
                 '    "supporting_points": ["string"],\n'
@@ -1172,7 +919,7 @@ class PageIntelligenceAgent(BaseAgent):
                 '      {\n'
                 '        "section_id": "string",\n'
                 '        "section_name": "string",\n'
-                '        "status": "NEEDS_REWRITE|UPDATE_RECOMMENDED|OPTIMIZED",\n'
+                '        "status": "CHANGE_RECOMMENDED|NO_CHANGE_NEEDED|INSUFFICIENT_EVIDENCE",\n'
                 '        "current_preview": "string",\n'
                 '        "suggested_copy": "string",\n'
                 '        "purpose": "string",\n'
@@ -1193,14 +940,25 @@ class PageIntelligenceAgent(BaseAgent):
             ),
             additional_context=json.dumps(context, ensure_ascii=False),
         )
-        if not isinstance(result, dict) or not result.get("suggested"):
-            reason = "LLM returned no copy"
-            code = "no_suggested"
-            if isinstance(result, dict):
-                reason = str(result.get("unavailable_reason") or result.get("status") or reason)
-                code = str(result.get("unavailable_reason") or result.get("status") or code)
+        if not isinstance(result, dict):
+            return _fail_copy_audit(fallback, PageSeoAudit(score=fallback.seo_score), "LLM returned no copy", "no_suggested")
+        if str(result.get("status") or "").lower() == "unavailable" or result.get("unavailable_reason") == "no_llm_key":
+            reason = str(result.get("unavailable_reason") or result.get("status") or "LLM returned no copy")
+            code = str(result.get("unavailable_reason") or result.get("status") or "no_suggested")
             return _fail_copy_audit(fallback, PageSeoAudit(score=fallback.seo_score), reason, code)
-        parsed = _parse_copy_result(result, fallback, brand_name=profile.business_name)
+        blob = _suggested_blob(result)
+        payload = dict(result)
+        if blob and not (isinstance(payload.get("suggested"), dict) and payload.get("suggested")):
+            payload["suggested"] = blob
+        if not blob and not str(payload.get("analysis") or "").strip() and not payload.get("issues"):
+            reason = str(payload.get("unavailable_reason") or payload.get("status") or "LLM returned no copy")
+            code = str(payload.get("unavailable_reason") or payload.get("status") or "no_suggested")
+            return _fail_copy_audit(fallback, PageSeoAudit(score=fallback.seo_score), reason, code)
+        parsed = _parse_copy_result(payload, fallback, brand_name=profile.business_name)
+        if parsed.suggested:
+            parsed.suggested.sections = [
+                section for section in parsed.suggested.sections if _keep_page_section(section, page)
+            ]
         parsed.llm_status = "ok"
         if parsed.suggested:
             parsed.suggested.notes = (

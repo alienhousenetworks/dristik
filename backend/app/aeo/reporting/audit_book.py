@@ -2124,12 +2124,17 @@ def _render_aeo_table(facts: _Facts, number: str) -> str:
         body = []
         for p in facts.pages[:20]:
             u = str(_get(p, "url", ""))
-            score = facts.extractability or 75.0
-            autonomy = "High (Self-Contained)" if score >= 80 else ("Moderate" if score >= 60 else "Low (Context Dependent)")
+            score = getattr(facts, "extractability", None)
+            if score is not None:
+                score_str = f"<strong>{score:.1f}/100</strong>"
+                autonomy = "High (Self-Contained)" if score >= 80 else ("Moderate" if score >= 60 else "Low (Context Dependent)")
+            else:
+                score_str = "UNMEASURED"
+                autonomy = "Not Evaluated"
             body.append(
                 "<tr>"
                 f"<td><code>{_esc(u)}</code></td>"
-                f"<td><strong>{score:.1f}/100</strong></td>"
+                f"<td>{score_str}</td>"
                 f"<td><span class=\"badge-sm\">{_esc(autonomy)}</span></td>"
                 f"<td>Clean Declarative Sentences</td>"
                 "</tr>"
@@ -2301,7 +2306,7 @@ def _render_aeo_table(facts: _Facts, number: str) -> str:
         header = "<tr><th>AEO Term</th><th>Industry Definition</th><th>Audit Metric Application</th></tr>"
         terms = [
             ("AEO (Answer Engine Optimization)", "Optimizing content to be discovered, extracted, and cited by answer-producing search systems.", "Question coverage, answer quality, and observed citations."),
-            ("Direct Answer Block", "A 40-60 word declarative statement answering a question directly below a heading.", "Extractability score and featured snippet eligibility."),
+            ("Direct Answer Block", "A self-contained answer stored under a heading. A word count is not a citation score.", "Only a specialist judgment, or an explicit not-written note."),
             ("Passage Extractability", "The degree to which a content segment can be understood independently out of context.", "Standalone clarity without requiring surrounding paragraphs."),
             ("Entity Consensus", "Consistent representation of an organization across Schema.org, Wikidata, and authority sources.", "Bidirectional SameAs validation and Knowledge Graph presence."),
             ("Citation Share", "The proportion of answer engine citations citing the brand domain versus competitors.", "Competitive share of voice in generative search."),

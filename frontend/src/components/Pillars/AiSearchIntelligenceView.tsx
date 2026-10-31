@@ -83,8 +83,6 @@ export function AiSearchIntelligenceView({
   const schemaCrosscheck = geo?.schema_crosscheck;
   const perEngine = report.per_engine_geo;
   const botDirectives = perEngine?.ai_bot_directives;
-  const domainBase = report.domain ? report.domain.split('.')[0] : 'Brand';
-  const brandName = report.business_profile?.business_name || (domainBase.charAt(0).toUpperCase() + domainBase.slice(1));
 
   // Active question set
   const questionItems = qGraph?.questions || geo?.questions || [];
@@ -121,7 +119,7 @@ export function AiSearchIntelligenceView({
     : null;
 
   const handleCopyLlms = async () => {
-    const text = botDirectives?.llms_txt_generated || `# ${brandName}\n\n> ${report.business_profile?.value_proposition || 'Enterprise Web Services'}\n\n## Overview\nWebsite: ${report.website_url}\nIndustry: ${report.business_profile?.industry || 'Technology'}\n`;
+    const text = botDirectives?.llms_txt_generated || 'No llms.txt was stored for this audit.';
     try {
       await navigator.clipboard.writeText(text);
       setCopiedLlms(true);
@@ -646,11 +644,11 @@ export function AiSearchIntelligenceView({
                 </h4>
               </div>
               <span className="text-xs font-mono px-2 py-0.5 rounded bg-paper-200 text-ink-700 font-semibold">
-                40–60 Words • Zero Hallucination
+                Specialist text only
               </span>
             </div>
             <p className="text-xs text-ink-600">
-              Place these self-contained definition blocks directly under your H2 question headings. Answer engines extract and quote them verbatim in AI Overview pills.
+              These blocks are the text a specialist or the crawl stored. They are not a required word count, and they are not a promise that an answer engine will quote them.
             </p>
 
             <div className="space-y-3">
@@ -764,7 +762,7 @@ export function AiSearchIntelligenceView({
               </p>
               <div className="bg-paper-100 dark:bg-ink-950 p-3 rounded border border-line font-mono text-xs max-h-40 overflow-y-auto">
                 <pre className="text-ink-700 whitespace-pre-wrap">
-                  {botDirectives?.llms_txt_generated || `# ${brandName}\n\n> ${report.business_profile?.value_proposition || 'Enterprise Platform'}\n\n## Core Capabilities\n- Website: ${report.website_url}\n`}
+                  {botDirectives?.llms_txt_generated || 'No llms.txt was stored. This panel does not invent one.'}
                 </pre>
               </div>
             </Card>
@@ -775,27 +773,22 @@ export function AiSearchIntelligenceView({
                   <Bot className="w-4 h-4 text-ink-700" />
                   <h4 className="font-sans text-base font-bold text-ink">AI Search Crawler Directives (robots.txt)</h4>
                 </div>
-                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-good/10 text-good font-semibold">
-                  RFC 9309 Compliant
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-paper-200 text-ink-700 font-semibold">
+                  {botDirectives?.robots_measured === true ? 'Measured' : 'Not measured'}
                 </span>
               </div>
               <p className="text-xs text-ink-600">
-                Explicitly permit AI search crawlers (PerplexityBot, GPTBot, ClaudeBot) to index your site for real-time answers.
+                {botDirectives?.robots_measured === true
+                  ? 'Flags below are the directives stored from robots.txt. They are not a recommendation to allow every bot.'
+                  : 'AI crawler directives were not measured. An absent record is not an allow.'}
               </p>
               <div className="bg-paper-100 dark:bg-ink-950 p-3 rounded border border-line font-mono text-xs max-h-40 overflow-y-auto">
-                <pre className="text-ink-700 whitespace-pre-wrap">{`User-agent: PerplexityBot
-Allow: /
-
-User-agent: GPTBot
-Allow: /
-
-User-agent: ClaudeBot
-Allow: /
-
-User-agent: Google-Extended
-Allow: /
-
-Sitemap: ${report.website_url.replace(/\/$/, '')}/sitemap.xml`}</pre>
+                <pre className="text-ink-700 whitespace-pre-wrap">{botDirectives?.robots_measured === true
+                  ? `PerplexityBot: ${botDirectives.perplexitybot_allowed ? 'allowed' : 'blocked'}
+GPTBot: ${botDirectives.gptbot_allowed ? 'allowed' : 'blocked'}
+ClaudeBot: ${botDirectives.claudebot_allowed ? 'allowed' : 'blocked'}
+Google-Extended: ${botDirectives.google_extended_allowed ? 'allowed' : 'blocked'}`
+                  : 'Not measured.'}</pre>
               </div>
             </Card>
           </div>

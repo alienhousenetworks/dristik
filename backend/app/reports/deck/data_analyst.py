@@ -899,7 +899,7 @@ class DeckDataAnalystAgent:
                 if dims and any(isinstance(v, dict) or hasattr(v, "score") for v in dims.values()):
                     d_items = list(dims.items())[:5]
                     categories = [k.replace("_", " ").title()[:16] for k, _ in d_items]
-                    values = [float(getattr(v, "score", v.get("score", 70.0) if isinstance(v, dict) else 70.0)) for _, v in d_items]
+                    values = [float(getattr(v, "score", v.get("score", 0.0) if isinstance(v, dict) else 0.0)) for _, v in d_items]
 
                     s.chart = ChartDataSpec(
                         title="Multi-Dimensional GEO Readiness Breakdown",
@@ -909,7 +909,7 @@ class DeckDataAnalystAgent:
                         units="/ 100"
                     )
                     s.cards = [
-                        CardSpec(kicker="COMPOSITE READINESS", title="GEO Health Score", description="Calculated from 8 independent content extraction dimensions on crawled DOM.", metric_value=f"{geo_score:.1f}/100" if geo_score is not None else "75.0/100", badge="CALCULATED", badge_color="emerald")
+                        CardSpec(kicker="COMPOSITE READINESS", title="GEO Health Score", description="Calculated from 8 independent content extraction dimensions on crawled DOM.", metric_value=f"{geo_score:.1f}/100" if geo_score is not None else "UNMEASURED", badge="CALCULATED" if geo_score is not None else "UNMEASURED", badge_color="emerald" if geo_score is not None else "amber")
                     ]
                 elif geo_score is not None:
                     s.chart = ChartDataSpec(

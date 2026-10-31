@@ -195,11 +195,11 @@ def test_specialist_seo_performance_flags_slow_ttfb_and_render_blocking():
     specialist = SpecialistAgent(SPECIALIST_AGENTS_V3["seo.performance.v3"], model_router=None)
     res = specialist._deterministic_audit(bb, [ev])
 
-    claims = bb.claim_registry.get_all()
-    severities = [c.severity for c in claims]
-    assert Severity.HIGH in severities
-
-    statements = " ".join([c.statement for c in claims]).lower()
+    assert bb.claim_registry.get_all() == []
+    assert res["claims"] == []
+    statements = " ".join(
+        item["fact"] for item in (res["observations"].get("measured_facts") or [])
+    ).lower()
     assert "ttfb" in statements or "server response" in statements
     assert "render-blocking" in statements
     assert "compression" in statements

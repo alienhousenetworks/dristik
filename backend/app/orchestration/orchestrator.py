@@ -950,47 +950,18 @@ class AnalysisOrchestrator:
                 raw_findings = [f for f in raw_findings if f.finding_id != "find_cro_001"]
                 raw_findings.append(cro_finding)
 
-            for f_group in (can_findings, http_findings, heading_findings, media_findings, link_findings, wcag_findings, local_findings, intl_findings, topical_findings, indexation_findings, ecom_findings, serp_findings, cro_findings):
-                for f in f_group:
-                    if not any(x.finding_id == f.finding_id for x in raw_findings):
-                        raw_findings.append(f)
-
-            # Raw HTML vs Rendered DOM Disparity Findings
-            from app.seo.analyzers.rendering_disparity import analyze_rendering_disparity
-            for p in eval_pages:
-                if getattr(p, "raw_html", None) and getattr(p, "rendered_html", None):
-                    try:
-                        _, render_findings = analyze_rendering_disparity(
-                            raw_html=p.raw_html,
-                            rendered_html=p.rendered_html,
-                            page_url=p.url,
-                            evidence_store=blackboard.evidence_store,
-                        )
-                        for rf in render_findings:
-                            if not any(x.finding_id == rf.finding_id for x in raw_findings):
-                                raw_findings.append(rf)
-                    except Exception as rf_err:
-                        logger.info("Page rendering disparity collection note: %s", rf_err)
-
-            # Layer 2 — Deterministic Finding Engine evaluation
-            from app.domain.evidence.deterministic_rules import DeterministicFindingEngine
-            deterministic_engine = DeterministicFindingEngine()
-            layer2_findings = deterministic_engine.evaluate(blackboard.evidence_store, manifest)
-            for f in layer2_findings:
-                if not any(x.finding_id == f.finding_id or (x.rule_id and x.rule_id == f.rule_id) for x in raw_findings):
-                    raw_findings.append(f)
+            # Measurement rollups (HTTP, headings, schema, meta, WCAG, indexation) stay on the
+            # report as evidence. Their pass/fail finding lists are a fixed checklist and are
+            # not published. Written findings come from specialist claims only.
 
             from app.geo.entity_graph import evaluate_entity_graph
             profile_name = ""
             if blackboard.business_profile and blackboard.business_profile.business_name:
                 profile_name = blackboard.business_profile.business_name
-            entity_graph_report, entity_graph_findings, entity_graph_contradictions = evaluate_entity_graph(
+            entity_graph_report, _entity_graph_findings, entity_graph_contradictions = evaluate_entity_graph(
                 eval_pages,
                 brand_name=profile_name,
             )
-            for f in entity_graph_findings:
-                if not any(x.finding_id == f.finding_id for x in raw_findings):
-                    raw_findings.append(f)
             if entity_graph_contradictions:
                 blackboard.identity_contradictions.extend(entity_graph_contradictions)
 

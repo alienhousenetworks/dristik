@@ -464,7 +464,7 @@ class UniversalPatchEngine:
                 operation=PatchOperation.REPLACE,
                 before_snippet=str(ev_snippet) if ev_snippet else "<!-- Missing meta description tag -->",
                 after_snippet=f'<meta name="description" content="{meta_copy}">',
-                explanation=finding.recommendation or f"Supplies a {len(meta_copy)}-character meta description within the optimal 140-160 window.",
+                explanation=finding.recommendation or f"Supplies the stored {len(meta_copy)}-character meta description. Length is not a compliance grade.",
                 confidence=0.94 if not is_blocked else 0.0,
                 approval_status=PatchApprovalStatus.PENDING,
                 is_blocked=is_blocked,

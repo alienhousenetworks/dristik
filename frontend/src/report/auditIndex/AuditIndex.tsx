@@ -1086,7 +1086,7 @@ export function AuditIndex({
                                 }`}
                               />
                               <span>
-                                Sub-index evidence · {section.auditedChecks.length} checklist {section.auditedChecks.length === 1 ? 'line' : 'lines'}
+                                Specialist questions · {section.auditedChecks.length} {section.auditedChecks.length === 1 ? 'question' : 'questions'}
                               </span>
                             </span>
                             <span className="text-[10px] font-normal text-ink-400">

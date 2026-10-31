@@ -130,7 +130,7 @@ class CognitiveAnalystWorker(BaseCognitiveWorker):
             prompt_contract = (
                 "Execute an exhaustive Generative Engine Optimization (GEO) diagnostic for modern AI answer engines "
                 "(Perplexity Pro, ChatGPT Search, Google Gemini Overviews, Claude):\n"
-                "1. DIRECT FACT EXTRACTABILITY: Are core company facts, capabilities, and pricing written in concise, self-contained declarative paragraphs (40-60 words) under clear semantic H2/H3 tags?\n"
+                "1. DIRECT FACT EXTRACTABILITY: Are core company facts, capabilities, and pricing written as self-contained statements grounded in the crawled page? Do not require a word-count band, and do not invent a score.\n"
                 "2. INFORMATION GAIN: Does the site provide original proprietary statistics, benchmarks, or case studies versus regurgitated generic boilerplate?\n"
                 "3. SCHEMA.ORG ENTITY GRAPH: Audit completeness of JSON-LD (Organization, WebSite, SoftwareApplication, Product, FAQPage) and sameAs authority linking (Wikidata, LinkedIn, Crunchbase).\n"
                 "4. CITATION READINESS: Assess probability of capturing direct footnote citations in AI answer engine outputs for target buyer inquiries.\n"

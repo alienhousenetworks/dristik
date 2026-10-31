@@ -64,7 +64,7 @@ def analyze_topical_authority(
         ca = p.content_authority or {}
         w_cnt = p.word_count or ca.get("word_count", 0)
         entities = ca.get("topical_entities") or []
-        ig_score = float(ca.get("information_gain_score") or 50.0)
+        ig_score = float(ca.get("information_gain_score") or 0.0)
         orig_data = int(ca.get("original_data_points") or 0)
         evidence_markers = ca.get("first_party_evidence_markers") or []
         experts = ca.get("expert_signals") or []

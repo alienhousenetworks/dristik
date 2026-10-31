@@ -112,7 +112,7 @@ export function ScoringRubricModal({ isOpen, onClose }: ScoringRubricModalProps)
       core_signals: [
         '5-second value proposition clarity above the fold',
         'High-contrast action verbs in primary CTAs',
-        'Form barrier count (< 4 input fields optimal)',
+        'Form field count stored on audited forms',
         'Mobile viewport responsiveness & layout shift (CLS)',
       ],
       measurement_mode: 'Behavioral Heuristics + GA4 First-Party Connector',

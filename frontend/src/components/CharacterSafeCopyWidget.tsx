@@ -17,45 +17,19 @@ export function CharacterSafeCopyWidget({ initialCopy }: CharacterSafeCopyWidget
   const metaCount = meta.length;
   const heroWords = (headline + ' ' + subhead).trim().split(/\s+/).filter(Boolean).length;
 
-  const getTitleBadge = () => {
-    if (titleCount >= 50 && titleCount <= 60) {
-      return { text: `${titleCount}/60 chars (Compliant)`, color: 'bg-good/10 text-good border-good/30' };
-    }
-    if (titleCount < 50) {
-      return { text: `${titleCount}/60 chars (Too Short — Under 50)`, color: 'bg-warn/10 text-warn border-warn/30' };
-    }
-    return { text: `${titleCount}/60 chars (Too Long — Truncated in SERPs)`, color: 'bg-bad/10 text-bad border-bad/30' };
-  };
-
-  const getMetaBadge = () => {
-    if (metaCount >= 140 && metaCount <= 160) {
-      return { text: `${metaCount}/160 chars (Compliant)`, color: 'bg-good/10 text-good border-good/30' };
-    }
-    if (metaCount < 140) {
-      return { text: `${metaCount}/160 chars (Too Short — Under 140)`, color: 'bg-warn/10 text-warn border-warn/30' };
-    }
-    return { text: `${metaCount}/160 chars (Too Long — Truncated in SERPs)`, color: 'bg-bad/10 text-bad border-bad/30' };
-  };
-
-  const getHeroBadge = () => {
-    if (heroWords >= 40 && heroWords <= 60) {
-      return { text: `${heroWords}/60 words (Compliant)`, color: 'bg-good/10 text-good border-good/30' };
-    }
-    if (heroWords < 40) {
-      return { text: `${heroWords}/60 words (Too Brief — Under 40 words)`, color: 'bg-warn/10 text-warn border-warn/30' };
-    }
-    return { text: `${heroWords}/60 words (Wordy — Over 60 words)`, color: 'bg-bad/10 text-bad border-bad/30' };
-  };
+  const countBadge = (text: string) => ({
+    text,
+    color: 'bg-paper-200 text-ink-700 border-line',
+  });
+  const titleBadge = countBadge(title ? `${titleCount} characters` : 'No title stored');
+  const metaBadge = countBadge(meta ? `${metaCount} characters` : 'No meta stored');
+  const heroBadge = countBadge(heroWords ? `${heroWords} words` : 'No hero stored');
 
   const copy = async (key: string, text: string) => {
     await navigator.clipboard.writeText(text);
     setCopiedField(key);
     setTimeout(() => setCopiedField(null), 1800);
   };
-
-  const titleBadge = getTitleBadge();
-  const metaBadge = getMetaBadge();
-  const heroBadge = getHeroBadge();
 
   return (
     <div className="bg-paper-50 border border-line rounded-lg p-6 shadow-sm space-y-6">
@@ -64,15 +38,15 @@ export function CharacterSafeCopyWidget({ initialCopy }: CharacterSafeCopyWidget
           <div className="flex items-center gap-2">
             <span className="w-2.5 h-2.5 rounded-full bg-good/10"></span>
             <h3 className="text-lg font-bold text-ink">
-              Character-Safe Copy Assistant (Live Enforced)
+              Specialist copy
             </h3>
           </div>
           <p className="text-xs text-ink-500 mt-1">
-            Enforces strict bounds so headlines and metas never get truncated in Google SERPs or AI context windows.
+            Character and word counts are measurements. A count is not a pass, a fail, or a required band.
           </p>
         </div>
         <span className="text-[11px] font-semibold text-ink-500 bg-paper-200 px-2.5 py-1 rounded">
-          Agency Reseller Specification
+          Unjudged until a specialist writes it
         </span>
       </div>
 
@@ -81,7 +55,7 @@ export function CharacterSafeCopyWidget({ initialCopy }: CharacterSafeCopyWidget
         <div className="space-y-1.5">
           <div className="flex items-center justify-between">
             <label className="text-xs font-bold text-ink-700 uppercase tracking-[0.04em]">
-              Page Title (50–60 characters)
+              Page title
             </label>
             <div className="flex items-center gap-2">
               <span className={`text-[10px] font-bold px-2 py-0.5 rounded border uppercase ${titleBadge.color}`}>
@@ -108,7 +82,7 @@ export function CharacterSafeCopyWidget({ initialCopy }: CharacterSafeCopyWidget
         <div className="space-y-1.5">
           <div className="flex items-center justify-between">
             <label className="text-xs font-bold text-ink-700 uppercase tracking-[0.04em]">
-              Meta Description (140–160 characters)
+              Meta description
             </label>
             <div className="flex items-center gap-2">
               <span className={`text-[10px] font-bold px-2 py-0.5 rounded border uppercase ${metaBadge.color}`}>
@@ -135,7 +109,7 @@ export function CharacterSafeCopyWidget({ initialCopy }: CharacterSafeCopyWidget
         <div className="space-y-1.5">
           <div className="flex items-center justify-between">
             <label className="text-xs font-bold text-ink-700 uppercase tracking-[0.04em]">
-              Hero Section (Headline + Subhead: 40–60 words)
+              Hero headline and subhead
             </label>
             <div className="flex items-center gap-2">
               <span className={`text-[10px] font-bold px-2 py-0.5 rounded border uppercase ${heroBadge.color}`}>

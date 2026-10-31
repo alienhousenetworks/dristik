@@ -2319,9 +2319,9 @@ class SeoPrintReportRenderer:
     def _render_sec_06(self, report: ExecutiveReport) -> str:
         t = report.topical_authority
         clusters_count = len(t.cannibalization_clusters) if (t and t.cannibalization_clusters) else 0
-        cov_score = t.topical_coverage_score if t else 68
-        gain_score = t.avg_information_gain if t else 62
-        orig_data = t.total_original_data_points if t else 3
+        cov_score = t.topical_coverage_score if (t and t.topical_coverage_score is not None) else None
+        gain_score = t.avg_information_gain if (t and t.avg_information_gain is not None) else None
+        orig_data = t.total_original_data_points if (t and t.total_original_data_points is not None) else 0
         summary_text = t.summary if t else "Topical depth and copywriting clarity evaluated across crawled pages."
 
         pages = self._get_pages(report)
@@ -2330,10 +2330,10 @@ class SeoPrintReportRenderer:
             p_url = self._pval(p, "url", "")
             p_url_short = p_url if len(p_url) <= 38 else p_url[:35] + "..."
             words = self._pval(p, "word_count", 0)
-            read_score = self._pval(p, "readability_score", 65.0)
+            read_score = self._pval(p, "readability_score", None)
             raw_len = len(self._pval(p, "raw_html") or "")
             body_len = len(self._pval(p, "body_text") or "")
-            ratio = round((body_len / max(1, raw_len)) * 100, 1) if raw_len > 0 else round(min(35.0, max(8.0, (words * 6) / 2500 * 100)), 1)
+            ratio = round((body_len / max(1, raw_len)) * 100, 1) if raw_len > 0 else 0.0
             
             if words < 150:
                 c_badge = '<span class="badge badge-crit">THIN CONTENT (&lt;150w)</span>'
@@ -2342,12 +2342,13 @@ class SeoPrintReportRenderer:
             else:
                 c_badge = '<span class="badge badge-clean">ROBUST (450+w)</span>'
 
+            read_label = f"Grade {read_score:.1f} / 100" if read_score is not None else "—"
             content_rows.append(f"""
             <tr>
                 <td><code>{html.escape(p_url_short)}</code></td>
                 <td><strong>{words}</strong> words</td>
                 <td>{ratio}%</td>
-                <td>Grade {read_score:.1f} / 100</td>
+                <td>{read_label}</td>
                 <td>{c_badge}</td>
             </tr>
             """)
@@ -2397,16 +2398,19 @@ class SeoPrintReportRenderer:
         </div>
         """
 
+        cov_display = f"{cov_score}/100" if cov_score is not None else "UNMEASURED"
+        gain_display = f"{gain_score}/100" if gain_score is not None else "UNMEASURED"
+
         return f"""
         <div class="kpi-grid">
             <div class="kpi-card">
                 <span class="kpi-label">Topical Coverage</span>
-                <div class="kpi-val" style="color: #0284c7;">{cov_score}/100</div>
+                <div class="kpi-val" style="color: #0284c7;">{cov_display}</div>
                 <span class="kpi-sub">Entity breadth</span>
             </div>
             <div class="kpi-card">
                 <span class="kpi-label">Information Gain</span>
-                <div class="kpi-val">{gain_score}/100</div>
+                <div class="kpi-val">{gain_display}</div>
                 <span class="kpi-sub">Unique perspective</span>
             </div>
             <div class="kpi-card">
@@ -2767,13 +2771,16 @@ class SeoPrintReportRenderer:
     # --------------------------------------------------------------------------
     def _render_sec_10(self, report: ExecutiveReport) -> str:
         summary = report.crawl_summary or {}
-        avg_ttfb = summary.get("avg_ttfb_ms", 220.0)
-        ttfb_color = "#10b981" if avg_ttfb < 300 else ("#f59e0b" if avg_ttfb < 600 else "#ef4444")
-        ttfb_grade = "FAST" if avg_ttfb < 300 else ("MODERATE" if avg_ttfb < 600 else "SLOW")
+        raw_ttfb = summary.get("avg_ttfb_ms")
+        avg_ttfb = float(raw_ttfb) if raw_ttfb is not None else 0.0
+        ttfb_color = "#10b981" if 0 < avg_ttfb < 300 else ("#f59e0b" if avg_ttfb < 600 else ("#ef4444" if avg_ttfb > 0 else "#64748b"))
+        ttfb_grade = "FAST" if 0 < avg_ttfb < 300 else ("MODERATE" if avg_ttfb < 600 else ("SLOW" if avg_ttfb > 0 else "UNMEASURED"))
+        ttfb_display = f"{int(round(avg_ttfb))} ms" if avg_ttfb > 0 else "UNMEASURED"
 
         media = report.media_assets
         missing_dims = getattr(media, "missing_explicit_dimensions_count", 0) if media else 0
-        webp_ratio = getattr(media, "modern_format_adoption_pct", 85.0) if media else 85.0
+        webp_ratio = getattr(media, "modern_format_adoption_pct", None) if media else None
+        webp_display = f"{webp_ratio:.1f}%" if webp_ratio is not None else "UNMEASURED"
 
         pages = self._get_pages(report)
         perf_rows = []
@@ -2782,20 +2789,24 @@ class SeoPrintReportRenderer:
             p_url = self._pval(p, "url", "")
             p_url_short = p_url if len(p_url) <= 38 else p_url[:35] + "..."
             ttfb = self._pval(p, "ttfb_ms", 0.0)
-            dom_count = self._pval(p, "dom_elements_count", 0) or 480
-            scripts = self._pval(p, "scripts_count", 0) or 12
-            sheets = self._pval(p, "stylesheets_count", 0) or 3
+            dom_count = self._pval(p, "dom_elements_count", None)
+            dom_str = f"{dom_count} nodes" if dom_count is not None else "—"
+            scripts = self._pval(p, "scripts_count", None)
+            scripts_str = f"{scripts} scripts" if scripts is not None else "—"
+            sheets = self._pval(p, "stylesheets_count", None)
+            sheets_str = f"{sheets} css" if sheets is not None else "—"
             
-            speed_badge = '<span class="badge badge-clean">FAST (&lt;300ms)</span>' if ttfb < 300 else ('<span class="badge badge-warn">MODERATE</span>' if ttfb < 600 else '<span class="badge badge-crit">SLOW (&gt;600ms)</span>')
+            speed_badge = '<span class="badge badge-clean">FAST (&lt;300ms)</span>' if (0 < ttfb < 300) else ('<span class="badge badge-warn">MODERATE</span>' if ttfb < 600 else ('<span class="badge badge-crit">SLOW (&gt;600ms)</span>' if ttfb > 0 else '<span class="badge">UNMEASURED</span>'))
+            ttfb_str = f"<strong>{int(ttfb)} ms</strong>" if ttfb > 0 else "—"
 
             perf_rows.append(f"""
             <tr>
                 <td><code>{html.escape(p_url_short)}</code></td>
-                <td><strong>{int(ttfb)} ms</strong></td>
+                <td>{ttfb_str}</td>
                 <td>{speed_badge}</td>
-                <td>{dom_count} nodes</td>
-                <td>{scripts} scripts</td>
-                <td>{sheets} css</td>
+                <td>{dom_str}</td>
+                <td>{scripts_str}</td>
+                <td>{sheets_str}</td>
             </tr>
             """)
 
@@ -2867,12 +2878,12 @@ class SeoPrintReportRenderer:
         <div class="kpi-grid">
             <div class="kpi-card">
                 <span class="kpi-label">Average Server TTFB</span>
-                <div class="kpi-val" style="color: {ttfb_color};">{int(round(avg_ttfb))} ms</div>
+                <div class="kpi-val" style="color: {ttfb_color};">{ttfb_display}</div>
                 <span class="kpi-sub">{ttfb_grade} server response</span>
             </div>
             <div class="kpi-card">
                 <span class="kpi-label">Modern Image Formats</span>
-                <div class="kpi-val">{webp_ratio}%</div>
+                <div class="kpi-val">{webp_display}</div>
                 <span class="kpi-sub">WebP / AVIF adoption</span>
             </div>
             <div class="kpi-card">
@@ -3147,13 +3158,14 @@ class SeoPrintReportRenderer:
 
         gbp_links = getattr(l, "gbp_links", None) or getattr(l, "gbp_urls", []) or []
         has_map = getattr(l, "has_map_embed", False) or getattr(l, "has_google_maps_embed", False)
-        nap_score = getattr(l, "nap_consistency_pct", None) or 100.0
+        nap_score = getattr(l, "nap_consistency_pct", None)
+        nap_display = f"{nap_score:.1f}%" if nap_score is not None else "UNMEASURED"
 
         return f"""
         <div class="status-summary-card">
             <h4>Local SEO &amp; Google Business Profile Readiness</h4>
             <p><strong>Status:</strong> <span class="badge badge-open">{l.status}</span></p>
-            <p><strong>GBP Links:</strong> {len(gbp_links)} | <strong>Map Embed:</strong> {'YES' if has_map else 'NO'} | <strong>NAP Consistency:</strong> {nap_score}%</p>
+            <p><strong>GBP Links:</strong> {len(gbp_links)} | <strong>Map Embed:</strong> {'YES' if has_map else 'NO'} | <strong>NAP Consistency:</strong> {nap_display}</p>
             <p style="margin-top: 2mm; font-size: 8.5pt;">{html.escape(l.summary)}</p>
         </div>
         {nap_table}
@@ -3512,23 +3524,16 @@ class SeoPrintReportRenderer:
             </div>
             """
 
-        extract_score = g.extractability_score if g.extractability_score is not None else 75.0
-        score_color = "#10b981" if extract_score >= 80 else ("#0284c7" if extract_score >= 60 else "#ef4444")
+        extract_score = g.extractability_score if (g and g.extractability_score is not None) else None
+        score_display = f"{int(extract_score)}/100" if extract_score is not None else "UNMEASURED"
+        score_color = "#10b981" if (extract_score or 0) >= 80 else ("#0284c7" if (extract_score or 0) >= 60 else ("#ef4444" if extract_score is not None else "#64748b"))
         entity_name = g.entity_name or report.domain
 
         # Build Question Extractability Ledger
         q_rows = []
         q_list = getattr(g, "questions", []) or []
         if not q_list:
-            # Fallback canonical queries
-            q_list = [
-                {"question": f"What is {entity_name}?", "status": "SUPPORTED", "evidence_url": report.website_url, "evidence_snippet": f"{entity_name} provides specialized digital solutions and technology engineering.", "remediation_type": "NO_REMEDIATION_NEEDED"},
-                {"question": f"Who is {entity_name} for?", "status": "SUPPORTED", "evidence_url": report.website_url, "evidence_snippet": "Enterprises, modern engineering teams, and fast-growing digital organizations.", "remediation_type": "NO_REMEDIATION_NEEDED"},
-                {"question": f"How much does {entity_name} cost?", "status": "PARTIAL", "evidence_url": f"{report.website_url}/services", "evidence_snippet": "Custom contract pricing; no explicit self-serve tiered pricing table.", "remediation_type": "CONTENT_REQUIRED"},
-                {"question": f"What capabilities and services does {entity_name} provide?", "status": "SUPPORTED", "evidence_url": report.website_url, "evidence_snippet": "Consulting, cloud systems, and AI engineering protocols.", "remediation_type": "NO_REMEDIATION_NEEDED"},
-                {"question": f"Can I trust {entity_name}?", "status": "PARTIAL", "evidence_url": report.website_url, "evidence_snippet": "Verified domain HTTPS, but missing third-party case studies, ISO badges, or client reviews.", "remediation_type": "CONTENT_REQUIRED"},
-                {"question": f"How does {entity_name} compare to alternatives?", "status": "UNSUPPORTED", "evidence_url": report.website_url, "evidence_snippet": "Zero competitor comparison matrix or differentiation table discovered in crawl.", "remediation_type": "CONTENT_REQUIRED"},
-            ]
+            q_rows.append('<tr><td colspan="5" style="text-align: center; color: #64748b; padding: 12px; font-style: italic;">No commercial inquiry extractability evaluations were executed on this crawl run.</td></tr>')
 
         for item in q_list:
             q_text = getattr(item, "question", None) if not isinstance(item, dict) else item.get("question")
@@ -3582,7 +3587,7 @@ class SeoPrintReportRenderer:
         <div class="kpi-grid">
             <div class="kpi-card">
                 <span class="kpi-label">Extractability Score</span>
-                <div class="kpi-val" style="color: {score_color};">{int(extract_score)}/100</div>
+                <div class="kpi-val" style="color: {score_color};">{score_display}</div>
                 <span class="kpi-sub">Answer engine readiness</span>
             </div>
             <div class="kpi-card">
@@ -3677,8 +3682,10 @@ class SeoPrintReportRenderer:
             f_cause = html.escape(f.root_cause or f.causal_mechanism or f.detailed_diagnosis or f.description or "")
             f_val = html.escape(f.acceptance_criteria or f.validation_criteria or "Automated re-crawl confirms zero errors.")
             f_owner = html.escape(f.owner or "Engineering")
-            effort = f.effort or 5
-            impact = f.impact or 8
+            effort = f.effort
+            impact = f.impact
+            effort_str = f"{effort}/10" if effort is not None else "Unrated"
+            impact_str = f"{impact}/10" if impact is not None else "Unrated"
 
             backlog_rows.append(f"""
             <tr>
@@ -3687,7 +3694,7 @@ class SeoPrintReportRenderer:
                 <td><code>{html.escape(aff_short)}</code><br><span class="badge badge-secondary" style="font-size: 6pt;">{scope_badge}</span></td>
                 <td><strong>{f_title}</strong><br><span style="font-size: 7pt; color: #475569;">{f_cause[:120]}...</span></td>
                 <td><span style="font-weight: 600;">{f_owner}</span></td>
-                <td><span style="font-size: 7pt;">Effort: <strong>{effort}/10</strong><br>Impact: <strong>{impact}/10</strong></span></td>
+                <td><span style="font-size: 7pt;">Effort: <strong>{effort_str}</strong><br>Impact: <strong>{impact_str}</strong></span></td>
                 <td style="font-size: 7pt; color: #166534;"><span class="verify">✅ {f_val[:110]}...</span></td>
             </tr>
             """)

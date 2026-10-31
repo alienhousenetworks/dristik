@@ -511,8 +511,8 @@ function needQuestions(facts: Facts, label: string): Result | null {
 }
 
 function fixFor(item: QuestionRow): string {
-  if (item.gap) return `Add a fact-checked answer for “${clip(item.text, 80)}”. Stored gap: ${clip(item.gap, 160)}.`;
-  return `Add a fact-checked answer, with conditions and a source, for “${clip(item.text, 80)}”.`;
+  if (item.gap) return `Stored specialist gap: ${clip(item.gap, 160)}.`;
+  return 'No specialist wrote a fix for this question.';
 }
 
 function issue(scope: string, why: string, fix: string): string {

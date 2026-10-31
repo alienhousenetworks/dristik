@@ -19,6 +19,11 @@ export function Chapter06PageByPage({
 }: Chapter06PageByPageProps) {
   const { pages, meta } = report;
   const detailsPageNumber = typeof pageNumber === 'number' ? pageNumber + 1 : pageNumber;
+  const hasSpecialistCopy = (item: (typeof pages.inventory)[number]) => Boolean(
+    item.suggestedTitle || item.suggestedDescription || item.hook || item.geoSnippet || item.suggestedH1 || item.hero || item.primaryCta || item.bodyRewrite || item.analysis || item.sections?.length || item.faqs?.length
+  );
+  const writtenPages = pages.inventory.filter(hasSpecialistCopy);
+  const shownPages = writtenPages.length > 0 ? writtenPages : pages.inventory.slice(0, 4);
 
   return (
     <>
@@ -32,7 +37,7 @@ export function Chapter06PageByPage({
         domain={meta.domain}
         whyThisMatters="Systemic indexation failures frequently originate on specific high-value sub-routes. Granular route audits prevent individual weak links from diluting overall domain discoverability."
         howWeMeasuredIt="Per-URL DOM extraction, HTTP header validation, TTFB network telemetry, and section-by-section copywriting analysis."
-        whatWasAnalyzed="Status codes, word counts, TTFB latency, SEO & Copy scores, title/meta length compliance, and AI citation snippet targets."
+        whatWasAnalyzed="Status codes, word counts, TTFB, and the title, description, hook, and section rewrites the page specialist wrote for these URLs."
         pageNumber={typeof pageNumber === 'number' ? pageNumber : undefined}
       />
 
@@ -66,7 +71,7 @@ export function Chapter06PageByPage({
           </div>
 
           <div className="space-y-4">
-            {pages.inventory.slice(0, 4).map((p, idx) => (
+            {shownPages.map((p, idx) => (
               <div
                 key={p.url}
                 className="report-avoid-break p-4 border border-line rounded bg-paper-50 space-y-3 text-[8pt]"
@@ -124,30 +129,94 @@ export function Chapter06PageByPage({
                   </div>
                 )}
 
+                {p.analysis && (
+                  <p className="text-ink-700 leading-snug">{p.analysis}</p>
+                )}
+
                 {/* Current vs Suggested SERP Metadata */}
                 <div className="border border-line rounded divide-y divide-line bg-paper-100">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-2 p-2">
                     <div>
                       <span className="font-mono text-[7pt] uppercase text-ink-400 block">Current SERP Title:</span>
-                      <p className="text-ink-700 italic truncate">{p.currentTitle || 'Default or missing title'}</p>
+                      <p className="text-ink-700 italic break-words">{p.currentTitle || 'No title tag stored.'}</p>
                     </div>
                     <div>
                       <span className="font-mono text-[7pt] uppercase font-bold text-good block">Recommended Title:</span>
-                      <p className="text-ink font-medium truncate">{p.suggestedTitle || `${meta.brandName} | Official Enterprise Architecture`}</p>
+                      <p className="text-ink font-medium break-words">
+                        {p.suggestedTitle || 'The copy specialist did not write a title for this URL.'}
+                      </p>
                     </div>
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-2 p-2">
                     <div>
                       <span className="font-mono text-[7pt] uppercase text-ink-400 block">Current Description:</span>
-                      <p className="text-ink-600 line-clamp-2 leading-tight">{p.currentDescription || 'No description tag observed.'}</p>
+                      <p className="text-ink-600 leading-tight break-words">{p.currentDescription || 'No description tag stored.'}</p>
                     </div>
                     <div>
                       <span className="font-mono text-[7pt] uppercase font-bold text-good block">Recommended Description:</span>
-                      <p className="text-ink line-clamp-2 leading-tight font-medium">{p.suggestedDescription || `Official platform specifications, enterprise documentation, and capabilities for ${meta.brandName}.`}</p>
+                      <p className="text-ink leading-tight font-medium break-words">
+                        {p.suggestedDescription || 'The copy specialist did not write a description for this URL.'}
+                      </p>
                     </div>
                   </div>
+
+                  {(p.suggestedH1 || p.hero || p.primaryCta) && (
+                    <div className="grid grid-cols-1 gap-2 p-2">
+                      {p.suggestedH1 && (
+                        <div>
+                          <span className="font-mono text-[7pt] uppercase font-bold text-good block">Recommended H1:</span>
+                          <p className="text-ink font-medium break-words">{p.suggestedH1}</p>
+                        </div>
+                      )}
+                      {p.hero && (
+                        <div>
+                          <span className="font-mono text-[7pt] uppercase font-bold text-good block">Recommended hero:</span>
+                          <p className="text-ink break-words">{p.hero}</p>
+                        </div>
+                      )}
+                      {p.primaryCta && (
+                        <div>
+                          <span className="font-mono text-[7pt] uppercase font-bold text-good block">Recommended call to action:</span>
+                          <p className="text-ink font-medium break-words">{p.primaryCta}</p>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
+
+                {p.bodyRewrite && (
+                  <div>
+                    <span className="font-mono text-[7pt] font-bold uppercase text-ink-500 block mb-0.5">Page rewrite:</span>
+                    <p className="text-ink-700 whitespace-pre-wrap leading-snug">{p.bodyRewrite}</p>
+                  </div>
+                )}
+
+                {p.sections && p.sections.length > 0 && (
+                  <div className="space-y-2">
+                    <span className="font-mono text-[7pt] font-bold uppercase text-ink-500 block">
+                      Copy for the sections on this URL:
+                    </span>
+                    {p.sections.map((section) => (
+                      <div key={`${p.url}-${section.name}`} className="border border-line rounded p-2">
+                        <p className="font-semibold text-ink">{section.name}</p>
+                        <p className="text-ink-700 whitespace-pre-wrap leading-snug">{section.copy}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {p.faqs && p.faqs.length > 0 && (
+                  <div className="space-y-1">
+                    <span className="font-mono text-[7pt] font-bold uppercase text-ink-500 block">Specialist FAQs:</span>
+                    {p.faqs.map((faq) => (
+                      <p key={`${p.url}-${faq.question}`} className="text-ink-700 leading-snug">
+                        <span className="font-semibold text-ink">Q: {faq.question}</span>
+                        {faq.answer ? ` A: ${faq.answer}` : ''}
+                      </p>
+                    ))}
+                  </div>
+                )}
               </div>
             ))}
           </div>

@@ -90,7 +90,7 @@ export function VerificationProofCard({
             <span className="text-[10px] text-bad uppercase">Recorded condition</span>
           </div>
           <p className="text-bad font-sans text-xs mb-2 leading-relaxed">
-            {report?.before_state || finding?.description || 'Detected non-compliant configuration.'}
+            {report?.before_state || finding?.description || 'No recorded condition was stored for this finding.'}
           </p>
           <div className="text-[10px] text-bad truncate pt-1 border-t border-bad/30">
             Status: Initial audit detection

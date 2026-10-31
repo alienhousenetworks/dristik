@@ -107,7 +107,7 @@ export function UrlLevelTechnicalAppendix({
       return [
         `"${p.url}"`,
         p.status_code,
-        p.is_indexable !== false ? 'YES' : 'NO',
+        p.is_indexable === true ? 'YES' : p.is_indexable === false ? 'NO' : 'not stored',
         p.inlinks_count ?? 0,
         p.ttfb_ms ? Math.round(p.ttfb_ms) : '',
         `"${p.canonical_url || ''}"`,
@@ -115,11 +115,11 @@ export function UrlLevelTechnicalAppendix({
         `"${(p.title || '').replace(/"/g, '""')}"`,
         (p.title || '').length,
         p.title_pixel_width ?? '',
-        p.title_pixel_status ?? 'OPTIMAL',
+        p.title_pixel_status ?? 'not judged',
         `"${((p.h1 && p.h1[0]) || '').replace(/"/g, '""')}"`,
         (p.h1 || []).length,
         p.word_count || 0,
-        (p.word_count || 0) < 250 ? 'YES' : 'NO',
+        (p.word_count || 0) < 250 ? 'under 250' : '250 or more',
         `"${(p.schema_types || []).join('; ')}"`,
         p.images_without_alt ?? 0,
         p.total_images ?? 0,
@@ -186,11 +186,11 @@ export function UrlLevelTechnicalAppendix({
           <p className="text-sm font-bold text-bad mt-0.5">{errorCount}</p>
         </div>
         <div className="p-2 bg-warn/10 border border-warn/30 rounded">
-          <span className="text-[9px] text-warn uppercase">Canonical Issues</span>
+          <span className="text-[9px] text-warn uppercase">Canonical not self</span>
           <p className="text-sm font-bold text-warn mt-0.5">{canonicalIssueCount}</p>
         </div>
         <div className="p-2 bg-paper-100 border border-line rounded">
-          <span className="text-[9px] text-ink-700 uppercase">Thin Content</span>
+          <span className="text-[9px] text-ink-700 uppercase">Under 250 words</span>
           <p className="text-sm font-bold text-ink-700 mt-0.5">{thinContentCount}</p>
         </div>
         <div className="p-2 bg-warn/10 border border-warn/30 rounded">
@@ -210,7 +210,7 @@ export function UrlLevelTechnicalAppendix({
             { key: 'ERROR', label: `4xx/5xx (${errorCount})` },
             { key: 'CANONICAL_ISSUE', label: `Non-Canonical (${canonicalIssueCount})` },
             { key: 'MISSING_H1', label: `Missing H1 (${missingH1Count})` },
-            { key: 'THIN_CONTENT', label: `Thin Content (${thinContentCount})` },
+            { key: 'THIN_CONTENT', label: `Under 250 words (${thinContentCount})` },
             { key: 'PIXEL_TRUNCATED', label: `Pixel > 580px (${pixelTruncatedCount})` },
           ].map((item) => (
             <button
@@ -321,12 +321,14 @@ export function UrlLevelTechnicalAppendix({
                     <td className="py-2 px-2.5 text-center">
                       <span
                         className={`text-[9px] px-1 py-0.5 rounded font-bold ${
-                          p.is_indexable !== false
+                          p.is_indexable === true
                             ? 'bg-good/10 text-good border border-good/30'
-                            : 'bg-bad/10 text-bad border border-bad/30'
+                            : p.is_indexable === false
+                            ? 'bg-bad/10 text-bad border border-bad/30'
+                            : 'bg-paper-200 text-ink-600 border border-line'
                         }`}
                       >
-                        {p.is_indexable !== false ? 'Indexable' : 'Blocked'}
+                        {p.is_indexable === true ? 'Indexable' : p.is_indexable === false ? 'Blocked' : 'Not stored'}
                       </span>
                     </td>
 
@@ -378,7 +380,7 @@ export function UrlLevelTechnicalAppendix({
                               : 'bg-paper-200 text-ink-600'
                           }`}
                         >
-                          {pixelWidth}px {isPixelTruncated ? ' Truncated' : '✓'}
+                          {pixelWidth}px{isPixelTruncated ? ' over 580px' : ''}
                         </span>
                         <span className="text-[9px] text-ink-400 font-mono">
                           ({(p.title || '').length}ch)

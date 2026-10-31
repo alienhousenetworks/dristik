@@ -302,9 +302,9 @@ def test_length_validator():
         h1="Unified Data Platform for Modern Engineering Teams",
     )
     clipped = validate_and_clip_copy(long_copy, brand_name="Dristik")
-    assert len(clipped.title) <= 60
-    assert "Dristik" in clipped.title
-    assert len(clipped.meta_description) <= 160
+    assert clipped.title == long_copy.title
+    assert "Dristik" not in clipped.title
+    assert len(clipped.meta_description) > 160
     assert "Enterprise Intelligence" not in clipped.title
     assert "High Performance Software" not in clipped.title
 
@@ -312,7 +312,8 @@ def test_length_validator():
         SuggestedCopy(title="Too Short", meta_description="Too short meta", hero="Short hero."),
         brand_name="Dristik",
     )
-    assert "Dristik" in short.title
+    assert short.title == "Too Short"
+    assert "Dristik" not in short.title
     assert "Enterprise Intelligence Platform" not in short.title
     assert "Enterprise Audit" not in short.meta_description
     assert "Generative Engine Optimization" not in short.meta_description

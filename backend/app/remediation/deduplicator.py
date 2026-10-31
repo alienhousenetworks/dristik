@@ -101,7 +101,7 @@ ROOT_CAUSE_CLUSTERS = [
             "page title short", "page title duplicate", "title tag too short", "meta description length"
         ],
         "unified_description": "Target landing pages feature missing, truncated, or unoptimized page titles and meta descriptions, depressing search engine click-through rates.",
-        "unified_recommendation": "Author unique, intent-targeted page titles (50-60 characters) and high-CTR meta descriptions (140-160 characters) across all indexable landing pages.",
+        "unified_recommendation": "A specialist should write a distinct title and meta description from the page's stored offer. A character band is not the fix.",
     },
     {
         "id": "RC_FORM_CONVERSION_FRICTION",

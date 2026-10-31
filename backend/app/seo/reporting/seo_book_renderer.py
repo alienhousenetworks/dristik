@@ -51,6 +51,104 @@ def _get_val(obj: Any, key: str, default: Any = None) -> Any:
     return getattr(obj, key, default)
 
 
+def _url_key(url: str) -> str:
+    return (url or "").strip().rstrip("/").lower()
+
+
+def _page_report_index(report: Any) -> Dict[str, Any]:
+    index: Dict[str, Any] = {}
+    reports = _get_val(report, "page_reports") or []
+    if not isinstance(reports, list):
+        return index
+    for rep in reports:
+        url = str(_get_val(rep, "url") or "")
+        if not url:
+            continue
+        index[url] = rep
+        index[_url_key(url)] = rep
+    return index
+
+
+def _specialist_copy(rep: Any) -> Dict[str, Any]:
+    """Copy the page specialist actually wrote. Empty when the model did not run."""
+    empty = {
+        "suggested_title": "",
+        "suggested_meta": "",
+        "suggested_h1": "",
+        "hero": "",
+        "hook": "",
+        "geo_snippet": "",
+        "primary_cta": "",
+        "analysis": "",
+        "body_rewrite": "",
+        "sections": [],
+        "faqs": [],
+        "copy_status": "",
+        "has_specialist_copy": False,
+    }
+    copy = _get_val(rep, "copywriting") if rep is not None else None
+    if not copy:
+        return empty
+    status = str(_get_val(copy, "llm_status") or "")
+    sug = _get_val(copy, "suggested") or {}
+
+    def text(*keys: str, collapse: bool = True) -> str:
+        for key in keys:
+            value = _get_val(sug, key)
+            if isinstance(value, str) and value.strip():
+                cleaned = value.strip()
+                return re.sub(r"\s+", " ", cleaned) if collapse else cleaned
+        return ""
+
+    sections = []
+    raw_sections = _get_val(sug, "sections") or []
+    if isinstance(raw_sections, list):
+        for sec in raw_sections:
+            body = _get_val(sec, "suggested_copy") or _get_val(sec, "rewrite") or _get_val(sec, "copy") or ""
+            if isinstance(body, str) and body.strip():
+                sections.append({
+                    "name": str(_get_val(sec, "section_name") or _get_val(sec, "name") or "Section"),
+                    "copy": body.strip(),
+                })
+    faqs = []
+    raw_faqs = _get_val(sug, "faq_items") or _get_val(sug, "faqs") or []
+    if isinstance(raw_faqs, list):
+        for faq in raw_faqs:
+            question = str(_get_val(faq, "question") or "").strip()
+            answer = str(_get_val(faq, "answer") or "").strip()
+            if question or answer:
+                faqs.append({"question": question, "answer": answer})
+    analysis = str(_get_val(copy, "analysis") or "").strip() if status == "ok" else ""
+    payload = {
+        "suggested_title": text("title", "title_tag", "proposed_title", "recommended_title"),
+        "suggested_meta": text("meta_description", "proposed_meta_description", "description"),
+        "suggested_h1": text("h1", "headline", "proposed_h1"),
+        "hero": text("hero", "hero_subhead"),
+        "hook": text("hook_3sec", "hook"),
+        "geo_snippet": text("geo_snippet", "snippet"),
+        "primary_cta": text("primary_cta", "cta"),
+        "analysis": analysis,
+        "body_rewrite": text("body_rewrite", "full_rewrite", collapse=False),
+        "sections": sections,
+        "faqs": faqs,
+        "copy_status": status,
+    }
+    payload["has_specialist_copy"] = bool(
+        payload["suggested_title"]
+        or payload["suggested_meta"]
+        or payload["suggested_h1"]
+        or payload["hero"]
+        or payload["hook"]
+        or payload["geo_snippet"]
+        or payload["primary_cta"]
+        or payload["analysis"]
+        or payload["body_rewrite"]
+        or sections
+        or faqs
+    )
+    return payload
+
+
 def normalize_finding(finding: Any, index: int = 1) -> Dict[str, Any]:
     """
     Normalizes any Dristik Finding model or dict into the standard 17-field data contract.
@@ -1077,9 +1175,9 @@ def _expected_for_metric_check(check_lower: str) -> str:
     if "thin copy" in check_lower or "word count" in check_lower:
         return ">= 300 informative words on commercial service pages; 0 thin (<200 word) pages."
     if "title" in check_lower:
-        return "Unique <title> tag per page between 50–60 characters (~280–580px)."
+        return "A title was stored per crawled page. Character count is a measurement, not a required band."
     if "meta description" in check_lower:
-        return "Unique <meta name='description'> per page between 140–160 characters."
+        return "A meta description was stored per crawled page. Character count is a measurement, not a required band."
     if "anchor" in check_lower or "link density" in check_lower:
         return "Descriptive topical anchor text; >= 3 contextual internal links per page."
     if "referring domain" in check_lower or "authority" in check_lower:
@@ -1295,20 +1393,32 @@ def _resolve_dedicated_metric(
     # 6. On-Page SEO, Titles, Meta Descriptions, Headings & Content Quality
     if "desktop title pixel" in check_lower:
         if pages_list:
-            bad_t = [p for p in pages_list if len(str(_get_val(p, "title") or "").strip()) < 30 or len(str(_get_val(p, "title") or "").strip()) > 60]
-            if bad_t:
-                return (DiagnosticStatus.SAMPLED.value if is_sampled else DiagnosticStatus.PASSED.value, f"{len(bad_t)} of {len(pages_list)} page(s) have titles outside 30–60 char (280–580px) range", sample_scope)
-            return (DiagnosticStatus.PASSED.value, f"All {len(pages_list)} inspected titles fit desktop SERP pixel limits", sample_scope)
+            lengths = [len(str(_get_val(p, "title") or "").strip()) for p in pages_list]
+            present = [n for n in lengths if n]
+            missing = len(lengths) - len(present)
+            if not present:
+                return (DiagnosticStatus.NOT_TESTED.value, f"{missing} crawled page(s) have no title text. Length was not judged.", sample_scope)
+            return (
+                DiagnosticStatus.NOT_TESTED.value,
+                f"{len(present)} title(s) measured, {min(present)}–{max(present)} characters. {missing} page(s) have no title. A pixel band is not a verdict.",
+                sample_scope,
+            )
 
     if "meta description truncation" in check_lower:
         dup_f = next((f for f in findings_pool if "meta description" in f.get("title", "").lower()), None)
         if pages_list:
-            bad_m = [p for p in pages_list if len(str(_get_val(p, "meta_description") or "").strip()) < 110 or len(str(_get_val(p, "meta_description") or "").strip()) > 160]
+            lengths = [len(str(_get_val(p, "meta_description") or "").strip()) for p in pages_list]
+            present = [n for n in lengths if n]
+            missing = len(lengths) - len(present)
             if dup_f:
                 return (DiagnosticStatus.FAILED.value, f"{dup_f.get('title', 'Meta description defect')[:75]}", sample_scope)
-            if bad_m:
-                return (DiagnosticStatus.SAMPLED.value if is_sampled else DiagnosticStatus.PASSED.value, f"{len(bad_m)} page(s) have meta descriptions outside 110–160 char optimal range", sample_scope)
-            return (DiagnosticStatus.PASSED.value, f"All {len(pages_list)} pages have compliant meta description lengths", sample_scope)
+            if not present:
+                return (DiagnosticStatus.NOT_TESTED.value, f"{missing} crawled page(s) have no meta description. Length was not judged.", sample_scope)
+            return (
+                DiagnosticStatus.NOT_TESTED.value,
+                f"{len(present)} meta description(s) measured, {min(present)}–{max(present)} characters. {missing} page(s) have none. A character band is not a verdict.",
+                sample_scope,
+            )
 
     if "missing h1" in check_lower or "multiple h1" in check_lower:
         if pages_list:
@@ -1884,6 +1994,7 @@ def build_seo_book_context(report: Any, page_numbers: Optional[Dict[str, int]] =
 
     # Compile Page-by-Page Optimization Dossiers
     page_dossiers: List[Dict[str, Any]] = []
+    copy_index = _page_report_index(report)
     for p in pages:
         u = str(_get_val(p, "url") or "")
         p_findings = [nf for nf in normalized_findings if u in (nf.get("affected_urls") or [])]
@@ -1906,6 +2017,7 @@ def build_seo_book_context(report: Any, page_numbers: Optional[Dict[str, int]] =
         c_url = str(_get_val(p, "canonical_url") or _get_val(p, "canonical_declared") or "")
         s_code = int(_get_val(p, "status_code") or _get_val(p, "http_status") or 200)
 
+        specialist = _specialist_copy(copy_index.get(u) or copy_index.get(_url_key(u)))
         page_dossiers.append({
             "url": u,
             "page_type": "Homepage" if u.rstrip("/").endswith(domain) else "Service / Landing Page",
@@ -1934,6 +2046,7 @@ def build_seo_book_context(report: Any, page_numbers: Optional[Dict[str, int]] =
             "findings": [pf["title"] for pf in p_findings[:5]],
             "recommendations": [pf["recommended_action"] for pf in p_findings[:4]],
             "recommended_changes": [pf["recommended_action"] for pf in p_findings[:4]],
+            **specialist,
         })
 
     # Active conditional chapters
@@ -2342,8 +2455,8 @@ def build_seo_book_context(report: Any, page_numbers: Optional[Dict[str, int]] =
         },
         {
             "metric": "On-Page Metadata & H1 Alignment",
-            "baseline": f"{sum(1 for p in pages if len(str(_get_val(p, 'meta_description') or '')) >= 70)}/{pages_crawled} pages with optimal meta description",
-            "target": "100% unique Title (50–60 chars), Meta Description (120–160 chars) & single descriptive H1",
+            "baseline": f"{sum(1 for p in pages if str(_get_val(p, 'meta_description') or '').strip())}/{pages_crawled} pages with a meta description stored",
+            "target": "A specialist writes the judgment. Character bands are not the target.",
             "source": "Dristik DOM Inspector (MEASURED)",
             "verification": "Inspect rendered <head> and <h1> across all commercial URLs",
         },

@@ -50,12 +50,14 @@ def test_developer_patch_pack_generation():
         assert "llms.txt" in namelist
         assert "robots.txt" in namelist
 
-    # Verify character-safe copy enforcement
+    # Observed profile text only. A character band is not a grade.
     copy = generate_character_safe_copy(bp, "https://fastpay.io")
-    assert 50 <= copy.title_char_count <= 60
-    assert copy.title_status == "compliant"
-    assert 140 <= copy.meta_char_count <= 160
-    assert copy.meta_status == "compliant"
+    assert copy.title_status == "unjudged"
+    assert "FastPay" in copy.title
+    assert "Fintech Infrastructure" in copy.title
+    assert copy.meta_description.startswith("Low-latency")
+    assert "guaranteed" not in (copy.hero_subhead or "").lower()
+    assert copy.primary_cta == "Start Sandbox Integration"
 
     # Verify Notion block
     notion_md = generate_notion_block(bp, "https://fastpay.io", evals)

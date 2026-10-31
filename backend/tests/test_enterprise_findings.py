@@ -217,14 +217,17 @@ def test_specialist_deterministic_audit_expanded_checks():
     )
     specialist_html = SpecialistAgent(defn_html, model_router=None)
     res_html = specialist_html._deterministic_audit(blackboard, [ev])
-    statements_html = [c.statement for c in blackboard.claim_registry.get_all()]
+    statements_html = [item["fact"] for item in res_html["observations"].get("measured_facts") or []]
 
+    assert blackboard.claim_registry.get_all() == []
+    assert res_html["claims"] == []
     assert any("missing an H1" in s for s in statements_html)
     assert any("multiple H1" in s for s in statements_html)
     assert any("missing a title" in s for s in statements_html)
-    assert any("outside optimal length" in s for s in statements_html)
+    assert all("outside optimal length" not in s for s in statements_html)
     assert any("missing a meta description" in s for s in statements_html)
     assert any("heading skips" in s for s in statements_html)
+    assert "title_lengths" in res_html["observations"]
 
     # Test seo.security.v3 deterministic audit
     defn_sec = AgentDefinition(
@@ -236,7 +239,7 @@ def test_specialist_deterministic_audit_expanded_checks():
     )
     specialist_sec = SpecialistAgent(defn_sec, model_router=None)
     res_sec = specialist_sec._deterministic_audit(blackboard, [ev])
-    statements_all = [c.statement for c in blackboard.claim_registry.get_all()]
+    statements_all = [item["fact"] for item in res_sec["observations"].get("measured_facts") or []]
 
     assert any("Strict-Transport-Security (HSTS)" in s for s in statements_all)
     assert any("Content-Security-Policy (CSP)" in s for s in statements_all)
@@ -252,7 +255,7 @@ def test_specialist_deterministic_audit_expanded_checks():
     )
     specialist_idx = SpecialistAgent(defn_idx, model_router=None)
     res_idx = specialist_idx._deterministic_audit(blackboard, [ev])
-    statements_idx = [c.statement for c in blackboard.claim_registry.get_all()]
+    statements_idx = [item["fact"] for item in res_idx["observations"].get("measured_facts") or []]
 
     assert any("no rel=canonical tag" in s for s in statements_idx)
     assert any("canonical tag mismatch" in s for s in statements_idx)

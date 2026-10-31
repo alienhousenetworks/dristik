@@ -237,9 +237,10 @@ class SpecialistAgent(BaseAgent):
             # Offline/fallback: if LLM unavailable, fall back to deterministic telemetry
             if llm_res.get("status") == "unavailable" and "deterministic" in (self.definition.allowed_models or []):
                 det = self._deterministic_audit(blackboard, evidence_slice)
-                if det.get("claims") or det.get("observations"):
+                if det.get("observations"):
                     det["status"] = "completed"
-                    det["mode"] = "DETERMINISTIC_OFFLINE_FALLBACK"
+                    det["mode"] = "MEASURED_AWAITING_AGENT"
+                    det["claims"] = []
                     self._store(blackboard, det)
                     return det
             self._store(blackboard, llm_res)
@@ -376,7 +377,13 @@ class SpecialistAgent(BaseAgent):
                 impact=int(item.get("impact") or 5),
                 effort=int(item.get("effort") or 3),
             )
-            registered.append(claim.id)
+            registered.append({
+                "claim_id": claim.id,
+                "statement": statement,
+                "recommendation": item.get("recommendation") or "",
+                "evidence_refs": refs,
+                "severity": str(item.get("severity") or "MEDIUM"),
+            })
 
         observations = raw.get("observations") if isinstance(raw.get("observations"), dict) else {}
         self._apply_side_effects(blackboard, observations, raw)
@@ -397,28 +404,16 @@ class SpecialistAgent(BaseAgent):
         observations: Dict[str, Any] = {"mode": "DETERMINISTIC"}
 
         def add(statement: str, severity: Severity, recommendation: str, refs: Optional[List[str]] = None):
+            # Crawl facts stay on the observation record. A missing title, header, or
+            # sitemap is not published as a finding, and the old recommendation string
+            # is not a specialist judgment.
+            del severity, recommendation
             bound = [ref for ref in (refs or []) if ref]
             if not bound:
                 bound = _supporting_evidence_ids(statement, evidence_slice)
-            if not bound and getattr(blackboard, "evidence_store", None) is not None:
-                source_type, selector = _preferred_binding(statement)
-                page_url = pages[0].url if pages else getattr(blackboard, "website_url", None)
-                created = blackboard.evidence_store.add_evidence(
-                    source_type=source_type,
-                    analyzer=self.agent_id,
-                    url=page_url,
-                    selector=selector,
-                    text=statement[:500],
-                    value={"observation": statement[:500], "selector": selector},
-                )
-                bound = [created.id]
-            if not bound:
-                return
-            claims_spec.append({
-                "statement": statement,
-                "severity": severity,
-                "recommendation": recommendation,
-                "refs": bound,
+            observations.setdefault("measured_facts", []).append({
+                "fact": statement,
+                "evidence_refs": bound,
             })
 
         aid = self.agent_id
@@ -479,20 +474,16 @@ class SpecialistAgent(BaseAgent):
                 add(f"{len(multi_h1)} page(s) contain multiple H1 heading tags.", Severity.MEDIUM, "Consolidate heading tags to a single primary H1 per page.")
             missing_title = [p.url for p in pages if not p.title or not p.title.strip()]
             observations["pages_missing_title"] = len(missing_title)
+            observations["title_lengths"] = [len(p.title.strip()) for p in pages if p.title and p.title.strip()]
             if missing_title:
-                add(f"{len(missing_title)} page(s) are missing a title tag.", Severity.HIGH, "Add a unique, keyword-aligned title tag (50-60 characters) to each page.")
-            title_suboptimal = [p.url for p in pages if p.title and (len(p.title.strip()) < 35 or len(p.title.strip()) > 65)]
-            observations["pages_title_suboptimal"] = len(title_suboptimal)
-            if title_suboptimal:
-                add(f"{len(title_suboptimal)} page(s) have title tags outside optimal length (35-65 characters).", Severity.MEDIUM, "Optimize title tags to 50-60 characters to avoid SERP truncation.")
+                add(f"{len(missing_title)} page(s) are missing a title tag.", Severity.HIGH, "")
             missing_meta = [p.url for p in pages if not p.meta_description or not p.meta_description.strip()]
             observations["pages_missing_meta"] = len(missing_meta)
+            observations["meta_lengths"] = [
+                len(p.meta_description.strip()) for p in pages if p.meta_description and p.meta_description.strip()
+            ]
             if missing_meta:
-                add(f"{len(missing_meta)} page(s) are missing a meta description.", Severity.HIGH, "Add an actionable meta description (140-160 characters) with a clear value proposition.")
-            meta_suboptimal = [p.url for p in pages if p.meta_description and (len(p.meta_description.strip()) < 70 or len(p.meta_description.strip()) > 160)]
-            observations["pages_meta_suboptimal"] = len(meta_suboptimal)
-            if meta_suboptimal:
-                add(f"{len(meta_suboptimal)} page(s) have meta descriptions outside recommended length (70-160 characters).", Severity.LOW, "Tune meta descriptions to 140-160 characters for complete SERP snippet display.")
+                add(f"{len(missing_meta)} page(s) are missing a meta description.", Severity.HIGH, "")
             heading_skips = [p.url for p in pages if p.h1 and not p.h2 and p.h3]
             observations["pages_heading_skips"] = len(heading_skips)
             if heading_skips:
@@ -618,21 +609,19 @@ class SpecialistAgent(BaseAgent):
             # Evaluates Information Gain, original data points, and first-party evidence rather than raw word count
             total_data_points = sum((p.content_authority or {}).get("original_data_points", 0) for p in pages)
             total_tables = sum((p.content_authority or {}).get("data_tables_count", 0) for p in pages)
-            avg_ig = (
-                sum((p.content_authority or {}).get("information_gain_score", 50.0) for p in pages) / max(1, len(pages))
-                if pages else 50.0
-            )
-            observations["avg_information_gain"] = round(avg_ig, 1)
+            gain_scores = [
+                value
+                for value in (
+                    (p.content_authority or {}).get("information_gain_score") for p in pages
+                )
+                if isinstance(value, (int, float))
+            ]
+            avg_ig = (sum(gain_scores) / len(gain_scores)) if gain_scores else None
+            observations["avg_information_gain"] = round(avg_ig, 1) if avg_ig is not None else None
             observations["total_original_data_points"] = total_data_points
             observations["total_data_tables"] = total_tables
 
-            if avg_ig < 50.0 and total_data_points < 3:
-                add(
-                    f"Crawled pages show low non-commodity Information Gain ({avg_ig:.0f}/100) and lack original data.",
-                    Severity.HIGH,
-                    "Incorporate proprietary benchmarks, customer case study metrics, and structured comparison tables.",
-                )
-            elif total_data_points == 0:
+            if total_data_points == 0 and pages:
                 add(
                     "Content contains zero original empirical data points or verified statistics.",
                     Severity.MEDIUM,
@@ -868,14 +857,9 @@ class SpecialistAgent(BaseAgent):
             # Evaluates unambiguous brand definition and LLM disambiguation
             h1_first = pages[0].h1[0] if (pages and pages[0].h1) else ""
             desc = pages[0].meta_description if pages else ""
-            unambiguous = bool(h1_first and len(h1_first) > 10 and desc and len(desc) > 30)
-            observations["llm_brand_clarity"] = "HIGH" if unambiguous else "NEEDS_REFINEMENT"
-            if not unambiguous:
-                add(
-                    "Brand identity prose contains marketing ambiguity that hinders zero-shot generative AI extraction.",
-                    Severity.HIGH,
-                    "Anchor the hero fold with an unambiguous declarative statement: '[Company] is a [category] that [solves X] for [target audience]'."
-                )
+            observations["homepage_h1_characters"] = len(h1_first or "")
+            observations["homepage_meta_characters"] = len(desc or "")
+            observations["llm_brand_clarity"] = "not_judged"
 
         elif aid == "geo.llms_txt.v3":
             # Audits presence and compliance of /llms.txt
@@ -890,14 +874,13 @@ class SpecialistAgent(BaseAgent):
 
         elif aid == "geo.extractability.v3":
             # Evaluates factual density vs marketing hyperbole for RAG crawlers
-            avg_word_count = sum(getattr(p, "word_count", 250) or 250 for p in pages) / max(1, len(pages))
-            observations["avg_word_count"] = avg_word_count
-            if avg_word_count < 200:
-                add(
-                    "Hero fold and body prose show low factual density (< 200 words), causing LLM extraction truncation.",
-                    Severity.HIGH,
-                    "Expand primary landing pages with concise, factual feature explanations and structured data points."
-                )
+            numeric_words = [
+                int(value)
+                for value in (getattr(p, "word_count", None) for p in pages)
+                if isinstance(value, (int, float))
+            ]
+            observations["word_counts"] = numeric_words
+            observations["avg_word_count"] = (sum(numeric_words) / len(numeric_words)) if numeric_words else None
 
         elif aid == "geo.synthesis.v3":
             # Evaluates citable soundbites and structured FAQ blocks
@@ -1092,18 +1075,7 @@ class SpecialistAgent(BaseAgent):
             # Featured Snippet & Direct Answer Specialist
             has_faqs = any(getattr(p, "faq_count", 0) > 0 for p in pages)
             observations["pages_with_structured_qa"] = has_faqs
-            if not has_faqs:
-                add(
-                    "Content lacks concise, 40-60 word declarative answer blocks below question headings, reducing featured snippet extractability.",
-                    Severity.MEDIUM,
-                    "Structure key question headings (H2/H3) immediately followed by concise, direct 40-60 word answer summaries before detailed elaborations."
-                )
-            else:
-                add(
-                    "FAQ and direct answer blocks verified: maintain clear definition and step-by-step procedural structures for answer engines.",
-                    Severity.LOW,
-                    "Enforce answer-first formatting across all informational guide pages."
-                )
+            observations["answer_block_judgment"] = "not_written"
 
         elif aid == "aeo.entity_consensus.v3":
             # Universal Entity Authority & Consensus Specialist
@@ -1329,35 +1301,17 @@ class SpecialistAgent(BaseAgent):
             # Checks for conflicting claims across specialists
             observations["contradiction_crosscheck_completed"] = True
 
-        registered = []
-        for spec in claims_spec:
-            refs = [r for r in (spec["refs"] or []) if r]
-            if not refs:
-                continue
-            claim = self.register_claim(
-                blackboard=blackboard,
-                statement=spec["statement"],
-                category=cat,
-                severity=spec["severity"],
-                evidence_refs=refs,
-                confidence=0.95,
-                recommendation=spec["recommendation"],
-            )
-            registered.append(claim.id)
-
         return {
             "agent_id": self.agent_id,
             "status": "completed",
-            "mode": "DETERMINISTIC",
-            "claims": registered,
+            "mode": "MEASURED",
+            "claims": [],
             "observations": observations,
         }
 
     def _merge(self, det: Dict[str, Any], llm: Dict[str, Any]) -> Dict[str, Any]:
-        claims = list(det.get("claims") or [])
-        for cid in llm.get("claims") or []:
-            if cid not in claims:
-                claims.append(cid)
+        # Measurements from the crawl stay in observations. Only the model publishes claims.
+        claims = [item for item in (llm.get("claims") or []) if isinstance(item, dict)]
         obs = dict(det.get("observations") or {})
         obs.update(llm.get("observations") or {})
         status = "completed" if claims or llm.get("status") == "completed" else llm.get("status") or det.get("status")

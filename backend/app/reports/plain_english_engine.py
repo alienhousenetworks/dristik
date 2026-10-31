@@ -1038,7 +1038,7 @@ SECTION_SUBJECT_MAP: Dict[str, Dict[str, str]] = {
     "ch_page_by_page": {
         "subject": "Page-by-Page Audit Inventory & URL Architecture",
         "description": "A URL-level breakdown showing the exact HTTP status codes, title tags, canonical states, and heading outlines across inspected pages.",
-        "why_care": "Provides your engineering and content teams with an actionable, page-by-page checklist to resolve defects without guesswork.",
+        "why_care": "Shows each crawled page with the measurements stored for it and any judgment a specialist actually wrote.",
     },
     "ch_roadmap": {
         "subject": "Strategic Priorities & 90-Day Engineering Roadmap",

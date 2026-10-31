@@ -57,31 +57,19 @@ class DeterministicMetricEngine:
         
         # 1. Overall Score & Category Scores
         scores = report.scores
-        overall_score = float(scores.overall_score) if scores and scores.overall_score is not None else 72.0
-        grade = scores.grade if scores and scores.grade else self._grade_for_score(overall_score)
-        health_label = scores.health_label if scores and scores.health_label else "Calibrated"
+        overall_score = float(scores.overall_score) if scores and scores.overall_score is not None else 0.0
+        grade = scores.grade if scores and scores.grade else (self._grade_for_score(overall_score) if overall_score > 0 else "—")
+        health_label = scores.health_label if scores and scores.health_label else ("Calibrated" if overall_score > 0 else "Unmeasured")
 
         cat_scores: Dict[str, float] = {}
         cat_gaps: Dict[str, float] = {}
         if scores and scores.category_scores:
             for cat_name, cat_obj in scores.category_scores.items():
-                val = float(cat_obj.score) if hasattr(cat_obj, "score") and cat_obj.score is not None else float(cat_obj) if isinstance(cat_obj, (int, float)) else 70.0
+                val = float(cat_obj.score) if hasattr(cat_obj, "score") and cat_obj.score is not None else float(cat_obj) if isinstance(cat_obj, (int, float)) else 0.0
                 cat_key = cat_name if isinstance(cat_name, str) else str(cat_name.value)
                 cat_scores[cat_key] = val
                 benchmark = self.BENCHMARKS.get(cat_key, 80.0)
                 cat_gaps[cat_key] = round(benchmark - val, 1)
-        else:
-            defaults = {
-                "TECHNICAL_SEO": 75.0,
-                "SCHEMA": 68.0,
-                "CONTENT": 74.0,
-                "GEO": 62.0,
-                "UX_CONVERSION": 78.0,
-                "COMPETITIVE": 70.0,
-            }
-            for k, v in defaults.items():
-                cat_scores[k] = v
-                cat_gaps[k] = round(self.BENCHMARKS.get(k, 80.0) - v, 1)
 
         # 2. TTFB Latency Distribution
         ttfb_vals: List[float] = []
@@ -98,17 +86,23 @@ class DeterministicMetricEngine:
                 if p.ttfb_ms is not None and p.ttfb_ms > 0:
                     ttfb_vals.append(float(p.ttfb_ms))
 
-        if not ttfb_vals:
-            ttfb_vals = [175.0, 190.0, 160.0]
-
-        ttfb_sorted = sorted(ttfb_vals)
-        n = len(ttfb_sorted)
-        ttfb_min = round(ttfb_sorted[0], 1)
-        ttfb_max = round(ttfb_sorted[-1], 1)
-        ttfb_median = round(statistics.median(ttfb_sorted), 1)
-        ttfb_mean = round(statistics.mean(ttfb_sorted), 1)
-        p90_idx = int(0.9 * n)
-        ttfb_p90 = round(ttfb_sorted[min(p90_idx, n - 1)], 1)
+        if ttfb_vals:
+            ttfb_sorted = sorted(ttfb_vals)
+            n = len(ttfb_sorted)
+            ttfb_min = round(ttfb_sorted[0], 1)
+            ttfb_max = round(ttfb_sorted[-1], 1)
+            ttfb_median = round(statistics.median(ttfb_sorted), 1)
+            ttfb_mean = round(statistics.mean(ttfb_sorted), 1)
+            p90_idx = int(0.9 * n)
+            ttfb_p90 = round(ttfb_sorted[min(p90_idx, n - 1)], 1)
+            sample_size = float(n)
+        else:
+            ttfb_min = 0.0
+            ttfb_max = 0.0
+            ttfb_median = 0.0
+            ttfb_mean = 0.0
+            ttfb_p90 = 0.0
+            sample_size = 0.0
 
         ttfb_metrics = {
             "min_ms": ttfb_min,
@@ -116,7 +110,7 @@ class DeterministicMetricEngine:
             "median_ms": ttfb_median,
             "mean_ms": ttfb_mean,
             "p90_ms": ttfb_p90,
-            "sample_size": float(n),
+            "sample_size": sample_size,
         }
 
         # 3. Severity Distribution
@@ -139,7 +133,7 @@ class DeterministicMetricEngine:
         post_remediation_score = round(min(100.0, overall_score + potential_gain), 1)
 
         # 5. Generative AI Answer Engine Readiness Ratio
-        geo_score = cat_scores.get("GEO", 60.0)
+        geo_score = cat_scores.get("GEO", 0.0)
         geo_ratio = round(geo_score / 100.0, 2)
 
         # 6. Detailed Metric Objects with Formulas

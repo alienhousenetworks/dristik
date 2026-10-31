@@ -201,12 +201,11 @@ function securityHeaderBars(pages: PageEvidence[]): ChartBar[] {
     if (keys.some((k) => k.includes('x-frame-options'))) xframe += 1;
     if (keys.some((k) => k.includes('x-content-type-options'))) xcontent += 1;
   }
-  const sample = pages.length;
   return [
-    { label: 'HSTS Configured', value: hsts || sample },
-    { label: 'CSP Configured', value: csp || sample },
-    { label: 'X-Frame-Options', value: xframe || sample },
-    { label: 'X-Content-Type', value: xcontent || sample },
+    { label: 'HSTS Configured', value: hsts },
+    { label: 'CSP Configured', value: csp },
+    { label: 'X-Frame-Options', value: xframe },
+    { label: 'X-Content-Type', value: xcontent },
   ];
 }
 
@@ -215,16 +214,26 @@ function intentBars(pages: PageEvidence[]): ChartBar[] {
   let comm = 0;
   let info = 0;
   let trans = 0;
-  pages.forEach((_, idx) => {
-    if (idx % 3 === 0) comm += 1;
-    else if (idx % 3 === 1) info += 1;
-    else trans += 1;
-  });
-  return [
-    { label: 'Commercial Investigation', value: comm },
-    { label: 'Informational Intent', value: info },
-    { label: 'Transactional Intent', value: trans },
-  ];
+  for (const p of pages) {
+    const rawIntent = String((p as any).search_intent || '').toUpperCase();
+    const ptype = (p.page_type || '').toLowerCase();
+    if (rawIntent.includes('COMMERCIAL') || ptype === 'pricing' || ptype === 'product') {
+      comm += 1;
+    } else if (rawIntent.includes('TRANSACTIONAL') || ptype === 'contact' || ptype === 'demo' || ptype === 'checkout') {
+      trans += 1;
+    } else if (rawIntent.includes('INFORMATIONAL') || ptype === 'blog' || ptype === 'docs' || ptype === 'article' || ptype === 'guide') {
+      info += 1;
+    } else if (ptype === 'homepage' || ptype === 'about') {
+      comm += 1;
+    } else {
+      info += 1;
+    }
+  }
+  const bars: ChartBar[] = [];
+  if (comm > 0) bars.push({ label: 'Commercial Investigation', value: comm });
+  if (info > 0) bars.push({ label: 'Informational Intent', value: info });
+  if (trans > 0) bars.push({ label: 'Transactional Intent', value: trans });
+  return bars;
 }
 
 function remediationVelocityBars(report: ExecutiveReport): ChartBar[] {
@@ -239,10 +248,6 @@ function remediationVelocityBars(report: ExecutiveReport): ChartBar[] {
     else if (sev === 'HIGH') p1 += 1;
     else if (sev === 'MEDIUM') p2 += 1;
     else p3 += 1;
-  }
-  if (!p0 && !p1 && !p2 && !p3) {
-    p2 = 3;
-    p3 = 5;
   }
   return [
     { label: 'P0 (48h Critical SLA)', value: p0 },

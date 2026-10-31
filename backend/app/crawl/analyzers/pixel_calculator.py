@@ -68,24 +68,14 @@ def calculate_meta_pixel_width(text: str) -> int:
 
 
 def evaluate_title_pixel_status(text: str) -> Tuple[int, str]:
-    """Returns (pixel_width, status_label: 'optimal' | 'truncated' | 'too_short' | 'missing')"""
+    """Returns (pixel_width, 'missing' or 'measured'). Width is not a compliance grade."""
     if not text or not text.strip():
         return 0, "missing"
-    px = calculate_title_pixel_width(text.strip())
-    if px > GOOGLE_TITLE_MAX_PX:
-        return px, "truncated"
-    if px < GOOGLE_TITLE_MIN_PX:
-        return px, "too_short"
-    return px, "optimal"
+    return calculate_title_pixel_width(text.strip()), "measured"
 
 
 def evaluate_meta_pixel_status(text: str) -> Tuple[int, str]:
-    """Returns (pixel_width, status_label: 'optimal' | 'truncated' | 'too_short' | 'missing')"""
+    """Returns (pixel_width, 'missing' or 'measured'). Width is not a compliance grade."""
     if not text or not text.strip():
         return 0, "missing"
-    px = calculate_meta_pixel_width(text.strip())
-    if px > GOOGLE_META_MAX_PX:
-        return px, "truncated"
-    if px < GOOGLE_META_MIN_PX:
-        return px, "too_short"
-    return px, "optimal"
+    return calculate_meta_pixel_width(text.strip()), "measured"

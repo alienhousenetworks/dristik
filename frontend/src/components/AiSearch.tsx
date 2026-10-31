@@ -11,105 +11,54 @@ interface AiSearchProps {
   onEvaluationsUpdated?: (evaluations: AiSearchQueryEvaluation[]) => void;
 }
 
-const CANONICAL_COMMERCIAL_QUESTIONS = [
-  {
-    key: 'identity',
-    title: '1. Identity & Category',
-    query: 'What does this company do, what is its primary offering, and what category does it belong to?',
-    intent: 'Verify company name, core offering, and industry niche without marketing fluff.',
-    risk: 'Without explicit WebSite and Organization Schema.org, LLMs hallucinate inaccurate adjacent categories.',
-    remediation: 'Deploy schema.jsonld Organization graph and canonical llms.txt entity definitions.'
-  },
-  {
-    key: 'icp',
-    title: '2. Target Audience & ICP',
-    query: 'Who is this product built for, what company sizes qualify, and who should NOT buy this?',
-    intent: 'Verify explicit buyer personas, qualification criteria, and disqualifiers.',
-    risk: 'Vague marketing jargon causes AI engines to omit your brand from specialized buyer vendor shortlists.',
-    remediation: 'Publish character-safe ICP definitions with clear company-size bounds.'
-  },
-  {
-    key: 'pricing',
-    title: '3. Pricing & Commercial Model',
-    query: 'How is this priced, what are the pricing tiers, and is self-serve or sales-led pricing available?',
-    intent: 'Determine whether transparent pricing exists or if answer engines report "Contact Sales" / hallucinate.',
-    risk: 'Perplexity and ChatGPT cite competitors with visible price points over sites that hide pricing behind sales demos.',
-    remediation: 'Publish transparent pricing tiers or starting-at figures in FAQPage microdata.'
-  },
-  {
-    key: 'alternatives',
-    title: '4. Alternatives & Differentiation',
-    query: 'How does this compare against primary market alternatives, and why choose it over competitors?',
-    intent: 'Audit defensible competitive moats vs generic commodity claims.',
-    risk: 'Competitors capture "alternatives to [Your Brand]" queries by publishing explicit comparison tables.',
-    remediation: 'Deploy head-to-head comparison schemas and define unique architectural moats.'
-  },
-  {
-    key: 'trust',
-    title: '5. Trust & Enterprise Proof',
-    query: 'What customer logos, case studies, security certifications, or social proof substantiate credibility?',
-    intent: 'Verify third-party authority signals, SOC2/ISO/GDPR, and enterprise customer testimonials.',
-    risk: 'Absence of verifiable customer proof leads answer engines to label your platform as unverified or high risk.',
-    remediation: 'Include SOC2/GDPR compliance markers and verified customer case metrics in structured copy.'
-  },
-  {
-    key: 'roi',
-    title: '6. ROI & Time-to-Value',
-    query: 'What is the concrete quantifiable business payoff, expected ROI, and time-to-value?',
-    intent: 'Audit whether quantitative business outcomes (e.g. 3x faster, 40% reduction) are backed by evidence.',
-    risk: 'Generative answer engines filter out non-quantified outcome claims as unsubstantiated marketing hyperbole.',
-    remediation: 'Publish specific, evidence-grounded performance metrics with timeframes.'
-  },
-];
-
 const EXTRACTABILITY_PILLARS = [
   {
     name: '1. Entity Clarity',
-    band: 'High',
-    color: 'text-good bg-good/10 border-good/30',
-    desc: 'Unambiguous business name, commercial category, and brand identity declared in high-priority DOM nodes.',
+    band: 'Not judged',
+    color: 'text-ink-600 bg-paper-100 border-line',
+    desc: 'Business name, category, and brand text stored in the crawl. A specialist writes the judgment.',
   },
   {
     name: '2. Claim Clarity',
-    band: 'Moderate',
-    color: 'text-warn bg-warn/10 border-warn/30',
-    desc: 'Specific verifiable capability statements vs unsubstantiated marketing buzzwords.',
+    band: 'Not judged',
+    color: 'text-ink-600 bg-paper-100 border-line',
+    desc: 'Capability statements stored on the page. A missing specialist note is not a moderate grade.',
   },
   {
     name: '3. Direct Answerability',
-    band: 'Moderate',
-    color: 'text-warn bg-warn/10 border-warn/30',
-    desc: 'Can buyer questions be answered directly from on-page copy without requiring LLM extrapolation?',
+    band: 'Not judged',
+    color: 'text-ink-600 bg-paper-100 border-line',
+    desc: 'Whether a buyer question is answered is a specialist judgment, not a fixed score.',
   },
   {
     name: '4. Structured Data',
-    band: 'Deficit',
-    color: 'text-bad bg-bad/10 border-bad/30',
-    desc: 'Schema.org JSON-LD graph (Organization, WebSite, FAQPage, Service) verified in DOM nodes.',
+    band: 'Not judged',
+    color: 'text-ink-600 bg-paper-100 border-line',
+    desc: 'Schema.org types parsed from the DOM. Presence is a measurement. Quality is not filled in here.',
   },
   {
     name: '5. Question Coverage',
-    band: 'Moderate',
-    color: 'text-warn bg-warn/10 border-warn/30',
-    desc: 'On-page coverage across identity, ICP, pricing, alternatives, security compliance, and ROI.',
+    band: 'Not judged',
+    color: 'text-ink-600 bg-paper-100 border-line',
+    desc: 'Questions the crawl or a specialist actually recorded. An empty list is not a sample audit.',
   },
   {
     name: '6. Citation-Ready Passages',
-    band: 'Deficit',
-    color: 'text-bad bg-bad/10 border-bad/30',
-    desc: 'Presence of self-contained 40–60 word quotable definition blocks designed for LLM context retrieval.',
+    band: 'Not judged',
+    color: 'text-ink-600 bg-paper-100 border-line',
+    desc: 'Passages stored on the page. A word-count band is not a citation rate.',
   },
   {
     name: '7. Semantic Consistency',
-    band: 'High',
-    color: 'text-good bg-good/10 border-good/30',
-    desc: 'Absence of conflicting pricing, mismatched capability claims, or broken terminology across pages.',
+    band: 'Not judged',
+    color: 'text-ink-600 bg-paper-100 border-line',
+    desc: 'Conflicts the specialist recorded. Silence is not a high consistency score.',
   },
   {
     name: '8. Source Authority',
-    band: 'Moderate',
-    color: 'text-warn bg-warn/10 border-warn/30',
-    desc: 'Crawler accessibility, canonical domain references, SSL latency, and sitemap completeness.',
+    band: 'Not judged',
+    color: 'text-ink-600 bg-paper-100 border-line',
+    desc: 'Crawl access, canonicals, and sitemap records. Unconnected authority data stays blank.',
   },
 ];
 
@@ -216,7 +165,7 @@ export function AiSearch({ evaluations, geoReadiness, analysisId, onOpenPatchPac
                   On-Page Content &amp; Entity Extractability Audit
                 </h4>
                 <p className="text-xs text-ink-500 mt-1">
-                  Evaluated 100% deterministically from the crawled DOM, schema graph, and content nodes.
+                  Scores and question rows appear only when the audit stored them. An empty table is not a pass.
                 </p>
               </div>
 
@@ -260,7 +209,7 @@ export function AiSearch({ evaluations, geoReadiness, analysisId, onOpenPatchPac
             <div className="space-y-3 pt-3 border-t border-line">
               <div className="flex items-center justify-between">
                 <span className="label text-ink">Commercial Buyer Question Extractability Audit</span>
-                <span className="text-xs font-mono text-ink-500">6 Canonical Commercial Questions</span>
+                <span className="text-xs font-mono text-ink-500">{(geoReadiness?.questions || []).length} stored question(s)</span>
               </div>
               <div className="border border-line rounded-md overflow-hidden">
                 <table className="w-full text-left text-xs border-collapse">
@@ -272,14 +221,13 @@ export function AiSearch({ evaluations, geoReadiness, analysisId, onOpenPatchPac
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-line text-[11px]">
-                    {(geoReadiness?.questions || [
-                      { question_key: 'identity', question: 'What is this company?', status: 'SUPPORTED', evidence_snippet: 'Hero header and primary heading explicitly state category offering.' },
-                      { question_key: 'icp', question: 'Who is this product for?', status: 'PARTIAL', evidence_snippet: 'General audience referenced; lacks explicit company size or qualification bounds.' },
-                      { question_key: 'pricing', question: 'How much does it cost?', status: 'UNSUPPORTED', evidence_snippet: 'No transparent pricing tiers or self-serve figures detected in DOM.' },
-                      { question_key: 'offering', question: 'What does it offer?', status: 'SUPPORTED', evidence_snippet: 'Primary product taxonomy and service offerings listed.' },
-                      { question_key: 'trust', question: 'Can I trust this company?', status: 'PARTIAL', evidence_snippet: 'Client testimonials found; security compliance (SOC2/ISO) missing.' },
-                      { question_key: 'compare', question: 'How does it compare to alternatives?', status: 'UNSUPPORTED', evidence_snippet: 'No competitive differentiation table or moat definition found.' },
-                    ]).map((q, idx) => (
+                    {(geoReadiness?.questions || []).length === 0 ? (
+                      <tr>
+                        <td colSpan={3} className="py-4 px-3 text-ink-500">
+                          No specialist published a question judgment. An empty list is not a pass and not a sample audit.
+                        </td>
+                      </tr>
+                    ) : (geoReadiness?.questions || []).map((q, idx) => (
                       <tr key={idx} className="hover:bg-paper-50">
                         <td className="py-2.5 px-3 font-medium text-ink">{q.question}</td>
                         <td className="py-2.5 px-2">
@@ -291,14 +239,16 @@ export function AiSearch({ evaluations, geoReadiness, analysisId, onOpenPatchPac
                                 ? 'bg-warn/10 text-warn border border-warn/30'
                                 : q.status === 'CONFLICTING'
                                 ? 'bg-paper-100 text-ink-700 border border-line'
-                                : 'bg-bad/10 text-bad border border-bad/30'
+                                : q.status === 'UNSUPPORTED'
+                                ? 'bg-bad/10 text-bad border border-bad/30'
+                                : 'bg-paper-100 text-ink-600 border border-line'
                             }`}
                           >
-                            {q.status}
+                            {q.status || 'Not judged'}
                           </span>
                         </td>
                         <td className="py-2.5 px-3 text-ink-600 font-mono text-[10px]">
-                          {q.evidence_snippet ? `"${q.evidence_snippet}"` : ((q as any).why || 'Crawled sample lacks explicit statement.')}
+                          {q.evidence_snippet ? `"${q.evidence_snippet}"` : ((q as any).why || 'No excerpt stored.')}
                         </td>
                       </tr>
                     ))}
@@ -310,7 +260,7 @@ export function AiSearch({ evaluations, geoReadiness, analysisId, onOpenPatchPac
             {/* Quick Remediation Actions */}
             <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-line text-xs">
               <span className="text-ink-500">
-                Fix extractability gaps directly with verified llms.txt and Schema JSON-LD.
+                A patch file uses stored profile text. It does not invent a ranking fix.
               </span>
               <div className="flex items-center gap-2">
                 {onOpenPatchPack && (

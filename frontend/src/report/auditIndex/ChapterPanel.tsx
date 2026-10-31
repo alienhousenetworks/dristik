@@ -218,7 +218,7 @@ export function ChapterPanel({
   const visual = chapterVisuals(report, number);
   const mix: ChartSpec = {
     title: 'Sub-index evidence states',
-    note: 'How many checklist lines in this chapter landed in each evidence state. This is not a pass rate for URLs that were not fetched.',
+    note: 'How many specialist questions in this chapter have a recorded judgment. This is not a pass rate.',
     bars: evidenceBars(lineStatuses),
   };
   const charts = mix.bars.length ? [mix, ...visual.charts] : visual.charts;

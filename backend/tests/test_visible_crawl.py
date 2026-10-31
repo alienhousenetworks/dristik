@@ -233,9 +233,10 @@ def test_copy_hero_uses_real_paragraph_not_nav():
         BusinessProfile(business_name="ALIENHOUSE NETWORKS", primary_intent=BusinessIntent.SAAS),
         seo,
     )
-    assert copy.suggested.h1 == "Privacy Policy"
-    assert "Software Development" not in (copy.suggested.hero or "")
-    assert copy.suggested.title == "Privacy Policy | ALIENHOUSE NETWORKS"
+    assert copy.suggested is None
+    assert copy.llm_status == "skipped"
+    assert "privacy" in (copy.analysis or "").lower()
+    assert "software development" not in (copy.analysis or "").lower()
 
 
 def test_gsap_opacity_carousel_is_still_scraped():

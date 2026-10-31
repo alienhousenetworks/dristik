@@ -221,8 +221,8 @@ export function SeoOnPageExperience({ report }: SeoOnPageExperienceProps) {
             </div>
             <p className="text-[11px] text-ink-500">
               {titlePx > 580
-                ? '⚠ Exceeds 580px desktop width. Google desktop SERP will truncate with ellipsis.'
-                : '✓ Optimal pixel length. Full title is guaranteed to display on desktop and mobile SERPs.'}
+                ? `${titlePx}px is wider than a 580px desktop title column. Display width varies by device. This is not a compliance grade.`
+                : `${titlePx}px measured against a 580px desktop column. Fitting that column is not a guarantee and not a pass.`}
             </p>
           </div>
 
@@ -244,8 +244,8 @@ export function SeoOnPageExperience({ report }: SeoOnPageExperienceProps) {
             </div>
             <p className="text-[11px] text-ink-500">
               {metaPx > 960
-                ? '⚠ Exceeds 960px snippet boundary. Google may truncate or replace with on-page text.'
-                : '✓ Well within snippet display threshold. Clear and concise search teaser.'}
+                ? `${metaPx}px is wider than a 960px snippet column. Search engines may show other text. This is not a defect score.`
+                : `${metaPx}px measured against a 960px snippet column. The column is a display estimate, not a required length.`}
             </p>
           </div>
         </div>
@@ -263,7 +263,7 @@ export function SeoOnPageExperience({ report }: SeoOnPageExperienceProps) {
             </h3>
           </div>
           <span className="text-xs font-mono font-bold px-2.5 py-0.5 rounded bg-paper-200 text-ink-700">
-            H1 Score: {headings?.h1_health_score ? Math.round(headings.h1_health_score) : 100}/100
+            H1 score: {headings?.h1_health_score != null ? `${Math.round(headings.h1_health_score)}/100` : '—'}
           </span>
         </div>
 
@@ -285,7 +285,7 @@ export function SeoOnPageExperience({ report }: SeoOnPageExperienceProps) {
             }`}>
               {headings?.multiple_h1?.length || 0} pages
             </span>
-            <p className="text-[10px] text-ink-500">Dilutes primary keyword weight</p>
+            <p className="text-[10px] text-ink-500">More than one H1 was stored</p>
           </div>
 
           <div className="p-3.5 rounded border border-line bg-paper-100/60 space-y-1">

@@ -122,17 +122,16 @@ def test_per_page_seo_and_copy_fallback():
         ctas=[],
     )
     seo = audit_page_seo(thin)
-    assert seo.title_status == "too_short"
-    assert seo.meta_status == "missing"
-    assert seo.h1_status == "missing"
-    assert seo.score < 80
+    assert seo.title_status == "present"
+    assert seo.meta_status == "absent"
+    assert seo.h1_status == "absent"
+    assert seo.score is None
 
     copy = fallback_copy_audit(thin, BusinessProfile(business_name="Northwind", primary_intent=BusinessIntent.SAAS), seo)
-    assert copy.suggested.h1
-    assert copy.suggested.title
-    assert copy.suggested.meta_description
-    assert copy.suggested.primary_cta
-    assert any(i.area == "h1" for i in copy.issues)
+    assert copy.suggested is None
+    assert copy.issues == []
+    assert copy.llm_status == "skipped"
+    assert "specialist" in (copy.analysis or "").lower()
 
 
 def test_ssrf_protection():

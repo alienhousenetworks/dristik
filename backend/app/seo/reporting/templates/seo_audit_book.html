@@ -980,6 +980,56 @@ pre {
         </tbody>
       </table>
 
+      {% if pg.has_specialist_copy %}
+      <div style="font-size: 8.5pt; margin: 6pt 0 8pt; background: #f8fafc; border: 1px solid #e2e8f0; padding: 8pt;">
+        <strong style="color: var(--ink);">Copy specialist rewrite</strong>
+        {% if pg.analysis %}
+        <p style="margin: 4pt 0;">{{ pg.analysis }}</p>
+        {% endif %}
+        <table style="font-size: 8pt; margin: 4pt 0;">
+          <tbody>
+            {% if pg.suggested_title %}
+            <tr><th style="width: 22%;">Recommended title</th><td>{{ pg.suggested_title }}</td></tr>
+            {% endif %}
+            {% if pg.suggested_meta %}
+            <tr><th>Recommended description</th><td>{{ pg.suggested_meta }}</td></tr>
+            {% endif %}
+            {% if pg.suggested_h1 %}
+            <tr><th>Recommended H1</th><td>{{ pg.suggested_h1 }}</td></tr>
+            {% endif %}
+            {% if pg.hero %}
+            <tr><th>Recommended hero</th><td>{{ pg.hero }}</td></tr>
+            {% endif %}
+            {% if pg.hook %}
+            <tr><th>First-impression line</th><td>{{ pg.hook }}</td></tr>
+            {% endif %}
+            {% if pg.geo_snippet %}
+            <tr><th>Citation passage</th><td>{{ pg.geo_snippet }}</td></tr>
+            {% endif %}
+            {% if pg.primary_cta %}
+            <tr><th>Call to action</th><td>{{ pg.primary_cta }}</td></tr>
+            {% endif %}
+          </tbody>
+        </table>
+        {% if pg.body_rewrite %}
+        <p style="white-space: pre-wrap; margin: 4pt 0;">{{ pg.body_rewrite }}</p>
+        {% endif %}
+        {% if pg.sections %}
+        <p style="margin: 8pt 0 2pt;"><strong>Copy for the sections on this URL</strong></p>
+        {% endif %}
+        {% for sec in pg.sections %}
+        <p style="margin: 6pt 0 2pt;"><strong>{{ sec.name }}</strong></p>
+        <p style="white-space: pre-wrap; margin: 0 0 4pt;">{{ sec.copy }}</p>
+        {% endfor %}
+        {% for faq in pg.faqs %}
+        <p style="margin: 4pt 0 0;"><strong>Q: {{ faq.question }}</strong></p>
+        <p style="margin: 0 0 4pt;">A: {{ faq.answer }}</p>
+        {% endfor %}
+      </div>
+      {% else %}
+      <p style="font-size: 8pt; color: var(--muted); margin: 4pt 0 8pt;">The copy specialist did not write a rewrite for this URL.</p>
+      {% endif %}
+
       {% if pg.top_issues %}
       <div style="font-size: 8.5pt; margin-bottom: 4pt;">
         <strong style="color: var(--critical);">Verified Page Defects:</strong>

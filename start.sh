@@ -152,14 +152,17 @@ validate_environment() {
     fi
 
     # Check backend virtual environment
-    if [ ! -d "${BACKEND_DIR}/venv" ]; then
-        echo -e "${YELLOW}⚠ Virtual environment not found in backend/venv. Creating...${RESET}"
-        python3 -m venv "${BACKEND_DIR}/venv"
-        echo -e "  ${GREEN}✓${RESET} Created virtualenv"
+    if [ ! -d "${BACKEND_DIR}/venv" ] || [ ! -f "${BACKEND_DIR}/venv/.installed" ]; then
+        if [ ! -d "${BACKEND_DIR}/venv" ]; then
+            echo -e "${YELLOW}⚠ Virtual environment not found in backend/venv. Creating...${RESET}"
+            python3 -m venv "${BACKEND_DIR}/venv"
+            echo -e "  ${GREEN}✓${RESET} Created virtualenv"
+        fi
         echo -e "${DIM}  Installing backend requirements...${RESET}"
-        "${BACKEND_DIR}/venv/bin/pip" install --quiet --upgrade pip
-        "${BACKEND_DIR}/venv/bin/pip" install --quiet -r "${BACKEND_DIR}/requirements.txt"
+        "${BACKEND_DIR}/venv/bin/pip" install --upgrade pip
+        "${BACKEND_DIR}/venv/bin/pip" install -r "${BACKEND_DIR}/requirements.txt"
         PLAYWRIGHT_SKIP_FFMPEG_INSTALL=1 "${BACKEND_DIR}/venv/bin/playwright" install chromium 2>/dev/null || true
+        touch "${BACKEND_DIR}/venv/.installed"
         echo -e "  ${GREEN}✓${RESET} Backend dependencies installed"
     fi
 

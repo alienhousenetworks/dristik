@@ -400,6 +400,13 @@ export interface NormalizedReport {
       hook?: string;
       geoSnippet?: string;
       suggestedTitle?: string;
+      suggestedH1?: string;
+      hero?: string;
+      primaryCta?: string;
+      bodyRewrite?: string;
+      analysis?: string;
+      sections?: Array<{ name: string; copy: string }>;
+      faqs?: Array<{ question: string; answer: string }>;
       currentTitle?: string;
       suggestedDescription?: string;
       currentDescription?: string;
@@ -933,9 +940,34 @@ export function normalizeExecutiveReport(report: ExecutiveReport): NormalizedRep
 
     pages: {
       inventory: rawPages.map((page) => {
-        const rep = rawPageReports.find((r) => r.url === page.url);
+        const pageKey = (page.url || '').trim().replace(/\/+$/, '').toLowerCase();
+        const rep = rawPageReports.find((r) => {
+          const reportKey = (r.url || '').trim().replace(/\/+$/, '').toLowerCase();
+          return r.url === page.url || reportKey === pageKey;
+        });
         const routePath = page.url.replace(/^https?:\/\/[^/]+/, '') || '/';
         const sug = rep?.copywriting?.suggested as any;
+        const text = (...values: unknown[]) => {
+          const found = values.find((value) => typeof value === 'string' && value.trim());
+          return typeof found === 'string' ? found.trim() : undefined;
+        };
+        const written = rep?.copywriting?.llm_status === 'ok';
+        const sections = Array.isArray(sug?.sections)
+          ? sug.sections
+              .map((section: any) => ({
+                name: text(section?.section_name, section?.name) || 'Section',
+                copy: text(section?.suggested_copy, section?.rewrite, section?.copy) || '',
+              }))
+              .filter((section: { copy: string }) => section.copy)
+          : [];
+        const faqs = Array.isArray(sug?.faq_items)
+          ? sug.faq_items
+              .map((faq: any) => ({
+                question: text(faq?.question) || '',
+                answer: text(faq?.answer) || '',
+              }))
+              .filter((faq: { question: string; answer: string }) => faq.question || faq.answer)
+          : [];
 
         return {
           url: page.url,
@@ -945,12 +977,19 @@ export function normalizeExecutiveReport(report: ExecutiveReport): NormalizedRep
           wordCount: page.word_count || 0,
           ttfbMs: page.ttfb_ms,
           seoScore: rep?.seo?.score != null ? Math.round(rep.seo.score) : null,
-          copyScore: rep?.copywriting?.score != null ? Math.round(rep.copywriting.score) : null,
-          hook: sug?.hook_3sec,
-          geoSnippet: sug?.geo_snippet,
-          suggestedTitle: sug?.title_tag,
+          copyScore: written && rep?.copywriting?.score != null ? Math.round(rep.copywriting.score) : null,
+          hook: text(sug?.hook_3sec, sug?.hook),
+          geoSnippet: text(sug?.geo_snippet, sug?.snippet),
+          suggestedTitle: text(sug?.title, sug?.title_tag, sug?.proposed_title, sug?.recommended_title),
+          suggestedH1: text(sug?.h1, sug?.headline),
+          hero: text(sug?.hero, sug?.hero_subhead),
+          primaryCta: text(sug?.primary_cta, sug?.cta),
+          bodyRewrite: text(sug?.body_rewrite, sug?.full_rewrite),
+          analysis: written ? text(rep?.copywriting?.analysis) : undefined,
+          sections,
+          faqs,
           currentTitle: page.title,
-          suggestedDescription: sug?.meta_description,
+          suggestedDescription: text(sug?.meta_description, sug?.description, sug?.meta),
           currentDescription: page.meta_description,
         };
       }),

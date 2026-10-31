@@ -103,7 +103,7 @@ def test_grounded_remediation_patcher_url_specific():
     assert title_patch is not None
     assert "<title>" in title_patch.after_snippet
     assert "Acme Cloud" in title_patch.after_snippet
-    assert len(title_patch.after_snippet.replace("<title>", "").replace("</title>", "")) <= 60
+    assert "guaranteed" not in title_patch.after_snippet.lower()
 
     # 2. Meta description patch for /about
     meta_patch = next((p for p in patches if "meta description" in p.title.lower() and "about" in p.title.lower()), None)

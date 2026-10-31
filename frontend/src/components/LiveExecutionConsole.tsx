@@ -1466,7 +1466,13 @@ export function LiveExecutionConsole({ run, onRefreshRun }: LiveExecutionConsole
                         <span className="text-ink-400">
                           Mode:{' '}
                           <strong className="text-ink-600 font-sans">
-                            {ag.mode === 'DETERMINISTIC' ? 'Deterministic AST' : 'Hybrid Auditor'}
+                            {ag.mode === 'DETERMINISTIC' || ag.mode === 'MEASURED'
+                              ? 'Measured'
+                              : ag.mode === 'MEASURED_AWAITING_AGENT'
+                                ? 'Awaiting specialist'
+                                : ag.mode === 'OBSERVED'
+                                  ? 'Specialist judgment'
+                                  : (ag.mode || 'Specialist')}
                           </strong>
                         </span>
                         <span className="px-2 py-0.5 rounded bg-paper-200 text-pine font-semibold">

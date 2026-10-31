@@ -353,4 +353,48 @@ describe('NormalizedReport Model & Zero-Fake Enforcer', () => {
     expect(normalized.appendices.evidenceLedger.map((item) => item.hashStatus)).toEqual(['SHARED_SNAPSHOT', 'SHARED_SNAPSHOT']);
     expect(normalized.appendices.evidenceLedger.every((item) => item.sha256 == null)).toBe(true);
   });
+
+  it('puts the copy specialist title on the PDF page inventory', () => {
+    const normalized = normalizeExecutiveReport({
+      ...mockReport,
+      page_reports: [
+        {
+          url: 'https://enterprise-analytics.io',
+          copywriting: {
+            llm_status: 'ok',
+            score: 81,
+            analysis: 'Name the product in the title.',
+            suggested: {
+              title: 'Enterprise Analytics | Commercial Intelligence',
+              meta_description: 'Commercial intelligence for engineering teams.',
+              h1: 'Commercial intelligence for the teams who already buy it',
+              hook_3sec: 'See pipeline risk before the quarter closes.',
+              geo_snippet: 'Enterprise Analytics is a commercial intelligence platform.',
+              sections: [{ section_name: 'Hero', suggested_copy: 'One record for the pipeline the team already runs.' }],
+            },
+          },
+        },
+        {
+          url: 'https://enterprise-analytics.io/solutions',
+          copywriting: {
+            llm_status: 'ok',
+            suggested: {
+              title_tag: 'Enterprise Analytics solutions',
+            },
+          },
+        },
+      ],
+    } as ExecutiveReport);
+
+    const home = normalized.pages.inventory.find((page) => page.path === '/');
+    const solutions = normalized.pages.inventory.find((page) => page.path === '/solutions');
+    expect(home?.suggestedTitle).toBe('Enterprise Analytics | Commercial Intelligence');
+    expect(home?.suggestedDescription).toContain('Commercial intelligence');
+    expect(home?.hook).toContain('pipeline risk');
+    expect(home?.suggestedH1).toContain('Commercial intelligence');
+    expect(home?.analysis).toContain('Name the product');
+    expect(home?.sections?.[0].copy).toContain('One record');
+    expect(solutions?.suggestedTitle).toBe('Enterprise Analytics solutions');
+    expect(home?.suggestedTitle).not.toContain('Official Enterprise Architecture');
+  });
 });

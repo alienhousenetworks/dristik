@@ -22,7 +22,7 @@ export function Chapter05Conversion({
   const copySuite = conversion.characterSafeCopy;
   const headlineWords = countWords(copySuite?.hero_headline);
   const blockWords = countWords(`${copySuite?.hero_headline || ''} ${copySuite?.hero_subhead || ''}`);
-  const blockStatus = blockWords >= 40 && blockWords <= 60 ? 'within 40–60' : blockWords < 40 ? 'under 40' : 'over 60';
+  const blockStatus = blockWords ? `${blockWords} words measured` : 'not measured';
   const detailsPageNumber = typeof pageNumber === 'number' ? pageNumber + 1 : pageNumber;
 
   return (
@@ -153,7 +153,7 @@ export function Chapter05Conversion({
                 </p>
                 {copySuite?.hero_subhead && (
                   <p className="font-mono text-[7.5pt] text-ink-500">
-                    Headline and subhead together: {blockWords} words ({blockStatus} for the 40–60 word block). The headline count above is only the H1.
+                    Headline and subhead together: {blockStatus}. The headline count above is only the H1.
                   </p>
                 )}
               </div>

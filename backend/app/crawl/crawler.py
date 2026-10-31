@@ -675,7 +675,7 @@ class CrawlerService:
                     t_px, t_status = evaluate_title_pixel_status(meta_res.get("title") or "")
                     m_px, m_status = evaluate_meta_pixel_status(meta_res.get("meta_description") or "")
                     w_cnt = html_res.get("word_count", 0)
-                    is_thin = bool(w_cnt < 250 and page_type not in ("contact", "legal"))
+                    is_thin = False
 
                     return PageEvidence(
                         url=page_url,

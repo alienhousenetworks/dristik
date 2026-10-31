@@ -348,37 +348,37 @@ async def run_public_grade(raw_domain: str, client: Optional[httpx.AsyncClient] 
             title_text = soup.title.string.strip()
         title_length = len(title_text or "")
         if title_text:
-            title_status = "optimal" if 45 <= title_length <= 65 else ("short" if title_length < 45 else "long")
+            title_status = "present"
         else:
-            title_status = "missing"
+            title_status = "absent"
             add_finding(
                 "ev_title_missing",
                 "Homepage title is missing",
                 "Machine readability",
                 "HIGH",
                 "The fetched HTML has no title text.",
-                "Add a unique title that names the page.",
+                "No specialist wrote a title. The fetch recorded none.",
                 home.url,
             )
         checks_run.append("title")
         provenance_for("title", title_text, home.url)
-        readability_parts.append(bool(title_text) and title_status == "optimal")
+        readability_parts.append(bool(title_text))
 
         meta_desc = soup.find("meta", attrs={"name": re.compile(r"^description$", re.I)})
         if meta_desc and meta_desc.get("content"):
             desc_text = str(meta_desc.get("content")).strip()
         desc_length = len(desc_text or "")
         if desc_text:
-            desc_status = "optimal" if 130 <= desc_length <= 165 else ("short" if desc_length < 130 else "long")
+            desc_status = "present"
         else:
-            desc_status = "missing"
+            desc_status = "absent"
             add_finding(
                 "ev_description_missing",
                 "Meta description is missing",
                 "Machine readability",
                 "MEDIUM",
                 "The fetched homepage has no meta description.",
-                "Add a meta description written from the page's actual offer.",
+                "No specialist wrote a meta description. The fetch recorded none.",
                 home.url,
             )
         checks_run.append("meta_description")

@@ -25,15 +25,19 @@ class ExecutiveNarrativeSynthesizer:
         elif topic == "overall_diagnostic":
             return f"{domain} Scores {overall}/100 [Grade {metrics.grade}] Across 8 Growth Pillars"
         elif topic == "tri_perspective":
-            if metrics.category_scores.get("GEO", 70.0) < 65.0:
+            if metrics.category_scores.get("GEO", 0.0) < 65.0:
                 return "Tri-Perspective Divergence: Technical Foundation Strong, Generative Citations Impaired"
             return "Tri-Perspective Diagnostic: Cross-Evaluating Visitor Experience, Crawler Access, and AI Citability"
         elif topic == "pillars_radar":
-            gap_cat = max(metrics.category_gaps.items(), key=lambda x: x[1])[0] if metrics.category_gaps else "GEO"
-            gap_val = metrics.category_gaps.get(gap_cat, 18.0)
-            return f"8-Pillar Scorecard Reveals Primary Deficit in {gap_cat} (-{gap_val} pts vs Benchmark)"
+            if metrics.category_gaps:
+                gap_cat = max(metrics.category_gaps.items(), key=lambda x: x[1])[0]
+                gap_val = metrics.category_gaps.get(gap_cat, 0.0)
+                return f"8-Pillar Scorecard Reveals Primary Deficit in {gap_cat} (-{gap_val} pts vs Benchmark)"
+            return "8-Pillar Scorecard: Comprehensive Growth and Architecture Diagnostic"
         elif topic == "http_latency":
-            med = metrics.ttfb_metrics.get("median_ms", 175.0)
+            med = metrics.ttfb_metrics.get("median_ms", 0.0)
+            if med <= 0:
+                return "Crawl Latency (TTFB): Unmeasured During Audit Run"
             status_word = "Meets" if med <= 200.0 else "Exceeds"
             return f"Median TTFB of {med}ms {status_word} 200ms Target Across Discovered Routes"
         elif topic == "geo_answer_engine":
@@ -71,8 +75,10 @@ class ExecutiveNarrativeSynthesizer:
                 delta_clause = "reflects solid infrastructure performance."
             return f"Read: Overall score of {overall}/100 {delta_clause}"
         elif topic == "http_latency":
-            med = metrics.ttfb_metrics.get("median_ms", 175.0)
-            p90 = metrics.ttfb_metrics.get("p90_ms", 190.0)
+            med = metrics.ttfb_metrics.get("median_ms", 0.0)
+            p90 = metrics.ttfb_metrics.get("p90_ms", 0.0)
+            if med <= 0:
+                return "Read: Server latency was not captured during this crawl run."
             latency_eval = "demonstrating strong server-side responsiveness" if p90 <= 300.0 else "indicating latency variance across complex server routes"
             return f"Read: 90% of requests complete within {p90}ms (median {med}ms), {latency_eval}."
         elif topic == "geo_answer_engine":

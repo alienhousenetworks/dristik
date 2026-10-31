@@ -1000,7 +1000,7 @@ export interface SuggestedCopy {
 }
 
 export interface PageSeoAudit {
-  score: number;
+  score: number | null;
   title_status: string;
   title_length: number;
   meta_status: string;
@@ -1054,7 +1054,7 @@ export interface PageReport {
   url: string;
   page_type: string;
   title?: string;
-  overall_score: number;
+  overall_score: number | null;
   seo: PageSeoAudit;
   copywriting: PageCopyAudit;
   ux: PageUxSignals;

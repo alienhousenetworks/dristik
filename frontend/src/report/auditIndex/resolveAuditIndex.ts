@@ -67,7 +67,7 @@ function specialist(
   if (evidence) {
     return {
       status: 'MEASURED',
-      summary: `The crawl found evidence of ${label}. The rest of that specialist checklist was not run.`,
+      summary: `The crawl found evidence of ${label}. The specialist did not publish the rest of this chapter.`,
       coverage: sampleLine(ctx),
     };
   }

@@ -15,71 +15,30 @@ from typing import Dict, Any, List, Tuple, Optional
 from app.domain.models import BusinessProfile, CommercialQueryEvaluation, CharacterSafeCopy
 
 def generate_character_safe_copy(bp: Optional[BusinessProfile], website_url: str) -> CharacterSafeCopy:
-    biz_name = (
-        bp.business_name
-        if bp and bp.business_name and bp.business_name not in ["Unknown", "Unknown Business"]
-        else "Target Platform"
-    )
-    niche = bp.niche if bp and bp.niche else "Enterprise Technology & Infrastructure"
-    val_prop = (
-        bp.value_proposition
-        if bp and bp.value_proposition
-        else f"High-performance {niche.lower()} and scalable enterprise solutions."
-    )
-    audience = bp.target_audience if bp and bp.target_audience else "growth teams and industry leaders"
-
-    # 1. Title: Strictly enforce 50 - 60 characters without ellipsis
-    raw_title = f"{biz_name} — {niche} Platform"
-    if len(raw_title) < 50:
-        raw_title = f"{biz_name} — Enterprise {niche} & Solutions"
-    if len(raw_title) < 50:
-        raw_title = f"{biz_name} — High-Performance {niche} Platform"
-    if len(raw_title) > 60:
-        from app.remediation.serp_text import fit_serp_text
-        raw_title = fit_serp_text(raw_title, 60)
-    title = raw_title[:60].strip()
-    t_len = len(title)
-    t_status = "compliant" if 50 <= t_len <= 60 else "too_short" if t_len < 50 else "too_long"
-
-    # 2. Meta Description: Strictly enforce 140 - 160 characters without ellipsis
-    base_desc = f"{biz_name} delivers {val_prop.strip('.')}."
-    if len(base_desc) < 140:
-        base_desc = (
-            f"{biz_name} delivers {val_prop.strip('.')}. "
-            f"Engineered for {audience}. "
-            f"Discover how {biz_name} accelerates enterprise outcomes today."
-        )
-    if len(base_desc) > 160:
-        from app.remediation.serp_text import fit_serp_text
-        base_desc = fit_serp_text(base_desc, 160)
-    meta_desc = base_desc[:160].strip()
-    m_len = len(meta_desc)
-    m_status = "compliant" if 140 <= m_len <= 160 else "too_short" if m_len < 140 else "too_long"
-
-    # 3. Hero Headline + Subhead: Enforce 40 - 60 words
-    headline = f"The Definitive {niche} for High-Growth Enterprises"
-    subhead = (
-        f"{biz_name} eliminates guesswork by delivering verifiable {val_prop.lower().strip('.')}. "
-        f"Designed specifically for {audience}, "
-        f"our platform provides complete transparency, guaranteed precision, and immediate time-to-value without operational friction."
-    )
-    total_words = len((headline + " " + subhead).split())
-    h_status = "compliant" if 40 <= total_words <= 60 else "under_length" if total_words < 40 else "over_length"
-
-    cta = (bp.primary_cta if bp and bp.primary_cta else None) or "Explore Enterprise Platform"
-
+    """Observed profile text only. A character count is not a compliance grade."""
+    del website_url
+    biz_name = ""
+    if bp and bp.business_name and bp.business_name not in ["Unknown", "Unknown Business"]:
+        biz_name = bp.business_name.strip()
+    niche = (bp.niche or "").strip() if bp and bp.niche else ""
+    val_prop = (bp.value_proposition or "").strip() if bp and bp.value_proposition else ""
+    title = " — ".join(part for part in (biz_name, niche) if part)
+    headline = biz_name
+    subhead = val_prop
+    total_words = len(f"{headline} {subhead}".split()) if (headline or subhead) else 0
+    cta = (bp.primary_cta or "").strip() if bp and bp.primary_cta else ""
     return CharacterSafeCopy(
         title=title,
-        title_char_count=t_len,
-        title_status=t_status,
-        meta_description=meta_desc,
-        meta_char_count=m_len,
-        meta_status=m_status,
+        title_char_count=len(title),
+        title_status="unjudged" if title else "not_written",
+        meta_description=val_prop,
+        meta_char_count=len(val_prop),
+        meta_status="unjudged" if val_prop else "not_written",
         hero_headline=headline,
         hero_subhead=subhead,
         hero_word_count=total_words,
-        hero_status=h_status,
-        primary_cta=cta
+        hero_status="unjudged" if total_words else "not_written",
+        primary_cta=cta,
     )
 
 def _get_canonical_qa_items(
@@ -87,72 +46,19 @@ def _get_canonical_qa_items(
     website_url: str,
     commercial_evals: List[CommercialQueryEvaluation]
 ) -> List[Dict[str, str]]:
-    clean_url = website_url.rstrip("/")
-    biz_name = (
-        bp.business_name
-        if bp and bp.business_name and bp.business_name not in ["Unknown", "Unknown Business"]
-        else "Target Platform"
-    )
-    niche = bp.niche if bp and bp.niche else "Enterprise Technology"
-    val_prop = (
-        bp.value_proposition
-        if bp and bp.value_proposition
-        else "High-performance enterprise solutions with verified reliability."
-    )
-    audience = bp.target_audience if bp and bp.target_audience else "enterprise software and growth leaders"
-
-    eval_map = {ev.question_key: (ev.after_answer or ev.before_answer) for ev in commercial_evals if ev.question_key}
-
-    items = [
-        {
-            "key": "identity",
-            "question": f"What does {biz_name} do and what category does it belong to?",
-            "answer": eval_map.get(
-                "identity",
-                f"{biz_name} provides {niche} solutions delivering {val_prop}. The platform is purpose-built for {audience}."
-            )
-        },
-        {
-            "key": "icp",
-            "question": f"Who is {biz_name} built for, what company sizes qualify, and who should NOT buy?",
-            "answer": eval_map.get(
-                "icp",
-                f"{biz_name} is engineered for {audience} seeking verified {niche} outcomes, tailored to organizations with defined operational requirements."
-            )
-        },
-        {
-            "key": "pricing",
-            "question": f"How is {biz_name} priced, what are the tiers, and is self-serve or custom pricing available?",
-            "answer": eval_map.get(
-                "pricing",
-                f"{biz_name} provides commercial engagement options for its {niche} solutions. Direct pricing details, tier breakdowns, and custom agreements are coordinated directly via {clean_url}."
-            )
-        },
-        {
-            "key": "alternatives",
-            "question": f"How does {biz_name} compare against primary market alternatives, and why choose it?",
-            "answer": eval_map.get(
-                "alternatives",
-                f"{biz_name} differentiates its offerings within {niche} by tailoring solutions specifically for {audience}, delivering {val_prop.lower().strip('.')}."
-            )
-        },
-        {
-            "key": "trust",
-            "question": f"What customer proof, certifications, or security standards substantiate credibility for {biz_name}?",
-            "answer": eval_map.get(
-                "trust",
-                f"{biz_name} maintains operational standards, data privacy protections, and service reliability aligned with industry requirements for {niche} platforms. Detailed compliance documentation is accessible via {clean_url}."
-            )
-        },
-        {
-            "key": "roi",
-            "question": f"What is the concrete quantifiable business payoff and time-to-value with {biz_name}?",
-            "answer": eval_map.get(
-                "roi",
-                f"Deployments of {biz_name} enable {audience} to streamline operations, enhance {niche} workflows, and achieve measurable business impact."
-            )
-        }
-    ]
+    """Only answers a specialist or the crawl already stored. Missing answers are omitted."""
+    del bp, website_url
+    items: List[Dict[str, str]] = []
+    for ev in commercial_evals or []:
+        answer = (ev.after_answer or ev.before_answer or "").strip()
+        question = (ev.buyer_query or ev.question_title or "").strip()
+        if not answer or not question:
+            continue
+        items.append({
+            "key": ev.question_key or question,
+            "question": question,
+            "answer": answer,
+        })
     return items
 
 def build_patch_pack_files(
@@ -545,7 +451,7 @@ Sitemap: {clean_url}/sitemap.xml
 | File | Purpose | Target Destination |
 | :--- | :--- | :--- |
 | `schema.jsonld` | Multi-entity Schema graph (Org + WebSite + Service + FAQ) | Injected into `<head>` inside `<script type="application/ld+json">` |
-| `metadata.html` | Character-safe Title (50-60), Meta (140-160), OG, Twitter, Robots | Replace current `<title>` and `<meta>` tags in `<head>` |
+| `metadata.html` | Observed title and meta text. Character counts are not a required band. | Review before replacing live `<title>` and `<meta>` tags |
 | `faq.html` | Semantic HTML5 `<details><summary>` accordion with microdata | Embed inside Homepage or `/pricing` page layout |
 | `llms.txt` | Standardized AI agent reference file | Upload directly to `{clean_url}/llms.txt` (in `/public/llms.txt`) |
 | `robots.txt` | Directives allowing GPTBot, PerplexityBot, ClaudeBot, etc. | Append to `{clean_url}/robots.txt` |
@@ -661,30 +567,11 @@ add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsaf
     # -------------------------------------------------------------------------
     # 7. geo_definitions.html — 40-60 Word Answer-First Definition Blocks
     # -------------------------------------------------------------------------
-    geo_definitions_html = f"""<!-- Dristik AI GEO Answer-First Definitions (40-60 Words per High-Intent Buyer Question) -->
-<!-- Designed for direct extraction by ChatGPT Search, Perplexity, Claude, and Google AI Overviews -->
-
-<section class="geo-definitions-container" style="max-width: 820px; margin: 2rem auto; font-family: system-ui, -apple-system, sans-serif;">
-  <article class="geo-definition-card" style="margin-bottom: 2rem; border-left: 4px solid #4f46e5; padding-left: 1.5rem;">
-    <h2 style="font-size: 1.3rem; font-weight: 700; color: #1e1b4b; margin-bottom: 0.5rem;">What is {biz_name}?</h2>
-    <p style="font-size: 1rem; line-height: 1.6; color: #374151;">
-      {biz_name} is an enterprise {niche} platform engineered to {val_prop.lower().strip('.')}. Designed specifically for {audience}, {biz_name} provides comprehensive operational transparency, verified data accuracy, and rapid deployment to eliminate performance bottlenecks and accelerate enterprise revenue growth.
-    </p>
-  </article>
-
-  <article class="geo-definition-card" style="margin-bottom: 2rem; border-left: 4px solid #059669; padding-left: 1.5rem;">
-    <h2 style="font-size: 1.3rem; font-weight: 700; color: #064e3b; margin-bottom: 0.5rem;">Who is {biz_name} for?</h2>
-    <p style="font-size: 1rem; line-height: 1.6; color: #374151;">
-      {biz_name} is built for {audience} who require enterprise-grade reliability, compliance, and deterministic execution. Teams choose {biz_name} when legacy tools fail to deliver measurable business outcomes, complex integrations require seamless interoperability, and continuous verification is critical for mission success.
-    </p>
-  </article>
-
-  <article class="geo-definition-card" style="margin-bottom: 2rem; border-left: 4px solid #d97706; padding-left: 1.5rem;">
-    <h2 style="font-size: 1.3rem; font-weight: 700; color: #78350f; margin-bottom: 0.5rem;">How does {biz_name} compare to alternatives?</h2>
-    <p style="font-size: 1rem; line-height: 1.6; color: #374151;">
-      {biz_name} differentiates its {niche} offerings through specialized solutions engineered specifically for {audience}. By delivering {val_prop.lower().strip('.')}, {biz_name} ensures direct operational alignment, high service reliability, and dedicated support.
-    </p>
-  </article>
+    observed_offer = val_prop.strip() if val_prop else "No value proposition was stored. A specialist did not write a definition."
+    geo_definitions_html = f"""<!-- Observed profile text only. This file is not a word-count regulation and not a citation promise. -->
+<section>
+  <h2>Stored offer for {biz_name}</h2>
+  <p>{observed_offer}</p>
 </section>
 """
 

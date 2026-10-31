@@ -1317,7 +1317,7 @@ export function Big4AuditReport({
               </div>
               <p className="text-xs text-ink-700 leading-relaxed">
                 What Dristik verifies directly from the crawled website itself: entity clarity, claim specificity, direct answerability,
-                Schema.org JSON-LD grounding, 40–60 word quotable passages, and semantic consistency.
+                Schema.org JSON-LD found in the crawl, passage text stored on the page, and semantic consistency. A word-count band is not a citation score.
               </p>
             </div>
 
@@ -1787,7 +1787,9 @@ export function Big4AuditReport({
               </thead>
               <tbody className="divide-y divide-line">
                 {pages.slice(0, 8).map((page) => {
-                  const pageRep = pageReports.find((pr) => pr.url === page.url);
+                  const pageKey = (page.url || '').trim().replace(/\/+$/, '').toLowerCase();
+                  const pageRep = pageReports.find((pr) => pr.url === page.url || (pr.url || '').trim().replace(/\/+$/, '').toLowerCase() === pageKey);
+                  const suggestedTitle = pageRep?.copywriting?.suggested?.title;
                   return (
                     <tr key={page.url} className="hover:bg-paper-100">
                       <td className="p-3 font-mono text-[11px] text-ink max-w-[200px] truncate">
@@ -1815,9 +1817,14 @@ export function Big4AuditReport({
                         <div className="text-[10px] text-ink-500 mt-0.5 truncate">
                           H1: {page.h1?.[0] || 'Missing H1'}
                         </div>
+                        {suggestedTitle && (
+                          <div className="text-[10px] text-ink-700 font-medium mt-0.5 break-words">
+                            Title: {suggestedTitle}
+                          </div>
+                        )}
                         {pageRep?.copywriting?.suggested?.h1 && (
-                          <div className="text-[10px] text-ink-700 font-medium truncate mt-0.5">
-                            Rec: {pageRep.copywriting.suggested.h1}
+                          <div className="text-[10px] text-ink-700 font-medium mt-0.5 break-words">
+                            H1: {pageRep.copywriting.suggested.h1}
                           </div>
                         )}
                       </td>
@@ -1994,8 +2001,8 @@ export function Big4AuditReport({
           {/* Google SERP Pixel Width & Truncation Risk Ribbon */}
           <div className="mt-4 p-3 border border-line bg-paper-100 rounded">
             <div className="flex items-center justify-between text-xs font-mono font-bold uppercase text-ink-700 mb-2">
-              <span>Google SERP Pixel Truncation Compliance (Arial Font Metrics)</span>
-              <span className="text-[10px] text-ink-700 font-normal">Desktop Viewport Standards</span>
+              <span>Measured title and snippet width</span>
+              <span className="text-[10px] text-ink-700 font-normal">580px and 960px are display columns, not a grade</span>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs font-mono">
               <div className="p-2 bg-paper-50 border border-line rounded flex justify-between items-center">
@@ -2006,11 +2013,17 @@ export function Big4AuditReport({
                   </span>
                 </div>
                 <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                  (metaRollup?.truncated_pixel_titles?.length ?? 0) === 0
-                    ? 'bg-good/10 text-good'
+                  !metaRollup
+                    ? 'bg-paper-200 text-ink-600'
+                    : (metaRollup.truncated_pixel_titles?.length || 0) === 0
+                    ? 'bg-paper-200 text-ink-700'
                     : 'bg-warn/10 text-warn'
                 }`}>
-                  {(metaRollup?.truncated_pixel_titles?.length ?? 0) === 0 ? '✓ Compliant' : 'Clipping Risk'}
+                  {!metaRollup
+                    ? 'Not measured'
+                    : (metaRollup.truncated_pixel_titles?.length || 0) === 0
+                    ? 'None over 580px'
+                    : 'Wider than 580px'}
                 </span>
               </div>
               <div className="p-2 bg-paper-50 border border-line rounded flex justify-between items-center">
@@ -2021,11 +2034,17 @@ export function Big4AuditReport({
                   </span>
                 </div>
                 <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                  (metaRollup?.truncated_pixel_descriptions?.length ?? 0) === 0
-                    ? 'bg-good/10 text-good'
+                  !metaRollup
+                    ? 'bg-paper-200 text-ink-600'
+                    : (metaRollup.truncated_pixel_descriptions?.length || 0) === 0
+                    ? 'bg-paper-200 text-ink-700'
                     : 'bg-warn/10 text-warn'
                 }`}>
-                  {(metaRollup?.truncated_pixel_descriptions?.length ?? 0) === 0 ? '✓ Compliant' : 'Clipping Risk'}
+                  {!metaRollup
+                    ? 'Not measured'
+                    : (metaRollup.truncated_pixel_descriptions?.length || 0) === 0
+                    ? 'None over 960px'
+                    : 'Wider than 960px'}
                 </span>
               </div>
               <div className="p-2 bg-paper-50 border border-line rounded flex justify-between items-center">
@@ -2036,7 +2055,7 @@ export function Big4AuditReport({
                   </span>
                 </div>
                 <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-paper-100 text-ink-700">
-                  Keyword Redundancy
+                  Stored count
                 </span>
               </div>
             </div>
@@ -2281,7 +2300,7 @@ export function Big4AuditReport({
                              3. How To Fix It
                           </span>
                           <p className="text-xs text-ink-700 leading-relaxed font-sans line-clamp-3">
-                            {finding.recommendation || 'Deploy suggested code adjustments and structural directives to resolve.'}
+                            {finding.recommendation || 'No specialist wrote a fix for this finding.'}
                           </p>
                         </div>
                         <div className="pt-1 text-[10px] font-mono text-ink-700 border-t border-line">

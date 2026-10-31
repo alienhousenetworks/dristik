@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { CrawlManifest, PageEvidence, PageReport, CopySection, CopyFaqItem } from '../types';
+import { CrawlManifest, PageEvidence, PageReport, CopySection, CopyFaqItem, SuggestedCopy } from '../types';
 import { asNumber, asString, display, scoreTone } from '../lib/format';
 import { PageGenreAnalytics, detectPageGenre, GENRE_CONFIGS, PageGenre } from './PageGenreAnalytics';
 
@@ -16,6 +16,32 @@ interface PagesProps {
     conversions: number;
     conversion_rate?: number;
   }>;
+}
+
+function pageKey(url: string): string {
+  return url.trim().replace(/\/+$/, '').toLowerCase();
+}
+
+function hasText(value?: string | null): boolean {
+  return Boolean(value && value.trim());
+}
+
+function suggestedHasText(suggested?: SuggestedCopy | null): boolean {
+  if (!suggested) return false;
+  return (
+    hasText(suggested.title) ||
+    hasText(suggested.meta_description) ||
+    hasText(suggested.h1) ||
+    hasText(suggested.hero) ||
+    hasText(suggested.primary_cta) ||
+    hasText(suggested.secondary_cta) ||
+    hasText(suggested.body_rewrite) ||
+    hasText(suggested.geo_snippet) ||
+    hasText(suggested.hook_3sec) ||
+    (suggested.supporting_points || []).some((item) => hasText(item)) ||
+    (suggested.sections || []).some((section) => hasText(section.suggested_copy)) ||
+    (suggested.faq_items || []).some((faq) => hasText(faq.question) || hasText(faq.answer))
+  );
 }
 
 function CopyButton({ text, label = 'Copy' }: { text: string; label?: string }) {
@@ -164,11 +190,15 @@ function SectionHighlights({
   const statusBadge = (status: string) => {
     switch (status) {
       case 'NEEDS_REWRITE':
+      case 'CHANGE_RECOMMENDED':
         return 'bg-bad/10 text-bad border-bad/30';
       case 'UPDATE_RECOMMENDED':
         return 'bg-warn/10 text-warn border-warn/30';
       case 'OPTIMIZED':
+      case 'NO_CHANGE_NEEDED':
         return 'bg-good/10 text-good border-good/30';
+      case 'INSUFFICIENT_EVIDENCE':
+        return 'bg-paper-200 text-ink-600 border-line';
       default:
         return 'bg-paper-200 text-ink-700 border-line';
     }
@@ -177,11 +207,15 @@ function SectionHighlights({
   const statusLabel = (status: string) => {
     switch (status) {
       case 'NEEDS_REWRITE':
-        return 'Needs Rewrite';
+      case 'CHANGE_RECOMMENDED':
+        return 'Copy written';
       case 'UPDATE_RECOMMENDED':
-        return 'Update Recommended';
+        return 'Copy written';
       case 'OPTIMIZED':
-        return 'Optimized';
+      case 'NO_CHANGE_NEEDED':
+        return 'No change';
+      case 'INSUFFICIENT_EVIDENCE':
+        return 'Not enough evidence';
       default:
         return status;
     }
@@ -191,9 +225,9 @@ function SectionHighlights({
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line pb-2">
         <div>
-          <p className="label text-ink-700">Page Sections — Needs to be Updated</p>
+          <p className="label text-ink-700">Copy for this page&apos;s sections</p>
           <p className="text-xs text-ink-500 mt-0.5">
-            Production-grade, high-converting copy rewrites optimized for SEO search intent and GEO answer engine citation.
+            Each block uses the section name from this URL. A section is listed only when the specialist wrote copy for it.
           </p>
         </div>
         {fullRewrite && (
@@ -307,9 +341,9 @@ function FaqBlock({ faqs }: { faqs?: CopyFaqItem[] }) {
     <div className="sheet border border-line rounded-lg p-4 space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line pb-2">
         <div>
-          <p className="label text-ink-700">Generative Engine Optimization (GEO) FAQs</p>
+          <p className="label text-ink-700">Questions written for this page</p>
           <p className="text-xs text-ink-500">
-            Suggested question-and-answer content. This format may help answer discovery, but does not guarantee citations by any search or AI platform.
+            Shown only when the specialist wrote a question this page can answer. This is not a required FAQ block.
           </p>
         </div>
         <CopyButton
@@ -356,6 +390,19 @@ function PageDetail({
   const seo = report?.seo;
   const copy = report?.copywriting;
   const suggested = copy?.suggested;
+  const written = suggestedHasText(suggested);
+  const pageSections = (suggested?.sections || []).filter((section) => hasText(section.suggested_copy));
+  const wroteLines = Boolean(
+    suggested && (
+      hasText(suggested.title) ||
+      hasText(suggested.meta_description) ||
+      hasText(suggested.h1) ||
+      hasText(suggested.hero) ||
+      hasText(suggested.primary_cta) ||
+      hasText(suggested.secondary_cta) ||
+      (suggested.supporting_points || []).some((item) => hasText(item))
+    )
+  );
 
   return (
     <div className="space-y-8">
@@ -363,18 +410,18 @@ function PageDetail({
       <dl className="grid grid-cols-2 sm:grid-cols-4 gap-5">
         <div>
           <dt className="label">Overall Score</dt>
-          <dd className={`font-sans text-3xl ${scoreTone(report?.overall_score ?? 0)}`}>
-            {report ? Math.round(report.overall_score) : '—'}
+          <dd className={`font-sans text-3xl ${report?.overall_score != null ? scoreTone(report.overall_score) : 'text-ink'}`}>
+            {report?.overall_score != null ? Math.round(report.overall_score) : '—'}
           </dd>
         </div>
         <div>
           <dt className="label">SEO Score</dt>
-          <dd className="font-sans text-3xl">{seo ? Math.round(seo.score) : '—'}</dd>
+          <dd className="font-sans text-3xl">{seo?.score != null ? Math.round(seo.score) : '—'}</dd>
         </div>
         <div>
           <dt className="label">Copywriting Score</dt>
           <dd className="font-sans text-3xl">
-            {copy && copy.llm_status === 'ok' && copy.score != null ? Math.round(copy.score) : 'null'}
+            {copy?.score != null ? Math.round(copy.score) : '—'}
           </dd>
         </div>
         <div>
@@ -386,29 +433,14 @@ function PageDetail({
       {/* 2. Genre-Specific Analytics & Vector Visualizations */}
       <PageGenreAnalytics page={page} report={report} ga4LandingPages={ga4LandingPages} />
 
+      {copy?.analysis && (
+        <p className="text-sm text-ink-700 leading-relaxed">{copy.analysis}</p>
+      )}
+
       {copy?.llm_status === 'failed' && (
-        <div className="p-4 rounded-lg border border-bad/40 bg-bad/10 space-y-2">
-          <span className="label text-bad block">Copy rewrite FAILED</span>
-          <p className="text-sm text-ink-700 leading-relaxed">
-            {copy.llm_failure_reason || copy.analysis || 'The model did not return a rewrite.'}
-          </p>
-          {copy.llm_failure_code && (
-            <p className="text-[11px] font-mono text-ink-600">Code: {copy.llm_failure_code}</p>
-          )}
-          <p className="text-xs text-ink-600">
-            Suggested production copy is hidden because it would be a crawl echo, not an agent rewrite.
-            SEO scores below are from the crawl. Groq HTTP 404 means that engine's model id was retired
-            (llama-3.1-8b-instant / llama-3.3-70b-versatile shut down for free/dev tiers on 2026-08-16).
-            Use openai/gpt-oss-20b or openai/gpt-oss-120b. This does not affect the Claude audit path.
-          </p>
-          {copy.issues?.length > 0 && (
-            <ul className="text-xs text-ink-700 space-y-1 pt-1">
-              {copy.issues.map((item) => (
-                <li key={item.issue}>Crawl copy issue ({item.area}): {item.issue}</li>
-              ))}
-            </ul>
-          )}
-        </div>
+        <p className="text-[11px] font-mono text-ink-600">
+          The page specialist did not finish{copy.llm_failure_code ? `: ${copy.llm_failure_code}` : '.'}
+        </p>
       )}
 
       {/* 2. 5-Specialist Insights — only when the model actually ran */}
@@ -417,7 +449,7 @@ function PageDetail({
       )}
 
       {/* 3. 3-Second Hook & GEO Citation Callouts */}
-      {copy?.llm_status === 'ok' && (suggested?.hook_3sec || suggested?.geo_snippet) && (
+      {written && (suggested?.hook_3sec || suggested?.geo_snippet) && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {suggested.hook_3sec && (
             <div className="sheet border border-line rounded-lg p-4 space-y-2">
@@ -443,7 +475,7 @@ function PageDetail({
                 {suggested.geo_snippet}
               </p>
               <p className="text-[11px] text-ink-500">
-                40–60 word extractable definition crafted for direct quotation by ChatGPT and Perplexity.
+                Specialist passage for this URL. The word count is a measurement, not a required band.
               </p>
             </div>
           )}
@@ -451,58 +483,68 @@ function PageDetail({
       )}
 
       {/* 4. Section-Wise Highlights: What Needs To Be Updated */}
-      {copy?.llm_status === 'ok' && suggested?.sections && suggested.sections.length > 0 && (
+      {pageSections.length > 0 && (
         <SectionHighlights
-          sections={suggested.sections}
-          fullRewrite={suggested.body_rewrite}
+          sections={pageSections}
+          fullRewrite={suggested?.body_rewrite}
         />
       )}
 
-      {/* 5. SERP-Safe Title, Meta & Header Optimization */}
-      {copy?.llm_status === 'ok' && suggested && (
+      {/* 5. Lines the specialist rewrote for this URL */}
+      {wroteLines && suggested && (
         <section className="sheet border border-line rounded-lg p-5 space-y-4">
           <div className="border-b border-line pb-2">
-            <p className="label text-ink-700">SERP Metadata & Header Optimization</p>
+            <p className="label text-ink-700">Lines the specialist rewrote</p>
             <p className="text-xs text-ink-500">
-              Strict length compliance enforced: Title (50–60 chars) and Meta Description (140–160 chars) to prevent search engine truncation.
+              A line appears only when the specialist wrote it for this URL. Character counts are measurements.
             </p>
           </div>
 
-          <Pair
-            label="Title Tag"
-            current={page.title}
-            suggested={suggested.title}
-            badge={suggested.title ? `${suggested.title.length} chars (Target 50-60)` : undefined}
-          />
-          <Pair
-            label="Meta Description"
-            current={page.meta_description}
-            suggested={suggested.meta_description}
-            badge={suggested.meta_description ? `${suggested.meta_description.length} chars (Target 140-160)` : undefined}
-          />
-          <Pair
-            label="Primary H1 Headline"
-            current={page.h1?.[0]}
-            suggested={suggested.h1}
-          />
-          <Pair
-            label="Hero Subheadline"
-            current={
-              page.body_text
-                ? page.body_text
-                    .split('\n')
-                    .map((l) => l.trim())
-                    .filter((l) => l.length >= 40)[0]
-                : undefined
-            }
-            suggested={suggested.hero}
-          />
-          <Pair
-            label="Primary Call to Action"
-            current={page.ctas && page.ctas[0]}
-            suggested={suggested.primary_cta}
-          />
-          {suggested.secondary_cta && (
+          {hasText(suggested.title) && (
+            <Pair
+              label="Title"
+              current={page.title}
+              suggested={suggested.title}
+              badge={`${suggested.title.length} characters`}
+            />
+          )}
+          {hasText(suggested.meta_description) && (
+            <Pair
+              label="Meta description"
+              current={page.meta_description}
+              suggested={suggested.meta_description}
+              badge={`${suggested.meta_description.length} characters`}
+            />
+          )}
+          {hasText(suggested.h1) && (
+            <Pair
+              label="H1"
+              current={page.h1?.[0]}
+              suggested={suggested.h1}
+            />
+          )}
+          {hasText(suggested.hero) && (
+            <Pair
+              label="Opening line"
+              current={
+                page.body_text
+                  ? page.body_text
+                      .split('\n')
+                      .map((l) => l.trim())
+                      .filter((l) => l.length >= 40)[0]
+                  : undefined
+              }
+              suggested={suggested.hero}
+            />
+          )}
+          {hasText(suggested.primary_cta) && (
+            <Pair
+              label="Call to action"
+              current={page.ctas && page.ctas[0]}
+              suggested={suggested.primary_cta}
+            />
+          )}
+          {hasText(suggested.secondary_cta) && (
             <Pair
               label="Secondary Call to Action"
               current={page.ctas && page.ctas[1]}
@@ -513,7 +555,7 @@ function PageDetail({
           {suggested.supporting_points?.length > 0 && (
             <div className="py-3 border-b border-line">
               <div className="flex items-center justify-between mb-1.5">
-                <p className="label text-[10px]">Key Supporting Pillars</p>
+                <p className="label text-[10px]">Points from this page</p>
                 <CopyButton text={suggested.supporting_points.map((p) => `• ${p}`).join('\n')} />
               </div>
               <ul className="space-y-1.5 text-xs text-ink-700">
@@ -534,7 +576,7 @@ function PageDetail({
       )}
 
       {/* 6. AI Answer Engine FAQ Block */}
-      {copy?.llm_status === 'ok' && suggested?.faq_items && suggested.faq_items.length > 0 && (
+      {written && suggested?.faq_items && suggested.faq_items.length > 0 && (
         <FaqBlock faqs={suggested.faq_items} />
       )}
 
@@ -555,7 +597,7 @@ function PageDetail({
                   ))}
                 </ul>
               ) : (
-                <p className="text-ink-400">No major SEO issues detected.</p>
+                <p className="text-ink-400">No specialist judgment was recorded for this URL.</p>
               )}
             </div>
             <div>
@@ -621,7 +663,11 @@ export function Pages({ manifest, summary, pageReports = [], ga4LandingPages }: 
   const [openScrapedUrls, setOpenScrapedUrls] = useState<Set<string>>(new Set());
   const [selectedGenre, setSelectedGenre] = useState<string>('all');
   const pages = manifest?.pages || [];
-  const reportsByUrl = new Map(pageReports.map((item) => [item.url, item]));
+  const reportsByUrl = new Map<string, PageReport>();
+  pageReports.forEach((item) => {
+    reportsByUrl.set(item.url, item);
+    reportsByUrl.set(pageKey(item.url), item);
+  });
   const recordedDiscovered = [manifest?.total_pages_discovered, summary.total_pages_discovered]
     .find((value) => typeof value === 'number' && value > 0);
   const sitemap = manifest?.sitemap_found ?? Boolean(summary.sitemap_found);
@@ -722,7 +768,7 @@ export function Pages({ manifest, summary, pageReports = [], ga4LandingPages }: 
       ) : (
         <ul className="divide-y divide-line border-y border-line">
           {filteredPages.map((page) => {
-            const report = reportsByUrl.get(page.url);
+            const report = reportsByUrl.get(page.url) || reportsByUrl.get(pageKey(page.url));
             const isScrapedOpen = openScrapedUrls.has(page.url);
 
             return (
@@ -735,8 +781,8 @@ export function Pages({ manifest, summary, pageReports = [], ga4LandingPages }: 
                   </div>
                   <div className="flex items-center gap-3 text-xs text-ink-500 shrink-0">
                     {report && (
-                      <span className={`font-sans text-lg font-bold px-2 py-0.5 rounded border border-line ${scoreTone(report.overall_score)}`}>
-                        {Math.round(report.overall_score)}
+                      <span className={`font-sans text-lg font-bold px-2 py-0.5 rounded border border-line ${report.overall_score != null ? scoreTone(report.overall_score) : 'text-ink'}`}>
+                        {report.overall_score != null ? Math.round(report.overall_score) : '—'}
                       </span>
                     )}
                     <span className="px-2 py-1 rounded bg-paper-50 border border-line font-mono">{page.status_code}</span>

@@ -211,13 +211,13 @@ export function SearchIntelligenceView({
             <div className="border border-line p-4 rounded-lg bg-paper-50 space-y-2">
               <span className="label text-[10px] block">Homepage Title Tag</span>
               <p className="font-semibold text-ink text-sm">{homePage?.title || 'No Title Detected'}</p>
-              <span className="text-ink-500 font-mono">Length: {homePage?.title?.length || 0} characters (Recommended: 50-60)</span>
+              <span className="text-ink-500 font-mono">Length: {homePage?.title ? homePage.title.length : 0} characters. A character count is not a required band.</span>
             </div>
 
             <div className="border border-line p-4 rounded-lg bg-paper-50 space-y-2">
               <span className="label text-[10px] block">Meta Description</span>
               <p className="text-ink text-sm">{homePage?.meta_description || 'No Meta Description Found'}</p>
-              <span className="text-ink-500 font-mono">Length: {homePage?.meta_description?.length || 0} characters (Recommended: 140-160)</span>
+              <span className="text-ink-500 font-mono">Length: {homePage?.meta_description ? homePage.meta_description.length : 0} characters. A character count is not a required band.</span>
             </div>
 
             <div className="col-span-full border border-line p-4 rounded-lg bg-paper-50 space-y-3">

@@ -28,66 +28,42 @@ def _clean_path(url_or_path: str) -> str:
 
 
 def _format_title_copy(page_path: str, biz_name: str, niche: str) -> str:
-    """Constructs character-safe (50-60 characters) title copy without ellipses."""
+    """Title from the stored business name and path. Not padded to a character band."""
     p = page_path.strip("/").lower()
+    niche_bit = f" — {niche}" if niche else ""
     if not p or p in ("", "index.html", "home"):
-        raw = f"{biz_name} — {niche}"
-        if len(raw) < 50:
-            raw = f"{biz_name} — Enterprise {niche}"
-        if len(raw) < 50:
-            raw = f"{biz_name} — {niche} Platform & Solutions"
+        raw = f"{biz_name}{niche_bit}"
     elif "pricing" in p:
-        raw = f"{biz_name} Pricing — Transparent Plans for {niche}"
+        raw = f"{biz_name} pricing{niche_bit}"
     elif "about" in p:
-        raw = f"About {biz_name} — High-Performance {niche}"
+        raw = f"About {biz_name}{niche_bit}"
     elif "contact" in p:
-        raw = f"Contact {biz_name} — Get Started with {niche}"
+        raw = f"Contact {biz_name}{niche_bit}"
     elif "blog" in p or "resources" in p:
-        raw = f"{biz_name} Blog — Insights on Modern {niche}"
+        raw = f"{biz_name} blog{niche_bit}"
     elif "docs" in p or "guide" in p:
-        raw = f"{biz_name} Documentation — Technical {niche} Guides"
+        raw = f"{biz_name} documentation{niche_bit}"
     elif "solutions" in p or "features" in p or "product" in p:
-        raw = f"{biz_name} Solutions — Next-Gen {niche} Capabilities"
+        raw = f"{biz_name} {p.split('/')[-1].replace('-', ' ')}{niche_bit}"
     else:
-        # Reconstruct path as readable title
-        subparts = [sp.replace("-", " ").replace("_", " ").title() for sp in p.split("/") if sp]
+        subparts = [sp.replace("-", " ").replace("_", " ") for sp in p.split("/") if sp]
         subparts.reverse()
-        sub_title = " - ".join(subparts)
-        raw = f"{sub_title} | {biz_name}"
-        if len(raw) < 50:
-            raw = f"{sub_title} | {biz_name} — {niche}"
-
-    if len(raw) < 50:
-        raw = f"{raw} Platform"
-    if len(raw) > 60:
-        from app.remediation.serp_text import fit_serp_text
-        raw = fit_serp_text(raw, 60)
-    return raw[:60].strip()
+        raw = f"{' / '.join(subparts)} | {biz_name}"
+    return re.sub(r"\s+", " ", raw).strip()
 
 
 def _format_meta_description(page_path: str, biz_name: str, val_prop: str, audience: str, page_title: Optional[str] = None) -> str:
-    """Constructs character-safe (140-160 characters) page-specific meta description copy."""
+    """Meta text from stored profile fields. Not padded or trimmed to a character band."""
+    del page_title
     clean_vp = val_prop.rstrip(".").strip()
-    p = page_path.strip("/").lower()
-
-    if "pricing" in p:
-        desc = f"Explore transparent pricing plans for {biz_name}. Engineered for {audience}, delivering {clean_vp.lower()} with zero lock-in."
-    elif "about" in p:
-        desc = f"Learn how {biz_name} accelerates outcomes for {audience}. Our team delivers {clean_vp.lower()} with proven reliability and measurable impact."
-    elif "contact" in p:
-        desc = f"Connect with the {biz_name} team. Discover how our {clean_vp.lower()} solutions empower {audience} to scale efficiently."
-    elif p:
-        topic = p.replace("-", " ").replace("_", " ").replace("/", " — ").title()
-        desc = f"Discover {topic} from {biz_name}. Purpose-built for {audience} seeking proven results, high reliability, and clear technical value."
+    who = f" for {audience}" if audience else ""
+    offer = f" {clean_vp}." if clean_vp else ""
+    path_label = page_path.strip("/").replace("-", " ").replace("_", " ").replace("/", " / ")
+    if path_label:
+        desc = f"{biz_name}: {path_label}.{offer}".strip()
     else:
-        desc = f"{biz_name} delivers {clean_vp}. Engineered specifically for {audience} with guaranteed precision, high performance, and rapid time-to-value."
-
-    if len(desc) < 140:
-        desc = f"{desc} Complete technical specifications and architectural guidelines."
-    if len(desc) > 160:
-        from app.remediation.serp_text import fit_serp_text
-        desc = fit_serp_text(desc, 160)
-    return desc
+        desc = f"{biz_name}{who}.{offer}".strip()
+    return re.sub(r"\s+", " ", desc).strip()
 
 
 class RemediationPatcher:
@@ -189,14 +165,14 @@ class RemediationPatcher:
 
                     patches.append(CodePatch(
                         patch_id=f"patch_{p_idx:03d}",
-                        title=f"Deploy Compliant Meta Description for '{path}' ({len(opt_desc)} chars)",
+                        title=f"Meta description from stored profile for '{path}' ({len(opt_desc)} chars)",
                         category=Category.ON_PAGE_SEO,
                         target_file=f"index.html / template (<head> for {path})",
                         before_snippet=before_snip,
                         after_snippet=f'<meta name="description" content="{opt_desc}">',
                         explanation=(
-                            f"Provides an optimized {len(opt_desc)}-character meta description within the recommended 140-160 character "
-                            "window to ensure Google renders the complete snippet without trailing ellipsis on mobile SERPs."
+                            f"Uses the stored profile text ({len(opt_desc)} characters). "
+                            "Length is a measurement, not a required band, and this is not a snippet guarantee."
                         ),
                         release_status=ReleaseStatus.PENDING_APPROVAL,
                     ))

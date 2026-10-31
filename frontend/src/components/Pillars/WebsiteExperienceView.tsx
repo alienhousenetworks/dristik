@@ -439,15 +439,17 @@ export function WebsiteExperienceView({
           PASS: 'bg-good/10 text-good dark:text-good border-good/30',
           NEEDS_ATTENTION: 'bg-warn/10 text-warn dark:text-warn border-warn/30',
           NON_COMPLIANT: 'bg-bad/10 text-bad dark:text-bad border-bad/30',
+          NOT_JUDGED: 'bg-paper-200 text-ink-600 border-line',
         };
 
         const statusLabels = {
-          PASS: 'WCAG 2.2 AA Compliant',
-          NEEDS_ATTENTION: 'WCAG 2.2 AA Needs Attention',
-          NON_COMPLIANT: 'WCAG 2.2 AA Non-Compliant',
+          PASS: 'WCAG check recorded a pass',
+          NEEDS_ATTENTION: 'WCAG check recorded issues',
+          NON_COMPLIANT: 'WCAG check recorded failures',
+          NOT_JUDGED: 'WCAG judgment not written',
         };
 
-        const currentStatus = wcag?.conformance_status || (homePage?.images_without_alt ? 'NEEDS_ATTENTION' : 'PASS');
+        const currentStatus = wcag?.conformance_status || 'NOT_JUDGED';
         const statusClass = statusColors[currentStatus as keyof typeof statusColors] || statusColors.NEEDS_ATTENTION;
         const statusLabel = statusLabels[currentStatus as keyof typeof statusLabels] || currentStatus;
 

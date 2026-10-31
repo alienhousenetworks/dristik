@@ -314,73 +314,43 @@ function resolveCheck(
   // Section 36 AI Crawler & Bot Diagnostics
   if (sectionNumber === '36') {
     const directives = report.per_engine_geo?.ai_bot_directives;
-    const gpt = directives?.gptbot_allowed ?? true;
-    const claude = directives?.claudebot_allowed ?? true;
-    const perplexity = directives?.perplexitybot_allowed ?? true;
+    if (!directives || directives.robots_measured !== true) {
+      return {
+        label: checkLabel,
+        status: 'NOT_TESTED',
+        result: 'AI crawler directives were not measured. An absent record is not an allow.',
+      };
+    }
+    const named = (flag: boolean | null | undefined, name: string) =>
+      flag == null ? `${name} not stored` : `${name} ${flag ? 'allowed' : 'blocked'}`;
     return {
       label: checkLabel,
       status: 'SAMPLE_VERIFIED',
-      result: `AI Crawler Directives: GPTBot (${gpt ? 'Allowed' : 'Blocked'}), ClaudeBot (${claude ? 'Allowed' : 'Blocked'}), PerplexityBot (${perplexity ? 'Allowed' : 'Blocked'}).`,
+      result: [
+        named(directives.gptbot_allowed, 'GPTBot'),
+        named(directives.claudebot_allowed, 'ClaudeBot'),
+        named(directives.perplexitybot_allowed, 'PerplexityBot'),
+      ].join('; '),
     };
   }
 
-  // Default fallback
   return {
     label: checkLabel,
-    status: crawledCount > 0 ? 'SAMPLE_VERIFIED' : 'NOT_TESTED',
+    status: 'NOT_TESTED',
     result: crawledCount > 0
-      ? `Evaluated under 2026 Enterprise GEO Standard across the crawled sample.`
-      : 'Unmeasured: No pages were crawled on this audit run.',
+      ? `No specialist published a judgment for “${checkLabel}”. ${crawledCount} page(s) were crawled. That is not a pass.`
+      : 'No page was crawled, and no specialist published a judgment.',
   };
 }
 
-function getAgentContextByPart(part: string, domain: string) {
-  switch (part) {
-    case 'VI':
-      return {
-        architectureMechanics: 'Evaluates DOM passage token density, semantic entity boundaries, and RAG chunk extractability for LLM context windows.',
-        businessRisk: 'Ambiguous or marketing-heavy copy causes retrieval truncation, leading LLMs to substitute competitors for factual inquiries.',
-        remediationRecipe: 'Refactor ambiguous marketing prose into self-contained, fact-dense subject-predicate-object attribution blocks.',
-        verificationProtocol: 'Run AST passage extractability parser on revised HTML and check definition density score.',
-      };
-    case 'VII':
-      return {
-        architectureMechanics: 'Audits robots.txt crawl directives, HTTP headers, /llms.txt manifest, and DOM hydration for AI search spiders (GPTBot, ClaudeBot, PerplexityBot).',
-        businessRisk: 'Crawler blockage or JavaScript rendering timeouts prevent AI retrieval spiders from indexing core product pages.',
-        remediationRecipe: 'Declare explicit bot allowances in robots.txt and deploy an accessible /llms.txt markdown manifesto at the domain root.',
-        verificationProtocol: 'Inspect server access logs for AI user-agents and verify HTTP 200 response on /llms.txt.',
-      };
-    case 'III':
-      return {
-        architectureMechanics: 'Verifies factual entity alignment between crawled first-party DOM and LLM associative memory to detect hallucinations.',
-        businessRisk: 'Hallucinated pricing, deprecated features, or fabricated partner claims degrade customer trust and skew buyer decisions.',
-        remediationRecipe: 'Inject precise JSON-LD Organization/Product schemas with verified sameAs anchors and unambiguous numeric specifications.',
-        verificationProtocol: 'Query generative answer engines with entity-specific prompts and verify zero factual distortions.',
-      };
-    case 'IV':
-    case 'V':
-      return {
-        architectureMechanics: 'Analyzes first-party vs third-party source corroboration and competitor displacement in generative answer engine shortlists.',
-        businessRisk: 'Absence from authoritative aggregator citations leads AI engines to favor competitor shortlists in commercial consideration prompts.',
-        remediationRecipe: 'Publish objective comparison matrices and acquire citations across verified industry review directories (G2, Trustpilot).',
-        verificationProtocol: 'Track monthly citation share across target query clusters to detect competitor displacement.',
-      };
-    case 'IX':
-    case 'X':
-      return {
-        architectureMechanics: 'Deterministic ledger tracking engineering tickets, code patch validation, and statistical significance across prompt variations.',
-        businessRisk: 'Unprioritized remediation leads to wasted engineering sprints on cosmetic changes without improving answerability.',
-        remediationRecipe: 'Execute high-impact DOM and Schema patches first, then verify via post-change crawl and query delta tests.',
-        verificationProtocol: 'Rerun automated regression benchmark and verify finding resolution in the evidence ledger.',
-      };
-    default:
-      return {
-        architectureMechanics: 'Evaluates generative content extraction, multi-engine knowledge representation, and vector retrieval chunk eligibility.',
-        businessRisk: 'Loss of brand recommendation share across conversational AI search assistants, depressing inbound pipeline.',
-        remediationRecipe: 'Deploy structured, extractable definition blocks and machine-readable comparison tables.',
-        verificationProtocol: 'Rerun standardized prompt benchmark across target engines and inspect citation rates.',
-      };
-  }
+function agentSilence(domain: string) {
+  const note = `No specialist published a judgment for ${domain}. Stored measurements stay in the checks. A missing judgment is not a pass.`;
+  return {
+    architectureMechanics: note,
+    businessRisk: note,
+    remediationRecipe: note,
+    verificationProtocol: note,
+  };
 }
 
 export function resolveGeoAudit(report: ExecutiveReport): ResolvedGeoAudit {
@@ -433,19 +403,18 @@ export function resolveGeoAudit(report: ExecutiveReport): ResolvedGeoAudit {
       'Generative Engine Optimization Specialist',
     ];
 
-    const partCtx = getAgentContextByPart(sec.part, domain);
+    const partCtx = agentSilence(domain);
+    const top = matchedFindings[0];
 
     const agent: GeoAgentConsultation = {
       agentId,
       agentName,
       agentRole,
-      diagnosticOverview: `Diagnostic review for Chapter ${secNumber} (${sec.title}) evaluated under the 2026 Enterprise GEO Standard for ${domain}.`,
-      architectureMechanics: partCtx.architectureMechanics,
-      rootCause: matchedFindings.length > 0
-        ? `Identified ${matchedFindings.length} defect(s) affecting this chapter.`
-        : 'No critical architectural breakdown stored in baseline sample.',
-      businessRisk: partCtx.businessRisk,
-      remediationRecipe: partCtx.remediationRecipe,
+      diagnosticOverview: top?.description || `${agentName} did not publish a judgment for ${sec.title} on ${domain}.`,
+      architectureMechanics: top?.description || partCtx.architectureMechanics,
+      rootCause: top?.description || partCtx.businessRisk,
+      businessRisk: top?.why_it_matters || partCtx.businessRisk,
+      remediationRecipe: top?.recommendation || partCtx.remediationRecipe,
       verificationProtocol: partCtx.verificationProtocol,
     };
 
@@ -455,7 +424,7 @@ export function resolveGeoAudit(report: ExecutiveReport): ResolvedGeoAudit {
       title: sec.title,
       status: sectionStatus,
       pageNumber,
-      summary: `Comprehensive evaluation of ${sec.title.toLowerCase()} based on crawled DOM AST and empirical benchmark runs.`,
+      summary: top?.description || `${agentName} did not publish a chapter judgment. Checks below are specialist questions, not a regulation.`,
       checks,
       findings: matchedFindings.map(toFindingRef),
       agent,
