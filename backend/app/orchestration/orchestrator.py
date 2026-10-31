@@ -2104,11 +2104,15 @@ class AnalysisOrchestrator:
 
             if node_id == "node_crawl":
                 if not blackboard.crawl_manifest or not blackboard.pages:
-                    manifest = await self.crawler.crawl(blackboard.website_url, max_pages=15)
+                    manifest = await self.crawler.crawl_site_and_analyze(
+                        target_url=blackboard.website_url,
+                        evidence_store=blackboard.evidence_store,
+                        max_pages=15,
+                    )
                     blackboard.crawl_manifest = manifest
                     blackboard.pages = manifest.pages
                     try:
-                        self.repository.save_crawl_pages(analysis_id, manifest.pages)
+                        self.repository.persist_crawl_pages(analysis_id, manifest.pages)
                     except Exception as pe:
                         logger.warning(f"Could not persist crawl pages: {pe}")
 

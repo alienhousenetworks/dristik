@@ -35,7 +35,11 @@ from functools import lru_cache
 # shortcut: in-process 512-host DNS cache without TTL, replace if long-lived workers need DNS rebinding rotation checks
 @lru_cache(maxsize=512)
 def _resolve_hostname_ips(hostname: str) -> Tuple[str, ...]:
-    return tuple({item[4][0] for item in socket.getaddrinfo(hostname, None)})
+    try:
+        infos = socket.getaddrinfo(hostname, None, socket.AF_INET, socket.SOCK_STREAM)
+    except socket.gaierror:
+        infos = socket.getaddrinfo(hostname, None, 0, socket.SOCK_STREAM)
+    return tuple({item[4][0] for item in infos})
 
 
 def is_safe_url(target_url: str, egress_allowlist: Optional[list[str]] = None) -> Tuple[bool, str]:

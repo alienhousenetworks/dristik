@@ -22,6 +22,9 @@ services:
       - ./backend:/app
       - dristik-data:/app/data
       - hf-cache:/root/.cache/huggingface
+    dns:
+      - 1.1.1.1
+      - 8.8.8.8
     restart: unless-stopped
 
   web:

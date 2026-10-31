@@ -241,7 +241,7 @@ class CrawlerService:
             try:
                 safe, reason = await asyncio.wait_for(
                     asyncio.to_thread(is_safe_url, url),
-                    timeout=3.0,
+                    timeout=8.0,
                 )
             except asyncio.TimeoutError:
                 return None, None, 0, (time.time() - start_time) * 1000, {}, 0, "SSRF validation timed out; render target blocked", None
@@ -353,7 +353,7 @@ class CrawlerService:
                     try:
                         is_safe, reason = await asyncio.wait_for(
                             asyncio.to_thread(is_safe_url, current_url),
-                            timeout=3.0,
+                            timeout=8.0,
                         )
                     except asyncio.TimeoutError:
                         direct_err = f"SSRF blocked redirect validation timeout: {current_url}"
@@ -475,7 +475,7 @@ class CrawlerService:
             try:
                 is_safe, reason = await asyncio.wait_for(
                     asyncio.to_thread(is_safe_url, normalized_root),
-                    timeout=3.0,
+                    timeout=8.0,
                 )
             except asyncio.TimeoutError as exc:
                 raise ValueError("Security Alert: SSRF validation timed out; crawl blocked.") from exc
