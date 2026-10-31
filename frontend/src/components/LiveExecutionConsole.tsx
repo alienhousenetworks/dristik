@@ -462,12 +462,17 @@ export function LiveExecutionConsole({ run, onRefreshRun }: LiveExecutionConsole
     };
 
     fetchGraph();
+    if (run.status === 'completed' || run.status === 'failed') {
+      return () => {
+        isMounted = false;
+      };
+    }
     const interval = setInterval(fetchGraph, 2500);
     return () => {
       isMounted = false;
       clearInterval(interval);
     };
-  }, [run.analysis_id]);
+  }, [run.analysis_id, run.status]);
 
   // Sync if run prop changes with embedded graph
   useEffect(() => {

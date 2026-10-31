@@ -30,6 +30,14 @@ BLOCKED_HOSTNAMES = {
     "fd00::",
 }
 
+from functools import lru_cache
+
+# shortcut: in-process 512-host DNS cache without TTL, replace if long-lived workers need DNS rebinding rotation checks
+@lru_cache(maxsize=512)
+def _resolve_hostname_ips(hostname: str) -> Tuple[str, ...]:
+    return tuple({item[4][0] for item in socket.getaddrinfo(hostname, None)})
+
+
 def is_safe_url(target_url: str, egress_allowlist: Optional[list[str]] = None) -> Tuple[bool, str]:
     """
     Validates that a URL is safe to fetch and does not target internal infrastructure.
@@ -67,9 +75,7 @@ def is_safe_url(target_url: str, egress_allowlist: Optional[list[str]] = None) -
 
         # Attempt to resolve hostname to IP addresses (DNS Pinning validation)
         try:
-            addr_info = socket.getaddrinfo(hostname_clean, None)
-            for item in addr_info:
-                ip_str = item[4][0]
+            for ip_str in _resolve_hostname_ips(hostname_clean):
                 ip_obj = ipaddress.ip_address(ip_str)
                 for net in BLOCKED_IP_NETWORKS:
                     if ip_obj in net:
@@ -81,4 +87,5 @@ def is_safe_url(target_url: str, egress_allowlist: Optional[list[str]] = None) -
         return True, "URL is safe"
     except Exception as e:
         return False, f"SSRF validation error: {str(e)}"
+
 

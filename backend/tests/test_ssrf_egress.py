@@ -42,3 +42,21 @@ def test_tenant_egress_allowlist():
     safe, msg = is_safe_url("https://google.com", egress_allowlist=allowlist)
     assert safe is False
     assert "not in tenant egress allowlist" in msg
+
+
+def test_ssrf_hostname_dns_cached(monkeypatch):
+    import socket
+    from app.core.security import ssrf
+
+    ssrf._resolve_hostname_ips.cache_clear()
+    calls = []
+
+    def fake_getaddrinfo(host, port, *args, **kwargs):
+        calls.append(host)
+        return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.216.34", 0))]
+
+    monkeypatch.setattr(ssrf.socket, "getaddrinfo", fake_getaddrinfo)
+    assert is_safe_url("https://cached-example.test/page-1")[0] is True
+    assert is_safe_url("https://cached-example.test/page-2")[0] is True
+    assert calls == ["cached-example.test"]
+

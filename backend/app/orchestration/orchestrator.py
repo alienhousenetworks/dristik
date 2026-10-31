@@ -16,6 +16,7 @@ from app.core.config import settings
 from app.aeo.analytics_history import aeo_analytics_history_store
 from app.aeo.scoring import AeoMetricsCalculator
 from app.domain.models import AnalysisRun, ExecutiveReport, CrawlManifest, FindingEvidence
+from app.db.models import StageCheckpoint
 from app.domain.enums import AnalysisStage, Category, Severity
 from app.domain.capability import CAPABILITY_REGISTRY
 from app.orchestration.cognition.blackboard import CognitiveBlackboard
@@ -373,7 +374,6 @@ class AnalysisOrchestrator:
             )
 
             # Durable Checkpoint 1: Crawl & DOM observations complete
-            from app.db.models import StageCheckpoint
             try:
                 self.repository.persist_crawl_pages(analysis_id, manifest.pages)
                 self.repository.persist_evidence_items(analysis_id, blackboard.evidence_store.get_all())
