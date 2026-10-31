@@ -1483,6 +1483,7 @@ class SectionReportGenerator:
     <main class="document-stage">
         {book_html}
     </main>
+    <footer class="document-footer-meta" style="display:none;" data-footer-mark="{footer_mark}">{footer_mark}</footer>
     """
 
         return f"""

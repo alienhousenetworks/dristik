@@ -1036,7 +1036,7 @@ class DeckDataAnalystAgent:
                         *c_cards
                     ][:4]
                 else:
-                    crit_count = len(report.critical_findings or [])
+                    crit_count = len(getattr(report, "critical_findings", None) or [f for f in getattr(report, "findings", []) if getattr(getattr(f, "severity", None), "value", str(getattr(f, "severity", ""))).upper() == "CRITICAL"])
                     s.cards = [
                         CardSpec(kicker="CORE THESIS", title="Root Cause vs Surface Symptoms", description="Surface visibility drops stem from systemic architectural, extractability, or conversion bottlenecks.", badge="ROOT CAUSE", badge_color="sky"),
                         CardSpec(kicker="BOTTLENECK 01", title="Indexation Continuity", description="Ensure search spiders crawl only canonical, valid 200 OK routes without redirect hops.", badge="TECHNICAL", badge_color="emerald"),
@@ -1057,10 +1057,11 @@ class DeckDataAnalystAgent:
                     tech_findings = [f for f in (report.findings or []) if "tech" in str(getattr(f, "category", "")).lower()]
                     tf = tech_findings[0] if tech_findings else None
                     if tf:
+                        tf_impact = getattr(tf, "impact_description", None) or (f"Impact score {tf.impact}/10" if getattr(tf, "impact", None) is not None else None) or "Deficit in canonical headers, status codes, or sitemap synchronization."
                         s.cards = [
                             CardSpec(kicker="SYMPTOM", title=tf.title[:50], description=getattr(tf, "description", "Crawl or indexation anomaly detected.")[:140], badge=str(getattr(tf, "severity", "HIGH")).upper(), badge_color="amber"),
-                            CardSpec(kicker="ROOT CAUSE", title="Underlying Protocol / Structure", description=(getattr(tf, "impact", None) or "Deficit in canonical headers, status codes, or sitemap synchronization.")[:140], badge="ROOT CAUSE", badge_color="rose"),
-                            CardSpec(kicker="REMEDY", title="Engineering Remediation", description=(getattr(tf, "remediation", None) or "Standardize canonical tags and enforce clean 200 OK indexation.")[:140], badge="REMEDY", badge_color="emerald")
+                            CardSpec(kicker="ROOT CAUSE", title="Underlying Protocol / Structure", description=str(tf_impact)[:140], badge="ROOT CAUSE", badge_color="rose"),
+                            CardSpec(kicker="REMEDY", title="Engineering Remediation", description=str(getattr(tf, "remediation", None) or "Standardize canonical tags and enforce clean 200 OK indexation.")[:140], badge="REMEDY", badge_color="emerald")
                         ]
                     else:
                         s.cards = [
@@ -1082,10 +1083,11 @@ class DeckDataAnalystAgent:
                     geo_findings = [f for f in (report.findings or []) if any(k in str(getattr(f, "category", "")).lower() for k in ("geo", "schema", "content"))]
                     gf = geo_findings[0] if geo_findings else None
                     if gf:
+                        gf_impact = getattr(gf, "impact_description", None) or (f"Impact score {gf.impact}/10" if getattr(gf, "impact", None) is not None else None) or "Absence of structured Schema.org JSON-LD or extractable 40-60 word definition passages."
                         s.cards = [
                             CardSpec(kicker="SYMPTOM", title=gf.title[:50], description=getattr(gf, "description", "Extractability gap across generative answer engines.")[:140], badge=str(getattr(gf, "severity", "HIGH")).upper(), badge_color="amber"),
-                            CardSpec(kicker="ROOT CAUSE", title="Unanchored Entity Graph", description=(getattr(gf, "impact", None) or "Absence of structured Schema.org JSON-LD or extractable 40-60 word definition passages.")[:140], badge="ROOT CAUSE", badge_color="rose"),
-                            CardSpec(kicker="REMEDY", title="Structured Answer Blocks", description=(getattr(gf, "remediation", None) or "Inject Organization schema and self-contained definition blocks.")[:140], badge="REMEDY", badge_color="emerald")
+                            CardSpec(kicker="ROOT CAUSE", title="Unanchored Entity Graph", description=str(gf_impact)[:140], badge="ROOT CAUSE", badge_color="rose"),
+                            CardSpec(kicker="REMEDY", title="Structured Answer Blocks", description=str(getattr(gf, "remediation", None) or "Inject Organization schema and self-contained definition blocks.")[:140], badge="REMEDY", badge_color="emerald")
                         ]
                     else:
                         s.cards = [
@@ -1107,10 +1109,11 @@ class DeckDataAnalystAgent:
                     cro_findings = [f for f in (report.findings or []) if any(k in str(getattr(f, "category", "")).lower() for k in ("cro", "conversion", "perf", "form"))]
                     cf = cro_findings[0] if cro_findings else None
                     if cf:
+                        cf_impact = getattr(cf, "impact_description", None) or (f"Impact score {cf.impact}/10" if getattr(cf, "impact", None) is not None else None) or "Vague calls-to-action, hidden pricing indicators, or form input friction."
                         s.cards = [
                             CardSpec(kicker="SYMPTOM", title=cf.title[:50], description=getattr(cf, "description", "Visitor bounce or drop-off before form completion.")[:140], badge=str(getattr(cf, "severity", "HIGH")).upper(), badge_color="amber"),
-                            CardSpec(kicker="ROOT CAUSE", title="CTA / Value Proposition Friction", description=(getattr(cf, "impact", None) or "Vague calls-to-action, hidden pricing indicators, or form input friction.")[:140], badge="ROOT CAUSE", badge_color="rose"),
-                            CardSpec(kicker="REMEDY", title="High-Intent Conversion Strip", description=(getattr(cf, "remediation", None) or "Deploy action-oriented CTA buttons with transparent reassurance copy.")[:140], badge="REMEDY", badge_color="emerald")
+                            CardSpec(kicker="ROOT CAUSE", title="CTA / Value Proposition Friction", description=str(cf_impact)[:140], badge="ROOT CAUSE", badge_color="rose"),
+                            CardSpec(kicker="REMEDY", title="High-Intent Conversion Strip", description=str(getattr(cf, "remediation", None) or "Deploy action-oriented CTA buttons with transparent reassurance copy.")[:140], badge="REMEDY", badge_color="emerald")
                         ]
                     else:
                         s.cards = [

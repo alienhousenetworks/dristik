@@ -126,29 +126,29 @@ class SpecialistAuditorAgent:
         """Contextual synthesis of finding in plain, non-technical English."""
         clean_title = title.rstrip(".")
         desc = description.strip() if description else ""
-        if desc and desc.lower() != clean_title.lower() and len(desc) > 20:
+        if desc and desc.lower() != clean_title.lower() and len(desc) > 30 and "dristik" not in desc.lower():
             return desc
 
         domain = self.domain.upper()
         if domain == "CANONICAL":
             return (
-                "Search engines require a single definitive URL address for each page. Discrepancies in canonical tags "
-                "cause search engines to split ranking authority between duplicate versions, diluting page search prominence."
+                "Search engines require a single definitive URL address for each page. Discrepancies in canonical tags cause search engines "
+                "to split ranking authority between duplicate versions, diluting page search prominence."
             )
         if domain == "REDIRECT":
             return (
-                "A link redirects through intermediate hops or points to a non-existent page, causing mobile visitors and "
-                "search crawlers to encounter delays or reach dead ends."
+                f"Page navigation or link destination contains redirect chains or dead-end addresses regarding '{clean_title}'. "
+                "This slows down visitor access and leaks search ranking equity."
             )
         if domain == "CRAWL":
             return (
-                f"Search engine crawlers face friction discovering or crawling pages related to '{clean_title}'. "
-                "Resolving this ensures all valuable commercial URLs are efficiently discovered and indexed."
+                f"Search engine spiders encounter crawling or indexing barriers regarding '{clean_title}'. "
+                "Pages blocked or misconfigured cannot appear in search results."
             )
         if domain == "SCHEMA":
             return (
-                "Structured data (JSON-LD) is missing or malformed, preventing search engines and AI tools from recognizing "
-                "key business entities, products, and rich snippet attributes."
+                "Search engines cannot clearly identify key business entities (organization, products, reviews) because "
+                "structured data tags are missing or invalid."
             )
         if domain == "SPEED":
             return (
@@ -180,13 +180,16 @@ class SpecialistAuditorAgent:
                 f"Market benchmark identified an organic reach or citation discrepancy regarding '{clean_title}' relative to peers."
             )
 
-        return f"Technical inspection identified an issue with '{clean_title}'. Resolving this ensures standard compliance and improves digital performance across affected URLs."
+        return f"{self.name} evaluation identified an issue with '{clean_title}'. Resolving this ensures standard compliance and improves performance across affected endpoints."
 
     def business_impact(self, title: str, description: str, severity: str) -> str:
         """Derives the commercial and search consequence based on the finding context."""
         clean_title = title.rstrip(".")
-        domain = self.domain.upper()
+        desc = description.strip() if description else ""
+        if desc and ("risk" in desc.lower() or "impact" in desc.lower() or "dilutes" in desc.lower()):
+            return desc
 
+        domain = self.domain.upper()
         if domain == "CANONICAL":
             return "Dilutes link equity across duplicate URLs and confuses search engines about which page should rank for commercial queries."
         if domain == "REDIRECT":
@@ -208,7 +211,8 @@ class SpecialistAuditorAgent:
         if domain == "COMPETITOR":
             return "Unaddressed competitor gaps allow category rivals to capture search market share and organic customer demand."
 
-        return f"Unresolved defect in '{clean_title}' affects {self.default_stakeholders}, impairing technical health and organic visibility."
+        sev = str(severity).upper()
+        return f"[{sev}] Unresolved defect in '{clean_title}' affects {self.default_stakeholders}, impairing technical health and user experience."
 
     def who_is_affected(self, title: str, description: str) -> str:
         """Classifies the primary audience and stakeholders affected."""
@@ -260,7 +264,8 @@ class SpecialistAuditorAgent:
         if domain == "COMPETITOR":
             return "Target identified competitor keyword and content gaps with authoritative landing pages."
 
-        return f"Apply the recommended configuration or code adjustment for '{title}' across affected templates."
+        clean_title = title.rstrip(".")
+        return f"Apply recommended remediation for '{clean_title}' across affected endpoints as prescribed by {self.name}."
 
     def what_was_checked(self, title: str, subcategory: str, rule_id: Optional[str]) -> str:
         """Articulates the technical inspection protocol executed."""
@@ -583,15 +588,6 @@ class PlainEnglishEngine:
         agent = AgenticSpecialistRegistry.dispatch_agent_for_finding(category)
         return agent.expected_outcome(severity)
 
-    _RC_CODE_TRANSLATIONS: Dict[str, str] = {
-        "RC_HOMEPAGE_POSITIONING": "Homepage H1 heading uses a creative slogan rather than an explicit commercial category and buyer value proposition.",
-        "RC_IMAGE_ACCESSIBILITY": "Image components in page templates omit descriptive alt attributes.",
-        "RC_SECURITY_HEADERS": "Web server or CDN edge configuration omits recommended HTTP security response headers.",
-        "RC_HOST_CANONICAL_ARCHITECTURE": "Canonical link directives and host normalization rules are not consistently enforced across routes.",
-        "RC_META_DUPLICATION": "CMS page templates reuse a shared fallback meta description instead of page-specific summaries.",
-        "RC_SCHEMA_OMISSION": "Page templates do not inject structured JSON-LD entity markup into the document head.",
-    }
-
     @classmethod
     def _clean_internal_text(cls, val: Any) -> str:
         if val is None:
@@ -604,11 +600,6 @@ class PlainEnglishEngine:
             return ""
         if s.startswith("{") and s.endswith("}") and ("'status':" in s or '"status":' in s):
             return ""
-        if s in cls._RC_CODE_TRANSLATIONS:
-            return cls._RC_CODE_TRANSLATIONS[s]
-        for code, human in cls._RC_CODE_TRANSLATIONS.items():
-            if code in s:
-                s = s.replace(code, human)
         s = re.sub(
             r"SINGLE_SOURCE_UNVERIFIED:\s*no usable external ground truth for this claim family;\s*DOM-only,\s*confidence capped at MEDIUM\.?",
             "",
@@ -625,139 +616,6 @@ class PlainEnglishEngine:
         s = re.sub(r"\bCategory\.([A-Z_]+)\b", lambda m: m.group(1).replace("_", " ").title(), s)
         s = re.sub(r"\bSeverity\.([A-Z_]+)\b", lambda m: m.group(1).title(), s)
         return s.strip(" -—:;")
-
-    @classmethod
-    def _derive_expected_condition(cls, title: str, element: str, category: str) -> str:
-        blob = f"{title} {element} {category}".lower()
-        if "open graph" in blob or "og:" in blob:
-            return "Every indexable page declares og:title, og:description, og:image, and og:url in <head>."
-        if "meta description" in blob or "meta[name='description']" in blob:
-            return "Each indexable URL declares a unique 140–160 character <meta name='description'> summarizing the page offer."
-        if "title" in blob:
-            return "Each indexable URL declares a unique 50–60 character <title> tag naming the primary service and brand."
-        if "h2" in blob or "subheading" in blob:
-            return "Long-form pages (>200 words) segment body copy with descriptive <h2> and <h3> section headings."
-        if "h1" in blob or "heading" in blob:
-            return "Each page contains exactly one descriptive <h1> heading stating the primary topic or commercial offer."
-        if "alt" in blob or "img" in blob or "image" in blob:
-            return "Every informative <img> element includes a descriptive alt attribute (decorative images use alt='')."
-        if "canonical" in blob:
-            return "Each indexable URL declares a single self-referencing <link rel='canonical'> resolving to HTTP 200."
-        if "robots.txt" in blob:
-            return "Root /robots.txt returns HTTP 200 with valid User-agent rules and a Sitemap directive."
-        if "sitemap" in blob:
-            return "XML sitemap at /sitemap.xml returns HTTP 200 and lists only canonical, indexable HTTP 200 URLs."
-        if "hsts" in blob or "strict-transport-security" in blob:
-            return "HTTPS responses include Strict-Transport-Security: max-age=31536000; includeSubDomains."
-        if "csp" in blob or "content-security-policy" in blob:
-            return "HTTP responses declare a Content-Security-Policy header restricting unauthorized script origins."
-        if "x-frame-options" in blob:
-            return "HTTP responses include X-Frame-Options: SAMEORIGIN (or CSP frame-ancestors 'self')."
-        if "x-content-type-options" in blob:
-            return "HTTP responses include X-Content-Type-Options: nosniff."
-        if "schema" in blob or "json-ld" in blob or "structured data" in blob:
-            return "Pages include valid <script type='application/ld+json'> markup for Organization, WebSite, and Service/Product entities."
-        if "viewport" in blob or "mobile" in blob:
-            return "Document <head> includes <meta name='viewport' content='width=device-width, initial-scale=1'>."
-        if "form" in blob or "input" in blob or "label" in blob:
-            return "Every form <input>, <select>, and <textarea> is bound to an explicit <label> or aria-label."
-        return "Rendered HTML DOM and HTTP response headers satisfy target technical SEO and search engine indexing specifications."
-
-    @classmethod
-    def _derive_specific_dev_instructions(
-        cls,
-        title: str,
-        category: str,
-        affected_urls: List[str],
-        recommended_action: str,
-    ) -> str:
-        url_target = affected_urls[0] if affected_urls else "affected page template(s)"
-        tl = title.lower()
-        if "open graph" in tl or "og:" in tl:
-            return (
-                f"Target URL(s): {url_target}\n"
-                "Component: Document <head> social metadata block\n"
-                "Implementation:\n"
-                "<meta property=\"og:type\" content=\"website\" />\n"
-                "<meta property=\"og:title\" content=\"Primary Page Title | Brand\" />\n"
-                "<meta property=\"og:description\" content=\"Unique 140-160 char summary of the page offer.\" />\n"
-                "<meta property=\"og:url\" content=\"" + (affected_urls[0] if affected_urls else "https://example.com/") + "\" />\n"
-                "<meta property=\"og:image\" content=\"https://example.com/assets/og-preview.jpg\" />"
-            )
-        if "meta description" in tl:
-            return (
-                f"Target URL(s): {', '.join(affected_urls[:3]) if affected_urls else url_target}\n"
-                "Component: Document <head> -> <meta name=\"description\">\n"
-                "Implementation: Replace shared/missing description with a unique 140–160 character summary per route:\n"
-                "<meta name=\"description\" content=\"Specific service offering, target audience, proof point, and call to action.\" />"
-            )
-        if "h2" in tl or "subheading" in tl:
-            return (
-                f"Target URL(s): {url_target}\n"
-                "Component: Main article/service body container (<main>)\n"
-                "Implementation: Wrap distinct topical sections in semantic <h2> headings (and nested subsections in <h3>) rather than plain <p> or <div> blocks."
-            )
-        if "h1" in tl or "beyond imagination" in tl:
-            return (
-                f"Target URL(s): {url_target}\n"
-                "Component: Hero banner headline (<h1>)\n"
-                "Implementation: Ensure exactly one <h1> tag states the explicit service category and value proposition, moving taglines into a supporting <p class=\"eyebrow\">."
-            )
-        if "title" in tl:
-            return (
-                f"Target URL(s): {url_target}\n"
-                "Component: Document <head> -> <title>\n"
-                "Implementation:\n"
-                "<title>Primary Keyword &amp; Commercial Service | Brand Name</title> <!-- Keep between 50–60 chars -->"
-            )
-        if "alt" in tl and ("image" in tl or "img" in tl):
-            return (
-                f"Target URL(s): {url_target}\n"
-                "Component: <img> elements in page templates\n"
-                "Implementation: Add descriptive alt text to all content images (e.g. <img src=\"...\" alt=\"Descriptive subject and context\" width=\"...\" height=\"...\" />) and alt=\"\" for purely decorative icons."
-            )
-        if "hsts" in tl or "strict-transport-security" in tl or "security header" in tl or "csp" in tl or "x-frame" in tl or "x-content-type" in tl:
-            return (
-                f"Target Host: {url_target}\n"
-                "Component: Web server / CDN Edge Response Headers (Nginx / Cloudflare / Vercel)\n"
-                "Implementation:\n"
-                "Strict-Transport-Security: max-age=31536000; includeSubDomains; preload\n"
-                "X-Content-Type-Options: nosniff\n"
-                "X-Frame-Options: SAMEORIGIN\n"
-                "Referrer-Policy: strict-origin-when-cross-origin"
-            )
-        if "schema" in tl or "json-ld" in tl or "structured data" in tl:
-            return (
-                f"Target URL(s): {url_target}\n"
-                "Component: Document <head> JSON-LD script block\n"
-                "Implementation:\n"
-                "<script type=\"application/ld+json\">\n"
-                "{\n"
-                "  \"@context\": \"https://schema.org\",\n"
-                "  \"@type\": \"Organization\",\n"
-                "  \"name\": \"Brand Name\",\n"
-                "  \"url\": \"" + (affected_urls[0] if affected_urls else "https://example.com/") + "\"\n"
-                "}\n"
-                "</script>"
-            )
-        if "canonical" in tl:
-            return (
-                f"Target URL(s): {url_target}\n"
-                "Component: Document <head> -> <link rel=\"canonical\">\n"
-                "Implementation:\n"
-                f"<link rel=\"canonical\" href=\"{affected_urls[0] if affected_urls else 'https://example.com/'}\" />"
-            )
-        if "form" in tl or "input" in tl or "cta" in tl:
-            return (
-                f"Target URL(s): {url_target}\n"
-                "Component: Lead capture form & primary CTA controls\n"
-                "Implementation: Bind every <input> to an explicit <label for=\"...\"> element and ensure primary CTA buttons use descriptive action text."
-            )
-        return (
-            f"Target URL(s): {', '.join(affected_urls[:3]) if affected_urls else url_target}\n"
-            f"Component: Page template / HTTP response configuration\n"
-            f"Implementation Directive: {recommended_action}"
-        )
 
     @classmethod
     def enrich_finding(cls, finding: Any, index: int = 1) -> Dict[str, Any]:
@@ -845,13 +703,6 @@ class PlainEnglishEngine:
             _get_val(finding, "plain_english_summary")
             or _get_val(finding, "what_is_this")
         )
-        if plain_english_summary and any(phrase in str(plain_english_summary) for phrase in (
-            "Modern browsers display warnings",
-            "mandatory security certificates",
-            "encryption rules",
-        )) and agent.domain != "SECURITY":
-            plain_english_summary = ""
-
         if not plain_english_summary or plain_english_summary.lower() == title.lower():
             desc_val = cls._clean_internal_text(_get_val(finding, "description") or "")
             if desc_val and desc_val.lower() != str(title).strip().lower():
@@ -866,12 +717,7 @@ class PlainEnglishEngine:
             or _get_val(finding, "why_to_change")
             or _get_val(finding, "business_context")
         )
-        if not business_impact or (any(phrase in str(business_impact) for phrase in (
-            "Modern browsers display warnings",
-            "mandatory security certificates",
-            "encryption rules",
-            "browser security warnings",
-        )) and agent.domain != "SECURITY"):
+        if not business_impact:
             business_impact = agent.business_impact(str(title), str(observed_result), sev_str)
         if "cannot be quantified" not in business_impact.lower() and "unmeasured" not in business_impact.lower():
             business_impact = (
@@ -881,15 +727,15 @@ class PlainEnglishEngine:
 
         # What Dristik checked
         what_was_checked = cls._clean_internal_text(_get_val(finding, "what_was_checked"))
-        if not what_was_checked or ("Security, HTTPS & Protocol Integrity Specialist" in str(what_was_checked) and agent.domain != "SECURITY"):
+        if not what_was_checked:
             what_was_checked = agent.what_was_checked(str(title), str(subcategory), rule_id)
 
         # Who is affected
         who_affected = cls._clean_internal_text(_get_val(finding, "who_affected"))
-        if not who_affected or ("Reputation & Risk" in str(who_affected) and agent.domain != "SECURITY"):
+        if not who_affected:
             who_affected = agent.who_is_affected(str(title), str(observed_result))
 
-        # Recommended action (Fix mismatched recommendations from legacy runs)
+        # Recommended action
         recommended_action = cls._clean_internal_text(
             _get_val(finding, "recommended_action")
             or _get_val(finding, "how_to_change")
@@ -897,20 +743,6 @@ class PlainEnglishEngine:
             or _get_val(finding, "recommendation")
             or _get_val(finding, "suggested_fix")
         )
-        title_l = title.lower()
-        if "open graph" in title_l and "140–160 character description" in recommended_action:
-            recommended_action = "Add complete Open Graph meta tags (og:title, og:description, og:image, og:url) in the document <head> on affected URLs."
-        elif ("h2" in title_l or "subheading" in title_l) and "140–160 character description" in recommended_action:
-            recommended_action = "Break long body copy into scannable sections using descriptive <h2> and <h3> subheadings aligned with buyer search intent."
-        elif "Suggested H1:" in recommended_action and not ("h1" in title_l or "hero" in title_l or "headline" in title_l):
-            recommended_action = re.sub(r"\s*Suggested H1:.*$", "", recommended_action).strip()
-            if not recommended_action or recommended_action.lower().startswith("replace "):
-                if "title" in title_l:
-                    recommended_action = "Write a distinct 50–60 character <title> tag naming the specific service, target audience, and brand."
-                elif "meta" in title_l or "description" in title_l:
-                    recommended_action = "Write a unique 140–160 character <meta name='description'> summarizing the page offer, proof, and CTA."
-                elif "cta" in title_l:
-                    recommended_action = "Replace generic CTA button labels with specific, high-intent commercial action text."
         if not recommended_action:
             recommended_action = agent.recommended_action(str(title))
 
@@ -932,35 +764,27 @@ class PlainEnglishEngine:
                 if dev_detail:
                     developer_instructions = dev_detail
                 else:
-                    developer_instructions = cls._derive_specific_dev_instructions(
-                        str(title), str(category), affected_urls, str(recommended_action)
+                    targets = ", ".join(affected_urls[:3]) if affected_urls else "affected page template(s)"
+                    developer_instructions = (
+                        f"Target Scope: {targets}\n"
+                        f"Component: {category} template / server configuration\n"
+                        f"Implementation Directive: {recommended_action}"
                     )
         else:
             developer_instructions = raw_dev
 
-        # Verification steps (Ensure topic-accurate verification steps)
-        val_crit = cls._clean_internal_text(_get_val(finding, "validation_criteria") or _get_val(finding, "acceptance_criteria"))
-        if "alt" in title_l and ("image" in title_l or "img" in title_l):
-            verification_steps = [
-                "Inspect the rendered DOM on affected URLs and verify every informative <img> tag has a non-empty, descriptive alt attribute.",
-                "Confirm purely decorative images declare an explicit empty alt=\"\" attribute.",
-                "Re-run the Dristik page crawler to verify missing_alt_count == 0.",
-            ]
-        elif "open graph" in title_l or "og:" in title_l:
-            verification_steps = [
-                "Inspect the HTML <head> on affected URLs and confirm og:title, og:description, og:image, and og:url tags are present.",
-                "Verify that the og:image URL resolves with HTTP 200 and valid image dimensions.",
-            ]
-        elif "form" in title_l or "input" in title_l:
-            verification_steps = [
-                "Inspect form controls in the DOM and confirm every <input>, <select>, and <textarea> has an associated <label> or aria-label.",
-                "Test keyboard tab navigation and form submission across desktop and mobile viewports.",
-            ]
+        # Testable Acceptance Criteria
+        acceptance_val = cls._clean_internal_text(_get_val(finding, "acceptance_criteria") or _get_val(finding, "validation_criteria"))
+        if not acceptance_val:
+            acceptance_val = f"Endpoint resolves according to {agent.name} standards with zero {title.lower()} defects."
+
+        # Verification steps
+        ver_steps = _get_val(finding, "verification_steps")
+        if ver_steps and isinstance(ver_steps, list) and len(ver_steps) > 0:
+            verification_steps = [str(s) for s in ver_steps]
         else:
-            verification_steps = _get_val(finding, "verification_steps")
-            if not verification_steps or any("Rich Results" in str(s) for s in verification_steps) and "schema" not in title_l:
-                ver_method = _get_val(finding, "verification_method")
-                verification_steps = agent.verification_steps(str(title), val_crit, ver_method)
+            ver_method = _get_val(finding, "verification_method")
+            verification_steps = agent.verification_steps(str(title), acceptance_val, ver_method)
 
         # Evidence references (Full Layer 1 Machine Observations, strictly filtered for semantic compatibility)
         from app.seo.audit.evidence.compatibility_gate import EvidenceCompatibilityGate
@@ -980,7 +804,7 @@ class PlainEnglishEngine:
             e_obs = cls._clean_internal_text(raw_e_obs) or observed_result
             raw_e_exp = _get_val(ev, "expected_condition")
             if not raw_e_exp or "conform to w3c" in str(raw_e_exp).lower() or "conform to published" in str(raw_e_exp).lower():
-                e_exp = cls._derive_expected_condition(str(title), str(e_elem), str(category))
+                e_exp = acceptance_val
             else:
                 e_exp = str(raw_e_exp)
             e_meth = _get_val(ev, "test_method") or "crawl_inspection"
@@ -1002,13 +826,12 @@ class PlainEnglishEngine:
             })
 
         if not evidence_list:
-            default_exp = cls._derive_expected_condition(str(title), str(agent.domain.lower()), str(category))
             evidence_list.append({
                 "id": f"EV-{raw_id}-01",
                 "url": str(affected_urls[0] if affected_urls else ""),
                 "element": str(agent.domain.lower()),
                 "observed_value": str(observed_result),
-                "expected_condition": default_exp,
+                "expected_condition": str(acceptance_val),
                 "test_method": "deterministic_inspection",
                 "snippet": str(observed_result)[:120],
                 "source": "crawl_inspection",
@@ -1048,9 +871,10 @@ class PlainEnglishEngine:
             "REGRESSED": "Regressed Defect",
         }.get(status_str, "Open Defect")
 
-        # Responsible Role (Priority 6)
+        # Responsible Role
         responsible_role = _get_val(finding, "responsible_role") or _get_val(finding, "owner")
         if not responsible_role or responsible_role in ("Engineering", "default"):
+            title_l = title.lower()
             if any(k in title_l for k in ["alt", "heading", "h1", "h2", "title tag", "meta description", "thin copy", "content"]):
                 responsible_role = "Content Editor"
             elif any(k in title_l for k in ["schema", "json-ld", "keyword", "sitemap", "robots.txt", "canonical", "serp", "open graph"]):
@@ -1060,7 +884,7 @@ class PlainEnglishEngine:
             else:
                 responsible_role = "Developer"
 
-        # Estimated Effort (Priority 6)
+        # Estimated Effort
         raw_effort = _get_val(finding, "estimated_effort")
         if raw_effort:
             estimated_effort = str(raw_effort)
@@ -1075,7 +899,7 @@ class PlainEnglishEngine:
             else:
                 estimated_effort = "Complex (> 3 days)"
 
-        # Implementation Dependencies (Priority 6)
+        # Implementation Dependencies
         raw_deps = _get_val(finding, "dependencies") or _get_val(finding, "implementation_dependencies") or []
         if isinstance(raw_deps, list) and raw_deps:
             dependencies = [str(d) for d in raw_deps]
@@ -1089,7 +913,7 @@ class PlainEnglishEngine:
             else:
                 dependencies = ["Analytics administrative access"]
 
-        # Priority Rationale (Priority 6)
+        # Priority Rationale
         priority_rationale = cls._clean_internal_text(_get_val(finding, "priority_rationale") or _get_val(finding, "severity_justification"))
         if not priority_rationale:
             if sev_str == "CRITICAL":
@@ -1101,56 +925,18 @@ class PlainEnglishEngine:
             else:
                 priority_rationale = "Low Priority: Best-practice hygiene optimization with minimal immediate crawl risk."
 
-        # Testable Acceptance Criteria (Priority 6 / Validation)
-        acceptance_val = cls._clean_internal_text(_get_val(finding, "acceptance_criteria") or _get_val(finding, "validation_criteria"))
-        if not acceptance_val:
-            acceptance_val = cls._derive_expected_condition(str(title), "", str(category))
-
-        # Concrete Verification Command (Priority 6 / Validation)
+        # Concrete Verification Command
         verification_cmd = _get_val(finding, "verification_command")
         if not verification_cmd:
             primary_url = affected_urls[0] if affected_urls else None
-            if "canonical" in title_l:
-                verification_cmd = f"curl -sI -L '{primary_url}' | grep -i 'canonical'" if primary_url else "Verify canonical target URL returns HTTP 200 without redirect loops."
-            elif "hsts" in title_l or "security" in title_l:
-                verification_cmd = f"curl -sI '{primary_url}' | grep -i 'Strict-Transport-Security'" if primary_url else "Inspect HTTPS response headers for Strict-Transport-Security."
-            elif "open graph" in title_l or "og:" in title_l:
-                verification_cmd = f"curl -sL '{primary_url}' | grep -i 'property=\"og:'" if primary_url else "Inspect document head for Open Graph meta tags."
-            elif "heading" in title_l or "h1" in title_l or "h2" in title_l:
-                verification_cmd = f"curl -sL '{primary_url}' | grep -ioE '<h[1-6][^>]*>.*?</h[1-6]>'" if primary_url else "Audit rendered DOM heading hierarchy."
-            elif "alt" in title_l:
-                verification_cmd = f"curl -sL '{primary_url}' | grep -ioE '<img[^>]*>' | grep -v 'alt='" if primary_url else "Re-crawl and inspect all img elements for valid alt text attributes."
-            elif "meta" in title_l or "title" in title_l:
-                verification_cmd = f"curl -sL '{primary_url}' | grep -iE '<(title|meta name=\"description\")'" if primary_url else "Inspect document head title and meta tags."
-            elif "thin" in title_l or "word" in title_l:
-                verification_cmd = f"Extract body text nodes from '{primary_url}' and calculate informative word count." if primary_url else "Audit page body content volume and topical completeness."
-            elif "404" in title_l or "redirect" in title_l:
-                verification_cmd = f"curl -sIL -o /dev/null -w '%{{http_code}} -> %{{url_effective}}\\n' '{primary_url}'" if primary_url else "Inspect link destination HTTP status codes."
-            elif "robots" in title_l:
-                verification_cmd = f"curl -s '{primary_url.rstrip('/')}/robots.txt'" if primary_url else "Fetch and parse /robots.txt directives."
-            elif "sitemap" in title_l:
-                verification_cmd = f"curl -sI '{primary_url.rstrip('/')}/sitemap.xml'" if primary_url else "Verify /sitemap.xml accessibility and HTTP 200 response."
-            elif "ttfb" in title_l or "speed" in title_l or "latency" in title_l:
-                verification_cmd = f"curl -s -o /dev/null -w 'TTFB: %{{time_starttransfer}}s\\n' '{primary_url}'" if primary_url else "Execute latency benchmarks under controlled test conditions."
-            elif "schema" in title_l or "json-ld" in title_l:
-                verification_cmd = f"curl -sL '{primary_url}' | grep -i 'application/ld+json'" if primary_url else "Validate JSON-LD structured data syntax and Schema.org properties."
+            if primary_url:
+                verification_cmd = f"curl -sI -L '{primary_url}'"
             else:
-                verification_cmd = f"Execute automated verification retest for '{title}' on {primary_url}" if primary_url else f"Automated inspection and retest for '{title}'."
+                verification_cmd = f"Automated inspection and retest for '{title}'."
 
         root_cause_val = cls._clean_internal_text(_get_val(finding, "root_cause") or _get_val(finding, "causal_mechanism"))
         if not root_cause_val:
-            if "h1" in title_l or "beyond imagination" in title_l:
-                root_cause_val = cls._RC_CODE_TRANSLATIONS["RC_HOMEPAGE_POSITIONING"]
-            elif "alt" in title_l:
-                root_cause_val = cls._RC_CODE_TRANSLATIONS["RC_IMAGE_ACCESSIBILITY"]
-            elif "hsts" in title_l or "security" in title_l or "csp" in title_l or "x-frame" in title_l:
-                root_cause_val = cls._RC_CODE_TRANSLATIONS["RC_SECURITY_HEADERS"]
-            elif "duplicate" in title_l and "meta" in title_l:
-                root_cause_val = cls._RC_CODE_TRANSLATIONS["RC_META_DUPLICATION"]
-            elif "schema" in title_l or "json-ld" in title_l:
-                root_cause_val = cls._RC_CODE_TRANSLATIONS["RC_SCHEMA_OMISSION"]
-            else:
-                root_cause_val = f"Template markup or HTTP configuration omission on {len(affected_urls) or 1} audited route(s)."
+            root_cause_val = f"Template markup or HTTP configuration omission on {len(affected_urls) or 1} audited route(s)."
         code_val = cls._clean_internal_text(_get_val(finding, "relevant_code_or_configuration_example"))
 
         return {
@@ -1189,6 +975,7 @@ class PlainEnglishEngine:
         cls,
         finding: Any,
         domain: Optional[str] = None,
+        client: Optional[Any] = None,
     ) -> Dict[str, Any]:
         """
         Asynchronous LLM-powered agentic explanation pathway.
@@ -1198,10 +985,14 @@ class PlainEnglishEngine:
         Falls back seamlessly to the deterministic agent workforce when offline.
         """
         try:
-            from app.scoring.calibration import calibrate_and_explain_finding_ai
+            try:
+                from app.domain.scoring.calibration import calibrate_and_explain_finding_ai
+            except ImportError:
+                from app.scoring.calibration import calibrate_and_explain_finding_ai
+
             from app.domain.models import Finding
             if isinstance(finding, Finding):
-                await calibrate_and_explain_finding_ai(finding, domain=domain)
+                await calibrate_and_explain_finding_ai(finding, domain=domain, client=client)
         except Exception as e:
             logger.debug("Agentic AI explanation fallback: %s", e)
 
@@ -1501,7 +1292,10 @@ async def batch_enrich_report_agentic(
     Directly addresses non-technical questions across findings.
     """
     try:
-        from app.scoring.calibration import batch_calibrate_and_explain_findings_ai
+        try:
+            from app.domain.scoring.calibration import batch_calibrate_and_explain_findings_ai
+        except ImportError:
+            from app.scoring.calibration import batch_calibrate_and_explain_findings_ai
         findings = list(getattr(report, "findings", []) or [])
         if findings:
             await batch_calibrate_and_explain_findings_ai(findings, domain=domain, client=client)

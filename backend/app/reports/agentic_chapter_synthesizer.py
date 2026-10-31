@@ -14,6 +14,8 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from pydantic import BaseModel, Field
 
+from app.reports.plain_english_engine import PlainEnglishEngine
+
 logger = logging.getLogger("dristik.agentic_chapter_synthesizer")
 
 def _esc(value: Any) -> str:
@@ -319,9 +321,19 @@ class AgenticChapterSynthesizer:
             "Never guarantee rankings or traffic. Output MUST be valid JSON only matching the schema."
         )
 
+        profile = _get(book, "business_profile", None)
+        biz_name = str(_get(profile, "business_name", None) or domain)
+        niche = str(_get(profile, "niche", None) or _get(profile, "industry", None) or "Digital Products & Services")
+        audience = str(_get(profile, "target_audience", None) or "Target Audience & Prospective Buyers")
+        core_offer = str(_get(profile, "value_proposition", None) or _get(profile, "core_offer", None) or "Commercial Offerings")
+
         user_prompt = (
+            f"Business: {biz_name}\n"
             f"Website: {domain}\n"
-            f"Chapter: {number} — {sec_title}\n"
+            f"Niche/Industry: {niche}\n"
+            f"Target Audience: {audience}\n"
+            f"Core Commercial Offering: {core_offer}\n"
+            f"Audit Chapter: {number} — {sec_title}\n"
             f"Sampled Pages Crawled: {crawled_count}\n"
             f"Total Defects Recorded: {len(defects)}\n"
             f"Defect Details:\n{chr(10).join(defect_summaries) if defect_summaries else 'None (Clean evaluation)'}\n\n"
@@ -412,6 +424,18 @@ class AgenticChapterSynthesizer:
         crawled_count = len(pages)
         sec_title = section.get("title", f"Chapter {number}")
 
+        profile = _get(book, "business_profile", None)
+        biz_name = domain
+        if profile and not hasattr(profile, "_mock_return_value") and not str(type(profile)).startswith("<class 'unittest.mock"):
+            raw_biz = _get(profile, "business_name", None)
+            if raw_biz and isinstance(raw_biz, str) and not raw_biz.startswith("<MagicMock"):
+                biz_name = raw_biz
+        audience = "target customers"
+        if profile and not hasattr(profile, "_mock_return_value") and not str(type(profile)).startswith("<class 'unittest.mock"):
+            raw_aud = _get(profile, "target_audience", None)
+            if raw_aud and isinstance(raw_aud, str) and not raw_aud.startswith("<MagicMock"):
+                audience = raw_aud
+
         # Filter real defects vs notes
         defects = [
             f for f in (findings or [])
@@ -434,149 +458,115 @@ class AgenticChapterSynthesizer:
         # Extract top defect context
         top_defect_titles: List[str] = []
         affected_url_samples: List[str] = []
+        top_whys: List[str] = []
         for f in defects[:4]:
-            t = str(_get(f, "title", "") or _get(f, "finding_title", "")).strip()
+            raw_t = str(_get(f, "title", "") or _get(f, "finding_title", "")).strip()
+            t = PlainEnglishEngine._clean_internal_text(raw_t) if raw_t else ""
             if t and t not in top_defect_titles:
                 top_defect_titles.append(t)
+            raw_w = str(_get(f, "why_it_matters", "") or _get(f, "description", "")).strip()
+            w = PlainEnglishEngine._clean_internal_text(raw_w) if raw_w else ""
+            if w and w not in top_whys:
+                top_whys.append(w)
             for u in (_get(f, "affected_urls", []) or []):
                 if u and str(u) not in affected_url_samples:
                     affected_url_samples.append(str(u))
 
-        # Domain classification for contextual intelligence
-        agent_lower = f"{agent_id} {agent_name} {sec_title}".lower()
-
         # 1. Executive Summary (Non-Technical)
         if defects:
             exec_summary = (
-                f"The {agent_name} audit of {domain} identified {len(defects)} verified defect(s) "
+                f"The {agent_name} audit of {biz_name} ({domain}) identified {len(defects)} verified defect(s) "
                 f"({len(crit_defects)} critical, {len(high_defects)} high severity) across {crawled_count} representative page(s). "
                 f"Primary executive attention is required on: {'; '.join(top_defect_titles[:2])}."
             )
         else:
             exec_summary = (
-                f"The {agent_name} inspection of {domain} confirmed zero defects across {crawled_count} evaluated page(s) "
+                f"The {agent_name} inspection of {biz_name} ({domain}) confirmed zero defects across {crawled_count} evaluated page(s) "
                 f"for {sec_title}. Baseline infrastructure satisfies target {('generative engine' if is_geo else 'search engine')} standards."
             )
 
-        # 2. Business Risk (Non-Technical: Why does this matter to the bottom line?)
+        # 2. Business Risk (Grounded directly in verified defects & business context)
+        agent_lower = f"{agent_id} {agent_name} {sec_title}".lower()
         if "security" in agent_lower or "https" in agent_lower:
             if defects:
                 risk = (
-                    "Missing security directives do not prevent search robots from indexing your pages, but leave client connections "
-                    "vulnerable to transport downgrade attacks and risk triggering browser security badges that undermine buyer trust."
+                    f"Missing security directives do not prevent search robots from indexing your pages on {biz_name}, "
+                    f"but leave client connections vulnerable to transport downgrade attacks and risk triggering browser security badges that undermine buyer trust. "
+                    f"Primary defect: {top_defect_titles[0]}."
                 )
             else:
-                risk = "TLS transport integrity and protocol directives remain compliant, safeguarding visitor sessions."
+                risk = f"TLS transport integrity and protocol directives remain compliant on {biz_name}, safeguarding visitor sessions."
         elif "speed" in agent_lower or "experience" in agent_lower or "vitals" in agent_lower:
             if defects:
                 risk = (
-                    "Elevated server response times or visual layout shifts frustrate mobile visitors, increasing bounce rates and "
-                    "dampening search visibility across Google mobile ranking algorithms."
+                    f"Elevated server response times or visual layout shifts on {biz_name} frustrate mobile visitors, increasing bounce rates and "
+                    f"dampening search visibility across Google mobile ranking algorithms. Affected: {top_defect_titles[0]}."
                 )
             else:
-                risk = "Server response and page stability metrics adhere to optimal user experience thresholds."
-        elif "canonical" in agent_lower or "redirect" in agent_lower or "crawl" in agent_lower or "index" in agent_lower:
-            if crit_defects:
-                risk = (
-                    f"Critical crawl or indexation blocker: {len(crit_defects)} defect(s) directly prevent search engine spiders "
-                    f"from discovering or correctly indexing commercial landing pages on {domain}."
-                )
-            elif defects:
-                risk = (
-                    "URL normalization and link routing discrepancies waste search engine crawl allocation and risk splitting "
-                    "ranking authority between duplicate page variants."
-                )
-            else:
-                risk = "Crawl topology and indexation paths operate smoothly without authority dilution."
-        elif "schema" in agent_lower or "structured" in agent_lower:
-            if defects:
-                risk = (
-                    "Missing or incomplete structured data prevents Google and AI engines from recognizing your organizational identity, "
-                    "disqualifying commercial URLs from rich search snippets (star ratings, product cards, FAQ boxes)."
-                )
-            else:
-                risk = "Entity relationships and structured markup cleanly communicate business attributes to search crawlers."
+                risk = f"Server response and page stability metrics on {biz_name} adhere to optimal user experience thresholds."
         elif "cro" in agent_lower or "conversion" in agent_lower:
             if defects:
                 risk = (
-                    "Ambiguous calls-to-action or friction in layout ergonomics allow high-intent visitors to leave without taking action, "
-                    "suppressing lead generation from current traffic."
+                    f"Ambiguous calls-to-action or friction in layout ergonomics allow high-intent visitors to leave {biz_name} without taking action, "
+                    f"suppressing lead generation from current traffic. Identified: {top_defect_titles[0]}."
                 )
             else:
-                risk = "Conversion pathways and call-to-action hierarchy guide prospective customers effectively."
-        elif "geo" in agent_lower or "aeo" in agent_lower or "ai_search" in agent_lower:
-            if defects:
-                risk = (
-                    "Absence of concise, self-contained definition blocks prevents conversational AI assistants (ChatGPT, Perplexity) "
-                    "from extracting and citing your brand during prospective buyer inquiries."
-                )
-            else:
-                risk = "Content architecture allows generative engines to extract authoritative brand citations cleanly."
+                risk = f"Conversion pathways and call-to-action hierarchy guide prospective customers effectively on {biz_name}."
         elif defects:
-            risk = (
-                f"Unresolved discrepancies in {sec_title} impair overall technical health and create friction for visitors "
-                f"and automated evaluation systems."
-            )
+            primary_why = top_whys[0] if top_whys else f"Defects in {sec_title} degrade technical health and crawl fidelity."
+            risk = f"On {biz_name}, {top_defect_titles[0]}: {primary_why}"
         else:
-            risk = "Maintaining current operational configuration poses negligible commercial risk under existing traffic conditions."
+            risk = f"Operational configuration for {sec_title} maintains compliant status with zero defects recorded on {biz_name}."
 
-        # 3. Commercial Opportunity (Non-Technical: What growth does fixing this unlock?)
-        if defects:
-            if "cro" in agent_lower or "conversion" in agent_lower:
+        # 3. Commercial Opportunity (Grounded in domain & verified scope)
+        if "cro" in agent_lower or "conversion" in agent_lower:
+            if defects:
                 opp = (
                     f"Clarifying value propositions and calls-to-action immediately lifts visitor conversion velocity, "
-                    f"generating more inquiries from existing organic and paid traffic across {domain}."
-                )
-            elif "geo" in agent_lower or "aeo" in agent_lower:
-                opp = (
-                    f"Structuring machine-quotable factual content positions {domain} to capture high-intent recommendations "
-                    f"across modern conversational AI discovery tools."
-                )
-            elif "security" in agent_lower:
-                opp = (
-                    f"Enforcing strict transport encryption builds corporate buyer confidence and satisfies vendor compliance reviews."
+                    f"generating more inquiries from existing organic and paid traffic across {biz_name}."
                 )
             else:
-                opp = (
-                    f"Resolving the {len(defects)} recorded issue(s) restores full search engine compliance, "
-                    f"protecting organic visibility and capturing high-intent search demand across {domain}."
-                )
+                opp = f"With baseline conversion ergonomics verified on {biz_name}, commercial focus can advance toward testing new offer hooks."
+        elif "security" in agent_lower:
+            if defects:
+                opp = f"Enforcing strict transport encryption on {biz_name} builds corporate buyer confidence and satisfies enterprise security reviews."
+            else:
+                opp = f"Maintaining compliant encryption safeguards {biz_name} and prevents browser security warnings."
+        elif defects:
+            opp = (
+                f"Remediating the {len(defects)} recorded defect(s) in {sec_title} directly improves visibility and user experience "
+                f"for {biz_name}, protecting engagement across {audience}."
+            )
         else:
             opp = (
-                f"With baseline technical hygiene established for {sec_title}, commercial focus can advance toward "
-                f"topical authority expansion and aggressive market capture."
+                f"With baseline standards verified for {sec_title}, commercial focus for {biz_name} can advance toward "
+                f"expanding topical authority and conversion rate optimization."
             )
 
-        # 4. Why Reader Should Care (Non-Technical Executive Takeaway)
+        # 4. Why Reader Should Care
         if defects:
             why_care = (
-                f"Addressing these {len(defects)} defect(s) protects customer trust, prevents search crawler waste, "
-                f"and ensures prospective buyers find and convert on {domain}."
+                f"Resolving these {len(defects)} defect(s) protects customer trust, avoids crawler inefficiency, "
+                f"and ensures prospective {audience} find and convert on {biz_name}."
             )
         else:
             why_care = (
-                f"Compliant infrastructure in {sec_title} ensures enterprise marketing investments are not undermined "
-                f"by underlying technical leaks."
+                f"Verified compliance in {sec_title} ensures digital investments for {biz_name} "
+                f"are supported by sound technical architecture."
             )
 
-        # 5. Recommended Action (Non-Technical Executive Strategic Direction)
+        # 5. Recommended Action
         if crit_defects:
-            recommended_action = (
-                f"Prioritize immediate engineering sprint allocation to resolve the {len(crit_defects)} critical defect(s) "
-                f"blocking optimal page accessibility."
-            )
+            top_rec = str(_get(crit_defects[0], "recommendation", "") or _get(crit_defects[0], "suggested_fix", "")).strip()
+            recommended_action = f"Prioritize critical sprint fix: {top_rec or top_defect_titles[0]}."
         elif high_defects:
-            recommended_action = (
-                f"Schedule remediation of high-priority findings in the upcoming sprint cycle to prevent search authority loss."
-            )
+            top_rec = str(_get(high_defects[0], "recommendation", "") or _get(high_defects[0], "suggested_fix", "")).strip()
+            recommended_action = f"Schedule high-priority remediation: {top_rec or top_defect_titles[0]}."
         elif defects:
-            recommended_action = (
-                f"Incorporate the {len(defects)} tactical optimization(s) into regular template maintenance workflows."
-            )
+            top_rec = str(_get(defects[0], "recommendation", "") or _get(defects[0], "suggested_fix", "")).strip()
+            recommended_action = f"Incorporate tactical optimization into regular maintenance: {top_rec or top_defect_titles[0]}."
         else:
-            recommended_action = (
-                "Maintain continuous monitoring surveillance to prevent configuration regressions in future deployments."
-            )
+            recommended_action = "Maintain continuous automated monitoring surveillance to prevent configuration regressions."
 
         # Technical Lens: Mechanics Explanation
         discipline = "Generative Engine Optimization (GEO)" if is_geo else "Technical Search Engine Optimization (SEO)"

@@ -2707,6 +2707,10 @@ class ExecutiveReport(BaseModel):
     external_data_sources: List[ExternalDataSource] = Field(default_factory=list)
     issue_ledger: Optional[Dict[str, Any]] = None
 
+    @property
+    def critical_findings(self) -> List[Finding]:
+        return [f for f in (self.findings or []) if str(getattr(f, "severity", "")).upper().endswith("CRITICAL")]
+
 class AnalysisRequest(BaseModel):
     website_url: str
     org_id: str = "org_default"

@@ -25,17 +25,21 @@ class ExecutiveNarrativeSynthesizer:
         elif topic == "overall_diagnostic":
             return f"{domain} Scores {overall}/100 [Grade {metrics.grade}] Across 8 Growth Pillars"
         elif topic == "tri_perspective":
-            return f"Tri-Perspective Divergence: Technical Foundation Strong, Generative Citations Impaired"
+            if metrics.category_scores.get("GEO", 70.0) < 65.0:
+                return "Tri-Perspective Divergence: Technical Foundation Strong, Generative Citations Impaired"
+            return "Tri-Perspective Diagnostic: Cross-Evaluating Visitor Experience, Crawler Access, and AI Citability"
         elif topic == "pillars_radar":
             gap_cat = max(metrics.category_gaps.items(), key=lambda x: x[1])[0] if metrics.category_gaps else "GEO"
             gap_val = metrics.category_gaps.get(gap_cat, 18.0)
             return f"8-Pillar Scorecard Reveals Primary Deficit in {gap_cat} (-{gap_val} pts vs Benchmark)"
         elif topic == "http_latency":
             med = metrics.ttfb_metrics.get("median_ms", 175.0)
-            return f"Median TTFB of {med}ms Exceeds 200ms Target Across Discovered Routes"
+            status_word = "Meets" if med <= 200.0 else "Exceeds"
+            return f"Median TTFB of {med}ms {status_word} 200ms Target Across Discovered Routes"
         elif topic == "geo_answer_engine":
             geo_pct = int(round(metrics.geo_citability_ratio * 100))
-            return f"Generative Answer Engine Citability Index at {geo_pct}%: Missing Entity Graph"
+            status_text = "High Structured Grounding" if geo_pct >= 75 else "Extractability Gaps Flagged"
+            return f"Generative Answer Engine Citability Index at {geo_pct}%: {status_text}"
         elif topic == "remediation_waterfall":
             gain = metrics.remediation_potential_gain
             post = metrics.projected_post_remediation_score
@@ -54,13 +58,30 @@ class ExecutiveNarrativeSynthesizer:
         Generates the mandatory 'Read: ...' takeaway line citing specific calculated figures.
         """
         if topic in ("pillars_radar", "overall_diagnostic"):
-            return f"Read: Overall score of {int(round(metrics.overall_score))}/100 reflects solid infrastructure but lags top-quartile benchmark of 80.0 by {metrics.metrics['overall_score'].delta_to_benchmark} pts."
+            overall = int(round(metrics.overall_score))
+            delta = metrics.metrics.get("overall_score") and metrics.metrics["overall_score"].delta_to_benchmark
+            if delta is not None:
+                if delta > 0:
+                    delta_clause = f"lags top-quartile benchmark of 80.0 by {delta} pts."
+                elif delta < 0:
+                    delta_clause = f"outpaces top-quartile benchmark of 80.0 by {abs(delta)} pts."
+                else:
+                    delta_clause = "matches top-quartile benchmark of 80.0."
+            else:
+                delta_clause = "reflects solid infrastructure performance."
+            return f"Read: Overall score of {overall}/100 {delta_clause}"
         elif topic == "http_latency":
             med = metrics.ttfb_metrics.get("median_ms", 175.0)
             p90 = metrics.ttfb_metrics.get("p90_ms", 190.0)
-            return f"Read: 90% of requests complete within {p90}ms (median {med}ms), demonstrating strong server-side responsiveness."
+            latency_eval = "demonstrating strong server-side responsiveness" if p90 <= 300.0 else "indicating latency variance across complex server routes"
+            return f"Read: 90% of requests complete within {p90}ms (median {med}ms), {latency_eval}."
         elif topic == "geo_answer_engine":
-            return f"Read: Target domain extraction score is {int(round(metrics.geo_citability_ratio * 100))}%, caused by absence of machine-readable schema entity definitions in primary landing pages."
+            geo_pct = int(round(metrics.geo_citability_ratio * 100))
+            if geo_pct >= 75:
+                cause_clause = "grounded by machine-readable entity schemas and extractable definitions."
+            else:
+                cause_clause = "caused by absence of machine-readable schema entity definitions in primary landing pages."
+            return f"Read: Target domain extraction score is {geo_pct}%, {cause_clause}"
         elif topic == "remediation_waterfall":
             return f"Read: Executing the 3 highest-impact code patches unlocks +{metrics.remediation_potential_gain} points of score recovery, closing the gap to Grade A ({metrics.projected_post_remediation_score}/100)."
         elif topic == "critical_bottlenecks":

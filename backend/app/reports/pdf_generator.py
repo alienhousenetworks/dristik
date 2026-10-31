@@ -38,14 +38,14 @@ class ExecutiveDeckGenerator:
 
         story_summary = run_data.get("story_summary") or "No executive narrative was sealed for this run."
         lead_opp = run_data.get("primary_strategic_opportunity") or "No next action was sealed for this run."
-        what_site_gets_right = run_data.get("what_site_gets_right") or "Clean canonical routing, valid HTTP response codes, and compliant sitemaps ensure traditional indexation health."
-        what_is_holding_it_back = run_data.get("what_is_holding_it_back") or "Ambiguous marketing copy requires conversion into structured, entity-attributed factual statements for RAG answer engines."
+        what_site_gets_right = run_data.get("what_site_gets_right") or "No baseline strengths recorded from unverified claims."
+        what_is_holding_it_back = run_data.get("what_is_holding_it_back") or "No primary constraint recorded from unverified claims."
         r7 = run_data.get("roadmap_7_days") or []
         r30 = run_data.get("roadmap_30_days") or []
         r90 = run_data.get("roadmap_90_days") or []
-        r7_desc = "; ".join(r7[:2]) if r7 else "Start with high-severity findings that have direct evidence, confirmed scope, and a reproducible acceptance test."
-        r30_desc = "; ".join(r30[:2]) if r30 else "Sequence changes by dependency, implementation risk, and business priority. Require approval for production-impacting changes."
-        r90_desc = "; ".join(r90[:2]) if r90 else "Re-run the relevant checks after implementation and report a fix as verified only when fresh evidence confirms the intended outcome."
+        r7_desc = "; ".join(r7[:2]) if r7 else "No 7-day action items recorded for this run."
+        r30_desc = "; ".join(r30[:2]) if r30 else "No 30-day action items recorded for this run."
+        r90_desc = "; ".join(r90[:2]) if r90 else "No 90-day action items recorded for this run."
 
         html = f"""<!DOCTYPE html>
 <html lang="en">

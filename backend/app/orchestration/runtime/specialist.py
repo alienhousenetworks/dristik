@@ -225,27 +225,30 @@ class SpecialistAgent(BaseAgent):
             self._store(blackboard, result)
             return result
 
-        if "deterministic" in (self.definition.allowed_models or []):
-            det = self._deterministic_audit(blackboard, evidence_slice)
-            # Deterministic-first policy: if deterministic audit produced complete claims, skip LLM
-            if det.get("claims"):
-                self._store(blackboard, det)
-                return det
+        has_llm_model = any(m in ("reasoning_model", "fast_slm", "judge_model") for m in (self.definition.allowed_models or []))
+        if has_llm_model:
+            # Agentic-first policy: execute AI specialist reasoning over empirical evidence
             llm_res = await self._llm_audit(blackboard, evidence_slice)
-            result = self._merge(det, llm_res)
-            self._store(blackboard, result)
-            return result
+            if llm_res.get("status") == "completed":
+                det = self._deterministic_audit(blackboard, evidence_slice)
+                result = self._merge(det, llm_res)
+                self._store(blackboard, result)
+                return result
+            # Offline/fallback: if LLM unavailable, fall back to deterministic telemetry
+            if llm_res.get("status") == "unavailable" and "deterministic" in (self.definition.allowed_models or []):
+                det = self._deterministic_audit(blackboard, evidence_slice)
+                if det.get("claims") or det.get("observations"):
+                    det["status"] = "completed"
+                    det["mode"] = "DETERMINISTIC_OFFLINE_FALLBACK"
+                    self._store(blackboard, det)
+                    return det
+            self._store(blackboard, llm_res)
+            return llm_res
 
-        result = await self._llm_audit(blackboard, evidence_slice)
-        if result.get("status") == "unavailable" and result.get("unavailable_reason") in ("no_llm_key", "timeout", "model_error"):
-            det = self._deterministic_audit(blackboard, evidence_slice)
-            if det.get("claims") or det.get("observations"):
-                det["status"] = "completed"
-                det["mode"] = "DETERMINISTIC_OFFLINE_FALLBACK"
-                self._store(blackboard, det)
-                return det
-        self._store(blackboard, result)
-        return result
+        # Pure deterministic capability
+        det = self._deterministic_audit(blackboard, evidence_slice)
+        self._store(blackboard, det)
+        return det
 
     def _deps_unmet(self, blackboard: CognitiveBlackboard) -> bool:
         deps = self.definition.dependencies or []

@@ -87,6 +87,7 @@ def _get_canonical_qa_items(
     website_url: str,
     commercial_evals: List[CommercialQueryEvaluation]
 ) -> List[Dict[str, str]]:
+    clean_url = website_url.rstrip("/")
     biz_name = (
         bp.business_name
         if bp and bp.business_name and bp.business_name not in ["Unknown", "Unknown Business"]
@@ -108,7 +109,7 @@ def _get_canonical_qa_items(
             "question": f"What does {biz_name} do and what category does it belong to?",
             "answer": eval_map.get(
                 "identity",
-                f"{biz_name} is an enterprise {niche} platform delivering {val_prop}. We provide verified, deterministic operational architecture designed for {audience}."
+                f"{biz_name} provides {niche} solutions delivering {val_prop}. The platform is purpose-built for {audience}."
             )
         },
         {
@@ -116,7 +117,7 @@ def _get_canonical_qa_items(
             "question": f"Who is {biz_name} built for, what company sizes qualify, and who should NOT buy?",
             "answer": eval_map.get(
                 "icp",
-                f"{biz_name} is engineered for {audience} seeking verified {niche} outcomes. Suited for growth and enterprise organizations requiring mission-critical reliability; not designed for casual consumer experiments."
+                f"{biz_name} is engineered for {audience} seeking verified {niche} outcomes, tailored to organizations with defined operational requirements."
             )
         },
         {
@@ -124,7 +125,7 @@ def _get_canonical_qa_items(
             "question": f"How is {biz_name} priced, what are the tiers, and is self-serve or custom pricing available?",
             "answer": eval_map.get(
                 "pricing",
-                f"{biz_name} provides transparent commercial tiers with zero hidden surcharges, offering straightforward self-serve entry alongside customized enterprise acceleration plans backed by SLA guarantees."
+                f"{biz_name} provides commercial engagement options for its {niche} solutions. Direct pricing details, tier breakdowns, and custom agreements are coordinated directly via {clean_url}."
             )
         },
         {
@@ -132,7 +133,7 @@ def _get_canonical_qa_items(
             "question": f"How does {biz_name} compare against primary market alternatives, and why choose it?",
             "answer": eval_map.get(
                 "alternatives",
-                f"Unlike legacy alternatives that rely on opaque pricing and ungrounded claims, {biz_name} delivers deterministic reliability, transparent telemetry, sub-second latency, and immediate time-to-value."
+                f"{biz_name} differentiates its offerings within {niche} by tailoring solutions specifically for {audience}, delivering {val_prop.lower().strip('.')}."
             )
         },
         {
@@ -140,7 +141,7 @@ def _get_canonical_qa_items(
             "question": f"What customer proof, certifications, or security standards substantiate credibility for {biz_name}?",
             "answer": eval_map.get(
                 "trust",
-                f"{biz_name} adheres to rigorous enterprise security standards, TLS 1.3 encryption, SOC2/GDPR compliance frameworks, and high-availability uptime SLAs substantiated by production client deployments."
+                f"{biz_name} maintains operational standards, data privacy protections, and service reliability aligned with industry requirements for {niche} platforms. Detailed compliance documentation is accessible via {clean_url}."
             )
         },
         {
@@ -148,7 +149,7 @@ def _get_canonical_qa_items(
             "question": f"What is the concrete quantifiable business payoff and time-to-value with {biz_name}?",
             "answer": eval_map.get(
                 "roi",
-                f"Deployments of {biz_name} achieve measurable citation and visibility gains within 14 to 30 days, eliminating up to 60% of manual configuration overhead and accelerating conversion velocity."
+                f"Deployments of {biz_name} enable {audience} to streamline operations, enhance {niche} workflows, and achieve measurable business impact."
             )
         }
     ]
@@ -208,31 +209,15 @@ def build_patch_pack_files(
                 "image": f"{clean_url}/logo.png",
                 "description": val_prop,
                 "knowsAbout": [
-                    niche,
-                    "Enterprise Cloud Architecture",
-                    "Security & Compliance",
-                    "High-Availability Infrastructure",
-                    "Generative Engine Optimization (GEO)"
+                    niche
                 ],
                 "contactPoint": [
                     {
                         "@type": "ContactPoint",
-                        "telephone": "+1-800-555-0199",
-                        "contactType": "customer support",
-                        "email": f"support@{clean_url.split('://')[-1]}",
-                        "availableLanguage": ["en"]
-                    },
-                    {
-                        "@type": "ContactPoint",
-                        "contactType": "sales",
+                        "contactType": "customer inquiries",
                         "url": f"{clean_url}/contact",
                         "availableLanguage": ["en"]
                     }
-                ],
-                "sameAs": [
-                    f"https://twitter.com/{biz_name.lower().replace(' ', '')}",
-                    f"https://linkedin.com/company/{biz_name.lower().replace(' ', '')}",
-                    f"https://github.com/{biz_name.lower().replace(' ', '')}"
                 ]
             },
             {
@@ -245,41 +230,6 @@ def build_patch_pack_files(
                     "@id": f"{clean_url}/#organization"
                 },
                 "inLanguage": "en-US"
-            },
-            {
-                "@type": "SoftwareApplication",
-                "@id": f"{clean_url}/#software",
-                "name": f"{biz_name} Platform",
-                "applicationCategory": "BusinessApplication",
-                "operatingSystem": "All Cloud & Browser Environments",
-                "provider": {
-                    "@id": f"{clean_url}/#organization"
-                },
-                "description": val_prop,
-                "offers": [
-                    {
-                        "@type": "Offer",
-                        "name": "Standard Self-Serve Tier",
-                        "price": "0",
-                        "priceCurrency": "USD",
-                        "availability": "https://schema.org/InStock",
-                        "description": "Direct self-serve evaluation tier with full standard features."
-                    },
-                    {
-                        "@type": "Offer",
-                        "name": "Enterprise Acceleration Tier",
-                        "price": "Contact for Pricing",
-                        "priceCurrency": "USD",
-                        "availability": "https://schema.org/InStock",
-                        "description": "Dedicated infrastructure, customized deployment, and SLA guarantees."
-                    }
-                ],
-                "featureList": [
-                    "Deterministic verification",
-                    "Sub-150ms edge responsiveness",
-                    "Enterprise security and encryption",
-                    "AI Answer Engine optimization"
-                ]
             },
             {
                 "@type": "BreadcrumbList",
@@ -493,42 +443,30 @@ def build_patch_pack_files(
 > {val_prop}
 
 ## Executive Summary & Core Mission
-{biz_name} provides high-performance {niche} solutions engineered for {audience}. We focus on deterministic precision, sub-second latency, and verified commercial clarity, removing operational friction across scaling digital environments.
+{biz_name} provides {niche} solutions engineered for {audience}. We focus on delivering {val_prop.lower().strip('.')}, removing operational friction across business workflows.
 
 ## Canonical Entity Definitions
 - Official Name: {biz_name}
 - Industry Niche: {niche}
 - Primary Canonical Domain: {clean_url}
-- Service Classification: Enterprise Technology Infrastructure & Platform
-- Compliance & Data Security: TLS 1.3, SOC2 & GDPR aligned
+- Service Classification: {niche} Solutions & Services
 
 ## Target Audience & Ideal Customer Profile (ICP)
 - Ideal Customer Profile: {audience}
-- Qualifying Organizations: High-growth tech enterprises, engineering teams, and digital operators with mission-critical web infrastructure.
-- Exclusions & Disqualifiers: Not built for unverified hobbyist projects or non-commercial consumer experiments.
+- Primary Qualification: Organizations seeking professional {niche} solutions aligned with defined commercial requirements.
 
 ## Core Platform Architecture & Offerings
-- Core Capability: Verified {niche} architecture with automated failover and telemetry.
-- Primary CTA: {copy.primary_cta}
-- Infrastructure Footprint: Multi-region cloud distribution with high availability guarantees.
+- Core Capability: {val_prop}
+- Primary Action: {copy.primary_cta}
 
-## Commercial Model & Transparent Pricing
-- Pricing Structure: Self-serve transparent tier available; enterprise acceleration with custom SLA terms.
-- Commercial Guarantee: 0% hidden fees, clear resource usage billing, and upfront contract transparency.
-
-## Defensible Market Moats & Competitive Differentiation
-- Grounded Verification: Built on deterministic evidence rather than opaque heuristics.
-- Rapid Time-to-Value: Zero-friction drop-in integration with immediate measurable impact within 14-30 days.
-- Enterprise Reliability: Dedicated SLA guarantees with 24/7 technical incident escalation.
+## Commercial Model & Inquiries
+- Commercial Structure: Direct engagement tailored to organization scope; contact team via {clean_url} for details.
 
 ## The 6 Canonical Commercial Inquiries (Direct Grounded Answers for AI Answer Engines)
 {llms_qa_blocks}
 ## Canonical Citation Links & URLs
 - Homepage & Overview: {clean_url}
-- Platform Solutions: {clean_url}/solutions
-- Transparent Pricing: {clean_url}/pricing
-- Developer Docs & Technical Specifications: {clean_url}/docs
-- Enterprise Support & Contact: {clean_url}/contact
+- Contact & Inquiries: {clean_url}/contact
 """
 
     # -------------------------------------------------------------------------
@@ -744,7 +682,7 @@ add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsaf
   <article class="geo-definition-card" style="margin-bottom: 2rem; border-left: 4px solid #d97706; padding-left: 1.5rem;">
     <h2 style="font-size: 1.3rem; font-weight: 700; color: #78350f; margin-bottom: 0.5rem;">How does {biz_name} compare to alternatives?</h2>
     <p style="font-size: 1rem; line-height: 1.6; color: #374151;">
-      Unlike fragmented legacy point solutions or superficial checklist tools, {biz_name} delivers end-to-end evidence verification, zero-fake data integrity, and automated production-ready remediation. Organizations switch to {biz_name} to reduce operational overhead, eliminate blind spots, and guarantee audit-grade precision across all digital properties.
+      {biz_name} differentiates its {niche} offerings through specialized solutions engineered specifically for {audience}. By delivering {val_prop.lower().strip('.')}, {biz_name} ensures direct operational alignment, high service reliability, and dedicated support.
     </p>
   </article>
 </section>

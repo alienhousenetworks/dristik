@@ -52,9 +52,8 @@ def compose_executive_lines(
         )
         opportunity = f"Restore indexation first: {commercial.title}. {reason}"
         ignore = (
-            "Ignore vanity work (rebrand, bulk backlinks, animation, extra blog posts) while indexation is blocked. "
-            "Do not spend against invented TAM or competitor giants that are not in this market. "
-            "Conversion and citation work are separate findings and do not wait on unrelated headers."
+            f"Prioritize resolving '{commercial.title}' before committing engineering hours to cosmetic page design. "
+            "Conversion and citation work proceed on their own verified findings."
         )
     elif commercial:
         constraint = (
@@ -66,9 +65,8 @@ def compose_executive_lines(
             "Other pillars move on their own findings."
         )
         ignore = (
-            "Ignore vanity work (rebrand, bulk backlinks, animation, extra blog posts). "
-            "Do not spend against invented TAM or competitor giants that are not in this market. "
-            "SEO, design, conversion, and citation work proceed on their own findings."
+            f"Focus sprints on resolving '{commercial.title}' before non-essential design updates. "
+            "SEO, CRO, and GEO initiatives proceed in parallel on their respective findings."
         )
         if _is_security_header(commercial):
             constraint += (
@@ -76,10 +74,9 @@ def compose_executive_lines(
             )
     else:
         constraint = "No executive-eligible commercial defect was recorded in the crawled sample."
-        opportunity = "Widen the crawl before inventing a growth program — the current sample recorded no executive-eligible defects."
+        opportunity = f"Maintain regular crawl surveillance for {business_name} across key discovery endpoints."
         ignore = (
-            "Ignore vanity work (rebrand, bulk backlinks, animation, extra blog posts). "
-            "Do not spend against invented TAM or competitor giants that are not in this market."
+            "Maintain current operational configuration and re-verify after major code deployments."
         )
 
     if (

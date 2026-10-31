@@ -1610,8 +1610,8 @@ def _build_chapter_analysis(
     has_failed_metrics: bool,
 ) -> Dict[str, str]:
     """
-    Synthesizes deep consultative commentary for a chapter, explicitly distinguishing
-    documented technical/search risk from measured commercial impact.
+    Synthesizes deep consultative commentary for a chapter via the authoritative
+    AgenticChapterSynthesizer specialist agent.
     """
     part_label = PART_LABELS_BY_CHAPTER_ID.get(ch["id"], "Part III — Technical SEO")
     crawled_cnt = len(pages)
@@ -1619,65 +1619,52 @@ def _build_chapter_analysis(
     disc_cnt = _get_val(manifest, "total_pages_discovered") or crawled_cnt
     scope_phrase = f"{crawled_cnt} crawled page(s) out of {disc_cnt} discovered URLs"
 
+    from app.reports.agentic_chapter_synthesizer import AgenticChapterSynthesizer
+    synth_book = {
+        "domain": _get_val(report, "domain") or "this site",
+        "pages": pages,
+        "business_profile": _get_val(report, "business_profile"),
+    }
+    narrative = AgenticChapterSynthesizer.synthesize_narrative(
+        book=synth_book,
+        number=ch_num,
+        section=ch,
+        findings=ch_findings,
+        is_geo=False,
+    )
+
+    if ch["id"] in ("sec-offpage-backlinks", "sec-competitor-seo", "sec-analytics-measurement"):
+        ext_cov = _get_val(_get_val(report, "external_authority") or {}, "coverage") or []
+        has_conn = any((getattr(c, "status", None) == "CONNECTED" or (isinstance(c, dict) and c.get("status") == "CONNECTED")) for c in ext_cov)
+        if not has_conn and not ch_findings:
+            return {
+                "part_label": part_label,
+                "executive_interpretation": (
+                    f"{ch['title']} requires authenticated third-party telemetry (Google Search Console, GA4, or a backlink provider). "
+                    "In accordance with Dristik's evidence-first standard, no synthetic scores, traffic estimates, or placeholder competitors were fabricated."
+                ),
+                "technical_mechanics": "External API connector state was verified as NOT_CONNECTED during this audit run.",
+                "risk_vs_measured_impact": (
+                    "Documented Technical Risk: Blind spot in off-site authority and organic query attribution. "
+                    "Measured Commercial Impact: Unavailable until external connectors are authenticated."
+                ),
+                "strategic_action": "Connect Google Search Console, GA4, and your backlink intelligence provider in Dristik Settings to unlock empirical measurement.",
+                "data_classification": "UNAVAILABLE (CONNECTOR REQUIRED)",
+            }
+
     if ch_findings:
-        top_titles = "; ".join(f.get("title", "") for f in ch_findings[:3])
-        exec_interp = (
-            f"Across the {scope_phrase}, Dristik verified {len(ch_findings)} canonical issue(s) in {ch['title']}: "
-            f"{top_titles}. {ch.get('business_explanation', '')}"
-        )
-        tech_mech = (
-            f"Inspection of the live HTTP responses and rendered DOM confirmed concrete discrepancies ({ch_findings[0].get('observed_result', '')[:160]}). "
-            f"Root cause analysis indicates: {ch_findings[0].get('root_cause') or 'template-level markup or server configuration omission'}."
-        )
-        risk_vs_impact = (
-            "Documented Technical Risk: Confirmed by direct crawl evidence and DOM/HTTP inspection. "
-            "Measured Commercial Impact: Direct organic traffic, ranking position, or revenue loss cannot be quantified until Google Search Console and GA4 conversion telemetry are connected."
-        )
-        strat_action = ch_findings[0].get("recommended_action") or f"Prioritize remediation of the {len(ch_findings)} finding(s) in this chapter and verify via automated re-crawl."
         data_class = "MEASURED (DEFECTS VERIFIED)"
     elif has_failed_metrics:
-        exec_interp = (
-            f"Diagnostic threshold evaluation across {scope_phrase} identified metric non-compliance in {ch['title']}. "
-            f"{ch.get('business_explanation', '')}"
-        )
-        tech_mech = "Automated threshold gates flagged suboptimal parameters in the chapter check ledger below."
-        risk_vs_impact = (
-            "Documented Technical Risk: Verified threshold deviation on sampled URLs. "
-            "Measured Commercial Impact: Revenue and impression impact remain unquantified without connected GSC/GA4 telemetry."
-        )
-        strat_action = f"Adjust template or server parameters for {ch['title'].lower()} to meet target benchmarks."
         data_class = "MEASURED (THRESHOLD WARNING)"
-    elif ch["id"] in ("sec-offpage-backlinks", "sec-competitor-seo", "sec-analytics-measurement"):
-        exec_interp = (
-            f"{ch['title']} requires authenticated third-party telemetry (Google Search Console, GA4, or a backlink provider). "
-            "In accordance with Dristik's evidence-first standard, no synthetic scores, traffic estimates, or placeholder competitors were fabricated."
-        )
-        tech_mech = "External API connector state was verified as NOT_CONNECTED during this audit run."
-        risk_vs_impact = (
-            "Documented Technical Risk: Blind spot in off-site authority and organic query attribution. "
-            "Measured Commercial Impact: Unavailable until external connectors are authenticated."
-        )
-        strat_action = "Connect Google Search Console, GA4, and your backlink intelligence provider in Dristik Settings to unlock empirical measurement."
-        data_class = "UNAVAILABLE (CONNECTOR REQUIRED)"
     else:
-        exec_interp = (
-            f"Empirical inspection across {scope_phrase} confirmed baseline compliance for {ch['title']}. "
-            f"{ch.get('business_explanation', '')}"
-        )
-        tech_mech = f"All executed DOM and HTTP assertions in {ch['title'].lower()} passed target thresholds on the {crawled_cnt} inspected URL(s)."
-        risk_vs_impact = (
-            f"Documented Technical Risk: Low across the {crawled_cnt} sampled URLs (does not guarantee uninspected URLs outside the {crawled_cnt}/{disc_cnt} sample are defect-free). "
-            "Measured Commercial Impact: Maintain current configuration and monitor during future deployments."
-        )
-        strat_action = "No immediate remediation required; include these checks in continuous CI/CD deployment regression gates."
         data_class = "MEASURED (SAMPLE COMPLIANT)"
 
     return {
         "part_label": part_label,
-        "executive_interpretation": exec_interp,
-        "technical_mechanics": tech_mech,
-        "risk_vs_measured_impact": risk_vs_impact,
-        "strategic_action": strat_action,
+        "executive_interpretation": narrative.get("executive_summary") or f"Evaluation across {scope_phrase} completed for {ch['title']}.",
+        "technical_mechanics": narrative.get("technical_mechanics") or "Automated inspection completed against target thresholds.",
+        "risk_vs_measured_impact": narrative.get("business_risk") or "Documented Technical Risk: Evaluated on sampled pages.",
+        "strategic_action": narrative.get("recommended_action") or (ch_findings[0].get("recommended_action") if ch_findings else "Maintain current configuration."),
         "data_classification": data_class,
     }
 
@@ -2081,8 +2068,8 @@ def build_seo_book_context(report: Any, page_numbers: Optional[Dict[str, int]] =
             "part_label": part_label,
             "show_part_banner": show_part_banner,
             "title": ch["title"],
-            "introduction": ch["introduction"],
-            "business_explanation": ch.get("business_explanation", ""),
+            "introduction": analysis.get("executive_interpretation") or ch["introduction"],
+            "business_explanation": analysis.get("why_reader_should_care") or analysis.get("risk_vs_measured_impact") or ch.get("business_explanation", ""),
             "analysis": analysis,
             "empirical_table": empirical_table,
             "page_dossiers": page_dossiers if ch["id"] == "sec-page-by-page" else [],
@@ -2090,7 +2077,7 @@ def build_seo_book_context(report: Any, page_numbers: Optional[Dict[str, int]] =
             "findings": ch_findings,
             "has_failed_metrics": has_failed_metrics,
             "conclusion": ch_conclusion,
-            "closing_business_explanation": ch.get("business_explanation", ""),
+            "closing_business_explanation": analysis.get("strategic_action") or ch.get("business_explanation", ""),
         })
 
     # Catch-all chapter for any remaining unassigned findings (guarantees zero orphans)

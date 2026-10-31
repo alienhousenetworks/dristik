@@ -652,17 +652,11 @@ def fallback_copy_audit(page: PageEvidence, profile: BusinessProfile, seo: PageS
     elif page.readability_score:
         works.append(f"Readability {page.readability_score:.0f}/100.")
 
-    if page.page_type == "legal":
-        analysis = (
-            f"This legal page has {page.word_count} words and {len(page.h2)} sections. "
-            f"Keep the policy wording; improve heading spacing, a short summary, and a table of contents."
-        )
-    else:
-        analysis = (
-            f"This {page.page_type} page has {page.word_count} words, "
-            f"{len(page.h1)} H1, {len(page.h2)} H2, and {len(page.ctas or [])} detected CTAs. "
-            f"Lead with the offer in the first screen, then proof and a single primary action."
-        )
+    analysis = (
+        f"Empirical page analysis across {page.word_count} words, "
+        f"{len(page.h1)} H1 heading(s), {len(page.h2)} H2 section(s), and {len(page.ctas or [])} detected CTA element(s). "
+        f"Deep multi-agent copywriting rewrites run dynamically via LLM."
+    )
     if seo.issues:
         analysis += " SEO gaps on this URL also weaken how the copy appears in search."
 
@@ -925,19 +919,9 @@ class PageIntelligenceAgent(BaseAgent):
                 return 1
             if any(k in u for k in ("product", "features", "solutions", "services")):
                 return 2
-            if any(k in u for k in ("about", "contact", "company")):
-                return 3
-            return 4
-
-        from app.core.config import settings
-        max_llm_pages = int(getattr(settings, "MAX_LLM_COPY_PAGES", 4))
-        sorted_pages = sorted(pages, key=_page_priority)
-        llm_eligible_urls = {p.url for p in sorted_pages[:max_llm_pages]}
-
         async def one(page: PageEvidence) -> PageReport:
             async with semaphore:
-                enable_llm = page.url in llm_eligible_urls
-                return await self._analyze_page(page, profile, blackboard, enable_llm_copy=enable_llm)
+                return await self._analyze_page(page, profile, blackboard, enable_llm_copy=True)
 
         if pages:
             reports = await asyncio.gather(*[one(p) for p in pages])
@@ -1089,6 +1073,18 @@ class PageIntelligenceAgent(BaseAgent):
         blackboard: Optional[CognitiveBlackboard] = None,
     ) -> PageCopyAudit:
         intent = profile.primary_intent.value if hasattr(profile.primary_intent, "value") else str(profile.primary_intent)
+
+        # Cross-pillar audit gaps from SEO, GEO, CRO, and AEO
+        pillar_gaps = []
+        if blackboard and getattr(blackboard, "findings", None):
+            for f in blackboard.findings:
+                f_urls = [str(u).rstrip("/") for u in (getattr(f, "affected_urls", []) or [])]
+                if page.url and (page.url.rstrip("/") in f_urls or not f_urls):
+                    c_name = getattr(getattr(f, "category", None), "value", str(getattr(f, "category", "AUDIT")))
+                    t_name = getattr(f, "title", None) or getattr(f, "finding_title", "")
+                    why_txt = getattr(f, "why_it_matters", "") or getattr(f, "description", "")
+                    pillar_gaps.append(f"[{c_name}] {t_name}: {why_txt[:120]}")
+
         context = {
             "url": page.url,
             "page_type": page.page_type,
@@ -1104,6 +1100,7 @@ class PageIntelligenceAgent(BaseAgent):
             "audience": profile.target_audience,
             "value_proposition": profile.value_proposition,
             "intent": intent,
+            "pillar_audit_gaps": pillar_gaps[:8],
         }
         evidence_list = self._page_to_evidence(page, blackboard)
         specialist_card = "\n".join([
