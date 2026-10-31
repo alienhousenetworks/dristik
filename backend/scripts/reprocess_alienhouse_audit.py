@@ -17,10 +17,11 @@ from pathlib import Path
 # Add backend directory to sys.path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from app.audit.inventory_helper import get_canonical_crawl_inventory
-from app.audit.diagnostic_inventory import DiagnosticInventoryEngine
-from app.audit.page_analysis import PageLevelAnalysisEngine
-from app.audit.consistency_engine import CrossChapterConsistencyEngine
+import asyncio
+from app.crawl.audit.inventory_helper import get_canonical_crawl_inventory
+from app.crawl.audit.diagnostic_inventory import DiagnosticInventoryEngine
+from app.crawl.audit.page_analysis import PageLevelAnalysisEngine
+from app.crawl.audit.consistency_engine import CrossChapterConsistencyEngine
 from app.reports.validation_gate import ValidationGate
 from app.seo.reporting.seo_book_renderer import seo_audit_book_renderer
 from app.domain.models import ExecutiveReport, CrawlManifest
@@ -103,7 +104,16 @@ def reprocess():
     output_dir.mkdir(parents=True, exist_ok=True)
     book_path = output_dir / f"{certified_report.domain}_master_seo_audit_book.html"
     book_path.write_text(canonical_book_html, encoding="utf-8")
-    print(f"Rendered Master SEO Audit Book to: {book_path} ({len(canonical_book_html)} bytes)")
+    print(f"Rendered Master SEO Audit Book HTML to: {book_path} ({len(canonical_book_html)} bytes)")
+
+    print("Rendering Two-Pass Master SEO Audit Book PDF via Playwright Chromium...")
+    pdf_bytes = asyncio.run(seo_audit_book_renderer.render_book_pdf(certified_report, two_pass=True))
+    if pdf_bytes:
+        pdf_path = output_dir / f"{certified_report.domain}_master_seo_audit_book.pdf"
+        pdf_path.write_bytes(pdf_bytes)
+        downloads_pdf = Path("/Users/sayantande/Downloads/alienhousenetworks.com_master_seo_audit_book-2.pdf")
+        downloads_pdf.write_bytes(pdf_bytes)
+        print(f"Rendered Master SEO Audit Book PDF to: {pdf_path} and {downloads_pdf} ({len(pdf_bytes)} bytes)")
 
     return {
         "status": certified_report.certification_status,

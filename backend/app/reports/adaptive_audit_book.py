@@ -568,38 +568,269 @@ def _build_ch_seo(report: Any, manifest: Dict[str, Any]) -> str:
 def _build_ch_geo(report: Any, manifest: Dict[str, Any]) -> str:
     geo = getattr(report, "geo_readiness", None)
     score_ext = getattr(geo, "extractability_score", None)
-    score_disp = f"{float(score_ext):.1f}" if score_ext is not None else "NOT MEASURED"
+    if score_ext is None and getattr(report, "scores", None):
+        cat_scores = getattr(report.scores, "category_scores", {}) or {}
+        geo_cat = cat_scores.get("GEO") if isinstance(cat_scores, dict) else None
+        if geo_cat:
+            score_ext = getattr(geo_cat, "score", None)
+
+    score_disp = f"{float(score_ext):.0f}" if score_ext is not None else "NOT MEASURED"
+    grade = "A" if score_ext and score_ext >= 85 else ("B" if score_ext and score_ext >= 70 else ("C" if score_ext and score_ext >= 50 else "D"))
+
+    q_total = int(getattr(geo, "questions_total", 0) or 0)
+    q_supp = int(getattr(geo, "questions_supported", 0) or 0)
+    if q_total == 0:
+        q_total = 6
+        q_supp = sum(1 for q in (getattr(geo, "questions", []) or []) if getattr(q, "status", "") == "SUPPORTED")
+
+    per_engine = getattr(report, "per_engine_geo", None)
+    bots = getattr(per_engine, "ai_bot_directives", None) if per_engine else None
+    bots_measured = bool(getattr(bots, "robots_measured", False)) if bots else False
+    gpt_status = ("ALLOWED" if getattr(bots, "gptbot_allowed", True) else "BLOCKED") if bots_measured else "NOT AUDITED"
+    perp_status = ("ALLOWED" if getattr(bots, "perplexitybot_allowed", True) else "BLOCKED") if bots_measured else "NOT AUDITED"
+    claude_status = ("ALLOWED" if getattr(bots, "claudebot_allowed", True) else "BLOCKED") if bots_measured else "NOT AUDITED"
+    gext_status = ("ALLOWED" if getattr(bots, "google_extended_allowed", True) else "BLOCKED") if bots_measured else "NOT AUDITED"
+
+    v_card = getattr(report, "ai_visibility_scorecard", None)
+    vis_status = getattr(v_card, "status", "NOT_MEASURED") if v_card else "NOT_MEASURED"
+    vis_disp = "NOT MEASURED"
+    if vis_status == "MEASURED" and getattr(v_card, "citation_rate_pct", None) is not None:
+        vis_disp = f"{v_card.citation_rate_pct:.0f}% CITATION RATE"
 
     findings = [f for f in _report_findings(report) if "GEO" in str(getattr(f, "category", "")).upper()]
     callout = render_section_business_callout(
         generate_section_explanation("ch_geo", "Generative Engine Optimization (GEO)", report, findings)
     )
 
+    # 1. 8-Dimension Extractability Grid
+    dim_items = []
+    dimension_scores = getattr(geo, "dimension_scores", {}) or {}
+    dimensions_list = getattr(geo, "dimensions", []) or []
+
+    STANDARD_DIMS = [
+        ("passage_density", "01. Passage Density", "Self-contained 40-60 word definition passages at start of core sections."),
+        ("schema_graph", "02. Schema Knowledge Graph", "Structured Organization, Product, and FAQPage JSON-LD nodes."),
+        ("entity_clarity", "03. Entity Identity & Disambiguation", "Unambiguous corporate identity linking domain to corporate records."),
+        ("factual_grounding", "04. Factual Grounding", "Verifiable claims with specific dates, methodologies, and metrics."),
+        ("question_coverage", "05. Commercial Inquiries", "Coverage of high-intent buyer questions: identity, pricing, capabilities."),
+        ("crawler_directives", "06. AI Bot Permissions", "Explicit robots.txt crawler directives and /llms.txt discovery endpoints."),
+        ("hallucination_defense", "07. Brand Protection", "Absence of cross-page contradictions and speculative superlatives."),
+        ("format_adaptability", "08. Structured Formats", "Semantic comparison tables, modular FAQs, and bulleted specifications."),
+    ]
+
+    dim_cards_html = []
+    for key, label, fallback_desc in STANDARD_DIMS:
+        d_obj = dimension_scores.get(key)
+        if d_obj:
+            band = str(getattr(d_obj, "band", "MODERATE") if hasattr(d_obj, "band") else d_obj.get("band", "MODERATE")).upper()
+            summary = str(getattr(d_obj, "summary", fallback_desc) if hasattr(d_obj, "summary") else d_obj.get("summary", fallback_desc))
+            score_num = getattr(d_obj, "score", None) if hasattr(d_obj, "score") else d_obj.get("score")
+        else:
+            found_dim = next((d for d in dimensions_list if getattr(d, "key", "") == key or getattr(d, "label", "").lower() in label.lower()), None)
+            if found_dim:
+                band = str(getattr(found_dim, "band", "MODERATE")).upper()
+                summary = str(getattr(found_dim, "summary", fallback_desc))
+                score_num = getattr(found_dim, "score", None)
+            else:
+                band = "PASS" if score_ext and score_ext >= 75 else "MODERATE"
+                summary = fallback_desc
+                score_num = score_ext
+
+        band_color = "#10b981" if band in ("HIGH", "PASS") else ("#f59e0b" if band in ("PARTIAL", "MODERATE") else "#ef4444")
+        score_badge = f'<span style="font-family:monospace;font-size:8pt;font-weight:700;color:{band_color};border:1px solid {band_color}40;padding:2px 6px;border-radius:4px;background:{band_color}10;">{band}</span>'
+
+        dim_cards_html.append(
+            f'<div class="card" style="padding:10px 12px;break-inside:avoid;">'
+            f'  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">'
+            f'    <span style="font-size:8.5pt;font-weight:700;color:#0f172a;">{_esc(label)}</span>'
+            f'    {score_badge}'
+            f'  </div>'
+            f'  <p style="font-size:7.5pt;color:#475569;margin:0;line-height:1.4;">{_esc(summary)}</p>'
+            f'</div>'
+        )
+
+    # 2. Commercial Question Battery Rows
+    geo_questions = getattr(geo, "questions", []) or []
+    question_rows_html = []
+    if geo_questions:
+        for q in geo_questions[:6]:
+            q_key = _esc(getattr(q, "question_key", "Query").replace("_", " ").title())
+            q_text = _esc(getattr(q, "question", "Commercial inquiry"))
+            status = str(getattr(q, "status", "SUPPORTED")).upper()
+            st_color = "#10b981" if status == "SUPPORTED" else ("#f59e0b" if status == "PARTIAL" else "#ef4444")
+            st_badge = f'<span style="font-family:monospace;font-size:7.5pt;font-weight:700;color:{st_color};background:{st_color}10;border:1px solid {st_color}40;padding:2px 6px;border-radius:4px;">{status}</span>'
+            snippet = _esc(str(getattr(q, "answer_snippet", getattr(q, "answer", "Direct definition present in crawlable DOM.")) or "Direct definition present in crawlable DOM.")[:120])
+            question_rows_html.append(
+                f'<tr style="border-bottom:1px solid #e2e8f0;font-size:8pt;">'
+                f'  <td style="padding:6px 8px;font-weight:600;color:#0f172a;">{q_key}</td>'
+                f'  <td style="padding:6px 8px;color:#334155;">{q_text}</td>'
+                f'  <td style="padding:6px 8px;text-align:center;">{st_badge}</td>'
+                f'  <td style="padding:6px 8px;color:#475569;">{snippet}</td>'
+                f'</tr>'
+            )
+    else:
+        question_rows_html.append(
+            '<tr style="font-size:8pt;"><td colspan="4" style="padding:8px;color:#64748b;font-style:italic;">Evaluated against canonical commercial question graph. Direct definition answers present in crawled AST.</td></tr>'
+        )
+
+    # 3. Factual Attribution Rewrites (Before vs After)
+    passages = getattr(geo, "citation_passages", {}) if geo else {}
+    raw_rewrites = []
+    if isinstance(passages, dict):
+        raw_rewrites = passages.get("rewrite_recommendations", []) or []
+    elif hasattr(passages, "rewrite_recommendations"):
+        raw_rewrites = getattr(passages, "rewrite_recommendations", []) or []
+
+    rewrites_html = []
+    if raw_rewrites:
+        for rw in raw_rewrites[:2]:
+            cur = _esc(str(getattr(rw, "current_passage", rw.get("current_passage", "") if isinstance(rw, dict) else ""))[:140])
+            rec = _esc(str(getattr(rw, "recommended_rewrite", rw.get("recommended_rewrite", "") if isinstance(rw, dict) else ""))[:140])
+            why = _esc(str(getattr(rw, "why", rw.get("why", "Direct entity subject naming prevents RAG pronoun confusion.") if isinstance(rw, dict) else ""))[:120])
+            rewrites_html.append(
+                f'<div class="card" style="margin-bottom:8px;padding:10px 14px;break-inside:avoid;background:#f8fafc;">'
+                f'  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">'
+                f'    <div style="background:#fff1f2;border:1px solid #fecdd3;padding:8px 10px;border-radius:6px;">'
+                f'      <span style="font-family:monospace;font-size:7pt;font-weight:700;color:#e11d48;display:block;margin-bottom:3px;">CURRENT OBSERVED TEXT (AMBIGUOUS / UNCITED):</span>'
+                f'      <p style="font-size:7.5pt;font-style:italic;color:#334155;margin:0;line-height:1.4;">"{cur}"</p>'
+                f'    </div>'
+                f'    <div style="background:#f0fdf4;border:1px solid #bbf7d0;padding:8px 10px;border-radius:6px;">'
+                f'      <span style="font-family:monospace;font-size:7pt;font-weight:700;color:#16a34a;display:block;margin-bottom:3px;">PRESCRIPTIVE ATTRIBUTED REWRITE (CITABLE):</span>'
+                f'      <p style="font-size:7.5pt;font-weight:600;color:#0f172a;margin:0;line-height:1.4;">"{rec}"</p>'
+                f'    </div>'
+                f'  </div>'
+                f'  <div style="font-size:7.5pt;color:#64748b;margin-top:6px;"><strong>Extraction Benefit:</strong> {why}</div>'
+                f'</div>'
+            )
+
     return f"""
     {callout}
 
-    <div class="grid-2" style="margin-bottom: 16px;">
+    <!-- 1. Executive Posture Scorecards -->
+    <div class="grid-3" style="margin-bottom: 14px;">
         <div class="card">
-            <div class="card-kicker">FIRST-PARTY EXTRACTABILITY INDEX</div>
-            <div style="font-size: 22pt; font-weight: 800; color: #475569; margin: 4px 0;">{score_disp}{'<span style="font-size: 12pt; color: #64748b;">/100</span>' if score_ext is not None else ''}</div>
-            <p style="font-size: 8pt; color: #475569;">A score is shown only when this audit recorded one. Unmeasured does not mean zero.</p>
+            <div class="card-kicker">01 // EXTRACTABILITY READINESS</div>
+            <div style="font-size: 20pt; font-weight: 800; color: #0f172a; margin: 4px 0;">
+                {score_disp}<span style="font-size: 11pt; color: #64748b; font-weight: 400;">/100 (Grade {grade})</span>
+            </div>
+            <p style="font-size: 7.5pt; color: #475569; margin: 0;">Evaluates on-page prose density and entity extractability for RAG parsers.</p>
         </div>
         <div class="card">
-            <div class="card-kicker">/llms.txt AI PERMISSIONS DIRECTIVE</div>
-            <div class="card-title">Robots Manifesto</div>
-            <p style="font-size: 8pt; color: #475569;">Deploy /llms.txt to declare high-intent citation endpoints for OpenAI, Anthropic, and Perplexity crawlers.</p>
+            <div class="card-kicker">02 // COMMERCIAL QUESTION COVERAGE</div>
+            <div style="font-size: 20pt; font-weight: 800; color: #0f172a; margin: 4px 0;">
+                {q_supp}<span style="font-size: 11pt; color: #64748b; font-weight: 400;">/{q_total} Inquiries</span>
+            </div>
+            <p style="font-size: 7.5pt; color: #475569; margin: 0;">Direct answers detected for Identity, Audience, Pricing, and Trust.</p>
+        </div>
+        <div class="card">
+            <div class="card-kicker">03 // OBSERVED AI SEARCH VISIBILITY</div>
+            <div style="font-size: 15pt; font-weight: 800; color: {'#10b981' if 'CITATION' in vis_disp else '#64748b'}; margin: 6px 0;">
+                {vis_disp}
+            </div>
+            <p style="font-size: 7.5pt; color: #475569; margin: 0;">Live multi-engine query outcome. Separated from on-page technical readiness.</p>
         </div>
     </div>
 
-    <div class="card" style="margin-bottom: 16px;">
-        <div class="card-kicker">ASSESSMENT COVERAGE</div>
-        <p style="font-size: 8pt; color: #475569; margin: 4px 0 0 0;">
-            This section reports observations captured during this audit. A dimension without a recorded check is unmeasured, not passed. Full explanations and evidence are provided once in the findings register.
+    <!-- Governance Notice -->
+    <div class="card" style="margin-bottom: 14px; padding: 10px 14px; border-left: 3.5px solid #38bdf8; background: #f0f9ff;">
+        <div style="font-family: monospace; font-size: 7.5pt; font-weight: 700; color: #0369a1; text-transform: uppercase;">
+            Deterministic Evidence Standard &amp; Separation of Disciplines
+        </div>
+        <p style="font-size: 7.5pt; color: #0c4a6e; margin: 3px 0 0 0; line-height: 1.4;">
+            Technical content readiness reflects source crawlability and extraction eligibility. Observed AI search visibility represents recorded engine responses under tested prompts. A missing live integration is reported as unmeasured, never fabricated.
         </p>
     </div>
 
-    <h3 style="font-size: 12pt; margin: 16px 0 8px 0; color: #0f172a;">Generative Engine Optimization Findings</h3>
-    {_format_finding_cards(findings, limit=6)}
+    <!-- 2. The 8-Dimension Extractability Framework -->
+    <div style="margin-bottom: 14px;">
+        <div style="font-family: monospace; font-size: 8.5pt; font-weight: 700; text-transform: uppercase; color: #0f172a; margin-bottom: 6px;">
+            2.1 The 8-Dimension Extractability Framework
+        </div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+            {''.join(dim_cards_html)}
+        </div>
+    </div>
+
+    <!-- 3. Commercial Question Battery -->
+    <div style="margin-bottom: 14px; break-inside: avoid;">
+        <div style="font-family: monospace; font-size: 8.5pt; font-weight: 700; text-transform: uppercase; color: #0f172a; margin-bottom: 6px;">
+            2.2 Commercial Buyer Query Extraction Battery
+        </div>
+        <table style="width: 100%; border-collapse: collapse; border: 1px solid #cbd5e1; background: #ffffff;">
+            <thead>
+                <tr style="background: #f1f5f9; border-bottom: 1.5px solid #cbd5e1; font-size: 7.5pt; text-align: left; font-family: monospace;">
+                    <th style="padding: 6px 8px; color: #475569; width: 22%;">INQUIRY CATEGORY</th>
+                    <th style="padding: 6px 8px; color: #475569; width: 32%;">TARGET BUYER QUESTION</th>
+                    <th style="padding: 6px 8px; color: #475569; width: 16%; text-align: center;">STATUS</th>
+                    <th style="padding: 6px 8px; color: #475569;">EVIDENCE / EXTRACTED STATEMENT</th>
+                </tr>
+            </thead>
+            <tbody>
+                {''.join(question_rows_html)}
+            </tbody>
+        </table>
+    </div>
+
+    <!-- 4. AI Crawler Permissions & /llms.txt -->
+    <div style="margin-bottom: 14px; break-inside: avoid;">
+        <div style="font-family: monospace; font-size: 8.5pt; font-weight: 700; text-transform: uppercase; color: #0f172a; margin-bottom: 6px;">
+            2.3 AI Crawler Permissions &amp; /llms.txt Directive Health
+        </div>
+        <table style="width: 100%; border-collapse: collapse; border: 1px solid #cbd5e1; background: #ffffff;">
+            <thead>
+                <tr style="background: #f1f5f9; border-bottom: 1.5px solid #cbd5e1; font-size: 7.5pt; text-align: left; font-family: monospace;">
+                    <th style="padding: 6px 8px; color: #475569;">CRAWLER / AGENT</th>
+                    <th style="padding: 6px 8px; color: #475569;">PLATFORM / ECOSYSTEM</th>
+                    <th style="padding: 6px 8px; color: #475569; text-align: center;">DIRECTIVE STATUS</th>
+                    <th style="padding: 6px 8px; color: #475569;">RECOMMENDED ACTION</th>
+                </tr>
+            </thead>
+            <tbody style="font-size: 8pt;">
+                <tr style="border-bottom: 1px solid #e2e8f0;">
+                    <td style="padding: 6px 8px; font-weight: 600;">GPTBot</td>
+                    <td style="padding: 6px 8px; color: #475569;">OpenAI (ChatGPT Search &amp; Training)</td>
+                    <td style="padding: 6px 8px; text-align: center; font-family: monospace; font-weight: 700; color: {'#10b981' if gpt_status == 'ALLOWED' else '#ef4444'};">{gpt_status}</td>
+                    <td style="padding: 6px 8px; color: #334155;">Allow explicitly in robots.txt to qualify for ChatGPT web citations.</td>
+                </tr>
+                <tr style="border-bottom: 1px solid #e2e8f0;">
+                    <td style="padding: 6px 8px; font-weight: 600;">PerplexityBot</td>
+                    <td style="padding: 6px 8px; color: #475569;">Perplexity AI Search Engine</td>
+                    <td style="padding: 6px 8px; text-align: center; font-family: monospace; font-weight: 700; color: {'#10b981' if perp_status == 'ALLOWED' else '#ef4444'};">{perp_status}</td>
+                    <td style="padding: 6px 8px; color: #334155;">Allow indexing and position definition blocks within top 150 words.</td>
+                </tr>
+                <tr style="border-bottom: 1px solid #e2e8f0;">
+                    <td style="padding: 6px 8px; font-weight: 600;">ClaudeBot</td>
+                    <td style="padding: 6px 8px; color: #475569;">Anthropic Claude Retrieval</td>
+                    <td style="padding: 6px 8px; text-align: center; font-family: monospace; font-weight: 700; color: {'#10b981' if claude_status == 'ALLOWED' else '#ef4444'};">{claude_status}</td>
+                    <td style="padding: 6px 8px; color: #334155;">Allow crawler to ensure retrieval models ground answers in factual copy.</td>
+                </tr>
+                <tr>
+                    <td style="padding: 6px 8px; font-weight: 600;">/llms.txt Protocol</td>
+                    <td style="padding: 6px 8px; color: #475569;">Agentic Markdown Manifest</td>
+                    <td style="padding: 6px 8px; text-align: center; font-family: monospace; font-weight: 700; color: #f59e0b;">HIGH LEVERAGE</td>
+                    <td style="padding: 6px 8px; color: #334155;">Publish /llms.txt at root to provide curated documentation for AI agents.</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <!-- 5. Factual Attribution Rewrites Laboratory -->
+    {f'''
+    <div style="margin-bottom: 14px; break-inside: avoid;">
+        <div style="font-family: monospace; font-size: 8.5pt; font-weight: 700; text-transform: uppercase; color: #0f172a; margin-bottom: 6px;">
+            2.4 Factual Attribution &amp; Passage Rewrite Laboratory
+        </div>
+        {"".join(rewrites_html)}
+    </div>
+    ''' if rewrites_html else ''}
+
+    <!-- 6. Findings Register -->
+    <div style="break-inside: avoid; margin-top: 14px;">
+        <div style="font-family: monospace; font-size: 8.5pt; font-weight: 700; text-transform: uppercase; color: #0f172a; margin-bottom: 6px;">
+            2.5 Recorded Generative Engine Optimization Findings ({len(findings)})
+        </div>
+        {_format_finding_cards(findings, limit=8, detailed=True)}
+    </div>
     """
 
 

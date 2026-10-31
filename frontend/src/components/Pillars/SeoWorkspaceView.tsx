@@ -195,7 +195,10 @@ export function SeoWorkspaceView({
       )}
 
       {activeTab === 'enterprise' && (
-        <EnterpriseSeoAudit analysisId={analysisId || report.analysis_id || report.report_id} />
+        <EnterpriseSeoAudit
+          analysisId={analysisId || report.analysis_id || report.report_id}
+          report={report}
+        />
       )}
 
       {activeTab === 'history' && <DeltaAnalyticsDashboard />}

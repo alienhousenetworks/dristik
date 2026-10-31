@@ -36,7 +36,15 @@ function rateText(value: number | null | undefined): string {
   return value == null ? 'Not measured' : `${value}%`;
 }
 
-function LiveVisibilityCard({ scorecard }: { scorecard: ExecutiveReport['ai_visibility_scorecard'] }) {
+function LiveVisibilityCard({
+  scorecard,
+  onRunLiveBenchmark,
+  benchLoading,
+}: {
+  scorecard: ExecutiveReport['ai_visibility_scorecard'];
+  onRunLiveBenchmark?: () => void;
+  benchLoading?: boolean;
+}) {
   const measured = scorecard?.status === 'MEASURED';
   const engines = scorecard?.engines_queried?.length
     ? scorecard.engines_queried.join(', ')
@@ -44,35 +52,100 @@ function LiveVisibilityCard({ scorecard }: { scorecard: ExecutiveReport['ai_visi
   const missing = scorecard?.surfaces_not_queried?.length
     ? scorecard.surfaces_not_queried
     : UNQUERIED_SURFACES;
-  const rows = [
-    ['Engines queried', engines],
-    ['Not queried', missing.join(', ')],
-    ['Prompts', scorecard ? String(scorecard.queries) : 'Not measured'],
-    ['Repeats', scorecard ? String(scorecard.repeats) : 'Not measured'],
-    ['Successful responses', scorecard ? String(scorecard.successful_runs) : 'Not measured'],
-    ['Mention rate', measured ? rateText(scorecard?.mention_rate_pct) : 'Not measured'],
-    ['Citation rate', measured ? rateText(scorecard?.citation_rate_pct) : 'Not measured'],
-    ['Citation accuracy', measured ? rateText(scorecard?.citation_accuracy_pct) : 'Not measured'],
-    ['Competitor visibility', measured ? rateText(scorecard?.competitor_visibility_pct) : 'Not measured'],
-  ];
+
   return (
-    <Card className="p-5 space-y-4">
-      <div className="space-y-1">
-        <h3 className="font-sans text-lg text-ink font-semibold">Live visibility</h3>
-        <p className="text-xs text-ink-600">
-          {scorecard?.measurement_note
-            || scorecard?.not_measured_reason
-            || 'Live visibility stays blank until an engine returns a response. Model APIs are not Google AI Overviews, AI Mode, or Bing Copilot.'}
-        </p>
-      </div>
-      <dl className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        {rows.map(([label, value]) => (
-          <div key={label} className="p-3 rounded border border-line bg-paper-50">
-            <dt className="text-[10px] font-mono uppercase tracking-[0.04em] text-ink-500">{label}</dt>
-            <dd className="mt-1 text-sm font-medium text-ink">{value}</dd>
+    <Card className="p-6 space-y-5 border border-line bg-paper-50/50">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line pb-4">
+        <div>
+          <div className="flex items-center gap-2">
+            <span className="font-mono text-[10px] uppercase tracking-wider text-ink-500 font-bold">
+              Layer 2 Telemetry
+            </span>
+            <span
+              className={`font-mono text-[9px] font-bold px-2 py-0.5 rounded ${
+                measured
+                  ? 'bg-good/10 text-good border border-good/30'
+                  : 'bg-paper-200 text-ink-600 border border-line'
+              }`}
+            >
+              {measured ? 'LIVE ENGINE MEASURED' : 'STANDBY / NOT MEASURED'}
+            </span>
           </div>
-        ))}
-      </dl>
+          <h3 className="font-sans text-xl text-ink font-semibold mt-1">
+            Live AI Answer Engine Visibility
+          </h3>
+        </div>
+
+        {onRunLiveBenchmark && !measured && (
+          <button
+            type="button"
+            onClick={onRunLiveBenchmark}
+            disabled={benchLoading}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-pine text-white text-xs font-semibold rounded hover:bg-pine/90 disabled:opacity-50 transition-colors shadow-sm"
+          >
+            {benchLoading ? (
+              <>
+                <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                Querying Engines…
+              </>
+            ) : (
+              <>
+                <Zap className="w-3.5 h-3.5" /> Run Live Benchmark
+              </>
+            )}
+          </button>
+        )}
+      </div>
+
+      {measured ? (
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className="p-4 rounded border border-line bg-white shadow-sm">
+              <span className="text-[10px] font-mono uppercase tracking-wider text-ink-500 block">Brand Mention Rate</span>
+              <p className="mt-1 font-sans text-2xl font-bold text-good">{rateText(scorecard?.mention_rate_pct)}</p>
+              <span className="text-[11px] text-ink-500 mt-1 block">Presence in answer text</span>
+            </div>
+            <div className="p-4 rounded border border-line bg-white shadow-sm">
+              <span className="text-[10px] font-mono uppercase tracking-wider text-ink-500 block">Citation Rate</span>
+              <p className="mt-1 font-sans text-2xl font-bold text-ink">{rateText(scorecard?.citation_rate_pct)}</p>
+              <span className="text-[11px] text-ink-500 mt-1 block">Verified link citation</span>
+            </div>
+            <div className="p-4 rounded border border-line bg-white shadow-sm">
+              <span className="text-[10px] font-mono uppercase tracking-wider text-ink-500 block">Citation Accuracy</span>
+              <p className="mt-1 font-sans text-2xl font-bold text-ink">{rateText(scorecard?.citation_accuracy_pct)}</p>
+              <span className="text-[11px] text-ink-500 mt-1 block">Hallucination-free quotes</span>
+            </div>
+            <div className="p-4 rounded border border-line bg-white shadow-sm">
+              <span className="text-[10px] font-mono uppercase tracking-wider text-ink-500 block">Competitor Share</span>
+              <p className="mt-1 font-sans text-2xl font-bold text-warn">{rateText(scorecard?.competitor_visibility_pct)}</p>
+              <span className="text-[11px] text-ink-500 mt-1 block">Alternative brands cited</span>
+            </div>
+          </div>
+
+          <div className="p-3 bg-paper-100 rounded border border-line text-xs flex flex-wrap items-center justify-between gap-2 text-ink-600">
+            <span><strong>Queried Engines:</strong> {engines}</span>
+            <span><strong>Queries Tested:</strong> {scorecard?.queries ?? 0}</span>
+            <span><strong>Repeats:</strong> {scorecard?.repeats ?? 1}</span>
+            <span><strong>Successful Runs:</strong> {scorecard?.successful_runs ?? 0}</span>
+          </div>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          <p className="text-xs text-ink-700 leading-relaxed">
+            {scorecard?.measurement_note
+              || scorecard?.not_measured_reason
+              || 'Live multi-engine citation polling was not executed during this crawl run. First-party content readiness and extractability are fully evaluated below, but real-time brand mention and citation rates require live API keys for OpenAI, Perplexity, and Anthropic.'}
+          </p>
+          <div className="p-3 bg-paper-100 rounded border border-line text-[11px] space-y-1 text-ink-600">
+            <span className="font-mono font-bold text-ink-700 uppercase tracking-wider block text-[10px]">
+              Engines Requiring Live Query Execution:
+            </span>
+            <p>
+              {missing.join(' · ')} · ChatGPT Search · Perplexity Citations
+            </p>
+          </div>
+        </div>
+      )}
     </Card>
   );
 }
@@ -288,7 +361,152 @@ export function GeoWorkspaceView({
       {activeSubTab === 'audit' && <GeoAuditBook report={report} />}
 
       {activeSubTab === 'visibility' && (
-        <LiveVisibilityCard scorecard={scorecard} />
+        <div className="space-y-6">
+          <LiveVisibilityCard
+            scorecard={scorecard}
+            onRunLiveBenchmark={handleRunLiveBenchmark}
+            benchLoading={benchLoading}
+          />
+
+          {/* Layer 1: First-Party DOM Extractability & Technical Grounding */}
+          <Card className="p-6 space-y-6 border border-line bg-white shadow-sm">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line pb-4">
+              <div>
+                <span className="font-mono text-[10px] uppercase tracking-wider text-ink-500 font-bold block">
+                  Layer 1 · On-Page AST Analysis
+                </span>
+                <h3 className="font-sans text-xl text-ink font-semibold mt-1">
+                  DOM Extractability &amp; Knowledge Grounding
+                </h3>
+              </div>
+              <div className="flex items-center gap-3">
+                <div className="text-right">
+                  <span className="text-[10px] font-mono text-ink-500 uppercase block">Extractability Score</span>
+                  <span className="text-2xl font-bold font-sans text-pine">
+                    {geoScore != null ? `${geoScore}/100` : '—'}
+                  </span>
+                </div>
+                <span
+                  className={`font-mono text-xs font-bold px-2.5 py-1 rounded ${
+                    geoScore && geoScore >= 75
+                      ? 'bg-good/10 text-good border border-good/30'
+                      : geoScore && geoScore >= 50
+                      ? 'bg-warn/10 text-warn border border-warn/30'
+                      : 'bg-bad/10 text-bad border border-bad/30'
+                  }`}
+                >
+                  {geoScore && geoScore >= 75 ? 'HIGH READINESS' : geoScore && geoScore >= 50 ? 'MODERATE READINESS' : 'LOW READINESS'}
+                </span>
+              </div>
+            </div>
+
+            {/* AI Crawler Permissions */}
+            <div className="space-y-3">
+              <h4 className="font-mono text-xs uppercase tracking-wider text-ink-700 font-bold flex items-center gap-2">
+                <Bot className="w-4 h-4 text-ink-600" />
+                AI Search Crawler Permissions &amp; Directive Health
+              </h4>
+              <BotDirectiveGrid directives={perEngine?.ai_bot_directives} />
+            </div>
+
+            {/* Commercial Buyer Query Grounding Battery */}
+            {geoReadiness?.questions && geoReadiness.questions.length > 0 && (
+              <div className="space-y-3 pt-2">
+                <div className="flex items-center justify-between">
+                  <h4 className="font-mono text-xs uppercase tracking-wider text-ink-700 font-bold flex items-center gap-2">
+                    <Search className="w-4 h-4 text-ink-600" />
+                    Commercial Buyer Question Grounding Battery ({geoReadiness.questions.length} Inquiries)
+                  </h4>
+                  <span className="font-mono text-xs text-ink-500">
+                    {geoReadiness.questions.filter((q) => q.status === 'SUPPORTED').length} Supported ·{' '}
+                    {geoReadiness.questions.filter((q) => q.status === 'PARTIAL').length} Partial ·{' '}
+                    {geoReadiness.questions.filter((q) => q.status === 'UNSUPPORTED').length} Unsupported
+                  </span>
+                </div>
+                <div className="border border-line rounded-lg overflow-hidden">
+                  <table className="w-full text-xs text-left">
+                    <thead className="bg-paper-100 font-mono text-[11px] text-ink-600 uppercase border-b border-line">
+                      <tr>
+                        <th className="py-2.5 px-3 w-1/3">Buyer Commercial Inquiry</th>
+                        <th className="py-2.5 px-3 w-28">Status</th>
+                        <th className="py-2.5 px-3">First-Party Answer Passage &amp; Guidance</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-line">
+                      {geoReadiness.questions.map((q, idx) => (
+                        <tr key={idx} className="hover:bg-paper-50 transition-colors">
+                          <td className="py-3 px-3 font-medium text-ink align-top">
+                            {q.question}
+                          </td>
+                          <td className="py-3 px-3 align-top">
+                            <span
+                              className={`inline-block font-mono text-[10px] font-bold px-2 py-0.5 rounded ${
+                                q.status === 'SUPPORTED'
+                                  ? 'bg-good/10 text-good border border-good/30'
+                                  : q.status === 'PARTIAL'
+                                  ? 'bg-warn/10 text-warn border border-warn/30'
+                                  : 'bg-bad/10 text-bad border border-bad/30'
+                              }`}
+                            >
+                              {q.status}
+                            </span>
+                          </td>
+                          <td className="py-3 px-3 text-ink-700 align-top leading-relaxed space-y-1">
+                            {q.answer_snippet || q.answer ? (
+                              <p className="italic text-ink-800">
+                                &ldquo;{q.answer_snippet || q.answer}&rdquo;
+                              </p>
+                            ) : (
+                              <p className="text-bad text-[11px]">
+                                No extractable factual passage found on crawled pages.
+                              </p>
+                            )}
+                            {q.recommended_answer && q.status !== 'SUPPORTED' && (
+                              <p className="text-[11px] text-ink-600">
+                                <strong className="text-pine font-mono text-[10px] uppercase">Recommended Addition:</strong> {q.recommended_answer}
+                              </p>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {/* 8-Dimension Extractability Framework */}
+            {geoReadiness?.dimensions && geoReadiness.dimensions.length > 0 && (
+              <div className="space-y-3 pt-2">
+                <h4 className="font-mono text-xs uppercase tracking-wider text-ink-700 font-bold flex items-center gap-2">
+                  <BarChart3 className="w-4 h-4 text-ink-600" />
+                  The 8-Dimension Extractability Framework
+                </h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {geoReadiness.dimensions.map((dim) => (
+                    <div key={dim.key} className="p-3 border border-line rounded bg-paper-50 space-y-1">
+                      <div className="flex items-center justify-between pb-1 border-b border-line">
+                        <span className="font-sans font-bold text-ink text-xs">{dim.label}</span>
+                        <span
+                          className={`font-mono text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                            dim.band === 'HIGH' || dim.band === 'PASS'
+                              ? 'bg-good/10 text-good border border-good/30'
+                              : dim.band === 'PARTIAL' || dim.band === 'MODERATE'
+                              ? 'bg-warn/10 text-warn border border-warn/30'
+                              : 'bg-bad/10 text-bad border border-bad/30'
+                          }`}
+                        >
+                          {dim.band}
+                        </span>
+                      </div>
+                      <p className="text-xs text-ink-600 leading-relaxed font-sans">{dim.summary}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </Card>
+        </div>
       )}
 
       {/* Appendix: on-page writing exercise. Not a live engine query. */}

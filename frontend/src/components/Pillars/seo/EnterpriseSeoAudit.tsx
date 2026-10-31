@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Badge } from '../../ui';
 import { api } from '../../../services/http';
+import { ExecutiveReport } from '../../../types';
 
 type ChapterStatus =
   | 'ISSUE_VERIFIED'
@@ -95,13 +96,27 @@ function statusTone(status: ChapterStatus): 'bad' | 'good' | 'warn' | 'neutral' 
   return 'neutral';
 }
 
-export function EnterpriseSeoPanel({ assessment }: { assessment: EnterpriseSeoAssessment }) {
+function shortUrlPath(url?: string): string {
+  if (!url) return '/';
+  return url.replace(/^https?:\/\/[^/]+/i, '') || '/';
+}
+
+export function EnterpriseSeoPanel({
+  assessment,
+  report,
+}: {
+  assessment: EnterpriseSeoAssessment;
+  report?: ExecutiveReport;
+}) {
   const sourceUnavailable = assessment.agents.filter(
     (agent) => agent.status === 'unavailable' && !agent.agent_id.startsWith('seo.ai.'),
   );
   const aiHeld = assessment.agents.filter(
     (agent) => agent.agent_id.startsWith('seo.ai.') && agent.status !== 'completed',
   );
+  const pages = (report?.crawl_manifest?.pages || report?.page_reports || []) as Array<Record<string, any>>;
+  const allFindings = report?.findings || [];
+
   return (
     <div className="space-y-8">
       <section className="space-y-2">
@@ -141,6 +156,97 @@ export function EnterpriseSeoPanel({ assessment }: { assessment: EnterpriseSeoAs
           ))}
         </div>
       </section>
+
+      {pages.length > 0 && (
+        <section className="space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h3 className="section-title">Page-by-Page &amp; URL-Level Optimization Dossiers</h3>
+              <p className="text-xs text-ink-500">
+                Full empirical website inspection across {pages.length} crawled URL(s): HTTP response, metadata, headings, schema JSON-LD, internal links, and page-specific optimization actions.
+              </p>
+            </div>
+            <Badge tone="pine">{pages.length} URLs Audited</Badge>
+          </div>
+
+          <div className="space-y-3">
+            {pages.map((pg, idx) => {
+              const url = String(pg.url || '');
+              const title = String(pg.title || '—');
+              const meta = String(pg.meta_description || '—');
+              const h1s: string[] = Array.isArray(pg.h1) ? pg.h1 : [];
+              const h2Count = Array.isArray(pg.h2) ? pg.h2.length : 0;
+              const wordCount = Number(pg.word_count || 0);
+              const status = Number(pg.status_code || 200);
+              const canonical = String(pg.canonical_url || '');
+              const schemas: string[] = Array.isArray(pg.schema_types) ? pg.schema_types : [];
+              const inLinks = Number(pg.internal_links_count ?? (Array.isArray(pg.internal_links) ? pg.internal_links.length : 0));
+              const exLinks = Number(pg.external_links_count ?? (Array.isArray(pg.external_links) ? pg.external_links.length : 0));
+              const totalImg = Number(pg.total_images ?? pg.image_count ?? 0);
+              const missingAlt = Number(pg.images_without_alt ?? 0);
+              const pageFindings = allFindings.filter((f) => {
+                const urls = (f as any).affected_urls;
+                return (Array.isArray(urls) && urls.includes(url)) || (f as any).url === url;
+              });
+
+              return (
+                <div key={url || idx} className="card p-4 space-y-3 border-l-4 border-l-pine-600">
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line pb-2">
+                    <div>
+                      <span className="font-mono text-sm font-semibold text-ink">{url}</span>
+                      <span className="ml-2 text-xs text-ink-400">({shortUrlPath(url) === '/' ? 'Homepage' : 'Commercial / Content Page'})</span>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge tone={status === 200 ? 'good' : 'bad'}>HTTP {status}</Badge>
+                      <Badge tone={schemas.length > 0 ? 'good' : 'warn'}>
+                        {schemas.length > 0 ? `Schema: ${schemas.join(', ')}` : '0 JSON-LD Schema'}
+                      </Badge>
+                      <Badge tone={pageFindings.length > 0 ? 'warn' : 'good'}>
+                        {pageFindings.length} Issue(s)
+                      </Badge>
+                    </div>
+                  </div>
+
+                  <div className="grid gap-2 text-xs sm:grid-cols-2">
+                    <div className="rounded bg-paper-50 p-2.5 border border-line/60">
+                      <p className="font-mono text-[10px] uppercase text-ink-400">Title Tag ({title === '—' ? 0 : title.length} chars)</p>
+                      <p className="mt-0.5 font-medium text-ink">{title}</p>
+                    </div>
+                    <div className="rounded bg-paper-50 p-2.5 border border-line/60">
+                      <p className="font-mono text-[10px] uppercase text-ink-400">Meta Description ({meta === '—' ? 0 : meta.length} chars)</p>
+                      <p className="mt-0.5 text-ink-700">{meta}</p>
+                    </div>
+                    <div className="rounded bg-paper-50 p-2.5 border border-line/60">
+                      <p className="font-mono text-[10px] uppercase text-ink-400">Primary H1 ({h1s.length}) &amp; H2s ({h2Count})</p>
+                      <p className="mt-0.5 font-medium text-ink">{h1s.length > 0 ? h1s.join(' | ') : 'Missing H1'}</p>
+                    </div>
+                    <div className="rounded bg-paper-50 p-2.5 border border-line/60">
+                      <p className="font-mono text-[10px] uppercase text-ink-400">DOM &amp; Link Signals</p>
+                      <p className="mt-0.5 text-ink-700">
+                        {wordCount} words · Canonical: {canonical ? 'Self-referencing' : 'Missing'} · Links: {inLinks} in / {exLinks} out · Alt gaps: {missingAlt}/{totalImg}
+                      </p>
+                    </div>
+                  </div>
+
+                  {pageFindings.length > 0 && (
+                    <div className="rounded bg-paper-100/70 p-2.5 text-xs space-y-1">
+                      <p className="font-semibold text-ink">Page-Specific Findings &amp; Remediation Directives:</p>
+                      <ul className="list-disc pl-4 space-y-1 text-ink-700">
+                        {pageFindings.slice(0, 5).map((pf) => (
+                          <li key={pf.finding_id}>
+                            <span className="font-medium text-ink">{pf.title}:</span>{' '}
+                            {pf.recommendation}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      )}
 
       <section className="space-y-3">
         <h3 className="section-title">Chapters</h3>
@@ -209,7 +315,13 @@ export function EnterpriseSeoPanel({ assessment }: { assessment: EnterpriseSeoAs
   );
 }
 
-export function EnterpriseSeoAudit({ analysisId }: { analysisId?: string }) {
+export function EnterpriseSeoAudit({
+  analysisId,
+  report,
+}: {
+  analysisId?: string;
+  report?: ExecutiveReport;
+}) {
   const [assessment, setAssessment] = useState<EnterpriseSeoAssessment | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -243,5 +355,5 @@ export function EnterpriseSeoAudit({ analysisId }: { analysisId?: string }) {
   if (!assessment) {
     return <p className="text-sm text-ink-500">Building the enterprise assessment from the sealed report.</p>;
   }
-  return <EnterpriseSeoPanel assessment={assessment} />;
+  return <EnterpriseSeoPanel assessment={assessment} report={report} />;
 }

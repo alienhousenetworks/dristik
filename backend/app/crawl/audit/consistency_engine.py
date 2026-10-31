@@ -295,23 +295,99 @@ class CrossChapterConsistencyEngine:
                         })
 
         # -------------------------------------------------------------
-        # 9. Finding Deduplication & Scope Preservation
+        # 9. Finding Deduplication, DOM Reconciliation & Scope Preservation
         # -------------------------------------------------------------
         checks_run += 1
         if report.findings:
+            pages_list = list(getattr(manifest, "pages", []) or []) if manifest else []
+            all_have_canonical = bool(pages_list) and all(bool(getattr(p, "canonical_url", None)) for p in pages_list)
+            all_have_meta = bool(pages_list) and all(bool((getattr(p, "meta_description", None) or "").strip()) for p in pages_list)
+            all_have_lang = bool(pages_list) and all(
+                bool(getattr(p, "has_html_lang", False) or getattr(p, "html_lang", None))
+                for p in pages_list
+            )
+
+            reconciled_findings: List[Finding] = []
+            false_positives_removed = 0
+            for f in report.findings:
+                t_low = (f.title or "").lower()
+                d_low = (getattr(f, "description", "") or "").lower()
+                blob_low = f"{t_low} {d_low}"
+                if all_have_canonical and (
+                    "have no rel=canonical" in blob_low
+                    or "missing a canonical" in blob_low
+                    or "no canonical tag" in blob_low
+                ):
+                    false_positives_removed += 1
+                    continue
+                if all_have_meta and (
+                    "missing a meta description" in blob_low
+                    or "meta description is missing" in blob_low
+                    or "have no meta description" in blob_low
+                ):
+                    false_positives_removed += 1
+                    continue
+                if all_have_lang and (
+                    "missing an html lang" in blob_low
+                    or "missing html lang" in blob_low
+                ):
+                    false_positives_removed += 1
+                    continue
+                reconciled_findings.append(f)
+
+            if false_positives_removed > 0:
+                contradictions.append({
+                    "dimension": "dom_evidence_reconciliation",
+                    "conflict": f"{false_positives_removed} finding(s) contradicted measured PageEvidence DOM attributes.",
+                    "action": "drop_contradicted_findings"
+                })
+                repairs.append({
+                    "field": "findings",
+                    "repaired_value": f"Removed {false_positives_removed} contradicted finding(s).",
+                    "reason": "Reconciled finding ledger against verified PageEvidence DOM tags (canonical, meta description, html[lang])."
+                })
+
+            def _semantic_rule_key(item: Finding) -> str:
+                r_id = str(getattr(item, "rule_id", "") or "").strip().lower()
+                if r_id:
+                    return r_id
+                txt = f"{item.title or ''} {getattr(item, 'description', '') or ''}".lower()
+                if "beyond imagination" in txt or ("h1" in txt and ("slogan" in txt or "vague" in txt or "generic" in txt or "category" in txt)):
+                    return "canonical_issue::homepage_vague_h1"
+                if ("duplicate" in txt or "identical" in txt or "repeats" in txt or "reuses" in txt or "verbatim" in txt) and "meta description" in txt:
+                    return "canonical_issue::duplicate_meta_description"
+                if "open graph" in txt and "missing" in txt:
+                    return "canonical_issue::missing_open_graph"
+                if "alienhouse" in txt and ("casing" in txt or "inconsistent" in txt or "brand" in txt or "naming" in txt):
+                    return "canonical_issue::brand_naming_consistency"
+                if ("'game'" in txt or '"game"' in txt) and ("nav" in txt or "menu" in txt or "label" in txt):
+                    return "canonical_issue::ambiguous_nav_game"
+                if "alt" in txt and ("image" in txt or "img" in txt) and ("missing" in txt or "lack" in txt):
+                    return "canonical_issue::missing_image_alt"
+                if "hsts" in txt or "strict-transport-security" in txt:
+                    return "canonical_issue::missing_hsts"
+                if "content-security-policy" in txt or ("csp" in txt and "header" in txt):
+                    return "canonical_issue::missing_csp"
+                if "x-frame-options" in txt:
+                    return "canonical_issue::missing_xfo"
+                if "x-content-type-options" in txt:
+                    return "canonical_issue::missing_xcto"
+                cat_val = item.category.value if hasattr(item.category, "value") else str(item.category)
+                return f"{cat_val}::{(item.title or '').strip().lower()}"
+
             unique_findings: Dict[str, Finding] = {}
             duplicates_found = 0
-            for f in report.findings:
-                rule_key = getattr(f, "rule_id", "") or f.title.strip().lower()
-                cat_val = f.category.value if hasattr(f.category, "value") else str(f.category)
-                key = f"{cat_val}::{rule_key}"
+            for f in reconciled_findings:
+                key = _semantic_rule_key(f)
                 if key in unique_findings:
                     duplicates_found += 1
                     existing = unique_findings[key]
-                    merged_urls = list(dict.fromkeys(existing.affected_urls + f.affected_urls))
+                    merged_urls = list(dict.fromkeys((existing.affected_urls or []) + (f.affected_urls or [])))
                     existing.affected_urls = merged_urls
-                    existing.evidence_refs = list(dict.fromkeys(existing.evidence_refs + f.evidence_refs))
-                    existing.evidence_ids = list(dict.fromkeys(existing.evidence_ids + f.evidence_ids))
+                    existing.evidence_refs = list(dict.fromkeys((existing.evidence_refs or []) + (f.evidence_refs or [])))
+                    existing.evidence_ids = list(dict.fromkeys((existing.evidence_ids or []) + (f.evidence_ids or [])))
+                    if hasattr(existing, "evidence") and hasattr(f, "evidence"):
+                        existing.evidence = list((existing.evidence or []) + (f.evidence or []))[:10]
                     if not existing.root_cause and f.root_cause:
                         existing.root_cause = f.root_cause
                     if not existing.relevant_code_or_configuration_example and f.relevant_code_or_configuration_example:
@@ -319,13 +395,13 @@ class CrossChapterConsistencyEngine:
                 else:
                     unique_findings[key] = f
 
+            report.findings = list(unique_findings.values())
             if duplicates_found > 0:
                 contradictions.append({
                     "dimension": "finding_deduplication",
                     "conflict": f"{duplicates_found} duplicate findings detected across chapter outputs.",
                     "action": "merge_duplicates_preserve_scope"
                 })
-                report.findings = list(unique_findings.values())
                 repairs.append({
                     "field": "findings",
                     "repaired_value": f"Merged {duplicates_found} duplicates into {len(report.findings)} unique findings.",

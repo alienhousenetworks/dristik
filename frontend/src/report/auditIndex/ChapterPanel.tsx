@@ -127,6 +127,85 @@ function sourceStateClass(state: string): string {
   return 'bg-paper-100 text-ink-500 border-line';
 }
 
+function buildEmpiricalTableForChapter(
+  report: ExecutiveReport,
+  chapterNum: string,
+): { title: string; columns: string[]; rows: string[][] } | null {
+  const pages = ((report.crawl_manifest as any)?.pages || report.page_reports || []) as Array<Record<string, any>>;
+  if (!pages.length) return null;
+
+  const shortPath = (u?: string) => (u ? u.replace(/^https?:\/\/[^/]+/i, '') || '/' : '/');
+  const ch = parseInt(chapterNum, 10);
+
+  // Chapters 03-07: Crawlability, Indexation, HTTP Status, Sitemap, Canonicals
+  if (ch >= 3 && ch <= 7) {
+    return {
+      title: 'Empirical Crawl, Indexation & Canonical Ledger',
+      columns: ['URL Path', 'HTTP Status', 'Indexable', 'Canonical Directive', 'Click Depth'],
+      rows: pages.slice(0, 12).map((p) => [
+        shortPath(p.url),
+        `HTTP ${p.status_code ?? 200}`,
+        String(p.robots_meta || '').toLowerCase().includes('noindex') ? 'Noindex' : 'Indexable',
+        p.canonical_url ? 'Self-referencing' : 'Missing',
+        `Depth ${p.click_depth ?? (shortPath(p.url) === '/' ? 0 : 1)}`,
+      ]),
+    };
+  }
+
+  // Chapters 08-12: Titles, Snippets, Headings, Content Quality, Internal Links & Media
+  if (ch >= 8 && ch <= 12) {
+    return {
+      title: 'Empirical On-Page Metadata, Headings & Content Matrix',
+      columns: ['URL Path', 'Title Tag (Len)', 'Meta Description (Len)', 'Primary H1', 'Words & Alt Gaps'],
+      rows: pages.slice(0, 12).map((p) => {
+        const title = String(p.title || '—');
+        const meta = String(p.meta_description || '—');
+        const h1 = Array.isArray(p.h1) && p.h1.length > 0 ? String(p.h1[0]) : 'Missing H1';
+        const wc = Number(p.word_count || 0);
+        const missingAlt = Number(p.images_without_alt || 0);
+        const totalImg = Number(p.total_images ?? p.image_count ?? 0);
+        return [
+          shortPath(p.url),
+          `${title.slice(0, 38)} (${title === '—' ? 0 : title.length}c)`,
+          `${meta.slice(0, 42)}... (${meta === '—' ? 0 : meta.length}c)`,
+          h1.slice(0, 36),
+          `${wc}w · ${missingAlt}/${totalImg} missing alt`,
+        ];
+      }),
+    };
+  }
+
+  // Chapters 13-15: Core Web Vitals, Latency, Mobile & Rendering
+  if (ch >= 13 && ch <= 15) {
+    return {
+      title: 'Empirical Performance, Viewport & Rendering Telemetry',
+      columns: ['URL Path', 'Response Latency', 'Viewport Meta', 'HTML Lang', 'Internal / Ext Links'],
+      rows: pages.slice(0, 12).map((p) => [
+        shortPath(p.url),
+        p.load_time_ms ? `${Math.round(Number(p.load_time_ms))} ms` : 'Measured in crawl',
+        p.has_viewport !== false ? 'Present' : 'Missing',
+        p.html_lang || (p.has_html_lang ? 'Present' : 'Missing'),
+        `${p.internal_links_count ?? (Array.isArray(p.internal_links) ? p.internal_links.length : 0)} in / ${p.external_links_count ?? (Array.isArray(p.external_links) ? p.external_links.length : 0)} out`,
+      ]),
+    };
+  }
+
+  // Chapters 16-24: Schema, Entities, E-E-A-T, Security
+  return {
+    title: 'Empirical Structured Data (JSON-LD) & Entity Signals',
+    columns: ['URL Path', 'Detected Schema Types', 'Rich Result Eligibility', 'HTTPS / Transport'],
+    rows: pages.slice(0, 12).map((p) => {
+      const schemas: string[] = Array.isArray(p.schema_types) ? p.schema_types : [];
+      return [
+        shortPath(p.url),
+        schemas.length > 0 ? schemas.join(', ') : 'None (0 JSON-LD blocks)',
+        schemas.length > 0 ? 'Eligible' : 'Ineligible (Missing JSON-LD)',
+        String(p.url || '').startsWith('https://') ? 'HTTPS Active' : 'HTTP',
+      ];
+    }),
+  };
+}
+
 export function ChapterPanel({
   report,
   number,
@@ -143,6 +222,7 @@ export function ChapterPanel({
     bars: evidenceBars(lineStatuses),
   };
   const charts = mix.bars.length ? [mix, ...visual.charts] : visual.charts;
+  const empiricalTable = buildEmpiricalTableForChapter(report, number);
 
   return (
     <div className="mt-3.5 rounded-lg border border-line/80 bg-paper-50/40 p-3.5 dark:bg-ink-950/10">
@@ -183,6 +263,38 @@ export function ChapterPanel({
           {charts.map((chart) => (
             <ModernBarChart key={chart.title} chart={chart} />
           ))}
+        </div>
+      )}
+
+      {/* Empirical Website Page Inspection Table */}
+      {empiricalTable && (
+        <div className="mt-3 rounded-lg border border-line/70 bg-paper p-3 overflow-x-auto">
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-xs font-semibold text-ink">{empiricalTable.title}</p>
+            <span className="font-mono text-[10px] text-ink-400">
+              {empiricalTable.rows.length} crawled URL(s)
+            </span>
+          </div>
+          <table className="w-full text-left border-collapse text-[11px]">
+            <thead>
+              <tr className="border-b border-line text-ink-500 font-mono text-[10px] uppercase">
+                {empiricalTable.columns.map((col) => (
+                  <th key={col} className="py-1.5 px-2 font-semibold">{col}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-line/50">
+              {empiricalTable.rows.map((row, rIdx) => (
+                <tr key={rIdx} className="hover:bg-paper-50/80">
+                  {row.map((cell, cIdx) => (
+                    <td key={cIdx} className={`py-1.5 px-2 ${cIdx === 0 ? 'font-mono font-medium text-ink' : 'text-ink-700'}`}>
+                      {cell}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
 

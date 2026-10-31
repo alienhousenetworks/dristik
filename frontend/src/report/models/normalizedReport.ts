@@ -299,6 +299,13 @@ export interface NormalizedReport {
       recommendedRewrite: string;
       why?: string;
     }>;
+    questions: Array<{
+      key: string;
+      question: string;
+      status: string;
+      answer?: string;
+      recommendedAnswer?: string;
+    }>;
   };
 
   // Chapter 03: Answer Engine Visibility (AEO)
@@ -826,6 +833,13 @@ export function normalizeExecutiveReport(report: ExecutiveReport): NormalizedRep
         recommendedRewrite: rw.recommended_rewrite || '',
         why: rw.why,
       })).filter((rw) => rw.recommendedRewrite && rw.recommendedRewrite !== rw.currentPassage),
+      questions: ((geoReadiness?.questions || []) as any[]).map((q) => ({
+        key: q.question_key || '',
+        question: q.question || '',
+        status: (q.status || 'UNSUPPORTED').toUpperCase(),
+        answer: q.answer_snippet || q.answer || '',
+        recommendedAnswer: q.recommended_answer || '',
+      })),
     },
 
     aeo: {

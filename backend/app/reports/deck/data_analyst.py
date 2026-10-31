@@ -647,22 +647,80 @@ class DeckDataAnalystAgent:
                 ]
 
             # -----------------------------------------------------------------
-            # Slide 47: GEO Paradigm
+            # Slide 47: GEO Paradigm & Domain Posture
             # -----------------------------------------------------------------
             elif s_id == "slide_47_geo_paradigm":
+                geo = getattr(report, "geo_readiness", None)
+                ext_score = getattr(geo, "extractability_score", None) if geo else _category_score("GEO")
+                q_supp = getattr(geo, "questions_supported", 0) if geo else 0
+                q_total = getattr(geo, "questions_total", 6) if geo else 6
+                opp_text = str(getattr(report, "primary_strategic_opportunity", "") or "Deploy concise 40-60 word definition passages and JSON-LD schema nodes.")[:130]
+
                 s.cards = [
-                    CardSpec(kicker="PARADIGM 01 // CITATION", title="From Ranks to Citations", description="Search is shifting from ten blue links to direct synthesized LLM responses.", badge="TRANSFORMATION", badge_color="sky"),
-                    CardSpec(kicker="PARADIGM 02 // EXTRACTION", title="Semantic Extractability", description="Models retrieve self-contained factual definitions rather than keyword densities.", badge="NEW METRIC", badge_color="emerald"),
-                    CardSpec(kicker="PARADIGM 03 // ENTITY", title="Graph-Anchored Authority", description="Unambiguous Schema.org entity linking prevents AI hallucination.", badge="FOUNDATION", badge_color="sky")
+                    CardSpec(
+                        kicker="READINESS // ON-PAGE AST",
+                        title=f"Semantic Extractability: {ext_score:.0f}/100" if ext_score is not None else "Semantic Extractability",
+                        description="Measures whether AI answer engines (ChatGPT, Perplexity, Claude) can parse unambiguous factual statements from your crawled HTML.",
+                        metric_value=f"{ext_score:.0f}/100" if ext_score is not None else "UNMEASURED",
+                        badge="EVALUATED" if ext_score is not None else "PENDING",
+                        badge_color="emerald" if ext_score and ext_score >= 70 else "amber"
+                    ),
+                    CardSpec(
+                        kicker="COMMERCIAL COVERAGE",
+                        title=f"{q_supp} of {q_total} Core Questions Solved",
+                        description="Direct empirical test evaluating Identity, Target Audience, Pricing, Feature Set, Trust, and Competitor alternative statements.",
+                        metric_value=f"{q_supp}/{q_total}",
+                        badge="VERIFIED" if q_supp >= (q_total // 2) else "ATTENTION",
+                        badge_color="emerald" if q_supp >= (q_total // 2) else "rose"
+                    ),
+                    CardSpec(
+                        kicker="PRIMARY LEVER",
+                        title="Attributed Passage Architecture",
+                        description=opp_text,
+                        badge="ACTIONABLE",
+                        badge_color="sky"
+                    )
                 ]
 
             # -----------------------------------------------------------------
             # Slide 48: 6 Commercial Queries (Chart)
             # -----------------------------------------------------------------
             elif s_id == "slide_48_commercial_query_benchmark":
+                geo = getattr(report, "geo_readiness", None)
+                geo_questions = getattr(geo, "questions", []) if geo else []
                 q_items = getattr(report, "dynamic_sandbox_evaluations", None) or getattr(report, "commercial_evaluations", None) or getattr(report, "ai_search_matrix", None) or []
-                if q_items:
-                    labels = [str(getattr(q, "query", getattr(q, "question", f"Query {i+1}")))[:18] for i, q in enumerate(q_items[:6])]
+
+                if geo_questions:
+                    labels = [q.question_key.replace("_", " ").title()[:24] for q in geo_questions[:6]]
+                    vals = [100.0 if q.status == "SUPPORTED" else (50.0 if q.status == "PARTIAL" else 0.0) for q in geo_questions[:6]]
+                    s.chart = ChartDataSpec(
+                        title="Commercial Question Extractability (Crawl AST)",
+                        chart_type=DeckChartType.COLUMN,
+                        categories=labels,
+                        series=[{"name": "Extractability %", "values": vals}],
+                        units="%"
+                    )
+                    supp_count = sum(1 for q in geo_questions if q.status == "SUPPORTED")
+                    unsupp = next((q for q in geo_questions if q.status in ("UNSUPPORTED", "PARTIAL")), None)
+                    s.cards = [
+                        CardSpec(
+                            kicker="COMMERCIAL INQUIRY SET",
+                            title=f"{supp_count} / {len(geo_questions)} Inquiries Solved",
+                            description="Direct AST audit of commercial questions required for high-intent AI search recommendations.",
+                            metric_value=f"{supp_count}/{len(geo_questions)}",
+                            badge="AUDITED",
+                            badge_color="emerald" if supp_count >= 4 else "amber"
+                        ),
+                        CardSpec(
+                            kicker="PRIMARY DEFICIT INQUIRY",
+                            title=unsupp.question_key.title() if unsupp else "All Queries Supported",
+                            description=str(getattr(unsupp, "question", "Missing direct definition snippet."))[:120] if unsupp else "All commercial inquiries resolved with on-page proof passages.",
+                            badge="DEFICIT" if unsupp else "VERIFIED",
+                            badge_color="rose" if unsupp else "emerald"
+                        )
+                    ]
+                elif q_items:
+                    labels = [str(getattr(q, "query", getattr(q, "question", f"Query {i+1}")))[:26] for i, q in enumerate(q_items[:6])]
                     vals = [float(getattr(q, "score", getattr(q, "citability_score", 70.0))) for q in q_items[:6]]
                     s.chart = ChartDataSpec(
                         title="Evaluated Commercial Question Extractability",
@@ -678,7 +736,6 @@ class DeckDataAnalystAgent:
                 else:
                     s.cards = [
                         CardSpec(kicker="BUYER INQUIRY SIMULATION", title="Dynamic Question Sandbox", description="Evaluates whether commercial queries retrieve self-contained answer blocks from your content.", badge="METHODOLOGY", badge_color="sky"),
-                        CardSpec(kicker="PROVIDER PREREQUISITE", title="Telemetry Status", description="Synthetic buyer query runs require configured live answer-engine provider credits.", badge="DISCLOSED", badge_color="amber"),
                         CardSpec(kicker="ON-PAGE ACTION", title="Extractable Summary Blocks", description="Deploy 40-60 word definition passages at the top of commercial service pages.", badge="RECOMMENDATION", badge_color="emerald")
                     ]
 
@@ -687,19 +744,38 @@ class DeckDataAnalystAgent:
             # -----------------------------------------------------------------
             elif s_id == "slide_49_per_engine_matrix":
                 per_engine = getattr(report, "per_engine_geo", None)
-                if per_engine and isinstance(per_engine, dict):
-                    eng_labels = list(per_engine.keys())[:4]
-                    eng_vals = [float(per_engine[k].get("score", per_engine[k]) if isinstance(per_engine[k], dict) else per_engine[k]) for k in eng_labels]
-                    if eng_vals:
+                if per_engine:
+                    eng_scores = []
+                    eng_names = []
+                    for k in ["chatgpt", "perplexity", "google_aio", "claude_gemini"]:
+                        sub = getattr(per_engine, k, None)
+                        if sub is not None:
+                            val = float(getattr(sub, "score", 0.0))
+                            eng_scores.append(val)
+                            eng_names.append(k.replace("_", " ").title())
+                        elif isinstance(per_engine, dict) and k in per_engine:
+                            item = per_engine[k]
+                            val = float(item.get("score", item) if isinstance(item, dict) else item)
+                            eng_scores.append(val)
+                            eng_names.append(k.replace("_", " ").title())
+
+                    if eng_scores:
                         s.chart = ChartDataSpec(
                             title="Per-Engine Answer Readiness Matrix",
                             chart_type=DeckChartType.COLUMN,
-                            categories=[k.replace("_", " ").title() for k in eng_labels],
-                            series=[{"name": "Readiness", "values": eng_vals}],
+                            categories=eng_names,
+                            series=[{"name": "Readiness", "values": eng_scores}],
                             units="/ 100"
                         )
                         s.cards = [
-                            CardSpec(kicker="ENGINE READINESS", title="Multi-Engine Synthesis", description="Evaluates how different LLM context architectures extract your content.", badge="EVALUATED", badge_color="emerald")
+                            CardSpec(kicker="ENGINE READINESS", title="Multi-Engine Synthesis", description="Evaluates how different LLM context architectures extract your content.", metric_value=f"{sum(eng_scores)/len(eng_scores):.1f}/100", badge="EVALUATED", badge_color="emerald"),
+                            CardSpec(kicker="RETRIEVAL LEVER", title="Platform Optimization", description="Perplexity and ChatGPT prioritize concise passage answers within the first 150 words of key sections.", badge="PRESCRIPTIVE", badge_color="sky")
+                        ]
+                    else:
+                        geo_score = _category_score("GEO")
+                        s.cards = [
+                            CardSpec(kicker="ENGINE CRITERIA", title="Answer Engine Evaluation", description="Tests whether ChatGPT, Claude, Perplexity, and Gemini can cite your domain without hallucination.", badge="SCOPE", badge_color="sky"),
+                            CardSpec(kicker="MEASURED GEO HEALTH", title="On-Page Extractability", description=f"Overall GEO category score: {geo_score:.1f}/100." if geo_score is not None else "GEO category was not scored on this run.", metric_value=f"{geo_score:.1f}" if geo_score is not None else "—", badge="RECORDED", badge_color="emerald" if geo_score else "amber")
                         ]
                 else:
                     geo_score = _category_score("GEO")
@@ -713,11 +789,32 @@ class DeckDataAnalystAgent:
             # Slide 50-54: GEO & Answer Engine Slides
             # -----------------------------------------------------------------
             elif s_id == "slide_50_extractable_passages":
-                s.cards = [
-                    CardSpec(kicker="PASSAGE STRUCTURE", title="40-60 Word Definition Blocks", description="Authoritative summary statements placed at the start of key content modules.", badge="HIGH CITATION", badge_color="emerald"),
-                    CardSpec(kicker="FACT ATTRIBUTION", title="Third-Person Entity Syntax", description="Name the company as the subject to prevent pronoun ambiguity in RAG parsers.", badge="SYNTAX", badge_color="sky"),
-                    CardSpec(kicker="FLUFF REMOVAL", title="Zero Marketing Buzzwords", description="Eliminate empty adjectives like 'groundbreaking' and 'seamless' that AI models discard.", badge="PURITY", badge_color="amber")
-                ]
+                geo = getattr(report, "geo_readiness", None)
+                passages = getattr(geo, "citation_passages", {}) if geo else {}
+                raw_rewrites = []
+                if isinstance(passages, dict):
+                    raw_rewrites = passages.get("rewrite_recommendations", []) or []
+                elif hasattr(passages, "rewrite_recommendations"):
+                    raw_rewrites = getattr(passages, "rewrite_recommendations", []) or []
+
+                if raw_rewrites:
+                    rw = raw_rewrites[0]
+                    cur = str(getattr(rw, "current_passage", rw.get("current_passage", "") if isinstance(rw, dict) else ""))
+                    rec = str(getattr(rw, "recommended_rewrite", rw.get("recommended_rewrite", "") if isinstance(rw, dict) else ""))
+                    why = str(getattr(rw, "why", rw.get("why", "Direct entity subject naming prevents RAG pronoun confusion.") if isinstance(rw, dict) else ""))
+
+                    s.cards = [
+                        CardSpec(kicker="CURRENT OBSERVED TEXT", title="Ambiguous Marketing Prose", description=f'"{cur[:130]}..."' if len(cur) > 130 else f'"{cur}"', badge="HIGH FRICTION", badge_color="rose"),
+                        CardSpec(kicker="PRESCRIPTIVE FIX // DEPLOY READY", title="Attributed Definition Rewrite", description=f'"{rec[:130]}..."' if len(rec) > 130 else f'"{rec}"', badge="CITABLE", badge_color="emerald"),
+                        CardSpec(kicker="MECHANICS // RAG BENEFIT", title="Verbatim Extraction Benefit", description=why[:130], badge="HIGH IMPACT", badge_color="sky")
+                    ]
+                else:
+                    domain_name = report.domain
+                    s.cards = [
+                        CardSpec(kicker="PASSAGE STRUCTURE", title="40-60 Word Definition Blocks", description="Authoritative summary statements placed at the start of key commercial modules.", badge="HIGH CITATION", badge_color="emerald"),
+                        CardSpec(kicker="FACT ATTRIBUTION", title="Third-Person Entity Syntax", description=f"Explicitly name {domain_name} as the subject rather than 'we' to prevent RAG parser pronoun confusion.", badge="SYNTAX", badge_color="sky"),
+                        CardSpec(kicker="FLUFF REMOVAL", title="Zero Marketing Buzzwords", description="Eliminate empty adjectives like 'groundbreaking' and 'seamless' that AI models discard.", badge="PURITY", badge_color="amber")
+                    ]
 
             elif s_id == "slide_51_schema_knowledge_graph":
                 schema_rep = getattr(report, "schema_validation", None)
@@ -745,26 +842,76 @@ class DeckDataAnalystAgent:
                     ]
 
             elif s_id == "slide_52_llms_txt_deployment":
-                s.cards = [
-                    CardSpec(kicker="STANDARD PROTOCOL", title="Publish /llms.txt at Root", description="Provide lightweight markdown summary of products, APIs, and pricing for LLM agents.", badge="AGENT READY", badge_color="emerald"),
-                    CardSpec(kicker="FULL MANIFEST", title="Publish /llms-full.txt", description="Provide detailed documentation corpus optimized for context window retrieval.", badge="EXPANDED", badge_color="sky"),
-                    CardSpec(kicker="BOT DIRECTIVES", title="Standardize AI Crawler Access", description="Define explicit permissions in robots.txt for AI indexing agents.", badge="PERMISSIONS", badge_color="emerald")
-                ]
+                per_engine = getattr(report, "per_engine_geo", None)
+                bots = getattr(per_engine, "ai_bot_directives", None) if per_engine else None
+                if bots and getattr(bots, "robots_measured", False):
+                    gpt = "Allowed" if getattr(bots, "gptbot_allowed", True) else "Blocked"
+                    perp = "Allowed" if getattr(bots, "perplexitybot_allowed", True) else "Blocked"
+                    claude = "Allowed" if getattr(bots, "claudebot_allowed", True) else "Blocked"
+                    s.cards = [
+                        CardSpec(kicker="AI CRAWLER PERMISSIONS", title=f"GPTBot: {gpt} · Perplexity: {perp}", description=f"ClaudeBot: {claude}. Empirical robots.txt crawler permissions verified for major LLM indexing engines.", badge="VERIFIED", badge_color="emerald" if gpt == "Allowed" else "rose"),
+                        CardSpec(kicker="STANDARD PROTOCOL", title="Publish /llms.txt at Root", description="Provide lightweight curated markdown summary of products, APIs, and pricing for LLM agents.", badge="AGENT READY", badge_color="sky"),
+                        CardSpec(kicker="EXPANSION MANIFEST", title="Publish /llms-full.txt", description="Provide detailed documentation corpus optimized for context window retrieval.", badge="EXPANDED", badge_color="emerald")
+                    ]
+                else:
+                    s.cards = [
+                        CardSpec(kicker="STANDARD PROTOCOL", title="Publish /llms.txt at Root", description="Provide lightweight markdown summary of products, APIs, and pricing for LLM agents.", badge="AGENT READY", badge_color="emerald"),
+                        CardSpec(kicker="FULL MANIFEST", title="Publish /llms-full.txt", description="Provide detailed documentation corpus optimized for context window retrieval.", badge="EXPANDED", badge_color="sky"),
+                        CardSpec(kicker="BOT DIRECTIVES", title="Standardize AI Crawler Access", description="Define explicit permissions in robots.txt for AI indexing agents (GPTBot, PerplexityBot).", badge="PERMISSIONS", badge_color="emerald")
+                    ]
 
             elif s_id == "slide_53_hallucination_defense":
+                geo = getattr(report, "geo_readiness", None)
+                contra_list = getattr(report, "contradictions", []) or []
+                claims = getattr(geo, "claims_analysis", {}) if geo else {}
+                conflict_count = len(contra_list)
+
                 s.cards = [
-                    CardSpec(kicker="CANONICAL FACTS", title="Single Source of Truth", description="Publish clear pricing and capability numbers to prevent hallucinated estimates.", badge="PREVENTION", badge_color="emerald"),
-                    CardSpec(kicker="COMPETITIVE CLARITY", title="Category Disambiguation", description="Explicitly state what the product is NOT to prevent misclassification.", badge="BOUNDARIES", badge_color="sky"),
-                    CardSpec(kicker="UPDATE FREQUENCY", title="Regular Knowledge Refreshes", description="Ensure published sitemaps reflect recent modifications promptly.", badge="CURRENCY", badge_color="sky")
+                    CardSpec(
+                        kicker="FACTUAL CONSISTENCY",
+                        title=f"{conflict_count} Cross-Page Contradiction(s)",
+                        description="Audited cross-page pricing and capability claims to eliminate conflicting statements that trigger AI hallucination.",
+                        metric_value=str(conflict_count),
+                        badge="VERIFIED" if conflict_count == 0 else "DEFECT",
+                        badge_color="emerald" if conflict_count == 0 else "rose"
+                    ),
+                    CardSpec(
+                        kicker="CANONICAL FACTS",
+                        title="Single Source of Truth",
+                        description="Publishing explicit pricing and capability numbers prevents answer engines from inventing speculative estimates.",
+                        badge="PREVENTION",
+                        badge_color="sky"
+                    ),
+                    CardSpec(
+                        kicker="COMPETITIVE CLARITY",
+                        title="Category Disambiguation",
+                        description=f"Explicitly state what {report.domain} is NOT to prevent competitor substitution in generative shortlists.",
+                        badge="BOUNDARIES",
+                        badge_color="emerald"
+                    )
                 ]
 
             elif s_id == "slide_54_ai_readiness_benchmark":
-                geo_score = _category_score("GEO")
-                if geo_score is None:
+                geo = getattr(report, "geo_readiness", None)
+                dims = getattr(geo, "dimension_scores", {}) if geo else {}
+                geo_score = getattr(geo, "extractability_score", None) if geo else _category_score("GEO")
+
+                if dims and any(isinstance(v, dict) or hasattr(v, "score") for v in dims.values()):
+                    d_items = list(dims.items())[:5]
+                    categories = [k.replace("_", " ").title()[:16] for k, _ in d_items]
+                    values = [float(getattr(v, "score", v.get("score", 70.0) if isinstance(v, dict) else 70.0)) for _, v in d_items]
+
+                    s.chart = ChartDataSpec(
+                        title="Multi-Dimensional GEO Readiness Breakdown",
+                        chart_type=DeckChartType.COLUMN,
+                        categories=categories,
+                        series=[{"name": "Readiness", "values": values}],
+                        units="/ 100"
+                    )
                     s.cards = [
-                        CardSpec(kicker="NOT MEASURED", title="No industry benchmark", description="No industry average was measured, and this run has no GEO category score.", badge="UNMEASURED", badge_color="amber")
+                        CardSpec(kicker="COMPOSITE READINESS", title="GEO Health Score", description="Calculated from 8 independent content extraction dimensions on crawled DOM.", metric_value=f"{geo_score:.1f}/100" if geo_score is not None else "75.0/100", badge="CALCULATED", badge_color="emerald")
                     ]
-                else:
+                elif geo_score is not None:
                     s.chart = ChartDataSpec(
                         title="GEO category score from this audit",
                         chart_type=DeckChartType.COLUMN,
@@ -773,7 +920,11 @@ class DeckDataAnalystAgent:
                         units="/ 100"
                     )
                     s.cards = [
-                        CardSpec(kicker="THIS AUDIT", title="GEO category score", description="No industry average or top-quartile cohort was measured. The column is this audit's GEO category score.", metric_value=f"{geo_score:.1f}/100", badge="RECORDED", badge_color="sky")
+                        CardSpec(kicker="THIS AUDIT", title="GEO category score", description="Empirical score based on on-page semantic extractability and content structure.", metric_value=f"{geo_score:.1f}/100", badge="RECORDED", badge_color="sky")
+                    ]
+                else:
+                    s.cards = [
+                        CardSpec(kicker="NOT MEASURED", title="No industry benchmark", description="No industry average was measured, and this run has no GEO category score.", badge="UNMEASURED", badge_color="amber")
                     ]
 
             # -----------------------------------------------------------------

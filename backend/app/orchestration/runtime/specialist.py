@@ -1301,19 +1301,16 @@ class SpecialistAgent(BaseAgent):
             # Internationalization & Hreflang Specialist
             html_langs = set(filter(None, [getattr(p, "html_lang", None) for p in pages]))
             observations["detected_html_langs"] = list(html_langs)
-            missing_lang = [p.url for p in pages if not getattr(p, "html_lang", None)]
+            missing_lang = [
+                p.url for p in pages
+                if not getattr(p, "has_html_lang", False) and not getattr(p, "html_lang", None)
+            ]
             observations["missing_lang_count"] = len(missing_lang)
             if missing_lang and len(pages) > 0:
                 add(
                     f"{len(missing_lang)} audited page(s) are missing an html lang attribute.",
                     Severity.MEDIUM,
                     "Add an explicit lang attribute to the <html> tag (e.g. <html lang=\"en\">) on all indexable pages."
-                )
-            else:
-                add(
-                    "Internationalization hygiene: verify html lang attributes and hreflang return tags where multilingual editions are published.",
-                    Severity.LOW,
-                    "Ensure <html lang='...'> attribute is explicitly set on all pages and reciprocal hreflang alternate links exist for multi-regional locales."
                 )
 
         elif aid == "verification.adversarial.v3":

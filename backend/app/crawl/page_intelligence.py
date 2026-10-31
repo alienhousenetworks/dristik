@@ -949,8 +949,13 @@ class PageIntelligenceAgent(BaseAgent):
             page_ev_ids = [ev.id for ev in blackboard.evidence_store.get_all() if getattr(ev, "url", None) == report.url][:3]
             if not page_ev_ids:
                 page_ev_ids = [ev.id for ev in blackboard.evidence_store.get_all()[:2]]
-            for issue in report.seo.issues[:3]:
+            for idx, issue in enumerate(report.seo.issues[:3]):
                 severity = Severity.HIGH if report.seo.score < 55 else Severity.MEDIUM
+                rec_text = (
+                    report.seo.recommendations[idx]
+                    if idx < len(report.seo.recommendations)
+                    else (report.seo.recommendations[0] if report.seo.recommendations else "Fix on-page SEO for this URL.")
+                )
                 self.register_claim(
                     blackboard=blackboard,
                     statement=f"{report.url}: {issue}",
@@ -958,12 +963,24 @@ class PageIntelligenceAgent(BaseAgent):
                     severity=severity,
                     confidence=0.93,
                     evidence_refs=page_ev_ids,
-                    recommendation=report.seo.recommendations[0] if report.seo.recommendations else "Fix on-page SEO for this URL.",
+                    recommendation=rec_text,
                     impact=7,
                     effort=3,
                 )
             for copy_issue in report.copywriting.issues[:2]:
                 sev = Severity.HIGH if copy_issue.severity == "HIGH" else Severity.MEDIUM
+                area_l = (copy_issue.area or "").lower()
+                sugg = report.copywriting.suggested
+                extra_sugg = ""
+                if sugg:
+                    if ("h1" in area_l or "hero" in area_l or "headline" in area_l) and getattr(sugg, "h1", None):
+                        extra_sugg = f" Suggested H1: {sugg.h1}"
+                    elif "title" in area_l and getattr(sugg, "title", None):
+                        extra_sugg = f" Suggested Title: {sugg.title}"
+                    elif ("meta" in area_l or "description" in area_l) and getattr(sugg, "meta_description", None):
+                        extra_sugg = f" Suggested Meta Description: {sugg.meta_description}"
+                    elif "cta" in area_l and getattr(sugg, "primary_cta", None):
+                        extra_sugg = f" Suggested CTA: {sugg.primary_cta}"
                 self.register_claim(
                     blackboard=blackboard,
                     statement=f"{report.url} copy — {copy_issue.area}: {copy_issue.issue}",
@@ -971,14 +988,7 @@ class PageIntelligenceAgent(BaseAgent):
                     severity=sev,
                     confidence=0.9,
                     evidence_refs=page_ev_ids,
-                    recommendation=(
-                        f"Replace {copy_issue.area} copy."
-                        + (
-                            f" Suggested H1: {report.copywriting.suggested.h1}"
-                            if report.copywriting.suggested and report.copywriting.suggested.h1
-                            else ""
-                        )
-                    ),
+                    recommendation=f"Replace {copy_issue.area} copy.{extra_sugg}",
                     impact=8,
                     effort=3,
                 )

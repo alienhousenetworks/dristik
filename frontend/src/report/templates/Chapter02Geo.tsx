@@ -96,10 +96,76 @@ export function Chapter02Geo({
             </div>
           </div>
 
-          {/* 2.2 AI Bot Crawler Permissions & llms.txt */}
+          {/* 2.2 Commercial Buyer Query Grounding Battery */}
+          {geo.questions && geo.questions.length > 0 && (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <h3 className="font-mono text-[8.5pt] font-bold uppercase tracking-[0.04em] text-ink-700">
+                  2.2 Commercial Buyer Query Grounding Battery
+                </h3>
+                <span className="font-mono text-[7.5pt] text-ink-500">
+                  {geo.questions.filter((q) => q.status === 'SUPPORTED').length} of {geo.questions.length} Commercial Inquiries Supported
+                </span>
+              </div>
+              <p className="text-[7.5pt] text-ink-500 font-sans">
+                Tests whether high-intent buyer questions can be directly answered from first-party DOM passages by generative AI engines.
+              </p>
+              <div className="border border-line rounded overflow-hidden bg-white">
+                <table className="w-full text-[8pt] border-collapse">
+                  <thead>
+                    <tr className="bg-paper-100 border-b border-line text-left font-mono text-[7.5pt] text-ink-600 uppercase">
+                      <th className="py-2 px-3 w-1/3">Buyer Inquiry</th>
+                      <th className="py-2 px-2 w-28">Status</th>
+                      <th className="py-2 px-3">First-Party Answer Passage &amp; Guidance</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {geo.questions.map((q, idx) => (
+                      <tr key={idx} className="border-b border-line last:border-b-0">
+                        <td className="py-2 px-3 font-medium text-ink align-top">
+                          {q.question}
+                        </td>
+                        <td className="py-2 px-2 align-top">
+                          <span
+                            className={`inline-block font-mono text-[7pt] font-bold px-1.5 py-0.5 rounded ${
+                              q.status === 'SUPPORTED'
+                                ? 'bg-good/10 text-good border border-good/30'
+                                : q.status === 'PARTIAL'
+                                ? 'bg-warn/10 text-warn border border-warn/30'
+                                : 'bg-bad/10 text-bad border border-bad/30'
+                            }`}
+                          >
+                            {q.status}
+                          </span>
+                        </td>
+                        <td className="py-2 px-3 text-ink-700 font-sans align-top leading-relaxed">
+                          {q.answer ? (
+                            <p className="text-[7.5pt] italic text-ink-800">
+                              &ldquo;{q.answer}&rdquo;
+                            </p>
+                          ) : (
+                            <p className="text-[7.5pt] text-bad">
+                              No extractable passage found in audited crawl sample.
+                            </p>
+                          )}
+                          {q.recommendedAnswer && q.status !== 'SUPPORTED' && (
+                            <p className="text-[7pt] text-ink-600 mt-1">
+                              <strong className="text-pine font-mono uppercase text-[6.5pt]">Recommended Addition:</strong> {q.recommendedAnswer}
+                            </p>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* 2.3 AI Bot Crawler Permissions & llms.txt */}
           <div className="space-y-2">
             <h3 className="font-mono text-[8.5pt] font-bold uppercase tracking-[0.04em] text-ink-700">
-              2.2 AI Crawler Permissions &amp; /llms.txt Directive Health
+              2.3 AI Crawler Permissions &amp; /llms.txt Directive Health
             </h3>
             <table className="w-full text-[8.5pt] border-collapse border border-line">
               <tbody>
@@ -149,11 +215,11 @@ export function Chapter02Geo({
             </table>
           </div>
 
-          {/* 2.3 Factual Entity Attribution Recommendations */}
+          {/* 2.4 Factual Entity Attribution Recommendations */}
           {geo.attributionRewrites.length > 0 && (
             <div className="space-y-3">
               <h3 className="font-mono text-[8.5pt] font-bold uppercase tracking-[0.04em] text-ink-700">
-                2.3 Factual Entity Attribution Recommendations
+                2.4 Factual Entity Attribution Recommendations
               </h3>
               <p className="text-[7.5pt] text-ink-500 font-sans">
                 Transforms ambiguous marketing prose into attributed factual statements that RAG engines can directly extract into answer cards.

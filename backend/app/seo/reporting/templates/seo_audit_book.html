@@ -343,9 +343,9 @@ pre {
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  padding: 20mm 14mm;
+  padding: 24mm 20mm;
   color: white;
-  background: var(--brand);
+  background: linear-gradient(160deg, #0f294d 0%, #173e73 60%, #1e4b8a 100%);
   page-break-after: always;
   break-after: page;
 }
@@ -355,32 +355,77 @@ pre {
 }
 
 .cover-brand {
-  font-size: 13pt;
-  letter-spacing: 3pt;
+  font-size: 14pt;
+  letter-spacing: 3.5pt;
   font-weight: 700;
 }
 
 .cover h1 {
-  font-size: 39pt;
-  max-width: 500px;
-  margin: 0 0 15pt;
+  font-size: 36pt;
+  max-width: 520px;
+  margin: 0 0 14pt;
 }
 
 .cover-subtitle {
-  font-size: 15pt;
-  max-width: 470px;
+  font-size: 13.5pt;
+  max-width: 500px;
   opacity: .94;
 }
 
 .cover-rule {
   width: 75px;
   border-top: 4px solid white;
-  margin: 22pt 0;
+  margin: 18pt 0;
 }
 
 .cover-meta {
   font-size: 10pt;
-  line-height: 1.9;
+  line-height: 1.85;
+}
+
+.part-banner {
+  background: #0f172a;
+  color: #ffffff;
+  padding: 6pt 10pt;
+  border-radius: 4px;
+  font-size: 8.5pt;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1.4pt;
+  margin-bottom: 10pt;
+  display: inline-block;
+}
+
+.analysis-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8pt;
+  margin: 10pt 0 14pt;
+}
+
+.analysis-box {
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 8pt 10pt;
+  background: #f8fafc;
+  font-size: 8.5pt;
+}
+
+.analysis-box h4 {
+  margin: 0 0 4pt;
+  font-size: 8pt;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--brand);
+}
+
+.dossier-card {
+  border: 1px solid #cbd5e1;
+  border-left: 4px solid var(--brand);
+  border-radius: 5px;
+  padding: 10pt 12pt;
+  margin: 10pt 0 14pt;
+  background: #ffffff;
 }
 
 .disclaimer {
@@ -409,21 +454,26 @@ pre {
 /* Chromium print layout. */
 @page {
   size: A4 portrait;
-  margin: 19mm 17mm 19mm 17mm;
+  margin: 18mm 16mm 18mm 16mm;
+}
+
+@page :first {
+  margin: 0;
 }
 
 @media print {
   html, body {
     width: auto;
     background: white;
-    font-size: 10.5pt;
+    font-size: 10pt;
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
   }
 
   .cover {
-    margin: -19mm -17mm;
+    margin: 0;
     min-height: 297mm;
+    padding: 26mm 22mm;
   }
 
   .no-print {
@@ -461,7 +511,7 @@ pre {
     page-break-inside: avoid;
   }
 
-  .finding, .finding-card, article, pre, table, .panel, .plain-english, .evidence {
+  .finding, .finding-card, .dossier-card, article, pre, table, .panel, .plain-english, .evidence {
     break-inside: auto !important;
     page-break-inside: auto !important;
   }
@@ -474,7 +524,7 @@ pre {
 <!-- SCREEN-ONLY INTERACTIVE CONTROL TOOLBAR -->
 <div class="screen-toolbar no-print" style="position: sticky; top: 0; z-index: 1000; background: #0f172a; color: #fff; padding: 10px 16px; display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #1e293b;">
   <div>
-    <strong>DRISTIK SEO AUDIT BOOK</strong> — {{ report.domain }}
+    <strong>DRISTIK ENTERPRISE SEO INTELLIGENCE REPORT</strong> — {{ report.domain }}
   </div>
   <div style="display: flex; gap: 10px; align-items: center;">
     <button onclick="window.print()" style="background: #173e73; color: #fff; border: 1px solid #38bdf8; padding: 6px 14px; border-radius: 4px; font-weight: 700; cursor: pointer;">Print / Save as PDF</button>
@@ -491,14 +541,14 @@ pre {
       DRISTIK
     </div>
     <div class="cover-rule"></div>
-    <div class="eyebrow">Website Intelligence Report</div>
+    <div class="eyebrow" style="color: #93c5fd;">Enterprise SEO Intelligence Report · Master Architecture v2.0</div>
   </div>
 
   <div>
     <h1>Comprehensive SEO Audit</h1>
     <p class="cover-subtitle">
-      Search performance, technical health, content quality,
-      authority, usability and organic growth opportunities.
+      Executive business alignment, technical SEO diagnostics, search demand &amp; intent mapping,
+      page-by-page optimization dossiers, and prioritized implementation roadmap.
     </p>
     <div class="cover-rule"></div>
     <div class="cover-meta">
@@ -507,7 +557,7 @@ pre {
       <strong>Audit date:</strong> {{ report.audit_date }}<br>
       <strong>Audit scope:</strong> {{ report.scope_label }}<br>
       <strong>SEO Score:</strong> {{ report.seo_score if report.seo_score is not none else "Unmeasured" }}/100 {% if report.grade and report.grade != '—' %}[GRADE {{ report.grade }} · {{ report.grade_label }}]{% endif %}<br>
-      <strong>Report version:</strong> {{ report.report_version | default("1.0") }}
+      <strong>Report version:</strong> {{ report.report_version | default("2.0 — Enterprise SEO Intelligence") }}
     </div>
   </div>
 
@@ -515,9 +565,8 @@ pre {
     <p>
       Prepared by Dristik Website Intelligence
     </p>
-    <p class="small">
-      Findings in this report are limited to the pages, data sources,
-      and tests identified in the evidence register.
+    <p class="small" style="color: #cbd5e1;">
+      Evidence-First Governance: Findings are strictly grounded in live crawled DOM/HTTP evidence. Unconnected telemetry (GSC/GA4/Backlinks) is reported as UNAVAILABLE and never fabricated or scored as zero.
     </p>
   </div>
 </section>
@@ -693,6 +742,18 @@ pre {
     </p>
   </div>
 
+  {% if report.business_profile %}
+  <h3>Business and website profile</h3>
+  <table>
+    <tbody>
+      <tr><th>Business / Entity Name</th><td>{{ report.business_profile.business_name }}</td></tr>
+      <tr><th>Commercial Model</th><td>{{ report.business_profile.business_model }}</td></tr>
+      <tr><th>Primary Industry &amp; Niche</th><td>{{ report.business_profile.industry }} — {{ report.business_profile.niche }}</td></tr>
+      <tr><th>Target Geography</th><td>{{ report.business_profile.target_geography }}</td></tr>
+    </tbody>
+  </table>
+  {% endif %}
+
   <h3>Audit scope and coverage</h3>
   <table>
     <tbody>
@@ -706,14 +767,20 @@ pre {
     </tbody>
   </table>
 
+  <div class="panel" style="border-left: 4px solid #d97706; background: #fffbeb; margin: 12pt 0;">
+    <strong style="color: #92400e;">Distinguishing Documented Technical Risk vs. Measured Commercial Impact:</strong>
+    <p style="margin: 4pt 0 0; font-size: 9pt; color: #78350f;">
+      Technical, metadata, and structured data risks in this report are verified directly from crawled HTTP responses and DOM markup across the {{ report.pages_crawled }} inspected URL(s). Because Google Search Console ({{ report.gsc_status }}) and GA4 ({{ report.analytics_status }}) are not connected, direct organic traffic, keyword ranking positions, and revenue attribution are marked <strong>UNAVAILABLE</strong> rather than estimated or scored as zero.
+    </p>
+  </div>
+
   <h3>Most important issues</h3>
   {% if executive_summary.top_findings %}
     {% for item in executive_summary.top_findings %}
     <div class="panel">
-      <strong>{{ item.title }}</strong>
+      <strong>{{ item.id }} — {{ item.title }}</strong>
       <p>{{ item.plain_english_summary }}</p>
-      <p><strong>Priority:</strong> {{ item.priority }}</p>
-      <p><strong>Evidence:</strong> {{ item.evidence_summary }}</p>
+      <p><strong>Priority:</strong> {{ item.priority }} &nbsp;|&nbsp; <strong>Evidence:</strong> {{ item.evidence_summary }}</p>
     </div>
     {% endfor %}
   {% else %}
@@ -767,7 +834,7 @@ pre {
       {% for pillar in seo_pillars %}
       <tr>
         <td>{{ pillar.name }}</td>
-        <td>{{ pillar.score if pillar.score is not none else "N/A" }}</td>
+        <td>{{ pillar.score if pillar.score is not none else "N/A (Unconnected)" }}</td>
         <td>{{ pillar.coverage | default("Not reported") }}</td>
         <td>{{ pillar.interpretation | default("No interpretation supplied") }}</td>
       </tr>
@@ -797,52 +864,176 @@ pre {
 
 <!-- ======================================================
      06. COMPLETE SEO CHAPTER CATALOG
-     The backend should create only relevant sections.
+     Master Report Architecture · Parts II–VI
      ====================================================== -->
 
 {% for section in seo_sections %}
 <section class="chapter chapter-start" id="{{ section.id }}">
   <span class="chapter-marker" style="display:inline; font-size: 0pt; color: transparent; line-height: 0;">[[chapter_ref:{{ section.id }}]]</span>
   <div class="chapter-opener">
+    {% if section.part_label %}
+    <div class="part-banner">{{ section.part_label }}</div>
+    {% endif %}
     <div class="chapter-number">{{ section.chapter_label }}</div>
     <h2>{{ section.title }}</h2>
     <p class="section-intro">{{ section.introduction }}</p>
   </div>
 
-  {% if section.business_explanation %}
+  {% if section.analysis %}
+  <div class="analysis-grid">
+    <div class="analysis-box">
+      <h4>Executive Interpretation &amp; Data State ({{ section.analysis.data_classification }})</h4>
+      <p style="margin: 0;">{{ section.analysis.executive_interpretation }}</p>
+    </div>
+    <div class="analysis-box">
+      <h4>Technical Mechanics &amp; Root Cause</h4>
+      <p style="margin: 0;">{{ section.analysis.technical_mechanics }}</p>
+    </div>
+    <div class="analysis-box">
+      <h4>Documented Technical Risk vs. Measured Impact</h4>
+      <p style="margin: 0;">{{ section.analysis.risk_vs_measured_impact }}</p>
+    </div>
+    <div class="analysis-box">
+      <h4>Strategic Priority Action</h4>
+      <p style="margin: 0;">{{ section.analysis.strategic_action }}</p>
+    </div>
+  </div>
+  {% elif section.business_explanation %}
   <div class="plain-english">
     <strong>What this means for your business</strong>
     <p>{{ section.business_explanation }}</p>
   </div>
   {% endif %}
 
+  {% if section.empirical_table and section.empirical_table.rows %}
+  <div style="margin: 12pt 0 16pt;">
+    <h3 style="font-size: 11.5pt; color: var(--brand); margin: 10pt 0 4pt;">
+      Empirical Website Inspection: {{ section.empirical_table.title }}
+    </h3>
+    {% if section.empirical_table.note %}
+    <p style="font-size: 8.5pt; color: var(--muted); margin: 0 0 6pt;">{{ section.empirical_table.note }}</p>
+    {% endif %}
+    <table style="font-size: 8.5pt; margin: 4pt 0 12pt;">
+      <thead>
+        <tr>
+          {% for col in section.empirical_table.columns %}
+          <th>{{ col }}</th>
+          {% endfor %}
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in section.empirical_table.rows %}
+        <tr>
+          {% for cell in row %}
+          <td>{{ cell }}</td>
+          {% endfor %}
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+
+  {% if section.page_dossiers %}
+  <div style="margin: 14pt 0 18pt;">
+    <h3 style="font-size: 13pt; color: var(--brand); border-bottom: 2px solid var(--brand); padding-bottom: 4pt;">
+      Page-by-Page &amp; URL-Level Optimization Dossiers ({{ section.page_dossiers | length }} Audited URLs)
+    </h3>
+    {% for pg in section.page_dossiers %}
+    <div class="dossier-card">
+      <div style="display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; border-bottom: 1px solid #e2e8f0; padding-bottom: 6pt; margin-bottom: 8pt;">
+        <div>
+          <strong style="font-size: 11pt; color: var(--ink);">{{ pg.url }}</strong>
+          <span style="font-size: 8.5pt; color: var(--muted); margin-left: 6pt;">({{ pg.page_type }})</span>
+        </div>
+        <div style="display: flex; gap: 6pt; align-items: center;">
+          <span class="status passed">HTTP {{ pg.status_code }}</span>
+          <span class="status info">Health: {{ pg.health_score | round | int }}/100 (Grade {{ pg.grade }})</span>
+          <span class="status {% if pg.issues_count > 0 %}high{% else %}passed{% endif %}">{{ pg.issues_count }} Open Issue(s)</span>
+        </div>
+      </div>
+
+      <table style="font-size: 8pt; margin: 4pt 0 8pt;">
+        <tbody>
+          <tr>
+            <th style="width: 22%;">Title Tag ({{ pg.title_length }} chars)</th>
+            <td style="width: 78%;">{{ pg.title }}</td>
+          </tr>
+          <tr>
+            <th>Meta Description ({{ pg.meta_description_length }} chars)</th>
+            <td>{{ pg.meta_description }}</td>
+          </tr>
+          <tr>
+            <th>Primary H1 Tag(s)</th>
+            <td>{{ pg.h1_tags | join(" | ") if pg.h1_tags else "Missing H1" }} &nbsp;<span class="muted">(H2 count: {{ pg.h2_count }})</span></td>
+          </tr>
+          <tr>
+            <th>Technical &amp; Content Signals</th>
+            <td>
+              <strong>Word Count:</strong> {{ pg.word_count }} words &nbsp;|&nbsp;
+              <strong>Canonical:</strong> {{ pg.canonical_status }} ({{ pg.canonical_url or "None" }}) &nbsp;|&nbsp;
+              <strong>Schema JSON-LD:</strong> {{ pg.schema_types | join(", ") if pg.schema_types else "None (0 nodes)" }} &nbsp;|&nbsp;
+              <strong>Links:</strong> {{ pg.internal_links }} internal / {{ pg.external_links }} external &nbsp;|&nbsp;
+              <strong>Images Missing Alt:</strong> {{ pg.images_missing_alt }}/{{ pg.total_images }}
+            </td>
+          </tr>
+        </tbody>
+      </table>
+
+      {% if pg.top_issues %}
+      <div style="font-size: 8.5pt; margin-bottom: 4pt;">
+        <strong style="color: var(--critical);">Verified Page Defects:</strong>
+        <ul style="margin: 2pt 0 6pt; padding-left: 16pt;">
+          {% for iss in pg.top_issues[:5] %}
+          <li>{{ iss }}</li>
+          {% endfor %}
+        </ul>
+      </div>
+      {% endif %}
+
+      {% if pg.recommendations %}
+      <div style="font-size: 8.5pt; background: #f0fdf4; border-left: 3px solid #16a34a; padding: 6pt 8pt;">
+        <strong style="color: #166534;">Page-Specific Optimization Directives:</strong>
+        <ul style="margin: 2pt 0 0; padding-left: 16pt;">
+          {% for rec in pg.recommendations[:4] %}
+          <li>{{ rec }}</li>
+          {% endfor %}
+        </ul>
+      </div>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
   {% for subsection in section.subsections %}
   <div id="{{ subsection.id }}" style="margin-top: 12pt;">
-    <h3 style="font-size: 12pt; color: #1e293b; margin: 12pt 0 4pt;">{{ subsection.title }}</h3>
-    <p style="font-size: 9pt; color: #475569; margin-bottom: 6pt;">{{ subsection.explanation }}</p>
-
-    {% if subsection.business_explanation %}
-    <div class="plain-english" style="margin: 6pt 0 10pt; padding: 6pt 10pt; font-size: 8.5pt;">
-      <strong>What this means for your business:</strong> {{ subsection.business_explanation }}
-    </div>
-    {% endif %}
+    <h3 style="font-size: 11.5pt; color: #1e293b; margin: 10pt 0 4pt;">{{ subsection.title }}</h3>
+    <p style="font-size: 8.5pt; color: #475569; margin-bottom: 6pt;">{{ subsection.explanation }}</p>
 
     {% if subsection.metrics %}
-    <table style="margin: 6pt 0 12pt;">
+    <table style="margin: 6pt 0 12pt; font-size: 8.5pt;">
       <thead>
-        <tr><th>Metric or check</th><th>Result</th><th>Status</th><th>Scope</th></tr>
+        <tr>
+          <th style="width: 24%;">Metric or check</th>
+          <th style="width: 28%;">Expected Benchmark</th>
+          <th style="width: 26%;">Observed Result</th>
+          <th style="width: 11%;">Status</th>
+          <th style="width: 11%;">Scope</th>
+        </tr>
       </thead>
       <tbody>
         {% for metric in subsection.metrics %}
         <tr>
           <td><strong>{{ metric.name }}</strong></td>
-          <td style="color: #334155;">{{ metric.value if metric.value is not none else "Not measured" }}</td>
+          <td style="color: #475569; font-size: 8pt;">{{ metric.expected | default("Target SEO specification") }}</td>
+          <td style="color: #0f172a; font-weight: 600;">{{ metric.value if metric.value is not none else "Not measured" }}</td>
           <td>
-            <span class="status {{ (metric.status | string | lower).replace('_', '-') }}" style="font-size: 7.5pt; padding: 2pt 6pt; border-radius: 3px; font-weight: 700; text-transform: uppercase;">
+            <span class="status {{ (metric.status | string | lower).replace('_', '-') }}" style="font-size: 7pt; padding: 2pt 5pt; border-radius: 3px; font-weight: 700; text-transform: uppercase;">
               {{ metric.status }}
             </span>
           </td>
-          <td><code style="font-size: 7.5pt; background: #f8fafc; padding: 1pt 4pt; border-radius: 2px;">{{ metric.scope | default("Not specified") }}</code></td>
+          <td><code style="font-size: 7pt; background: #f8fafc; padding: 1pt 4pt; border-radius: 2px;">{{ metric.scope | default("Not specified") }}</code></td>
         </tr>
         {% endfor %}
       </tbody>
@@ -888,11 +1079,11 @@ pre {
 <section class="chapter chapter-start" id="findings-register">
   <span class="chapter-marker" style="display:inline; font-size: 0pt; color: transparent; line-height: 0;">[[chapter_ref:findings-register]]</span>
   <div class="chapter-opener">
+    <div class="part-banner">Part VI — Growth and Execution</div>
     <div class="chapter-number">{{ findings_register_chapter_label | default("Chapter 37") }}</div>
     <h2>Consolidated Findings Register</h2>
     <p class="section-intro">
-      One place to review the recorded issues, their severity, affected
-      pages, evidence and next actions.
+      Canonical, deduplicated register of all verified issues, severity, affected URLs, owner, and remediation status.
     </p>
   </div>
 
@@ -900,15 +1091,17 @@ pre {
   <table>
     <thead>
       <tr>
-        <th>ID</th><th>Finding</th><th>Priority</th><th>Scope</th><th>Status</th>
+        <th>ID</th><th>Canonical Finding</th><th>Priority</th><th>Owner &amp; Effort</th><th>Affected URLs</th><th>Scope</th><th>Status</th>
       </tr>
     </thead>
     <tbody>
       {% for finding in findings %}
       <tr>
-        <td>{{ finding.id }}</td>
+        <td><strong>{{ finding.id }}</strong></td>
         <td>{{ finding.title }}</td>
-        <td>{{ finding.priority }}</td>
+        <td><span class="status {{ finding.priority | lower }}">{{ finding.priority }}</span></td>
+        <td>{{ finding.responsible_role | default("Developer") }}<br><span class="small">{{ finding.estimated_effort | default("Medium") }}</span></td>
+        <td>{{ (finding.affected_urls | length) if finding.affected_urls else 1 }} URL(s)</td>
         <td>{{ finding.scope_status }}</td>
         <td>{{ finding.lifecycle_status | default("Open") }}</td>
       </tr>
@@ -922,23 +1115,22 @@ pre {
   <div class="plain-english">
     <strong>What this means for your business</strong>
     <p>
-      Use this register to assign work and track progress. A high-priority
-      label indicates the audit's recommended urgency, not a guaranteed
-      amount of traffic or revenue loss.
+      Use this register to assign work and track progress. Every duplicate observation has been merged into a single canonical finding ID so engineering teams can fix root causes once across shared templates.
     </p>
   </div>
 </section>
 
 <!-- ======================================================
-     08. IMPLEMENTATION ROADMAP
+     08. IMPLEMENTATION ROADMAP & KPI VERIFICATION PLAN
      ====================================================== -->
 <section class="chapter chapter-start" id="roadmap">
   <span class="chapter-marker" style="display:inline; font-size: 0pt; color: transparent; line-height: 0;">[[chapter_ref:roadmap]]</span>
   <div class="chapter-opener">
+    <div class="part-banner">Part VI — Growth and Execution</div>
     <div class="chapter-number">{{ roadmap_chapter_label | default("Chapter 38") }}</div>
-    <h2>SEO Implementation Roadmap</h2>
+    <h2>SEO Implementation Roadmap &amp; Verification Plan</h2>
     <p class="section-intro">
-      An evidence-based order for addressing issues and verifying changes.
+      Prioritized delivery schedule with engineering owners, effort estimates, dependencies, acceptance criteria, and KPI measurement plan.
     </p>
   </div>
 
@@ -956,22 +1148,54 @@ pre {
   <table>
     <thead>
       <tr>
-        <th>Task</th><th>Priority</th><th>Owner</th><th>Dependency</th><th>Verification</th>
+        <th style="width: 10%;">ID</th>
+        <th style="width: 34%;">Task &amp; Actionable Directive</th>
+        <th style="width: 10%;">Priority</th>
+        <th style="width: 16%;">Owner &amp; Effort</th>
+        <th style="width: 14%;">Dependency</th>
+        <th style="width: 16%;">Acceptance &amp; Verification</th>
       </tr>
     </thead>
     <tbody>
       {% for task in phase.tasks %}
       <tr>
-        <td>{{ task.title }}<br><span class="small">{{ task.description }}</span></td>
-        <td>{{ task.priority }}</td>
-        <td>{{ task.owner | default("To assign") }}</td>
+        <td><strong>{{ task.id | default("TASK") }}</strong></td>
+        <td><strong>{{ task.title }}</strong><br><span class="small">{{ task.description }}</span></td>
+        <td><span class="status {{ (task.priority | string | lower) }}">{{ task.priority }}</span></td>
+        <td>{{ task.owner | default("To assign") }}<br><span class="small">{{ task.effort | default("Medium") }}</span></td>
         <td>{{ task.dependency | default("None specified") }}</td>
-        <td>{{ task.verification | default("Verification criteria required") }}</td>
+        <td>{{ task.acceptance_criteria | default("") }}<br><span class="small">{{ task.verification | default("Verification criteria required") }}</span></td>
       </tr>
       {% endfor %}
     </tbody>
   </table>
   {% endfor %}
+
+  {% if kpi_framework %}
+  <h3>KPI Framework, Measurement Plan &amp; Post-Implementation Verification</h3>
+  <table>
+    <thead>
+      <tr>
+        <th>KPI / Measurement Dimension</th>
+        <th>Measured Baseline</th>
+        <th>90-Day Target Benchmark</th>
+        <th>Telemetry Source</th>
+        <th>Verification Protocol</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for kpi in kpi_framework %}
+      <tr>
+        <td><strong>{{ kpi.metric }}</strong></td>
+        <td>{{ kpi.baseline }}</td>
+        <td>{{ kpi.target }}</td>
+        <td>{{ kpi.source }}</td>
+        <td>{{ kpi.verification }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
 
   <h3>Definition of done</h3>
   <ul>
@@ -993,18 +1217,52 @@ pre {
 </section>
 
 <!-- ======================================================
-     09. EVIDENCE REGISTER
+     09. EVIDENCE REGISTER & URL AUDIT INVENTORY
      ====================================================== -->
 <section class="chapter chapter-start" id="evidence-register">
   <span class="chapter-marker" style="display:inline; font-size: 0pt; color: transparent; line-height: 0;">[[chapter_ref:evidence-register]]</span>
   <div class="chapter-opener">
+    <div class="part-banner">Part VII — Technical Appendices</div>
     <div class="chapter-number">Appendix A</div>
-    <h2>Evidence Register</h2>
+    <h2>Evidence Register &amp; URL Audit Inventory</h2>
     <p class="section-intro">
-      Traceability for observations, measurements and conclusions.
+      Traceability for all crawled URLs, machine observations, measurements, and finding references.
     </p>
   </div>
 
+  {% if page_dossiers %}
+  <h3>Audited URL Inventory ({{ page_dossiers | length }} Inspected Pages)</h3>
+  <table>
+    <thead>
+      <tr>
+        <th>URL</th>
+        <th>Page Type</th>
+        <th>HTTP</th>
+        <th>Health Score</th>
+        <th>Word Count</th>
+        <th>Canonical</th>
+        <th>Schema JSON-LD</th>
+        <th>Open Issues</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for pg in page_dossiers %}
+      <tr>
+        <td><code>{{ pg.url }}</code></td>
+        <td>{{ pg.page_type }}</td>
+        <td>HTTP {{ pg.status_code }}</td>
+        <td>{{ pg.health_score | round | int }}/100 ({{ pg.grade }})</td>
+        <td>{{ pg.word_count }} words</td>
+        <td>{{ pg.canonical_status }}</td>
+        <td>{{ pg.schema_types | join(", ") if pg.schema_types else "None" }}</td>
+        <td>{{ pg.issues_count }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endif %}
+
+  <h3>Traceable Finding Evidence Register</h3>
   {% if evidence_records %}
   <table>
     <thead>
