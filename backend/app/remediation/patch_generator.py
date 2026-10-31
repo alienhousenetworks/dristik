@@ -182,8 +182,8 @@ class RemediationPatcher:
                     seen_patch_keys.add(patch_key)
 
                     p_idx += 1
-                    opt_desc = _format_meta_description(path, biz_name, val_prop, audience, page_title=(pe.title if pe else None))
                     pe = page_map.get(tgt_url.rstrip("/")) or page_map.get(path)
+                    opt_desc = _format_meta_description(path, biz_name, val_prop, audience, page_title=(pe.title if pe else None))
                     cur_desc = (pe.meta_description if pe else None) or (ev_snippets[0] if ev_snippets else None)
                     before_snip = f'<meta name="description" content="{cur_desc}">' if cur_desc and cur_desc != "MISSING" else "<!-- Missing meta description tag in <head> -->"
 
