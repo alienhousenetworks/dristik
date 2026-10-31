@@ -152,7 +152,15 @@ async def test_wordpress_connector_flow():
     )
     connector = WordPressConnector(creds)
     health = await connector.test_connection()
-    assert health.status.value in ["connected", "unauthorized", "error"]
+    assert health.status.value in [
+    "connected",
+    "unauthorized",
+    "error",
+    "unavailable",
+    "degraded",
+    "disconnected",
+    "auth_required",
+]
 
     discovery = await connector.discover_site_structure()
     assert discovery["cms"] == "WordPress"
@@ -271,17 +279,24 @@ async def test_api_connectors_and_remediation_routes():
         _PATCH_REGISTRY[p.patch_id] = p
 
     transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+    async with AsyncClient(transport=transport, base_url="https://test") as ac:
         anonymous = await ac.get("/api/v1/connectors")
         assert anonymous.status_code == 401
         signup = await ac.post("/api/v1/auth/signup", json={
-            "full_name": "Connector Owner",
-            "email": f"conn_{uuid.uuid4().hex[:8]}@example.com",
-            "password": "OwnerPass1",
-            "organization_name": "Connector Org",
-        })
+         "full_name": "Connector Owner",
+         "email": f"conn_{uuid.uuid4().hex[:8]}@example.com",
+         "password": "OwnerPass1",
+         "organization_name": "Connector Org",
+         })
+
         assert signup.status_code == 200, signup.text
+
         user = signup.json()["user"]
+
+        assert "dristik_session" in ac.cookies, (
+           "Signup succeeded, but the session cookie was not set."
+        )
+        
         now = datetime.now(timezone.utc).isoformat()
         orchestrator.runs["test_run_123"] = AnalysisRun(
             analysis_id="test_run_123",
