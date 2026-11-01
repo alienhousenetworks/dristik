@@ -176,7 +176,9 @@ async def test_dataforseo_live_ai_search_and_crux_connectors():
         provider=ConnectorType.DATAFORSEO,
         name="DataForSEO Test",
         target_url="https://example.com",
-        credentials=ConnectorCredentials(provider=ConnectorType.DATAFORSEO)
+        credentials=ConnectorCredentials(provider=ConnectorType.DATAFORSEO),
+        org_id="test_org_01",
+        workspace_id="ws_test_01",
     )
     instantiated_dfs = connector_store.get_connector(dfs_integ.integration_id)
     assert isinstance(instantiated_dfs, DataForSeoConnector)

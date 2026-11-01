@@ -9,11 +9,11 @@ from datetime import datetime, timedelta
 from difflib import SequenceMatcher
 from typing import List, Dict, Optional, Any
 from urllib.parse import urlparse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 class RadarSubscription(BaseModel):
     subscription_id: str
-    org_id: str = "org_default"
+    org_id: str
     target_url: str
     domain: str
     plan_id: str = "monthly_pulse"
@@ -23,6 +23,16 @@ class RadarSubscription(BaseModel):
     created_at: str = Field(default_factory=lambda: datetime.now().isoformat())
     last_run_at: Optional[str] = None
     next_run_at: Optional[str] = None
+
+    @field_validator("org_id")
+    @classmethod
+    def check_org_id(cls, v: str) -> str:
+        if not v or not isinstance(v, str) or not v.strip():
+            raise ValueError("Tenant org_id is required and cannot be empty.")
+        cleaned = v.strip()
+        if cleaned in ("org_default", "default"):
+            raise ValueError(f"Insecure fallback tenant '{cleaned}' is forbidden.")
+        return cleaned
     last_run_id: Optional[str] = None
     last_scores: Dict[str, Optional[float]] = Field(default_factory=dict)
     last_snapshot: Dict[str, Any] = Field(default_factory=dict)
@@ -351,12 +361,15 @@ class RadarService:
     def create_subscription(
         self,
         target_url: str,
-        org_id: str = "org_default",
+        org_id: str,
         plan_id: str = "monthly_pulse",
         saved_prompts: Optional[List[str]] = None,
         initial_scores: Optional[Dict[str, float]] = None,
         initial_snapshot: Optional[Dict[str, Any]] = None,
     ) -> RadarSubscription:
+        if not org_id or not isinstance(org_id, str) or not org_id.strip() or org_id.strip() in ("org_default", "default"):
+            raise ValueError(f"Valid tenant org_id required for radar subscription; '{org_id}' is forbidden.")
+        clean_org_id = org_id.strip()
         parsed = urlparse(target_url if "://" in target_url else f"https://{target_url}")
         domain = parsed.netloc or parsed.path
         sub_id = f"sub_{uuid.uuid4().hex[:10]}"

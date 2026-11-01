@@ -57,6 +57,7 @@ def test_audit_db_restoration_with_full_report():
     report = ExecutiveReport(
         report_id=f"rep_{analysis_id}",
         analysis_id=analysis_id,
+        org_id="test_org_01",
         website_url="https://acme-test.org",
         domain="acme-test.org",
         generated_at="September 20, 2026 - 12:00 UTC",
@@ -80,6 +81,7 @@ def test_audit_db_restoration_with_full_report():
 
     run = AnalysisRun(
         analysis_id=analysis_id,
+        org_id="test_org_01",
         website_url="https://acme-test.org",
         status=AnalysisStage.COMPLETED,
         progress_percentage=100,
@@ -108,7 +110,7 @@ def test_audit_db_restoration_with_full_report():
     assert restored.report.honest_scores.ai_citation_score == 84
 
     # 4. Check list_runs includes this audit
-    runs = repo.list_runs(limit=20)
+    runs = repo.list_runs(org_id="test_org_01", limit=20)
     matching = [r for r in runs if r["analysis_id"] == analysis_id]
     assert len(matching) == 1
     assert matching[0]["domain"] == "acme-test.org"

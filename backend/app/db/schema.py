@@ -14,6 +14,7 @@ CREATE TABLE IF NOT EXISTS organizations (
 CREATE TABLE IF NOT EXISTS audits (
     analysis_id TEXT PRIMARY KEY,
     org_id TEXT NOT NULL,
+    workspace_id TEXT,
     user_id TEXT NOT NULL,
     website_url TEXT NOT NULL,
     domain TEXT NOT NULL,
@@ -39,6 +40,9 @@ CREATE TABLE IF NOT EXISTS audits (
 CREATE INDEX IF NOT EXISTS idx_audits_org ON audits(org_id);
 CREATE INDEX IF NOT EXISTS idx_audits_domain ON audits(domain);
 CREATE INDEX IF NOT EXISTS idx_audits_status ON audits(status);
+CREATE INDEX IF NOT EXISTS idx_audits_workspace ON audits(workspace_id);
+CREATE INDEX IF NOT EXISTS idx_audits_org_workspace ON audits(org_id, workspace_id);
+
 
 CREATE TABLE IF NOT EXISTS audit_checkpoints (
     checkpoint_id TEXT PRIMARY KEY,
@@ -222,6 +226,7 @@ CREATE TABLE IF NOT EXISTS organizations (
 CREATE TABLE IF NOT EXISTS audits (
     analysis_id VARCHAR(64) PRIMARY KEY,
     org_id VARCHAR(64) NOT NULL,
+    workspace_id VARCHAR(64),
     user_id VARCHAR(64) NOT NULL,
     website_url TEXT NOT NULL,
     domain VARCHAR(255) NOT NULL,
@@ -247,6 +252,9 @@ CREATE TABLE IF NOT EXISTS audits (
 CREATE INDEX IF NOT EXISTS idx_audits_org ON audits(org_id);
 CREATE INDEX IF NOT EXISTS idx_audits_domain ON audits(domain);
 CREATE INDEX IF NOT EXISTS idx_audits_status ON audits(status);
+CREATE INDEX IF NOT EXISTS idx_audits_workspace ON audits(workspace_id);
+CREATE INDEX IF NOT EXISTS idx_audits_org_workspace ON audits(org_id, workspace_id);
+
 
 CREATE TABLE IF NOT EXISTS audit_checkpoints (
     checkpoint_id VARCHAR(64) PRIMARY KEY,

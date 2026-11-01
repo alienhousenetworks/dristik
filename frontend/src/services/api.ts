@@ -114,3 +114,48 @@ export function getSectionPptxUrl(analysisId: string, sectionKey: string): strin
   return `/api/v1/reports/${analysisId}/sections/${sectionKey}/pptx`;
 }
 
+export interface ProgressiveReportItem {
+  run_id: string;
+  phase_id: string;
+  subphase_id?: string;
+  title?: string;
+  phase_name?: string;
+  status: string;
+  confidence?: string;
+  findings_count?: number;
+  content_hash?: string;
+  pdf_ready: boolean;
+  download_url: string;
+  json_url?: string;
+}
+
+export interface ProgressiveReportCatalog {
+  run_id: string;
+  total_subphase_reports: number;
+  ready_subphase_pdfs: number;
+  total_phase_reports: number;
+  ready_phase_pdfs: number;
+  phases: ProgressiveReportItem[];
+  subphases: ProgressiveReportItem[];
+}
+
+export async function getProgressiveReportCatalog(analysisId: string): Promise<ProgressiveReportCatalog> {
+  return api(
+    `/api/v1/analyses/${analysisId}/reports/catalog`,
+    {},
+    'Could not load progressive reports catalog'
+  );
+}
+
+export function getSubphasePdfUrl(analysisId: string, phaseId: string, subphaseId: string): string {
+  return `/api/v1/analyses/${analysisId}/phases/${phaseId}/subphases/${subphaseId}/pdf`;
+}
+
+export function getSubphaseJsonUrl(analysisId: string, phaseId: string, subphaseId: string): string {
+  return `/api/v1/analyses/${analysisId}/phases/${phaseId}/subphases/${subphaseId}/json`;
+}
+
+export function getPhasePdfUrl(analysisId: string, phaseId: string): string {
+  return `/api/v1/analyses/${analysisId}/phases/${phaseId}/pdf`;
+}
+

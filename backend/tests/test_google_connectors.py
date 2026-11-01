@@ -96,26 +96,26 @@ def test_google_analytics_connector_alias_and_oauth_routes():
     from app.connectors.base.models import ConnectorCredentials
     import uuid
 
-    client = TestClient(app)
-    email = f"ga_{uuid.uuid4().hex[:8]}@example.com"
-    signup = client.post("/api/v1/auth/signup", json={
-        "full_name": "GA User",
-        "email": email,
-        "password": "Password123",
-        "organization_name": "GA Org",
-    })
-    assert signup.status_code == 200
-    login = client.post("/api/v1/auth/login", json={
-        "email": email,
-        "password": "Password123",
-    })
-    assert login.status_code == 200, login.text
-
-    # 1. Authorize routes for google_analytics and google_analytics_4
     with patch.object(settings, "GOOGLE_CLIENT_ID", "mock-client-id"), \
          patch.object(settings, "GOOGLE_CLIENT_SECRET", "mock-client-sec"), \
          patch.object(settings, "AUTH_SECRET", "test-oauth-state-signing-secret-0123456789abcdef"), \
          patch.object(settings, "ENVIRONMENT", "test"):
+        client = TestClient(app, base_url="https://testserver")
+        email = f"ga_{uuid.uuid4().hex[:8]}@example.com"
+        signup = client.post("/api/v1/auth/signup", json={
+            "full_name": "GA User",
+            "email": email,
+            "password": "Password123",
+            "organization_name": "GA Org",
+        })
+        assert signup.status_code == 200
+        login = client.post("/api/v1/auth/login", json={
+            "email": email,
+            "password": "Password123",
+        })
+        assert login.status_code == 200, login.text
+
+        # 1. Authorize routes for google_analytics and google_analytics_4
         resp_ga = client.get(
             "/api/v1/connectors/oauth/google_analytics/authorize?domain=example.com",
             follow_redirects=False,
@@ -137,6 +137,8 @@ def test_google_analytics_connector_alias_and_oauth_routes():
         name="Google Analytics (example.com)",
         target_url="https://example.com",
         credentials=ConnectorCredentials(provider=ConnectorType.GOOGLE_ANALYTICS, api_key="123456789"),
+        org_id="test_org_01",
+        workspace_id="ws_test_01",
     )
     conn = connector_store.get_connector(integ.integration_id)
     assert conn is not None

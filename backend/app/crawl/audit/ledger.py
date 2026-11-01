@@ -8,12 +8,13 @@ import json
 import time
 import uuid
 from typing import List, Dict, Any, Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+from app.core.constants import FORBIDDEN_TENANT_IDENTIFIERS
 
 class AuditEvent(BaseModel):
     event_id: str = Field(default_factory=lambda: f"evt_{uuid.uuid4().hex[:12]}")
     org_id: str
-    workspace_id: str = "ws_default"
+    workspace_id: Optional[str] = None
     mission_id: Optional[str] = None
     actor: str  # User ID, System Agent ID, or API Key ID
     action: str  # "mission:create", "crawler:fetch", "critic:reject", "patch:approve", "report:export"
@@ -22,6 +23,29 @@ class AuditEvent(BaseModel):
     details: Dict[str, Any] = Field(default_factory=dict)
     prev_hash: str = "0" * 64
     event_hash: str = ""
+
+    @field_validator("org_id")
+    @classmethod
+    def check_event_org_id(cls, v: str) -> str:
+        if not v or not isinstance(v, str) or not v.strip():
+            raise ValueError("Tenant org_id is required and cannot be empty.")
+        cleaned = v.strip()
+        if cleaned.lower() in FORBIDDEN_TENANT_IDENTIFIERS:
+            raise ValueError(f"Insecure fallback tenant '{cleaned}' is forbidden.")
+        return cleaned
+
+    @field_validator("workspace_id")
+    @classmethod
+    def check_event_workspace_id(cls, v: Optional[str]) -> Optional[str]:
+        if v is not None:
+            if not isinstance(v, str) or not v.strip():
+                raise ValueError("Insecure fallback workspace cannot be empty or whitespace-only.")
+            cleaned = v.strip()
+            if cleaned.lower() in FORBIDDEN_TENANT_IDENTIFIERS:
+                raise ValueError(f"Insecure fallback workspace '{cleaned}' is forbidden.")
+            return cleaned
+        return v
+
 
 class AuditLedger:
     """In-memory append-only tamper-evident audit ledger with cryptographic hash chaining."""
@@ -37,7 +61,7 @@ class AuditLedger:
         action: str,
         target: str,
         mission_id: Optional[str] = None,
-        workspace_id: str = "ws_default",
+        workspace_id: Optional[str] = None,
         details: Optional[Dict[str, Any]] = None
     ) -> AuditEvent:
         event = AuditEvent(

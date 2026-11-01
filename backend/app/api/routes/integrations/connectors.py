@@ -15,7 +15,7 @@ import httpx
 from app.domain.models import Integration
 from app.domain.enums import ConnectorType, ConnectorHealthStatus
 from app.identity.authorizer import Authorizer, UserIdentity
-from app.identity.deps import get_current_user, require_permission
+from app.identity.deps import get_current_user, require_permission, require_org_context
 from app.connectors.base.models import ConnectorCredentials, ConnectorHealth
 from app.core.config import settings
 from app.connectors.store import connector_store
@@ -238,8 +238,8 @@ class ConnectPlatformRequest(BaseModel):
     repository: Optional[str] = None
     branch: Optional[str] = "main"
     scopes: List[str] = Field(default_factory=list)
-    org_id: str = "org_default"
-    workspace_id: str = "ws_default"
+    org_id: Optional[str] = None
+    workspace_id: Optional[str] = None
     
 
 class ConnectPlatformResponse(BaseModel):
@@ -255,8 +255,10 @@ def _actor_id(user: UserIdentity) -> Optional[str]:
 
 def _owned_integration(integration_id: str, user: UserIdentity) -> Integration:
     integration = connector_store.get_integration(integration_id)
-    if not integration or not Authorizer.can_access_org(user, integration.org_id):
+    if not integration:
         raise HTTPException(status_code=404, detail="Integration not found")
+    if not Authorizer.can_access_org(user, integration.org_id):
+        raise HTTPException(status_code=403, detail="Cross-tenant integration access forbidden")
     return integration
 
 
@@ -273,9 +275,9 @@ async def connect_platform(
     user: UserIdentity = Depends(require_permission("patches:generate")),
 ):
     """Register and verify a new platform connector for the caller's organization."""
-    req.org_id = user.org_id
+    req.org_id = require_org_context(user, req.org_id if req.org_id and req.org_id not in ("org_default", "default") else None)
     # Workspace identifiers supplied by clients are not trusted for authorization.
-    req.workspace_id = str(getattr(user, "workspace_id", None) or "ws_default")
+    req.workspace_id = str(getattr(user, "workspace_id", None) or f"ws_default_{req.org_id}")
     api_key = req.api_key
     if req.provider == ConnectorType.CRUX and not (api_key and str(api_key).strip()):
         api_key = (
@@ -943,6 +945,19 @@ async def google_oauth_callback(
     if not tokens or not tokens.get("access_token"):
         return _oauth_error("No access token was returned. No connector was saved.")
 
+    from app.identity.deps import read_session_token
+    from app.identity.store import get_store
+
+    session_token = read_session_token(
+        authorization=request.headers.get("authorization"),
+        dristik_session=request.cookies.get("dristik_session"),
+    )
+    session_user = get_store().get_user_by_session(session_token) if session_token else None
+    if not session_user or not session_user.org_id or session_user.org_id in ("org_default", "default"):
+        return _oauth_error("Authentication required: valid organization session missing.")
+    oauth_org_id = session_user.org_id
+    oauth_ws_id = str(getattr(session_user, "workspace_id", None) or f"ws_default_{oauth_org_id}")
+
     # Save to connector store
     creds = ConnectorCredentials(
         provider=ConnectorType.GOOGLE_SEARCH_CONSOLE,
@@ -954,6 +969,8 @@ async def google_oauth_callback(
         name=f"Google Search Console ({target_domain})",
         target_url=f"https://{target_domain}",
         credentials=creds,
+        org_id=oauth_org_id,
+        workspace_id=oauth_ws_id,
         settings={"auth_mode": "oauth2", "email": user_email}
     )
     integration.status = ConnectorHealthStatus.CONNECTED

@@ -17,7 +17,7 @@ except ImportError:  # pragma: no cover
         """
         return None
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from pydantic import Field
+from pydantic import Field, field_validator
 
 # Ensure backend/.env variables are populated into os.environ for os.environ.get calls
 _backend_root = Path(__file__).resolve().parent.parent.parent
@@ -285,6 +285,47 @@ class Settings(BaseSettings):
     ALLOWED_SCHEMES: List[str] = ["http", "https"]
     AUTH_SECRET: str = Field(default="dristik-dev-secret-change-me", description="Secret used to bind session tokens")
     AUTH_DATABASE_PATH: str = Field(default="data/dristik.db")
+    # Database & Persistence Configuration
+    DATABASE_URL: str = Field(
+        default="sqlite:///data/dristik.db",
+        description="Unified PostgreSQL or SQLite connection string"
+    )
+    DB_POOL_SIZE: int = Field(
+        default=10,
+        ge=1,
+        le=100,
+        description="SQLAlchemy connection pool size for PostgreSQL"
+    )
+    DB_MAX_OVERFLOW: int = Field(
+        default=20,
+        ge=0,
+        le=100,
+        description="SQLAlchemy connection max overflow for PostgreSQL"
+    )
+    DB_POOL_TIMEOUT: int = Field(
+        default=30,
+        ge=1,
+        le=300,
+        description="SQLAlchemy connection checkout timeout in seconds"
+    )
+    DB_POOL_RECYCLE: int = Field(
+        default=1800,
+        ge=60,
+        le=86400,
+        description="SQLAlchemy connection recycle time in seconds"
+    )
+    DB_POOL_PRE_PING: bool = Field(
+        default=True,
+        description="SQLAlchemy pool pre-ping connection liveness verification"
+    )
+    DB_CONNECT_TIMEOUT: int = Field(
+        default=5,
+        ge=1,
+        le=300,
+        description=(
+            "Database connection handshake timeout in seconds for PostgreSQL"
+        ),
+    )
     SESSION_DAYS: int = 14
     FRONTEND_URL: str = "http://localhost:5173"
     SYSTEM_ADMIN_EMAIL: str = "admin@dristik.ai"
@@ -497,7 +538,46 @@ class Settings(BaseSettings):
         default="connect.dristik.ai",
         description="Domain for issued AI connection identities",
     )
-    
+
+    @field_validator("DATABASE_URL", mode="before")
+    @classmethod
+    def validate_and_normalize_database_url(cls, v: Any) -> str:
+        if not v or not isinstance(v, str) or not v.strip():
+            return "sqlite:///data/dristik.db"
+        url_str = v.strip()
+        if url_str.startswith("postgres://"):
+            url_str = "postgresql://" + url_str[len("postgres://"):]
+        supported_schemes = (
+            "sqlite://",
+            "sqlite+pysqlite://",
+            "postgresql://",
+            "postgresql+psycopg://",
+            "postgresql+psycopg2://",
+            "postgresql+asyncpg://",
+            "postgresql+pg8000://",
+        )
+        if not any(url_str.startswith(scheme) for scheme in supported_schemes):
+            raise ValueError(
+                f"Unsupported database scheme in DATABASE_URL: '{url_str}'. "
+                "Must be a valid SQLite or PostgreSQL URL."
+            )
+        return url_str
+
+    @property
+    def is_sqlite(self) -> bool:
+        return self.DATABASE_URL.startswith("sqlite")
+
+    @property
+    def sqlite_db_path(self) -> Optional[str]:
+        if (
+            not self.is_sqlite
+            or self.DATABASE_URL.startswith("sqlite:///:memory:")
+        ):
+            return None
+        if "///" in self.DATABASE_URL:
+            return self.DATABASE_URL.split("///", 1)[1]
+        return None
+
     model_config = SettingsConfigDict(
         env_file=(".env", "backend/.env", "../backend/.env"),
         env_file_encoding="utf-8",
@@ -755,6 +835,16 @@ def validate_production_configuration(settings_obj: Settings) -> None:
         if not settings_obj.PRODUCTION_DATA_INTEGRITY_MODE:
             raise RuntimeError(
                 "CRITICAL DATA INTEGRITY ERROR: PRODUCTION_DATA_INTEGRITY_MODE must be True in production."
+            )
+        if not settings_obj.DATABASE_URL or not settings_obj.DATABASE_URL.strip():
+            raise RuntimeError(
+                "CRITICAL CONFIGURATION ERROR: DATABASE_URL cannot be empty "
+                "in production."
+            )
+        if ":memory:" in settings_obj.DATABASE_URL:
+            raise RuntimeError(
+                "CRITICAL DATA INTEGRITY ERROR: In-memory database "
+                "sqlite:///:memory: is forbidden in production."
             )
 
 

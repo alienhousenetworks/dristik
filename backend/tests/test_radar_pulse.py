@@ -23,6 +23,7 @@ def test_create_radar_subscription():
     # Explicit initial scores are preserved when provided
     sub_with_scores = service.create_subscription(
         target_url="https://saascloud.io",
+        org_id="test_org_01",
         initial_scores={"human": 68.0}
     )
     assert sub_with_scores.last_scores["human"] == 68.0
@@ -32,6 +33,7 @@ def test_run_pulse_check_with_dom_changes_and_score_gains():
     service = RadarService()
     sub = service.create_subscription(
         target_url="https://growthexample.com",
+        org_id="test_org_01",
         initial_scores={"human": 60.0, "google": 65.0, "ai_citation": 50.0},
         initial_snapshot={
             "h1": "Welcome to GrowthExample",
@@ -74,6 +76,7 @@ def test_detect_citability_regression():
     service = RadarService()
     sub = service.create_subscription(
         target_url="https://regresstest.com",
+        org_id="test_org_01",
         initial_scores={"human": 85.0, "google": 88.0, "ai_citation": 80.0},
         initial_snapshot={"h1": "Established Leader", "has_schema": True}
     )

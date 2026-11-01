@@ -298,8 +298,8 @@ class CrossChapterConsistencyEngine:
         # 9. Finding Deduplication, DOM Reconciliation & Scope Preservation
         # -------------------------------------------------------------
         checks_run += 1
-        if report.findings:
-            pages_list = list(getattr(manifest, "pages", []) or []) if manifest else []
+        pages_list = list(getattr(manifest, "pages", []) or []) if manifest else []
+        if report.findings or pages_list:
             all_have_canonical = bool(pages_list) and all(bool(getattr(p, "canonical_url", None)) for p in pages_list)
             all_have_meta = bool(pages_list) and all(bool((getattr(p, "meta_description", None) or "").strip()) for p in pages_list)
             all_have_lang = bool(pages_list) and all(
@@ -309,7 +309,13 @@ class CrossChapterConsistencyEngine:
 
             reconciled_findings: List[Finding] = []
             false_positives_removed = 0
-            for f in report.findings:
+            
+            # Detect business profile to filter non-applicable e-commerce/publisher checks
+            prof = getattr(report, "business_profile", None)
+            prof_blob = f"{getattr(prof, 'business_model', '')} {getattr(prof, 'industry', '')} {getattr(prof, 'niche', '')} {getattr(report, 'domain', '')}".lower()
+            is_service_site = any(k in prof_blob for k in ["service", "consulting", "agency", "solutions", "technology", "b2b"]) or not any(k in prof_blob for k in ["store", "ecommerce", "shop", "retail", "cart"])
+
+            for f in (report.findings or []):
                 t_low = (f.title or "").lower()
                 d_low = (getattr(f, "description", "") or "").lower()
                 blob_low = f"{t_low} {d_low}"
@@ -333,25 +339,74 @@ class CrossChapterConsistencyEngine:
                 ):
                     false_positives_removed += 1
                     continue
+                # Issue 6 & 7: Drop non-applicable e-commerce / catalog checks on service sites
+                if is_service_site and (
+                    "faceted navigation" in blob_low
+                    or "product variant" in blob_low
+                    or "out of stock" in blob_low
+                    or "out-of-stock" in blob_low
+                    or "itemavailability" in blob_low
+                    or "variant page" in blob_low
+                ):
+                    false_positives_removed += 1
+                    continue
+                # Issue 8: Drop author bylines on corporate service landing pages
+                if is_service_site and any(k in blob_low for k in ["author byline", "editorial masthead", "author transparency", "editorial author"]):
+                    aff = [str(u).lower() for u in (getattr(f, "affected_urls", []) or [])]
+                    if not aff or any("service" in u or u.endswith("/") for u in aff):
+                        false_positives_removed += 1
+                        continue
+                # Issue 9: Soften unsupported doorway-page penalty claims
+                if "doorway" in blob_low:
+                    f.title = f.title.replace("doorway-page penalty", "geographic proof points").replace("Doorway", "Content Differentiation")
+                    if hasattr(f, "description") and f.description:
+                        f.description = f.description.replace("doorway-page penalty", "local content relevance").replace("doorway", "template differentiation")
                 reconciled_findings.append(f)
+
+            # Issue 1 & 2: Ensure canonical missing alt finding exists if crawled pages show missing alt text
+            total_missing_alt = sum(int(getattr(p, "images_without_alt", 0) or 0) for p in pages_list)
+            has_alt_finding = any(
+                "alt" in (f.title or "").lower() and ("image" in (f.title or "").lower() or "img" in (f.title or "").lower())
+                for f in reconciled_findings
+            )
+            if total_missing_alt > 0 and not has_alt_finding:
+                alt_urls = [str(getattr(p, "url", "")) for p in pages_list if getattr(p, "images_without_alt", 0) > 0]
+                reconciled_findings.append(Finding(
+                    finding_id="find_missing_image_alt",
+                    category=Category.ON_PAGE_SEO,
+                    severity=Severity.MEDIUM,
+                    priority=6,
+                    title=f"{total_missing_alt} Informative Images Missing Descriptive Alt Attributes",
+                    description=f"{total_missing_alt} informative images across evaluated pages lack descriptive alt text, hindering search engine understanding and accessibility (WCAG 2.2 AA). Purely decorative images with alt=\"\" were excluded.",
+                    recommendation="Add concise, descriptive alt attributes to all informative images across primary templates. Keep alt=\"\" on decorative elements.",
+                    affected_urls=alt_urls[:5],
+                    rule_id="canonical_issue::missing_image_alt",
+                    recommended_solution="Update <img> elements to declare concise descriptive alt text describing the visual subject.",
+                    acceptance_criteria="All informative <img> elements have descriptive alt text; decorative images declare alt=\"\"."
+                ))
 
             if false_positives_removed > 0:
                 contradictions.append({
                     "dimension": "dom_evidence_reconciliation",
-                    "conflict": f"{false_positives_removed} finding(s) contradicted measured PageEvidence DOM attributes.",
+                    "conflict": f"{false_positives_removed} finding(s) contradicted measured PageEvidence DOM attributes or business model applicability.",
                     "action": "drop_contradicted_findings"
                 })
                 repairs.append({
                     "field": "findings",
-                    "repaired_value": f"Removed {false_positives_removed} contradicted finding(s).",
-                    "reason": "Reconciled finding ledger against verified PageEvidence DOM tags (canonical, meta description, html[lang])."
+                    "repaired_value": f"Removed {false_positives_removed} contradicted or non-applicable finding(s).",
+                    "reason": "Reconciled finding ledger against verified PageEvidence DOM tags and business model applicability."
                 })
 
             def _semantic_rule_key(item: Finding) -> str:
-                r_id = str(getattr(item, "rule_id", "") or "").strip().lower()
-                if r_id:
-                    return r_id
                 txt = f"{item.title or ''} {getattr(item, 'description', '') or ''}".lower()
+                # Issue 4: Missing Service/Product Schema deduplication
+                if ("schema" in txt and any(k in txt for k in ["organization", "service", "product", "offer"])) or ("organization" in txt and "service" in txt and "schema" in txt):
+                    return "canonical_issue::missing_service_schema"
+                # Issue 10: Generic / repeated CTA deduplication
+                if ("cta" in txt or "call to action" in txt or "custom build" in txt) and any(k in txt for k in ["generic", "vague", "identical", "repeated", "request custom build"]):
+                    return "canonical_issue::generic_cta"
+                if "alt" in txt and ("image" in txt or "img" in txt) and ("missing" in txt or "lack" in txt):
+                    return "canonical_issue::missing_image_alt"
                 if "beyond imagination" in txt or ("h1" in txt and ("slogan" in txt or "vague" in txt or "generic" in txt or "category" in txt)):
                     return "canonical_issue::homepage_vague_h1"
                 if ("duplicate" in txt or "identical" in txt or "repeats" in txt or "reuses" in txt or "verbatim" in txt) and "meta description" in txt:
@@ -362,8 +417,6 @@ class CrossChapterConsistencyEngine:
                     return "canonical_issue::brand_naming_consistency"
                 if ("'game'" in txt or '"game"' in txt) and ("nav" in txt or "menu" in txt or "label" in txt):
                     return "canonical_issue::ambiguous_nav_game"
-                if "alt" in txt and ("image" in txt or "img" in txt) and ("missing" in txt or "lack" in txt):
-                    return "canonical_issue::missing_image_alt"
                 if "hsts" in txt or "strict-transport-security" in txt:
                     return "canonical_issue::missing_hsts"
                 if "content-security-policy" in txt or ("csp" in txt and "header" in txt):
@@ -372,6 +425,10 @@ class CrossChapterConsistencyEngine:
                     return "canonical_issue::missing_xfo"
                 if "x-content-type-options" in txt:
                     return "canonical_issue::missing_xcto"
+
+                r_id = str(getattr(item, "rule_id", "") or "").strip().lower()
+                if r_id:
+                    return r_id
                 cat_val = item.category.value if hasattr(item.category, "value") else str(item.category)
                 return f"{cat_val}::{(item.title or '').strip().lower()}"
 
@@ -379,6 +436,24 @@ class CrossChapterConsistencyEngine:
             duplicates_found = 0
             for f in reconciled_findings:
                 key = _semantic_rule_key(f)
+                
+                # Issue 3 & 5: Schema severity & remediation realignment
+                if key == "canonical_issue::missing_service_schema":
+                    if str(getattr(f.severity, "value", f.severity)).upper() == "CRITICAL" or f.priority >= 9:
+                        f.severity = Severity.MEDIUM
+                        f.priority = 6
+                        repairs.append({
+                            "field": f"finding.{f.finding_id}.severity",
+                            "repaired_value": "MEDIUM",
+                            "reason": "Downgraded missing optional Service schema from CRITICAL to MEDIUM."
+                        })
+                    rec_low = (getattr(f, "recommendation", "") or "").lower()
+                    if "breadcrumb" in rec_low or "breadcrumblist" in rec_low or not f.recommendation:
+                        f.recommendation = "Declare schema.org/Service or schema.org/ProfessionalService JSON-LD entities on commercial service pages declaring provider, serviceType, and description."
+                        f.recommended_solution = "Add a valid <script type=\"application/ld+json\"> block containing schema.org/Service to each primary service landing page."
+                        f.implementation_steps = ["Add a valid <script type=\"application/ld+json\"> block containing schema.org/Service to each primary service landing page."]
+                        f.acceptance_criteria = "Google Rich Results Test confirms valid schema.org/Service JSON-LD markup on primary service endpoints."
+
                 if key in unique_findings:
                     duplicates_found += 1
                     existing = unique_findings[key]

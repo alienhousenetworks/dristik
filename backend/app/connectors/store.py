@@ -173,8 +173,11 @@ class ConnectorStore:
             self._integrations[integration.integration_id] = integration
             self._write(integration)
 
-    def list_integrations(self, org_id: str = "org_default") -> List[Integration]:
-        return [i for i in self._integrations.values() if i.org_id == org_id]
+    def list_integrations(self, org_id: Optional[str] = None) -> List[Integration]:
+        if not org_id or not isinstance(org_id, str) or not org_id.strip() or org_id.strip() in ("org_default", "default"):
+            return []
+        clean_org = org_id.strip()
+        return [i for i in self._integrations.values() if i.org_id == clean_org]
 
     def begin_action(self, org_id: str, integration_id: str, idempotency_key: str, action: str) -> Dict[str, Any]:
         """Reserve an action key exactly once per tenant/integration."""
@@ -313,20 +316,23 @@ class ConnectorStore:
         name: str,
         target_url: str,
         credentials: ConnectorCredentials,
+        org_id: str,
+        workspace_id: Optional[str] = None,
         repository: Optional[str] = None,
         branch: Optional[str] = "main",
-        org_id: str = "org_default",
-        workspace_id: str = "ws_default",
-        settings: Optional[Dict[str, Any]] = None
+        settings: Optional[Dict[str, Any]] = None,
     ) -> Integration:
+        if not org_id or not isinstance(org_id, str) or not org_id.strip() or org_id.strip() in ("org_default", "default"):
+            raise ValueError(f"Valid tenant org_id required for integration; '{org_id}' is forbidden.")
+        clean_org_id = org_id.strip()
         integration_id = f"int_{provider.value}_{uuid.uuid4().hex[:8]}"
         now = datetime.now(timezone.utc).isoformat()
         
         # Zero-Fake Rule: Never initialize as CONNECTED before health verification passes
         integration = Integration(
             integration_id=integration_id,
-            org_id=org_id,
-            workspace_id=workspace_id,
+            org_id=clean_org_id,
+            workspace_id=workspace_id or f"ws_default_{clean_org_id}",
             provider=provider,
             name=name,
             target_url=target_url,

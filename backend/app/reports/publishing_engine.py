@@ -104,128 +104,113 @@ class CoverGenerator:
 
     PALETTES: Dict[str, Dict[str, str]] = {
         "SEO": {
-            "bg_gradient": "radial-gradient(circle at 50% 85%, #1e3a8a 0%, #081226 70%)",
-            "accent": "#38bdf8",
+            "bg_gradient": "#0f172a",
+            "accent": "#94a3b8",
             "eyebrow": "TECHNICAL SEO & SEARCH ARCHITECTURE AUDIT",
             "border": "#1e293b",
-            "badge_bg": "rgba(56, 189, 248, 0.15)",
+            "badge_bg": "rgba(255, 255, 255, 0.08)",
         },
         "GEO": {
-            "bg_gradient": "radial-gradient(circle at 50% 85%, #4c1d95 0%, #0d0b1e 70%)",
-            "accent": "#c084fc",
+            "bg_gradient": "#0f172a",
+            "accent": "#94a3b8",
             "eyebrow": "GENERATIVE ENGINE OPTIMIZATION (GEO) ASSESSMENT",
-            "border": "#2e1065",
-            "badge_bg": "rgba(192, 132, 252, 0.15)",
+            "border": "#1e293b",
+            "badge_bg": "rgba(255, 255, 255, 0.08)",
         },
         "AEO": {
-            "bg_gradient": "radial-gradient(circle at 50% 85%, #064e3b 0%, #022c22 70%)",
-            "accent": "#34d399",
+            "bg_gradient": "#0f172a",
+            "accent": "#94a3b8",
             "eyebrow": "ANSWER ENGINE OPTIMIZATION & AI CITATION AUDIT",
-            "border": "#065f46",
-            "badge_bg": "rgba(52, 211, 153, 0.15)",
+            "border": "#1e293b",
+            "badge_bg": "rgba(255, 255, 255, 0.08)",
         },
         "CRO": {
-            "bg_gradient": "radial-gradient(circle at 50% 85%, #7f1d1d 0%, #1c0d0d 70%)",
-            "accent": "#f87171",
+            "bg_gradient": "#0f172a",
+            "accent": "#94a3b8",
             "eyebrow": "CONVERSION RATE OPTIMIZATION & UX FRICTION AUDIT",
-            "border": "#450a0a",
-            "badge_bg": "rgba(248, 113, 113, 0.15)",
+            "border": "#1e293b",
+            "badge_bg": "rgba(255, 255, 255, 0.08)",
         },
         "COMPETITOR": {
-            "bg_gradient": "radial-gradient(circle at 50% 85%, #78350f 0%, #18181b 70%)",
-            "accent": "#fbbf24",
+            "bg_gradient": "#0f172a",
+            "accent": "#94a3b8",
             "eyebrow": "COMPETITIVE DIGITAL POSITIONING & OPPORTUNITY ANALYSIS",
-            "border": "#3f3f46",
-            "badge_bg": "rgba(251, 191, 36, 0.15)",
+            "border": "#1e293b",
+            "badge_bg": "rgba(255, 255, 255, 0.08)",
         },
         "COMPLETE": {
-            "bg_gradient": "radial-gradient(circle at 50% 85%, #1e1b4b 0%, #090d16 70%)",
-            "accent": "#38bdf8",
+            "bg_gradient": "#0f172a",
+            "accent": "#94a3b8",
             "eyebrow": "INTEGRATED DIGITAL PERFORMANCE & ASSET DOSSIER",
-            "border": "#334155",
-            "badge_bg": "rgba(56, 189, 248, 0.15)",
+            "border": "#1e293b",
+            "badge_bg": "rgba(255, 255, 255, 0.08)",
         },
     }
 
     @classmethod
     def render_motif_svg(cls, family: str) -> str:
-        """Returns a high-precision, category-specific SVG vector artwork."""
+        """Returns a high-precision, category-specific SVG vector artwork in restrained editorial monochrome."""
         fam = family.upper()
         if fam == "GEO":
-            # Generative Neural Lattice
+            # Generative Retrieval Lattice
             return """
             <svg width="220" height="90" viewBox="0 0 220 90" class="cover-motif-svg">
-                <circle cx="110" cy="45" r="38" fill="none" stroke="#c084fc" stroke-width="1.5" stroke-dasharray="3 3" opacity="0.6"/>
-                <circle cx="110" cy="45" r="24" fill="none" stroke="#c084fc" stroke-width="2" opacity="0.8"/>
-                <circle cx="110" cy="45" r="10" fill="#c084fc" opacity="0.9"/>
-                <line x1="60" y1="45" x2="160" y2="45" stroke="#a855f7" stroke-width="1" stroke-dasharray="2 2" opacity="0.5"/>
-                <line x1="110" y1="10" x2="110" y2="80" stroke="#a855f7" stroke-width="1" stroke-dasharray="2 2" opacity="0.5"/>
-                <circle cx="70" cy="30" r="4" fill="#e879f9" opacity="0.7"/>
-                <circle cx="150" cy="60" r="4" fill="#e879f9" opacity="0.7"/>
-                <circle cx="80" cy="65" r="3" fill="#a855f7" opacity="0.6"/>
-                <circle cx="140" cy="25" r="3" fill="#a855f7" opacity="0.6"/>
-                <line x1="70" y1="30" x2="110" y2="45" stroke="#c084fc" stroke-width="1" opacity="0.4"/>
-                <line x1="150" y1="60" x2="110" y2="45" stroke="#c084fc" stroke-width="1" opacity="0.4"/>
+                <circle cx="110" cy="45" r="38" fill="none" stroke="#64748b" stroke-width="1.2" stroke-dasharray="3 3" opacity="0.6"/>
+                <circle cx="110" cy="45" r="24" fill="none" stroke="#94a3b8" stroke-width="1.5" opacity="0.8"/>
+                <circle cx="110" cy="45" r="8" fill="#cbd5e1" opacity="0.9"/>
+                <line x1="60" y1="45" x2="160" y2="45" stroke="#64748b" stroke-width="1" stroke-dasharray="2 2" opacity="0.5"/>
+                <line x1="110" y1="10" x2="110" y2="80" stroke="#64748b" stroke-width="1" stroke-dasharray="2 2" opacity="0.5"/>
+                <circle cx="70" cy="30" r="3" fill="#94a3b8" opacity="0.7"/>
+                <circle cx="150" cy="60" r="3" fill="#94a3b8" opacity="0.7"/>
+                <line x1="70" y1="30" x2="110" y2="45" stroke="#64748b" stroke-width="0.8" opacity="0.4"/>
+                <line x1="150" y1="60" x2="110" y2="45" stroke="#64748b" stroke-width="0.8" opacity="0.4"/>
             </svg>
             """
         elif fam == "AEO":
-            # Entity Graph Node Network
+            # Entity Knowledge Graph
             return """
             <svg width="220" height="90" viewBox="0 0 220 90" class="cover-motif-svg">
-                <rect x="80" y="25" width="60" height="40" rx="6" fill="none" stroke="#34d399" stroke-width="2" opacity="0.8"/>
-                <circle cx="110" cy="45" r="8" fill="#34d399" opacity="0.9"/>
-                <line x1="45" y1="45" x2="80" y2="45" stroke="#10b981" stroke-width="1.5" stroke-dasharray="3 3"/>
-                <line x1="140" y1="45" x2="175" y2="45" stroke="#10b981" stroke-width="1.5" stroke-dasharray="3 3"/>
-                <circle cx="40" cy="45" r="5" fill="#6ee7b7"/>
-                <circle cx="180" cy="45" r="5" fill="#6ee7b7"/>
-                <line x1="110" y1="12" x2="110" y2="25" stroke="#10b981" stroke-width="1.5"/>
-                <circle cx="110" cy="8" r="4" fill="#a7f3d0"/>
+                <rect x="80" y="25" width="60" height="40" rx="4" fill="none" stroke="#94a3b8" stroke-width="1.5" opacity="0.8"/>
+                <circle cx="110" cy="45" r="7" fill="#cbd5e1" opacity="0.9"/>
+                <line x1="45" y1="45" x2="80" y2="45" stroke="#64748b" stroke-width="1" stroke-dasharray="3 3"/>
+                <line x1="140" y1="45" x2="175" y2="45" stroke="#64748b" stroke-width="1" stroke-dasharray="3 3"/>
+                <circle cx="40" cy="45" r="4" fill="#94a3b8"/>
+                <circle cx="180" cy="45" r="4" fill="#94a3b8"/>
+                <line x1="110" y1="12" x2="110" y2="25" stroke="#64748b" stroke-width="1"/>
+                <circle cx="110" cy="8" r="3" fill="#94a3b8"/>
             </svg>
             """
         elif fam == "CRO":
-            # Conversion Funnel Ergonomics
+            # Conversion Hierarchy
             return """
             <svg width="220" height="90" viewBox="0 0 220 90" class="cover-motif-svg">
-                <polygon points="60,15 160,15 135,50 85,50" fill="none" stroke="#f87171" stroke-width="1.5" opacity="0.7"/>
-                <polygon points="85,55 135,55 120,78 100,78" fill="none" stroke="#f87171" stroke-width="2" opacity="0.9"/>
-                <line x1="110" y1="20" x2="110" y2="45" stroke="#ef4444" stroke-width="2"/>
-                <polygon points="107,45 113,45 110,50" fill="#ef4444"/>
-                <circle cx="110" cy="83" r="3" fill="#fca5a5"/>
+                <polygon points="65,18 155,18 132,50 88,50" fill="none" stroke="#94a3b8" stroke-width="1.2" opacity="0.7"/>
+                <polygon points="88,54 132,54 118,76 102,76" fill="none" stroke="#94a3b8" stroke-width="1.5" opacity="0.9"/>
+                <line x1="110" y1="22" x2="110" y2="46" stroke="#cbd5e1" stroke-width="1.5"/>
+                <circle cx="110" cy="81" r="3" fill="#cbd5e1"/>
             </svg>
             """
         elif fam == "COMPETITOR":
-            # Dual-Axis Competitive Parity Scale
+            # Comparative Parity Matrix
             return """
             <svg width="220" height="90" viewBox="0 0 220 90" class="cover-motif-svg">
-                <line x1="50" y1="45" x2="170" y2="45" stroke="#fbbf24" stroke-width="2" opacity="0.8"/>
-                <polygon points="110,35 102,55 118,55" fill="#fbbf24" opacity="0.9"/>
-                <circle cx="60" cy="45" r="14" fill="none" stroke="#f59e0b" stroke-width="1.5" stroke-dasharray="2 2"/>
-                <circle cx="60" cy="45" r="6" fill="#fbbf24"/>
-                <circle cx="160" cy="45" r="14" fill="none" stroke="#f59e0b" stroke-width="1.5" stroke-dasharray="2 2"/>
-                <circle cx="160" cy="45" r="6" fill="#fbbf24"/>
-            </svg>
-            """
-        elif fam == "COMPLETE":
-            # Polyhedral Digital Intelligence Prism
-            return """
-            <svg width="220" height="90" viewBox="0 0 220 90" class="cover-motif-svg">
-                <polygon points="110,12 155,38 155,70 110,84 65,70 65,38" fill="none" stroke="#38bdf8" stroke-width="1.8" opacity="0.8"/>
-                <line x1="110" y1="12" x2="110" y2="84" stroke="#818cf8" stroke-width="1" stroke-dasharray="3 3" opacity="0.6"/>
-                <line x1="65" y1="38" x2="155" y2="70" stroke="#818cf8" stroke-width="1" stroke-dasharray="3 3" opacity="0.4"/>
-                <line x1="65" y1="70" x2="155" y2="38" stroke="#818cf8" stroke-width="1" stroke-dasharray="3 3" opacity="0.4"/>
-                <circle cx="110" cy="48" r="8" fill="#38bdf8" opacity="0.9"/>
+                <line x1="50" y1="45" x2="170" y2="45" stroke="#64748b" stroke-width="1.5" opacity="0.8"/>
+                <polygon points="110,38 104,52 116,52" fill="#cbd5e1" opacity="0.9"/>
+                <circle cx="60" cy="45" r="12" fill="none" stroke="#64748b" stroke-width="1" stroke-dasharray="2 2"/>
+                <circle cx="60" cy="45" r="5" fill="#94a3b8"/>
+                <circle cx="160" cy="45" r="12" fill="none" stroke="#64748b" stroke-width="1" stroke-dasharray="2 2"/>
+                <circle cx="160" cy="45" r="5" fill="#94a3b8"/>
             </svg>
             """
         else:
-            # Default / SEO: Search Radar Beacon
+            # Complete / SEO: Search Radar Beacon
             return """
             <svg width="220" height="90" viewBox="0 0 220 90" class="cover-motif-svg">
-                <circle cx="110" cy="45" r="36" fill="none" stroke="#38bdf8" stroke-width="1.2" stroke-dasharray="4 4" opacity="0.5"/>
-                <circle cx="110" cy="45" r="22" fill="none" stroke="#38bdf8" stroke-width="1.8" opacity="0.8"/>
-                <circle cx="110" cy="45" r="8" fill="#38bdf8" opacity="0.95"/>
-                <line x1="55" y1="45" x2="165" y2="45" stroke="#0ea5e9" stroke-width="1" stroke-dasharray="3 3" opacity="0.5"/>
-                <line x1="110" y1="5" x2="110" y2="85" stroke="#0ea5e9" stroke-width="1" stroke-dasharray="3 3" opacity="0.5"/>
-                <polygon points="110,45 138,24 135,18" fill="none" stroke="#7dd3fc" stroke-width="1.5" opacity="0.8"/>
+                <circle cx="110" cy="45" r="36" fill="none" stroke="#64748b" stroke-width="1" stroke-dasharray="4 4" opacity="0.5"/>
+                <circle cx="110" cy="45" r="22" fill="none" stroke="#94a3b8" stroke-width="1.5" opacity="0.8"/>
+                <circle cx="110" cy="45" r="7" fill="#cbd5e1" opacity="0.95"/>
+                <line x1="55" y1="45" x2="165" y2="45" stroke="#64748b" stroke-width="1" stroke-dasharray="3 3" opacity="0.5"/>
+                <line x1="110" y1="5" x2="110" y2="85" stroke="#64748b" stroke-width="1" stroke-dasharray="3 3" opacity="0.5"/>
             </svg>
             """
 
@@ -433,16 +418,16 @@ def get_publishing_css() -> str:
         text-rendering: optimizeLegibility;
     }
 
-    /* Editorial system v3: restrained ink + teal palette, clear evidence hierarchy. */
+    /* Editorial system: restrained ink + slate palette, clear evidence hierarchy. */
     :root {
         --dr-ink: #0f172a;
         --dr-muted: #64748b;
         --dr-line: #cbd5e1;
         --dr-paper: #ffffff;
-        --dr-accent: #0f766e;
-        --dr-accent-soft: #f0fdfa;
-        --dr-critical: #b91c1c;
-        --dr-warning: #b45309;
+        --dr-accent: #1e3a8a;
+        --dr-accent-soft: #f8fafc;
+        --dr-critical: #991b1b;
+        --dr-warning: #92400e;
     }
 
     h1, h2, h3, h4 {
@@ -567,7 +552,7 @@ def get_publishing_css() -> str:
             flex-wrap: wrap;
         }
         .btn-action-primary {
-            background: #0f766e;
+            background: #1e3a8a;
             color: #ffffff;
             font-weight: 600;
             font-size: 12.5px;
@@ -582,7 +567,7 @@ def get_publishing_css() -> str:
             box-shadow: 0 2px 4px rgba(0,0,0,0.3);
             transition: background 0.15s ease;
         }
-        .btn-action-primary:hover { background: #115e59; }
+        .btn-action-primary:hover { background: #172554; }
         .btn-action-secondary {
             background: #1e293b;
             color: #e2e8f0;
@@ -681,7 +666,7 @@ def get_publishing_css() -> str:
         font-size: 18pt;
         font-weight: 900;
         letter-spacing: 2.5px;
-        color: #0f766e;
+        color: #ffffff;
     }
 
     .cover-classification-badge {
@@ -689,9 +674,9 @@ def get_publishing_css() -> str:
         font-size: 7.5pt;
         font-weight: 700;
         padding: 4px 10px;
-        background: rgba(239, 68, 68, 0.2);
-        border: 1px solid rgba(239, 68, 68, 0.45);
-        color: #fca5a5;
+        background: rgba(255, 255, 255, 0.08);
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        color: #cbd5e1;
         border-radius: 4px;
         letter-spacing: 0.08em;
     }
@@ -727,7 +712,7 @@ def get_publishing_css() -> str:
 
     .cover-target-box {
         margin: 5mm 0 6mm 0;
-        border-left: 2px solid #0f766e;
+        border-left: 2px solid #64748b;
         padding-left: 14px;
     }
 
@@ -749,7 +734,7 @@ def get_publishing_css() -> str:
     .cover-target-url {
         font-family: ui-monospace, monospace;
         font-size: 9.5pt;
-        color: #0f766e;
+        color: #cbd5e1;
         margin-top: 2px;
     }
 
@@ -920,7 +905,7 @@ def get_publishing_css() -> str:
     }
 
     .toc-link:hover {
-        color: #0f766e;
+        color: #1e3a8a;
     }
 
     .toc-badge {
@@ -970,7 +955,7 @@ def get_publishing_css() -> str:
         font-family: ui-monospace, monospace;
         font-size: 8.5pt;
         font-weight: 800;
-        color: #0f766e;
+        color: #334155;
         letter-spacing: 0.1em;
         text-transform: uppercase;
     }
@@ -1132,19 +1117,19 @@ def get_publishing_css() -> str:
     }
 
     .plain-english-panel {
-        background: #f0fdfa;
-        border: 1px solid #99f6e4;
-        border-radius: 4px;
-        padding: 12px 14px;
-        margin: 10px 0;
+        background: #f8fafc;
+        border-left: 3px solid #334155;
+        border-radius: 3px;
+        padding: 10px 14px;
+        margin: 8px 0;
     }
 
     .plain-english-panel .finding-block-title {
-        color: #115e59;
+        color: #334155;
     }
 
     .plain-english-panel .finding-block-text {
-        color: #134e4a;
+        color: #0f172a;
         font-weight: 500;
     }
 
@@ -1156,7 +1141,7 @@ def get_publishing_css() -> str:
 
     .affected-urls-list code {
         font-family: ui-monospace, monospace;
-        color: #0f766e;
+        color: #1e293b;
         font-size: 8pt;
     }
 
@@ -1176,7 +1161,7 @@ def get_publishing_css() -> str:
 
     .code-block {
         background: #0f172a;
-        color: #0f766e;
+        color: #e2e8f0;
         font-family: ui-monospace, monospace;
         font-size: 7.5pt;
         padding: 10px 12px;

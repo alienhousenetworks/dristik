@@ -40,6 +40,7 @@ def test_analysis_request_target_pillars():
 
     run = AnalysisRun(
         analysis_id="run_test_pillars",
+        org_id="test_org_01",
         website_url="https://example.com",
         target_pillars=["seo", "cro"],
         created_at="2026-10-12T00:00:00",
@@ -82,7 +83,7 @@ async def test_orchestrator_section_pillar_alias():
     from app.orchestration.orchestrator import orchestrator
 
     # Verify run_pipeline_section accepts pillar abbreviation like 'seo'
-    run = orchestrator.create_run("https://example.com", target_pillars=["seo"])
+    run = orchestrator.create_run("https://example.com", org_id="test_org_01", target_pillars=["seo"])
     assert run.target_pillars == ["seo"]
 
     controller = get_pipeline_controller(run.analysis_id)

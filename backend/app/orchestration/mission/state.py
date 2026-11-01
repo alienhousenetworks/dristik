@@ -4,7 +4,7 @@ Strongly typed, serializable, and resumable state model for mission orchestratio
 """
 from typing import List, Dict, Any, Optional
 from datetime import datetime
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from app.domain.enums import AnalysisStage, Category, Severity, VerificationStatus
 from app.domain.models import (
     PageEvidence,
@@ -17,8 +17,11 @@ from app.domain.models import (
     BusinessProfile,
     TelemetryData,
     UntrustedObservation,
-    AiSearchQueryEvaluation
+    AiSearchQueryEvaluation,
+    validate_tenant_org_id,
+    validate_tenant_workspace_id,
 )
+
 
 class WebsiteTarget(BaseModel):
     url: str
@@ -100,10 +103,21 @@ class SimulationScenario(BaseModel):
 
 class MissionState(BaseModel):
     mission_id: str
-    org_id: str = "org_default"
-    workspace_id: str = "ws_default"
+    org_id: str
+    workspace_id: str
     target: WebsiteTarget
     objective: MissionObjective
+
+    @field_validator("org_id")
+    @classmethod
+    def check_mission_org_id(cls, v: str) -> str:
+        return validate_tenant_org_id(v, required=True)
+
+    @field_validator("workspace_id")
+    @classmethod
+    def check_mission_workspace_id(cls, v: str) -> str:
+        return validate_tenant_workspace_id(v, required=True)
+
 
     # Discovery & Evidence
     crawl_snapshot: Optional[CrawlManifest] = None

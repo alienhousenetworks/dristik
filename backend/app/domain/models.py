@@ -4,6 +4,7 @@ Strict typed models for Evidence, Claims, Findings, Scores, Reports, and Telemet
 """
 from __future__ import annotations
 from datetime import datetime, timezone
+import uuid
 from typing import List, Dict, Any, Optional, Union, Tuple
 from pydantic import BaseModel, Field, field_validator, model_validator, ConfigDict
 from app.domain.enums import (
@@ -44,6 +45,38 @@ from app.domain.enums import (
     FindingStatus,
 )
 from app.domain.evidence.models import EvidenceRef
+
+FORBIDDEN_TENANT_IDENTIFIERS = frozenset({"org_default", "ws_default", "default"})
+
+
+def validate_tenant_org_id(v: Optional[str], required: bool = True) -> Optional[str]:
+    """Validates organization tenant identifier against forbidden fallback defaults."""
+    if v is None:
+        if required:
+            raise ValueError("Tenant org_id is required and cannot be empty.")
+        return None
+    if not isinstance(v, str) or not v.strip():
+        if required:
+            raise ValueError("Tenant org_id is required and cannot be empty.")
+        raise ValueError(f"Insecure fallback tenant '{v}' is forbidden.")
+    cleaned = v.strip()
+    if cleaned.lower() in FORBIDDEN_TENANT_IDENTIFIERS:
+        raise ValueError(f"Insecure fallback tenant '{cleaned}' is forbidden.")
+    return cleaned
+
+
+def validate_tenant_workspace_id(v: Optional[str], required: bool = False) -> Optional[str]:
+    """Validates workspace identifier against whitespace and forbidden fallback defaults."""
+    if v is None:
+        if required:
+            raise ValueError("Tenant workspace_id is required and cannot be empty.")
+        return None
+    if not isinstance(v, str) or not v.strip():
+        raise ValueError("Insecure fallback workspace cannot be empty or whitespace-only.")
+    cleaned = v.strip()
+    if cleaned.lower() in FORBIDDEN_TENANT_IDENTIFIERS:
+        raise ValueError(f"Insecure fallback workspace '{cleaned}' is forbidden.")
+    return cleaned
 
 
 class FindingEvidence(BaseModel):
@@ -122,8 +155,8 @@ class RemediationPatch(BaseModel):
 
 class Integration(BaseModel):
     integration_id: str
-    org_id: str = "org_default"
-    workspace_id: str = "ws_default"
+    org_id: str
+    workspace_id: Optional[str] = None
     provider: ConnectorType = ConnectorType.GENERIC
     name: str
     target_url: str
@@ -135,6 +168,17 @@ class Integration(BaseModel):
     last_synced_at: Optional[str] = None
     error_message: Optional[str] = None
     settings: Dict[str, Any] = Field(default_factory=dict)
+
+    @field_validator("org_id")
+    @classmethod
+    def check_org_id(cls, v: str) -> str:
+        return validate_tenant_org_id(v, required=True)
+
+    @field_validator("workspace_id")
+    @classmethod
+    def check_workspace_id(cls, v: Optional[str]) -> Optional[str]:
+        return validate_tenant_workspace_id(v, required=False)
+
 
 class RoiInput(BaseModel):
     avg_deal_size_inr: Optional[float] = None
@@ -330,9 +374,20 @@ class ClaimLedger(BaseModel):
 
 class Finding(BaseModel):
     finding_id: str
-    org_id: str = "org_default"
-    workspace_id: str = "ws_default"
+    org_id: Optional[str] = None
+    workspace_id: Optional[str] = None
     mission_id: Optional[str] = None
+
+    @field_validator("org_id")
+    @classmethod
+    def check_finding_org_id(cls, v: Optional[str]) -> Optional[str]:
+        return validate_tenant_org_id(v, required=False)
+
+    @field_validator("workspace_id")
+    @classmethod
+    def check_finding_workspace_id(cls, v: Optional[str]) -> Optional[str]:
+        return validate_tenant_workspace_id(v, required=False)
+
     category: Category
     subcategory: Optional[str] = None
     affected_urls: List[str] = Field(default_factory=list)
@@ -2606,12 +2661,23 @@ class ConsistencyAuditReport(BaseModel):
 class ExecutiveReport(BaseModel):
     report_id: str
     analysis_id: Optional[str] = None
-    org_id: str = "org_default"
-    workspace_id: str = "ws_default"
+    org_id: str
+    workspace_id: Optional[str] = None
     mission_id: Optional[str] = None
     website_url: str
     domain: str
     generated_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+
+    @field_validator("org_id")
+    @classmethod
+    def check_report_org_id(cls, v: str) -> str:
+        return validate_tenant_org_id(v, required=True)
+
+    @field_validator("workspace_id")
+    @classmethod
+    def check_report_workspace_id(cls, v: Optional[str]) -> Optional[str]:
+        return validate_tenant_workspace_id(v, required=False)
+
     business_profile: Optional[BusinessProfile] = None
     resolved_entity: Optional[ResolvedEntity] = None
     scores: OverallScoreResult
@@ -2713,9 +2779,9 @@ class ExecutiveReport(BaseModel):
 
 class AnalysisRequest(BaseModel):
     website_url: str
-    org_id: str = "org_default"
-    workspace_id: str = "ws_default"
-    project_id: Optional[str] = "proj_default"
+    org_id: Optional[str] = None
+    workspace_id: Optional[str] = None
+    project_id: Optional[str] = None
     country: Optional[str] = "Global"
     language: Optional[str] = "en"
     industry: Optional[str] = None
@@ -2728,10 +2794,20 @@ class AnalysisRequest(BaseModel):
     data_residency: DataResidency = DataResidency.GLOBAL
     target_pillars: Optional[List[str]] = Field(default=None, description="Selected pillars to audit: 'seo', 'geo', 'aeo', 'cro'. If omitted, audits all pillars.")
 
+    @field_validator("org_id")
+    @classmethod
+    def check_request_org_id(cls, v: Optional[str]) -> Optional[str]:
+        return validate_tenant_org_id(v, required=False)
+
+    @field_validator("workspace_id")
+    @classmethod
+    def check_request_workspace_id(cls, v: Optional[str]) -> Optional[str]:
+        return validate_tenant_workspace_id(v, required=False)
+
 class AnalysisRun(BaseModel):
     analysis_id: str
-    org_id: str = "org_default"
-    workspace_id: str = "ws_default"
+    org_id: str
+    workspace_id: Optional[str] = None
     mission_id: str = ""
     website_url: str
     status: AnalysisStage = AnalysisStage.QUEUED
@@ -2746,6 +2822,17 @@ class AnalysisRun(BaseModel):
     manifest_id: Optional[str] = None
     report_id: Optional[str] = None
     target_pillars: Optional[List[str]] = None
+
+    @field_validator("org_id")
+    @classmethod
+    def check_run_org_id(cls, v: str) -> str:
+        return validate_tenant_org_id(v, required=True)
+
+    @field_validator("workspace_id")
+    @classmethod
+    def check_run_workspace_id(cls, v: Optional[str]) -> Optional[str]:
+        return validate_tenant_workspace_id(v, required=False)
+
 
 
 class TrackedKeyword(BaseModel):

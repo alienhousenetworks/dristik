@@ -3,7 +3,7 @@
 The composite is calculated by displayed_score.displayed_composite. This module
 does not apply a second formula.
 """
-from app.persistence.models import ScoreExplanation, ScoreExplanationDimension
+from app.db.models.audit import ScoreExplanation, ScoreExplanationDimension
 from app.domain.scoring.displayed_score import (
     align_story_score,
     displayed_composite,

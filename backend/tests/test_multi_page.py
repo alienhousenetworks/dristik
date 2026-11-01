@@ -113,7 +113,7 @@ async def test_multi_page_orchestration_pipeline(monkeypatch):
         AsyncMock(return_value={"content": mock_llm_json, "input_tokens": 50, "output_tokens": 50, "latency_ms": 100.0, "provider": "together"})
     )
     
-    run = orchestrator.create_run("https://supabase.com")
+    run = orchestrator.create_run("https://supabase.com", org_id="test_org_01")
     await orchestrator.execute_analysis_pipeline(run.analysis_id, "https://supabase.com", max_pages=3)
     
     completed = orchestrator.runs[run.analysis_id]

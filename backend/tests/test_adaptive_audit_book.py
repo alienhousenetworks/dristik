@@ -344,3 +344,60 @@ class TestSectionPdfEndpoint:
             assert client.get(url).status_code == 503
         finally:
             app.dependency_overrides.clear()
+
+
+class TestDedicatedDisciplineAudits:
+    def test_aeo_manifest_and_rendering(self):
+        rep = _build_test_report(policy_pack="aeo_only", categories=["AI_SEARCH"])
+        manifest = build_publication_manifest(rep, "AEO")
+        ch_ids = [ch["id"] for ch in manifest["chapters"]]
+        assert "ch_aeo_questions" in ch_ids
+        assert "ch_aeo_definitions" in ch_ids
+        assert "ch_aeo_schema" in ch_ids
+        assert "ch_aeo_visibility" in ch_ids
+        assert len(manifest["chapters"]) >= 7
+
+        html = render_adaptive_audit_book_html(rep, report_type="AEO")
+        assert "Question Universe &amp; Search Intent Mapping" in html
+        assert "Direct Definition Passages &amp; Rank-Zero Extraction" in html
+        assert "Structured Data, Rich Results &amp; Entity Graph" in html
+        assert "Observed AI Answer Engine Visibility &amp; Citations" in html
+        assert "Comprehensive Master Audit Index" in html
+        assert "ZERO-FAKE EVIDENCE ATTESTATION" in html
+
+    def test_geo_manifest_and_rendering(self):
+        rep = _build_test_report(policy_pack="geo_only", categories=["GEO"])
+        manifest = build_publication_manifest(rep, "GEO")
+        ch_ids = [ch["id"] for ch in manifest["chapters"]]
+        assert "ch_geo_extractability" in ch_ids
+        assert "ch_geo_inquiries" in ch_ids
+        assert "ch_geo_crawlers" in ch_ids
+        assert "ch_geo_rewrites" in ch_ids
+        assert len(manifest["chapters"]) >= 7
+
+        html = render_adaptive_audit_book_html(rep, report_type="GEO")
+        assert "The 8-Dimension Content Extractability Framework" in html
+        assert "Commercial Buyer Query Extraction Battery" in html
+        assert "AI Crawler Directives &amp; /llms.txt Health" in html
+        assert "Factual Attribution Laboratory &amp; Citable Rewrites" in html
+        assert "Comprehensive Master Audit Index" in html
+        assert "ZERO-FAKE EVIDENCE ATTESTATION" in html
+
+    def test_cro_manifest_and_rendering(self):
+        rep = _build_test_report(policy_pack="cro_only", categories=["UX_CONVERSION"])
+        manifest = build_publication_manifest(rep, "CRO")
+        ch_ids = [ch["id"] for ch in manifest["chapters"]]
+        assert "ch_cro_value_prop" in ch_ids
+        assert "ch_cro_cta" in ch_ids
+        assert "ch_cro_forms" in ch_ids
+        assert "ch_cro_trust" in ch_ids
+        assert len(manifest["chapters"]) >= 7
+
+        html = render_adaptive_audit_book_html(rep, report_type="CRO")
+        assert "Above-the-Fold Messaging &amp; Value Proposition Clarity" in html
+        assert "Call-to-Action (CTA) Hierarchy &amp; Friction Audit" in html
+        assert "Form Optimization, Inputs &amp; Interactive Usability" in html
+        assert "Trust Architecture, Credibility Signals &amp; Risk Reversal" in html
+        assert "Comprehensive Master Audit Index" in html
+        assert "ZERO-FAKE EVIDENCE ATTESTATION" in html
+

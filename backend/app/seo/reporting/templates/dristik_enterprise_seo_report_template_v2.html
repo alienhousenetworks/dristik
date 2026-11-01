@@ -12,19 +12,19 @@
    ========================================================= */
 
 :root {
-  --ink: #172235;
-  --muted: #596579;
-  --brand: #173e73;
-  --brand-light: #eaf1fa;
-  --line: #d8dee8;
+  --ink: #0f172a;
+  --muted: #475569;
+  --brand: #1e3a8a;
+  --brand-light: #f1f5f9;
+  --line: #e2e8f0;
   --paper: #ffffff;
-  --surface: #f5f7fa;
-  --critical: #a51d2d;
-  --high: #b54708;
-  --medium: #8a6100;
-  --low: #356b49;
-  --info: #315d92;
-  --font-body: Arial, Helvetica, sans-serif;
+  --surface: #f8fafc;
+  --critical: #881337;
+  --high: #9a3412;
+  --medium: #334155;
+  --low: #166534;
+  --info: #0369a1;
+  --font-body: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
 }
 
 * {
@@ -35,8 +35,8 @@ html {
   font-family: var(--font-body);
   color: var(--ink);
   background: var(--paper);
-  font-size: 10.5pt;
-  line-height: 1.55;
+  font-size: 10pt;
+  line-height: 1.5;
 }
 
 body {
@@ -46,16 +46,16 @@ body {
 }
 
 p {
-  margin: 0 0 9pt;
+  margin: 0 0 8pt;
 }
 
 ul, ol {
-  margin: 5pt 0 10pt;
-  padding-left: 20pt;
+  margin: 4pt 0 8pt;
+  padding-left: 18pt;
 }
 
 li {
-  margin-bottom: 4pt;
+  margin-bottom: 3pt;
 }
 
 h1, h2, h3, h4 {
@@ -66,23 +66,23 @@ h1, h2, h3, h4 {
 }
 
 h1 {
-  font-size: 29pt;
-  margin: 0 0 16pt;
+  font-size: 26pt;
+  margin: 0 0 14pt;
 }
 
 h2 {
-  font-size: 21pt;
-  margin: 0 0 13pt;
+  font-size: 19pt;
+  margin: 0 0 11pt;
 }
 
 h3 {
-  font-size: 14pt;
-  margin: 18pt 0 7pt;
+  font-size: 13pt;
+  margin: 14pt 0 6pt;
 }
 
 h4 {
-  font-size: 11pt;
-  margin: 12pt 0 5pt;
+  font-size: 10.5pt;
+  margin: 10pt 0 4pt;
 }
 
 a {
@@ -91,7 +91,7 @@ a {
 }
 
 small, .small {
-  font-size: 8.5pt;
+  font-size: 8pt;
   color: var(--muted);
 }
 
@@ -101,29 +101,29 @@ small, .small {
 
 .eyebrow {
   text-transform: uppercase;
-  letter-spacing: 1.6pt;
+  letter-spacing: 1.5pt;
   color: var(--brand);
   font-weight: 700;
-  font-size: 9pt;
+  font-size: 8.5pt;
 }
 
 .rule {
   border: 0;
   border-top: 1px solid var(--line);
-  margin: 15pt 0;
+  margin: 12pt 0;
 }
 
 .section-intro {
-  font-size: 11pt;
+  font-size: 10.5pt;
   color: var(--muted);
   max-width: 650px;
 }
 
 .panel {
   border: 1px solid var(--line);
-  border-radius: 5px;
-  padding: 12pt;
-  margin: 10pt 0;
+  border-radius: 4px;
+  padding: 10pt 12pt;
+  margin: 8pt 0;
   background: #fff;
   break-inside: avoid;
 }
@@ -133,10 +133,10 @@ small, .small {
 }
 
 .plain-english {
-  border-left: 4px solid var(--brand);
+  border-left: 3px solid var(--brand);
   background: var(--brand-light);
-  padding: 10pt 12pt;
-  margin: 10pt 0;
+  padding: 8pt 10pt;
+  margin: 8pt 0;
   break-inside: avoid;
 }
 
@@ -147,26 +147,26 @@ small, .small {
 
 .status {
   display: inline-block;
-  padding: 3pt 6pt;
+  padding: 2.5pt 6pt;
   border: 1px solid var(--line);
   border-radius: 3px;
-  font-size: 8pt;
+  font-size: 7.5pt;
   font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: .3pt;
+  letter-spacing: .4pt;
 }
 
-.status.critical { color: var(--critical); }
-.status.high { color: var(--high); }
-.status.medium { color: var(--medium); }
-.status.low { color: var(--low); }
-.status.info { color: var(--info); }
-.status.passed { color: #15803d; background: #f0fdf4; border-color: #bbf7d0; }
-.status.failed { color: #b91c1c; background: #fef2f2; border-color: #fecaca; }
-.status.sampled { color: #0284c7; background: #f0f9ff; border-color: #bae6fd; }
-.status.not_tested, .status.not-tested { color: #64748b; background: #f8fafc; border-color: #cbd5e1; }
-.status.unavailable { color: #d97706; background: #fffbeb; border-color: #fde68a; }
-.status.inferred { color: #7c3aed; background: #f5f3ff; border-color: #ddd6fe; }
+.status.critical { color: #881337; background: #fff1f2; border-color: #fecdd3; }
+.status.high { color: #9a3412; background: #fff7ed; border-color: #fed7aa; }
+.status.medium { color: #334155; background: #f8fafc; border-color: #cbd5e1; }
+.status.low { color: #166534; background: #f0fdf4; border-color: #bbf7d0; }
+.status.info { color: #0369a1; background: #f0f9ff; border-color: #bae6fd; }
+.status.passed { color: #166534; background: #f0fdf4; border-color: #bbf7d0; }
+.status.failed { color: #881337; background: #fff1f2; border-color: #fecdd3; }
+.status.sampled { color: #0369a1; background: #f0f9ff; border-color: #bae6fd; }
+.status.not_tested, .status.not-tested { color: #475569; background: #f8fafc; border-color: #e2e8f0; }
+.status.unavailable { color: #475569; background: #f8fafc; border-color: #cbd5e1; }
+.status.inferred { color: #4338ca; background: #eef2ff; border-color: #c7d2fe; }
 
 .grid-2 {
   display: grid;
@@ -666,24 +666,24 @@ pre {
   <div class="cover-header">
     <div>
       <div class="cover-brand">DRISTIK</div>
-      <div style="font-size: 8pt; color: #94a3b8; letter-spacing: 0.16em; text-transform: uppercase; margin-top: 3pt;">
-        WEBSITE INTELLIGENCE · ENTERPRISE AUDIT PUBLICATION
+      <div style="font-size: 7.5pt; color: #94a3b8; letter-spacing: 0.18em; text-transform: uppercase; margin-top: 3pt;">
+        ENTERPRISE WEBSITE INTELLIGENCE · C-SUITE AUDIT PUBLICATION
       </div>
     </div>
-    <div class="cover-badge">
-      STRICTLY CONFIDENTIAL // C-SUITE DOSSIER
+    <div class="cover-badge" style="background: rgba(147, 197, 253, 0.1); border-color: rgba(147, 197, 253, 0.3); color: #93c5fd;">
+      STRICTLY CONFIDENTIAL // EXECUTIVE DOSSIER
     </div>
   </div>
 
   <div>
-    <div class="eyebrow" style="color: #38bdf8; margin-bottom: 8pt;">Enterprise SEO Intelligence &amp; Architecture Audit</div>
-    <h1>Comprehensive SEO Audit</h1>
-    <p class="cover-subtitle">
-      Executive commercial alignment, deep technical crawl diagnostics, search demand &amp; intent mapping,
-      page-by-page optimization dossiers, and prioritized 90-day engineering implementation roadmap.
+    <div class="eyebrow" style="color: #93c5fd; margin-bottom: 8pt; letter-spacing: 0.2em;">Enterprise SEO Intelligence &amp; Architecture Audit</div>
+    <h1 style="font-size: 32pt; letter-spacing: -0.02em; margin: 12pt 0 10pt;">Comprehensive SEO Audit</h1>
+    <p class="cover-subtitle" style="color: #cbd5e1; font-size: 11pt; max-width: 620px; line-height: 1.6;">
+      Authoritative technical crawl diagnostics, on-page architecture, search intent reconciliation,
+      and prioritized 90-day engineering implementation roadmap for {{ report.domain }}.
     </p>
 
-    <div class="cover-meta-grid">
+    <div class="cover-meta-grid" style="border-color: #334155;">
       <div class="cover-meta-cell">
         <span class="meta-label">TARGET PROPERTY</span>
         <span class="meta-val">{{ report.domain }}</span>
@@ -694,7 +694,7 @@ pre {
       </div>
       <div class="cover-meta-cell">
         <span class="meta-label">REPORT REFERENCE</span>
-        <span class="meta-val">{{ report.run_id }} · {{ report.report_version | default("v2.0 Enterprise Edition") }}</span>
+        <span class="meta-val">{{ report.run_id }} · {{ report.report_version | default("v2.5 Enterprise Edition") }}</span>
       </div>
       <div class="cover-meta-cell">
         <span class="meta-label">CRAWL SAMPLE RATIO</span>
@@ -702,27 +702,24 @@ pre {
       </div>
       <div class="cover-meta-cell">
         <span class="meta-label">COMPOSITE SEO INDEX</span>
-        <span class="meta-val" style="color: #38bdf8;">
+        <span class="meta-val" style="color: #93c5fd;">
           {{ report.seo_score if report.seo_score is not none else "UNMEASURED" }}/100
           {% if report.grade and report.grade != '—' %}[GRADE {{ report.grade }} · {{ report.grade_label }}]{% endif %}
         </span>
       </div>
       <div class="cover-meta-cell">
         <span class="meta-label">VERIFIED FINDINGS</span>
-        <span class="meta-val">
-          <span style="color: var(--critical);">{{ report.critical_count }} Crit</span> ·
-          <span style="color: var(--high);">{{ report.high_count }} High</span> ·
-          <span style="color: var(--medium);">{{ report.medium_count }} Med</span> ·
-          <span style="color: var(--low);">{{ report.low_count }} Low</span>
+        <span class="meta-val" style="color: #f1f5f9;">
+          {{ report.finding_count | default(0) }} Distinct Issues ({{ report.critical_count | default(0) }} Crit · {{ report.high_count | default(0) }} High)
         </span>
       </div>
     </div>
   </div>
 
-  <div class="cover-footer">
+  <div class="cover-footer" style="border-color: #334155;">
     <div>CONFIDENTIAL &amp; PROPRIETARY // PREPARED EXCLUSIVELY FOR {{ report.domain | upper }}</div>
-    <div style="font-weight: 700; color: #cbd5e1;">ZERO-FABRICATION EVIDENCE POLICY // STATUS EXPLICIT IN REPORT</div>
-    <div>PAGE 1 (COVER) // UNNUMBERED</div>
+    <div style="font-weight: 600; color: #94a3b8;">ZERO-FABRICATION EVIDENCE GOVERNANCE // AUDITED EVIDENCE STORE</div>
+    <div>PAGE 1 // COVER</div>
   </div>
 </section>
 
@@ -989,9 +986,9 @@ pre {
     </tbody>
   </table>
 
-  <div class="panel" style="border-left: 4px solid #d97706; background: #fffbeb; margin: 12pt 0;">
-    <strong style="color: #92400e;">Distinguishing Documented Technical Risk vs. Measured Commercial Impact:</strong>
-    <p style="margin: 4pt 0 0; font-size: 9pt; color: #78350f;">
+  <div class="panel" style="border-left: 4px solid #334155; background: #f8fafc; border: 1px solid #e2e8f0; margin: 12pt 0;">
+    <strong style="color: #0f172a;">Distinguishing Documented Technical Risk vs. Measured Commercial Impact:</strong>
+    <p style="margin: 4pt 0 0; font-size: 9pt; color: #475569;">
       Technical, metadata, and structured data risks in this report are verified directly from crawled HTTP responses and DOM markup across the {{ report.pages_crawled }} inspected URL(s). Because Google Search Console ({{ report.gsc_status }}) and GA4 ({{ report.analytics_status }}) are not connected, direct organic traffic, keyword ranking positions, and revenue attribution are marked <strong>UNAVAILABLE</strong> rather than estimated or scored as zero.
     </p>
   </div>
@@ -1325,8 +1322,8 @@ pre {
   </div>
   {% else %}
   {% if section.has_failed_metrics %}
-  <div class="empty-state" style="margin-top: 12pt; padding: 10pt 14pt; background: #fffbeb; border: 1px solid #fef3c7; border-left: 4px solid #f59e0b; border-radius: 4px; font-size: 9pt; color: #92400e;">
-    <strong>Diagnostic Threshold Failure Identified:</strong> One or more tests in this chapter failed target performance/infrastructure thresholds (see metrics matrix above). Dedicated finding card was omitted to avoid redundant defect rollups, but remediation is required.
+  <div class="empty-state" style="margin-top: 12pt; padding: 10pt 14pt; background: #f8fafc; border: 1px solid #e2e8f0; border-left: 4px solid #475569; border-radius: 4px; font-size: 9pt; color: #334155;">
+    <strong style="color: #0f172a;">Diagnostic Threshold Failure Identified:</strong> One or more tests in this chapter failed target performance/infrastructure thresholds (see metrics matrix above). Dedicated finding card was omitted to avoid redundant defect rollups, but remediation is required.
   </div>
   {% else %}
   <div class="empty-state" style="margin-top: 12pt; padding: 10pt 14pt; background: #f8fafc; border: 1px dashed #cbd5e1; border-radius: 4px; font-size: 9pt;">

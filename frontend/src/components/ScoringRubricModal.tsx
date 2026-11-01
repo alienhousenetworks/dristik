@@ -207,15 +207,15 @@ export function ScoringRubricModal({ isOpen, onClose }: ScoringRubricModalProps)
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
                   <div className="p-3 rounded-lg bg-paper-50 dark:bg-ink-950 border border-line space-y-1">
                     <span className="font-bold text-ink block">Google Discoverability</span>
-                    <p className="text-[11px] text-ink-500">45% Technical + 35% On-Page + 20% Schema. Evaluates organic crawling and indexing posture.</p>
+                    <p className="text-[11px] text-ink-500">40% Technical + 30% On-Page + 30% Schema. Evaluates organic crawling, DOM hierarchy, and structured indexing posture.</p>
                   </div>
                   <div className="p-3 rounded-lg bg-paper-50 dark:bg-ink-950 border border-line space-y-1">
                     <span className="font-bold text-ink block">Human Experience</span>
-                    <p className="text-[11px] text-ink-500">40% UX/CRO + 35% Content Readability + 25% Trust. Evaluates engagement and conversion friction.</p>
+                    <p className="text-[11px] text-ink-500">50% UX/Conversion + 50% Content Readability. Evaluates user friction, CTA clarity, and copy comprehension.</p>
                   </div>
                   <div className="p-3 rounded-lg bg-paper-50 dark:bg-ink-950 border border-line space-y-1">
                     <span className="font-bold text-ink block">AI Search Readiness</span>
-                    <p className="text-[11px] text-ink-500">50% GEO Extractability + 50% AI Search Visibility (stays blank if live engine monitor was not run).</p>
+                    <p className="text-[11px] text-ink-500">60% GEO Extractability + 40% Question Support Points (or 100% GEO baseline). Live AI Visibility tracked separately.</p>
                   </div>
                 </div>
               </div>

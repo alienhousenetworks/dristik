@@ -13,7 +13,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from app.audit.regression_engine import get_regression_engine
-from app.identity.authorizer import UserIdentity
+from app.identity.authorizer import Authorizer, UserIdentity
 from app.identity.deps import get_current_user, require_permission
 
 router = APIRouter(prefix="/workspaces", tags=["Enterprise Workspaces"])
@@ -39,8 +39,10 @@ _DOMAIN_RUNS_STORE = {}
 
 def _owned_workspace(workspace_id: str, user: UserIdentity) -> dict:
     workspace = _WORKSPACES_STORE.get(workspace_id)
-    if not workspace or workspace.get("org_id") != user.org_id:
+    if not workspace:
         raise HTTPException(status_code=404, detail="Workspace not found.")
+    if workspace.get("org_id") != user.org_id and not Authorizer.is_system(user):
+        raise HTTPException(status_code=403, detail="Cross-tenant workspace access forbidden")
     return workspace
 
 

@@ -774,9 +774,26 @@ class PlainEnglishEngine:
             developer_instructions = raw_dev
 
         # Testable Acceptance Criteria
-        acceptance_val = cls._clean_internal_text(_get_val(finding, "acceptance_criteria") or _get_val(finding, "validation_criteria"))
-        if not acceptance_val:
-            acceptance_val = f"Endpoint resolves according to {agent.name} standards with zero {title.lower()} defects."
+        raw_acceptance = cls._clean_internal_text(_get_val(finding, "acceptance_criteria") or _get_val(finding, "validation_criteria"))
+        title_l = str(title).lower()
+        if raw_acceptance and "with zero " not in raw_acceptance and "according to standard" not in raw_acceptance:
+            acceptance_val = raw_acceptance
+        elif any(k in title_l for k in ["meta description", "meta desc", "description"]):
+            acceptance_val = "All applicable indexable pages declare a non-empty, unique meta description within length policy (50–160 characters)."
+        elif any(k in title_l for k in ["alt", "image"]):
+            acceptance_val = "All informative <img> elements declare descriptive alt text; decorative images correctly declare alt=\"\"."
+        elif any(k in title_l for k in ["canonical", "rel=canonical"]):
+            acceptance_val = "Target page declares a valid self-referential or intended rel=canonical URL that resolves with HTTP 200."
+        elif any(k in title_l for k in ["schema", "json-ld", "structured data"]):
+            acceptance_val = "Target page includes a valid JSON-LD entity conforming to schema.org standards with zero syntax errors in Google Rich Results Test."
+        elif any(k in title_l for k in ["cta", "call to action", "call-to-action", "custom build"]):
+            acceptance_val = "CTA text and target destination are clear, unique, and align with page-specific conversion intent."
+        elif any(k in title_l for k in ["h1", "heading"]):
+            acceptance_val = "Each page contains a single clear H1 tag accurately communicating the primary service or topic."
+        elif any(k in title_l for k in ["hsts", "strict-transport-security"]):
+            acceptance_val = "Strict-Transport-Security header is served over HTTPS with max-age >= 31536000 and includeSubDomains."
+        else:
+            acceptance_val = f"Endpoint resolves with HTTP 200 and passes automated {category} compliance validation."
 
         # Verification steps
         ver_steps = _get_val(finding, "verification_steps")
@@ -873,13 +890,15 @@ class PlainEnglishEngine:
 
         # Responsible Role
         responsible_role = _get_val(finding, "responsible_role") or _get_val(finding, "owner")
-        if not responsible_role or responsible_role in ("Engineering", "default"):
+        if not responsible_role or responsible_role in ("Engineering", "default", "Analytics Owner"):
             title_l = title.lower()
-            if any(k in title_l for k in ["alt", "heading", "h1", "h2", "title tag", "meta description", "thin copy", "content"]):
+            if any(k in title_l for k in ["cta", "call to action", "call-to-action", "custom build", "conversion flow", "value proposition", "messaging"]):
+                responsible_role = "CRO Specialist"
+            elif any(k in title_l for k in ["alt", "heading", "h1", "h2", "title tag", "meta description", "thin copy", "content", "byline", "author"]):
                 responsible_role = "Content Editor"
             elif any(k in title_l for k in ["schema", "json-ld", "keyword", "sitemap", "robots.txt", "canonical", "serp", "open graph"]):
                 responsible_role = "SEO Specialist"
-            elif any(k in title_l for k in ["analytics", "conversion", "ga4", "gsc", "tracking"]):
+            elif any(k in title_l for k in ["ga4", "gsc", "search console", "tag manager", "tracking code", "gtag", "telemetry"]):
                 responsible_role = "Analytics Owner"
             else:
                 responsible_role = "Developer"
@@ -906,12 +925,16 @@ class PlainEnglishEngine:
         else:
             if responsible_role == "Developer":
                 dependencies = ["Codebase template access", "Deployment staging pipeline"]
+            elif responsible_role == "CRO Specialist":
+                dependencies = ["CMS editor or landing page template privileges"]
             elif responsible_role == "Content Editor":
                 dependencies = ["CMS editor privileges"]
             elif responsible_role == "SEO Specialist":
                 dependencies = ["DNS / Server header control or CMS SEO plugin access"]
-            else:
+            elif responsible_role == "Analytics Owner":
                 dependencies = ["Analytics administrative access"]
+            else:
+                dependencies = ["CMS or template editor privileges"]
 
         # Priority Rationale
         priority_rationale = cls._clean_internal_text(_get_val(finding, "priority_rationale") or _get_val(finding, "severity_justification"))
@@ -1315,49 +1338,49 @@ def render_section_business_callout(exp: SectionBusinessExplanation) -> str:
     Visually distinct, high contrast, and print-ready.
     """
     if exp.evidence_status == "DEFECTS_FOUND":
-        accent = "#ea580c"  # Amber/Orange
-        badge_bg = "#fff7ed"
-        badge_color = "#c2410c"
+        accent = "#334155"
+        badge_bg = "#f1f5f9"
+        badge_color = "#991b1b"
         badge_text = "ISSUES REQUIRING ATTENTION"
     elif exp.evidence_status == "SAMPLE_TESTED_CLEAN":
-        accent = "#16a34a"  # Green
-        badge_bg = "#f0fdf4"
-        badge_color = "#15803d"
+        accent = "#334155"
+        badge_bg = "#f1f5f9"
+        badge_color = "#166534"
         badge_text = "SAMPLE PASSED // NO DEFECTS RECORDED"
     else:
-        accent = "#64748b"  # Slate/Gray
-        badge_bg = "#f8fafc"
+        accent = "#334155"
+        badge_bg = "#f1f5f9"
         badge_color = "#475569"
         badge_text = "NOT TESTED // INTEGRATION REQUIRED"
 
     return f"""
-    <div class="business-explanation-card report-avoid-break" style="border-left: 4px solid {accent}; margin: 16px 0 20px 0; padding: 14px 18px; background: #ffffff; border-radius: 4px; border-top: 1px solid #e2e8f0; border-right: 1px solid #e2e8f0; border-bottom: 1px solid #e2e8f0; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-            <span style="font-family: ui-monospace, monospace; font-size: 7.5pt; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; color: {accent};">
+    <div class="business-explanation-card report-avoid-break" style="border-left: 3px solid {accent}; margin: 12px 0 16px 0; padding: 12px 16px; background: #f8fafc; border-radius: 3px; border-top: 1px solid #e2e8f0; border-right: 1px solid #e2e8f0; border-bottom: 1px solid #e2e8f0;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+            <span style="font-family: ui-monospace, monospace; font-size: 7.5pt; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase; color: #334155;">
                 WHAT THIS MEANS FOR YOUR BUSINESS
             </span>
-            <span style="font-family: ui-monospace, monospace; font-size: 7pt; font-weight: 700; padding: 2px 8px; border-radius: 3px; background: {badge_bg}; color: {badge_color};">
+            <span style="font-family: ui-monospace, monospace; font-size: 7pt; font-weight: 700; padding: 2px 6px; border-radius: 2px; background: {badge_bg}; color: {badge_color};">
                 {badge_text}
             </span>
         </div>
-        <p style="font-size: 10pt; line-height: 1.55; color: #1e293b; margin: 0 0 8px 0; font-weight: 500;">
+        <p style="font-size: 9.5pt; line-height: 1.5; color: #0f172a; margin: 0 0 6px 0; font-weight: 500;">
             {_esc(exp.plain_english_subject)}
         </p>
-        <div style="margin: 6px 0 10px 0; font-size: 8.5pt; color: #334155; line-height: 1.5;">
+        <div style="margin: 4px 0 8px 0; font-size: 8.5pt; color: #334155; line-height: 1.45;">
             <strong style="color: #0f172a;">Why this matters to your bottom line:</strong> {_esc(exp.why_reader_should_care)}
         </div>
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 8px; padding-top: 8px; border-top: 1px solid #f1f5f9;">
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 6px; padding-top: 6px; border-top: 1px solid #e2e8f0;">
             <div>
-                <strong style="font-size: 7.5pt; font-family: ui-monospace, monospace; text-transform: uppercase; color: #64748b; display: block; margin-bottom: 2px;">Key Observation:</strong>
-                <span style="font-size: 8.5pt; color: #0f172a; line-height: 1.45;">{_esc(exp.key_result)}</span>
+                <strong style="font-size: 7pt; font-family: ui-monospace, monospace; text-transform: uppercase; color: #64748b; display: block; margin-bottom: 2px;">Key Observation:</strong>
+                <span style="font-size: 8.5pt; color: #0f172a; line-height: 1.4;">{_esc(exp.key_result)}</span>
             </div>
             <div>
-                <strong style="font-size: 7.5pt; font-family: ui-monospace, monospace; text-transform: uppercase; color: #64748b; display: block; margin-bottom: 2px;">Recommended Action:</strong>
-                <span style="font-size: 8.5pt; color: #0f172a; line-height: 1.45;">{_esc(exp.recommended_action)}</span>
+                <strong style="font-size: 7pt; font-family: ui-monospace, monospace; text-transform: uppercase; color: #64748b; display: block; margin-bottom: 2px;">Recommended Action:</strong>
+                <span style="font-size: 8.5pt; color: #0f172a; line-height: 1.4;">{_esc(exp.recommended_action)}</span>
             </div>
         </div>
-        <div style="margin-top: 8px; padding-top: 6px; border-top: 1px dashed #e2e8f0; font-size: 8pt; color: #64748b; line-height: 1.4;">
-            <strong style="font-family: ui-monospace, monospace; font-size: 7pt; color: #475569;">EVIDENCE SCOPE &amp; LIMITATIONS:</strong> {_esc(exp.evidence_status_note)}
+        <div style="margin-top: 6px; padding-top: 5px; border-top: 1px dotted #cbd5e1; font-size: 7.5pt; color: #64748b; line-height: 1.35;">
+            <strong style="font-family: ui-monospace, monospace; font-size: 7pt; color: #475569;">EVIDENCE SCOPE:</strong> {_esc(exp.evidence_status_note)}
         </div>
     </div>
     """

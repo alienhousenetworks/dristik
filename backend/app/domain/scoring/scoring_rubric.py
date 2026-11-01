@@ -76,22 +76,25 @@ SCORING_RUBRIC_V4: Dict[str, Any] = {
         {
             "id": "google_perspective",
             "name": "Google Discoverability",
-            "description": "Blended view of Technical SEO (45%), On-Page SEO (35%), and Schema Architecture (20%). Evaluates indexation and organic search readiness.",
-            "formula": "0.45 * Technical + 0.35 * OnPage + 0.20 * Schema"
+            "description": "Blended view of Technical SEO (40%), On-Page SEO (30%), and Schema Architecture (30%). Evaluates organic crawlability, semantic markup, and indexation posture.",
+            "formula": "0.40 * Technical + 0.30 * OnPage + 0.30 * Schema"
         },
         {
             "id": "human_perspective",
             "name": "Human Experience",
-            "description": "Blended view of UX & Conversion (40%), Content Readability (35%), and Trust & Security (25%). Evaluates real buyer engagement and trust.",
-            "formula": "0.40 * UX + 0.35 * Content + 0.25 * Trust"
+            "description": "Blended view of UX & Conversion (50%) and Content Readability (50%). Evaluates user journey clarity, value proposition comprehension, and conversion friction.",
+            "formula": "0.50 * UX + 0.50 * Content"
         },
         {
             "id": "ai_perspective",
             "name": "AI Search Readiness",
-            "description": "Blended view of On-Page GEO extractability (50%) and live AI Visibility (50% when measured; otherwise on-page only). Evaluates citation readiness in generative answers.",
-            "formula": "0.50 * GEO + 0.50 * AIVisibility (or 1.0 * GEO if visibility unmeasured)"
+            "description": "Blended view of On-Page GEO extractability (60%) and deterministic commercial question support (40%). Live AI Search Visibility is tracked empirically as a separate citation rate.",
+            "formula": "0.60 * GEO + 0.40 * QuestionSupport (or 1.0 * GEO fallback)"
         }
     ],
+    # Note: 'five_pillars' is retained strictly as a backward-compatibility schema alias
+    # for legacy clients and regression tests (test_confidence_gating.py:12).
+    # The authoritative categories are 'eight_categories' above.
     "five_pillars": [
         {
             "id": "search_seo",

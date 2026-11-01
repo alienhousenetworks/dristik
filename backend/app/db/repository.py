@@ -19,12 +19,13 @@ from app.core.config import settings
 from app.domain.enums import AnalysisStage, MetricProvenanceState
 from app.domain.models import AnalysisRun, Claim, Finding, PageEvidence
 from app.evidence.models import Evidence
-from app.db.models import (
+from app.db.models.audit import (
     EvidenceTraceItem,
     ScoreExplanation,
     ScoreExplanationDimension,
     StageCheckpoint,
 )
+from app.core.constants import FORBIDDEN_TENANT_IDENTIFIERS
 from app.db.schema import SQLITE_SCHEMA
 
 logger = logging.getLogger(__name__)
@@ -45,8 +46,21 @@ class AuditRepository:
         os.makedirs(os.path.dirname(os.path.abspath(self.db_path)), exist_ok=True)
         with self._lock:
             with sqlite3.connect(self.db_path, check_same_thread=False) as conn:
+                self._migrate_sqlite(conn)
                 conn.executescript(SQLITE_SCHEMA)
                 conn.commit()
+
+    def _migrate_sqlite(self, conn: sqlite3.Connection) -> None:
+        """Applies backward-compatible column migrations for existing SQLite databases."""
+        try:
+            cur = conn.execute("PRAGMA table_info(audits)")
+            columns = {row[1] for row in cur.fetchall()}
+            if columns and "workspace_id" not in columns:
+                conn.execute("ALTER TABLE audits ADD COLUMN workspace_id TEXT")
+                conn.execute("CREATE INDEX IF NOT EXISTS idx_audits_org_workspace ON audits(org_id, workspace_id)")
+        except Exception as e:
+            logger.warning(f"Failed to check or alter audits table schema: {e}")
+
 
     def _get_conn(self) -> sqlite3.Connection:
         conn = sqlite3.connect(self.db_path, check_same_thread=False)
@@ -84,17 +98,18 @@ class AuditRepository:
 
         sql = """
         INSERT INTO audits (
-            analysis_id, org_id, user_id, website_url, domain, status, progress,
+            analysis_id, org_id, workspace_id, user_id, website_url, domain, status, progress,
             stage, max_pages, score_overall, score_human, score_google,
             score_ai_readiness, score_ai_visibility, score_band, started_at,
             completed_at, input_hash, output_hash, raw_report_json, error_message
         ) VALUES (
-            :analysis_id, :org_id, :user_id, :website_url, :domain, :status, :progress,
+            :analysis_id, :org_id, :workspace_id, :user_id, :website_url, :domain, :status, :progress,
             :stage, :max_pages, :score_overall, :score_human, :score_google,
             :score_ai_readiness, :score_ai_visibility, :score_band, :started_at,
             :completed_at, :input_hash, :output_hash, :raw_report_json, :error_message
         )
         ON CONFLICT(analysis_id) DO UPDATE SET
+            workspace_id = COALESCE(excluded.workspace_id, audits.workspace_id),
             status = excluded.status,
             progress = excluded.progress,
             stage = excluded.stage,
@@ -113,6 +128,7 @@ class AuditRepository:
         params = {
             "analysis_id": run.analysis_id,
             "org_id": run.org_id,
+            "workspace_id": getattr(run, "workspace_id", None),
             "user_id": user_id_val,
             "website_url": run.website_url,
             "domain": domain,
@@ -171,33 +187,50 @@ class AuditRepository:
                         conn.executemany(finding_sql, finding_rows)
                 conn.commit()
 
-    def get_run(self, analysis_id: str) -> Optional[Dict[str, Any]]:
-        """Fetches an audit record by analysis_id."""
-        sql = "SELECT * FROM audits WHERE analysis_id = ?"
-        with self._lock:
-            with self._get_conn() as conn:
-                cur = conn.execute(sql, (analysis_id,))
-                row = cur.fetchone()
-                return dict(row) if row else None
-
-    def list_runs(self, org_id: Optional[str] = None, limit: int = 50) -> List[Dict[str, Any]]:
-        """Lists recent audit runs, optionally filtered by org_id."""
+    def get_run(self, analysis_id: str, org_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
+        """Fetches an audit record by analysis_id, optionally verifying org_id ownership."""
         with self._lock:
             with self._get_conn() as conn:
                 if org_id:
                     cur = conn.execute(
-                        "SELECT * FROM audits WHERE org_id = ? ORDER BY created_at DESC LIMIT ?",
-                        (org_id, limit),
+                        "SELECT * FROM audits WHERE analysis_id = ? AND org_id = ?",
+                        (analysis_id, org_id),
+                    )
+                else:
+                    cur = conn.execute("SELECT * FROM audits WHERE analysis_id = ?", (analysis_id,))
+                row = cur.fetchone()
+                return dict(row) if row else None
+
+    def list_runs(
+        self,
+        org_id: str,
+        workspace_id: Optional[str] = None,
+        limit: int = 50,
+    ) -> List[Dict[str, Any]]:
+        """Lists recent audit runs strictly partitioned by org_id."""
+        if not org_id or not isinstance(org_id, str) or not org_id.strip() or org_id.strip() in ("org_default", "default"):
+            raise ValueError("Tenant org_id is required and non-empty for list_runs; unscoped listing or 'org_default' is forbidden.")
+
+        clean_org_id = org_id.strip()
+        with self._lock:
+            with self._get_conn() as conn:
+                if workspace_id:
+                    cur = conn.execute(
+                        "SELECT * FROM audits WHERE org_id = ? AND workspace_id = ? ORDER BY created_at DESC LIMIT ?",
+                        (clean_org_id, workspace_id, limit),
                     )
                 else:
                     cur = conn.execute(
-                        "SELECT * FROM audits ORDER BY created_at DESC LIMIT ?",
-                        (limit,),
+                        "SELECT * FROM audits WHERE org_id = ? ORDER BY created_at DESC LIMIT ?",
+                        (clean_org_id, limit),
                     )
                 return [dict(r) for r in cur.fetchall()]
 
-    def delete_run(self, analysis_id: str, org_id: Optional[str] = None) -> bool:
+    def delete_run(self, analysis_id: str, org_id: str) -> bool:
         """Deletes one audit and its checkpoints, pages, evidence, claims, and findings."""
+        if not org_id or not isinstance(org_id, str) or not org_id.strip() or org_id.strip() in ("org_default", "default"):
+            raise ValueError("Tenant org_id is required to delete an audit run; unauthenticated deletion forbidden.")
+        clean_org_id = org_id.strip()
         child_tables = (
             "audit_checkpoints",
             "audit_pages",
@@ -209,16 +242,15 @@ class AuditRepository:
         with self._lock:
             with self._get_conn() as conn:
                 conn.execute("PRAGMA foreign_keys = ON")
-                if org_id:
-                    owned = conn.execute(
-                        "SELECT 1 FROM audits WHERE analysis_id = ? AND org_id = ?",
-                        (analysis_id, org_id),
-                    ).fetchone()
-                    if not owned:
-                        return False
+                owned = conn.execute(
+                    "SELECT 1 FROM audits WHERE analysis_id = ? AND org_id = ?",
+                    (analysis_id, clean_org_id),
+                ).fetchone()
+                if not owned:
+                    return False
                 for table in child_tables:
                     conn.execute(f"DELETE FROM {table} WHERE analysis_id = ?", (analysis_id,))
-                cur = conn.execute("DELETE FROM audits WHERE analysis_id = ?", (analysis_id,))
+                cur = conn.execute("DELETE FROM audits WHERE analysis_id = ? AND org_id = ?", (analysis_id, clean_org_id))
                 conn.commit()
                 return cur.rowcount > 0
 

@@ -18,14 +18,18 @@ class MissionDirector:
     def create_mission(
         self,
         target_url: str,
+        org_id: str,
+        workspace_id: str,
         audit_type: str = "standard_growth",
         industry: Optional[str] = None,
         competitors: Optional[List[str]] = None,
         max_pages: Optional[int] = None,
         budget_usd: Optional[float] = None,
-        org_id: str = "org_default",
-        workspace_id: str = "ws_default"
     ) -> MissionState:
+        if not org_id or not isinstance(org_id, str) or not org_id.strip() or org_id.strip() in ("org_default", "default"):
+            raise ValueError(f"Valid tenant org_id required for mission; '{org_id}' is forbidden.")
+        if not workspace_id or not isinstance(workspace_id, str) or not workspace_id.strip() or workspace_id.strip() == "ws_default":
+            raise ValueError(f"Valid workspace_id required for mission; '{workspace_id}' is forbidden.")
         parsed = urlparse(target_url)
         domain = parsed.netloc.lower()
         if ":" in domain:

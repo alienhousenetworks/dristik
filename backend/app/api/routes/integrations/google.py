@@ -9,7 +9,7 @@ from typing import Dict, Any, Optional
 from pydantic import BaseModel
 from app.core.config import settings
 from app.identity.authorizer import UserIdentity
-from app.identity.deps import get_current_user, get_current_user_optional
+from app.identity.deps import get_current_user, get_current_user_optional, require_org_context
 from app.integrations.google_connectors import (
     gsc_connector,
     ga4_connector,
@@ -35,12 +35,12 @@ class GscConnectRequest(BaseModel):
 
 
 @router.get("/status")
-def get_integrations_status(user: Optional[UserIdentity] = Depends(get_current_user_optional)) -> Dict[str, Any]:
+def get_integrations_status(user: UserIdentity = Depends(get_current_user)) -> Dict[str, Any]:
     """Returns provider status for the signed-in organization."""
     from app.connectors.store import connector_store
     from app.domain.enums import ConnectorType, ConnectorHealthStatus
 
-    org_id = user.org_id if user else "org_default"
+    org_id = require_org_context(user)
     integrations = connector_store.list_integrations(org_id)
     ga4_integ = [i for i in integrations if i.provider == ConnectorType.GOOGLE_ANALYTICS_4]
     ga4_connected = any(i.status == ConnectorHealthStatus.CONNECTED for i in ga4_integ)
@@ -157,7 +157,7 @@ def connect_gsc(payload: GscConnectRequest):
 
 
 @router.post("/ga4/connect")
-def connect_ga4(payload: Ga4ConnectRequest, user: Optional[UserIdentity] = Depends(get_current_user_optional)):
+def connect_ga4(payload: Ga4ConnectRequest, user: UserIdentity = Depends(get_current_user)):
     """Configures GA4 property ID with format verification across OAuth, service account, and environment credentials."""
     if not payload.property_id or not payload.property_id.strip():
         raise HTTPException(status_code=400, detail="property_id is required")
@@ -172,7 +172,7 @@ def connect_ga4(payload: Ga4ConnectRequest, user: Optional[UserIdentity] = Depen
     from app.domain.enums import ConnectorType, ConnectorHealthStatus
     from app.integrations.google_api import query_ga4_with_token, query_ga4, refresh_google_access_token
 
-    org_id = user.org_id if user else "org_default"
+    org_id = require_org_context(user)
     integrations = connector_store.list_integrations(org_id)
     ga4_integs = [i for i in integrations if i.provider in (ConnectorType.GOOGLE_ANALYTICS_4, ConnectorType.GOOGLE_ANALYTICS)]
 

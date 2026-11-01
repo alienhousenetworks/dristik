@@ -92,13 +92,16 @@ def _project(user: Optional[UserIdentity], requested: Optional[str]) -> str:
 
     A caller-supplied project id cannot select another organization's records.
     """
-    if user is None or not user.org_id:
+    if user is None or not getattr(user, "org_id", None):
         raise HTTPException(status_code=401, detail="Sign in to continue.")
-    if requested and requested != user.org_id:
-        if not Authorizer.can_access_org(user, requested):
-            raise HTTPException(status_code=404, detail="Project not found.")
+    org_id = user.org_id
+    if not org_id or org_id in ("org_default", "default"):
+        raise HTTPException(status_code=403, detail="Valid organization context required.")
+    if requested and requested != org_id:
+        if not Authorizer.is_system(user) and not Authorizer.can_access_org(user, requested):
+            raise HTTPException(status_code=403, detail="Cross-tenant access forbidden")
         return requested
-    return user.org_id
+    return org_id
 
 
 def _guard(exc: Exception) -> None:

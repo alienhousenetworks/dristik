@@ -14,6 +14,8 @@ async def test_mission_director_decomposition():
     director = MissionDirector()
     mission = director.create_mission(
         target_url="https://example.com",
+        org_id="test_org_01",
+        workspace_id="ws_test_01",
         audit_type="deep_enterprise",
         industry="saas",
         max_pages=15
@@ -51,7 +53,7 @@ async def test_state_graph_execution_flow():
 
     compiled = graph.compile()
     director = MissionDirector()
-    initial_state = director.create_mission("https://test.com")
+    initial_state = director.create_mission("https://test.com", org_id="test_org_01", workspace_id="ws_test_01")
 
     final_state = await compiled.astream(initial_state)
     assert final_state.status == AnalysisStage.COMPLETED

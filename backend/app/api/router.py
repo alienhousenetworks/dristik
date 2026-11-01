@@ -40,6 +40,7 @@ from app.core.security.enterprise_audit_logger import router as audit_logs_route
 from app.intelligence.citations.live import router as live_ai_citation_router
 from app.remediation.sync_engine import router as developer_sync_router
 from app.reports.pdf_generator import router as reports_router
+from app.api.routes.audits.reports_progressive import router as reports_progressive_router
 from app.tenancy.white_label import router as white_label_router
 
 # Mounted at both /api/v1 and /api.
@@ -78,6 +79,7 @@ _PREFIXED_ROUTERS = (
     live_ai_citation_router,
     developer_sync_router,
     reports_router,
+    reports_progressive_router,
     aeo_reports_router,
     audit_logs_router,
     white_label_router,

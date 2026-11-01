@@ -33,10 +33,10 @@ def reprocess():
     conn.row_factory = sqlite3.Row
     cur = conn.cursor()
 
-    cur.execute("SELECT analysis_id, domain, raw_report_json FROM audits WHERE analysis_id = 'run_529ca7cc31'")
+    cur.execute("SELECT analysis_id, domain, raw_report_json FROM audits WHERE analysis_id = 'run_244918d08c' OR domain LIKE '%alienhouse%' LIMIT 1")
     row = cur.fetchone()
     if not row:
-        print("ERROR: run_529ca7cc31 not found in database!")
+        print("ERROR: alienhouse audit record not found in database!")
         return
 
     print(f"Loaded audit record: {row['analysis_id']} for domain: {row['domain']}")
@@ -89,8 +89,8 @@ def reprocess():
     score_val = certified_report.scores.overall_score
     updated_json = certified_report.model_dump_json()
     cur.execute(
-        "UPDATE audits SET raw_report_json = ?, score_overall = ? WHERE analysis_id = 'run_529ca7cc31'",
-        (updated_json, score_val),
+        "UPDATE audits SET raw_report_json = ?, score_overall = ? WHERE analysis_id = ?",
+        (updated_json, score_val, row["analysis_id"]),
     )
     conn.commit()
     conn.close()

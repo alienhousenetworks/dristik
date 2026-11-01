@@ -16,26 +16,6 @@ class TenantManager:
         self._projects: Dict[str, Project] = {}
         self._snapshots: Dict[str, MissionSnapshot] = {}
 
-        # Default system organization for single-tenant / local development
-        default_org = Organization(
-            org_id="org_default",
-            name="Default Organization",
-            slug="default-org",
-            plan="enterprise",
-            data_residency=DataResidency.GLOBAL,
-            allowed_domains=["*"],
-            budget_limit_usd=1000.0
-        )
-        self._orgs[default_org.org_id] = default_org
-
-        default_ws = Workspace(
-            workspace_id="ws_default",
-            org_id="org_default",
-            name="Default Workspace",
-            slug="default-ws"
-        )
-        self._workspaces[default_ws.workspace_id] = default_ws
-
     def register_organization(
         self,
         name: str,

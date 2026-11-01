@@ -346,7 +346,7 @@ async def test_end_to_end_orchestration(monkeypatch):
 
     monkeypatch.setattr(ModelRouter, "generate_structured", AsyncMock(side_effect=fake_structured))
 
-    run = orchestrator.create_run("https://dristik-demo.ai")
+    run = orchestrator.create_run("https://dristik-demo.ai", org_id="test_org_01")
     assert run.status.value == "queued"
     
     # Execute analysis pipeline

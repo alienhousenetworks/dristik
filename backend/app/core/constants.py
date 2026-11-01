@@ -6,3 +6,7 @@ MAX_REDIRECT_HOPS = 5
 API_PREFIX = "/api/v1"
 JWT_ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24
+
+# Shared tenant security invariants: forbidden default and fallback identifiers
+FORBIDDEN_TENANT_IDENTIFIERS = {"org_default", "ws_default", "default"}
+

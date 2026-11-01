@@ -569,12 +569,43 @@ class AgenticChapterSynthesizer:
             recommended_action = "Maintain continuous automated monitoring surveillance to prevent configuration regressions."
 
         # Technical Lens: Mechanics Explanation
-        discipline = "Generative Engine Optimization (GEO)" if is_geo else "Technical Search Engine Optimization (SEO)"
-        mechanics = (
-            f"{agent_role} enforces strict {discipline} standards across evaluated assets. "
-            f"The evaluation examines machine discoverability, semantic entity coherence, and server response fidelity. "
-            f"Zero speculative metrics are assumed; unmeasured dimensions remain explicitly designated as DATA_UNAVAILABLE."
-        )
+        sec_l = f"{sec_title} {agent_role} {agent_id}".lower()
+        if any(k in sec_l for k in ["image", "media", "webp", "alt"]):
+            mechanics = (
+                f"{agent_role} inspects image compression formats (WebP/AVIF), responsive picture tags, "
+                f"and descriptive alt attributes for accessibility and Google Image search indexation."
+            )
+        elif any(k in sec_l for k in ["crawl", "index", "robot", "sitemap", "redirect", "status", "canonical"]):
+            mechanics = (
+                f"{agent_role} evaluates HTTP response status codes, robots.txt crawl permissions, "
+                f"canonical link tag consistency, and internal hyperlink graph traversal across target endpoints."
+            )
+        elif any(k in sec_l for k in ["speed", "vital", "ttfb", "lcp", "performance", "latency"]):
+            mechanics = (
+                f"{agent_role} measures server response latency (TTFB), Largest Contentful Paint (LCP), "
+                f"and layout stability (CLS) against established Google Core Web Vitals performance thresholds."
+            )
+        elif any(k in sec_l for k in ["schema", "structured data", "json-ld", "entity", "semantic"]):
+            mechanics = (
+                f"{agent_role} validates JSON-LD entity graph syntax, schema.org vocabulary conformance, "
+                f"and Google Rich Results feature eligibility across evaluated templates."
+            )
+        elif any(k in sec_l for k in ["cro", "conversion", "strategy", "cta", "business"]):
+            mechanics = (
+                f"{agent_role} assesses call-to-action visibility, value proposition clarity, "
+                f"and friction points along primary visitor conversion pathways."
+            )
+        elif any(k in sec_l for k in ["security", "https", "hsts", "header", "ssl"]):
+            mechanics = (
+                f"{agent_role} audits TLS protocol encryption, Strict-Transport-Security (HSTS), "
+                f"and Content Security Policy headers to ensure compliant transport security."
+            )
+        else:
+            discipline = "Generative Engine Optimization (GEO)" if is_geo else "Technical Search Engine Optimization (SEO)"
+            mechanics = (
+                f"{agent_role} audits {sec_title} against objective {discipline} standards. "
+                f"Unmeasured dimensions remain explicitly designated as DATA_UNAVAILABLE."
+            )
 
         # Technical Lens: Root Cause Analysis
         if defects:

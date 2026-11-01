@@ -2432,7 +2432,14 @@ export type TabId =
   | 'ai_citations'
   | 'lead_gen'
   | 'search_console'
-  | 'ai_search';
+  | 'ai_search'
+  // Canonical categories
+  | 'technical_seo'
+  | 'on_page_seo'
+  | 'content'
+  | 'schema'
+  | 'ux_conversion'
+  | 'trust_authority';
 
 export interface PillarScoreData {
   id: TabId;
@@ -2449,12 +2456,22 @@ export interface PillarScoreData {
 }
 
 export interface WebsiteIntelligenceRollup {
-  // Enterprise separated pillars
+  // Enterprise separated pillars (mapped deterministically to canonical categories)
   seo: PillarScoreData;
   geo: PillarScoreData;
   aeo: PillarScoreData;
   cro: PillarScoreData;
   competitors: PillarScoreData;
+
+  // 8 Canonical Engine Categories (Authoritative)
+  technical_seo?: PillarScoreData;
+  on_page_seo?: PillarScoreData;
+  content?: PillarScoreData;
+  schema?: PillarScoreData;
+  trust_authority?: PillarScoreData;
+  ai_search?: PillarScoreData;
+  ux_conversion?: PillarScoreData;
+
   // Legacy pillar mappings for backward compatibility
   search_intelligence: PillarScoreData;
   ai_search_intelligence: PillarScoreData;

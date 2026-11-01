@@ -41,8 +41,12 @@ def get_current_user(
     return user
 
 
+from app.identity.access import require_org_context
+
+
 def require_permission(permission: str):
     def _inner(user: UserIdentity = Depends(get_current_user)) -> UserIdentity:
+        require_org_context(user)
         if not Authorizer.can_perform(user, permission):
             raise HTTPException(status_code=403, detail="You do not have permission to do that.")
         return user

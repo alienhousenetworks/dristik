@@ -10,6 +10,8 @@ import {
   getAgentWorkforce,
 } from '../services/api';
 import { formatMs } from '../lib/format';
+import { ProgressiveReportCenter } from './ProgressiveReportCenter';
+import { FileText } from 'lucide-react';
 
 interface LiveExecutionConsoleProps {
   run: AnalysisRun;
@@ -426,7 +428,7 @@ const DEFAULT_NODES_MAP: Record<string, Partial<GraphNode>> = {
 
 export function LiveExecutionConsole({ run, onRefreshRun }: LiveExecutionConsoleProps) {
   const [graphState, setGraphState] = useState<PipelineGraphState | null>(run.graph || null);
-  const [activeTab, setActiveTab] = useState<'phases' | 'terminal' | 'workforce'>('phases');
+  const [activeTab, setActiveTab] = useState<'phases' | 'terminal' | 'workforce' | 'reports'>('phases');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedSectionFilter, setSelectedSectionFilter] = useState<string>('all');
   const [autoScroll, setAutoScroll] = useState(true);
@@ -894,6 +896,18 @@ export function LiveExecutionConsole({ run, onRefreshRun }: LiveExecutionConsole
               }`}
             >
               Terminal Telemetry
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab('reports')}
+              className={`px-3 py-1 rounded-md text-xs font-medium transition-all cursor-pointer flex items-center gap-1.5 ${
+                activeTab === 'reports'
+                  ? 'bg-teal-700 text-white shadow-2xs font-semibold'
+                  : 'text-teal-400 hover:text-teal-300 font-semibold'
+              }`}
+            >
+              <FileText className="w-3.5 h-3.5 text-teal-300" />
+              Report Center (PDF)
             </button>
           </div>
         </div>
@@ -1484,6 +1498,10 @@ export function LiveExecutionConsole({ run, onRefreshRun }: LiveExecutionConsole
                 })}
             </div>
           )}
+        </div>
+      ) : activeTab === 'reports' ? (
+        <div className="p-4 sm:p-6 bg-slate-950">
+          <ProgressiveReportCenter analysisId={run.analysis_id} isLive={isRunning} />
         </div>
       ) : (
         /* TERMINAL-STYLE LIVE ACTIVITY STREAM */

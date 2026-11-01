@@ -38,6 +38,13 @@ export function synthesizePillars(report: ExecutiveReport | undefined | null): W
       aeo: emptyPillar('aeo', 'Answer Engine Optimization (AEO)', 'AEO', 'AEO'),
       cro: emptyPillar('cro', 'Conversion Rate Optimization (CRO)', 'CRO', 'CRO'),
       competitors: emptyPillar('competitors', 'Competitor Intelligence', 'Competitors', 'Benchmarking'),
+      technical_seo: emptyPillar('technical_seo', 'Technical SEO', 'Technical SEO', 'SEO'),
+      on_page_seo: emptyPillar('on_page_seo', 'On-Page SEO', 'On-Page SEO', 'SEO'),
+      content: emptyPillar('content', 'Content & Readability', 'Content', 'Content'),
+      schema: emptyPillar('schema', 'Schema & Structured Data', 'Schema', 'Schema'),
+      trust_authority: emptyPillar('trust_authority', 'Trust & Authority', 'Trust', 'Trust'),
+      ai_search: emptyPillar('ai_search', 'AI Search & Visibility', 'AI Search', 'AI'),
+      ux_conversion: emptyPillar('ux_conversion', 'UX & Conversion (CRO)', 'UX/CRO', 'CRO'),
       search_intelligence: emptyPillar('search_intelligence', 'Search Intelligence (SEO)', 'Search (SEO)', 'SEO'),
       ai_search_intelligence: emptyPillar('ai_search_intelligence', 'AI Search Intelligence (GEO / AEO)', 'AI Search', 'GEO/AEO'),
       website_experience: emptyPillar('website_experience', 'Website Experience (SXO)', 'Experience (SXO)', 'SXO'),
@@ -52,21 +59,22 @@ export function synthesizePillars(report: ExecutiveReport | undefined | null): W
   const catScores = report.scores?.category_scores || {};
   const honest = report.honest_scores;
 
+  const techCat = catScores['TECHNICAL_SEO'] ?? catScores['technical'];
+  const onPageCat = catScores['ON_PAGE_SEO'] ?? catScores['on_page'];
+  const contentCat = catScores['CONTENT'] ?? catScores['content'];
+  const geoCat = catScores['GEO'] ?? catScores['geo'];
+  const aiSearchCat = catScores['AI_SEARCH'] ?? catScores['ai_search'];
+  const schemaCat = catScores['SCHEMA'] ?? catScores['schema'];
+  const uxCat = catScores['UX_CONVERSION'] ?? catScores['ux_conversion'];
+  const trustCat = catScores['TRUST_AUTHORITY'] ?? catScores['trust_authority'];
+
   // ─────────────────────────────────────────────────────────────
-  // 1. SEO: SEARCH ENGINE OPTIMIZATION (Technical, On-Page & Content)
+  // 1. SEO: SEARCH ENGINE OPTIMIZATION (Technical SEO as primary)
   // ─────────────────────────────────────────────────────────────
-  const techScore = catScores['TECHNICAL_SEO']?.score ?? catScores['technical']?.score ?? honest?.google_score;
-  const onPageScore = catScores['ON_PAGE_SEO']?.score;
-  const contentScore = catScores['CONTENT']?.score;
-  const searchParts = [
-    [techScore, 0.45],
-    [onPageScore, 0.35],
-    [contentScore, 0.20],
-  ].filter((pair): pair is [number, number] => typeof pair[0] === 'number');
-  const searchWeight = searchParts.reduce((sum, pair) => sum + pair[1], 0);
-  const seoScore = searchWeight > 0
-    ? Math.round(searchParts.reduce((sum, [value, weight]) => sum + value * weight, 0) / searchWeight)
-    : (typeof techScore === 'number' ? Math.round(techScore) : null);
+  const techScore = techCat?.score != null ? Math.round(techCat.score) : (honest?.google_score != null ? Math.round(honest.google_score) : null);
+  const onPageScore = onPageCat?.score != null ? Math.round(onPageCat.score) : null;
+  const contentScore = contentCat?.score != null ? Math.round(contentCat.score) : null;
+  const seoScore = techScore;
 
   const seoFindings = findings.filter(f =>
     f.category === 'TECHNICAL_SEO' || f.category === 'ON_PAGE_SEO' || f.category === 'CONTENT'
@@ -84,8 +92,8 @@ export function synthesizePillars(report: ExecutiveReport | undefined | null): W
     summary: catScores['TECHNICAL_SEO']?.summary ||
       `Evaluates Googlebot crawlability, HTTP status codes, robots.txt, redirect paths, XML sitemaps, heading hierarchy, and meta architecture across ${report.crawl_manifest?.pages?.length ?? 0} pages.`,
     highlights: [
-      techScore == null ? 'Crawl index: not scored' : `Technical Crawl: ${Math.round(techScore)}/100`,
-      onPageScore == null ? 'On-page: not scored' : `On-Page & Structure: ${Math.round(onPageScore)}/100`,
+      techScore == null ? 'Crawl index: not scored' : `Technical Crawl: ${techScore}/100`,
+      onPageScore == null ? 'On-page: not scored' : `On-Page & Structure: ${onPageScore}/100`,
       `Sitemap & Robots: ${report.crawl_manifest?.sitemap_found ? 'Detected' : 'Missing'}`,
       `Pages Audited: ${report.crawl_manifest?.pages?.length ?? 0} crawled`,
     ],
@@ -100,14 +108,12 @@ export function synthesizePillars(report: ExecutiveReport | undefined | null): W
   const measuredExtractability = typeof report.geo_readiness?.extractability_score === 'number'
     ? report.geo_readiness.extractability_score
     : null;
-  const geoCatScore = catScores['GEO']?.score;
+  const geoCatScore = geoCat?.score != null ? Math.round(geoCat.score) : null;
   const infoGainScore = perEngine?.information_gain?.fluff_ratio_score != null
     ? Math.round(100 - perEngine.information_gain.fluff_ratio_score)
     : null;
 
-  const geoScore = measuredExtractability != null
-    ? Math.round(measuredExtractability)
-    : (typeof geoCatScore === 'number' ? Math.round(geoCatScore) : null);
+  const geoScore = geoCatScore != null ? geoCatScore : (measuredExtractability != null ? Math.round(measuredExtractability) : null);
 
   const geoFindings = findings.filter(f => f.category === 'GEO' || (f.category === 'AI_SEARCH' && f.title?.toLowerCase().includes('citation')));
 
@@ -133,10 +139,10 @@ export function synthesizePillars(report: ExecutiveReport | undefined | null): W
   };
 
   // ─────────────────────────────────────────────────────────────
-  // 3. AEO: ANSWER ENGINE & AGENT OPTIMIZATION (Agent Readiness, llms.txt, Schema, Q&A)
+  // 3. AEO: ANSWER ENGINE & AGENT OPTIMIZATION (Canonical SCHEMA)
   // ─────────────────────────────────────────────────────────────
-  const schemaScore = catScores['SCHEMA']?.score;
-  const extractabilityScore = report.geo_readiness?.extractability_score ?? null;
+  const schemaScore = schemaCat?.score != null ? Math.round(schemaCat.score) : null;
+  const aeoScore = schemaScore;
   const botDirectives = perEngine?.ai_bot_directives;
   const botPermissionCount = botDirectives ? [
     botDirectives.gptbot_allowed,
@@ -144,15 +150,9 @@ export function synthesizePillars(report: ExecutiveReport | undefined | null): W
     botDirectives.claudebot_allowed,
     botDirectives.google_extended_allowed,
   ].filter(Boolean).length : 0;
-  const botScore = botDirectives ? (botPermissionCount / 4) * 100 : null;
   const graphQuality = report.geo_readiness?.schema_crosscheck?.quality_score;
   const graphPresent = report.geo_readiness?.schema_crosscheck?.present_properties;
   const graphApplicable = report.geo_readiness?.schema_crosscheck?.applicable_properties;
-
-  const aeoParts = [schemaScore, extractabilityScore, botScore].filter((n): n is number => typeof n === 'number');
-  const aeoScore = aeoParts.length
-    ? Math.round(aeoParts.reduce((sum, n) => sum + n, 0) / aeoParts.length)
-    : null;
 
   const aeoFindings = findings.filter(f =>
     f.category === 'SCHEMA' || (f.category === 'AI_SEARCH' && !f.title?.toLowerCase().includes('citation'))
@@ -182,7 +182,7 @@ export function synthesizePillars(report: ExecutiveReport | undefined | null): W
   };
 
   // ─────────────────────────────────────────────────────────────
-  // 4. CRO: CONVERSION RATE OPTIMIZATION & USER JOURNEY
+  // 4. CRO: CONVERSION RATE OPTIMIZATION & USER JOURNEY (Canonical UX_CONVERSION)
   // ─────────────────────────────────────────────────────────────
   const formAudit = report.form_audit;
   const analytics = report.google_performance?.analytics;
@@ -197,6 +197,9 @@ export function synthesizePillars(report: ExecutiveReport | undefined | null): W
     ? Math.round((Number(ga4KeyEvents) / ga4Sessions) * 1000) / 10
     : null;
 
+  const uxScore = uxCat?.score != null ? Math.round(uxCat.score) : null;
+  const croScore = uxScore;
+
   const croFindings = findings.filter(f => f.category === 'UX_CONVERSION');
 
   const croPillar: PillarScoreData = {
@@ -204,15 +207,15 @@ export function synthesizePillars(report: ExecutiveReport | undefined | null): W
     name: 'Conversion Rate Optimization (CRO)',
     shortName: 'CRO',
     categoryTag: 'CRO',
-    score: null,
-    grade: '—',
-    health: getHealth(null),
+    score: croScore,
+    grade: getGrade(croScore),
+    health: getHealth(croScore),
     headline: ga4Measured
       ? `GA4 key-event rate ${ga4Rate}%`
-      : 'Heuristic from the crawled pages',
+      : (croScore == null ? 'Conversion experience unmeasured' : (croScore >= 75 ? 'Low Friction & Clear Value Proposition' : 'Conversion & UX Friction Detected')),
     summary: ga4Measured
-      ? 'Google Analytics 4 landing pages and key events for this property. The rate is key events divided by sessions. It is not a 0–100 CRO grade.'
-      : 'Heuristic from the crawled pages. No conversion rate is shown until GA4 returns landing pages and key events.',
+      ? 'Google Analytics 4 landing pages and key events for this property. The rate is key events divided by sessions.'
+      : 'Audited behavioral heuristics across CTAs, form barriers, and value proposition clarity.',
     highlights: [
       ga4Measured
         ? `GA4: ${ga4KeyEvents} key events / ${ga4Sessions} sessions (${ga4Rate}%)`
@@ -253,9 +256,86 @@ export function synthesizePillars(report: ExecutiveReport | undefined | null): W
     findingsCount: compFindings.length,
   };
 
+  // ─────────────────────────────────────────────────────────────
+  // Additional Canonical Pillars
+  // ─────────────────────────────────────────────────────────────
+  const onPageFindings = findings.filter(f => f.category === 'ON_PAGE_SEO');
+  const onPagePillar: PillarScoreData = {
+    id: 'on_page_seo',
+    name: 'On-Page SEO',
+    shortName: 'On-Page',
+    categoryTag: 'SEO',
+    score: onPageScore,
+    grade: getGrade(onPageScore),
+    health: getHealth(onPageScore),
+    headline: onPageScore == null ? 'On-page SEO not scored' : (onPageScore >= 80 ? 'Optimized Meta & Hierarchy' : 'On-Page Optimization Needed'),
+    summary: 'Evaluates title tags, meta descriptions, H1-H6 heading hierarchy, and content structure.',
+    highlights: [
+      `On-Page Score: ${onPageScore != null ? `${onPageScore}/100` : 'Not scored'}`,
+      `H1 Status: ${report.crawl_manifest?.pages?.[0]?.h1 ? 'Detected' : 'Missing'}`,
+    ],
+    findingsCount: onPageFindings.length,
+  };
+
+  const contentFindings = findings.filter(f => f.category === 'CONTENT');
+  const contentPillar: PillarScoreData = {
+    id: 'content',
+    name: 'Content & Readability',
+    shortName: 'Content',
+    categoryTag: 'Content',
+    score: contentScore,
+    grade: getGrade(contentScore),
+    health: getHealth(contentScore),
+    headline: contentScore == null ? 'Content not scored' : (contentScore >= 75 ? 'Clear and Engaging Copy' : 'Content Improvements Needed'),
+    summary: 'Audits readability indices, paragraph length, scannability, and proof points.',
+    highlights: [
+      `Content Score: ${contentScore != null ? `${contentScore}/100` : 'Not scored'}`,
+      `Readability: ${honest?.human_score != null ? 'Measured' : 'Audited'}`,
+    ],
+    findingsCount: contentFindings.length,
+  };
+
+  const trustScore = trustCat?.score != null ? Math.round(trustCat.score) : null;
+  const trustFindings = findings.filter(f => f.category === 'TRUST_AUTHORITY');
+  const trustPillar: PillarScoreData = {
+    id: 'trust_authority',
+    name: 'Trust & Authority',
+    shortName: 'Trust',
+    categoryTag: 'Trust',
+    score: trustScore,
+    grade: getGrade(trustScore),
+    health: getHealth(trustScore),
+    headline: trustScore == null ? 'Trust & authority unmeasured (connector not connected)' : (trustScore >= 80 ? 'Verified Security & E-E-A-T Posture' : 'Trust Deficits Detected'),
+    summary: 'Evaluates HTTPS/TLS encryption, legal policies, author attribution, and external domain authority.',
+    highlights: [
+      `Trust Score: ${trustScore != null ? `${trustScore}/100` : 'Not measured'}`,
+      `HTTPS: ${report.crawl_manifest?.pages?.[0]?.url?.startsWith('https') ? 'Active' : 'Missing'}`,
+    ],
+    findingsCount: trustFindings.length,
+  };
+
+  const aiSearchScore = aiSearchCat?.score != null ? Math.round(aiSearchCat.score) : null;
+  const aiSearchFindings = findings.filter(f => f.category === 'AI_SEARCH');
+  const aiSearchPillar: PillarScoreData = {
+    id: 'ai_search',
+    name: 'AI Search & LLM Optimization',
+    shortName: 'AI Search',
+    categoryTag: 'AI',
+    score: aiSearchScore,
+    grade: getGrade(aiSearchScore),
+    health: getHealth(aiSearchScore),
+    headline: aiSearchScore == null ? 'AI search unmeasured' : (aiSearchScore >= 75 ? 'High Generative AI Visibility' : 'Low AI Retrieval Presence'),
+    summary: 'Evaluates citations, mentions, and prompt coverage across major generative engines.',
+    highlights: [
+      `AI Search Score: ${aiSearchScore != null ? `${aiSearchScore}/100` : 'Not scored'}`,
+      liveCitations != null ? `Live Citation: ${Math.round(liveCitations)}/100` : 'Live visibility: unmeasured',
+    ],
+    findingsCount: aiSearchFindings.length,
+  };
+
   // Experience / SXO bridging calculation for legacy compatibility
   const ttfb = report.crawl_manifest?.pages?.[0]?.ttfb_ms;
-  const sxoScore = seoScore ?? null;
+  const sxoScore = honest?.human_score != null ? Math.round(honest.human_score) : (croScore ?? null);
 
   const experiencePillar: PillarScoreData = {
     id: 'website_experience',
@@ -279,16 +359,16 @@ export function synthesizePillars(report: ExecutiveReport | undefined | null): W
     name: 'Brand & Entity Intelligence',
     shortName: 'Brand & Entity',
     categoryTag: 'Entity',
-    score: aeoScore,
-    grade: getGrade(aeoScore),
-    health: getHealth(aeoScore),
+    score: trustScore,
+    grade: getGrade(trustScore),
+    health: getHealth(trustScore),
     headline: 'Entity Trust & Knowledge Graph Disambiguation',
     summary: 'Audits Organization JSON-LD schemas and business identity consistency.',
     highlights: [
       `Brand: ${report.business_profile?.business_name || 'Extracted'}`,
       `Conflicts: ${(report.contradictions?.length || 0) > 0 ? '⚠️ Detected' : 'None detected'}`,
     ],
-    findingsCount: aeoFindings.length,
+    findingsCount: trustFindings.length,
   };
 
   return {
@@ -297,6 +377,16 @@ export function synthesizePillars(report: ExecutiveReport | undefined | null): W
     aeo: aeoPillar,
     cro: croPillar,
     competitors: competitorPillar,
+
+    // 8 Canonical Categories
+    technical_seo: seoPillar,
+    on_page_seo: onPagePillar,
+    content: contentPillar,
+    schema: aeoPillar,
+    trust_authority: trustPillar,
+    ai_search: aiSearchPillar,
+    ux_conversion: croPillar,
+
     // Legacy pillar mappings for backward compatibility
     search_intelligence: seoPillar,
     ai_search_intelligence: geoPillar,
