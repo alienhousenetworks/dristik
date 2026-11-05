@@ -102,6 +102,7 @@ def _make_test_report(
     ]
 
     return ExecutiveReport(
+        org_id="test_org",
         report_id="DST-TEST-001",
         analysis_id="test-run-123",
         website_url=f"https://{domain}",
@@ -303,3 +304,55 @@ class TestApiRouteIntegration:
             assert "Comprehensive SEO Audit" in response.text
             assert "Acme Corp" in response.text
             assert "Table of Contents" in response.text
+
+
+class TestAgenticChapterIntegration:
+    """Tests agent provenance routing, honest metric diagnostics, and dynamic narratives."""
+
+    def test_agent_id_routing_to_chapter(self):
+        from app.seo.reporting.seo_book_renderer import _route_finding_to_chapter_id
+
+        applicable_ids = {"sec-technical-seo", "sec-structured-data", "sec-crawling-budget"}
+
+        finding_sec = {"agent_id": "trust.security.v3", "title": "Random observation"}
+        assert _route_finding_to_chapter_id(finding_sec, applicable_ids) == "sec-technical-seo"
+
+        finding_schema = {"agent_id": "schema.validation.v3", "title": "Entity note"}
+        assert _route_finding_to_chapter_id(finding_schema, applicable_ids) == "sec-structured-data"
+
+        finding_crawl = {"agent_id": "seo.crawl.v3", "title": "Spider log"}
+        assert _route_finding_to_chapter_id(finding_crawl, applicable_ids) == "sec-crawling-budget"
+
+    def test_chapter_narrative_diversity(self):
+        from app.reports.agentic_chapter_synthesizer import AgenticChapterSynthesizer
+
+        book = {"domain": "testsite.com", "pages": [], "business_profile": None}
+
+        sec_sec = {"title": "HTTPS & Security Integrity Specialist"}
+        narr_sec = AgenticChapterSynthesizer.synthesize_narrative(book, "18", sec_sec, [])
+
+        sec_crawl = {"title": "Crawl Infrastructure Specialist"}
+        narr_crawl = AgenticChapterSynthesizer.synthesize_narrative(book, "07", sec_crawl, [])
+
+        # Verify they don't produce the exact same canned text
+        assert narr_sec["executive_summary"] != narr_crawl["executive_summary"]
+        assert narr_sec["recommended_action"] != narr_crawl["recommended_action"]
+        assert "TLS" in narr_sec["executive_summary"] or "HTTPS" in narr_sec["executive_summary"]
+        assert "crawl" in narr_crawl["executive_summary"].lower()
+
+    def test_pre_synthesized_chapter_narratives_consumed(self):
+        report = _make_test_report()
+        report.chapter_narratives = {
+            "sec-technical-seo": {
+                "executive_summary": "Custom pre-synthesized executive summary by specialist agent.",
+                "technical_mechanics": "Custom DOM protocol audit.",
+                "business_risk": "Custom business risk analysis.",
+                "recommended_action": "Apply custom SSL patch immediately.",
+                "part_label": "Part III — Technical SEO",
+            }
+        }
+        renderer = SeoAuditBookRenderer()
+        html = renderer.render_html_report(report)
+        assert "Custom pre-synthesized executive summary by specialist agent." in html
+        assert "Apply custom SSL patch immediately." in html
+

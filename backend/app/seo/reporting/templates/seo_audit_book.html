@@ -633,14 +633,14 @@ pre {
   /* Keep only boxes that fit on one page unbreakable.
      break-inside:avoid on a finding, table, or code block taller than
      the page makes Chromium's print layout spin until nginx returns 504. */
-  .metric, .toc-list li {
+  .metric, .toc-list li, .finding, .finding-card, .dossier-card, .panel, .plain-english, .analysis-box {
     break-inside: avoid;
     page-break-inside: avoid;
   }
 
-  .finding, .finding-card, .dossier-card, article, pre, table, .panel, .plain-english, .evidence {
-    break-inside: auto !important;
-    page-break-inside: auto !important;
+  article, pre, table, tbody {
+    break-inside: auto;
+    page-break-inside: auto;
   }
 }
 </style>

@@ -377,9 +377,23 @@ class BrowserRenderService:
                 # System fonts only. document.fonts.ready is not awaited: a font
                 # that never settles would block the print, and cancelling that
                 # Playwright call does not return on Python 3.12.
+                header_html = (
+                    '<div style="font-size:7pt;width:100%;display:flex;justify-content:space-between;'
+                    'padding:0 16mm;color:#94a3b8;font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',Roboto,sans-serif;">'
+                    '<span>DRISTIK ENTERPRISE INTELLIGENCE AUDIT</span><span></span></div>'
+                )
+                footer_html = (
+                    '<div style="font-size:7pt;width:100%;display:flex;justify-content:space-between;'
+                    'padding:0 16mm;color:#94a3b8;font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',Roboto,sans-serif;">'
+                    '<span>CONFIDENTIAL &amp; PROPRIETARY</span>'
+                    '<span>Page <span class="pageNumber"></span> of <span class="totalPages"></span></span></div>'
+                )
                 pdf_task = asyncio.create_task(page.pdf(
                     prefer_css_page_size=True,
                     print_background=True,
+                    display_header_footer=True,
+                    header_template=header_html,
+                    footer_template=footer_html,
                 ))
                 if timeout_ms and timeout_ms > 0:
                     done, _pending = await asyncio.wait({pdf_task}, timeout=timeout_ms / 1000.0)

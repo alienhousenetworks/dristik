@@ -2062,7 +2062,38 @@ class AnalysisOrchestrator:
             except Exception as cro_intel_err:
                 logger.info("CRO intelligence rebuild kept the pre-analytics snapshot: %s", cro_intel_err)
 
+            # Pre-synthesize chapter narratives for enterprise audit book
+            chapter_narratives_map: Dict[str, Dict[str, Any]] = {}
+            try:
+                from app.reports.agentic_chapter_synthesizer import AgenticChapterSynthesizer
+                from app.seo.reporting.seo_book_renderer import CORE_CHAPTERS, AGENT_ROUTING_MAP
+
+                synth_book = {
+                    "domain": domain,
+                    "pages": eval_pages,
+                    "business_profile": blackboard.business_profile,
+                }
+                for ch_idx, ch in enumerate(CORE_CHAPTERS):
+                    ch_num = f"{ch_idx + 3:02d}"
+                    ch_agent_id = next((aid for aid, cid in AGENT_ROUTING_MAP.items() if cid == ch["id"]), None)
+                    ch_findings = [
+                        f for f in final_findings
+                        if (getattr(f, "agent_id", None) == ch_agent_id) or (getattr(f, "routed_to", None) == ch["id"])
+                    ]
+                    narr = AgenticChapterSynthesizer.synthesize_narrative(
+                        book=synth_book,
+                        number=ch_num,
+                        section=ch,
+                        findings=ch_findings,
+                        is_geo=False,
+                    )
+                    chapter_narratives_map[ch["id"]] = narr
+                    chapter_narratives_map[ch_num] = narr
+            except Exception as ch_synth_err:
+                logger.info("Chapter narratives pre-synthesis note: %s", ch_synth_err)
+
             report = ExecutiveReport(
+                chapter_narratives=chapter_narratives_map,
                 report_id=report_uuid,
                 analysis_id=analysis_id,
                 org_id=run.org_id,

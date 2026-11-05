@@ -473,6 +473,7 @@ class AgenticChapterSynthesizer:
                     affected_url_samples.append(str(u))
 
         # 1. Executive Summary (Non-Technical)
+        agent_lower = f"{agent_id} {agent_name} {sec_title}".lower()
         if defects:
             exec_summary = (
                 f"The {agent_name} audit of {biz_name} ({domain}) identified {len(defects)} verified defect(s) "
@@ -480,13 +481,43 @@ class AgenticChapterSynthesizer:
                 f"Primary executive attention is required on: {'; '.join(top_defect_titles[:2])}."
             )
         else:
-            exec_summary = (
-                f"The {agent_name} inspection of {biz_name} ({domain}) confirmed zero defects across {crawled_count} evaluated page(s) "
-                f"for {sec_title}. Baseline infrastructure satisfies target {('generative engine' if is_geo else 'search engine')} standards."
-            )
+            if any(k in agent_lower for k in ["crawl", "index", "robot", "sitemap", "redirect", "canonical", "status"]):
+                exec_summary = (
+                    f"The {agent_name} crawl inspection of {biz_name} ({domain}) verified HTTP response delivery, "
+                    f"crawler access rules, and indexation controls across {crawled_count} sampled routes without blocking errors."
+                )
+            elif any(k in agent_lower for k in ["security", "https", "ssl", "header"]):
+                exec_summary = (
+                    f"The {agent_name} TLS and transport evaluation on {domain} verified HTTPS protocol enforcement "
+                    f"and baseline security headers across sampled endpoints."
+                )
+            elif any(k in agent_lower for k in ["speed", "experience", "vital", "ttfb", "performance"]):
+                exec_summary = (
+                    f"The {agent_name} performance review of {biz_name} ({domain}) confirmed that server response "
+                    f"latency and layout stability meet target thresholds across sampled pages."
+                )
+            elif any(k in agent_lower for k in ["schema", "entity", "structured data", "json-ld"]):
+                exec_summary = (
+                    f"The {agent_name} structured data audit on {domain} validated that active JSON-LD nodes adhere "
+                    f"to Schema.org standards without syntax errors."
+                )
+            elif any(k in agent_lower for k in ["content", "heading", "outline", "copy", "intent"]):
+                exec_summary = (
+                    f"The {agent_name} content analysis of {biz_name} ({domain}) verified heading outline hierarchy (H1–H3) "
+                    f"and topical structure across {crawled_count} sampled templates."
+                )
+            elif any(k in agent_lower for k in ["cro", "conversion", "cta", "form"]):
+                exec_summary = (
+                    f"The {agent_name} conversion review on {domain} assessed call-to-action visibility and key "
+                    f"layout pathways across evaluated commercial surfaces."
+                )
+            else:
+                exec_summary = (
+                    f"The {agent_name} evaluation of {biz_name} ({domain}) confirmed that inspected parameters for "
+                    f"{sec_title} satisfy core requirements across {crawled_count} evaluated page(s)."
+                )
 
         # 2. Business Risk (Grounded directly in verified defects & business context)
-        agent_lower = f"{agent_id} {agent_name} {sec_title}".lower()
         if "security" in agent_lower or "https" in agent_lower:
             if defects:
                 risk = (
@@ -516,7 +547,14 @@ class AgenticChapterSynthesizer:
             primary_why = top_whys[0] if top_whys else f"Defects in {sec_title} degrade technical health and crawl fidelity."
             risk = f"On {biz_name}, {top_defect_titles[0]}: {primary_why}"
         else:
-            risk = f"Operational configuration for {sec_title} maintains compliant status with zero defects recorded on {biz_name}."
+            if any(k in agent_lower for k in ["crawl", "index", "robot", "sitemap", "redirect", "canonical"]):
+                risk = f"Crawler access directives and URL routing on {biz_name} remain compliant with search engine specifications, preserving crawl equity."
+            elif any(k in agent_lower for k in ["schema", "entity"]):
+                risk = f"Search engines can extract verified entity context from {biz_name} without syntax parsing failures."
+            elif any(k in agent_lower for k in ["content", "heading"]):
+                risk = f"Document outlines on {biz_name} maintain clear section discoverability for readers and search indexing models."
+            else:
+                risk = f"Baseline operational standards for {sec_title} are maintained on {biz_name}, avoiding negative algorithmic penalties."
 
         # 3. Commercial Opportunity (Grounded in domain & verified scope)
         if "cro" in agent_lower or "conversion" in agent_lower:
@@ -566,7 +604,20 @@ class AgenticChapterSynthesizer:
             top_rec = str(_get(defects[0], "recommendation", "") or _get(defects[0], "suggested_fix", "")).strip()
             recommended_action = f"Incorporate tactical optimization into regular maintenance: {top_rec or top_defect_titles[0]}."
         else:
-            recommended_action = "Maintain continuous automated monitoring surveillance to prevent configuration regressions."
+            if any(k in agent_lower for k in ["crawl", "index", "robot", "sitemap", "redirect"]):
+                recommended_action = "Re-validate edge redirects and XML sitemap endpoints whenever deployment routes are altered."
+            elif any(k in agent_lower for k in ["security", "https", "ssl"]):
+                recommended_action = "Maintain automated SSL/TLS certificate expiry alerting and review security headers quarterly."
+            elif any(k in agent_lower for k in ["speed", "vital", "ttfb", "performance"]):
+                recommended_action = "Continuously monitor real-user Core Web Vitals (INP, LCP, CLS) as front-end dependencies are updated."
+            elif any(k in agent_lower for k in ["schema", "entity"]):
+                recommended_action = "Expand entity graphs to include author credentials, organization contact points, and detailed offer specifications."
+            elif any(k in agent_lower for k in ["content", "heading"]):
+                recommended_action = "Enforce semantic heading structure and information depth policies across newly published service pages."
+            elif any(k in agent_lower for k in ["cro", "conversion"]):
+                recommended_action = "Run iterative A/B tests on headline clarity and CTA contrast to optimize inquiry rates from current traffic."
+            else:
+                recommended_action = f"Incorporate periodic review of {sec_title.lower()} into quarterly engineering and organic growth cycles."
 
         # Technical Lens: Mechanics Explanation
         sec_l = f"{sec_title} {agent_role} {agent_id}".lower()

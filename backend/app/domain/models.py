@@ -435,6 +435,7 @@ class Finding(BaseModel):
     adversarial_reviewed: bool = False
     held_from_executive: bool = False
     claim_refs: List[str] = Field(default_factory=list)
+    agent_id: Optional[str] = None
     why_it_matters: Optional[str] = Field(
         default=None,
         description="Plain-language explanation of the commercial / UX / SEO consequence of this finding for a non-technical stakeholder."
@@ -2757,6 +2758,7 @@ class ExecutiveReport(BaseModel):
     competitive_report: Optional[Dict[str, Any]] = None
     indexation_intelligence: Optional[IndexationAuditRollup] = None
     local_seo: Optional[LocalSeoAuditReport] = None
+    chapter_narratives: Dict[str, Dict[str, Any]] = Field(default_factory=dict)
     international_seo: Optional[InternationalSeoAuditReport] = None
     topical_authority: Optional[TopicalAuthorityAuditReport] = None
     ecommerce_seo: Optional[EcommerceSeoAuditReport] = None

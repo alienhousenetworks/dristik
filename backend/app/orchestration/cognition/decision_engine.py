@@ -101,6 +101,7 @@ class DecisionEngine:
                 source_integrity_label=claim.source_integrity_label or SourceIntegrityLabel.NOT_APPLICABLE,
                 claim_family=claim.claim_family,
                 routed_to=claim.routed_to,
+                agent_id=getattr(claim, "agent_id", None),
                 confidence_rubric=claim.confidence_rubric or RubricConfidence.LIKELY,
                 confidence_basis=claim.confidence_basis or "",
                 materiality=claim.materiality or Materiality.MINOR,

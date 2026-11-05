@@ -991,6 +991,9 @@ class PlainEnglishEngine:
             "dependencies": dependencies,
             "priority_rationale": str(priority_rationale),
             "relevant_code_or_configuration_example": str(code_val) if code_val else None,
+            "agent_id": _get_val(finding, "agent_id") or _get_val(finding, "originating_agent_id"),
+            "category": category,
+            "subcategory": subcategory,
         }
 
     @classmethod

@@ -1112,12 +1112,50 @@ def _reconcile_and_deduplicate_raw_findings(raw_findings: List[Any], pages: List
     return list(deduped_map.values())
 
 
+AGENT_ROUTING_MAP: Dict[str, str] = {
+    "business.discovery.v3": "sec-seo-strategy",
+    "business.intent.v3": "sec-keyword-intent",
+    "competitor.serp.v3": "sec-serp-analysis",
+    "trust.security.v3": "sec-technical-seo",
+    "seo.crawl.v3": "sec-crawling-budget",
+    "seo.indexability.v3": "sec-indexation-directives",
+    "seo.canonical.v3": "sec-canonicalization",
+    "seo.redirect.v3": "sec-status-codes-redirects",
+    "seo.status_reliability.v3": "sec-status-codes-redirects",
+    "seo.sitemap.v3": "sec-sitemaps-robots",
+    "content.intent.v3": "sec-onpage-seo",
+    "content.depth.v3": "sec-content-quality",
+    "content.authority.v3": "sec-topical-authority",
+    "content.readability.v3": "sec-image-seo",
+    "content.decay.v3": "sec-content-quality",
+    "external.authority.v3": "sec-offpage-backlinks",
+    "competitor.organic.v3": "sec-competitor-seo",
+    "schema.validation.v3": "sec-structured-data",
+    "seo.specialized.local.v3": "sec-local-seo",
+    "seo.specialized.international.v3": "sec-international-seo",
+    "ux.experience.v3": "sec-core-web-vitals",
+    "seo.rendering.v3": "sec-javascript-seo",
+    "seo.specialized.video.v3": "sec-video-seo",
+    "seo.specialized.news.v3": "sec-news-publisher",
+    "seo.specialized.ecommerce.v3": "sec-ecommerce-seo",
+    "seo.specialized.programmatic.v3": "sec-programmatic-seo",
+    "seo.specialized.saas_b2b.v3": "sec-seo-strategy",
+    "verification.adversarial.v3": "sec-migration-risk",
+    "strategy.executive.v3": "sec-seo-strategy",
+}
+
+
 def _route_finding_to_chapter_id(f: Dict[str, Any], applicable_ids: Set[str]) -> Optional[str]:
     """
     Deterministically routes a normalized finding to its most specific analytical chapter.
-    Prevents Chapter 06 (sec-technical-seo) from greedily capturing non-security findings
-    merely because their top-level enum category is TECHNICAL_SEO.
+    Prioritizes originating specialist agent attribution before heuristic substring matching.
     """
+    agent_id = str(f.get("agent_id") or f.get("originating_agent_id") or "").strip()
+    if agent_id and agent_id in AGENT_ROUTING_MAP:
+        mapped = AGENT_ROUTING_MAP[agent_id]
+        if mapped in applicable_ids:
+            return mapped
+
     title = str(f.get("title") or "").lower()
     obs = str(f.get("observed_result") or "").lower()
     checked = str(f.get("what_was_checked") or "").lower()
@@ -1802,13 +1840,19 @@ def _build_chapter_analysis(
         "pages": pages,
         "business_profile": _get_val(report, "business_profile"),
     }
-    narrative = AgenticChapterSynthesizer.synthesize_narrative(
-        book=synth_book,
-        number=ch_num,
-        section=ch,
-        findings=ch_findings,
-        is_geo=False,
-    )
+    # Consume pre-synthesized agent narrative if available, else derive from specialist synthesis
+    pre_narratives = getattr(report, "chapter_narratives", {}) or {}
+    pre_narrative = pre_narratives.get(ch["id"]) or pre_narratives.get(ch_num)
+    if pre_narrative and isinstance(pre_narrative, dict) and pre_narrative.get("executive_summary"):
+        narrative = pre_narrative
+    else:
+        narrative = AgenticChapterSynthesizer.synthesize_narrative(
+            book=synth_book,
+            number=ch_num,
+            section=ch,
+            findings=ch_findings,
+            is_geo=False,
+        )
 
     if ch["id"] in ("sec-offpage-backlinks", "sec-competitor-seo", "sec-analytics-measurement"):
         ext_cov = _get_val(_get_val(report, "external_authority") or {}, "coverage") or []
@@ -2191,6 +2235,11 @@ def build_seo_book_context(report: Any, page_numbers: Optional[Dict[str, int]] =
                         value_str = str(raw_val)[:90] if raw_val else ("Compliant across inspected sample" if status_str in (DiagnosticStatus.PASSED.value, DiagnosticStatus.SAMPLED.value) else "Unverified")
                         scope_str = f"{pages_crawled} pages sample" if status_str in (DiagnosticStatus.PASSED.value, DiagnosticStatus.SAMPLED.value, DiagnosticStatus.FAILED.value) else "External integration"
                     else:
+                        CRAWL_DOM_CHECKS = (
+                            "title", "heading", "h1", "h2", "canonical", "meta", "image", "alt",
+                            "robot", "sitemap", "https", "link", "word count", "content", "schema",
+                            "viewport", "html", "redirect", "status code", "404", "500", "ttfb"
+                        )
                         if any(k in check_lower for k in ["search console", "analytics", "backlink", "referring domain", "traffic", "authority profile"]):
                             status_str = DiagnosticStatus.UNAVAILABLE.value
                             value_str = "Requires authorized data connector (GSC/GA4)"
@@ -2199,10 +2248,14 @@ def build_seo_book_context(report: Any, page_numbers: Optional[Dict[str, int]] =
                             status_str = DiagnosticStatus.UNAVAILABLE.value
                             value_str = "Third-party competitor data connector not attached"
                             scope_str = "Unavailable"
-                        elif pages_crawled > 0:
+                        elif pages_crawled > 0 and any(k in check_lower for k in CRAWL_DOM_CHECKS):
                             status_str = DiagnosticStatus.SAMPLED.value if is_sampled else DiagnosticStatus.PASSED.value
-                            value_str = f"Verified across {pages_crawled} inspected sample page(s)"
+                            value_str = f"Compliant across {pages_crawled} inspected sample page(s)"
                             scope_str = f"{pages_crawled} pages sample"
+                        elif pages_crawled > 0:
+                            status_str = DiagnosticStatus.NOT_TESTED.value
+                            value_str = "Specialized check not instrumented in standard crawl profile"
+                            scope_str = "Uninspected"
                         else:
                             status_str = DiagnosticStatus.NOT_TESTED.value
                             value_str = "Check not executed in this audit run"
