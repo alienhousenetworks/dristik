@@ -24,26 +24,39 @@ class DecisionEngine:
         finding_idx = 0
         
         for claim in claims:
-            # Skip rejected claims
-            if claim.verification_status == VerificationStatus.REJECTED:
+            # Enforce Audit 1 Evidence-First standard:
+            # Skip rejected, unsupported, unevidenced, or held claims from executive findings
+            if getattr(claim, "held_from_executive", False):
+                continue
+            if claim.verification_status in (
+                VerificationStatus.REJECTED,
+                VerificationStatus.UNSUPPORTED,
+                VerificationStatus.INSUFFICIENT_EVIDENCE,
+                VerificationStatus.UNAVAILABLE,
+                VerificationStatus.NOT_TESTED,
+            ):
                 continue
                 
-            finding_idx += 1
-            f_id = f"find_{finding_idx:03d}"
-            
             # Map evidence references to FindingEvidence objects
             attached_ev: List[FindingEvidence] = []
             for ev_id in claim.evidence_refs:
-                ev_obj = evidence_store.get(ev_id)
+                ev_obj = evidence_store.get(ev_id) or evidence_store.get_observation(ev_id)
                 if ev_obj:
                     attached_ev.append(FindingEvidence(
-                        evidence_id=ev_obj.id,
-                        url=ev_obj.url,
-                        element=ev_obj.selector or ev_obj.source_type,
-                        value=str(ev_obj.value) if ev_obj.value is not None else "",
-                        selector=ev_obj.selector,
-                        snippet=ev_obj.text
+                        evidence_id=getattr(ev_obj, "id", None) or getattr(ev_obj, "evidence_id", ev_id),
+                        url=getattr(ev_obj, "url", None),
+                        element=getattr(ev_obj, "selector", None) or getattr(ev_obj, "source_type", None) or getattr(ev_obj, "source", "source"),
+                        value=str(getattr(ev_obj, "value", "")) if getattr(ev_obj, "value", None) is not None else "",
+                        selector=getattr(ev_obj, "selector", None),
+                        snippet=getattr(ev_obj, "text", None) or getattr(ev_obj, "snippet", None),
                     ))
+
+            # Rule: No findings without traceable evidence. Skip claims with zero verifiable evidence.
+            if not attached_ev:
+                continue
+
+            finding_idx += 1
+            f_id = f"find_{finding_idx:03d}"
                     
             # Compute confidence label. v4 HIGH/MEDIUM bands win over raw float.
             conf = claim.confidence
@@ -89,7 +102,8 @@ class DecisionEngine:
                 finding=claim.statement,
                 description=claim.verification_notes or claim.statement,
                 evidence=attached_ev,
-                evidence_refs=claim.evidence_refs,
+                evidence_refs=[ev.evidence_id for ev in attached_ev],
+                evidence_ids=[ev.evidence_id for ev in attached_ev],
                 confidence=claim.confidence,
                 confidence_label=label,
                 impact=claim.impact,

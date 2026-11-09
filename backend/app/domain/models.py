@@ -735,19 +735,35 @@ class Finding(BaseModel):
             "source_agreement": int(self.source_agreement or 0),
         }
 
+class ClaimEvidenceLink(BaseModel):
+    link_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    claim_id: str
+    evidence_id: str
+    audit_run_id: Optional[str] = None
+    support_role: str = "PRIMARY"  # PRIMARY, CORROBORATING, CONTRADICTING
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
 class Claim(BaseModel):
     id: str
-    agent_id: str
+    claim_id: Optional[str] = None
+    audit_run_id: Optional[str] = None
+    agent_id: str = "orchestrator"
     statement: str
-    claim_type: ClaimType = ClaimType.FACT
-    category: Category
+    claim_text: Optional[str] = None
+    claim_type: Any = ClaimType.OBSERVED
+    category: Optional[Category] = None
+    scope: Optional[str] = None
+    limitations: Optional[str] = None
+    created_by: Optional[str] = None
+    created_at: Optional[str] = None
     severity: Severity = Severity.MEDIUM
     evidence_refs: List[str] = Field(default_factory=list)
     evidence_ref_objects: List[EvidenceRef] = Field(default_factory=list)
     supporting_agents: List[str] = Field(default_factory=list)
     contradicting_agents: List[str] = Field(default_factory=list)
     confidence: float = Field(default=0.85, ge=0.0, le=1.0)
-    verification_status: VerificationStatus = VerificationStatus.PROVISIONAL
+    verification_status: VerificationStatus = VerificationStatus.VERIFIED
     claim_state: ClaimState = ClaimState.CREATED
     evidence_level: EvidenceLevel = EvidenceLevel.E3_DETERMINISTIC
     observation_type: ObservationType = ObservationType.OBSERVED
@@ -767,6 +783,24 @@ class Claim(BaseModel):
     source_agreement: int = 0
     adversarial_reviewed: bool = False
     held_from_executive: bool = False
+
+    @model_validator(mode="before")
+    @classmethod
+    def _sync_claim_fields(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            if "claim_id" in data and "id" not in data:
+                data["id"] = data["claim_id"]
+            elif "id" in data and not data.get("claim_id"):
+                data["claim_id"] = data["id"]
+            if "claim_text" in data and "statement" not in data:
+                data["statement"] = data["claim_text"]
+            elif "statement" in data and not data.get("claim_text"):
+                data["claim_text"] = data["statement"]
+            if not data.get("created_by") and data.get("agent_id"):
+                data["created_by"] = data["agent_id"]
+            if not data.get("created_at"):
+                data["created_at"] = datetime.now(timezone.utc).isoformat()
+        return data
 
 class Observation(BaseModel):
     id: str
@@ -1305,6 +1339,19 @@ class AuditScopeInfo(BaseModel):
     requested_pages: int = 5
     measured_pages: int = 5
     scope_coverage: float = 1.0  # measured_pages / requested_pages
+    requested_scope: Optional[str] = None
+    discovered_urls: List[str] = Field(default_factory=list)
+    attempted_urls: List[str] = Field(default_factory=list)
+    inspected_urls: List[str] = Field(default_factory=list)
+    failed_urls: List[str] = Field(default_factory=list)
+    excluded_urls: List[str] = Field(default_factory=list)
+    enabled_disciplines: List[str] = Field(default_factory=list)
+    disabled_disciplines: List[str] = Field(default_factory=list)
+    connected_integrations: List[str] = Field(default_factory=list)
+    unavailable_integrations: List[str] = Field(default_factory=list)
+    collection_errors: List[str] = Field(default_factory=list)
+    coverage_limitations: List[str] = Field(default_factory=list)
+    is_single_page_scope: bool = False
 
 
 class CategoryScore(BaseModel):

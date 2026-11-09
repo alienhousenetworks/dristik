@@ -13,6 +13,8 @@ from typing import Any
 class ScoreEngine:
     """Calculate a transparent weighted score from measured pillars only."""
 
+    FORMULA_VERSION = "dristik_audit1_v2.0"
+
     WEIGHTS: dict[str, float] = {
         "technical": 0.25,
         "content": 0.20,
@@ -61,14 +63,47 @@ class ScoreEngine:
             if key in self.WEIGHTS and value is not None
         }
         available_weight = sum(self.WEIGHTS[key] for key in measured)
+        coverage_pct = round(len(measured) / len(self.WEIGHTS) * 100, 1)
         return {
             "overall_score": score,
             "measured_pillars": sorted(measured),
             "unmeasured_pillars": sorted(set(self.WEIGHTS) - set(measured)),
-            "coverage_pct": round(len(measured) / len(self.WEIGHTS) * 100, 1),
+            "coverage_pct": coverage_pct,
             "normalized_weights": {
                 key: round(self.WEIGHTS[key] / available_weight, 6)
                 for key in sorted(measured)
             },
-            "score_status": "MEASURED" if len(measured) == len(self.WEIGHTS) else "PARTIAL",
+            "formula_version": self.FORMULA_VERSION,
+            "score_status": "MEASURED" if len(measured) == len(self.WEIGHTS) else (
+                "PARTIAL" if coverage_pct >= 33.0 else "NOT_MEASURED"
+            ),
+        }
+
+    def calculate_dimension_record(
+        self,
+        dimension_name: str,
+        eligible_inputs: Mapping[str, Any],
+        excluded_inputs: Mapping[str, str],
+        measurement_method: str = "deterministic_empirical",
+        weighting_rules: Optional[Mapping[str, float]] = None,
+        limitations: Optional[str] = None,
+    ) -> dict[str, Any]:
+        """Generate a fully reproducible, audited dimension record adhering to Audit 1 Section 13."""
+        valid_inputs = {
+            k: float(v) for k, v in eligible_inputs.items()
+            if isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(float(v))
+        }
+        status = "MEASURED" if valid_inputs else "NOT_MEASURED"
+        calc_score = round(sum(valid_inputs.values()) / len(valid_inputs), 1) if valid_inputs else None
+
+        return {
+            "dimension": dimension_name,
+            "measurement_method": measurement_method,
+            "eligible_inputs": valid_inputs,
+            "excluded_inputs": dict(excluded_inputs),
+            "weighting_rules": dict(weighting_rules or {}),
+            "formula_version": self.FORMULA_VERSION,
+            "score": calc_score,
+            "status": status,
+            "limitations": limitations or ("No eligible inputs measured" if not valid_inputs else None),
         }

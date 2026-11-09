@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from typing import List, Dict, Optional, Any
 from app.domain.evidence.models import Evidence, MachineObservation
 from app.domain.evidence.provenance import compute_evidence_hash, compute_raw_source_hash
+from app.domain.enums import ProvenanceType, CollectionStatus
 
 class EvidenceStore:
     def __init__(self, run_id: str, snapshots=None):
@@ -92,7 +93,20 @@ class EvidenceStore:
 
         evidence = Evidence(
             id=ev_id,
+            audit_run_id=self.run_id,
             source_type=source_type,
+            source_reference=url,
+            raw_observation=text or value,
+            normalized_observation=value or text,
+            collection_method=analyzer,
+            scope=url,
+            captured_at=fetched_at if isinstance(fetched_at, datetime) else datetime.now(timezone.utc),
+            provenance_type=ProvenanceType.RAW if source_type in ("dom", "http", "crawl", "html") else (
+                ProvenanceType.MEASURED if source_type in ("measured", "perf", "performance", "crux") else (
+                    ProvenanceType.EXTERNAL if source_type in ("external", "api", "gsc", "ga4") else ProvenanceType.DERIVED
+                )
+            ),
+            collection_status=CollectionStatus.SUCCESS,
             url=url,
             selector=selector,
             text=text,
@@ -145,7 +159,16 @@ class EvidenceStore:
         ev_hash = compute_evidence_hash("external", source, url, None, claim, payload)
         evidence = Evidence(
             id=ext_id,
+            audit_run_id=self.run_id,
             source_type="external",
+            source_reference=url or source,
+            raw_observation=payload,
+            normalized_observation=payload,
+            collection_method=f"api_{source}",
+            scope=url or source,
+            captured_at=now,
+            provenance_type=ProvenanceType.EXTERNAL,
+            collection_status=CollectionStatus.SUCCESS,
             url=url,
             text=claim,
             value=payload,
@@ -157,6 +180,86 @@ class EvidenceStore:
             metadata=meta,
         )
         self._evidence[ext_id] = evidence
+        return evidence
+
+    def record_unavailable(
+        self,
+        analyzer: str,
+        source_type: str = "external",
+        url: Optional[str] = None,
+        reason: str = "Data source or integration unavailable",
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> Evidence:
+        """Record an explicit UNAVAILABLE evidence item so missing inputs are not treated as failures or passes."""
+        self._counter += 1
+        ev_id = f"ev_{self._counter:03d}"
+        now = datetime.now(timezone.utc)
+        meta = dict(metadata or {})
+        meta["reason"] = reason
+        ev_hash = compute_evidence_hash(source_type, analyzer, url, None, reason, None)
+        evidence = Evidence(
+            id=ev_id,
+            audit_run_id=self.run_id,
+            source_type=source_type,
+            source_reference=url or analyzer,
+            raw_observation=None,
+            normalized_observation=None,
+            collection_method=analyzer,
+            scope=url or analyzer,
+            captured_at=now,
+            provenance_type=ProvenanceType.EXTERNAL if source_type == "external" else ProvenanceType.RAW,
+            collection_status=CollectionStatus.UNAVAILABLE,
+            limitations=reason,
+            url=url,
+            text=f"UNAVAILABLE: {reason}",
+            value=None,
+            analyzer=analyzer,
+            hash=ev_hash,
+            content_sha256="",
+            fetched_at=now,
+            metadata=meta,
+        )
+        self._evidence[ev_id] = evidence
+        return evidence
+
+    def record_failed(
+        self,
+        analyzer: str,
+        source_type: str = "crawl",
+        url: Optional[str] = None,
+        error: str = "Collection probe failed",
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> Evidence:
+        """Record an explicit FAILED evidence item without converting it into an unverified negative defect."""
+        self._counter += 1
+        ev_id = f"ev_{self._counter:03d}"
+        now = datetime.now(timezone.utc)
+        meta = dict(metadata or {})
+        meta["error"] = error
+        ev_hash = compute_evidence_hash(source_type, analyzer, url, None, error, None)
+        evidence = Evidence(
+            id=ev_id,
+            audit_run_id=self.run_id,
+            source_type=source_type,
+            source_reference=url or analyzer,
+            raw_observation=None,
+            normalized_observation=None,
+            collection_method=analyzer,
+            scope=url or analyzer,
+            captured_at=now,
+            provenance_type=ProvenanceType.RAW,
+            collection_status=CollectionStatus.FAILED,
+            limitations=error,
+            url=url,
+            text=f"FAILED: {error}",
+            value=None,
+            analyzer=analyzer,
+            hash=ev_hash,
+            content_sha256="",
+            fetched_at=now,
+            metadata=meta,
+        )
+        self._evidence[ev_id] = evidence
         return evidence
 
     def get_external(self) -> List[Evidence]:
@@ -244,7 +347,16 @@ class EvidenceStore:
 
         ev_legacy = Evidence(
             id=evidence_id,
+            audit_run_id=self.run_id,
             source_type=source,
+            source_reference=url,
+            raw_observation=value,
+            normalized_observation=value,
+            collection_method=f"layer1_{source}",
+            scope=url,
+            captured_at=datetime.now(timezone.utc),
+            provenance_type=ProvenanceType.RAW,
+            collection_status=CollectionStatus.SUCCESS,
             url=url,
             selector=selector,
             text=str(value) if value is not None else "",

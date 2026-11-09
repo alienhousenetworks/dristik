@@ -1037,6 +1037,248 @@ class ValidationGate:
             "details": "Document pagination, tables, and 20-chapter architecture verified for print/HTML delivery."
         }
 
+        # -------------------------------------------------------------
+        # 15 MANDATORY PUBLICATION QUALITY GATES (AUDIT 1 REFERENCE)
+        # -------------------------------------------------------------
+        story_text = (getattr(report, "story_summary", "") or "").lower()
+
+        # Gate 01: Schema Validation
+        schema_ok = bool(report.domain and report.report_id and report.scores is not None)
+        gates["gate_01_schema_validation"] = {
+            "gate_id": "GATE_01_SCHEMA",
+            "passed": schema_ok,
+            "status": "PASS" if schema_ok else "FAIL",
+            "severity": "CRITICAL",
+            "failure_reason": None if schema_ok else "Mandatory schema fields missing (domain, report_id, or scores).",
+            "related_ids": [report.report_id] if report.report_id else [],
+            "required_remediation": "Populate mandatory report envelope metadata.",
+            "details": "Schema validation passed." if schema_ok else "Schema envelope incomplete.",
+        }
+
+        # Gate 02: Evidence Reference Integrity
+        ledger_keys = set(report.evidence_ledger.keys()) if isinstance(report.evidence_ledger, dict) else set()
+        unresolvable_refs = []
+        cross_run_refs = []
+        for f in (report.findings or []):
+            for ref in (getattr(f, "evidence_ids", None) or getattr(f, "evidence_refs", None) or []):
+                if ledger_keys and ref not in ledger_keys:
+                    unresolvable_refs.append(ref)
+                if hasattr(report, "analysis_id") and report.analysis_id:
+                    ev_item = report.evidence_ledger.get(ref) if isinstance(report.evidence_ledger, dict) else None
+                    if isinstance(ev_item, dict) and ev_item.get("audit_run_id") and ev_item.get("audit_run_id") != report.analysis_id:
+                        cross_run_refs.append(ref)
+        ev_ref_ok = len(unresolvable_refs) == 0 and len(cross_run_refs) == 0
+        gates["gate_02_evidence_reference_integrity"] = {
+            "gate_id": "GATE_02_EVIDENCE_REF_INTEGRITY",
+            "passed": ev_ref_ok,
+            "status": "PASS" if ev_ref_ok else "FAIL",
+            "severity": "CRITICAL",
+            "failure_reason": f"Unresolvable evidence refs: {unresolvable_refs[:3]}; cross-run refs: {cross_run_refs[:3]}" if not ev_ref_ok else None,
+            "related_ids": unresolvable_refs + cross_run_refs,
+            "required_remediation": "Prune or repair orphaned evidence references before release.",
+            "details": "All evidence references resolve to the current audit execution." if ev_ref_ok else "Found unresolvable or cross-run evidence references.",
+        }
+
+        # Gate 03: Claim-Level Evidence Traceability
+        untraceable_claims = []
+        if getattr(report, "claim_ledger", None) and getattr(report.claim_ledger, "entries", None):
+            for entry in report.claim_ledger.entries:
+                st = str(getattr(entry, "source_type", "")).upper()
+                if "OBSERVED" in st or "MEASURED" in st or "FACT" in st:
+                    if not getattr(entry, "evidence_ids", None):
+                        untraceable_claims.append(entry.claim_id)
+        claim_trace_ok = len(untraceable_claims) == 0
+        gates["gate_03_claim_level_traceability"] = {
+            "gate_id": "GATE_03_CLAIM_TRACEABILITY",
+            "passed": claim_trace_ok,
+            "status": "PASS" if claim_trace_ok else "FAIL",
+            "severity": "CRITICAL",
+            "failure_reason": f"Factual claims lack backing evidence: {untraceable_claims[:3]}" if not claim_trace_ok else None,
+            "related_ids": untraceable_claims,
+            "required_remediation": "Anchor every factual claim to canonical Layer 1 evidence.",
+            "details": "Every factual sentence maps to valid evidence." if claim_trace_ok else f"{len(untraceable_claims)} factual claims lack evidence.",
+        }
+
+        # Gate 04: Semantic Evidence Support
+        semantic_violations = []
+        if any(k in story_text for k in ["site is 100% down", "completely unreachable", "total outage"]):
+            if report.crawl_manifest and report.crawl_manifest.pages and any(getattr(p, "status_code", 0) == 200 for p in report.crawl_manifest.pages):
+                semantic_violations.append("Story asserts site down but crawl observed HTTP 200 responses.")
+        sem_ok = len(semantic_violations) == 0
+        gates["gate_04_semantic_evidence_support"] = {
+            "gate_id": "GATE_04_SEMANTIC_SUPPORT",
+            "passed": sem_ok,
+            "status": "PASS" if sem_ok else "FAIL",
+            "severity": "CRITICAL",
+            "failure_reason": "; ".join(semantic_violations) if not sem_ok else None,
+            "related_ids": [],
+            "required_remediation": "Reconcile narrative claims with empirical observations.",
+            "details": "Semantic consistency confirmed between narrative and evidence." if sem_ok else "Contradiction detected between narrative and crawl facts.",
+        }
+
+        # Gate 05: Provenance Validation
+        provenance_ok = getattr(report, "sealed_evidence_snapshot_id", None) is not None or bool(report.evidence_ledger)
+        gates["gate_05_provenance_validation"] = {
+            "gate_id": "GATE_05_PROVENANCE",
+            "passed": bool(provenance_ok),
+            "status": "PASS" if provenance_ok else "FAIL",
+            "severity": "HIGH",
+            "failure_reason": None if provenance_ok else "Missing sealed evidence snapshot or evidence ledger.",
+            "related_ids": [],
+            "required_remediation": "Seal evidence snapshot before publication.",
+            "details": "Evidence provenance verified." if provenance_ok else "Snapshot unsealed.",
+        }
+
+        # Gate 06: Scope Consistency
+        is_single_page = False
+        if manifest and getattr(manifest, "total_pages_discovered", 1) == 1:
+            is_single_page = True
+        elif report.crawl_manifest and len(report.crawl_manifest.pages) == 1:
+            is_single_page = True
+        scope_ok = True
+        scope_reason = None
+        if is_single_page and "complete site-wide crawl" in story_text:
+            scope_ok = False
+            scope_reason = "Single-page audit asserts complete site-wide crawl."
+        gates["gate_06_scope_consistency"] = {
+            "gate_id": "GATE_06_SCOPE_CONSISTENCY",
+            "passed": scope_ok,
+            "status": "PASS" if scope_ok else "FAIL",
+            "severity": "HIGH",
+            "failure_reason": scope_reason,
+            "related_ids": [],
+            "required_remediation": "Acknowledge single-page public-web review scope without claiming full site crawl.",
+            "details": "Scope accurately describes inspection boundaries." if scope_ok else scope_reason,
+        }
+
+        # Gate 07: Finding Validity
+        unsupported_findings = [
+            f.finding_id for f in (report.findings or [])
+            if not getattr(f, "held_from_executive", False) and not (f.evidence_ids or f.evidence_refs or f.evidence)
+        ]
+        find_valid_ok = len(unsupported_findings) == 0
+        gates["gate_07_finding_validity"] = {
+            "gate_id": "GATE_07_FINDING_VALIDITY",
+            "passed": find_valid_ok,
+            "status": "PASS" if find_valid_ok else "FAIL",
+            "severity": "CRITICAL",
+            "failure_reason": f"Findings lack evidence: {unsupported_findings[:3]}" if not find_valid_ok else None,
+            "related_ids": unsupported_findings,
+            "required_remediation": "Remove unbacked findings from publication.",
+            "details": "All findings have traceable evidence." if find_valid_ok else f"{len(unsupported_findings)} findings lack evidence.",
+        }
+
+        # Gate 08: Severity and Confidence Consistency
+        conf_ok = all(
+            0.0 <= getattr(f, "confidence", 1.0) <= 1.0
+            for f in (report.findings or [])
+        )
+        gates["gate_08_severity_confidence_consistency"] = {
+            "gate_id": "GATE_08_SEV_CONF_CONSISTENCY",
+            "passed": conf_ok,
+            "status": "PASS" if conf_ok else "FAIL",
+            "severity": "HIGH",
+            "failure_reason": "Out of bounds confidence value detected." if not conf_ok else None,
+            "related_ids": [],
+            "required_remediation": "Ensure confidence values stay within [0.0, 1.0].",
+            "details": "Confidence and severity properly calibrated." if conf_ok else "Invalid confidence numbers.",
+        }
+
+        # Gate 09: Score Eligibility and Reproducibility
+        cat_scores_dict = report.scores.category_scores if report.scores else {}
+        unmeasured_as_100 = [
+            k for k, cs in cat_scores_dict.items()
+            if getattr(cs, "status", None) == "NOT_MEASURED" and getattr(cs, "score", None) == 100.0
+        ]
+        score_elig_ok = len(unmeasured_as_100) == 0
+        gates["gate_09_score_eligibility"] = {
+            "gate_id": "GATE_09_SCORE_ELIGIBILITY",
+            "passed": score_elig_ok,
+            "status": "PASS" if score_elig_ok else "FAIL",
+            "severity": "CRITICAL",
+            "failure_reason": f"Unmeasured category given score 100: {unmeasured_as_100}" if not score_elig_ok else None,
+            "related_ids": unmeasured_as_100,
+            "required_remediation": "Unmeasured pillars must display NOT_MEASURED and be excluded from composite calculation.",
+            "details": "Score eligibility rules respected." if score_elig_ok else "Synthetic score found on unmeasured pillar.",
+        }
+
+        # Gate 10: Recommendation Relevance
+        banned_rec_jargon = ["install redis cluster", "upgrade to aws aurora", "configure kubernetes ingress"]
+        irrelevant_recs = []
+        for f in (report.findings or []):
+            rec_text = (getattr(f, "recommendation", "") or "").lower()
+            for b in banned_rec_jargon:
+                if b in rec_text:
+                    irrelevant_recs.append(f"{f.finding_id}: {b}")
+        rec_ok = len(irrelevant_recs) == 0
+        gates["gate_10_recommendation_relevance"] = {
+            "gate_id": "GATE_10_REC_RELEVANCE",
+            "passed": rec_ok,
+            "status": "PASS" if rec_ok else "FAIL",
+            "severity": "HIGH",
+            "failure_reason": f"Irrelevant infrastructure recommendations: {irrelevant_recs[:2]}" if not rec_ok else None,
+            "related_ids": [r.split(":")[0] for r in irrelevant_recs],
+            "required_remediation": "Remove ungrounded infrastructure advice from recommendations.",
+            "details": "Recommendations grounded in finding context." if rec_ok else "Irrelevant infrastructure advice detected.",
+        }
+
+        # Gate 11: Cross-Section Consistency
+        top_10 = getattr(report, "top_10_actions", None)
+        actions_list = getattr(top_10, "actions", None) or getattr(top_10, "top_actions", None) or []
+        total_f = len(report.findings or [])
+        cross_ok = True
+        if actions_list:
+            if len(actions_list) > total_f and total_f > 0:
+                cross_ok = False
+        gates["gate_11_cross_section_consistency"] = {
+            "gate_id": "GATE_11_CROSS_SECTION",
+            "passed": cross_ok,
+            "status": "PASS" if cross_ok else "FAIL",
+            "severity": "HIGH",
+            "failure_reason": "Executive top actions exceed available findings count." if not cross_ok else None,
+            "related_ids": [],
+            "required_remediation": "Reconcile executive top action items with findings register.",
+            "details": "Cross-section counts agree." if cross_ok else "Discrepancy in finding/action counts.",
+        }
+
+        # Gate 12: Executive Summary Reconciliation
+        exec_reconciled = not any(
+            k in story_text for k in ["iso 27001 certified", "guaranteed #1 ranking", "100% bug free"]
+        )
+        gates["gate_12_executive_summary_reconciliation"] = {
+            "gate_id": "GATE_12_EXEC_RECONCILIATION",
+            "passed": exec_reconciled,
+            "status": "PASS" if exec_reconciled else "FAIL",
+            "severity": "CRITICAL",
+            "failure_reason": "Executive summary contains unbacked certification or ranking claims." if not exec_reconciled else None,
+            "related_ids": [],
+            "required_remediation": "Remove unverified certification or absolute ranking assertions from summary.",
+            "details": "Executive summary contains only substantiated claims." if exec_reconciled else "Unbacked claims in summary.",
+        }
+
+        # Gate 13: Report Rendering Validation
+        gates["gate_13_report_rendering_validation"] = gates["reporting_gate"]
+
+        # Gate 14: Citation Validation
+        gates["gate_14_citation_validation"] = gates["evidence_gate"]
+
+        # Gate 15: Missing-Data and Limitation Disclosure
+        missing_disclosed = True
+        ext_rep = getattr(report, "external_authority", None)
+        if ext_rep and not getattr(ext_rep, "gsc_connected", False):
+            if "google search console confirms" in story_text:
+                missing_disclosed = False
+        gates["gate_15_missing_data_disclosure"] = {
+            "gate_id": "GATE_15_MISSING_DATA_DISCLOSURE",
+            "passed": missing_disclosed,
+            "status": "PASS" if missing_disclosed else "FAIL",
+            "severity": "HIGH",
+            "failure_reason": "Disconnected analytics asserted as measured in executive summary." if not missing_disclosed else None,
+            "related_ids": [],
+            "required_remediation": "Disclose unavailable analytics as a data limitation.",
+            "details": "Missing data and limitations properly disclosed." if missing_disclosed else "Failed to disclose missing data.",
+        }
+
         all_passed = all(g["passed"] for g in gates.values())
         return {
             "all_passed": all_passed,

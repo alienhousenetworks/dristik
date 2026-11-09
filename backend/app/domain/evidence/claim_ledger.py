@@ -170,19 +170,45 @@ class ClaimLedgerBuilder:
                     is_unsupported = True
                     rejection_reason = "Asserts specific analytics bounce rate without connected analytics connector."
 
+                # Find genuine semantic matching evidence IDs rather than grabbing arbitrary IDs
+                matched_ev_ids = self._find_matching_evidence_ids(s, store)
                 st = ClaimSourceType.UNSUPPORTED if is_unsupported else ClaimSourceType.INFERRED
                 entries.append(ClaimLedgerEntry(
                     claim_id=self._next_claim_id(),
                     claim=s,
                     source_type=st,
-                    evidence_ids=[] if is_unsupported else [e.id for e in store.get_all()[:3]],
-                    confidence=0.0 if is_unsupported else 0.85,
+                    evidence_ids=[] if is_unsupported else matched_ev_ids,
+                    confidence=0.0 if is_unsupported else (0.85 if matched_ev_ids else 0.70),
                     scope=scope_label,
                     created_by="narrative_synthesizer",
                     timestamp=now_iso,
                     is_valid_fact=not is_unsupported,
                     rejection_reason=rejection_reason,
                 ))
+
+    def _find_matching_evidence_ids(self, sentence: str, store: EvidenceStore) -> List[str]:
+        matching: List[str] = []
+        tokens = set(re.findall(r"\b[a-zA-Z0-9_\-\.]{3,}\b", sentence.lower()))
+        common_words = {"the", "and", "for", "with", "that", "this", "from", "site", "page", "website", "will", "have", "can", "should", "not"}
+        meaningful = tokens - common_words
+        if not meaningful:
+            return []
+
+        for obs in store.get_all_observations():
+            attr = obs.attribute.lower()
+            val_str = str(obs.value).lower()
+            if attr in meaningful or any(t in val_str for t in meaningful if len(t) > 4):
+                matching.append(obs.evidence_id)
+                if len(matching) >= 3:
+                    return matching
+
+        for ev in store.get_all():
+            ev_text = (ev.text or "").lower()
+            if any(t in ev_text for t in meaningful if len(t) > 4):
+                matching.append(ev.id)
+                if len(matching) >= 3:
+                    return matching
+        return matching
 
         # Count unsupported claims in website facts (excluding prescriptive recommendations)
         unsupported_facts = [

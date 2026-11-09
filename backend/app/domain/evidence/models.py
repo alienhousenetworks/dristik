@@ -3,10 +3,11 @@ Dristik AI Evidence Models
 Universal immutable evidence schema with strict provenance.
 """
 from typing import Optional, Any
-from datetime import datetime
-from pydantic import BaseModel, Field, ConfigDict
-
+from datetime import datetime, timezone
+from pydantic import BaseModel, Field, ConfigDict, model_validator
 from enum import Enum
+
+from app.domain.enums import ProvenanceType, CollectionStatus
 
 class ProvenanceStatus(str, Enum):
     VERIFIED = "verified"
@@ -36,13 +37,24 @@ class ResultProvenance(BaseModel):
 
 class Evidence(BaseModel):
     id: str = Field(..., description="Unique immutable evidence ID, e.g. ev_001")
-    source_type: str = Field(..., description="Evidence category source")
+    audit_run_id: Optional[str] = Field(default=None, description="Associated audit execution run ID")
+    source_type: str = Field(..., description="Evidence category source: HTTP, DOM, browser, crawler, API, etc.")
+    source_reference: Optional[str] = Field(default=None, description="Original URL, source identifier, or provider reference")
+    raw_observation: Optional[Any] = Field(default=None, description="Original captured information")
+    normalized_observation: Optional[Any] = Field(default=None, description="Parsed or standardized representation")
+    collection_method: Optional[str] = Field(default=None, description="How the information was obtained")
+    scope: Optional[str] = Field(default=None, description="URL, page, origin, domain, site, or provider scope")
+    captured_at: Optional[datetime] = Field(default=None, description="Actual collection timestamp")
+    provenance_type: ProvenanceType = Field(default=ProvenanceType.RAW, description="RAW, MEASURED, DERIVED, EXTERNAL, or INFERRED")
+    integrity_hash: Optional[str] = Field(default=None, description="Cryptographic hash of the original captured artifact")
+    limitations: Optional[str] = Field(default=None, description="Known evidence limitations")
+    collection_status: CollectionStatus = Field(default=CollectionStatus.SUCCESS, description="SUCCESS, FAILED, UNAVAILABLE, or NOT_TESTED")
     url: Optional[str] = None
     selector: Optional[str] = None
     text: Optional[str] = None
     value: Optional[Any] = None
     analyzer: str = Field(..., description="Name of deterministic analyzer that produced this evidence")
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     hash: str = Field(..., description="SHA-256 cryptographic hash of extracted evidence payload")
     content_sha256: str = Field(default="", description="SHA-256 of raw source material at fetch time")
     fetched_at: Optional[datetime] = None
@@ -50,6 +62,28 @@ class Evidence(BaseModel):
     metadata: dict[str, Any] = Field(default_factory=dict)
 
     model_config = ConfigDict(frozen=True)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _hydrate_canonical_fields(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            if "evidence_id" in data and "id" not in data:
+                data["id"] = data["evidence_id"]
+            if not data.get("source_reference") and data.get("url"):
+                data["source_reference"] = data["url"]
+            if not data.get("integrity_hash") and data.get("hash"):
+                data["integrity_hash"] = data["hash"]
+            if not data.get("captured_at"):
+                data["captured_at"] = data.get("timestamp") or datetime.now(timezone.utc)
+            if data.get("raw_observation") is None:
+                data["raw_observation"] = data.get("value") if data.get("value") is not None else data.get("text")
+            if data.get("normalized_observation") is None:
+                data["normalized_observation"] = data.get("value") if data.get("value") is not None else data.get("text")
+        return data
+
+    @property
+    def evidence_id(self) -> str:
+        return self.id
 
     def to_ref(self) -> "EvidenceRef":
         st = (self.source_type or "").lower()

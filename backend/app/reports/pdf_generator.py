@@ -439,6 +439,11 @@ async def get_presentation_deck_pptx(
     report = getattr(run, "report", None)
     if not report:
         raise HTTPException(status_code=400, detail="Executive report not yet synthesized for this analysis run.")
+    if getattr(report, "certification_status", "") == "QA_FAILED":
+        raise HTTPException(
+            status_code=422,
+            detail="Report publication blocked by Publication Quality Gate failures. Evidence integrity checks must pass before release."
+        )
 
     from app.agents.deck.coordinator import generate_executive_pptx_deck
     pptx_bytes, blueprint = generate_executive_pptx_deck(report)
@@ -470,6 +475,11 @@ async def get_presentation_deck_manifest(
     report = getattr(run, "report", None)
     if not report:
         raise HTTPException(status_code=400, detail="Executive report not yet synthesized for this analysis run.")
+    if getattr(report, "certification_status", "") == "QA_FAILED":
+        raise HTTPException(
+            status_code=422,
+            detail="Report publication blocked by Publication Quality Gate failures. Evidence integrity checks must pass before release."
+        )
 
     from app.agents.deck.coordinator import get_deck_orchestrator
 
@@ -505,6 +515,11 @@ async def get_enterprise_seo_assessment(
     report = getattr(run, "report", None)
     if not report:
         raise HTTPException(status_code=400, detail="Executive report not yet synthesized for this analysis run.")
+    if getattr(report, "certification_status", "") == "QA_FAILED":
+        raise HTTPException(
+            status_code=422,
+            detail="Report publication blocked by Publication Quality Gate failures. Evidence integrity checks must pass before release."
+        )
     from app.seo.enterprise import build_enterprise_seo
 
     return build_enterprise_seo(report).model_dump()
@@ -530,6 +545,11 @@ async def get_complete_seo_report(
     report = getattr(run, "report", None)
     if not report:
         raise HTTPException(status_code=400, detail="Executive report not yet synthesized for this analysis run.")
+    if getattr(report, "certification_status", "") == "QA_FAILED":
+        raise HTTPException(
+            status_code=422,
+            detail="Report publication blocked by Publication Quality Gate failures. Evidence integrity checks must pass before release."
+        )
 
     from app.seo.reporting import seo_report_generator
     from app.seo.reporting import seo_audit_book_renderer
@@ -607,6 +627,11 @@ async def get_audit_deliverables(
     report = getattr(run, "report", None)
     if not report:
         raise HTTPException(status_code=400, detail="Executive report not yet synthesized for this analysis run.")
+    if getattr(report, "certification_status", "") == "QA_FAILED":
+        raise HTTPException(
+            status_code=422,
+            detail="Report publication blocked by Publication Quality Gate failures. Evidence integrity checks must pass before release."
+        )
 
     from app.seo.reporting import seo_report_generator
     json_rep = seo_report_generator.render_json_report(report)
@@ -631,6 +656,11 @@ async def export_urls_csv(
     report = getattr(run, "report", None)
     if not report:
         raise HTTPException(status_code=400, detail="Executive report not yet synthesized for this analysis run.")
+    if getattr(report, "certification_status", "") == "QA_FAILED":
+        raise HTTPException(
+            status_code=422,
+            detail="Report publication blocked by Publication Quality Gate failures. Evidence integrity checks must pass before release."
+        )
 
     from app.reports.export_service import generate_urls_csv
 
@@ -658,6 +688,11 @@ async def export_remediation_tracker_csv(
     report = getattr(run, "report", None)
     if not report:
         raise HTTPException(status_code=400, detail="Executive report not yet synthesized for this analysis run.")
+    if getattr(report, "certification_status", "") == "QA_FAILED":
+        raise HTTPException(
+            status_code=422,
+            detail="Report publication blocked by Publication Quality Gate failures. Evidence integrity checks must pass before release."
+        )
 
     from app.reports.export_service import generate_remediation_tracker_csv
 
@@ -687,6 +722,11 @@ async def get_complete_geo_report(
     report = getattr(run, "report", None)
     if not report:
         raise HTTPException(status_code=400, detail="Executive report not yet synthesized for this analysis run.")
+    if getattr(report, "certification_status", "") == "QA_FAILED":
+        raise HTTPException(
+            status_code=422,
+            detail="Report publication blocked by Publication Quality Gate failures. Evidence integrity checks must pass before release."
+        )
 
     from app.geo.reporting.geo_report_generator import geo_report_generator
 
@@ -726,6 +766,11 @@ async def export_geo_remediation_tracker_csv(
     report = getattr(run, "report", None)
     if not report:
         raise HTTPException(status_code=400, detail="Executive report not yet synthesized for this analysis run.")
+    if getattr(report, "certification_status", "") == "QA_FAILED":
+        raise HTTPException(
+            status_code=422,
+            detail="Report publication blocked by Publication Quality Gate failures. Evidence integrity checks must pass before release."
+        )
 
     from app.reports.export_service import generate_geo_remediation_csv
 
@@ -755,6 +800,11 @@ async def get_complete_aeo_report(
     report = getattr(run, "report", None)
     if not report:
         raise HTTPException(status_code=400, detail="Executive report not yet synthesized for this analysis run.")
+    if getattr(report, "certification_status", "") == "QA_FAILED":
+        raise HTTPException(
+            status_code=422,
+            detail="Report publication blocked by Publication Quality Gate failures. Evidence integrity checks must pass before release."
+        )
 
     from app.aeo.reporting import aeo_report_generator
 
@@ -796,6 +846,11 @@ async def get_complete_cro_report(
     report = getattr(run, "report", None)
     if not report:
         raise HTTPException(status_code=400, detail="Executive report not yet synthesized for this analysis run.")
+    if getattr(report, "certification_status", "") == "QA_FAILED":
+        raise HTTPException(
+            status_code=422,
+            detail="Report publication blocked by Publication Quality Gate failures. Evidence integrity checks must pass before release."
+        )
 
     from app.cro import build_from_executive_report, cro_report_generator
 
@@ -842,6 +897,11 @@ async def export_aeo_remediation_tracker_csv(
     report = getattr(run, "report", None)
     if not report:
         raise HTTPException(status_code=400, detail="Executive report not yet synthesized for this analysis run.")
+    if getattr(report, "certification_status", "") == "QA_FAILED":
+        raise HTTPException(
+            status_code=422,
+            detail="Report publication blocked by Publication Quality Gate failures. Evidence integrity checks must pass before release."
+        )
 
     from app.reports.export_service import generate_aeo_remediation_csv
 
@@ -869,6 +929,11 @@ async def export_aeo_question_dataset_csv(
     report = getattr(run, "report", None)
     if not report:
         raise HTTPException(status_code=400, detail="Executive report not yet synthesized for this analysis run.")
+    if getattr(report, "certification_status", "") == "QA_FAILED":
+        raise HTTPException(
+            status_code=422,
+            detail="Report publication blocked by Publication Quality Gate failures. Evidence integrity checks must pass before release."
+        )
 
     from app.reports.export_service import generate_aeo_question_dataset_csv
 
@@ -896,6 +961,11 @@ async def export_aeo_live_benchmark_csv(
     report = getattr(run, "report", None)
     if not report:
         raise HTTPException(status_code=400, detail="Executive report not yet synthesized for this analysis run.")
+    if getattr(report, "certification_status", "") == "QA_FAILED":
+        raise HTTPException(
+            status_code=422,
+            detail="Report publication blocked by Publication Quality Gate failures. Evidence integrity checks must pass before release."
+        )
 
     from app.reports.export_service import generate_aeo_live_benchmark_csv
 
@@ -923,6 +993,11 @@ async def export_aeo_brand_facts_csv(
     report = getattr(run, "report", None)
     if not report:
         raise HTTPException(status_code=400, detail="Executive report not yet synthesized for this analysis run.")
+    if getattr(report, "certification_status", "") == "QA_FAILED":
+        raise HTTPException(
+            status_code=422,
+            detail="Report publication blocked by Publication Quality Gate failures. Evidence integrity checks must pass before release."
+        )
 
     from app.reports.export_service import generate_aeo_brand_facts_csv
 
@@ -950,6 +1025,11 @@ async def export_aeo_evidence_ledger_csv(
     report = getattr(run, "report", None)
     if not report:
         raise HTTPException(status_code=400, detail="Executive report not yet synthesized for this analysis run.")
+    if getattr(report, "certification_status", "") == "QA_FAILED":
+        raise HTTPException(
+            status_code=422,
+            detail="Report publication blocked by Publication Quality Gate failures. Evidence integrity checks must pass before release."
+        )
 
     from app.reports.export_service import generate_aeo_evidence_ledger_csv
 
@@ -1002,6 +1082,11 @@ async def get_section_pdf_report(
     report = getattr(run, "report", None)
     if not report:
         raise HTTPException(status_code=400, detail="Executive report not yet synthesized for this analysis run.")
+    if getattr(report, "certification_status", "") == "QA_FAILED":
+        raise HTTPException(
+            status_code=422,
+            detail="Report publication blocked by Publication Quality Gate failures. Evidence integrity checks must pass before release."
+        )
 
     from app.reports.section_exports import section_report_generator
     html_content = section_report_generator.render_section_html(report, section_key)
@@ -1060,6 +1145,11 @@ async def get_section_pptx_deck(
     report = getattr(run, "report", None)
     if not report:
         raise HTTPException(status_code=400, detail="Executive report not yet synthesized for this analysis run.")
+    if getattr(report, "certification_status", "") == "QA_FAILED":
+        raise HTTPException(
+            status_code=422,
+            detail="Report publication blocked by Publication Quality Gate failures. Evidence integrity checks must pass before release."
+        )
 
     from app.agents.deck.coordinator import generate_section_pptx_deck
     pptx_bytes, blueprint = generate_section_pptx_deck(report, section_key)
@@ -1100,6 +1190,11 @@ async def get_adaptive_audit_book(
     report = getattr(run, "report", None)
     if not report:
         raise HTTPException(status_code=400, detail="Executive report not yet synthesized for this analysis run.")
+    if getattr(report, "certification_status", "") == "QA_FAILED":
+        raise HTTPException(
+            status_code=422,
+            detail="Report publication blocked by Publication Quality Gate failures. Evidence integrity checks must pass before release."
+        )
 
     from app.reports.adaptive_audit_book import (
         detect_report_family,

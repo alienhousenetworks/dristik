@@ -40,6 +40,8 @@ class VerificationStatus(str, Enum):
     REJECTED = "rejected"
     CONFLICTED = "conflicted"
     CONTESTED = "contested"
+    CONFLICTING = "conflicting"
+    FAILED = "failed"
     INSUFFICIENT_EVIDENCE = "insufficient_evidence"
     NOT_MEASURED = "not_measured"
     PENDING_VERIFICATION = "pending_verification"
@@ -231,6 +233,26 @@ class ClaimType(str, Enum):
     FACT = "fact"
     INFERENCE = "inference"
     RECOMMENDATION = "recommendation"
+    OBSERVED = "OBSERVED"
+    MEASURED = "MEASURED"
+    DERIVED = "DERIVED"
+    EXTERNAL = "EXTERNAL"
+    INFERRED = "INFERRED"
+
+
+class ProvenanceType(str, Enum):
+    RAW = "RAW"
+    MEASURED = "MEASURED"
+    DERIVED = "DERIVED"
+    EXTERNAL = "EXTERNAL"
+    INFERRED = "INFERRED"
+
+
+class CollectionStatus(str, Enum):
+    SUCCESS = "SUCCESS"
+    FAILED = "FAILED"
+    UNAVAILABLE = "UNAVAILABLE"
+    NOT_TESTED = "NOT_TESTED"
 
 
 class ClaimSourceType(str, Enum):
