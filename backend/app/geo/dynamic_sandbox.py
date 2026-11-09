@@ -10,6 +10,7 @@ Each question records its Question Provenance (why it was generated).
 Each evaluation uses claim-level grounding instead of sentence-window search.
 """
 import re
+import time
 from typing import List, Dict, Any, Optional
 from urllib.parse import urlparse
 from app.domain.models import (
@@ -143,27 +144,31 @@ class DynamicQuestionSandboxEngine:
             corpus_pages.append({"url": p.url, "title": p.title or "", "text": text, "lower": text.lower()})
         site_context = self._extract_site_context(corpus_pages, brand, niche, val_prop)
 
+        t_sandbox_start = time.perf_counter()
+        def _elapsed():
+            return f"T+{int((time.perf_counter() - t_sandbox_start) * 1000)}ms"
+
         self.system_execution_log = [
             {
-                "timestamp": "T+00ms",
+                "timestamp": _elapsed(),
                 "phase": "INDEXING",
                 "level": "INFO",
                 "message": f"Crawled Website Knowledge Base initialized across {len(pages)} pages for brand '{brand}'.",
             },
             {
-                "timestamp": "T+40ms",
+                "timestamp": _elapsed(),
                 "phase": "KNOWLEDGE_GRAPH",
                 "level": "INFO",
                 "message": f"Extracted {len(kg.claims)} atomic claims, {len(kg.entities)} entities, and {len(kg.relationships)} semantic edges.",
             },
             {
-                "timestamp": "T+80ms",
+                "timestamp": _elapsed(),
                 "phase": "QUERY_PLANNING",
                 "level": "INFO",
                 "message": f"Planned inquiry matrix across 10 strategic facets ({budget.value} budget tier: {budget.question_count()} target inquiries).",
             },
             {
-                "timestamp": "T+120ms",
+                "timestamp": _elapsed(),
                 "phase": "RAG_EXECUTION",
                 "level": "INFO",
                 "message": "Executing AI RAG Answering Agent with Hybrid Retrieval and claim-level grounding verification...",

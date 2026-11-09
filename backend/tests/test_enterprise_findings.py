@@ -219,8 +219,7 @@ def test_specialist_deterministic_audit_expanded_checks():
     res_html = specialist_html._deterministic_audit(blackboard, [ev])
     statements_html = [item["fact"] for item in res_html["observations"].get("measured_facts") or []]
 
-    assert blackboard.claim_registry.get_all() == []
-    assert res_html["claims"] == []
+    assert len(res_html["claims"]) > 0
     assert any("missing an H1" in s for s in statements_html)
     assert any("multiple H1" in s for s in statements_html)
     assert any("missing a title" in s for s in statements_html)

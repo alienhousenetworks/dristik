@@ -13,6 +13,9 @@ def repair_and_parse_json(raw_text: str) -> Optional[Dict[str, Any]]:
 
     text = raw_text.strip()
 
+    # Strip thinking blocks <think>...</think>
+    text = re.sub(r"<think>[\s\S]*?</think>", "", text).strip()
+
     # Strip markdown code blocks ```json ... ```
     if "```" in text:
         match = re.search(r"```(?:json)?\s*([\s\S]*?)\s*```", text)

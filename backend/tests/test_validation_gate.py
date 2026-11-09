@@ -121,6 +121,7 @@ def create_sample_report(
     return ExecutiveReport(
         report_id="rep_test_001",
         analysis_id="run_test_001",
+        org_id="org_test",
         website_url="https://example.com",
         domain="example.com",
         generated_at="September 20, 2026 - 12:00 UTC",

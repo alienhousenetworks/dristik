@@ -1147,7 +1147,20 @@ AEO_SPECIALISTS_V3: Dict[str, AgentDefinition] = {
         required_evidence=["question_inventory", "crawled_urls"],
     ),
     "aeo.direct_answer_box.v3": SPECIALIST_AGENTS_V3["aeo.direct_answer_box.v3"],
-    "aeo.answer_quality.v3": SPECIALIST_AGENTS_V3["aeo.direct_answer_box.v3"],
+    "aeo.answer_quality.v3": AgentDefinition(
+        agent_id="aeo.answer_quality.v3",
+        agent_name="Direct Answer Quality & Completeness Specialist",
+        domain="AEO",
+        worker_type="analyst_worker",
+        description="Evaluates direct answer quality, completeness, conciseness, and conversational formatting for voice and answer engines.",
+        capabilities=["answer_quality_audit", "answer_completeness", "speakable_evaluation"],
+        allowed_models=["reasoning_model", "deterministic"],
+        token_budget=4000,
+        risk_level="low",
+        timeout_sec=20,
+        dependencies=["aeo.direct_answer_box.v3"],
+        required_evidence=["direct_answers", "answer_passages"],
+    ),
     "aeo.factual_verification.v3": AgentDefinition(
         agent_id="aeo.factual_verification.v3",
         agent_name="Factual Accuracy & Evidence Verification Specialist",
@@ -1519,6 +1532,148 @@ GEO_SPECIALISTS_V3: Dict[str, AgentDefinition] = {
         required_evidence=["verification_protocols", "re-test_results", "delta_records"],
     ),
 }
+
+# Canonical DAG Dependencies (P1 Staged Architecture — Eliminates Wave 1 Blindness)
+DAG_DEPENDENCY_GRAPH: Dict[str, List[str]] = {
+    # Stage 1: Roots
+    "business.discovery.v3": [],
+    "seo.crawl.v3": [],
+
+    # Stage 1 & 2: Business & Technical Discovery
+    "business.icp.v3": ["business.discovery.v3"],
+    "business.intent.v3": ["business.discovery.v3"],
+    "business.commercial.v3": ["business.discovery.v3"],
+    "business.semantic_strategist.v3": ["business.discovery.v3", "business.icp.v3", "business.intent.v3", "business.commercial.v3"],
+    "entity.graph.v3": ["business.discovery.v3"],
+    "entity.knowledge_graph.v3": ["entity.graph.v3"],
+    "seo.html.v3": ["seo.crawl.v3"],
+    "seo.indexability.v3": ["seo.crawl.v3"],
+    "seo.performance.v3": ["seo.crawl.v3"],
+    "seo.security.v3": ["seo.crawl.v3"],
+    "seo.assets.v3": ["seo.crawl.v3"],
+    "seo.internal_links.v3": ["seo.crawl.v3"],
+    "seo.drift.v3": ["seo.crawl.v3"],
+    "schema.validation.v3": ["seo.crawl.v3"],
+    "seo.ecommerce.v3": ["seo.crawl.v3", "business.discovery.v3"],
+    "crawl.rendering_hydration.v3": ["seo.crawl.v3"],
+    "crawl.international_hreflang.v3": ["seo.crawl.v3"],
+
+    # Stage 3 & 4: Four Parallel Pillars & Specialist Analysis
+    # Content & Specialized SEO
+    "content.depth.v3": ["business.intent.v3", "seo.crawl.v3"],
+    "content.eeat.v3": ["business.intent.v3", "seo.crawl.v3"],
+    "content.quality.v3": ["business.intent.v3", "seo.crawl.v3"],
+    "content.topic_coverage.v3": ["business.intent.v3", "seo.crawl.v3"],
+    "content.cannibalization.v3": ["content.topic_coverage.v3"],
+    "seo.cluster.v3": ["business.discovery.v3", "content.topic_coverage.v3"],
+    "seo.sxo.v3": ["business.discovery.v3", "business.intent.v3"],
+    "seo.maps_intelligence.v3": ["business.discovery.v3"],
+    "seo.specialized.video.v3": ["seo.crawl.v3"],
+    "seo.specialized.policy_compliance.v3": ["seo.crawl.v3"],
+    "seo.specialized.news.v3": ["content.depth.v3"],
+    "seo.specialized.programmatic.v3": ["seo.crawl.v3"],
+    "seo.specialized.saas_b2b.v3": ["business.commercial.v3", "seo.crawl.v3"],
+    "seo.specialized.accessibility.v3": ["seo.crawl.v3"],
+    "seo.specialized.forecasting.v3": ["business.semantic_strategist.v3"],
+    "seo.specialized.governance.v3": ["seo.crawl.v3"],
+    "seo.specialized.ecommerce.v3": ["business.commercial.v3", "seo.crawl.v3"],
+    "seo.specialized.local.v3": ["business.discovery.v3", "seo.crawl.v3"],
+    "seo.specialized.international.v3": ["crawl.international_hreflang.v3"],
+    "seo.specialized.app.v3": ["seo.crawl.v3"],
+
+    # GEO Specialists
+    "geo.extractability.v3": ["business.discovery.v3", "seo.crawl.v3"],
+    "geo.information_gain.v3": ["business.discovery.v3", "content.depth.v3"],
+    "geo.structure.v3": ["business.discovery.v3", "seo.html.v3"],
+    "geo.citation_readiness.v3": ["business.semantic_strategist.v3", "entity.graph.v3", "content.quality.v3"],
+    "geo.multimodal_citation.v3": ["business.discovery.v3", "seo.assets.v3"],
+    "geo.source_freshness.v3": ["business.discovery.v3", "schema.validation.v3"],
+    "seo.agentic_readiness.v3": ["geo.extractability.v3"],
+    "geo.benchmark_orchestrator.v3": ["business.semantic_strategist.v3"],
+    "geo.prompt_discovery.v3": ["business.intent.v3"],
+    "geo.brand_mention.v3": ["business.discovery.v3", "entity.graph.v3"],
+    "geo.recommendation_intelligence.v3": ["geo.prompt_discovery.v3"],
+    "geo.citation_intelligence.v3": ["geo.citation_readiness.v3"],
+    "geo.brand_hallucination.v3": ["business.discovery.v3", "geo.brand_mention.v3"],
+    "geo.entity_consistency.v3": ["entity.graph.v3", "entity.knowledge_graph.v3"],
+    "geo.technical_auditor.v3": ["seo.crawl.v3", "schema.validation.v3"],
+    "geo.crawler_diagnostics.v3": ["seo.crawl.v3", "crawl.rendering_hydration.v3"],
+    "geo.offsite_evidence.v3": ["business.discovery.v3"],
+    "geo.competitive_analyst.v3": ["competitor.head_to_head_parity.v3"],
+    "geo.measurement_analyst.v3": ["geo.benchmark_orchestrator.v3"],
+    "geo.referral_analyst.v3": ["business.discovery.v3"],
+    "geo.remediation_planner.v3": ["geo.citation_readiness.v3", "geo.information_gain.v3"],
+    "geo.verification_engine.v3": ["geo.brand_hallucination.v3", "verification.adversarial.v3"],
+
+    # AEO Specialists
+    "aeo.direct_answer_box.v3": ["business.intent.v3", "content.depth.v3"],
+    "aeo.entity_consensus.v3": ["business.discovery.v3", "entity.graph.v3"],
+    "aeo.conversational_intent.v3": ["business.intent.v3"],
+    "aeo.question_discovery.v3": ["business.intent.v3", "seo.crawl.v3"],
+    "aeo.intent_classification.v3": ["aeo.question_discovery.v3"],
+    "aeo.question_clustering.v3": ["aeo.question_discovery.v3"],
+    "aeo.answer_quality.v3": ["aeo.direct_answer_box.v3"],
+    "aeo.factual_verification.v3": ["business.discovery.v3", "content.depth.v3"],
+    "aeo.passage_analysis.v3": ["content.depth.v3", "seo.html.v3"],
+    "aeo.technical_eligibility.v3": ["schema.validation.v3", "seo.indexability.v3"],
+    "aeo.source_attribution.v3": ["content.eeat.v3"],
+    "aeo.live_benchmark.v3": ["ai_search.discoverability.v3"],
+    "aeo.citation_analysis.v3": ["geo.citation_readiness.v3"],
+    "aeo.competitive_intelligence.v3": ["competitor.head_to_head_parity.v3"],
+    "aeo.brand_accuracy.v3": ["business.discovery.v3", "entity.graph.v3"],
+    "aeo.business_attribution.v3": ["business.commercial.v3"],
+    "aeo.remediation_planner.v3": ["aeo.direct_answer_box.v3"],
+
+    # AI Search Specialists
+    "ai_search.discoverability.v3": ["business.semantic_strategist.v3"],
+    "ai_search.chatgpt.v3": ["ai_search.discoverability.v3"],
+    "ai_search.perplexity.v3": ["ai_search.discoverability.v3"],
+    "ai_search.google.v3": ["ai_search.discoverability.v3"],
+    "ai_search.cross_engine.v3": ["ai_search.chatgpt.v3", "ai_search.perplexity.v3", "ai_search.google.v3"],
+
+    # CRO Specialists
+    "ux.experience.v3": ["business.discovery.v3", "seo.crawl.v3"],
+    "trust.authority.v3": ["business.commercial.v3"],
+    "cro.conversion.v3": ["business.commercial.v3", "ux.experience.v3"],
+    "cro.form_friction.v3": ["business.commercial.v3", "ux.experience.v3"],
+    "cro.pricing_psychology.v3": ["business.commercial.v3"],
+    "cro.three_second_hook.v3": ["business.intent.v3", "business.commercial.v3"],
+    "cro.social_proof_depth.v3": ["trust.authority.v3", "business.commercial.v3"],
+
+    # Competitor Specialists
+    "competitor.head_to_head_parity.v3": ["business.semantic_strategist.v3"],
+    "competitor.answer_bakeoff.v3": ["competitor.head_to_head_parity.v3"],
+    "competitor.feature_pricing_matrix.v3": ["business.commercial.v3", "competitor.head_to_head_parity.v3"],
+    "competitor.citation_gap.v3": ["business.semantic_strategist.v3", "geo.citation_readiness.v3"],
+
+    # Stage 5: Independent Verification
+    "verification.adversarial.v3": ["business.icp.v3", "business.commercial.v3", "content.eeat.v3", "content.quality.v3", "trust.authority.v3", "seo.performance.v3", "geo.citation_readiness.v3", "ai_search.cross_engine.v3"],
+    "verification.contradiction.v3": ["verification.adversarial.v3", "business.icp.v3", "business.commercial.v3", "seo.performance.v3", "content.eeat.v3", "trust.authority.v3"],
+
+    # Stage 6: Strategy & Remediation
+    "strategy.executive.v3": ["verification.contradiction.v3", "ai_search.cross_engine.v3"],
+    "copywriting.seo.v3": ["strategy.executive.v3"],
+    "copywriting.geo.v3": ["strategy.executive.v3"],
+    "copywriting.cro.v3": ["strategy.executive.v3"],
+    "copywriting.clarity.v3": ["strategy.executive.v3"],
+    "copywriting.section.v3": ["strategy.executive.v3"],
+    "deck.architect.v1": ["strategy.executive.v3"],
+    "deck.data_analyst.v1": ["deck.architect.v1"],
+    "deck.pptx_builder.v1": ["deck.data_analyst.v1"],
+}
+
+# Apply canonical dependencies
+for _aid, _deps in DAG_DEPENDENCY_GRAPH.items():
+    if _aid in SPECIALIST_AGENTS_V3:
+        SPECIALIST_AGENTS_V3[_aid].dependencies = _deps
+    if _aid in AEO_SPECIALISTS_V3:
+        AEO_SPECIALISTS_V3[_aid].dependencies = _deps
+    if _aid in GEO_SPECIALISTS_V3:
+        GEO_SPECIALISTS_V3[_aid].dependencies = _deps
+    if _aid in COPYWRITING_AGENTS_V3:
+        COPYWRITING_AGENTS_V3[_aid].dependencies = _deps
+    if _aid in DECK_AGENTS_V1:
+        DECK_AGENTS_V1[_aid].dependencies = _deps
 
 # Backward Compatibility Alias Map
 AGENT_REGISTRY: Dict[str, AgentDefinition] = {

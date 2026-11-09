@@ -38,6 +38,7 @@ def test_download_remediation_patch_pack():
     analysis_id = "run_test_pack_01"
 
     report = ExecutiveReport(
+        org_id=user["org_id"],
         report_id="rep_test_pack_01",
         analysis_id=analysis_id,
         website_url="https://acme.com",

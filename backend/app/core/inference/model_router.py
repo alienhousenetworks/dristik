@@ -288,6 +288,8 @@ class ModelRouter:
         tried_missing: set = set()
         user_prompt = prompts["user"]
         max_tokens = int(max_tokens or settings.LLM_MAX_TOKENS)
+        if capability in ("content_intelligence", "synthesizer", "geo_analysis") and max_tokens < 4096:
+            max_tokens = 4096
         call_timeout = int(timeout_sec) if timeout_sec else None
 
         # Evidence text for number grounding check

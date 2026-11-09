@@ -126,6 +126,7 @@ class AgentPool:
         end_progress: int = 88,
         active_pillars: Optional[Set[str]] = None,
     ) -> Dict[str, Any]:
+        blackboard.blackboard_state["pipeline_orchestrated"] = True
         total = max(len(self.agents), 1)
         completed = 0
         summary: Dict[str, Any] = {

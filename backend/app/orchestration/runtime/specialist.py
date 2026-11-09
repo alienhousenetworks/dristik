@@ -230,10 +230,13 @@ class SpecialistAgent(BaseAgent):
             # Agentic-first policy: execute AI specialist reasoning over empirical evidence
             llm_res = await self._llm_audit(blackboard, evidence_slice)
             if llm_res.get("status") == "completed":
-                det = self._deterministic_audit(blackboard, evidence_slice)
-                result = self._merge(det, llm_res)
-                self._store(blackboard, result)
-                return result
+                if "deterministic" in (self.definition.allowed_models or []):
+                    det = self._deterministic_audit(blackboard, evidence_slice)
+                    result = self._merge(det, llm_res)
+                    self._store(blackboard, result)
+                    return result
+                self._store(blackboard, llm_res)
+                return llm_res
             # Offline/fallback: if LLM unavailable, fall back to deterministic telemetry
             if llm_res.get("status") == "unavailable" and "deterministic" in (self.definition.allowed_models or []):
                 det = self._deterministic_audit(blackboard, evidence_slice)
@@ -255,13 +258,17 @@ class SpecialistAgent(BaseAgent):
         deps = self.definition.dependencies or []
         if not deps:
             return False
-        results = (blackboard.blackboard_state.get("agent_results") or {})
-        # Verification/strategy agents wait for some prior specialist output, not a hard fail
+        # Only enforce DAG prerequisite blocking during orchestrated pipeline runs
+        if not blackboard.blackboard_state.get("pipeline_orchestrated"):
+            return False
         if self.definition.domain == "VERIFICATION":
             return False
+        results = (blackboard.blackboard_state.get("agent_results") or {})
+        failed_deps = [d for d in deps if results.get(d, {}).get("status") in ("failed", "error")]
+        if failed_deps:
+            return True
         missing = [d for d in deps if d not in results]
-        # Soft: only block if ALL deps missing and deps are same-wave critical
-        return len(missing) == len(deps) and len(deps) > 0 and not results
+        return len(missing) == len(deps) and len(deps) > 0
 
     async def _llm_audit(self, blackboard: CognitiveBlackboard, evidence_slice) -> Dict[str, Any]:
         # Deduplication for business identity specialists: if Stage 6 already resolved business identity, reuse it
@@ -301,16 +308,19 @@ class SpecialistAgent(BaseAgent):
 
         models = self.definition.allowed_models or []
         if is_groq:
-            # Under Groq, only deep reasoning/critic/synthesis capabilities use reasoning_model
+            # Under Groq, route deep reasoning/critic/synthesis with appropriate token budget
             if self.capability in ("synthesizer", "geo_analysis", "ai_search_simulation", "critic", "cross_analyst") and "reasoning_model" in models:
                 tier = "reasoning_model"
+                token_budget = max(2048, int(self.definition.token_budget or 4000))
             elif "fast_slm" in models:
                 tier = "fast_slm"
+                token_budget = max(2048, min(int(self.definition.token_budget or 3000), 4000))
             elif "judge_model" in models:
                 tier = "judge_model"
+                token_budget = max(2048, int(self.definition.token_budget or 3500))
             else:
                 tier = "fast_slm"
-            token_budget = min(int(self.definition.token_budget or 3000), 1000)
+                token_budget = 2048
         else:
             if "judge_model" in models:
                 tier = "judge_model"
@@ -404,17 +414,56 @@ class SpecialistAgent(BaseAgent):
         observations: Dict[str, Any] = {"mode": "DETERMINISTIC"}
 
         def add(statement: str, severity: Severity, recommendation: str, refs: Optional[List[str]] = None):
-            # Crawl facts stay on the observation record. A missing title, header, or
-            # sitemap is not published as a finding, and the old recommendation string
-            # is not a specialist judgment.
-            del severity, recommendation
             bound = [ref for ref in (refs or []) if ref]
             if not bound:
                 bound = _supporting_evidence_ids(statement, evidence_slice)
+            if not bound and getattr(blackboard, "evidence_store", None) is not None:
+                source_type, selector = _preferred_binding(statement)
+                page_url = pages[0].url if pages else getattr(blackboard, "website_url", None)
+                created = blackboard.evidence_store.add_evidence(
+                    source_type=source_type,
+                    analyzer=self.agent_id,
+                    url=page_url,
+                    selector=selector,
+                    text=statement[:500],
+                    value={"observation": statement[:500], "selector": selector},
+                )
+                bound = [created.id]
+            bound = [r for r in bound if r]
+            if not bound:
+                # Zero-Fake Standard: Never bind arbitrary evidence nodes
+                observations.setdefault("unsupported_facts", []).append({
+                    "fact": statement,
+                    "reason": "NO_SUPPORTING_EVIDENCE_BOUND",
+                    "severity": severity.value if hasattr(severity, "value") else str(severity),
+                    "recommendation": recommendation,
+                })
+                return
             observations.setdefault("measured_facts", []).append({
                 "fact": statement,
                 "evidence_refs": bound,
+                "severity": severity.value if hasattr(severity, "value") else str(severity),
+                "recommendation": recommendation,
             })
+            if len(claims_spec) < 8:
+                claim = self.register_claim(
+                    blackboard=blackboard,
+                    statement=statement,
+                    category=cat,
+                    severity=severity,
+                    evidence_refs=bound,
+                    confidence=0.9,
+                    recommendation=recommendation,
+                    impact=7 if severity in (Severity.CRITICAL, Severity.HIGH) else 4,
+                    effort=2,
+                )
+                claims_spec.append({
+                    "claim_id": claim.id,
+                    "statement": statement,
+                    "recommendation": recommendation,
+                    "evidence_refs": bound,
+                    "severity": severity.value if hasattr(severity, "value") else str(severity),
+                })
 
         aid = self.agent_id
         ch = (manifest.crawl_health if manifest else {}) or {}
@@ -904,13 +953,19 @@ class SpecialistAgent(BaseAgent):
                 )
 
         elif aid == "ai_search.rank_tracker.v3":
-            # Evaluates presence in generative answer engine citation pools
-            observations["ai_citation_telemetry_ready"] = True
-            add(
-                "Domain is vulnerable to competitor substitution when buyers ask LLMs for category vendor recommendations.",
-                Severity.MEDIUM,
-                "Reinforce third-party digital footprint across GitHub, documentation, and directory graphs to boost AI consensus score."
-            )
+            # Evaluates presence in generative answer engine citation pools from real telemetry
+            scorecard = getattr(blackboard, "ai_visibility_scorecard", None)
+            if scorecard and getattr(scorecard, "status", None) == "MEASURED":
+                observations["ai_citation_telemetry_ready"] = True
+                observations["citation_rate_pct"] = getattr(scorecard, "citation_rate_pct", None)
+                if (getattr(scorecard, "citation_rate_pct", 100) or 0) < 50:
+                    add(
+                        "Live generative answer engine benchmarking shows low citation visibility across target buyer queries.",
+                        Severity.HIGH,
+                        "Reinforce third-party digital footprint across documentation, technical directories, and industry datasets.",
+                    )
+            else:
+                observations["ai_citation_telemetry_status"] = "UNMEASURED"
 
         elif aid == "ai_search.hallucination_risk.v3":
             # Evaluates ambiguity that could trigger LLM hallucinations about capabilities
@@ -937,12 +992,10 @@ class SpecialistAgent(BaseAgent):
         elif aid == "ai_search.competitor_displacement.v3":
             # Evaluates brand defensibility against rival displacement in AI search
             observations["competitor_bakeoff_conducted"] = bool(getattr(blackboard, "competitor_bakeoff", None))
-            if not getattr(blackboard, "competitor_bakeoff", None):
-                add(
-                    "Unmeasured commercial query bake-off against industry rivals creates blind spots in AI answer engine market share.",
-                    Severity.LOW,
-                    "Conduct a head-to-head commercial query bake-off against your primary rival domain to measure recommendation parity."
-                )
+            if getattr(blackboard, "competitor_bakeoff", None):
+                observations["competitor_displacement_evaluated"] = True
+            else:
+                observations["competitor_displacement_status"] = "UNMEASURED"
 
         elif aid == "cro.trust_signals.v3":
             # Audits trust signals (SSL, privacy policy, terms, contact, security headers)
@@ -959,33 +1012,29 @@ class SpecialistAgent(BaseAgent):
             # Evaluates form fields and friction points in the conversion funnel
             forms = [p.url for p in pages if getattr(p, "forms_detected", False)]
             observations["pages_with_forms"] = len(forms)
-            add(
-                "Conversion pathways require optimization to minimize initial engagement friction and drop-off.",
-                Severity.LOW,
-                "Simplify lead capture to minimal required fields (e.g. email-only or frictionless SSO) to maximize funnel velocity."
-            )
+            if len(forms) > 0:
+                add(
+                    f"{len(forms)} page(s) contain lead capture forms that require ongoing friction optimization.",
+                    Severity.LOW,
+                    "Simplify lead capture to minimal required fields (e.g. email-only or frictionless SSO) to maximize funnel velocity."
+                )
 
         elif aid == "cro.form_friction.v3":
             # Form & Input Abandonment Specialist: checks input field bloat, autocomplete, and required inputs
             inputs_count = sum(len(getattr(p, "form_inputs", []) or []) for p in pages)
             observations["form_inputs_detected"] = inputs_count
-            add(
-                "Lead capture and contact forms should be audited to minimize input friction and ensure explicit autocomplete attributes.",
-                Severity.MEDIUM,
-                "Audit all form fields: designate clear labels, enable browser autocomplete (e.g. autocomplete='email'), and remove non-essential fields."
-            )
+            if inputs_count > 6:
+                add(
+                    f"Lead capture forms contain {inputs_count} input fields across pages; high field counts correlate with conversion drop-off.",
+                    Severity.MEDIUM,
+                    "Audit form fields: designate clear labels, enable browser autocomplete, and remove non-essential fields."
+                )
 
         elif aid == "cro.pricing_psychology.v3":
             # Pricing Architecture & Packaging Specialist
             has_pricing = any("pricing" in (p.url or "").lower() or "plans" in (p.url or "").lower() for p in pages)
             observations["has_pricing_page"] = has_pricing
-            if has_pricing:
-                add(
-                    "Pricing tiers should feature transparent billing toggles (monthly vs annual) and explicit feature contrast.",
-                    Severity.LOW,
-                    "Highlight recommended plan with visual emphasis, include clear refund/trial guarantees, and display currency disclosures."
-                )
-            else:
+            if not has_pricing:
                 add(
                     "Public pricing or commercial packaging is not easily discoverable from main navigation.",
                     Severity.MEDIUM,
@@ -1005,11 +1054,7 @@ class SpecialistAgent(BaseAgent):
                     "Position an action-oriented primary button (e.g. 'Get Started Free' or 'Book a Demo') in direct proximity to the main headline."
                 )
             else:
-                add(
-                    "Hero headline and sub-headline should deliver instant clarity on What it is, Who it is for, and What to do next within 3 seconds.",
-                    Severity.LOW,
-                    "Test high-intent action verbs in the hero CTA and ensure the sub-headline explicitly qualifies target customer personas."
-                )
+                observations["hero_clarity"] = "PRESENT"
 
         elif aid == "cro.social_proof_depth.v3":
             # Social Proof & Case Study Depth Specialist
@@ -1020,12 +1065,6 @@ class SpecialistAgent(BaseAgent):
                     "Homepage and key commercial pages show limited verifiable customer proof or quantified ROI metrics.",
                     Severity.MEDIUM,
                     "Incorporate recognizable client logos, customer testimonials with named roles, and quantified case study outcomes (e.g. '+40% lift')."
-                )
-            else:
-                add(
-                    "Customer proof and case studies should feature verifiable customer identities and concrete business outcomes.",
-                    Severity.LOW,
-                    "Ensure case studies include measurable before/after metrics and link to full customer stories."
                 )
 
         elif aid == "competitor.head_to_head_parity.v3":
@@ -1045,31 +1084,38 @@ class SpecialistAgent(BaseAgent):
         elif aid == "competitor.answer_bakeoff.v3":
             # AI Answer Engine Bake-Off Specialist
             bakeoff = blackboard.blackboard_state.get("competitor_bakeoff") or {}
-            observations["bakeoff_evaluated"] = True
-            observations["engine_comparison_mode"] = "CONTROLLED_QUERY_BENCHMARK"
-            add(
-                "Commercial inquiry bake-off: brand citation visibility requires continuous optimization across high-intent search queries.",
-                Severity.MEDIUM,
-                "Publish authoritative comparison matrices and definitive solution overviews to maximize answer engine win rate."
-            )
+            if bakeoff and bakeoff.get("status") == "COMPLETED":
+                observations["bakeoff_evaluated"] = True
+                observations["engine_comparison_mode"] = "CONTROLLED_QUERY_BENCHMARK"
+                if bakeoff.get("win_rate", 1.0) < 0.5:
+                    add(
+                        "Commercial inquiry bake-off: competitor models are cited more frequently for core category solutions.",
+                        Severity.HIGH,
+                        "Publish authoritative comparison matrices and definitive solution overviews to maximize answer engine win rate."
+                    )
+            else:
+                observations["bakeoff_status"] = "UNMEASURED"
 
         elif aid == "competitor.feature_pricing_matrix.v3":
             # Competitor Value & Pricing Matrix Specialist
-            observations["value_prop_matrix_mode"] = "PUBLIC_PACKAGING_BENCHMARK"
-            add(
-                "Value proposition and feature disclosures benchmarked: transparent packaging and onboarding friction are key differentiators.",
-                Severity.LOW,
-                "Ensure key feature limits, integration capabilities, and trial guarantees are prominently documented."
-            )
+            comp_matrix = blackboard.blackboard_state.get("competitor_pricing_matrix") or {}
+            if comp_matrix and comp_matrix.get("evaluated"):
+                observations["value_prop_matrix_mode"] = "PUBLIC_PACKAGING_BENCHMARK"
+            else:
+                observations["pricing_matrix_status"] = "UNMEASURED"
 
         elif aid == "competitor.citation_gap.v3":
             # Competitor Authority & Citation Gap Specialist
-            observations["citation_sources_evaluated"] = ["directories", "industry_portals", "review_platforms"]
-            add(
-                "Third-party entity footprint: competitors benefit from high-authority presence on review directories and industry benchmarks.",
-                Severity.MEDIUM,
-                "Claim and optimize profiles on trusted third-party review platforms and industry directories to close the citation gap."
-            )
+            comp_graph = blackboard.blackboard_state.get("competitive_graph") or {}
+            if comp_graph and comp_graph.get("citation_gaps"):
+                observations["citation_sources_evaluated"] = ["directories", "industry_portals", "review_platforms"]
+                add(
+                    "Third-party entity footprint gap detected against key category competitors.",
+                    Severity.MEDIUM,
+                    "Claim and optimize profiles on trusted third-party review platforms and industry directories to close the citation gap."
+                )
+            else:
+                observations["competitor_citation_gap_status"] = "UNMEASURED"
 
         elif aid == "aeo.direct_answer_box.v3":
             # Featured Snippet & Direct Answer Specialist
@@ -1087,157 +1133,18 @@ class SpecialistAgent(BaseAgent):
                     Severity.HIGH,
                     "Implement comprehensive Organization schema including legalName, url, logo, and verified sameAs links to official corporate registries."
                 )
-            else:
-                add(
-                    "Organization entity schema detected: verify bidirectional consistency across external knowledge sources.",
-                    Severity.LOW,
-                    "Keep external social and corporate registry links updated in Schema sameAs properties."
-                )
 
-        elif aid == "aeo.conversational_intent.v3":
-            # Long-Tail Conversational Query Specialist
-            observations["conversational_query_audit"] = "INTENT_TAXONOMY_CHECKED"
-            add(
-                "Conversational search intent coverage: ensure comprehensive coverage of buyer comparison and objection queries.",
-                Severity.LOW,
-                "Address common buyer evaluation questions ('How does X compare to Y?', 'Is X suitable for Z?') with dedicated, unbiased landing sections."
-            )
-
-        elif aid == "aeo.question_discovery.v3":
-            # Question Discovery & Demand Research Specialist
-            observations["question_discovery_evaluated"] = True
-            add(
-                "Question inventory audit: ensure continuous discovery and ingestion of natural-language search queries.",
-                Severity.LOW,
-                "Regularly harvest query demand from Search Console questions, autocomplete, and customer support logs."
-            )
-
-        elif aid == "aeo.intent_classification.v3":
-            # Question Intent Classification Specialist
-            observations["intent_classification_evaluated"] = True
-            add(
-                "Question intent distribution: classify customer queries across informational, comparative, and transactional stages.",
-                Severity.LOW,
-                "Map each question cluster to clear buyer intent and ensure dedicated destination pages exist."
-            )
-
-        elif aid == "aeo.question_clustering.v3":
-            # Question Clustering Specialist
-            observations["question_clustering_evaluated"] = True
-            add(
-                "Topic cluster mapping: group semantically similar queries and establish clear primary vs supporting relationships.",
-                Severity.LOW,
-                "Consolidate fragmented Q&A content into authoritative topic hubs to prevent internal question cannibalization."
-            )
-
-        elif aid == "aeo.factual_verification.v3":
-            # Factual Accuracy & Evidence Verification Specialist
-            observations["factual_claims_checked"] = True
-            add(
-                "Factual verifiability audit: verify all quantitative claims, feature specifications, and comparative benchmarks against documented evidence.",
-                Severity.LOW,
-                "Attach verifiable data sources or first-party documentation to substantive product performance claims."
-            )
-
-        elif aid == "aeo.passage_analysis.v3":
-            # Passage Extractability Specialist
-            observations["passage_extractability_checked"] = True
-            add(
-                "Passage independence audit: ensure key declarative statements are self-contained and free of ambiguous pronoun references.",
-                Severity.LOW,
-                "Craft standalone answer passages that preserve their complete meaning when extracted out of surrounding context."
-            )
-
-        elif aid == "aeo.technical_eligibility.v3":
-            # Technical Discoverability Specialist
-            observations["technical_eligibility_checked"] = True
-            add(
-                "Crawler accessibility and rendering: verify AI search bots have unrestricted access to critical answer passages.",
-                Severity.LOW,
-                "Confirm robots.txt directives allow eligible AI user-agents and server responses avoid hydration-blocking barriers."
-            )
-
-        elif aid == "aeo.source_attribution.v3":
-            # Source Provenance Specialist
-            observations["source_attribution_checked"] = True
-            add(
-                "Source citation provenance: provide clear citation links to primary research, official specs, and authoritative standards.",
-                Severity.LOW,
-                "Maintain explicit attribution links to primary sources to increase citation probability in generative engines."
-            )
-
-        elif aid == "aeo.live_benchmark.v3":
-            # Live Answer Engine Benchmark Specialist
-            observations["live_benchmark_evaluated"] = True
-            add(
-                "Live answer monitoring: track engine response variance across multiple test queries and log raw outputs with timestamps.",
-                Severity.LOW,
-                "Establish automated benchmark query suites to monitor mention and citation rate trends over time."
-            )
-
-        elif aid == "aeo.citation_analysis.v3":
-            # Citation Distribution Specialist
-            observations["citation_distribution_checked"] = True
-            add(
-                "Citation share analysis: evaluate distribution between brand-owned URLs and third-party editorial citations.",
-                Severity.LOW,
-                "Strengthen first-party authoritative documentation while expanding third-party citation footprints."
-            )
-
-        elif aid == "aeo.competitive_intelligence.v3":
-            # Competitive Answer Share Specialist
-            observations["competitive_answer_share_checked"] = True
-            add(
-                "Competitive answer presence: identify high-intent query spaces where competitor brands are cited instead.",
-                Severity.LOW,
-                "Close competitive source gaps by publishing authoritative, head-to-head comparison and pricing clarity."
-            )
-
-        elif aid == "aeo.brand_accuracy.v3":
-            # Brand Accuracy & Misinformation Specialist
-            observations["brand_accuracy_checked"] = True
-            add(
-                "Hallucination and accuracy safeguards: monitor generated answers for obsolete pricing, false claims, or confusing entity names.",
-                Severity.LOW,
-                "Keep public corporate registries and Knowledge Graph entities synchronized to prevent AI hallucination."
-            )
-
-        elif aid == "aeo.business_attribution.v3":
-            # AEO Business Attribution Specialist
-            observations["business_attribution_checked"] = True
-            add(
-                "Answer traffic attribution: track assisted conversions and referral traffic emerging from generative search surfaces.",
-                Severity.LOW,
-                "Tag AI referral landing pages with dedicated analytics campaign parameters to measure pipeline impact."
-            )
-
-        elif aid == "aeo.remediation_planner.v3":
-            # Remediation Planner Specialist
-            observations["remediation_planner_checked"] = True
-            add(
-                "AEO remediation roadmap: maintain prioritized register of content and technical fixes with measurable validation criteria.",
-                Severity.LOW,
-                "Execute the prioritized 30/60/90-day answer optimization backlog and verify post-deployment crawl re-tests."
-            )
-
-        elif aid == "geo.multimodal_citation.v3":
-            # Multi-Modal Data & Visual Asset Specialist
-            total_images = sum(getattr(p, "total_images", 0) for p in pages)
-            observations["total_visual_assets"] = total_images
-            add(
-                "Data tables and visual assets should incorporate descriptive captions, units of measurement, and structured source attribution.",
-                Severity.LOW,
-                "Format proprietary data in semantic HTML <table> structures with complete <caption> and source attribution tags for AI extractability."
-            )
-
-        elif aid == "geo.source_freshness.v3":
-            # Temporal Freshness & Information Longevity Specialist
-            observations["freshness_signals_evaluated"] = True
-            add(
-                "Temporal metadata audit: ensure explicit datePublished and dateModified timestamps are maintained in Schema markup.",
-                Severity.LOW,
-                "Regularly refresh time-sensitive statistics and ensure Schema Article/WebPage objects feature accurate dateModified timestamps."
-            )
+        elif aid in (
+            "aeo.conversational_intent.v3", "aeo.question_discovery.v3", "aeo.intent_classification.v3",
+            "aeo.question_clustering.v3", "aeo.factual_verification.v3", "aeo.passage_analysis.v3",
+            "aeo.technical_eligibility.v3", "aeo.source_attribution.v3", "aeo.live_benchmark.v3",
+            "aeo.citation_analysis.v3", "aeo.competitive_intelligence.v3", "aeo.brand_accuracy.v3",
+            "aeo.business_attribution.v3", "aeo.remediation_planner.v3",
+            "geo.multimodal_citation.v3", "geo.source_freshness.v3",
+        ):
+            # Specialized telemetry agents: require external live feeds or model runs; unmeasured offline
+            observations["execution_status"] = "UNMEASURED"
+            observations["mode"] = "REQUIRE_LIVE_MEASUREMENT"
 
         elif aid == "crawl.rendering_hydration.v3":
             # JS Rendering & Hydration Risk Specialist
@@ -1266,11 +1173,7 @@ class SpecialistAgent(BaseAgent):
                     "Move primary H1 heading tags into the initial server-delivered HTML template."
                 )
             else:
-                add(
-                    "Rendering hygiene: ensure core navigation links and primary value proposition text are pre-rendered in initial HTML response.",
-                    Severity.LOW,
-                    "Ensure server-side rendering (SSR) or static generation covers primary body copy so search crawlers receive complete content without JS delays."
-                )
+                observations["hydration_status"] = "HEALTHY"
 
         elif aid == "crawl.international_hreflang.v3":
             # Internationalization & Hreflang Specialist
@@ -1304,21 +1207,22 @@ class SpecialistAgent(BaseAgent):
         return {
             "agent_id": self.agent_id,
             "status": "completed",
-            "mode": "MEASURED",
-            "claims": [],
+            "mode": observations.get("mode") or "DETERMINISTIC",
+            "claims": claims_spec,
             "observations": observations,
         }
 
     def _merge(self, det: Dict[str, Any], llm: Dict[str, Any]) -> Dict[str, Any]:
-        # Measurements from the crawl stay in observations. Only the model publishes claims.
-        claims = [item for item in (llm.get("claims") or []) if isinstance(item, dict)]
+        llm_claims = [item for item in (llm.get("claims") or []) if isinstance(item, dict)]
+        det_claims = [item for item in (det.get("claims") or []) if isinstance(item, dict)]
+        claims = llm_claims + [c for c in det_claims if not any(l.get("statement") == c.get("statement") for l in llm_claims)]
         obs = dict(det.get("observations") or {})
         obs.update(llm.get("observations") or {})
         status = "completed" if claims or llm.get("status") == "completed" else llm.get("status") or det.get("status")
         return {
             "agent_id": self.agent_id,
             "status": status,
-            "mode": llm.get("mode") or det.get("mode"),
+            "mode": llm.get("mode") or det.get("mode") or "OBSERVED",
             "claims": claims,
             "observations": obs,
             "unavailable_reason": llm.get("unavailable_reason") if status == "unavailable" and not claims else None,

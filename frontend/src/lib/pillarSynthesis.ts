@@ -74,7 +74,10 @@ export function synthesizePillars(report: ExecutiveReport | undefined | null): W
   const techScore = techCat?.score != null ? Math.round(techCat.score) : (honest?.google_score != null ? Math.round(honest.google_score) : null);
   const onPageScore = onPageCat?.score != null ? Math.round(onPageCat.score) : null;
   const contentScore = contentCat?.score != null ? Math.round(contentCat.score) : null;
-  const seoScore = techScore;
+  const seoComponents = [techScore, onPageScore, contentScore].filter((s): s is number => s != null);
+  const seoScore = honest?.google_score != null
+    ? Math.round(honest.google_score)
+    : (seoComponents.length > 0 ? Math.round(seoComponents.reduce((a, b) => a + b, 0) / seoComponents.length) : (techScore ?? null));
 
   const seoFindings = findings.filter(f =>
     f.category === 'TECHNICAL_SEO' || f.category === 'ON_PAGE_SEO' || f.category === 'CONTENT'
@@ -371,6 +374,24 @@ export function synthesizePillars(report: ExecutiveReport | undefined | null): W
     findingsCount: trustFindings.length,
   };
 
+  const schemaFindings = findings.filter(f => f.category === 'SCHEMA');
+  const schemaPillar: PillarScoreData = {
+    id: 'schema',
+    name: 'Schema & Structured Data',
+    shortName: 'Schema',
+    categoryTag: 'Schema',
+    score: schemaScore,
+    grade: getGrade(schemaScore),
+    health: getHealth(schemaScore),
+    headline: schemaScore == null ? 'Schema not scored' : (schemaScore >= 75 ? 'Structured Data Validated' : 'Schema Inconsistencies Detected'),
+    summary: 'Audits Schema.org JSON-LD, microdata graphs, entity properties, and syntax accuracy.',
+    highlights: [
+      `Schema Score: ${schemaScore != null ? `${schemaScore}/100` : 'Not scored'}`,
+      `Types detected: ${report.geo_readiness?.schema_types?.length || 0}`,
+    ],
+    findingsCount: schemaFindings.length,
+  };
+
   return {
     seo: seoPillar,
     geo: geoPillar,
@@ -382,7 +403,7 @@ export function synthesizePillars(report: ExecutiveReport | undefined | null): W
     technical_seo: seoPillar,
     on_page_seo: onPagePillar,
     content: contentPillar,
-    schema: aeoPillar,
+    schema: schemaPillar,
     trust_authority: trustPillar,
     ai_search: aiSearchPillar,
     ux_conversion: croPillar,

@@ -347,7 +347,9 @@ class CognitiveSimulatorWorker(BaseCognitiveWorker):
             "ai_search_matrix": [m.model_dump() for m in ai_matrix],
             "dynamic_sandbox_evaluations": [d.model_dump() for d in dynamic_evals],
             "scenarios": result.get("scenarios", []),
-            "status": "AVAILABLE"
+            "status": "SIMULATION_ONLY",
+            "is_simulation": True,
+            "evaluation_type": "THEORETICAL_PROJECTION"
         }
 
 
