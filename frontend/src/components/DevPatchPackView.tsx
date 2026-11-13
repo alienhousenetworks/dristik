@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { CodePatch, ExecutiveReport, RemediationPatch } from '../types';
+import { fetchPatchPackFiles } from '../services/api';
 import { Card, Section } from './ui';
-import { FileCode2, Copy, Check, Download, Layers, CheckCircle2 } from 'lucide-react';
+import { FileCode2, Copy, Check, Download, Layers, CheckCircle2, ShieldCheck, Package } from 'lucide-react';
 
 interface DevPatchPackViewProps {
   report: ExecutiveReport;
@@ -11,6 +12,35 @@ interface DevPatchPackViewProps {
 export function DevPatchPackView({ report, analysisId }: DevPatchPackViewProps) {
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<string>('ALL');
+  const [packFiles, setPackFiles] = useState<Record<string, string>>({});
+  const [activeArtifact, setActiveArtifact] = useState<string>('patches/unified.diff');
+
+  useEffect(() => {
+    if (!analysisId) return;
+    fetchPatchPackFiles(analysisId)
+      .then((res) => {
+        if (res?.files) {
+          setPackFiles(res.files);
+          if (res.files['patches/unified.diff']) {
+            setActiveArtifact('patches/unified.diff');
+          } else if (res.file_names?.length) {
+            setActiveArtifact(res.file_names[0]);
+          }
+        }
+      })
+      .catch(() => {
+        /* fallback to inline patches */
+      });
+  }, [analysisId]);
+
+  let verificationStatus: string | null = null;
+  try {
+    if (packFiles['VERIFICATION_REPORT.json']) {
+      verificationStatus = JSON.parse(packFiles['VERIFICATION_REPORT.json'])?.overall_status || null;
+    }
+  } catch {
+    verificationStatus = null;
+  }
 
   const patches: CodePatch[] = report.code_patches || [];
   const remediationPatches: RemediationPatch[] = report.remediation_patches || [];
@@ -83,16 +113,85 @@ export function DevPatchPackView({ report, analysisId }: DevPatchPackViewProps) 
         </div>
 
         <div className="flex items-center gap-2 shrink-0">
+          {verificationStatus && (
+            <span
+              className={`inline-flex items-center gap-1 text-[11px] font-mono px-2.5 py-1 rounded border ${
+                verificationStatus === 'VERIFIED_SYNTAX_PASS'
+                  ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                  : 'bg-amber-50 text-amber-800 border-amber-200'
+              }`}
+            >
+              <ShieldCheck className="w-3.5 h-3.5" />
+              {verificationStatus}
+            </span>
+          )}
+          {analysisId && (
+            <a
+              href={`/api/v1/analyses/${analysisId}/patch-pack/zip`}
+              className="btn-primary text-xs px-3 py-2 flex items-center gap-1.5"
+            >
+              <Package className="w-4 h-4" />
+              <span>Download Enterprise ZIP</span>
+            </a>
+          )}
           <button
             type="button"
             onClick={handleDownloadPatchFile}
-            className="btn-primary text-xs px-3 py-2 flex items-center gap-1.5"
+            className="text-xs px-3 py-2 rounded border border-line bg-paper-100 hover:bg-paper-200 flex items-center gap-1.5"
           >
             <Download className="w-4 h-4" />
-            <span>Download .patch Pack</span>
+            <span>Download .patch</span>
           </button>
         </div>
       </div>
+
+      {/* Enterprise Remediation Bundle Workbench */}
+      {Object.keys(packFiles).length > 0 && (
+        <Card className="p-4 space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line pb-2">
+            <div className="text-xs font-mono font-bold text-ink uppercase tracking-wider flex items-center gap-1.5">
+              <FileCode2 className="w-4 h-4 text-teal-700" />
+              Enterprise Remediation Artifacts ({Object.keys(packFiles).length})
+            </div>
+            <button
+              type="button"
+              onClick={() => handleCopy(`artifact_${activeArtifact}`, packFiles[activeArtifact] || '')}
+              className="text-xs px-2.5 py-1 rounded border border-line hover:bg-paper-100 flex items-center gap-1"
+            >
+              {copiedId === `artifact_${activeArtifact}` ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+              <span>{copiedId === `artifact_${activeArtifact}` ? 'Copied' : 'Copy Artifact'}</span>
+            </button>
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            {Object.keys(packFiles).map((fname) => (
+              <button
+                key={fname}
+                type="button"
+                onClick={() => setActiveArtifact(fname)}
+                className={`px-2.5 py-1 rounded text-[11px] font-mono transition-colors ${
+                  activeArtifact === fname
+                    ? 'bg-teal-700 text-white font-bold'
+                    : 'bg-paper-100 text-ink-600 hover:bg-paper-200 border border-line'
+                }`}
+              >
+                {fname}
+              </button>
+            ))}
+          </div>
+          <pre className="p-3 rounded bg-slate-950 text-slate-100 text-xs font-mono overflow-x-auto max-h-80 leading-relaxed">
+            {(packFiles[activeArtifact] || '').split('\n').map((line, i) => {
+              const cls = line.startsWith('+') && !line.startsWith('+++')
+                ? 'text-emerald-400'
+                : line.startsWith('-') && !line.startsWith('---')
+                ? 'text-rose-400'
+                : line.startsWith('@@')
+                ? 'text-cyan-300'
+                : 'text-slate-200';
+              return <div key={i} className={cls}>{line || ' '}</div>;
+            })}
+          </pre>
+        </Card>
+      )}
 
       {/* Category Filter Pills */}
       <div className="flex flex-wrap items-center gap-2">

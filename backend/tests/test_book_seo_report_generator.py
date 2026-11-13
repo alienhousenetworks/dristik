@@ -141,6 +141,7 @@ def _make_sample_report(ecommerce_detected: bool = True) -> ExecutiveReport:
     return ExecutiveReport(
         report_id="DRS-2026-TEST",
         analysis_id="analysis_book_001",
+        org_id="org_test",
         website_url="https://example.com",
         domain="example.com",
         generated_at="May 24, 2026",

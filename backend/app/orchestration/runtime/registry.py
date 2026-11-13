@@ -277,7 +277,8 @@ SPECIALIST_AGENTS_V3: Dict[str, AgentDefinition] = {
         token_budget=5000,
         risk_level="medium",
         timeout_sec=25,
-        required_evidence=["body_copy", "headings", "word_counts"]
+        required_evidence=["body_copy", "headings", "word_counts"],
+        dependencies=["business.discovery.v3"],
     ),
     "content.eeat.v3": AgentDefinition(
         agent_id="content.eeat.v3",
@@ -291,7 +292,8 @@ SPECIALIST_AGENTS_V3: Dict[str, AgentDefinition] = {
         token_budget=4500,
         risk_level="medium",
         timeout_sec=20,
-        required_evidence=["author_bios", "citations", "about_page", "editorial_policy", "external_ground_truth"]
+        required_evidence=["author_bios", "citations", "about_page", "editorial_policy", "external_ground_truth"],
+        dependencies=["business.discovery.v3"],
     ),
     "content.quality.v3": AgentDefinition(
         agent_id="content.quality.v3",
@@ -304,7 +306,8 @@ SPECIALIST_AGENTS_V3: Dict[str, AgentDefinition] = {
         token_budget=4000,
         risk_level="medium",
         timeout_sec=20,
-        required_evidence=["clean_text", "readability_metrics"]
+        required_evidence=["clean_text", "readability_metrics"],
+        dependencies=["business.discovery.v3"],
     ),
     "content.topic_coverage.v3": AgentDefinition(
         agent_id="content.topic_coverage.v3",
@@ -317,7 +320,8 @@ SPECIALIST_AGENTS_V3: Dict[str, AgentDefinition] = {
         token_budget=4500,
         risk_level="medium",
         timeout_sec=25,
-        required_evidence=["headings", "body_text"]
+        required_evidence=["headings", "body_text"],
+        dependencies=["business.discovery.v3"],
     ),
     "content.cannibalization.v3": AgentDefinition(
         agent_id="content.cannibalization.v3",
@@ -330,7 +334,8 @@ SPECIALIST_AGENTS_V3: Dict[str, AgentDefinition] = {
         token_budget=3500,
         risk_level="low",
         timeout_sec=20,
-        required_evidence=["page_manifest", "all_page_titles", "canonical_links"]
+        required_evidence=["page_manifest", "all_page_titles", "canonical_links"],
+        dependencies=["business.discovery.v3"],
     ),
     "seo.cluster.v3": AgentDefinition(
         agent_id="seo.cluster.v3",
@@ -359,7 +364,8 @@ SPECIALIST_AGENTS_V3: Dict[str, AgentDefinition] = {
         token_budget=4500,
         risk_level="medium",
         timeout_sec=20,
-        required_evidence=["dom_elements", "clean_text", "faqs"]
+        required_evidence=["dom_elements", "clean_text", "faqs"],
+        dependencies=["business.discovery.v3"],
     ),
     "geo.information_gain.v3": AgentDefinition(
         agent_id="geo.information_gain.v3",
@@ -372,7 +378,8 @@ SPECIALIST_AGENTS_V3: Dict[str, AgentDefinition] = {
         token_budget=5000,
         risk_level="high",
         timeout_sec=25,
-        required_evidence=["clean_text", "data_tables", "stat_mentions"]
+        required_evidence=["clean_text", "data_tables", "stat_mentions"],
+        dependencies=["business.discovery.v3"],
     ),
     "geo.citation_readiness.v3": AgentDefinition(
         agent_id="geo.citation_readiness.v3",
@@ -516,7 +523,8 @@ SPECIALIST_AGENTS_V3: Dict[str, AgentDefinition] = {
         token_budget=3000,
         risk_level="low",
         timeout_sec=15,
-        required_evidence=["dom_elements", "nav_structure", "viewport"]
+        required_evidence=["dom_elements", "nav_structure", "viewport"],
+        dependencies=["business.discovery.v3"],
     ),
     "seo.sxo.v3": AgentDefinition(
         agent_id="seo.sxo.v3",
@@ -543,7 +551,8 @@ SPECIALIST_AGENTS_V3: Dict[str, AgentDefinition] = {
         token_budget=3500,
         risk_level="low",
         timeout_sec=15,
-        required_evidence=["cta_elements", "form_fields", "hero_section"]
+        required_evidence=["cta_elements", "form_fields", "hero_section"],
+        dependencies=["business.discovery.v3"],
     ),
     "trust.authority.v3": AgentDefinition(
         agent_id="trust.authority.v3",
@@ -557,7 +566,8 @@ SPECIALIST_AGENTS_V3: Dict[str, AgentDefinition] = {
         token_budget=3500,
         risk_level="low",
         timeout_sec=15,
-        required_evidence=["footer_links", "trust_badges", "contact_info", "external_ground_truth"]
+        required_evidence=["footer_links", "trust_badges", "contact_info", "external_ground_truth"],
+        dependencies=["business.discovery.v3"],
     ),
 
     # DOMAIN 8: VERIFICATION / INTELLIGENCE

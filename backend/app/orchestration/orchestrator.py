@@ -1044,137 +1044,27 @@ class AnalysisOrchestrator:
                 copy_status = ExecutionStatus.COMPLETED if (effective_pillars is None or "seo" in effective_pillars) else ExecutionStatus.NOT_CONFIGURED
                 copy_conf = ConfidenceLevel.VERIFIED if page_intel_reports else ConfidenceLevel.UNMEASURED
 
-                # 4.1 SEO Copywriting
+                # 4.1 Consolidated Page Intelligence (single truthful subphase matching actual PageIntelligenceAgent run)
                 p4_1 = SubPhaseReportBuilder.build_generic(
                     run_id=analysis_id,
                     phase_id="phase_04_copywriting",
                     phase_name="4. Copywriting & Page Intelligence",
                     subphase_id="4.1",
-                    subphase_title="SEO Copywriting Specialist (SERP & Meta)",
-                    objective="Generate character-safe title tags, meta descriptions, and semantic heading copy.",
-                    agent_id="copywriting.seo.v3",
-                    agent_model="fast_slm",
-                    execution_mode="slm",
-                    duration_ms=copy_dur_ms,
-                    status=copy_status,
-                    input_summary={"pages_crawled": len(manifest.pages)},
-                    processing_steps=["SERP pixel width validation", "Title tag length truncation defense", "Primary keyword semantic heading alignment"],
-                    structured_output={"specialist": "copywriting.seo.v3", "status": "COMPLETED" if copy_status == ExecutionStatus.COMPLETED else "SKIPPED"},
-                    evidence_tokens=[],
-                    findings=[],
-                    confidence=copy_conf,
-                )
-                await self._record_progressive_subphase(p4_1, "copywriting_seo")
-
-                # 4.2 GEO Copywriting
-                p4_2 = SubPhaseReportBuilder.build_generic(
-                    run_id=analysis_id,
-                    phase_id="phase_04_copywriting",
-                    phase_name="4. Copywriting & Page Intelligence",
-                    subphase_id="4.2",
-                    subphase_title="GEO Copywriting Specialist (LLM Snippets & FAQ)",
-                    objective="Draft extractable, factual entity definitions and FAQ schema copy for LLM citation parsing.",
-                    agent_id="copywriting.geo.v3",
-                    agent_model="fast_slm",
-                    execution_mode="slm",
-                    duration_ms=copy_dur_ms,
-                    status=copy_status,
-                    input_summary={"pages_crawled": len(manifest.pages)},
-                    processing_steps=["Extractable single-sentence definition generation", "FAQ question-answer copy pairing"],
-                    structured_output={"specialist": "copywriting.geo.v3", "status": "COMPLETED" if copy_status == ExecutionStatus.COMPLETED else "SKIPPED"},
-                    evidence_tokens=[],
-                    findings=[],
-                    confidence=copy_conf,
-                )
-                await self._record_progressive_subphase(p4_2, "copywriting_geo")
-
-                # 4.3 CRO Copywriting
-                p4_3 = SubPhaseReportBuilder.build_generic(
-                    run_id=analysis_id,
-                    phase_id="phase_04_copywriting",
-                    phase_name="4. Copywriting & Page Intelligence",
-                    subphase_id="4.3",
-                    subphase_title="CRO Copywriting Specialist (CTA & Friction)",
-                    objective="Rewrite primary call-to-action buttons to eliminate conversion friction and clarify next steps.",
-                    agent_id="copywriting.cro.v3",
-                    agent_model="fast_slm",
-                    execution_mode="slm",
-                    duration_ms=copy_dur_ms,
-                    status=copy_status,
-                    input_summary={"pages_crawled": len(manifest.pages)},
-                    processing_steps=["Audit button action verbs", "Replace ambiguous 'Submit' or 'Click Here' labels with value-driven CTAs"],
-                    structured_output={"specialist": "copywriting.cro.v3", "status": "COMPLETED" if copy_status == ExecutionStatus.COMPLETED else "SKIPPED"},
-                    evidence_tokens=[],
-                    findings=[],
-                    confidence=copy_conf,
-                )
-                await self._record_progressive_subphase(p4_3, "copywriting_cro")
-
-                # 4.4 Clarity Copywriting
-                p4_4 = SubPhaseReportBuilder.build_generic(
-                    run_id=analysis_id,
-                    phase_id="phase_04_copywriting",
-                    phase_name="4. Copywriting & Page Intelligence",
-                    subphase_id="4.4",
-                    subphase_title="Clarity Copywriting Specialist (Jargon & Readability)",
-                    objective="Reduce reading grade level and eliminate confusing corporate jargon in customer-facing copy.",
-                    agent_id="copywriting.clarity.v3",
-                    agent_model="fast_slm",
-                    execution_mode="slm",
-                    duration_ms=copy_dur_ms,
-                    status=copy_status,
-                    input_summary={"pages_crawled": len(manifest.pages)},
-                    processing_steps=["Flesch-Kincaid readability scoring", "Corporate jargon substitution dictionary application"],
-                    structured_output={"specialist": "copywriting.clarity.v3", "status": "COMPLETED" if copy_status == ExecutionStatus.COMPLETED else "SKIPPED"},
-                    evidence_tokens=[],
-                    findings=[],
-                    confidence=copy_conf,
-                )
-                await self._record_progressive_subphase(p4_4, "copywriting_clarity")
-
-                # 4.5 Section Copywriting
-                p4_5 = SubPhaseReportBuilder.build_generic(
-                    run_id=analysis_id,
-                    phase_id="phase_04_copywriting",
-                    phase_name="4. Copywriting & Page Intelligence",
-                    subphase_id="4.5",
-                    subphase_title="Section Copywriting Specialist (Hero & Feature Blocks)",
-                    objective="Craft high-converting above-the-fold hero headlines and supporting value proposition sub-copy.",
-                    agent_id="copywriting.section.v3",
-                    agent_model="reasoning_model",
-                    execution_mode="reasoning_agent",
-                    duration_ms=copy_dur_ms,
-                    status=copy_status,
-                    input_summary={"pages_crawled": len(manifest.pages)},
-                    processing_steps=["Synthesize hero headline candidates", "Validate 5-second customer comprehension"],
-                    structured_output={"specialist": "copywriting.section.v3", "status": "COMPLETED" if copy_status == ExecutionStatus.COMPLETED else "SKIPPED"},
-                    evidence_tokens=[],
-                    findings=[],
-                    confidence=copy_conf,
-                )
-                await self._record_progressive_subphase(p4_5, "copywriting_section")
-
-                # 4.6 Page Intelligence Consolidated
-                p4_6 = SubPhaseReportBuilder.build_generic(
-                    run_id=analysis_id,
-                    phase_id="phase_04_copywriting",
-                    phase_name="4. Copywriting & Page Intelligence",
-                    subphase_id="4.6",
-                    subphase_title="Consolidated Page Intelligence & URL Rewrites",
-                    objective="Compile URL-by-URL action directives, title upgrades, and character-safe hero copy rewrites.",
+                    subphase_title="Page Intelligence & Copywriting Synthesis",
+                    objective="Compile URL-by-URL SEO/GEO/CRO audits, title upgrades, and character-safe hero copy rewrites.",
                     agent_id="agent.page_intelligence",
                     agent_model="hybrid_pipeline",
                     execution_mode="hybrid",
                     duration_ms=page_elapsed_ms,
                     status=copy_status,
                     input_summary={"pages_analyzed": len(manifest.pages)},
-                    processing_steps=["Compile per-page copy audits", "Assemble character-safe rewrite payload"],
+                    processing_steps=["Compile per-page SEO & copy audits", "Assemble character-safe rewrite payload"],
                     structured_output={"pages_analyzed": len(manifest.pages), "reports_count": len(page_intel_reports)},
                     evidence_tokens=[],
                     findings=[],
                     confidence=copy_conf,
                 )
-                await self._record_progressive_subphase(p4_6, "page_intelligence_consolidated")
+                await self._record_progressive_subphase(p4_1, "page_intelligence_consolidated")
 
                 # Phase 4 Consolidated
                 await self._consolidate_progressive_phase(analysis_id, "phase_04_copywriting", "phase_04_consolidated")

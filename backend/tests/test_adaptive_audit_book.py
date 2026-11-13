@@ -40,6 +40,7 @@ def _build_test_report(
     return ExecutiveReport(
         report_id="rep_book_test_001",
         analysis_id="analysis_book_001",
+        org_id="org_test",
         website_url="https://acme-analytics.io",
         domain="acme-analytics.io",
         generated_at="2026-10-12T14:30:00Z",

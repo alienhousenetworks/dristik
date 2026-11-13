@@ -585,9 +585,12 @@ async def get_complete_seo_report(
         return Response(content=book_html, media_type="text/html")
 
     if format.lower() == "pdf":
+        from app.reports.adaptive_audit_book import render_adaptive_audit_book_pdf
         domain_clean = (report.domain or "website").replace("https://", "").replace("http://", "").split("/")[0]
         disposition = "attachment" if download else "inline"
-        pdf_bytes = await seo_audit_book_renderer.render_book_pdf(report)
+        pdf_bytes, _qa = await render_adaptive_audit_book_pdf(report, report_type="SEO")
+        if not pdf_bytes:
+            pdf_bytes = await seo_audit_book_renderer.render_book_pdf(report)
         if not pdf_bytes:
             # Fallback to legacy generator if browser or template issue occurs
             pdf_bytes = await seo_report_generator.render_book_pdf(report)
