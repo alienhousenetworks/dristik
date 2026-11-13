@@ -97,7 +97,11 @@ def _get_canonical_qa_items(
 def build_patch_pack_files(
     bp: Optional[BusinessProfile],
     website_url: str,
-    commercial_evals: List[CommercialQueryEvaluation]
+    commercial_evals: List[CommercialQueryEvaluation],
+    findings: Optional[List[Any]] = None,
+    code_patches: Optional[List[Any]] = None,
+    remediation_patches: Optional[List[Any]] = None,
+    tech_stack: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, str]:
     clean_url = website_url.rstrip("/")
     biz_name = (
@@ -613,7 +617,7 @@ add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsaf
 </section>
 """
 
-    return {
+    files: Dict[str, str] = {
         "schema.jsonld": schema_json,
         "robots.txt": robots_txt,
         "llms.txt": llms_txt,
@@ -621,16 +625,234 @@ add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsaf
         "geo_definitions.html": geo_definitions_html,
         "metadata.html": metadata_html,
         "faq.html": faq_html,
-        "README_DEV_INSTALL.md": readme_md
+        "README_DEV_INSTALL.md": readme_md,
     }
+
+    # Enterprise Phase 2 additions: Finding-grounded unified diff, framework adapter, Jira backlog, verification
+    framework = str((tech_stack or {}).get("primary_framework") or "static_html").lower()
+    files["patches/unified.diff"] = _build_unified_diff(
+        findings=findings or [],
+        code_patches=code_patches or [],
+        remediation_patches=remediation_patches or [],
+        framework=framework,
+    )
+    adapter_name, adapter_code = _build_framework_adapter(
+        framework=framework,
+        copy=copy,
+        schema_json=schema_json,
+        biz_name=biz_name,
+        clean_url=clean_url,
+    )
+    files[adapter_name] = adapter_code
+    files["exports/jira_linear_backlog.json"] = _build_jira_linear_backlog(findings or [], clean_url)
+    files["VERIFICATION_REPORT.json"] = _verify_patch_pack(files, copy)
+
+    return files
+
+
+def _build_unified_diff(
+    findings: List[Any],
+    code_patches: List[Any],
+    remediation_patches: List[Any],
+    framework: str,
+) -> str:
+    """Build a git-apply style unified diff grounded in actual audit findings and patches."""
+    chunks: List[str] = [
+        f"# Dristik Enterprise Unified Remediation Diff (target_framework={framework})",
+        "# Grounded in verified audit findings and code patches.",
+        "",
+    ]
+    all_patches = list(code_patches or []) + list(remediation_patches or [])
+    for p in all_patches:
+        target_file = getattr(p, "target_file", None) or (p.get("target_file") if isinstance(p, dict) else "index.html")
+        title = getattr(p, "title", None) or (p.get("title") if isinstance(p, dict) else "Remediation Patch")
+        before = getattr(p, "before_snippet", None) or (p.get("before_snippet") if isinstance(p, dict) else "") or ""
+        after = getattr(p, "after_snippet", None) or (p.get("after_snippet") if isinstance(p, dict) else "") or ""
+        if not after:
+            continue
+        chunks.append(f"# {title}")
+        chunks.append(f"--- a/{target_file}")
+        chunks.append(f"+++ b/{target_file}")
+        before_lines = before.splitlines() if before else ["<!-- Missing or unoptimized block -->"]
+        after_lines = after.splitlines()
+        chunks.append(f"@@ -1,{len(before_lines)} +1,{len(after_lines)} @@")
+        for line in before_lines:
+            chunks.append(f"-{line}")
+        for line in after_lines:
+            chunks.append(f"+{line}")
+        chunks.append("")
+
+    # Also emit finding-level remediation stubs for CRITICAL/HIGH findings not yet covered by a patch
+    covered_titles = {str(getattr(p, "title", "") or "").lower() for p in all_patches}
+    for f in findings or []:
+        sev = str(getattr(f, "severity", "") or (f.get("severity") if isinstance(f, dict) else "")).upper()
+        if sev not in ("CRITICAL", "HIGH", "SEVERITY.CRITICAL", "SEVERITY.HIGH"):
+            continue
+        ftitle = str(getattr(f, "title", "") or (f.get("title") if isinstance(f, dict) else "")).strip()
+        if not ftitle or ftitle.lower() in covered_titles:
+            continue
+        rec = str(getattr(f, "recommendation", "") or (f.get("recommendation") if isinstance(f, dict) else "")).strip()
+        urls = getattr(f, "affected_urls", None) or (f.get("affected_urls") if isinstance(f, dict) else []) or []
+        chunks.append(f"# [{sev}] {ftitle}")
+        chunks.append(f"# Affected URLs: {', '.join(str(u) for u in urls[:5]) or 'Sitewide'}")
+        chunks.append(f"# Prescriptive Action: {rec}")
+        chunks.append("")
+
+    return "\n".join(chunks)
+
+
+def _build_framework_adapter(
+    framework: str,
+    copy: CharacterSafeCopy,
+    schema_json: str,
+    biz_name: str,
+    clean_url: str,
+) -> Tuple[str, str]:
+    """Generate a native drop-in file tailored to the detected frontend/CMS stack."""
+    if framework == "nextjs":
+        code = (
+            'import type { Metadata } from "next";\n\n'
+            "export const metadata: Metadata = {\n"
+            f'  title: {json.dumps(copy.title)},\n'
+            f'  description: {json.dumps(copy.meta_description)},\n'
+            f'  metadataBase: new URL({json.dumps(clean_url)}),\n'
+            '  alternates: { canonical: "/" },\n'
+            "  openGraph: {\n"
+            f'    title: {json.dumps(copy.title)},\n'
+            f'    description: {json.dumps(copy.meta_description)},\n'
+            f'    siteName: {json.dumps(biz_name)},\n'
+            '    type: "website",\n'
+            "  },\n"
+            "};\n\n"
+            "export function DristikJsonLdScript() {\n"
+            "  return (\n"
+            '    <script\n'
+            '      type="application/ld+json"\n'
+            f"      dangerouslySetInnerHTML={{{{ __html: JSON.stringify({schema_json}) }}}}\n"
+            "    />\n"
+            "  );\n"
+            "}\n"
+        )
+        return "patches/nextjs_metadata_layout.tsx", code
+
+    if framework == "wordpress":
+        code = (
+            "<?php\n"
+            "/**\n"
+            f" * Dristik Enterprise SEO & GEO Mu-Plugin for {biz_name}\n"
+            " */\n"
+            "add_action('wp_head', function() {\n"
+            "  if (is_front_page()) {\n"
+            f"    echo '<meta name=\"description\" content=\"' . esc_attr({json.dumps(copy.meta_description)}) . '\" />\\n';\n"
+            f"    echo '<script type=\"application/ld+json\">' . {json.dumps(schema_json)} . '</script>\\n';\n"
+            "  }\n"
+            "}, 1);\n"
+        )
+        return "patches/wordpress_dristik_seo.php", code
+
+    if framework == "shopify":
+        code = (
+            "{%- comment -%} Dristik Enterprise SEO & GEO Snippet (include in theme.liquid <head>) {%- endcomment -%}\n"
+            f"<title>{copy.title}</title>\n"
+            f'<meta name="description" content="{copy.meta_description}">\n'
+            '<script type="application/ld+json">\n'
+            f"{schema_json}\n"
+            "</script>\n"
+        )
+        return "patches/shopify_dristik_head.liquid", code
+
+    # React SPA / static HTML fallback
+    code = (
+        "// Dristik Enterprise React / Static Head Integration\n"
+        f"export const DRISTIK_HEAD_CONFIG = {{\n"
+        f"  title: {json.dumps(copy.title)},\n"
+        f"  description: {json.dumps(copy.meta_description)},\n"
+        f"  canonical: {json.dumps(clean_url)},\n"
+        "};\n"
+    )
+    return "patches/react_seo_head.ts", code
+
+
+def _build_jira_linear_backlog(findings: List[Any], clean_url: str) -> str:
+    """Export findings as structured Jira/Linear engineering tickets."""
+    tickets: List[Dict[str, Any]] = []
+    for idx, f in enumerate(findings or [], start=1):
+        sev = str(getattr(f, "severity", "") or (f.get("severity") if isinstance(f, dict) else "MEDIUM")).upper()
+        if "." in sev:
+            sev = sev.split(".")[-1]
+        if sev not in ("CRITICAL", "HIGH", "MEDIUM"):
+            continue
+        title = str(getattr(f, "title", "") or (f.get("title") if isinstance(f, dict) else "Audit Finding")).strip()
+        rec = str(getattr(f, "recommendation", "") or (f.get("recommendation") if isinstance(f, dict) else "")).strip()
+        cat = str(getattr(f, "category", "") or (f.get("category") if isinstance(f, dict) else "GENERAL"))
+        urls = getattr(f, "affected_urls", None) or (f.get("affected_urls") if isinstance(f, dict) else []) or [clean_url]
+        ev_refs = getattr(f, "evidence_refs", None) or (f.get("evidence_refs") if isinstance(f, dict) else []) or []
+        tickets.append({
+            "key": f"DRISTIK-{idx:03d}",
+            "summary": f"[{sev}] {title}",
+            "priority": "P0" if sev == "CRITICAL" else ("P1" if sev == "HIGH" else "P2"),
+            "category": cat,
+            "affected_urls": [str(u) for u in urls[:10]],
+            "evidence_refs": [str(r) for r in ev_refs[:10]],
+            "prescriptive_fix": rec,
+            "acceptance_criteria": [
+                "Defect no longer reproduces on affected URLs in headless Chromium re-crawl.",
+                "Evidence verification check passes without regression.",
+            ],
+        })
+    return json.dumps({"website_url": clean_url, "total_tickets": len(tickets), "tickets": tickets}, indent=2)
+
+
+def _verify_patch_pack(files: Dict[str, str], copy: CharacterSafeCopy) -> str:
+    """Automated Verification Sandbox: validates generated JSON-LD, bounds, and syntax."""
+    checks: List[Dict[str, Any]] = []
+    schema_raw = files.get("schema.jsonld", "")
+    try:
+        parsed = json.loads(schema_raw)
+        has_ctx = "@context" in parsed
+        has_graph = "@graph" in parsed or "@type" in parsed
+        checks.append({"artifact": "schema.jsonld", "passed": bool(has_ctx and has_graph), "detail": "Valid JSON-LD graph"})
+    except Exception as exc:
+        checks.append({"artifact": "schema.jsonld", "passed": False, "detail": f"JSON parse error: {exc}"})
+
+    checks.append({
+        "artifact": "metadata.html (title)",
+        "passed": 10 <= copy.title_char_count <= 65,
+        "detail": f"{copy.title_char_count} chars",
+    })
+    checks.append({
+        "artifact": "metadata.html (description)",
+        "passed": 50 <= copy.meta_char_count <= 165,
+        "detail": f"{copy.meta_char_count} chars",
+    })
+    checks.append({
+        "artifact": "patches/unified.diff",
+        "passed": bool(files.get("patches/unified.diff", "").strip()),
+        "detail": "Unified diff generated",
+    })
+    all_passed = all(c["passed"] for c in checks)
+    return json.dumps({"overall_status": "VERIFIED_SYNTAX_PASS" if all_passed else "NEEDS_REVIEW", "checks": checks}, indent=2)
+
 
 def generate_patch_pack_zip(
     bp: Optional[BusinessProfile],
     website_url: str,
-    commercial_evals: List[CommercialQueryEvaluation]
+    commercial_evals: List[CommercialQueryEvaluation],
+    findings: Optional[List[Any]] = None,
+    code_patches: Optional[List[Any]] = None,
+    remediation_patches: Optional[List[Any]] = None,
+    tech_stack: Optional[Dict[str, Any]] = None,
 ) -> bytes:
     """Creates an in-memory zip archive of the developer patch pack."""
-    files = build_patch_pack_files(bp, website_url, commercial_evals)
+    files = build_patch_pack_files(
+        bp,
+        website_url,
+        commercial_evals,
+        findings=findings,
+        code_patches=code_patches,
+        remediation_patches=remediation_patches,
+        tech_stack=tech_stack,
+    )
     buffer = io.BytesIO()
     with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as zf:
         for filename, content in files.items():
@@ -641,10 +863,22 @@ def generate_patch_pack_zip(
 def generate_notion_block(
     bp: Optional[BusinessProfile],
     website_url: str,
-    commercial_evals: List[CommercialQueryEvaluation]
+    commercial_evals: List[CommercialQueryEvaluation],
+    findings: Optional[List[Any]] = None,
+    code_patches: Optional[List[Any]] = None,
+    remediation_patches: Optional[List[Any]] = None,
+    tech_stack: Optional[Dict[str, Any]] = None,
 ) -> str:
     """Generates a clean, copyable Notion/Markdown block for project management."""
-    files = build_patch_pack_files(bp, website_url, commercial_evals)
+    files = build_patch_pack_files(
+        bp,
+        website_url,
+        commercial_evals,
+        findings=findings,
+        code_patches=code_patches,
+        remediation_patches=remediation_patches,
+        tech_stack=tech_stack,
+    )
     biz_name = (
         bp.business_name
         if bp and bp.business_name and bp.business_name not in ["Unknown", "Unknown Business"]

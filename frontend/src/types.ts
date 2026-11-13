@@ -2422,6 +2422,7 @@ export type TabId =
   | 'plans'
   | 'costing'
   | 'costs'
+  | 'copilot'
   // Legacy aliases for backward compatibility
   | 'search_intelligence'
   | 'ai_search_intelligence'

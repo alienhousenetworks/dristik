@@ -21,6 +21,7 @@ import re
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from app.evidence_integrity import validate_score
+from app.reports.svg_charts import SvgChartRenderer
 
 from app.reports.publishing_engine import (
     ChapterSpec,
@@ -516,6 +517,24 @@ def _build_ch_brief(report: Any, manifest: Dict[str, Any]) -> str:
         generate_section_explanation("ch_brief", "Executive Diagnostic Briefing", report, _report_findings(report))
     )
 
+    cat_scores = getattr(scores, "category_scores", None) or {}
+    radar_svg = SvgChartRenderer.render_category_radar_svg(cat_scores if isinstance(cat_scores, dict) else {})
+    sev_svg = SvgChartRenderer.render_severity_bar_svg(_report_findings(report))
+    charts_block = ""
+    if radar_svg or sev_svg:
+        charts_block = f"""
+        <div class="grid-2" style="margin-bottom: 16px; break-inside: avoid;">
+            <div class="card" style="text-align:center;">
+                <div class="card-kicker" style="text-align:left;">CANONICAL 8-CATEGORY RADAR</div>
+                {radar_svg or '<p class="small">Insufficient category scores for radar chart.</p>'}
+            </div>
+            <div class="card">
+                <div class="card-kicker">VERIFIED FINDING SEVERITY DISTRIBUTION</div>
+                <div style="margin-top:12px;">{sev_svg}</div>
+            </div>
+        </div>
+        """
+
     return f"""
     {callout}
 
@@ -598,6 +617,8 @@ def _build_ch_brief(report: Any, manifest: Dict[str, Any]) -> str:
         </div>
         <div class="chart-explanation-note">Scorecard note: a recorded score does not by itself prove live provider measurement. Missing scores remain unmeasured; inspect each pillar’s evidence and scope before interpreting its result.</div>
     </div>
+
+    {charts_block}
 
     <div class="card">
         <div class="card-kicker">PRIMARY STRATEGIC GROWTH CATALYST</div>

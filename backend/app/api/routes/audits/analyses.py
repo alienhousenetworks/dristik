@@ -447,7 +447,10 @@ async def download_patch_pack_zip(analysis_id: str, user: UserIdentity = Depends
     zip_bytes = generate_patch_pack_zip(
         bp=run.report.business_profile,
         website_url=run.report.website_url,
-        commercial_evals=run.report.commercial_evaluations or []
+        commercial_evals=run.report.commercial_evaluations or [],
+        findings=run.report.findings or [],
+        code_patches=run.report.code_patches or [],
+        remediation_patches=getattr(run.report, "remediation_patches", None) or [],
     )
     safe_domain = run.report.domain.replace(".", "_")
     return Response(
@@ -468,7 +471,10 @@ async def get_patch_pack_files(analysis_id: str, user: UserIdentity = Depends(ge
     files = build_patch_pack_files(
         bp=run.report.business_profile,
         website_url=run.report.website_url,
-        commercial_evals=run.report.commercial_evaluations or []
+        commercial_evals=run.report.commercial_evaluations or [],
+        findings=run.report.findings or [],
+        code_patches=run.report.code_patches or [],
+        remediation_patches=getattr(run.report, "remediation_patches", None) or [],
     )
     return {
         "domain": run.report.domain,
@@ -486,7 +492,10 @@ async def get_patch_pack_notion(analysis_id: str, user: UserIdentity = Depends(g
     notion_md = generate_notion_block(
         bp=run.report.business_profile,
         website_url=run.report.website_url,
-        commercial_evals=run.report.commercial_evaluations or []
+        commercial_evals=run.report.commercial_evaluations or [],
+        findings=run.report.findings or [],
+        code_patches=run.report.code_patches or [],
+        remediation_patches=getattr(run.report, "remediation_patches", None) or [],
     )
     return {
         "domain": run.report.domain,

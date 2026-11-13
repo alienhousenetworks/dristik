@@ -174,6 +174,7 @@ export function AppShell(props: AppShellProps) {
         { id: 'pages', label: 'Page inspector', group: 'Audit', onSelect: () => onSelectTab('pages') },
         { id: 'findings', label: 'Evidence ledger', group: 'Audit', onSelect: () => onSelectTab('findings') },
         { id: 'patches', label: 'Dev patch pack', group: 'Audit', onSelect: () => onSelectTab('patches') },
+        { id: 'copilot', label: 'Audit Copilot', group: 'Audit', onSelect: () => onSelectTab('copilot') },
         { id: 'roadmap', label: 'Action roadmap', group: 'Audit', onSelect: () => onSelectTab('roadmap') },
         { id: 'verification', label: 'Verification', group: 'Audit', onSelect: () => onSelectTab('verification') },
         { id: 'report', label: 'Presentation report', group: 'Audit', onSelect: () => onSelectTab('report') },

@@ -50,6 +50,47 @@ export async function deleteAnalysis(analysisId: string): Promise<void> {
   await api(`/api/v1/analyses/${analysisId}`, { method: 'DELETE' }, 'Could not delete the audit');
 }
 
+export interface CopilotResponse {
+  analysis_id: string;
+  domain: string;
+  answer: string;
+  cited_evidence_ids: string[];
+  matched_findings: Array<{
+    finding_id: string;
+    title: string;
+    severity: string;
+    recommendation: string;
+    affected_urls: string[];
+    evidence_refs: string[];
+  }>;
+  mode: string;
+}
+
+export async function askAuditCopilot(
+  analysisId: string,
+  question: string,
+  pageUrl?: string
+): Promise<CopilotResponse> {
+  return api<CopilotResponse>(
+    `/api/v1/analyses/${analysisId}/copilot`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ question, page_url: pageUrl || undefined }),
+    },
+    'Copilot query failed',
+  );
+}
+
+export async function fetchPatchPackFiles(
+  analysisId: string
+): Promise<{ domain: string; files: Record<string, string>; file_names: string[] }> {
+  return api(
+    `/api/v1/analyses/${analysisId}/patch-pack/files`,
+    {},
+    'Could not load patch pack files',
+  );
+}
+
 export async function getAnalysis(analysisId: string): Promise<AnalysisRun> {
   return api<AnalysisRun>(`/api/v1/analyses/${analysisId}`, {}, 'Could not load the audit');
 }

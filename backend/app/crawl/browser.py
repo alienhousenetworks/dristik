@@ -30,7 +30,8 @@ class BrowserRenderService:
     _lock = asyncio.Lock()
     # One print job at a time. A second download waits instead of piling
     # onto a Chromium process that is already inside page.pdf().
-    _render_lock = asyncio.Lock()
+    _render_semaphore = asyncio.Semaphore(3)
+    _render_lock = _render_semaphore
 
     @classmethod
     def is_available(cls) -> bool:

@@ -42,6 +42,7 @@ from app.remediation.sync_engine import router as developer_sync_router
 from app.reports.pdf_generator import router as reports_router
 from app.api.routes.audits.reports_progressive import router as reports_progressive_router
 from app.tenancy.white_label import router as white_label_router
+from app.api.copilot import router as copilot_router
 
 # Mounted at both /api/v1 and /api.
 # The in-memory SCIM and SAML configure routes stay unmounted until they
@@ -83,6 +84,7 @@ _PREFIXED_ROUTERS = (
     aeo_reports_router,
     audit_logs_router,
     white_label_router,
+    copilot_router,
 )
 
 

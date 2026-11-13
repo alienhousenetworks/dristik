@@ -47,6 +47,7 @@ const VerificationWorkspaceView = lazyWithRetry(() => import('./components/Verif
 const Pages = lazyWithRetry(() => import('./components/Pages').then((m) => ({ default: m.Pages })));
 const CostLedgerView = lazyWithRetry(() => import('./components/CostLedgerView').then((m) => ({ default: m.CostLedgerView })));
 const ContinuousIntelligenceView = lazyWithRetry(() => import('./components/ContinuousIntelligenceView').then((m) => ({ default: m.ContinuousIntelligenceView })));
+const AuditCopilot = lazyWithRetry(() => import('./components/AuditCopilot').then((m) => ({ default: m.AuditCopilot })));
 
 export function App() {
   const initial = parseNavigation();
@@ -602,6 +603,11 @@ export function App() {
                   {/* 8. DEV PATCH PACK */}
                   {tab === 'patches' && (
                     <DevPatchPackView report={report} analysisId={run?.analysis_id} />
+                  )}
+
+                  {/* 8b. AUDIT COPILOT */}
+                  {tab === 'copilot' && run?.analysis_id && (
+                    <AuditCopilot analysisId={run.analysis_id} domain={report.domain || ''} />
                   )}
 
                   {/* 9. ACTION ROADMAP */}

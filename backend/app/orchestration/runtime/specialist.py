@@ -11,6 +11,7 @@ from typing import Any, Dict, List, Optional
 from app.orchestration.runtime.base import BaseAgent
 from app.orchestration.runtime.registry import AgentDefinition, DOMAIN_CATEGORY
 from app.orchestration.runtime.task_cards import SPECIALIST_OUTPUT_SCHEMA, task_card_for
+from app.orchestration.runtime.tool_bus import AgentToolBus
 from app.orchestration.cognition.blackboard import CognitiveBlackboard
 from app.domain.enums import Category, Severity, VerificationStatus
 from app.domain.evidence.retriever import EvidenceRetriever
@@ -271,14 +272,8 @@ class SpecialistAgent(BaseAgent):
         return len(missing) == len(deps) and len(deps) > 0
 
     async def _llm_audit(self, blackboard: CognitiveBlackboard, evidence_slice) -> Dict[str, Any]:
-        # Deduplication for business identity specialists: if Stage 6 already resolved business identity, reuse it
-        if self.agent_id.startswith("business.") and (
-            getattr(blackboard, "semantic_representation", None) is not None
-            or (getattr(blackboard, "business_profile", None) is not None and getattr(blackboard.business_profile, "business_name", None))
-        ):
-            det = self._deterministic_audit(blackboard, evidence_slice)
-            if det.get("claims"):
-                return det
+        tool_bus = AgentToolBus(blackboard)
+        biz_ctx = tool_bus.get_business_context()
 
         system_extra = load_prompt("specialist_system")
         card = task_card_for(self.agent_id)
@@ -294,6 +289,8 @@ class SpecialistAgent(BaseAgent):
             f"TASK: {self.definition.description}\n"
             f"{card}\n"
             f"{forbid_line}"
+            f"{tool_bus.available_tools_spec()}\n"
+            f"BUSINESS & TECH CONTEXT: {biz_ctx}\n"
             f"{prior}"
         )
 
@@ -333,23 +330,62 @@ class SpecialistAgent(BaseAgent):
             token_budget = int(self.definition.token_budget or 3000)
 
         max_claims = int(getattr(self.definition, "max_claims", 0) or 8)
-        raw = await self.model_router.generate_structured(
-            capability=self.capability,
-            agent_role=self.definition.agent_name,
-            task_contract=contract,
-            evidence_list=evidence_slice,
-            output_schema_desc=SPECIALIST_OUTPUT_SCHEMA,
-            site_facts=getattr(blackboard, "site_facts", {}) or {},
-            task_card=card,
-            max_claims=max_claims,
-            allow_fallback=False,
-            model_tier=tier,
-            max_tokens=token_budget,
-            timeout_sec=int(self.definition.timeout_sec or 60),
-        )
-        return self._ingest_llm(blackboard, raw, evidence_slice)
+        extra_context_parts: List[str] = []
+        extra_evidence_ids: set = set()
+        raw: Dict[str, Any] = {}
+        max_turns = 3
 
-    def _ingest_llm(self, blackboard: CognitiveBlackboard, raw: Dict[str, Any], evidence_slice) -> Dict[str, Any]:
+        for turn in range(max_turns):
+            additional_ctx = "\n\n".join(extra_context_parts) if extra_context_parts else None
+            raw = await self.model_router.generate_structured(
+                capability=self.capability,
+                agent_role=self.definition.agent_name,
+                task_contract=contract,
+                evidence_list=evidence_slice,
+                output_schema_desc=SPECIALIST_OUTPUT_SCHEMA,
+                additional_context=additional_ctx,
+                site_facts=getattr(blackboard, "site_facts", {}) or {},
+                task_card=card,
+                max_claims=max_claims,
+                allow_fallback=False,
+                model_tier=tier,
+                max_tokens=token_budget,
+                timeout_sec=int(self.definition.timeout_sec or 60),
+            )
+            if not isinstance(raw, dict) or str(raw.get("status") or "").lower() == "unavailable":
+                break
+            tool_calls = raw.get("tool_calls") or []
+            if not tool_calls or not isinstance(tool_calls, list) or turn >= max_turns - 1:
+                break
+            turn_outputs: List[str] = []
+            for tc in tool_calls[:4]:
+                if not isinstance(tc, dict):
+                    continue
+                t_name = str(tc.get("tool") or "").strip()
+                t_args = tc.get("args") if isinstance(tc.get("args"), dict) else {}
+                if not t_name:
+                    continue
+                t_res = tool_bus.execute(t_name, t_args)
+                for item in (t_res.get("results") or []):
+                    if isinstance(item, dict) and item.get("id"):
+                        extra_evidence_ids.add(str(item["id"]))
+                turn_outputs.append(f"TOOL RESULT [{t_name}]: {str(t_res)[:1200]}")
+            if not turn_outputs:
+                break
+            extra_context_parts.extend(turn_outputs)
+
+        res = self._ingest_llm(blackboard, raw, evidence_slice, extra_evidence_ids=extra_evidence_ids)
+        if tool_bus.call_log:
+            res["tool_calls_trace"] = tool_bus.call_log
+        return res
+
+    def _ingest_llm(
+        self,
+        blackboard: CognitiveBlackboard,
+        raw: Dict[str, Any],
+        evidence_slice,
+        extra_evidence_ids: Optional[set] = None,
+    ) -> Dict[str, Any]:
         if not isinstance(raw, dict):
             return {"agent_id": self.agent_id, "status": "unavailable", "unavailable_reason": "invalid_llm_payload", "claims": []}
 
@@ -365,6 +401,8 @@ class SpecialistAgent(BaseAgent):
 
         valid_ids = {ev.id for ev in evidence_slice}
         valid_ids.update(ev.id for ev in blackboard.evidence_store.get_external())
+        if extra_evidence_ids:
+            valid_ids.update(extra_evidence_ids)
         registered = []
         max_claims = int(getattr(self.definition, "max_claims", 0) or 8)
         for item in (raw.get("claims") or [])[:max_claims]:

@@ -159,6 +159,11 @@ export function PillarNavBar({
       label: 'Verification & Regression',
       icon: ShieldCheck,
     },
+    {
+      id: 'copilot' as TabId,
+      label: 'Audit Copilot',
+      icon: Compass,
+    },
   ];
 
   // Helper to determine if a tab is active (supporting aliases)
