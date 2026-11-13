@@ -24,6 +24,7 @@ import {
   ListOrdered,
   Wrench,
   BadgeCheck,
+  Database,
 } from 'lucide-react';
 
 interface PillarNavBarProps {
@@ -121,6 +122,12 @@ export function PillarNavBar({
 
   // Group 3: Diagnostics
   const diagnosticItems = [
+    {
+      id: 'data_room' as TabId,
+      label: 'Data Room & Hypotheses',
+      icon: Database,
+      badge: pagesCount || report?.crawl_manifest?.pages?.length || undefined,
+    },
     {
       id: 'pages' as TabId,
       label: 'Page Inspector',

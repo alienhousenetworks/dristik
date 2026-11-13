@@ -33,6 +33,15 @@ def test_hypothesis_engine_evaluation():
     assert ai_hyp.posterior_confidence > ai_hyp.prior_probability
     assert len(ai_hyp.supporting_evidence_refs) == 1
 
+    matrix = engine.build_hypotheses_matrix(updated, claims)
+    assert len(matrix) == 3
+    ai_item = next(m for m in matrix if m.domain == "AI_SEARCH")
+    assert ai_item.confidence_delta > 0
+    assert ai_item.supporting_summaries == [
+        "Missing Schema.org JSON-LD markup on homepage and product pages."
+    ]
+    assert ai_item.required_telemetry
+
 def test_causal_reasoning_root_cause():
     engine = CausalReasoningEngine()
     bp = BusinessProfile(business_name="Acme Inc", niche="B2B Workflow AI")

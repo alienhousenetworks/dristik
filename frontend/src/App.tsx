@@ -37,6 +37,7 @@ const Pricing = lazyWithRetry(() => import('./components/Pricing').then((m) => (
 const SystemPanel = lazyWithRetry(() => import('./components/SystemPanel').then((m) => ({ default: m.SystemPanel })));
 const ExternalAuthorityView = lazyWithRetry(() => import('./components/ExternalAuthorityView').then((m) => ({ default: m.ExternalAuthorityView })));
 const CrawlWorkspaceView = lazyWithRetry(() => import('./components/Pillars/CrawlWorkspaceView').then((m) => ({ default: m.CrawlWorkspaceView })));
+const DataIngestionDataRoomView = lazyWithRetry(() => import('./components/DataIngestionDataRoomView').then((m) => ({ default: m.DataIngestionDataRoomView })));
 const SeoWorkspaceView = lazyWithRetry(() => import('./components/Pillars/SeoWorkspaceView').then((m) => ({ default: m.SeoWorkspaceView })));
 const GeoWorkspaceView = lazyWithRetry(() => import('./components/Pillars/GeoWorkspaceView').then((m) => ({ default: m.GeoWorkspaceView })));
 const AeoWorkspaceView = lazyWithRetry(() => import('./components/Pillars/AeoWorkspaceView').then((m) => ({ default: m.AeoWorkspaceView })));
@@ -502,7 +503,21 @@ export function App() {
                     />
                   )}
 
-                  {/* 0. WEBSITE CRAWL WORKSPACE */}
+                  {/* 0. DATA INGESTION DATA ROOM & HYPOTHESES MATRIX */}
+                  {tab === 'data_room' && (
+                    <DataIngestionDataRoomView
+                      report={report}
+                      analysisId={run?.analysis_id}
+                      onSelectTab={setTab}
+                      onSelectFinding={setFinding}
+                      onOpenConnectors={(connectorTab) => {
+                        setConnectorsInitialTab(connectorTab || 'google_search_console');
+                        setConnectorsOpen(true);
+                      }}
+                    />
+                  )}
+
+                  {/* 0b. WEBSITE CRAWL WORKSPACE */}
                   {tab === 'crawl' && (
                     <CrawlWorkspaceView
                       report={report}

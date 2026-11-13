@@ -2137,6 +2137,12 @@ class AnalysisOrchestrator:
                 code_patches=remediation_plan.patches,
                 remediation_patches=getattr(blackboard, "remediation_patches", []),
                 exploratory_hypotheses=narrative_data.get("exploratory_hypotheses", []),
+                hypotheses_matrix=self.hypothesis_engine.build_hypotheses_matrix(
+                    hypotheses=evaluated_hypotheses,
+                    claims=current_claims,
+                    exploratory_hypotheses=narrative_data.get("exploratory_hypotheses", []),
+                    google_performance=google_performance,
+                ),
                 scoring_rubric_version="enterprise_web_intel_v4",
                 roadmap_7_days=r7,
                 roadmap_30_days=r30,

@@ -2715,6 +2715,24 @@ class ConsistencyAuditReport(BaseModel):
     inconclusive_items: List[Dict[str, Any]] = Field(default_factory=list)
     summary: str = ""
 
+class HypothesisMatrixItem(BaseModel):
+    """Structured enterprise hypothesis record surfaced in the Data Room Hypotheses Matrix."""
+    id: str
+    statement: str
+    domain: str
+    source: str = "bayesian_engine"  # bayesian_engine | exploratory_finding | contradiction
+    prior_probability: float = 0.50
+    posterior_confidence: float = 0.50
+    confidence_delta: float = 0.0
+    status: str = "untested"  # validated | falsified | inconclusive | untested
+    supporting_evidence_refs: List[str] = Field(default_factory=list)
+    contradicting_evidence_refs: List[str] = Field(default_factory=list)
+    supporting_summaries: List[str] = Field(default_factory=list)
+    contradicting_summaries: List[str] = Field(default_factory=list)
+    required_telemetry: List[str] = Field(default_factory=list)
+    recommended_action: Optional[str] = None
+
+
 class ExecutiveReport(BaseModel):
     report_id: str
     analysis_id: Optional[str] = None
@@ -2783,6 +2801,7 @@ class ExecutiveReport(BaseModel):
     agent_readiness: Optional[AgentReadinessReport] = None
     contradictions: List[ContradictionReport] = Field(default_factory=list)
     exploratory_hypotheses: List[Finding] = Field(default_factory=list)
+    hypotheses_matrix: List[HypothesisMatrixItem] = Field(default_factory=list)
     scoring_rubric_version: str = "enterprise_web_intel_v4"
     visual_intelligence: Optional[VisualIntelligencePayload] = None
     evidence_ledger: Dict[str, Dict[str, Any]] = Field(default_factory=dict)

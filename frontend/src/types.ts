@@ -1341,6 +1341,7 @@ export interface ExecutiveReport {
   character_safe_copy?: CharacterSafeCopy;
   whatsapp_summary?: string;
   exploratory_hypotheses?: Finding[];
+  hypotheses_matrix?: HypothesisMatrixItem[];
   scoring_rubric_version?: string;
   visual_intelligence?: VisualIntelligencePayload;
   evidence_ledger?: Record<string, EvidenceLedgerItem>;
@@ -2399,8 +2400,26 @@ export interface ExternalAuthorityReport {
   notes?: string[];
 }
 
+export interface HypothesisMatrixItem {
+  id: string;
+  statement: string;
+  domain: string;
+  source: 'bayesian_engine' | 'exploratory_finding' | 'contradiction' | string;
+  prior_probability: number;
+  posterior_confidence: number;
+  confidence_delta: number;
+  status: 'validated' | 'falsified' | 'inconclusive' | 'untested' | string;
+  supporting_evidence_refs: string[];
+  contradicting_evidence_refs: string[];
+  supporting_summaries?: string[];
+  contradicting_summaries?: string[];
+  required_telemetry?: string[];
+  recommended_action?: string | null;
+}
+
 export type TabId =
   | 'overview'
+  | 'data_room'
   | 'crawl'
   | 'workflow'
   | 'seo'

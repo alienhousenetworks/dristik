@@ -37,6 +37,7 @@ export const VIEW_LABELS: Record<AppView, string> = {
 export const TAB_LABELS: Record<string, string> = {
   workflow: 'Workflow Engine',
   overview: 'Overview',
+  data_room: 'Data Ingestion & Data Room',
   crawl: 'Website Crawl',
   seo: 'SEO Space',
   search_intelligence: 'SEO Space',
