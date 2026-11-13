@@ -770,6 +770,8 @@ class Claim(BaseModel):
     provenance_hash: Optional[str] = None
     verification_notes: Optional[str] = None
     recommendation: Optional[str] = None
+    why_it_matters: Optional[str] = None
+    validation_criteria: Optional[str] = None
     impact: int = 5
     effort: int = 5
     source_integrity_label: SourceIntegrityLabel = SourceIntegrityLabel.NOT_APPLICABLE
@@ -884,6 +886,7 @@ class ResolvedEntity(BaseModel):
 
 
 class BusinessProfile(BaseModel):
+    profile_version: str = "4.0"
     business_name: str = ""
     industry: Optional[str] = None
     niche: Optional[str] = None
@@ -891,9 +894,15 @@ class BusinessProfile(BaseModel):
     products: List[str] = Field(default_factory=list)
     services: List[str] = Field(default_factory=list)
     target_audience: Optional[str] = None
+    personas: List[str] = Field(default_factory=list)
+    pain_points: List[str] = Field(default_factory=list)
     geography: Optional[str] = None
     business_model: Optional[str] = None
     value_proposition: Optional[str] = None
+    positioning: Optional[str] = None
+    competitors: List[str] = Field(default_factory=list)
+    verified_assumptions: List[str] = Field(default_factory=list)
+    unverified_assumptions: List[str] = Field(default_factory=list)
     primary_cta: Optional[str] = None
     secondary_cta: Optional[str] = None
     primary_intent: Optional[BusinessIntent] = None

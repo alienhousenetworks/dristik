@@ -1123,6 +1123,41 @@ class AnalysisOrchestrator:
                         f"Escalated {len(held_guesses)} GUESSING+CRITICAL claim(s) to verification.adversarial.v3 before executive use.",
                     )
 
+            # Mandatory Stage 6 Gate A: Independent Adversarial Critic Worker
+            try:
+                critic_res = await team_orchestrator.worker_critic.execute_task("34_adversarial_verification", blackboard)
+                blackboard.blackboard_state["critic_gate"] = {
+                    "status": "completed",
+                    "verified_count": len(critic_res.get("verified_claims") or []),
+                    "rejected_count": len(critic_res.get("rejected_claims") or []),
+                    "deflated_count": len(critic_res.get("deflated_claims") or []),
+                    "contradictions_count": len(critic_res.get("contradictions") or []),
+                }
+            except Exception as critic_err:
+                logger.error("Mandatory CognitiveCriticWorker gate failed for %s: %s", analysis_id, critic_err)
+                blackboard.blackboard_state["critic_gate"] = {
+                    "status": "failed",
+                    "error": str(critic_err),
+                }
+
+            # Mandatory Stage 6 Gate B: Contradiction Engine
+            try:
+                from app.orchestration.cognition.contradiction_engine import ContradictionEngine
+                contra_engine = ContradictionEngine()
+                claim_contradictions = contra_engine.detect_contradictions(
+                    blackboard.claim_registry.get_all()
+                ) if hasattr(contra_engine, "detect_contradictions") else []
+                blackboard.blackboard_state["contradiction_report"] = {
+                    "status": "completed",
+                    "conflicts_detected": len(claim_contradictions or []),
+                }
+            except Exception as ce_err:
+                logger.warning("ContradictionEngine gate note for %s: %s", analysis_id, ce_err)
+                blackboard.blackboard_state["contradiction_report"] = {
+                    "status": "error",
+                    "error": str(ce_err),
+                }
+
             controller.mark_node_status("node_adversarial_critic", GraphNodeStatus.COMPLETED)
             controller.log_activity("node_adversarial_critic", "success", "critic.complete", "Adversarial cross-examination complete")
 
@@ -2262,6 +2297,10 @@ class AnalysisOrchestrator:
             report.quality_gate_results = {
                 **(report.quality_gate_results or {}),
                 "final_report_integrity": integrity_result,
+                "execution_coverage": blackboard.blackboard_state.get("execution_coverage") or {},
+                "critic_gate": blackboard.blackboard_state.get("critic_gate") or {},
+                "contradiction_report": blackboard.blackboard_state.get("contradiction_report") or {},
+                "evidence_gaps_count": len(blackboard.blackboard_state.get("evidence_gaps") or []),
             }
             report.certification_status = "CERTIFIED" if integrity_result["certified"] else "NOT_CERTIFIED"
             if not integrity_result["certified"]:
@@ -2269,6 +2308,12 @@ class AnalysisOrchestrator:
                 report.withheld_sections.append({
                     "section": "Evidence certification",
                     "reason": "One or more findings lack linked evidence; these findings must not be treated as verified.",
+                })
+            if blackboard.blackboard_state.get("evidence_gaps"):
+                report.withheld_sections = list(report.withheld_sections or [])
+                report.withheld_sections.append({
+                    "section": "Evidence gaps & uncorroborated claims",
+                    "reason": f"{len(blackboard.blackboard_state['evidence_gaps'])} marketing or audit claim(s) lacked corroborating evidence and are flagged as unverified.",
                 })
 
             # Persist a validated report in a non-terminal state first. Only mark the
@@ -2934,7 +2979,7 @@ class AnalysisOrchestrator:
                         await ag.run(blackboard)
 
             elif node_id == "node_specialist_wave_2":
-                wave_2_agents = ["schema.validation.v3", "schema.entity_graph.v3", "seo.html.v3", "seo.internal_links.v3", "content.depth.v3", "content.topic_coverage.v3", "content.cannibalization.v3"]
+                wave_2_agents = ["schema.validation.v3", "entity.graph.v3", "seo.html.v3", "seo.internal_links.v3", "content.depth.v3", "content.topic_coverage.v3", "content.cannibalization.v3"]
                 for aid in wave_2_agents:
                     ag = pool.get(aid)
                     if ag:
@@ -2957,7 +3002,7 @@ class AnalysisOrchestrator:
                         await ag.run(blackboard)
 
             elif node_id == "node_specialist_wave_4":
-                wave_4_agents = ["geo.brand_identity.v3", "geo.llms_txt.v3", "geo.extractability.v3", "geo.synthesis.v3", "ai_search.query_coverage.v3", "ai_search.citability.v3", "ai_search.competitor_displacement.v3"]
+                wave_4_agents = ["geo.structure.v3", "geo.extractability.v3", "geo.citation_readiness.v3", "ai_search.discoverability.v3", "ai_search.cross_engine.v3", "competitor.answer_bakeoff.v3"]
                 for aid in wave_4_agents:
                     ag = pool.get(aid)
                     if ag:
@@ -2983,7 +3028,7 @@ class AnalysisOrchestrator:
                         await ag.run(blackboard)
 
             elif node_id == "node_seo_schema_ast":
-                for aid in ["schema.validation.v3", "schema.entity_graph.v3"]:
+                for aid in ["schema.validation.v3", "entity.graph.v3"]:
                     ag = pool.get(aid)
                     if ag:
                         await ag.run(blackboard)
@@ -2994,32 +3039,32 @@ class AnalysisOrchestrator:
 
             # --- 4. GEO Pillar Nodes ---
             elif node_id == "node_geo_entity_grounding":
-                for aid in ["geo.brand_identity.v3", "schema.entity_graph.v3"]:
+                for aid in ["entity.graph.v3", "entity.knowledge_graph.v3"]:
                     ag = pool.get(aid)
                     if ag:
                         await ag.run(blackboard)
 
             elif node_id == "node_geo_local_signals":
-                for aid in ["geo.extractability.v3"]:
+                for aid in ["geo.extractability.v3", "seo.maps_intelligence.v3"]:
                     ag = pool.get(aid)
                     if ag:
                         await ag.run(blackboard)
 
             elif node_id == "node_geo_llm_footprint":
-                for aid in ["geo.llms_txt.v3", "geo.synthesis.v3"]:
+                for aid in ["geo.structure.v3", "seo.agentic_readiness.v3"]:
                     ag = pool.get(aid)
                     if ag:
                         await ag.run(blackboard)
 
             # --- 5. AEO Pillar Nodes ---
             elif node_id == "node_aeo_citability_matrix":
-                for aid in ["ai_search.citability.v3"]:
+                for aid in ["geo.citation_readiness.v3", "aeo.direct_answer_box.v3"]:
                     ag = pool.get(aid)
                     if ag:
                         await ag.run(blackboard)
 
             elif node_id == "node_aeo_qa_readiness":
-                for aid in ["ai_search.query_coverage.v3", "ai_search.competitor_displacement.v3"]:
+                for aid in ["ai_search.discoverability.v3", "aeo.conversational_intent.v3", "competitor.answer_bakeoff.v3"]:
                     ag = pool.get(aid)
                     if ag:
                         await ag.run(blackboard)

@@ -186,6 +186,22 @@ class ClaimLedgerBuilder:
                     rejection_reason=rejection_reason,
                 ))
 
+        # Count unsupported claims in website facts (excluding prescriptive recommendations)
+        unsupported_facts = [
+            e for e in entries
+            if e.source_type == ClaimSourceType.UNSUPPORTED and not e.scope.startswith("recommendation:")
+        ]
+        rejected_count = len(unsupported_facts)
+        certified_zero_fake = (rejected_count == 0)
+
+        return ClaimLedger(
+            ledger_id=f"LEDGER_{self.run_id}",
+            run_id=self.run_id,
+            entries=entries,
+            certified_zero_fake=certified_zero_fake,
+            rejected_unsupported_count=rejected_count,
+        )
+
     def _find_matching_evidence_ids(self, sentence: str, store: EvidenceStore) -> List[str]:
         matching: List[str] = []
         tokens = set(re.findall(r"\b[a-zA-Z0-9_\-\.]{3,}\b", sentence.lower()))
@@ -209,22 +225,6 @@ class ClaimLedgerBuilder:
                 if len(matching) >= 3:
                     return matching
         return matching
-
-        # Count unsupported claims in website facts (excluding prescriptive recommendations)
-        unsupported_facts = [
-            e for e in entries
-            if e.source_type == ClaimSourceType.UNSUPPORTED and not e.scope.startswith("recommendation:")
-        ]
-        rejected_count = len(unsupported_facts)
-        certified_zero_fake = (rejected_count == 0)
-
-        return ClaimLedger(
-            ledger_id=f"LEDGER_{self.run_id}",
-            run_id=self.run_id,
-            entries=entries,
-            certified_zero_fake=certified_zero_fake,
-            rejected_unsupported_count=rejected_count,
-        )
 
     @classmethod
     def sanitize_unsupported_facts(

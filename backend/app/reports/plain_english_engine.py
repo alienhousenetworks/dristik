@@ -346,16 +346,16 @@ class AgenticSpecialistRegistry:
             default_stakeholders="Search Spiders (Googlebot, Bingbot) & Organic Search Reach",
             inspection_methodology="HTTP response headers, robots.txt parsing, and XML sitemap cross-validation",
         ),
-        "seo.canonical.v3": SpecialistAuditorAgent(
-            agent_id="seo.canonical.v3",
+        "seo.indexability.v3": SpecialistAuditorAgent(
+            agent_id="seo.indexability.v3",
             name="Canonicalization & Duplicate Control Specialist",
             role="Audits canonical URL designation, duplicate parameter handling, and link equity consolidation.",
             domain="CANONICAL",
             default_stakeholders="Search Spiders (Googlebot, Bingbot) & Organic Search Reach",
             inspection_methodology="DOM canonical tag routing, HTTP header rel=canonical verification, and status code audit",
         ),
-        "seo.redirect.v3": SpecialistAuditorAgent(
-            agent_id="seo.redirect.v3",
+        "seo.internal_links.v3": SpecialistAuditorAgent(
+            agent_id="seo.internal_links.v3",
             name="Redirect & Link Equity Specialist",
             role="Audits 3xx status hop chains, infinite loops, and 404/410 broken link defects.",
             domain="REDIRECT",
@@ -402,24 +402,24 @@ class AgenticSpecialistRegistry:
             default_stakeholders="AI Answer Engines (ChatGPT, Perplexity, Gemini) & Modern Buyers",
             inspection_methodology="Natural language question prompting, direct answer passage extraction, and citation benchmarking",
         ),
-        "ux.conversion.v3": SpecialistAuditorAgent(
-            agent_id="ux.conversion.v3",
+        "cro.conversion.v3": SpecialistAuditorAgent(
+            agent_id="cro.conversion.v3",
             name="Conversion Rate Optimization (CRO) Specialist",
             role="Analyzes value proposition clarity, call-to-action prominence, and mobile form ergonomics.",
             domain="CRO",
             default_stakeholders="Prospective Customers & Sales Pipeline",
             inspection_methodology="CTA visual salience analysis, viewport contrast computation, and input field friction audit",
         ),
-        "trust.security.v3": SpecialistAuditorAgent(
-            agent_id="trust.security.v3",
+        "seo.security.v3": SpecialistAuditorAgent(
+            agent_id="seo.security.v3",
             name="Security, HTTPS & Protocol Integrity Specialist",
             role="Audits TLS encryption, HSTS directives, Content-Security-Policy headers, and clickjacking protection.",
             domain="SECURITY",
             default_stakeholders="Business Owners (Reputation & Risk) and Developers",
             inspection_methodology="SSL/TLS certificate handshake inspection and HTTP security header policy evaluation",
         ),
-        "competitor.organic.v3": SpecialistAuditorAgent(
-            agent_id="competitor.organic.v3",
+        "competitor.head_to_head_parity.v3": SpecialistAuditorAgent(
+            agent_id="competitor.head_to_head_parity.v3",
             name="Competitive Intelligence Specialist",
             role="Evaluates SERP overlap, keyword footprint discrepancies, and competitor displacement opportunities.",
             domain="COMPETITOR",
@@ -442,11 +442,11 @@ class AgenticSpecialistRegistry:
         "ch_seo": "seo.crawl.v3",
         "ch_geo": "geo.extractability.v3",
         "ch_aeo": "aeo.direct_answer_box.v3",
-        "ch_competitive": "competitor.organic.v3",
-        "ch_conversion": "ux.conversion.v3",
+        "ch_competitive": "competitor.head_to_head_parity.v3",
+        "ch_conversion": "cro.conversion.v3",
         "ch_page_by_page": "seo.crawl.v3",
         "ch_roadmap": "strategy.executive.v3",
-        "ch_methodology": "trust.security.v3",
+        "ch_methodology": "seo.security.v3",
         "ch_appendix": "seo.crawl.v3",
     }
 
@@ -473,9 +473,9 @@ class AgenticSpecialistRegistry:
                 return cls.AGENTS["content.depth.v3"]
 
         if any(k in blob for k in ("canonical", "self-referencing", "duplicate url", "cross-domain")):
-            return cls.AGENTS["seo.canonical.v3"]
+            return cls.AGENTS["seo.indexability.v3"]
         if any(k in blob for k in ("redirect", "301", "302", "404", "broken link", "loop", "hop")):
-            return cls.AGENTS["seo.redirect.v3"]
+            return cls.AGENTS["seo.internal_links.v3"]
         if any(k in blob for k in ("schema", "json-ld", "structured data", "rich result", "entity graph")):
             return cls.AGENTS["schema.validation.v3"]
         if any(k in blob for k in ("speed", "ttfb", "cwv", "core web vitals", "lcp", "cls", "inp", "latency")):
@@ -485,13 +485,13 @@ class AgenticSpecialistRegistry:
         if any(k in blob for k in ("geo", "llms.txt", "gptbot", "extractability", "generative")):
             return cls.AGENTS["geo.extractability.v3"]
         if any(k in blob for k in ("conversion", "cro", "cta", "form", "checkout", "mobile tap", "contrast", "friction", "pricing", "persona")):
-            return cls.AGENTS["ux.conversion.v3"]
+            return cls.AGENTS["cro.conversion.v3"]
         if any(k in blob for k in ("strict-transport-security", "hsts", "content-security-policy", "csp", "x-frame-options", "x-content-type", "ssl certificate", "tls encryption", "mixed content", "security header")):
-            return cls.AGENTS["trust.security.v3"]
+            return cls.AGENTS["seo.security.v3"]
         if any(k in blob for k in ("crawl", "index", "robots", "sitemap", "noindex", "status", "bot")):
             return cls.AGENTS["seo.crawl.v3"]
         if any(k in blob for k in ("competitor", "benchmark", "overlap", "displacement", "peer set")):
-            return cls.AGENTS["competitor.organic.v3"]
+            return cls.AGENTS["competitor.head_to_head_parity.v3"]
 
         # Default fallback by high-level category
         if "seo" in cat_lower or "crawl" in cat_lower:
@@ -503,9 +503,9 @@ class AgenticSpecialistRegistry:
         if "aeo" in cat_lower:
             return cls.AGENTS["aeo.direct_answer_box.v3"]
         if "cro" in cat_lower or "ux" in cat_lower:
-            return cls.AGENTS["ux.conversion.v3"]
+            return cls.AGENTS["cro.conversion.v3"]
         if "competitor" in cat_lower or "competitive" in cat_lower:
-            return cls.AGENTS["competitor.organic.v3"]
+            return cls.AGENTS["competitor.head_to_head_parity.v3"]
 
         return cls.AGENTS["strategy.executive.v3"]
 
@@ -522,17 +522,17 @@ class AgenticSpecialistRegistry:
             "01": "strategy.executive.v3",
             "07": "seo.crawl.v3",
             "08": "seo.crawl.v3",
-            "10": "seo.canonical.v3",
-            "11": "seo.redirect.v3",
+            "10": "seo.indexability.v3",
+            "11": "seo.internal_links.v3",
             "12": "seo.crawl.v3",
             "16": "ux.experience.v3",
-            "18": "trust.security.v3",
+            "18": "seo.security.v3",
             "19": "schema.validation.v3",
             "20": "content.depth.v3",
             "21": "content.depth.v3",
             "45": "aeo.direct_answer_box.v3",
             "46": "geo.extractability.v3",
-            "50": "ux.conversion.v3",
+            "50": "cro.conversion.v3",
         }
         if clean_num in num_map:
             return cls.AGENTS[num_map[clean_num]]

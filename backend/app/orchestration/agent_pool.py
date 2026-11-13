@@ -217,6 +217,25 @@ class AgentPool:
         blackboard.blackboard_state["agent_pool_summary"] = {
             k: summary[k] for k in ("agents_declared", "agents_ran", "completed", "partial", "unavailable", "skipped", "errors", "waves")
         }
+        skipped_reasons = {
+            aid: res.get("unavailable_reason") or "skipped"
+            for aid, res in summary["results"].items()
+            if res.get("status") == "skipped"
+        }
+        all_claims = blackboard.claim_registry.get_all()
+        blackboard.blackboard_state["execution_coverage"] = {
+            "registered_agents": len(SPECIALIST_AGENTS_V3),
+            "eligible_agents": total - len(skipped_reasons),
+            "selected_agents": total,
+            "executed_agents": summary["agents_ran"] - summary["skipped"],
+            "completed_agents": summary["completed"],
+            "unavailable_agents": summary["unavailable"],
+            "failed_agents": summary["errors"],
+            "skipped_agents": summary["skipped"],
+            "skipped_reasons": skipped_reasons,
+            "claims_generated": len(all_claims),
+            "claims_held_for_review": sum(1 for c in all_claims if getattr(c, "held_from_executive", False)),
+        }
         return summary
 
     async def _run_one(self, agent_id: str, blackboard: CognitiveBlackboard) -> Dict[str, Any]:

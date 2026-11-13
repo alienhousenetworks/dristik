@@ -45,7 +45,7 @@ class LandscapeCalculator:
         # -------------------------------------------------------------
         # 1. Compute X (Search Visibility: 0.0 - 1.0)
         # -------------------------------------------------------------
-        x_val: float = 0.5
+        x_val: Optional[float] = None
         x_conf: EvidenceConfidence = EvidenceConfidence.UNMEASURED
 
         if search_dim and search_dim.status == "AVAILABLE" and search_dim.score is not None:
@@ -75,7 +75,7 @@ class LandscapeCalculator:
         # -------------------------------------------------------------
         # 2. Compute Y (GEO / AI Visibility: 0.0 - 1.0)
         # -------------------------------------------------------------
-        y_val: float = 0.5
+        y_val: Optional[float] = None
         y_conf: EvidenceConfidence = EvidenceConfidence.UNMEASURED
 
         if geo_dim and geo_dim.status == "AVAILABLE" and geo_dim.score is not None:

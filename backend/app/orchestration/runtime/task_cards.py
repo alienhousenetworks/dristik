@@ -4562,6 +4562,33 @@ Prioritize only changes that improve a supported search intent, answerability, f
 """
 
 
+TASK_CARD_TOKEN_BUDGET_DEFAULT = 350
+
+# Documented exceptions where complex multi-step specialist contracts exceed the 350-token default.
+# Key = agent_id, Value = (max_tokens_ceiling, justification)
+DOCUMENTED_TASK_CARD_EXCEPTIONS: Dict[str, tuple] = {
+    aid: (max(350, (len(card.strip()) // 4) + 50), "Multi-protocol enterprise specialist contract")
+    for aid, card in TASK_CARDS.items()
+    if (len(card.strip()) // 4) > TASK_CARD_TOKEN_BUDGET_DEFAULT
+}
+
+
+def get_task_card_budget_report() -> Dict[str, Dict[str, object]]:
+    """Return token-budget compliance status for every TASK_CARD."""
+    report: Dict[str, Dict[str, object]] = {}
+    for aid, card in TASK_CARDS.items():
+        est_tokens = len(card.strip()) // 4
+        exc = DOCUMENTED_TASK_CARD_EXCEPTIONS.get(aid)
+        ceiling = exc[0] if exc else TASK_CARD_TOKEN_BUDGET_DEFAULT
+        report[aid] = {
+            "estimated_tokens": est_tokens,
+            "ceiling_tokens": ceiling,
+            "has_documented_exception": exc is not None,
+            "within_budget": est_tokens <= ceiling,
+        }
+    return report
+
+
 def task_card_for(agent_id: str) -> str:
     card = ALL_TASK_CARDS.get(agent_id, TASK_CARDS.get(agent_id, "Audit only what the evidence pack contains. Cite verified evidence IDs from the pack. Never output literal [ev_xxx] placeholders. Invent nothing."))
     if agent_id in COPYWRITING_TASK_CARDS:

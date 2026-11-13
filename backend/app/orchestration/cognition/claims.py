@@ -35,7 +35,14 @@ class ClaimRegistry:
         effort: int = 5,
         evidence_level: Optional[Any] = None,
         observation_type: Optional[Any] = None,
-        provenance_hash: Optional[str] = None
+        provenance_hash: Optional[str] = None,
+        why_it_matters: Optional[str] = None,
+        validation_criteria: Optional[str] = None,
+        confidence_basis: Optional[str] = None,
+        confidence_rubric: Optional[Any] = None,
+        materiality: Optional[Any] = None,
+        source_agreement: Optional[int] = None,
+        source_integrity_label: Optional[Any] = None,
     ) -> Claim:
         if isinstance(agent_id, Claim):
             return self.add_claim(agent_id)
@@ -60,6 +67,8 @@ class ClaimRegistry:
             confidence=confidence,
             verification_status=VerificationStatus.PROVISIONAL,
             recommendation=recommendation,
+            why_it_matters=why_it_matters,
+            validation_criteria=validation_criteria,
             impact=impact,
             effort=effort,
             provenance_hash=provenance_hash
@@ -68,6 +77,16 @@ class ClaimRegistry:
             claim.evidence_level = evidence_level
         if observation_type is not None:
             claim.observation_type = observation_type
+        if confidence_basis is not None:
+            claim.confidence_basis = confidence_basis
+        if confidence_rubric is not None:
+            claim.confidence_rubric = confidence_rubric
+        if materiality is not None:
+            claim.materiality = materiality
+        if source_agreement is not None:
+            claim.source_agreement = int(source_agreement)
+        if source_integrity_label is not None:
+            claim.source_integrity_label = source_integrity_label
             
         self._claims[claim_id] = claim
         return claim

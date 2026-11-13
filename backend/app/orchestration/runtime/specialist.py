@@ -283,16 +283,48 @@ class SpecialistAgent(BaseAgent):
             forbid_line = "Forbidden operations: " + ", ".join(forbidden) + ".\n"
 
         prior = self._prior_context(blackboard)
+        # Do NOT embed `card` in `task_contract` here because PromptCompiler.compile()
+        # already places `task_card` in system_prompt. Avoids 2x task-card token bloat.
         contract = (
-            f"{system_extra}\n\n"
             f"SPECIALIST: {self.definition.agent_name} ({self.agent_id})\n"
             f"TASK: {self.definition.description}\n"
-            f"{card}\n"
             f"{forbid_line}"
             f"{tool_bus.available_tools_spec()}\n"
             f"BUSINESS & TECH CONTEXT: {biz_ctx}\n"
             f"{prior}"
         )
+
+        # For verification.adversarial.v3, focus evidence strictly on claim-cited evidence
+        # plus contradictory/external evidence, and attach held/contested claims to audit.
+        if self.agent_id == "verification.adversarial.v3":
+            all_claims = blackboard.claim_registry.get_all()
+            cited_ids = {ref for c in all_claims for ref in (c.evidence_refs or [])}
+            focused = [ev for ev in blackboard.evidence_store.get_all() if ev.id in cited_ids]
+            ext_evs = blackboard.evidence_store.get_external()
+            seen_ids = {ev.id for ev in focused}
+            for ev in ext_evs:
+                if ev.id not in seen_ids:
+                    focused.append(ev)
+                    seen_ids.add(ev.id)
+            if focused:
+                evidence_slice = focused[:80]
+            held_or_contested = [
+                {
+                    "claim_id": c.id,
+                    "agent_id": c.agent_id,
+                    "statement": c.statement,
+                    "severity": c.severity.value if hasattr(c.severity, "value") else str(c.severity),
+                    "confidence_rubric": c.confidence_rubric.value if hasattr(c.confidence_rubric, "value") else str(c.confidence_rubric or ""),
+                    "materiality": c.materiality.value if hasattr(c.materiality, "value") else str(c.materiality or ""),
+                    "evidence_refs": c.evidence_refs,
+                    "held_from_executive": c.held_from_executive,
+                }
+                for c in all_claims
+                if c.held_from_executive or c.verification_status == VerificationStatus.CONTESTED
+            ]
+            if held_or_contested:
+                import json as _json
+                contract += "\nCLAIMS_TO_AUDIT:\n" + _json.dumps(held_or_contested[:25], ensure_ascii=False)
 
         # Determine model tier and token budget.
         # When running under Groq (8,000 TPM limit), route routine specialists to fast_slm and budget tokens strictly.
@@ -414,6 +446,31 @@ class SpecialistAgent(BaseAgent):
             statement = (item.get("statement") or "").strip()
             if not statement or not refs:
                 continue
+            rubric_val = None
+            raw_rubric = str(item.get("confidence_rubric") or "").upper()
+            if raw_rubric:
+                from app.domain.enums import RubricConfidence
+                for rc in RubricConfidence:
+                    if rc.value == raw_rubric or rc.name == raw_rubric:
+                        rubric_val = rc
+                        break
+            mat_val = None
+            raw_mat = str(item.get("materiality") or "").upper()
+            if raw_mat:
+                from app.domain.enums import Materiality
+                for mt in Materiality:
+                    if mt.value == raw_mat or mt.name == raw_mat:
+                        mat_val = mt
+                        break
+            sil_val = None
+            raw_sil = str(item.get("source_integrity_label") or "").upper()
+            if raw_sil:
+                from app.domain.enums import SourceIntegrityLabel
+                for sl in SourceIntegrityLabel:
+                    if sl.value == raw_sil or sl.name == raw_sil:
+                        sil_val = sl
+                        break
+
             claim = self.register_claim(
                 blackboard=blackboard,
                 statement=statement,
@@ -424,6 +481,13 @@ class SpecialistAgent(BaseAgent):
                 recommendation=item.get("recommendation") or "",
                 impact=int(item.get("impact") or 5),
                 effort=int(item.get("effort") or 3),
+                why_it_matters=(item.get("why_it_matters") or "").strip() or None,
+                validation_criteria=(item.get("validation_criteria") or "").strip() or None,
+                confidence_basis=(item.get("confidence_basis") or "").strip() or None,
+                confidence_rubric=rubric_val,
+                materiality=mat_val,
+                source_agreement=int(item.get("source_agreement")) if item.get("source_agreement") is not None else None,
+                source_integrity_label=sil_val,
             )
             registered.append({
                 "claim_id": claim.id,
@@ -455,18 +519,6 @@ class SpecialistAgent(BaseAgent):
             bound = [ref for ref in (refs or []) if ref]
             if not bound:
                 bound = _supporting_evidence_ids(statement, evidence_slice)
-            if not bound and getattr(blackboard, "evidence_store", None) is not None:
-                source_type, selector = _preferred_binding(statement)
-                page_url = pages[0].url if pages else getattr(blackboard, "website_url", None)
-                created = blackboard.evidence_store.add_evidence(
-                    source_type=source_type,
-                    analyzer=self.agent_id,
-                    url=page_url,
-                    selector=selector,
-                    text=statement[:500],
-                    value={"observation": statement[:500], "selector": selector},
-                )
-                bound = [created.id]
             bound = [r for r in bound if r]
             if not bound:
                 # Zero-Fake Standard: Never bind arbitrary evidence nodes
@@ -899,7 +951,7 @@ class SpecialistAgent(BaseAgent):
                     "Give each URL a distinct title. Skip query-level rewrites until a provider measures the queries.",
                 )
 
-        elif aid == "schema.entity_graph.v3":
+        elif aid == "entity.graph.v3":
             # Audits Schema.org entity connectedness (sameAs, publisher, author, contactPoint)
             has_entity_graph = False
             for p in pages:
@@ -915,7 +967,7 @@ class SpecialistAgent(BaseAgent):
                     "Inject full Organization Schema.org markup linking legal name, logo, founders, and authoritative sameAs social profiles."
                 )
 
-        elif aid == "schema.product.v3":
+        elif aid == "seo.ecommerce.v3":
             # Audits Product, Service, or SoftwareApplication structured data
             has_product_schema = any(
                 any(st.lower() in ("product", "service", "softwareapplication", "webapplication") for st in (p.schema_types or []))
@@ -929,7 +981,7 @@ class SpecialistAgent(BaseAgent):
                     "Add Product / Service JSON-LD schema with offers, name, and capability attributes to enable rich SERP snippets."
                 )
 
-        elif aid == "content.freshness.v3":
+        elif aid == "geo.source_freshness.v3":
             # Audits content publication dates and temporal freshness markers
             has_dates = any(bool(getattr(p, "date_published", None) or getattr(p, "date_modified", None)) for p in pages)
             observations["temporal_dates_present"] = has_dates
@@ -940,23 +992,23 @@ class SpecialistAgent(BaseAgent):
                     "Expose explicit datePublished and dateModified attributes in article and webpage schemas to establish recency."
                 )
 
-        elif aid == "geo.brand_identity.v3":
-            # Evaluates unambiguous brand definition and LLM disambiguation
-            h1_first = pages[0].h1[0] if (pages and pages[0].h1) else ""
-            desc = pages[0].meta_description if pages else ""
-            observations["homepage_h1_characters"] = len(h1_first or "")
-            observations["homepage_meta_characters"] = len(desc or "")
-            observations["llm_brand_clarity"] = "not_judged"
-
-        elif aid == "geo.llms_txt.v3":
-            # Audits presence and compliance of /llms.txt
+        elif aid == "geo.structure.v3":
+            # Audits /llms.txt presence, FAQPage schema, and H1/meta clarity for LLM extraction
             has_llms_txt = bool(manifest and getattr(manifest, "llms_txt_found", False))
+            has_faq = any(any("faq" in st.lower() for st in (p.schema_types or [])) for p in pages)
             observations["llms_txt_found"] = has_llms_txt
+            observations["has_faq_schema"] = has_faq
             if not has_llms_txt:
                 add(
                     "Domain does not serve an /llms.txt or /llms-full.txt machine-readable crawler directive at root.",
                     Severity.MEDIUM,
                     "Publish an /llms.txt markdown file summarizing your core APIs, canonical entity facts, and key URLs for LLM crawlers."
+                )
+            if not has_faq:
+                add(
+                    "Missing FAQPage Schema.org structured data for direct answer engine snippet grounding.",
+                    Severity.MEDIUM,
+                    "Implement FAQPage JSON-LD schemas answering top customer commercial questions with concise factual prose."
                 )
 
         elif aid == "geo.extractability.v3":
@@ -969,18 +1021,7 @@ class SpecialistAgent(BaseAgent):
             observations["word_counts"] = numeric_words
             observations["avg_word_count"] = (sum(numeric_words) / len(numeric_words)) if numeric_words else None
 
-        elif aid == "geo.synthesis.v3":
-            # Evaluates citable soundbites and structured FAQ blocks
-            has_faq = any(any("faq" in st.lower() for st in (p.schema_types or [])) for p in pages)
-            observations["has_faq_schema"] = has_faq
-            if not has_faq:
-                add(
-                    "Missing FAQPage Schema.org structured data for direct answer engine snippet grounding.",
-                    Severity.MEDIUM,
-                    "Implement FAQPage JSON-LD schemas answering top customer commercial questions with concise factual prose."
-                )
-
-        elif aid == "ai_search.query_coverage.v3":
+        elif aid == "ai_search.discoverability.v3":
             # Evaluates coverage of commercial buyer comparison queries
             observations["evaluated_buyer_queries_count"] = len(getattr(blackboard, "commercial_evaluations", []) or [])
             if not getattr(blackboard, "commercial_evaluations", None):
@@ -990,7 +1031,7 @@ class SpecialistAgent(BaseAgent):
                     "Publish dedicated 'Alternative to' or 'Why Choose Us' comparison tables with verified objective feature specifications."
                 )
 
-        elif aid == "ai_search.rank_tracker.v3":
+        elif aid == "ai_search.cross_engine.v3":
             # Evaluates presence in generative answer engine citation pools from real telemetry
             scorecard = getattr(blackboard, "ai_visibility_scorecard", None)
             if scorecard and getattr(scorecard, "status", None) == "MEASURED":
@@ -1005,18 +1046,7 @@ class SpecialistAgent(BaseAgent):
             else:
                 observations["ai_citation_telemetry_status"] = "UNMEASURED"
 
-        elif aid == "ai_search.hallucination_risk.v3":
-            # Evaluates ambiguity that could trigger LLM hallucinations about capabilities
-            desc_len = len(pages[0].meta_description or "") if pages else 0
-            observations["meta_description_char_count"] = desc_len
-            if desc_len < 50:
-                add(
-                    "Sparse meta summaries increase LLM hallucination risk when generative engines summarize company offerings.",
-                    Severity.HIGH,
-                    "Provide a comprehensive, factual 150-character meta description explicitly listing supported features and platforms."
-                )
-
-        elif aid == "ai_search.citability.v3":
+        elif aid == "geo.citation_readiness.v3":
             # Evaluates citable quotation markers and statistical data points
             has_stats = any(bool(getattr(p, "content_authority", {}).get("original_data_points", 0)) for p in pages)
             observations["citable_data_points_present"] = has_stats
@@ -1027,16 +1057,8 @@ class SpecialistAgent(BaseAgent):
                     "Highlight empirical ROI statistics, customer volume, and benchmark metrics in clean semantic blockquotes."
                 )
 
-        elif aid == "ai_search.competitor_displacement.v3":
-            # Evaluates brand defensibility against rival displacement in AI search
-            observations["competitor_bakeoff_conducted"] = bool(getattr(blackboard, "competitor_bakeoff", None))
-            if getattr(blackboard, "competitor_bakeoff", None):
-                observations["competitor_displacement_evaluated"] = True
-            else:
-                observations["competitor_displacement_status"] = "UNMEASURED"
-
-        elif aid == "cro.trust_signals.v3":
-            # Audits trust signals (SSL, privacy policy, terms, contact, security headers)
+        elif aid == "trust.authority.v3":
+            # Audits trust signals (privacy policy, terms, contact, security headers)
             has_legal = any("privacy" in (p.url or "").lower() or "terms" in (p.url or "").lower() for p in pages)
             observations["legal_trust_links_detected"] = has_legal
             if not has_legal:
@@ -1044,17 +1066,6 @@ class SpecialistAgent(BaseAgent):
                     "Footer lacks conspicuous links to Privacy Policy and Terms of Service.",
                     Severity.MEDIUM,
                     "Add transparent Privacy Policy and Terms of Service links in the global footer to satisfy buyer trust requirements."
-                )
-
-        elif aid == "cro.friction.v3":
-            # Evaluates form fields and friction points in the conversion funnel
-            forms = [p.url for p in pages if getattr(p, "forms_detected", False)]
-            observations["pages_with_forms"] = len(forms)
-            if len(forms) > 0:
-                add(
-                    f"{len(forms)} page(s) contain lead capture forms that require ongoing friction optimization.",
-                    Severity.LOW,
-                    "Simplify lead capture to minimal required fields (e.g. email-only or frictionless SSO) to maximize funnel velocity."
                 )
 
         elif aid == "cro.form_friction.v3":
@@ -1173,16 +1184,44 @@ class SpecialistAgent(BaseAgent):
                 )
 
         elif aid in (
-            "aeo.conversational_intent.v3", "aeo.question_discovery.v3", "aeo.intent_classification.v3",
-            "aeo.question_clustering.v3", "aeo.factual_verification.v3", "aeo.passage_analysis.v3",
-            "aeo.technical_eligibility.v3", "aeo.source_attribution.v3", "aeo.live_benchmark.v3",
-            "aeo.citation_analysis.v3", "aeo.competitive_intelligence.v3", "aeo.brand_accuracy.v3",
-            "aeo.business_attribution.v3", "aeo.remediation_planner.v3",
-            "geo.multimodal_citation.v3", "geo.source_freshness.v3",
+            "aeo.conversational_intent.v3",
+            "geo.multimodal_citation.v3",
         ):
             # Specialized telemetry agents: require external live feeds or model runs; unmeasured offline
             observations["execution_status"] = "UNMEASURED"
             observations["mode"] = "REQUIRE_LIVE_MEASUREMENT"
+
+        elif aid in (
+            "seo.drift.v3",
+            "seo.specialized.accessibility.v3",
+            "seo.specialized.app.v3",
+            "seo.specialized.ecommerce.v3",
+            "seo.specialized.forecasting.v3",
+            "seo.specialized.governance.v3",
+            "seo.specialized.international.v3",
+            "seo.specialized.local.v3",
+            "seo.specialized.news.v3",
+            "seo.specialized.policy_compliance.v3",
+            "seo.specialized.programmatic.v3",
+            "seo.specialized.video.v3",
+        ):
+            # Deterministic baseline telemetry for specialized SEO agents
+            observations["pages_inspected"] = len(pages)
+            observations["specialized_domain"] = aid
+            if aid == "seo.specialized.accessibility.v3":
+                missing_alt = sum(
+                    len([img for img in (getattr(p, "image_assets", None) or []) if not img.get("alt")])
+                    for p in pages
+                )
+                observations["images_missing_alt"] = missing_alt
+            elif aid == "seo.specialized.international.v3":
+                observations["html_langs"] = sorted({getattr(p, "html_lang", None) for p in pages if getattr(p, "html_lang", None)})
+            elif aid == "seo.specialized.ecommerce.v3":
+                observations["product_schema_pages"] = sum(
+                    1 for p in pages if any(st.lower() in ("product", "offer") for st in (p.schema_types or []))
+                )
+            elif aid == "seo.drift.v3":
+                observations["baseline_snapshot_present"] = bool(getattr(blackboard, "baseline_snapshot", None))
 
         elif aid == "crawl.rendering_hydration.v3":
             # JS Rendering & Hydration Risk Specialist
@@ -1233,10 +1272,6 @@ class SpecialistAgent(BaseAgent):
             # Adversarial critic cross-examines findings against ground truth DOM evidence
             observations["adversarial_verification_mode"] = "GROUND_TRUTH_VALIDATION"
             observations["verified_claims_count"] = len(claims_spec)
-
-        elif aid == "verification.source_verifier.v3":
-            # Verifies provenance tokens and source URL evidence bindings
-            observations["provenance_binding_verified"] = True
 
         elif aid == "verification.contradiction.v3":
             # Checks for conflicting claims across specialists
@@ -1353,10 +1388,10 @@ class SpecialistAgent(BaseAgent):
                 claim.confidence_rubric == RubricConfidence.GUESSING
                 and claim.materiality == Materiality.CRITICAL
             ):
-                claim.adversarial_reviewed = True
-                claim.held_from_executive = False
+                # Never release GUESSING+CRITICAL claims before LLM adversarial + critic verification.
+                claim.held_from_executive = True
                 claim.routed_to = ADVERSARIAL_AGENT_ID
-                note = "Adversarial review of GUESSING+CRITICAL completed; still GUESSING — not CERTAIN/LIKELY."
+                note = "Flagged GUESSING+CRITICAL; held from executive synthesis pending adversarial + critic review."
                 existing = claim.verification_notes or ""
                 if note not in existing:
                     claim.verification_notes = f"{existing} | {note}".strip(" |")

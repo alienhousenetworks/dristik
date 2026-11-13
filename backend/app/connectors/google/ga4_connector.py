@@ -99,8 +99,10 @@ class GoogleAnalytics4Connector(BaseConnector, ExternalTelemetryConnector):
         try:
             from app.connectors.store import connector_store
             from app.connectors.google.google_connectors import ga4_connector as singleton_ga4
+            from app.identity.tenancy.tenant_context import current_org_id
+            org_id = current_org_id.get()
             has_auth = False
-            for integ in connector_store.list_integrations():
+            for integ in connector_store.list_integrations(org_id=org_id):
                 if integ.provider in (ConnectorType.GOOGLE_ANALYTICS_4, ConnectorType.GOOGLE_ANALYTICS):
                     conn = connector_store.get_connector(integ.integration_id)
                     raw_c = getattr(getattr(conn, "credentials", None), "api_key", None) or ""
@@ -219,7 +221,9 @@ class GoogleAnalytics4Connector(BaseConnector, ExternalTelemetryConnector):
         if not token:
             try:
                 from app.connectors.store import connector_store
-                for integ in connector_store.list_integrations():
+                from app.identity.tenancy.tenant_context import current_org_id
+                org_id = current_org_id.get()
+                for integ in connector_store.list_integrations(org_id=org_id):
                     if integ.provider in (ConnectorType.GOOGLE_ANALYTICS_4, ConnectorType.GOOGLE_ANALYTICS):
                         conn = connector_store.get_connector(integ.integration_id)
                         raw_c = getattr(getattr(conn, "credentials", None), "api_key", None) or ""

@@ -1411,32 +1411,8 @@ GEO_SPECIALISTS_V3: Dict[str, AgentDefinition] = {
         timeout_sec=20,
         required_evidence=["entity_triples", "schema_graph", "contradictions_ledger"],
     ),
-    "geo.extractability.v3": AgentDefinition(
-        agent_id="geo.extractability.v3",
-        agent_name="Content Extractability Auditor",
-        domain="GEO",
-        worker_type="analyst_worker",
-        description="Measures direct answer clarity: definitions, bulleted lists, tables, concise summaries, and modular sections.",
-        capabilities=["answer_extractability_score", "definition_finder", "table_list_density"],
-        allowed_models=["reasoning_model", "fast_slm"],
-        token_budget=4500,
-        risk_level="medium",
-        timeout_sec=20,
-        required_evidence=["dom_elements", "clean_text", "faqs"],
-    ),
-    "geo.information_gain.v3": AgentDefinition(
-        agent_id="geo.information_gain.v3",
-        agent_name="Information Gain Auditor",
-        domain="GEO",
-        worker_type="analyst_worker",
-        description="Detects original research, proprietary data, benchmarks, unique methodology, and first-party insights.",
-        capabilities=["information_gain_score", "original_data_detection", "proprietary_insight_check"],
-        allowed_models=["reasoning_model"],
-        token_budget=5000,
-        risk_level="high",
-        timeout_sec=25,
-        required_evidence=["clean_text", "data_tables", "stat_mentions"],
-    ),
+    "geo.extractability.v3": SPECIALIST_AGENTS_V3["geo.extractability.v3"],
+    "geo.information_gain.v3": SPECIALIST_AGENTS_V3["geo.information_gain.v3"],
     "geo.technical_auditor.v3": AgentDefinition(
         agent_id="geo.technical_auditor.v3",
         agent_name="Technical GEO Auditor",
@@ -1789,11 +1765,30 @@ DOMAIN_CATEGORY: Dict[str, str] = {
 }
 
 def get_agent_definition(agent_id: str) -> Optional[AgentDefinition]:
-    """Retrieve agent definition by ID or legacy alias."""
+    """Retrieve agent definition by exact canonical ID or registered alias."""
     return AGENT_REGISTRY.get(agent_id)
 
+def resolve_runtime_agent_id(agent_id: str) -> str:
+    """Resolve an agent_id strictly against SPECIALIST_AGENTS_V3. Fails closed on unknown IDs."""
+    if agent_id in SPECIALIST_AGENTS_V3:
+        return agent_id
+    defn = AGENT_REGISTRY.get(agent_id)
+    if defn and defn.agent_id in SPECIALIST_AGENTS_V3:
+        return defn.agent_id
+    raise KeyError(f"Unknown or non-runtime specialist agent_id: '{agent_id}'")
+
+WORKFORCE_CLASSIFICATION: Dict[str, str] = {
+    "SPECIALIST_AGENTS_V3": "RUNTIME_AGENT",
+    "BusinessUnderstandingOrchestrator": "RUNTIME_AGENT",
+    "PageIntelligenceAgent": "RUNTIME_AGENT",
+    "TeamOrchestrator.workers": "RUNTIME_AGENT",
+    "AgentToolBus": "ON_DEMAND_TOOL",
+    "seo.enterprise": "REFERENCE_LIBRARY",
+    "AgentPool.execute_streamlined_fleet": "DEPRECATED_LEGACY",
+}
+
 def list_all_specialists() -> List[AgentDefinition]:
-    """List all 35 canonical specialist agents."""
+    """List all canonical runtime specialist agents (68 in SPECIALIST_AGENTS_V3)."""
     return list(SPECIALIST_AGENTS_V3.values())
 
 def list_copywriting_specialists() -> List[AgentDefinition]:

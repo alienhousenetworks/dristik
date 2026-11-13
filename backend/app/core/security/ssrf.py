@@ -30,16 +30,30 @@ BLOCKED_HOSTNAMES = {
     "fd00::",
 }
 
-from functools import lru_cache
+import time
 
-# shortcut: in-process 512-host DNS cache without TTL, replace if long-lived workers need DNS rebinding rotation checks
-@lru_cache(maxsize=512)
+_DNS_CACHE: dict[str, Tuple[float, Tuple[str, ...]]] = {}
+_DNS_CACHE_TTL_SECONDS = 30.0
+_DNS_CACHE_MAX_SIZE = 512
+
+
 def _resolve_hostname_ips(hostname: str) -> Tuple[str, ...]:
+    now = time.monotonic()
+    cached = _DNS_CACHE.get(hostname)
+    if cached and (now - cached[0]) < _DNS_CACHE_TTL_SECONDS:
+        return cached[1]
     try:
         infos = socket.getaddrinfo(hostname, None, socket.AF_INET, socket.SOCK_STREAM)
     except socket.gaierror:
         infos = socket.getaddrinfo(hostname, None, 0, socket.SOCK_STREAM)
-    return tuple({item[4][0] for item in infos})
+    ips = tuple({item[4][0] for item in infos})
+    if len(_DNS_CACHE) >= _DNS_CACHE_MAX_SIZE:
+        _DNS_CACHE.clear()
+    _DNS_CACHE[hostname] = (now, ips)
+    return ips
+
+
+_resolve_hostname_ips.cache_clear = _DNS_CACHE.clear  # type: ignore[attr-defined]
 
 
 def is_safe_url(target_url: str, egress_allowlist: Optional[list[str]] = None) -> Tuple[bool, str]:

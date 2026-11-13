@@ -80,8 +80,8 @@ class DimensionScore(BaseModel):
 
 
 class LandscapeCoordinates(BaseModel):
-    x: float = Field(..., ge=0.0, le=1.0, description="Weighted Search Visibility (0.0 to 1.0)")
-    y: float = Field(..., ge=0.0, le=1.0, description="Weighted GEO / AI Visibility (0.0 to 1.0)")
+    x: Optional[float] = Field(None, ge=0.0, le=1.0, description="Weighted Search Visibility (0.0 to 1.0), None when unmeasured")
+    y: Optional[float] = Field(None, ge=0.0, le=1.0, description="Weighted GEO / AI Visibility (0.0 to 1.0), None when unmeasured")
     x_confidence: EvidenceConfidence = EvidenceConfidence.MEDIUM
     y_confidence: EvidenceConfidence = EvidenceConfidence.MEDIUM
     weights_used: Dict[str, Any] = Field(default_factory=dict)

@@ -10,13 +10,13 @@ from pydantic import BaseModel, Field
 
 from app.domain.enums import UserRole
 from app.identity.authorizer import UserIdentity
-from app.identity.deps import get_current_user_optional, require_permission
+from app.identity.deps import get_current_user, require_permission
 
 router = APIRouter(tags=["Enterprise IAM & SCIM 2.0"])
 
-# In-memory SCIM store for users and groups
-_SCIM_USERS = {}
-_SCIM_GROUPS = {}
+# Tenant-scoped SCIM store (org_id -> {id -> resource})
+_SCIM_USERS: Dict[str, Dict[str, Any]] = {}
+_SCIM_GROUPS: Dict[str, Dict[str, Any]] = {}
 
 
 class SAMLConfigRequest(BaseModel):
@@ -58,7 +58,7 @@ class SCIMUserCreateRequest(BaseModel):
 @router.post("/api/v1/auth/sso/saml/configure")
 async def configure_saml(
     req: SAMLConfigRequest,
-    user: Optional[UserIdentity] = Depends(get_current_user_optional)
+    user: UserIdentity = Depends(require_permission("org:manage"))
 ):
     """Configures enterprise SAML 2.0 IDP connection."""
     if not req.sso_url.startswith("https://"):
@@ -81,8 +81,9 @@ async def configure_saml(
 # ---------------------------------------------------------------------------
 
 @router.get("/scim/v2/Users")
-async def list_scim_users():
-    users_list = list(_SCIM_USERS.values())
+async def list_scim_users(user: UserIdentity = Depends(require_permission("org:manage"))):
+    org_users = _SCIM_USERS.get(user.org_id, {})
+    users_list = list(org_users.values())
     return {
         "schemas": ["urn:ietf:params:scim:api:messages:2.0:ListResponse"],
         "totalResults": len(users_list),
@@ -93,7 +94,10 @@ async def list_scim_users():
 
 
 @router.post("/scim/v2/Users", status_code=201)
-async def create_scim_user(req: SCIMUserCreateRequest):
+async def create_scim_user(
+    req: SCIMUserCreateRequest,
+    user: UserIdentity = Depends(require_permission("org:manage")),
+):
     user_id = f"usr_{uuid.uuid4().hex[:8]}"
     now = datetime.now(timezone.utc).isoformat()
     scim_obj = {
@@ -111,27 +115,36 @@ async def create_scim_user(req: SCIMUserCreateRequest):
             "location": f"/scim/v2/Users/{user_id}",
         }
     }
-    _SCIM_USERS[user_id] = scim_obj
+    _SCIM_USERS.setdefault(user.org_id, {})[user_id] = scim_obj
     return scim_obj
 
 
 @router.get("/scim/v2/Users/{user_id}")
-async def get_scim_user(user_id: str):
-    if user_id not in _SCIM_USERS:
+async def get_scim_user(
+    user_id: str,
+    user: UserIdentity = Depends(require_permission("org:manage")),
+):
+    org_users = _SCIM_USERS.get(user.org_id, {})
+    if user_id not in org_users:
         raise HTTPException(status_code=404, detail="SCIM User not found.")
-    return _SCIM_USERS[user_id]
+    return org_users[user_id]
 
 
 @router.delete("/scim/v2/Users/{user_id}", status_code=204)
-async def delete_scim_user(user_id: str):
-    if user_id in _SCIM_USERS:
-        del _SCIM_USERS[user_id]
+async def delete_scim_user(
+    user_id: str,
+    user: UserIdentity = Depends(require_permission("org:manage")),
+):
+    org_users = _SCIM_USERS.get(user.org_id, {})
+    if user_id in org_users:
+        del org_users[user_id]
     return None
 
 
 @router.get("/scim/v2/Groups")
-async def list_scim_groups():
-    groups_list = list(_SCIM_GROUPS.values())
+async def list_scim_groups(user: UserIdentity = Depends(require_permission("org:manage"))):
+    org_groups = _SCIM_GROUPS.get(user.org_id, {})
+    groups_list = list(org_groups.values())
     return {
         "schemas": ["urn:ietf:params:scim:api:messages:2.0:ListResponse"],
         "totalResults": len(groups_list),

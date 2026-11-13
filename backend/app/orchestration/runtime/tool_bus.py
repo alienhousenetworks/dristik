@@ -212,12 +212,23 @@ class AgentToolBus:
         bp_dict = {}
         if bp is not None:
             bp_dict = {
+                "profile_version": getattr(bp, "profile_version", "4.0"),
                 "business_name": getattr(bp, "business_name", None),
+                "industry": getattr(bp, "industry", None),
                 "niche": getattr(bp, "niche", None),
+                "products": getattr(bp, "products", []) or [],
+                "services": getattr(bp, "services", []) or [],
                 "target_audience": getattr(bp, "target_audience", None),
+                "personas": getattr(bp, "personas", []) or [],
+                "pain_points": getattr(bp, "pain_points", []) or [],
+                "geography": getattr(bp, "geography", None),
                 "value_proposition": getattr(bp, "value_proposition", None),
+                "positioning": getattr(bp, "positioning", None),
+                "competitors": getattr(bp, "competitors", []) or [],
                 "primary_cta": getattr(bp, "primary_cta", None),
                 "business_model": getattr(bp, "business_model", None),
+                "verified_assumptions": getattr(bp, "verified_assumptions", []) or [],
+                "unverified_assumptions": getattr(bp, "unverified_assumptions", []) or [],
             }
         tech = self.detect_tech_stack()
         prior_results = (getattr(self.bb, "blackboard_state", {}) or {}).get("agent_results", {}) or {}

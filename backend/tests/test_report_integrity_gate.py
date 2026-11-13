@@ -171,6 +171,7 @@ def test_deduplicator_and_repair_report_keep_weights_and_refs_valid_for_final_ga
     report = ExecutiveReport(
         report_id="rep_1",
         analysis_id="run_1",
+        org_id="org_test",
         website_url="https://example.com",
         domain="example.com",
         generated_at="now",

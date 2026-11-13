@@ -34,7 +34,14 @@ class BaseAgent(ABC):
         confidence: float = 0.85,
         recommendation: Optional[str] = None,
         impact: int = 5,
-        effort: int = 5
+        effort: int = 5,
+        why_it_matters: Optional[str] = None,
+        validation_criteria: Optional[str] = None,
+        confidence_basis: Optional[str] = None,
+        confidence_rubric: Optional[Any] = None,
+        materiality: Optional[Any] = None,
+        source_agreement: Optional[int] = None,
+        source_integrity_label: Optional[Any] = None,
     ) -> Claim:
         claim = blackboard.claim_registry.register_claim(
             agent_id=self.agent_id,
@@ -46,7 +53,14 @@ class BaseAgent(ABC):
             confidence=confidence,
             recommendation=recommendation,
             impact=impact,
-            effort=effort
+            effort=effort,
+            why_it_matters=why_it_matters,
+            validation_criteria=validation_criteria,
+            confidence_basis=confidence_basis,
+            confidence_rubric=confidence_rubric,
+            materiality=materiality,
+            source_agreement=source_agreement,
+            source_integrity_label=source_integrity_label,
         )
         from app.orchestration.cognition.ground_truth import apply_ground_truth_to_claim
         from app.orchestration.cognition.finding_rubric import apply_rubric_to_claim
