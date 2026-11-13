@@ -210,6 +210,60 @@ def test_pdf_renderer_html_generation():
     assert contract.content_hash in html_out
 
 
+def test_string_and_claim_findings_coerce_into_report_findings():
+    """Phase 3 used to pass claim statements as strings and crash SubPhaseReportContract."""
+
+    class _Severity:
+        value = "HIGH"
+
+    class _Claim:
+        id = "claim_alt"
+        claim_id = "claim_alt"
+        statement = "Detected 5 image(s) missing descriptive alt attributes."
+        severity = _Severity()
+        evidence_refs = ["img_1"]
+        recommendation = "Add descriptive alt text to each image."
+        why_it_matters = "Images stay invisible to search and assistive technology."
+        impact = 5  # domain claims store a numeric score, not prose
+
+    contract = SubPhaseReportBuilder.build_generic(
+        run_id="run_coerce_001",
+        phase_id="phase_03_pillars",
+        phase_name="3. Four Strategic Pillars",
+        subphase_id="3.1",
+        subphase_title="Search Engine Optimization (SEO) Specialist Analysis",
+        objective="Evaluate on-page content.",
+        agent_id="seo.specialist_workforce",
+        agent_model="multi_specialist_pool",
+        execution_mode="hybrid",
+        duration_ms=1200,
+        status=ExecutionStatus.COMPLETED,
+        input_summary={"active": True},
+        processing_steps=["On-page audit"],
+        structured_output={"pillar": "SEO"},
+        evidence_tokens=[],
+        findings=[
+            "5 image(s) are missing alt text.",
+            _Claim(),
+        ],
+        confidence=ConfidenceLevel.VERIFIED,
+    )
+
+    assert len(contract.findings) == 2
+    assert all(isinstance(item, ReportFinding) for item in contract.findings)
+    assert contract.findings[0].description == "5 image(s) are missing alt text."
+    assert contract.findings[0].severity == "info"
+    assert contract.findings[1].finding_id == "claim_alt"
+    assert contract.findings[1].severity == "high"
+    assert contract.findings[1].title.startswith("Detected 5 image")
+    assert contract.findings[1].evidence_ids == ["img_1"]
+    assert contract.findings[1].remediation_hint.startswith("Add descriptive alt")
+    assert contract.findings[1].impact.startswith("Images stay invisible")
+    assert len(contract.content_hash) == 64
+    assert not hasattr(ConfidenceLevel, "LIKELY")
+    assert ConfidenceLevel.INFERRED.value == "INFERRED"
+
+
 def test_progressive_reports_api_endpoints():
     client = TestClient(app)
 

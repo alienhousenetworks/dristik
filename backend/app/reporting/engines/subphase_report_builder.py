@@ -561,7 +561,7 @@ class SubPhaseReportBuilder:
         processing_steps: List[str],
         structured_output: Dict[str, Any],
         evidence_tokens: List[EvidenceTokenReference],
-        findings: List[ReportFinding],
+        findings: List[Any],
         confidence: ConfidenceLevel = ConfidenceLevel.VERIFIED,
         unresolved_issues: Optional[List[str]] = None,
         errors: Optional[List[str]] = None,

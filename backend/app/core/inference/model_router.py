@@ -20,7 +20,7 @@ from app.core.config import (
     GROQ_DEFAULT_REASONING,
 )
 from app.evidence.models import Evidence
-from app.core.inference.llm_client import LLMClient, RateLimitException
+from app.core.inference.llm_client import LLMClient, RateLimitException, _looks_like_json_document
 from app.core.inference.prompt_compiler import PromptCompiler, load_prompt
 from app.core.inference.json_repair import repair_and_parse_json
 from app.core.inference.telemetry import TelemetryTracker
@@ -339,7 +339,13 @@ class ModelRouter:
                         f"for capability '{capability}' (stop_reason={stop_reason}, chars={len(raw)})."
                     )
                     logger.warning("[ModelRouter][%s][%s] %s Preview: %s", capability, agent_role, last_error, raw[:300].replace("\n", " "))
-                    if stop_reason in ("max_tokens", "length") and max_tokens < 8192:
+                    # A thinking trace is not a truncated JSON document. Growing
+                    # max_tokens only gives the trace more room and blows the timeout.
+                    if (
+                        stop_reason in ("max_tokens", "length")
+                        and max_tokens < 8192
+                        and _looks_like_json_document(raw)
+                    ):
                         max_tokens = min(max_tokens * 2, 8192)
                         user_prompt = (
                             f"{prompts['user']}\n\n"

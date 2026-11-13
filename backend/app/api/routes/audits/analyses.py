@@ -9,6 +9,7 @@ from urllib.parse import urlparse, quote
 from typing import Optional, List, Dict, Any
 from pydantic import BaseModel, Field
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Response, status
+from fastapi.responses import JSONResponse
 from app.core.config import settings
 from app.domain.models import (
     AnalysisRequest,
@@ -1114,10 +1115,10 @@ async def run_single_graph_node(analysis_id: str, node_id: str, user: UserIdenti
     Executes an individual sub-section or agent node separately, provided its upstream dependencies are met.
     """
     _get_org_run(analysis_id, user)
-    res = await orchestrator.run_pipeline_node(analysis_id, node_id)
+    res = orchestrator.enqueue_pipeline_node(analysis_id, node_id)
     if not res.get("success"):
         raise HTTPException(status_code=400, detail=res.get("error", f"Node '{node_id}' could not be executed."))
-    return res
+    return JSONResponse(status_code=202, content=res)
 
 
 @router.post("/{analysis_id}/sections/{section_id}/run")
@@ -1126,10 +1127,10 @@ async def run_pipeline_section_endpoint(analysis_id: str, section_id: str, user:
     Executes all DAG nodes belonging to an entire phase / section sequentially.
     """
     _get_org_run(analysis_id, user)
-    res = await orchestrator.run_pipeline_section(analysis_id, section_id)
+    res = orchestrator.enqueue_pipeline_section(analysis_id, section_id)
     if not res.get("success"):
         raise HTTPException(status_code=400, detail=res.get("error", f"Section '{section_id}' execution failed."))
-    return res
+    return JSONResponse(status_code=202, content=res)
 
 
 @router.post("/{analysis_id}/pillars/{pillar_key}/run")
@@ -1145,10 +1146,10 @@ async def run_pipeline_pillar_endpoint(analysis_id: str, pillar_key: str, user: 
             status_code=400,
             detail=f"Invalid pillar '{pillar_key}'. Valid pillars are: {', '.join(PILLAR_TO_SECTION.keys())}"
         )
-    res = await orchestrator.run_pipeline_section(analysis_id, section_id)
+    res = orchestrator.enqueue_pipeline_section(analysis_id, section_id)
     if not res.get("success"):
         raise HTTPException(status_code=400, detail=res.get("error", f"Pillar '{pillar_key}' execution failed."))
-    return res
+    return JSONResponse(status_code=202, content=res)
 
 
 @router.get("/{analysis_id}/agent-workforce")

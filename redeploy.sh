@@ -43,12 +43,36 @@ if [ ! -f "$ENV_FILE" ]; then
     exit 1
 fi
 
-# Load variables from .env
+# Read AUTH_SECRET from the file before sourcing. A failed source (unquoted
+# values with spaces or parentheses) used to leave the shell variable empty
+# and this script then replaced the live secret.
+file_auth_secret="$(
+python3 - "$ENV_FILE" <<'PY'
+import pathlib, sys
+text = pathlib.Path(sys.argv[1]).read_text(encoding="utf-8", errors="replace")
+value = ""
+for line in text.splitlines():
+    stripped = line.strip()
+    if stripped.startswith("AUTH_SECRET="):
+        value = stripped.split("=", 1)[1].strip().strip('"').strip("'")
+        break
+sys.stdout.write(value)
+PY
+)"
+
+# Load variables from .env. Do not abort if one assignment cannot be sourced.
 set -a
-source "$ENV_FILE" 2>/dev/null || true
+set +e
+source "$ENV_FILE" 2>/dev/null
+set -e
 set +a
 
-# Validate AUTH_SECRET length or auto-generate
+if [ -n "$file_auth_secret" ]; then
+    export AUTH_SECRET="$file_auth_secret"
+fi
+
+# Validate AUTH_SECRET length or auto-generate. Never replace a secret that
+# is already present and strong in the file.
 if [ -z "$AUTH_SECRET" ] || [ ${#AUTH_SECRET} -lt 32 ] || [ "$AUTH_SECRET" = "dristik-dev-secret-change-me" ]; then
     echo -e "${YELLOW}⚡ Notice: AUTH_SECRET in .env is missing or weak. Auto-generating a secure 32-byte secret...${RESET}"
     NEW_SECRET=$(openssl rand -hex 32 2>/dev/null || python3 -c "import secrets; print(secrets.token_hex(32))" 2>/dev/null || date +%s%N | sha256sum | head -c 64)

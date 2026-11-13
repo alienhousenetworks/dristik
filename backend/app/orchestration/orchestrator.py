@@ -90,6 +90,12 @@ class AnalysisOrchestrator:
         self.narrative_gen = NarrativeGenerator()
         self.roadmap_builder = RoadmapBuilder()
         self.bakeoff_engine = CommercialBakeoffEngine()
+        # Manual pillar, section, and node runs are queued per audit so the HTTP
+        # request can return before a model call finishes. One worker per audit
+        # keeps those runs from overlapping each other.
+        self._pipeline_queue: Dict[str, List[tuple]] = {}
+        self._pipeline_active: Dict[str, str] = {}
+        self._pipeline_worker: Dict[str, asyncio.Task] = {}
         self.digital_twins: Dict[str, WebsiteDigitalTwin] = {}
         self.timelines: Dict[str, WebsiteIntelligenceTimeline] = {}
         from app.db.repository import get_audit_repository
@@ -930,8 +936,8 @@ class AnalysisOrchestrator:
                     processing_steps=["Technical indexation audit", "Core Web Vitals diagnostic", "Schema JSON-LD graph inspection"],
                     structured_output={"pillar": "SEO", "status": "COMPLETED" if "seo" in active_pillars_set else "SKIPPED"},
                     evidence_tokens=[],
-                    findings=[c.statement for c in seo_claims[:5]],
-                    confidence=ConfidenceLevel.VERIFIED if ("seo" in active_pillars_set and seo_claims) else (ConfidenceLevel.LIKELY if "seo" in active_pillars_set else ConfidenceLevel.UNMEASURED),
+                    findings=list(seo_claims[:5]),
+                    confidence=ConfidenceLevel.VERIFIED if ("seo" in active_pillars_set and seo_claims) else (ConfidenceLevel.INFERRED if "seo" in active_pillars_set else ConfidenceLevel.UNMEASURED),
                 )
                 await self._record_progressive_subphase(p3_seo, "seo_pillar")
 
@@ -952,8 +958,8 @@ class AnalysisOrchestrator:
                     processing_steps=["Entity knowledge graph mapping", "NAP consistency verification", "LLMs.txt and citation footprint probe"],
                     structured_output={"pillar": "GEO", "status": "COMPLETED" if "geo" in active_pillars_set else "SKIPPED"},
                     evidence_tokens=[],
-                    findings=[c.statement for c in geo_claims[:5]],
-                    confidence=ConfidenceLevel.VERIFIED if ("geo" in active_pillars_set and geo_claims) else (ConfidenceLevel.LIKELY if "geo" in active_pillars_set else ConfidenceLevel.UNMEASURED),
+                    findings=list(geo_claims[:5]),
+                    confidence=ConfidenceLevel.VERIFIED if ("geo" in active_pillars_set and geo_claims) else (ConfidenceLevel.INFERRED if "geo" in active_pillars_set else ConfidenceLevel.UNMEASURED),
                 )
                 await self._record_progressive_subphase(p3_geo, "geo_pillar")
 
@@ -974,8 +980,8 @@ class AnalysisOrchestrator:
                     processing_steps=["Direct answer density scoring", "FAQPage schema verification", "Hallucination defense testing"],
                     structured_output={"pillar": "AEO", "status": "COMPLETED" if "aeo" in active_pillars_set else "SKIPPED"},
                     evidence_tokens=[],
-                    findings=[c.statement for c in aeo_claims[:5]],
-                    confidence=ConfidenceLevel.VERIFIED if ("aeo" in active_pillars_set and aeo_claims) else (ConfidenceLevel.LIKELY if "aeo" in active_pillars_set else ConfidenceLevel.UNMEASURED),
+                    findings=list(aeo_claims[:5]),
+                    confidence=ConfidenceLevel.VERIFIED if ("aeo" in active_pillars_set and aeo_claims) else (ConfidenceLevel.INFERRED if "aeo" in active_pillars_set else ConfidenceLevel.UNMEASURED),
                 )
                 await self._record_progressive_subphase(p3_aeo, "aeo_pillar")
 
@@ -996,8 +1002,8 @@ class AnalysisOrchestrator:
                     processing_steps=["Visual CTA hierarchy scan", "5-second value proposition clarity test", "Trust proof and form ergonomics audit"],
                     structured_output={"pillar": "CRO", "status": "COMPLETED" if "cro" in active_pillars_set else "SKIPPED"},
                     evidence_tokens=[],
-                    findings=[c.statement for c in cro_claims[:5]],
-                    confidence=ConfidenceLevel.VERIFIED if ("cro" in active_pillars_set and cro_claims) else (ConfidenceLevel.LIKELY if "cro" in active_pillars_set else ConfidenceLevel.UNMEASURED),
+                    findings=list(cro_claims[:5]),
+                    confidence=ConfidenceLevel.VERIFIED if ("cro" in active_pillars_set and cro_claims) else (ConfidenceLevel.INFERRED if "cro" in active_pillars_set else ConfidenceLevel.UNMEASURED),
                 )
                 await self._record_progressive_subphase(p3_cro, "cro_pillar")
 
@@ -2475,8 +2481,8 @@ class AnalysisOrchestrator:
                     processing_steps=["Group by affected URL, selector, and issue category", "Deduplicate overlapping specialist claims"],
                     structured_output={"raw_count": len(raw_findings), "deduplicated_count": len(final_findings)},
                     evidence_tokens=[],
-                    findings=[f.title for f in final_findings[:5]],
-                    confidence=ConfidenceLevel.VERIFIED if final_findings else ConfidenceLevel.LIKELY,
+                    findings=list(final_findings[:5]),
+                    confidence=ConfidenceLevel.VERIFIED if final_findings else ConfidenceLevel.INFERRED,
                 )
                 await self._record_progressive_subphase(p5_1, "finding_deduplication")
 
@@ -2499,7 +2505,7 @@ class AnalysisOrchestrator:
                     structured_output={"patches_count": patches_count},
                     evidence_tokens=[],
                     findings=[],
-                    confidence=ConfidenceLevel.VERIFIED if patches_count > 0 else ConfidenceLevel.LIKELY,
+                    confidence=ConfidenceLevel.VERIFIED if patches_count > 0 else ConfidenceLevel.INFERRED,
                 )
                 await self._record_progressive_subphase(p5_2, "patch_generation")
 
@@ -2521,7 +2527,7 @@ class AnalysisOrchestrator:
                     structured_output={"items": r7},
                     evidence_tokens=[],
                     findings=[],
-                    confidence=ConfidenceLevel.VERIFIED if r7 else ConfidenceLevel.LIKELY,
+                    confidence=ConfidenceLevel.VERIFIED if r7 else ConfidenceLevel.INFERRED,
                 )
                 await self._record_progressive_subphase(p5_3, "roadmap_7_days")
 
@@ -2543,7 +2549,7 @@ class AnalysisOrchestrator:
                     structured_output={"items": r30},
                     evidence_tokens=[],
                     findings=[],
-                    confidence=ConfidenceLevel.VERIFIED if r30 else ConfidenceLevel.LIKELY,
+                    confidence=ConfidenceLevel.VERIFIED if r30 else ConfidenceLevel.INFERRED,
                 )
                 await self._record_progressive_subphase(p5_4, "roadmap_30_days")
 
@@ -2565,7 +2571,7 @@ class AnalysisOrchestrator:
                     structured_output={"items": r90},
                     evidence_tokens=[],
                     findings=[],
-                    confidence=ConfidenceLevel.VERIFIED if r90 else ConfidenceLevel.LIKELY,
+                    confidence=ConfidenceLevel.VERIFIED if r90 else ConfidenceLevel.INFERRED,
                 )
                 await self._record_progressive_subphase(p5_5, "roadmap_90_days")
 
@@ -3224,6 +3230,92 @@ class AnalysisOrchestrator:
             controller.log_activity(node_id, "error", "node.manual_failed", f"Step '{node_id}' failed: {str(err)}")
             await self._emit_event(analysis_id, "failed", 0, f"Step '{node_id}' failed: {str(err)}")
             return {"success": False, "node_id": node_id, "error": str(err)}
+
+    def _pipeline_job_label(self, kind: str, target_id: str) -> str:
+        return f"{kind}:{target_id}"
+
+    def _analysis_has_running_node(self, analysis_id: str) -> bool:
+        controller = get_pipeline_controller(analysis_id)
+        return any(state.status == GraphNodeStatus.RUNNING for state in controller.nodes_state.values())
+
+    def _ensure_pipeline_worker(self, analysis_id: str) -> None:
+        current = self._pipeline_worker.get(analysis_id)
+        if current is not None and not current.done():
+            return
+        self._pipeline_worker[analysis_id] = asyncio.create_task(
+            self._drain_pipeline_queue(analysis_id),
+            name=f"pipeline-queue:{analysis_id}",
+        )
+
+    async def _drain_pipeline_queue(self, analysis_id: str) -> None:
+        try:
+            while True:
+                queue = self._pipeline_queue.get(analysis_id) or []
+                if not queue:
+                    break
+                kind, target_id = queue.pop(0)
+                label = self._pipeline_job_label(kind, target_id)
+                self._pipeline_active[analysis_id] = label
+                try:
+                    if kind == "section":
+                        await self.run_pipeline_section(analysis_id, target_id)
+                    else:
+                        await self.run_pipeline_node(analysis_id, target_id)
+                except Exception:
+                    logger.exception("Queued %s failed for %s", label, analysis_id)
+                finally:
+                    if self._pipeline_active.get(analysis_id) == label:
+                        self._pipeline_active.pop(analysis_id, None)
+        finally:
+            current = self._pipeline_worker.get(analysis_id)
+            if current is asyncio.current_task():
+                self._pipeline_worker.pop(analysis_id, None)
+            if self._pipeline_queue.get(analysis_id):
+                self._ensure_pipeline_worker(analysis_id)
+
+    def _queue_pipeline_job(self, analysis_id: str, kind: str, target_id: str) -> str:
+        """Queue a section or node run. Returns 'started' or 'already_running'."""
+        label = self._pipeline_job_label(kind, target_id)
+        active = self._pipeline_active.get(analysis_id)
+        queued = [self._pipeline_job_label(item_kind, item_id) for item_kind, item_id in self._pipeline_queue.get(analysis_id, [])]
+        if label == active or label in queued:
+            return "already_running"
+        # The main audit owns the blackboard while one of its nodes is running.
+        # A second AEO execution on that same run is what the gateway was killing at 180s.
+        if active is None and not queued and self._analysis_has_running_node(analysis_id):
+            return "already_running"
+        self._pipeline_queue.setdefault(analysis_id, []).append((kind, target_id))
+        self._ensure_pipeline_worker(analysis_id)
+        return "started"
+
+    def enqueue_pipeline_section(self, analysis_id: str, section_id: str) -> Dict[str, Any]:
+        """Accept a section run without waiting for its model calls."""
+        section_id = PILLAR_TO_SECTION.get(section_id.lower(), section_id)
+        sec_def = next((s for s in SECTIONS_REGISTRY if s.section_id == section_id), None)
+        if not sec_def:
+            return {"success": False, "error": f"Section '{section_id}' not found in registry."}
+        status = self._queue_pipeline_job(analysis_id, "section", section_id)
+        return {
+            "success": True,
+            "status": status,
+            "section_id": section_id,
+            "title": sec_def.title,
+        }
+
+    def enqueue_pipeline_node(self, analysis_id: str, node_id: str) -> Dict[str, Any]:
+        """Accept a single-step run without waiting for its model calls."""
+        if node_id not in NODES_REGISTRY:
+            return {"success": False, "error": f"Step '{node_id}' not found."}
+        controller = get_pipeline_controller(analysis_id)
+        if not controller.are_dependencies_met(node_id):
+            missing = controller.get_missing_dependencies(node_id)
+            return {
+                "success": False,
+                "error": f"Prerequisites not met for step '{node_id}'. Missing completed dependencies: {missing}",
+                "missing_dependencies": missing,
+            }
+        status = self._queue_pipeline_job(analysis_id, "node", node_id)
+        return {"success": True, "status": status, "node_id": node_id}
 
     async def run_pipeline_section(self, analysis_id: str, section_id: str) -> Dict[str, Any]:
         """Executes all DAG nodes in a section sequentially, ensuring prerequisites are satisfied."""

@@ -70,6 +70,13 @@ def test_causal_reasoning_root_cause():
 def test_causal_decision_prioritization():
     decision_engine = DecisionEngine()
     store = EvidenceStore("test_run")
+    observation = store.add_observation(
+        attribute="canonical_redirect",
+        value="https://test.com/ redirects to itself",
+        source="http",
+        url="https://test.com/",
+        snippet="HTTP redirect loop on the homepage canonical.",
+    )
     claim = Claim(
         id="cl_crit",
         agent_id="worker_crit",
@@ -78,7 +85,8 @@ def test_causal_decision_prioritization():
         severity=Severity.CRITICAL,
         impact=10,
         effort=2,
-        confidence=0.95
+        confidence=0.95,
+        evidence_refs=[observation.evidence_id],
     )
 
     findings = decision_engine.synthesize_findings([claim], store)

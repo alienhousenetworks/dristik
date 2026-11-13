@@ -81,6 +81,7 @@ class CognitiveSimulatorWorker(BaseCognitiveWorker):
 
         # 1. AI Answer Engine Discoverability & Citation Simulation on 6 Commercial Inquiries
         contract = (
+            "Return one JSON object only. Do not restate the task or write a plan.\n"
             f"Simulate generative answer engine citation behaviors (ChatGPT Search, Perplexity Pro, Google Gemini Overviews, Claude) "
             f"for target brand '{biz_name}' ({niche_str}).\n"
             "Evaluate BOTH BEFORE (Current Raw Crawled DOM) AND AFTER (Post-Remediation with Schema.org JSON-LD + FAQPage + llms.txt applied) "
@@ -151,7 +152,11 @@ class CognitiveSimulatorWorker(BaseCognitiveWorker):
                 "4. 6 COMMERCIAL QUESTIONS: Must output exactly all 6 questions (identity, icp, pricing, alternatives, trust, roi)."
             ),
             output_schema_desc=schema_desc,
-            additional_context=f"Target: {biz_name} | Value Prop: {val_prop}"
+            additional_context=f"Target: {biz_name} | Value Prop: {val_prop}",
+            # Six short evaluations fit in this budget. A larger budget makes the
+            # reasoning model spend the whole call on a preamble and miss the proxy window.
+            max_tokens=2048,
+            timeout_sec=55,
         )
 
         # Parse Commercial Evaluations

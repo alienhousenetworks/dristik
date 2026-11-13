@@ -27,6 +27,74 @@ from app.core.inference.pricing import extract_provider_cost, provider_billed_us
 logger = logging.getLogger("dristik.llm_client")
 
 
+def _wants_json_response(response_format: Any) -> bool:
+    if response_format == "DEFAULT":
+        return True
+    return isinstance(response_format, dict) and response_format.get("type") == "json_object"
+
+
+def _nvidia_reasoning_fields(model: str, response_format: Any) -> Dict[str, Any]:
+    """Nemotron Super defaults reasoning_effort to high.
+
+    Those reasoning tokens count against max_tokens, so a structured call
+    finishes with a thinking trace and no JSON. `none` disables the trace.
+    """
+    name = (model or "").lower()
+    if "nemotron" not in name:
+        return {}
+    # reasoning_effort is the documented control. Do not also send
+    # chat_template_kwargs: a 400 for the extra field used to drop both
+    # and restore the default high reasoning budget.
+    if _wants_json_response(response_format):
+        return {"reasoning_effort": "none"}
+    return {"reasoning_effort": "low"}
+
+
+def _coerce_message_text(content: Any) -> str:
+    if content is None:
+        return ""
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts: List[str] = []
+        for part in content:
+            if isinstance(part, str):
+                parts.append(part)
+            elif isinstance(part, dict):
+                parts.append(str(part.get("text") or part.get("content") or ""))
+        return "".join(parts)
+    return str(content)
+
+
+def _looks_like_json_document(text: str) -> bool:
+    stripped = re.sub(r"<think>[\s\S]*?</think>", "", text or "", flags=re.IGNORECASE).strip()
+    if stripped.startswith("```"):
+        stripped = re.sub(r"^```(?:json)?", "", stripped, flags=re.IGNORECASE).strip()
+    return stripped.startswith("{") or stripped.startswith("[")
+
+
+def assemble_completion_text(content: Any, reasoning: Any, *, wants_json: bool) -> str:
+    """Prefer the final answer. A reasoning trace is not a JSON document."""
+    answer = _coerce_message_text(content).strip()
+    trace = _coerce_message_text(reasoning).strip()
+    if not wants_json:
+        return answer or trace
+    if _looks_like_json_document(answer):
+        return answer
+    if _looks_like_json_document(trace):
+        return trace
+    return answer
+
+
+def _connection_failure_detail(exc: BaseException) -> str:
+    detail = str(exc).strip() or repr(exc)
+    cause = exc.__cause__ or exc.__context__
+    if cause is not None and cause is not exc:
+        cause_detail = str(cause).strip() or repr(cause)
+        return f"{type(exc).__name__}: {detail} ({type(cause).__name__}: {cause_detail})"
+    return f"{type(exc).__name__}: {detail}"
+
+
 class RateLimitException(Exception):
     def __init__(self, message: str, retry_after_seconds: float = 5.0):
         super().__init__(message)
@@ -335,6 +403,8 @@ class LLMClient:
             payload["response_format"] = {"type": "json_object"}
         elif response_format is not None:
             payload["response_format"] = response_format
+        if provider in ("nvidia", "nvidiaapi", "nim"):
+            payload.update(_nvidia_reasoning_fields(model, response_format))
 
         logger.info("[LLMClient] Calling %s endpoint (model: '%s')", provider, model)
         start_time = time.time()
@@ -366,11 +436,28 @@ class LLMClient:
                         retry_after_seconds=3.0
                     )
 
-                # Handle response_format unsupported (400)
-                if response.status_code == 400 and ("response_format" in response.text.lower() or "json_object" in response.text.lower()):
-                    payload_no_format = dict(payload)
-                    payload_no_format.pop("response_format", None)
-                    response = await client.post(endpoint, json=payload_no_format, headers=headers)
+                # Drop request fields this endpoint does not accept, then retry once.
+                if response.status_code == 400:
+                    err_lower = response.text.lower()
+                    dropped = False
+                    if "response_format" in err_lower or "json_object" in err_lower:
+                        payload.pop("response_format", None)
+                        dropped = True
+                    if "reasoning_effort" in err_lower:
+                        payload.pop("reasoning_effort", None)
+                        if _wants_json_response(response_format):
+                            payload["chat_template_kwargs"] = {"enable_thinking": False}
+                        else:
+                            payload["chat_template_kwargs"] = {
+                                "enable_thinking": True,
+                                "low_effort": True,
+                            }
+                        dropped = True
+                    elif any(token in err_lower for token in ("chat_template_kwargs", "enable_thinking", "low_effort")):
+                        payload.pop("chat_template_kwargs", None)
+                        dropped = True
+                    if dropped:
+                        response = await client.post(endpoint, json=payload, headers=headers)
 
                 if response.status_code != 200:
                     err_text = response.text
@@ -399,14 +486,17 @@ class LLMClient:
                     )
                 data = response.json()
             except httpx.RequestError as e:
-                raise RuntimeError(f"Connection failed to LLM endpoint ({provider}): {str(e)}")
+                raise RuntimeError(
+                    f"Connection failed to LLM endpoint ({provider}): {_connection_failure_detail(e)}"
+                ) from e
 
         choice = data.get("choices", [{}])[0]
         msg = choice.get("message", {}) or {}
-        content = msg.get("content", "") or ""
-        reasoning = msg.get("reasoning_content", "") or ""
-        if not content.strip() and reasoning:
-            content = reasoning
+        content = assemble_completion_text(
+            msg.get("content"),
+            msg.get("reasoning_content") or msg.get("reasoning"),
+            wants_json=_wants_json_response(response_format),
+        )
         usage = data.get("usage", {}) or {}
         return {
             "content": content,

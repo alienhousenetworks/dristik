@@ -10,7 +10,7 @@ import json
 from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Dict, List, Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class ExecutionStatus(str, Enum):
@@ -46,6 +46,131 @@ class ReportFinding(BaseModel):
     evidence_ids: List[str] = Field(default_factory=list)
 
 
+_FINDING_SEVERITIES = {"critical", "high", "medium", "low", "info"}
+
+
+def _severity_token(value: Any) -> str:
+    raw = getattr(value, "value", value)
+    token = str(raw or "info").strip().lower()
+    return token if token in _FINDING_SEVERITIES else "info"
+
+
+def _optional_text(value: Any) -> Optional[str]:
+    if not isinstance(value, str):
+        return None
+    text = value.strip()
+    return text or None
+
+
+def _clip(text: str, limit: int) -> str:
+    compact = " ".join(text.split())
+    if len(compact) <= limit:
+        return compact
+    return compact[: limit - 1].rstrip() + "…"
+
+
+def _evidence_ids(raw: Any) -> List[str]:
+    if not raw:
+        return []
+    ids: List[str] = []
+    for entry in raw:
+        if isinstance(entry, str) and entry.strip():
+            ids.append(entry.strip())
+            continue
+        if isinstance(entry, dict):
+            evidence_id = entry.get("evidence_id") or entry.get("id")
+        else:
+            evidence_id = getattr(entry, "evidence_id", None) or getattr(entry, "id", None)
+        if evidence_id:
+            ids.append(str(evidence_id))
+    return ids
+
+
+def _finding_from_mapping(item: Dict[str, Any], index: int) -> Dict[str, Any]:
+    text = str(
+        item.get("statement")
+        or item.get("description")
+        or item.get("claim_text")
+        or item.get("finding")
+        or item.get("title")
+        or ""
+    ).strip()
+    title = _optional_text(item.get("title") if isinstance(item.get("title"), str) else None) or _clip(text, 160) or f"Finding {index + 1}"
+    description = _optional_text(item.get("description") if isinstance(item.get("description"), str) else None) or text or title
+    finding_id = str(item.get("finding_id") or item.get("claim_id") or item.get("id") or "").strip()
+    if not finding_id:
+        digest = hashlib.sha256(f"{index}:{description}".encode("utf-8")).hexdigest()[:12]
+        finding_id = f"obs_{digest}"
+    return {
+        "finding_id": finding_id,
+        "severity": _severity_token(item.get("severity")),
+        "title": _clip(title, 180) or f"Finding {index + 1}",
+        "description": description,
+        "impact": _optional_text(item.get("impact")) or _optional_text(item.get("why_it_matters")) or _optional_text(item.get("business_impact")),
+        "remediation_hint": _optional_text(item.get("remediation_hint")) or _optional_text(item.get("recommendation")),
+        "evidence_ids": _evidence_ids(item.get("evidence_ids") or item.get("evidence_refs")),
+    }
+
+
+def coerce_report_finding(item: Any, index: int = 0) -> Any:
+    """Normalize a string, claim, domain finding, or dict into ReportFinding input."""
+    if isinstance(item, ReportFinding):
+        return item
+    if isinstance(item, str):
+        text = item.strip() or f"Finding {index + 1}"
+        digest = hashlib.sha256(f"{index}:{text}".encode("utf-8")).hexdigest()[:12]
+        return {
+            "finding_id": f"obs_{digest}",
+            "severity": "info",
+            "title": _clip(text, 160),
+            "description": text,
+        }
+    if isinstance(item, dict):
+        return _finding_from_mapping(item, index)
+    text = str(
+        getattr(item, "statement", None)
+        or getattr(item, "description", None)
+        or getattr(item, "claim_text", None)
+        or getattr(item, "finding", None)
+        or getattr(item, "title", None)
+        or ""
+    ).strip()
+    title_attr = getattr(item, "title", None)
+    description_attr = getattr(item, "description", None)
+    return _finding_from_mapping(
+        {
+            "finding_id": getattr(item, "finding_id", None),
+            "claim_id": getattr(item, "claim_id", None),
+            "id": getattr(item, "id", None),
+            "severity": getattr(item, "severity", None),
+            "title": title_attr if isinstance(title_attr, str) else None,
+            "description": description_attr if isinstance(description_attr, str) else None,
+            "statement": text,
+            "impact": getattr(item, "impact", None),
+            "why_it_matters": getattr(item, "why_it_matters", None),
+            "business_impact": getattr(item, "business_impact", None),
+            "remediation_hint": getattr(item, "remediation_hint", None),
+            "recommendation": getattr(item, "recommendation", None),
+            "evidence_ids": getattr(item, "evidence_ids", None),
+            "evidence_refs": getattr(item, "evidence_refs", None),
+        },
+        index,
+    )
+
+
+def coerce_report_findings(value: Any) -> List[Any]:
+    """Accept a list of ReportFinding values, or the strings and claim objects producers emit."""
+    if value is None:
+        return []
+    if isinstance(value, (str, dict)) or isinstance(value, ReportFinding):
+        items: List[Any] = [value]
+    elif isinstance(value, list):
+        items = value
+    else:
+        items = [value]
+    return [coerce_report_finding(item, index) for index, item in enumerate(items)]
+
+
 class SubPhaseReportContract(BaseModel):
     # Execution Identity
     run_id: str
@@ -71,6 +196,11 @@ class SubPhaseReportContract(BaseModel):
     structured_output: Dict[str, Any] = Field(default_factory=dict)
     evidence_tokens: List[EvidenceTokenReference] = Field(default_factory=list)
     findings: List[ReportFinding] = Field(default_factory=list)
+
+    @field_validator("findings", mode="before")
+    @classmethod
+    def _coerce_findings(cls, value: Any) -> List[Any]:
+        return coerce_report_findings(value)
 
     # Truthful Metrics & Status
     confidence: ConfidenceLevel = ConfidenceLevel.VERIFIED
@@ -112,6 +242,11 @@ class PhaseReportContract(BaseModel):
     reconciled_findings: List[ReportFinding] = Field(default_factory=list)
     critical_blockers: List[str] = Field(default_factory=list)
     unresolved_conflicts: List[str] = Field(default_factory=list)
+
+    @field_validator("reconciled_findings", mode="before")
+    @classmethod
+    def _coerce_reconciled_findings(cls, value: Any) -> List[Any]:
+        return coerce_report_findings(value)
 
     # Next Phase Input
     passed_to_next_phase: Dict[str, Any] = Field(default_factory=dict)
