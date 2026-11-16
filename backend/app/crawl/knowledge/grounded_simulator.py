@@ -188,16 +188,23 @@ def _compose_rag_answer(
     title: Optional[str],
     section: Optional[str],
     url: Optional[str],
+    brand: Optional[str] = None,
 ) -> str:
     """
-    Extractive answer: the retrieved sentences, the aspects the crawl does not state,
-    and the source. The citation is not part of the claim text that gets verified.
+    Conversational AI chatbot-style answer grounded strictly in retrieved sentences,
+    disclosing any missing aspects and citing the first-party source.
     """
-    text = body.strip()
+    clean_body = body.strip()
+    if clean_body and clean_body[0].isupper() and brand:
+        # Frame as a direct AI assistant response distinct from raw verbatim extract
+        intro = f"Based on {brand}'s published content: {clean_body}"
+    else:
+        intro = clean_body
+    text = intro
     if assessment.status == "PARTIAL" and assessment.missing_aspects:
         missing = ", ".join(a.strip() for a in assessment.missing_aspects[:4] if a and a.strip())
         if missing:
-            text += f" The crawl does not state: {missing}."
+            text += f" Note: The crawled pages do not cover {missing}."
     cite = _citation_line(title, section, url)
     if cite:
         text += f" {cite}"
@@ -401,6 +408,7 @@ class GroundedAnswerSimulator:
                 source_page_title,
                 source_section,
                 source_url,
+                brand=self.graph.brand,
             )
 
         return GroundedAnswerSimulation(
@@ -423,6 +431,58 @@ class GroundedAnswerSimulator:
             section_update_recommendation=section_update_recommendation,
             ai_thinking_steps=ai_thinking_steps,
         )
+
+    async def simulate_async(
+        self,
+        question_id: str,
+        question: str,
+    ) -> GroundedAnswerSimulation:
+        """
+        Runs deterministic retrieval & claim grounding, then synthesizes a natural
+        AI chatbot-style answer via model_router (when available) constrained
+        strictly to the retrieved evidence passages.
+        """
+        sim = self.simulate(question_id=question_id, question=question)
+        if (
+            self.model_router is not None
+            and hasattr(self.model_router, "generate_prose")
+            and sim.assessment_status in ("SUFFICIENT", "PARTIAL")
+            and sim.retrieval_evidence_count > 0
+            and sim.retrieved_extract
+        ):
+            try:
+                brand = self.graph.brand
+                sys_prompt = (
+                    f"You are a helpful AI search assistant (like ChatGPT Search or Perplexity) "
+                    f"answering a buyer's question about {brand}. "
+                    "Write a clear, conversational, direct 2-4 sentence answer using ONLY the "
+                    "provided first-party evidence. Do NOT invent pricing, certifications, "
+                    "metrics, or features not in the evidence. If some aspect is missing, "
+                    "briefly note what the site does not specify. Never mention JSON-LD or schema.org."
+                )
+                missing_str = ", ".join(sim.missing_aspects[:4]) if sim.missing_aspects else "None"
+                user_prompt = (
+                    f"Question: {question}\n\n"
+                    f"Retrieved First-Party Evidence:\n{sim.retrieved_extract}\n\n"
+                    f"Missing Aspects (not stated on site): {missing_str}\n"
+                    f"Source URL: {sim.source_url or 'Website crawl'}"
+                )
+                llm_ans = await self.model_router.generate_prose(
+                    capability="ai_search_simulation",
+                    system_prompt=sys_prompt,
+                    user_prompt=user_prompt,
+                    temperature=0.2,
+                    max_tokens=260,
+                )
+                cleaned = re.sub(r"\s+", " ", (llm_ans or "")).strip()
+                if len(cleaned) >= 25:
+                    cite = _citation_line(sim.source_page_title, sim.source_section, sim.source_url)
+                    if cite and "source:" not in cleaned.lower():
+                        cleaned = f"{cleaned} {cite}"
+                    sim.rag_answer = cleaned[:700]
+            except Exception:
+                pass
+        return sim
 
     def _compute_answer_risk(
         self,

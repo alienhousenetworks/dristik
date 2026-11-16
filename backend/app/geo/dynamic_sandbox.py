@@ -9,6 +9,7 @@ Question Budget is configurable via QuestionBudgetTier (default = STANDARD: 100)
 Each question records its Question Provenance (why it was generated).
 Each evaluation uses claim-level grounding instead of sentence-window search.
 """
+import asyncio
 import re
 import time
 from typing import List, Dict, Any, Optional
@@ -178,34 +179,12 @@ class DynamicQuestionSandboxEngine:
         questions_per_facet = budget.questions_per_facet()
         all_evaluations: List[DynamicSandboxQuestionEvaluation] = []
         q_counter = 1
+        sem = asyncio.Semaphore(8)
 
-        for facet in SANDBOX_FACETS:
-            facet_id = facet["id"]
-            facet_title = facet["title"]
-            facet_intent = facet["intent"]
-
-            # Generate questions (LLM if available, else catalog)
-            facet_questions = await self._synthesize_facet_questions(
-                facet_id=facet_id,
-                brand=brand,
-                niche=niche,
-                val_prop=val_prop,
-                corpus_pages=corpus_pages,
-                site_context=site_context,
-                profile=profile,
-            )
-            # Trim to budget
-            facet_questions = facet_questions[:questions_per_facet]
-
-            for item in facet_questions:
-                q_id = f"Q-{q_counter:03d}"
-                q_counter += 1
-                q_text = item["question"]
-                b_intent = item["intent"]
-
-                # ── KIE: Grounded Answer Simulation (replaces string-window search) ──
+        async def _eval_one(q_id: str, facet_id: str, facet_title: str, q_text: str, b_intent: str) -> DynamicSandboxQuestionEvaluation:
+            async with sem:
                 if kg.claims:
-                    sim = simulator.simulate(question_id=q_id, question=q_text)
+                    sim = await simulator.simulate_async(question_id=q_id, question=q_text)
                     evidence_url = sim.source_url
                     evidence_snippet = None
                     for r in sim.claim_decomposition:
@@ -214,7 +193,6 @@ class DynamicQuestionSandboxEngine:
                             evidence_snippet = r.evidence_snippet
                             break
 
-                    # Map granular assessment status to answerability
                     if sim.assessment_status == "CONFLICTING":
                         answerability_status = "CONFLICTING"
                         is_answerable = False
@@ -228,7 +206,6 @@ class DynamicQuestionSandboxEngine:
                         answerability_status = "ANSWERABLE"
                         is_answerable = True
 
-                    # Citability score: grounding_ratio mapped to 1-10
                     if is_answerable and sim.grounding_ratio >= 0.60:
                         citability_score = max(6, min(10, round(sim.grounding_ratio * 10)))
                     elif is_answerable and sim.grounding_ratio >= 0.25:
@@ -268,19 +245,7 @@ class DynamicQuestionSandboxEngine:
                     retrieval_status = "RETRIEVED" if sim.retrieval_evidence_count > 0 else "NOT_RETRIEVED"
                     if sim.assessment_status == "PARTIAL":
                         retrieval_status = "PARTIAL"
-
-                    is_sensitive = facet_id in {"pricing", "trust_security"} or any(
-                        w in q_text.lower() for w in ["price", "cost", "tier", "soc 2", "iso 27001", "sla", "uptime", "refund"]
-                    )
-                    requires_owner_confirmation = is_sensitive and not is_answerable
-                    owner_confirmation_brief = (
-                        f"Business owner must confirm authoritative factual specifications for '{q_text}'. "
-                        "Do not publish placeholder pricing tiers, uncertified compliance badges, or unverified SLAs."
-                        if requires_owner_confirmation else None
-                    )
-
                 else:
-                    # ── Fallback: legacy string-window evaluator ──────────────────
                     eval_res = self._evaluate_question_answerability(
                         question=q_text, facet_id=facet_id, corpus_pages=corpus_pages,
                         brand=brand, niche=niche, val_prop=val_prop,
@@ -312,19 +277,19 @@ class DynamicQuestionSandboxEngine:
                     target_update_section = eval_res.get("target_update_section")
                     section_update_recommendation = eval_res.get("section_update_recommendation")
                     ai_thinking_steps = eval_res.get("ai_thinking_steps", [])
-
                     retrieval_status = "RETRIEVED" if is_answerable else ("PARTIAL" if answerability_status == "PARTIAL" else "NOT_RETRIEVED")
-                    is_sensitive = facet_id in {"pricing", "trust_security"} or any(
-                        w in q_text.lower() for w in ["price", "cost", "tier", "soc 2", "iso 27001", "sla", "uptime", "refund"]
-                    )
-                    requires_owner_confirmation = is_sensitive and not is_answerable
-                    owner_confirmation_brief = (
-                        f"Business owner must confirm authoritative factual specifications for '{q_text}'. "
-                        "Do not publish placeholder pricing tiers, uncertified compliance badges, or unverified SLAs."
-                        if requires_owner_confirmation else None
-                    )
 
-                eval_obj = DynamicSandboxQuestionEvaluation(
+                is_sensitive = facet_id in {"pricing", "trust_security"} or any(
+                    w in q_text.lower() for w in ["price", "cost", "tier", "soc 2", "iso 27001", "sla", "uptime", "refund"]
+                )
+                requires_owner_confirmation = is_sensitive and not is_answerable
+                owner_confirmation_brief = (
+                    f"Business owner must confirm authoritative factual specifications for '{q_text}'. "
+                    "Do not publish placeholder pricing tiers, uncertified compliance badges, or unverified SLAs."
+                    if requires_owner_confirmation else None
+                )
+
+                return DynamicSandboxQuestionEvaluation(
                     question_id=q_id,
                     facet=facet_title,
                     generated_question=q_text,
@@ -356,7 +321,26 @@ class DynamicQuestionSandboxEngine:
                     retrieval_status=retrieval_status,
                     ai_thinking_steps=ai_thinking_steps,
                 )
-                all_evaluations.append(eval_obj)
+
+        tasks = []
+        for facet in SANDBOX_FACETS:
+            facet_id = facet["id"]
+            facet_title = facet["title"]
+            facet_questions = await self._synthesize_facet_questions(
+                facet_id=facet_id,
+                brand=brand,
+                niche=niche,
+                val_prop=val_prop,
+                corpus_pages=corpus_pages,
+                site_context=site_context,
+                profile=profile,
+            )
+            for item in facet_questions[:questions_per_facet]:
+                q_id = f"Q-{q_counter:03d}"
+                q_counter += 1
+                tasks.append(_eval_one(q_id, facet_id, facet_title, item["question"], item["intent"]))
+
+        all_evaluations = list(await asyncio.gather(*tasks))
 
         ans_count = sum(1 for e in all_evaluations if e.is_answerable)
         gap_count = len(all_evaluations) - ans_count
@@ -794,7 +778,7 @@ class DynamicQuestionSandboxEngine:
         if match_score >= 3 and best_snippet:
             crawled_ans = best_snippet[:400].strip()
             source_note = f" Source: {src_title}." if src_title else ""
-            rag_ans = f"{crawled_ans}{source_note}"
+            rag_ans = f"Based on {brand}'s published content: {crawled_ans}{source_note}"
             return {
                 "is_answerable": True,
                 "answerability_status": "ANSWERABLE",
@@ -816,7 +800,7 @@ class DynamicQuestionSandboxEngine:
         elif match_score >= 1 and best_snippet:
             crawled_ans = best_snippet[:300].strip()
             rag_ans = (
-                f"{crawled_ans} The crawl does not state a complete answer to this question."
+                f"Based on {brand}'s published content: {crawled_ans} Note: The crawled pages do not cover all aspects of this question."
                 + (f" Source: {src_title}." if src_title else "")
             )
             return {

@@ -138,7 +138,7 @@ export function sandboxAnswers(item: SandboxAnswerInput): SandboxAnswers {
 
   if (storedRag && !isCitationBoilerplate(storedRag)) {
     rag = storedRag;
-    abstained = isAbstention(storedRag);
+    abstained = gap || (item.answerability_status !== 'PARTIAL' && item.answerability_status !== 'ANSWERABLE' && isAbstention(storedRag));
   } else if (gap || currentAbstains) {
     rag = (item.crawled_answer || '').trim() || 'The crawled knowledge base does not contain a fact that answers this question.';
     abstained = true;

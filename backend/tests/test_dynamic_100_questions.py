@@ -150,3 +150,42 @@ async def test_dynamic_sandbox_correctly_identifies_unanswerable_gaps():
     assert pricing_q.projected_patch_gain > 0.40
     assert pricing_q.grounding_ratio == 0.0
     assert pricing_q.answer_risk == "HIGH"
+
+
+@pytest.mark.asyncio
+async def test_dynamic_sandbox_synthesizes_ai_chatbot_answers_via_model_router():
+    class FakeRouter:
+        async def generate_prose(self, capability, system_prompt, user_prompt, temperature=0.2, max_tokens=260):
+            return "Acme Cloud provides automated security auditing and compliance monitoring for enterprise teams."
+
+    pages = [
+        PageEvidence(
+            url="https://acme-cloud.io/platform",
+            title="Platform | Acme Cloud",
+            h1=["Automated Security Auditing"],
+            body_text=(
+                "Acme Cloud provides automated security auditing and compliance monitoring for enterprise engineering teams. "
+                "Our platform integrates with GitHub and AWS to deliver continuous posture reporting."
+            ),
+            word_count=30,
+        )
+    ]
+    resolved_entity = UniversalEntityResolver.resolve_from_evidence(
+        website_url="https://acme-cloud.io",
+        pages=pages,
+    )
+    sandbox = DynamicQuestionSandboxEngine(model_router=FakeRouter())
+    evaluations = await sandbox.generate_and_evaluate_100_questions(
+        pages=pages,
+        website_url="https://acme-cloud.io",
+        resolved_entity=resolved_entity,
+    )
+    assert len(evaluations) == 100
+    answered = [e for e in evaluations if e.is_answerable]
+    assert len(answered) > 0
+    assert any(
+        "acme cloud provides automated security auditing" in (e.rag_answer or "").lower()
+        and "source:" in (e.rag_answer or "").lower()
+        and e.rag_answer != e.crawled_answer
+        for e in answered
+    )

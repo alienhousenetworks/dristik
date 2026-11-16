@@ -462,9 +462,9 @@ function FourPillarInquiryAuditPanel({ item }: { item: DynamicSandboxQuestionEva
           {/* Current Page Extract */}
           <div className="p-3 bg-paper-50 rounded border border-line space-y-1.5">
             <div className="flex items-center gap-1.5 font-semibold text-ink text-[11px]">
-              <Quote className="w-3 h-3 text-ink-600" /> Current Crawled Page Extract
+              <Quote className="w-3 h-3 text-ink-600" /> Semantic Search Extract (Crawled Page)
             </div>
-            <p className="text-[10px] text-ink-400">Verbatim passage as captured by the crawl.</p>
+            <p className="text-[10px] text-ink-400">Verbatim semantic passage retrieved from the crawl.</p>
             <blockquote className="text-ink-700 leading-relaxed border-l-2 border-line pl-2.5 italic">
               {answers.currentExtract}
             </blockquote>
@@ -474,7 +474,7 @@ function FourPillarInquiryAuditPanel({ item }: { item: DynamicSandboxQuestionEva
           <div className="p-3 bg-paper-50 rounded border border-line space-y-1.5">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-1.5 font-semibold text-ink text-[11px]">
-                <Target className="w-3 h-3 text-pine" /> Knowledge-Base Constrained Answer
+                <Target className="w-3 h-3 text-pine" /> AI Chatbot Answer (Grounded RAG)
               </div>
               {answers.abstained && (
                 <span className="text-[10px] font-semibold uppercase tracking-wide text-bad">Unanswered</span>
@@ -483,7 +483,7 @@ function FourPillarInquiryAuditPanel({ item }: { item: DynamicSandboxQuestionEva
             <p className="text-[10px] text-ink-400">
               {answers.abstained
                 ? 'Explicit abstention: crawled pages do not state this fact.'
-                : 'Strict synthesis constrained solely to retrieved evidence chunks.'}
+                : 'Conversational AI answer synthesized strictly from retrieved evidence.'}
             </p>
             <p className="text-ink leading-relaxed font-medium">{answers.ragAnswer}</p>
           </div>
