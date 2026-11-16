@@ -187,25 +187,44 @@ class ReportRegistry:
                 for jf in outputs_dir.glob("subphase_*.json"):
                     try:
                         clean_id = jf.stem.replace("subphase_", "").replace("_", ".")
+                        loaded = self.storage.load_subphase_json(run_id, phase_id, clean_id)
                         pdf_matches = list(reports_dir.glob(f"subphase_{clean_id.replace('.', '_')}*.pdf")) if reports_dir.exists() else []
                         key = f"{phase_id}_{clean_id}"
-                        self._registry[run_id]["subphases"][key] = {
-                            "run_id": run_id,
-                            "phase_id": phase_id,
-                            "subphase_id": clean_id,
-                            "title": clean_id,
-                            "status": "COMPLETED",
-                            "confidence": "VERIFIED",
-                            "findings_count": 0,
-                            "content_hash": "",
-                            "json_path": str(jf),
-                            "pdf_ready": len(pdf_matches) > 0,
-                            "pdf_path": str(pdf_matches[0]) if pdf_matches else None,
-                            "download_url": f"/api/v1/analyses/{run_id}/phases/{phase_id}/subphases/{clean_id}/pdf",
-                            "json_url": f"/api/v1/analyses/{run_id}/phases/{phase_id}/subphases/{clean_id}/json",
-                        }
-                    except Exception:
-                        pass
+                        if loaded is not None:
+                            self._subphases_cache[run_id][key] = loaded
+                            self._registry[run_id]["subphases"][key] = {
+                                "run_id": run_id,
+                                "phase_id": phase_id,
+                                "subphase_id": loaded.subphase_id,
+                                "title": loaded.subphase_title,
+                                "status": loaded.status.value,
+                                "confidence": loaded.confidence.value,
+                                "findings_count": len(loaded.findings),
+                                "content_hash": loaded.content_hash or "",
+                                "json_path": str(jf),
+                                "pdf_ready": len(pdf_matches) > 0,
+                                "pdf_path": str(pdf_matches[0]) if pdf_matches else None,
+                                "download_url": f"/api/v1/analyses/{run_id}/phases/{phase_id}/subphases/{loaded.subphase_id}/pdf",
+                                "json_url": f"/api/v1/analyses/{run_id}/phases/{phase_id}/subphases/{loaded.subphase_id}/json",
+                            }
+                        else:
+                            self._registry[run_id]["subphases"][key] = {
+                                "run_id": run_id,
+                                "phase_id": phase_id,
+                                "subphase_id": clean_id,
+                                "title": clean_id,
+                                "status": "UNVERIFIED",
+                                "confidence": "UNMEASURED",
+                                "findings_count": 0,
+                                "content_hash": "",
+                                "json_path": str(jf),
+                                "pdf_ready": len(pdf_matches) > 0,
+                                "pdf_path": str(pdf_matches[0]) if pdf_matches else None,
+                                "download_url": f"/api/v1/analyses/{run_id}/phases/{phase_id}/subphases/{clean_id}/pdf",
+                                "json_url": f"/api/v1/analyses/{run_id}/phases/{phase_id}/subphases/{clean_id}/json",
+                            }
+                    except Exception as e:
+                        logger.warning(f"Failed to scan subphase JSON {jf}: {e}")
 
 
 _global_report_registry: Optional[ReportRegistry] = None

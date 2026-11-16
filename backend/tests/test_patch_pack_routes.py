@@ -31,6 +31,7 @@ async def test_patch_pack_routes_and_aliases():
         # Mock an ExecutiveReport on this run
         from app.domain.models import ExecutiveReport, OverallScoreResult, ThreeWayComparison
         report = ExecutiveReport(
+            org_id="org_test",
             report_id=rep_id,
             analysis_id=run_id,
             website_url="https://example.com",

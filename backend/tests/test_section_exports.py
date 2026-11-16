@@ -8,6 +8,7 @@ from app.domain.models import ExecutiveReport, BusinessProfile, OverallScoreResu
 
 def _mock_report() -> ExecutiveReport:
     return ExecutiveReport(
+        org_id="org_test",
         report_id="rep_test_001",
         analysis_id="run_test_001",
         website_url="https://example.com",

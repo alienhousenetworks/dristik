@@ -78,6 +78,7 @@ def _build_base_report(num_pages=5, disc_total=5, domain="alienhousenetworks.com
         "STRUCTURED_DATA": CategoryScore(category=Category.SCHEMA, score=70.0, weight=25.0, weighted_score=17.5, summary="Structured data evaluated"),
     }
     report = ExecutiveReport(
+        org_id="org_test",
         report_id=f"RPT-{domain}-001",
         analysis_id="analysis_upgrade_test",
         domain=domain,
@@ -94,6 +95,7 @@ def _build_base_report(num_pages=5, disc_total=5, domain="alienhousenetworks.com
         scores=OverallScoreResult(overall_score=77.5, grade="B", health_label="Good", category_scores=cat_scores),
         page_reports=[PageReport(url=p.url, path=f"/page{i}", title=p.title or "", status_code=200) for i, p in enumerate(pages)],
         crawl_manifest=manifest,
+        sealed_evidence_snapshot_id="snap_test_001",
         story_summary=f"Audit of {domain} evaluating {num_pages} analyzed pages.",
         findings=[
             Finding(

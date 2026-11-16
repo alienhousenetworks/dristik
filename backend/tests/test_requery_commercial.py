@@ -190,7 +190,7 @@ async def test_simulator_worker_evaluates_all_6_canonical_questions():
     )
 
     res = await worker.execute_task("ai_search_simulation", blackboard)
-    assert res["status"] == "AVAILABLE"
+    assert res["status"] == "SIMULATION_ONLY"
     # All 6 canonical questions must be populated
     assert len(blackboard.commercial_evaluations) == 6
     assert len(blackboard.ai_search_evaluations) == 6

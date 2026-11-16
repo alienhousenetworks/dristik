@@ -1527,10 +1527,10 @@ class SeoPrintReportRenderer:
         crit_high_count = len([f for f in report.findings if f.priority >= 7 or str(f.severity.value).upper() in ("CRITICAL", "HIGH")])
 
         # What works well list
-        works_items = "".join(f"<li>{html.escape(w)}</li>" for w in report.what_site_gets_right) if report.what_site_gets_right else "<li>Strong baseline technical hygiene</li><li>HTTPS enforced</li><li>Standard URL structure</li>"
+        works_items = "".join(f"<li>{html.escape(w)}</li>" for w in report.what_site_gets_right) if report.what_site_gets_right else "<li>No verified strengths recorded in executive summary.</li>"
         
         # Challenges list
-        holding_items = "".join(f"<li>{html.escape(h)}</li>" for h in report.what_is_holding_it_back) if report.what_is_holding_it_back else "<li>Thin content volume on key paths</li><li>Structured data omissions</li><li>Internal linking depth anomalies</li>"
+        holding_items = "".join(f"<li>{html.escape(h)}</li>" for h in report.what_is_holding_it_back) if report.what_is_holding_it_back else "<li>No blockers recorded in executive summary.</li>"
         
         opp_text = html.escape(report.primary_strategic_opportunity or "Prioritize technical remediation on high-impact landing pages to maximize organic indexation and AI answer engine extraction.")
 
@@ -1835,14 +1835,18 @@ class SeoPrintReportRenderer:
         canon = report.canonical_audit
         http_breakdown = report.http_status_breakdown
 
-        pages_count = max(1, len(report.page_reports))
-        indexed_count = getattr(idx, "indexed_count", pages_count) if idx else pages_count
+        pages_count = len(report.page_reports)
+        indexed_count = getattr(idx, "indexed_count", None) if idx else None
+        if indexed_count is None:
+            indexed_count = sum(1 for p in report.page_reports if getattr(p, "is_indexable", None) is True) if pages_count else 0
         noindex_count = getattr(idx, "noindex_count", 0) if idx else 0
         robots_blocked = getattr(idx, "blocked_by_robots_count", 0) if idx else 0
         canonical_issues = getattr(canon, "conflicting_canonical_count", 0) if canon else 0
 
         # Donut Chart for HTTP status codes
-        c200 = getattr(http_breakdown, "count_200", pages_count) if http_breakdown else pages_count
+        c200 = getattr(http_breakdown, "count_200", None) if http_breakdown else None
+        if c200 is None:
+            c200 = sum(1 for p in report.page_reports if getattr(p, "status_code", None) == 200)
         c301 = getattr(http_breakdown, "count_301", 0) if http_breakdown else 0
         c404 = getattr(http_breakdown, "count_404", 0) if http_breakdown else 0
         c500 = getattr(http_breakdown, "count_500", 0) if http_breakdown else 0
@@ -1916,17 +1920,18 @@ class SeoPrintReportRenderer:
         </div>
         """
 
+        pages_denom = max(1, pages_count)
         return f"""
         <div class="kpi-grid">
             <div class="kpi-card">
                 <span class="kpi-label">Indexed Pages</span>
                 <div class="kpi-val">{indexed_count}</div>
-                <span class="kpi-sub">{round((indexed_count / pages_count) * 100, 1)}% of inventory</span>
+                <span class="kpi-sub">{round((indexed_count / pages_denom) * 100, 1) if pages_count else 0.0}% of inventory</span>
             </div>
             <div class="kpi-card">
                 <span class="kpi-label">Noindex Directives</span>
                 <div class="kpi-val" style="color: {'#ef4444' if noindex_count > 0 else '#0f172a'};">{noindex_count}</div>
-                <span class="kpi-sub">{round((noindex_count / pages_count) * 100, 1)}% excluded</span>
+                <span class="kpi-sub">{round((noindex_count / pages_denom) * 100, 1) if pages_count else 0.0}% excluded</span>
             </div>
             <div class="kpi-card">
                 <span class="kpi-label">Blocked by Robots</span>
@@ -1956,25 +1961,25 @@ class SeoPrintReportRenderer:
                     <tr>
                         <td><strong>200 OK</strong></td>
                         <td>{c200}</td>
-                        <td>{round((c200 / pages_count) * 100, 1)}%</td>
+                        <td>{round((c200 / pages_denom) * 100, 1) if pages_count else 0.0}%</td>
                         <td>Clean indexable response.</td>
                     </tr>
                     <tr>
                         <td><strong>301 Redirect</strong></td>
                         <td>{c301}</td>
-                        <td>{round((c301 / pages_count) * 100, 1)}%</td>
+                        <td>{round((c301 / pages_denom) * 100, 1) if pages_count else 0.0}%</td>
                         <td>Permanent equity transfer.</td>
                     </tr>
                     <tr>
                         <td><strong>404 Not Found</strong></td>
                         <td>{c404}</td>
-                        <td>{round((c404 / pages_count) * 100, 1)}%</td>
+                        <td>{round((c404 / pages_denom) * 100, 1) if pages_count else 0.0}%</td>
                         <td>Crawl equity wasted on dead targets.</td>
                     </tr>
                     <tr>
                         <td><strong>500 Error</strong></td>
                         <td>{c500}</td>
-                        <td>{round((c500 / pages_count) * 100, 1)}%</td>
+                        <td>{round((c500 / pages_denom) * 100, 1) if pages_count else 0.0}%</td>
                         <td>Server exception preventing indexation.</td>
                     </tr>
                 </table>
@@ -2001,7 +2006,9 @@ class SeoPrintReportRenderer:
         orphans = report.orphan_pages
         anchors = report.anchor_text_audit
 
-        max_depth = getattr(depth, "max_depth", 3) if depth else 3
+        max_depth = getattr(depth, "max_depth", None) if depth else None
+        if max_depth is None:
+            max_depth = "—"
         depth_gt3 = getattr(depth, "pages_depth_gt_3_count", 0) if depth else 0
         orphan_count = getattr(orphans, "orphan_count", 0) if orphans else 0
         generic_anchors = getattr(anchors, "generic_anchor_count", 0) if anchors else 0
@@ -2011,16 +2018,18 @@ class SeoPrintReportRenderer:
         for idx_p, p in enumerate(pages, 1):
             p_url = self._pval(p, "url", "")
             p_url_short = p_url if len(p_url) <= 45 else p_url[:42] + "..."
-            p_depth = self._pval(p, "click_depth", 1 if idx_p == 1 else 2)
-            inlinks = self._pval(p, "inlinks_count", len(pages) - 1 if idx_p == 1 else 2)
+            p_depth = self._pval(p, "click_depth", None)
+            p_depth_disp = f"Level {p_depth}" if p_depth is not None else "Unmeasured"
+            inlinks = self._pval(p, "inlinks_count", None)
+            inlinks_disp = str(inlinks) if inlinks is not None else "—"
             out_int = self._pval(p, "outlinks_internal_count", len(self._pval(p, "internal_links", [])))
             out_ext = self._pval(p, "outlinks_external_count", len(self._pval(p, "external_links", [])))
-            role = "Primary Authority Hub" if idx_p == 1 else ("Section Category Hub" if p_depth == 2 else "Leaf Page")
+            role = "Primary Authority Hub" if idx_p == 1 else ("Section Category Hub" if p_depth == 2 else "Target Page")
             link_rows.append(f"""
             <tr>
                 <td><code>{html.escape(p_url_short)}</code></td>
-                <td style="font-weight: 700; color: #0284c7;">Level {p_depth}</td>
-                <td><strong>{inlinks}</strong> inlinks</td>
+                <td style="font-weight: 700; color: #0284c7;">{p_depth_disp}</td>
+                <td><strong>{inlinks_disp}</strong> inlinks</td>
                 <td>{out_int} internal</td>
                 <td>{out_ext} external</td>
                 <td><span class="badge badge-clean">{role}</span></td>
@@ -2031,11 +2040,9 @@ class SeoPrintReportRenderer:
         anchors_audit = getattr(report, "anchor_text_audit", None)
         generic_samples = getattr(anchors_audit, "flagged_anchors", []) if anchors_audit else []
         if not generic_samples:
-            generic_samples = [
-                {"anchor": "Learn More", "source": pages[0].url if pages else "/", "target": "/services", "impact": "Dilutes internal topic relevance; zero semantic keyword signal."},
-                {"anchor": "Click Here", "source": pages[0].url if pages else "/", "target": "/contact", "impact": "Fails accessibility WCAG 2.1; provides search engines no context."},
-                {"anchor": "Read More", "source": pages[1].url if len(pages) > 1 else "/", "target": "/blog", "impact": "Generic anchor text wastes link equity transfer opportunities."},
-            ]
+            anchor_rows.append(
+                '<tr><td colspan="4" style="color: #64748b; font-style: italic;">No flagged generic anchor texts recorded in crawl sample.</td></tr>'
+            )
         for g in generic_samples[:4]:
             anchor_rows.append(f"""
             <tr>
@@ -2230,14 +2237,9 @@ class SeoPrintReportRenderer:
                     """)
 
         if not alt_defect_rows:
-            alt_defect_rows.append("""
-            <tr>
-                <td><code>/</code></td>
-                <td><code>hero-banner-main.webp</code></td>
-                <td><span class="badge badge-warn">EMPTY ALT ("")</span></td>
-                <td style="font-size: 7.5pt; color: #b45309;">Image decorative or missing descriptive entity context.</td>
-            </tr>
-            """)
+            alt_defect_rows.append(
+                '<tr><td colspan="4" style="color: #64748b; font-style: italic;">No missing image alt-text defects recorded in crawl sample.</td></tr>'
+            )
 
         evidence_section = f"""
         <div style="margin-top: 4mm;">
@@ -2375,26 +2377,9 @@ class SeoPrintReportRenderer:
             </table>
 
             <h4 style="font-size: 8.5pt; font-weight: 800; color: #0f294a; margin-bottom: 2mm;">Consultative Copywriting Teardown &amp; Rewrite Studio</h4>
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 3.5mm; margin-bottom: 2mm;">
-                <div style="background: #fef2f2; border: 1px solid #fecaca; border-radius: 6px; padding: 3mm 3.5mm;">
-                    <div style="font-size: 7.5pt; font-weight: 800; color: #991b1b; text-transform: uppercase; margin-bottom: 1.5mm;">❌ Current Copy &bull; Hero Section</div>
-                    <p style="font-size: 8pt; color: #7f1d1d; font-style: italic; line-height: 1.4; margin-bottom: 2mm;">
-                        &ldquo;Transforming digital paradigms with next-generation automated intelligence and enterprise ecosystem acceleration.&rdquo;
-                    </p>
-                    <div style="font-size: 7pt; color: #991b1b; border-top: 1px dashed #fca5a5; padding-top: 1.5mm;">
-                        <strong>Diagnostic Critique:</strong> High cognitive friction; uses abstract buzzwords without naming target user, core outcome, or proof mechanism. Unextractable for LLM answer engines.
-                    </div>
-                </div>
-                <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 6px; padding: 3mm 3.5mm;">
-                    <div style="font-size: 7.5pt; font-weight: 800; color: #166534; text-transform: uppercase; margin-bottom: 1.5mm;">✓ Recommended Production Rewrite &bull; High-Conversion Hook</div>
-                    <p style="font-size: 8pt; color: #14532d; font-weight: 600; line-height: 1.4; margin-bottom: 2mm;">
-                        &ldquo;Automate your core workflows in minutes. {html.escape(brand_name)} connects your sales, operations, and intelligence pipelines into one verified command center.&rdquo;
-                    </p>
-                    <div style="font-size: 7pt; color: #166534; border-top: 1px dashed #86efac; padding-top: 1.5mm;">
-                        <strong>Strategic Benefit:</strong> Immediate clarity; names primary business outcome; incorporates exact search entities for ChatGPT, Google AI Overviews, and Perplexity.
-                    </div>
-                </div>
-            </div>
+            <p style="font-size: 7.5pt; color: #64748b; font-style: italic; margin-bottom: 2mm;">
+                No AI copywriting rewrite pairs were generated for this run. Refer to the page-level content depth findings above for editorial recommendations.
+            </p>
         </div>
         """
 
@@ -2454,8 +2439,8 @@ class SeoPrintReportRenderer:
             
             sat_score = getattr(e, "satisfaction_score", None)
             if sat_score is None:
-                b_score = getattr(e, "before_score", 5)
-                sat_score = (b_score * 10) if isinstance(b_score, (int, float)) else 50
+                b_score = getattr(e, "before_score", None)
+                sat_score = (b_score * 10) if isinstance(b_score, (int, float)) else None
 
             rows.append(f"""
             <tr>
@@ -2686,24 +2671,24 @@ class SeoPrintReportRenderer:
     # --------------------------------------------------------------------------
     def _render_sec_09(self, report: ExecutiveReport) -> str:
         v = report.visual_ux
-        viewport_ok = getattr(v, "has_viewport_meta", True) if v else True
-        tap_issues = getattr(v, "touch_target_issues_count", 0) if v else 0
-        overflow_issues = getattr(v, "horizontal_overflow_count", 0) if v else 0
+        viewport_ok = getattr(v, "has_viewport_meta", None) if v else None
+        tap_issues = getattr(v, "touch_target_issues_count", None) if v else None
+        overflow_issues = getattr(v, "horizontal_overflow_count", None) if v else None
 
         pages = self._get_pages(report)
         mobile_rows = []
         for p in pages:
             p_url = self._pval(p, "url", "")
             p_url_short = p_url if len(p_url) <= 38 else p_url[:35] + "..."
-            v_tag = self._pval(p, "viewport") or "width=device-width, initial-scale=1.0"
-            v_status = '<span class="badge badge-clean">CONFIGURED</span>' if v_tag else '<span class="badge badge-crit">MISSING</span>'
-            t_status = '<span class="badge badge-clean">COMPLIANT (&ge;48px)</span>'
-            o_status = '<span class="badge badge-clean">NO OVERFLOW</span>'
+            v_tag = self._pval(p, "viewport") or ""
+            v_status = '<span class="badge badge-clean">CONFIGURED</span>' if v_tag else '<span class="badge badge-warn">NOT RECORDED</span>'
+            t_status = '<span class="badge badge-secondary">UNMEASURED</span>' if tap_issues is None else ('<span class="badge badge-clean">COMPLIANT (&ge;48px)</span>' if tap_issues == 0 else '<span class="badge badge-warn">ISSUES</span>')
+            o_status = '<span class="badge badge-secondary">UNMEASURED</span>' if overflow_issues is None else ('<span class="badge badge-clean">NO OVERFLOW</span>' if overflow_issues == 0 else '<span class="badge badge-crit">OVERFLOW</span>')
 
             mobile_rows.append(f"""
             <tr>
                 <td><code>{html.escape(p_url_short)}</code></td>
-                <td><code style="font-size: 7pt;">{html.escape(v_tag)}</code></td>
+                <td><code style="font-size: 7pt;">{html.escape(v_tag) if v_tag else '—'}</code></td>
                 <td>{v_status}</td>
                 <td>{t_status}</td>
                 <td>{o_status}</td>
@@ -2734,24 +2719,24 @@ class SeoPrintReportRenderer:
         <div class="kpi-grid">
             <div class="kpi-card">
                 <span class="kpi-label">Mobile Viewport</span>
-                <div class="kpi-val" style="color: {'#10b981' if viewport_ok else '#ef4444'}; font-size: 13pt; padding-top: 2mm;">
-                    {'CONFIGURED' if viewport_ok else 'MISSING'}
+                <div class="kpi-val" style="color: {'#64748b' if viewport_ok is None else ('#10b981' if viewport_ok else '#ef4444')}; font-size: 13pt; padding-top: 2mm;">
+                    {'UNMEASURED' if viewport_ok is None else ('CONFIGURED' if viewport_ok else 'MISSING')}
                 </div>
                 <span class="kpi-sub">width=device-width</span>
             </div>
             <div class="kpi-card">
                 <span class="kpi-label">Touch Targets &lt;48px</span>
-                <div class="kpi-val" style="color: {'#f59e0b' if tap_issues > 0 else '#0f172a'};">{tap_issues}</div>
+                <div class="kpi-val" style="color: {'#64748b' if tap_issues is None else ('#f59e0b' if tap_issues > 0 else '#0f172a')};">{tap_issues if tap_issues is not None else '—'}</div>
                 <span class="kpi-sub">Tap target spacing</span>
             </div>
             <div class="kpi-card">
                 <span class="kpi-label">Horizontal Overflow</span>
-                <div class="kpi-val" style="color: {'#ef4444' if overflow_issues > 0 else '#0f172a'};">{overflow_issues}</div>
+                <div class="kpi-val" style="color: {'#64748b' if overflow_issues is None else ('#ef4444' if overflow_issues > 0 else '#0f172a')};">{overflow_issues if overflow_issues is not None else '—'}</div>
                 <span class="kpi-sub">Unwanted horizontal scroll</span>
             </div>
             <div class="kpi-card">
                 <span class="kpi-label">Mobile-First Status</span>
-                <div class="kpi-val" style="font-size: 13pt; color: #10b981; padding-top: 2mm;">COMPLIANT</div>
+                <div class="kpi-val" style="font-size: 13pt; color: {'#64748b' if v is None else ('#10b981' if (viewport_ok and not tap_issues and not overflow_issues) else '#f59e0b')}; padding-top: 2mm;">{'UNMEASURED' if v is None else ('COMPLIANT' if (viewport_ok and not tap_issues and not overflow_issues) else 'NEEDS REVIEW')}</div>
                 <span class="kpi-sub">Google Mobile-First index</span>
             </div>
         </div>
@@ -2829,14 +2814,9 @@ class SeoPrintReportRenderer:
                     """)
 
         if not cls_rows:
-            cls_rows.append("""
-            <tr>
-                <td><code>/</code></td>
-                <td><code>logo-mark.svg</code></td>
-                <td><span class="badge badge-clean">DIMENSIONS_SPECIFIED</span></td>
-                <td style="font-size: 7.5pt; color: #166534;">Explicit width & height prevent layout shifts.</td>
-            </tr>
-            """)
+            cls_rows.append(
+                '<tr><td colspan="4" style="color: #64748b; font-style: italic;">No image dimension CLS defects recorded in crawl sample.</td></tr>'
+            )
 
         perf_tables = f"""
         <div style="margin-top: 4mm;">
@@ -2893,7 +2873,7 @@ class SeoPrintReportRenderer:
             </div>
             <div class="kpi-card">
                 <span class="kpi-label">Core Web Vitals Risk</span>
-                <div class="kpi-val" style="font-size: 13pt; color: #10b981; padding-top: 2mm;">LOW</div>
+                <div class="kpi-val" style="font-size: 13pt; color: {'#ef4444' if missing_dims > 5 else ('#f59e0b' if missing_dims > 0 else '#64748b')}; padding-top: 2mm;">{'HIGH' if missing_dims > 5 else ('MODERATE' if missing_dims > 0 else 'UNMEASURED')}</div>
                 <span class="kpi-sub">LCP / CLS hygiene</span>
             </div>
         </div>
@@ -2916,10 +2896,10 @@ class SeoPrintReportRenderer:
         sec = report.security_audit
         redirs = report.host_and_redirects
 
-        https_ok = getattr(sec, "https_enforced", getattr(report, "ssl_enforced", True)) if sec else True
+        https_ok = getattr(sec, "https_enforced", getattr(report, "ssl_enforced", None)) if sec else getattr(report, "ssl_enforced", None)
         hsts_ok = getattr(sec, "hsts_enabled", getattr(sec, "has_hsts_header", False)) if sec else False
         csp_ok = getattr(sec, "csp_enabled", False) if sec else False
-        apex_canonical = getattr(redirs, "apex_www_canonicalized", True) if redirs else True
+        apex_canonical = getattr(redirs, "apex_www_canonicalized", None) if redirs else None
 
         pages = self._get_pages(report)
         live_headers = {}
@@ -2927,12 +2907,12 @@ class SeoPrintReportRenderer:
             live_headers = self._pval(pages[0], "response_headers", {}) or self._pval(pages[0], "security_headers", {})
 
         headers = [
-            ("Strict-Transport-Security (HSTS)", live_headers.get("strict-transport-security", "max-age=31536000; includeSubDomains; preload" if hsts_ok else "NOT_DEPLOYED"), "ENABLED" if hsts_ok else "MISSING", "badge-clean" if hsts_ok else "badge-warn", "Enforces encrypted HTTPS connections; protects against SSL stripping."),
-            ("Content-Security-Policy (CSP)", live_headers.get("content-security-policy", "default-src 'self'" if csp_ok else "NOT_DEPLOYED"), "ENABLED" if csp_ok else "MISSING", "badge-clean" if csp_ok else "badge-warn", "Mitigates cross-site scripting (XSS) and code injection attacks."),
-            ("X-Content-Type-Options", live_headers.get("x-content-type-options", "nosniff"), "PRESENT" if getattr(sec, "x_content_type_options", None) or live_headers.get("x-content-type-options") else "MISSING", "badge-clean" if getattr(sec, "x_content_type_options", None) or live_headers.get("x-content-type-options") else "badge-warn", "nosniff (prevents MIME type sniffing vulnerabilities)."),
-            ("X-Frame-Options", live_headers.get("x-frame-options", "DENY / SAMEORIGIN"), "PRESENT" if getattr(sec, "x_frame_options", None) or live_headers.get("x-frame-options") else "MISSING", "badge-clean" if getattr(sec, "x_frame_options", None) or live_headers.get("x-frame-options") else "badge-warn", "DENY / SAMEORIGIN (prevents clickjacking attacks)."),
-            ("Referrer-Policy", live_headers.get("referrer-policy", "strict-origin-when-cross-origin"), "PRESENT" if getattr(sec, "referrer_policy", None) or live_headers.get("referrer-policy") else "MISSING", "badge-clean" if getattr(sec, "referrer_policy", None) or live_headers.get("referrer-policy") else "badge-secondary", "Protects user privacy & search query parameters."),
-            ("Server / Infrastructure", live_headers.get("server", "Cloudflare / Edge CDN"), "DISCLOSED", "badge-open", "Server software banner and edge network routing."),
+            ("Strict-Transport-Security (HSTS)", live_headers.get("strict-transport-security", "Present" if hsts_ok else "NOT_DEPLOYED"), "ENABLED" if hsts_ok else "MISSING", "badge-clean" if hsts_ok else "badge-warn", "Enforces encrypted HTTPS connections; protects against SSL stripping."),
+            ("Content-Security-Policy (CSP)", live_headers.get("content-security-policy", "Present" if csp_ok else "NOT_DEPLOYED"), "ENABLED" if csp_ok else "MISSING", "badge-clean" if csp_ok else "badge-warn", "Mitigates cross-site scripting (XSS) and code injection attacks."),
+            ("X-Content-Type-Options", live_headers.get("x-content-type-options", "NOT_DEPLOYED"), "PRESENT" if getattr(sec, "x_content_type_options", None) or live_headers.get("x-content-type-options") else "MISSING", "badge-clean" if getattr(sec, "x_content_type_options", None) or live_headers.get("x-content-type-options") else "badge-warn", "nosniff (prevents MIME type sniffing vulnerabilities)."),
+            ("X-Frame-Options", live_headers.get("x-frame-options", "NOT_DEPLOYED"), "PRESENT" if getattr(sec, "x_frame_options", None) or live_headers.get("x-frame-options") else "MISSING", "badge-clean" if getattr(sec, "x_frame_options", None) or live_headers.get("x-frame-options") else "badge-warn", "DENY / SAMEORIGIN (prevents clickjacking attacks)."),
+            ("Referrer-Policy", live_headers.get("referrer-policy", "NOT_DEPLOYED"), "PRESENT" if getattr(sec, "referrer_policy", None) or live_headers.get("referrer-policy") else "MISSING", "badge-clean" if getattr(sec, "referrer_policy", None) or live_headers.get("referrer-policy") else "badge-secondary", "Protects user privacy & search query parameters."),
+            ("Server / Infrastructure", live_headers.get("server", "Not Disclosed"), "DISCLOSED" if live_headers.get("server") else "UNMEASURED", "badge-open", "Server software banner and edge network routing."),
         ]
         sec_rows = "".join(f"""
         <tr>
@@ -3041,7 +3021,7 @@ class SeoPrintReportRenderer:
         for p in pages:
             p_url = self._pval(p, "url", "")
             p_url_short = p_url if len(p_url) <= 38 else p_url[:35] + "..."
-            p_lang = self._pval(p, "html_lang") or "en"
+            p_lang = self._pval(p, "html_lang") or "Unset"
             hreflangs = self._pval(p, "hreflang_tags", {}) or {}
             href_display = ", ".join(f"{k}:{v}" for k, v in list(hreflangs.items())[:2]) if hreflangs else "None declared (Single Locale)"
             
@@ -3206,7 +3186,7 @@ class SeoPrintReportRenderer:
             parity_rows.append(f"""
             <tr>
                 <td><code>{html.escape(p_url_short)}</code></td>
-                <td>{raw_bytes // 1024 if raw_bytes else 12} KB / {rend_bytes // 1024 if rend_bytes else 14} KB</td>
+                <td>{f"{raw_bytes // 1024} KB" if raw_bytes else "—"} / {f"{rend_bytes // 1024} KB" if rend_bytes else "—"}</td>
                 <td>{words} words</td>
                 <td>{badge}</td>
                 <td style="font-size: 7.5pt; color: #475569;">{risk_note}</td>
@@ -3374,14 +3354,9 @@ class SeoPrintReportRenderer:
                 """)
 
         if not ext_link_rows:
-            ext_link_rows.append(f"""
-            <tr>
-                <td><code>/</code></td>
-                <td><code>https://linkedin.com/company/{report.domain.split('.')[0]}</code></td>
-                <td><code>rel="noopener noreferrer"</code></td>
-                <td><span class="badge badge-clean">SAMEAS_ENTITY</span></td>
-            </tr>
-            """)
+            ext_link_rows.append(
+                '<tr><td colspan="4" style="color: #64748b; font-style: italic;">No external outbound links recorded in crawl sample.</td></tr>'
+            )
 
         outbound_table = f"""
         <div style="margin-top: 4mm;">
@@ -3637,21 +3612,21 @@ class SeoPrintReportRenderer:
         if not r7_items:
             r7_items = "".join(f"<li><strong>{html.escape(f.title)}</strong>: {html.escape(f.recommendation or '')[:85]}</li>" for f in p0_findings[:3])
         if not r7_items:
-            r7_items = "<li>Fix critical crawl/index blockers</li><li>Restore missing canonical tags</li><li>Correct redirect chains</li>"
+            r7_items = "<li>No immediate 7-day critical blockers recorded.</li>"
 
         r30_list = report.roadmap_30_days or []
         r30_items = "".join(f"<li><strong>{html.escape(r.title)}</strong>: {html.escape(r.description or '')[:85]}</li>" for r in r30_list[:3])
         if not r30_items:
             r30_items = "".join(f"<li><strong>{html.escape(f.title)}</strong>: {html.escape(f.recommendation or '')[:85]}</li>" for f in p1_findings[:3])
         if not r30_items:
-            r30_items = "<li>Optimize internal linking depth</li><li>Deploy Schema.org JSON-LD</li><li>Remediate heading hierarchies</li>"
+            r30_items = "<li>No 30-day high-priority items recorded.</li>"
 
         r90_list = report.roadmap_90_days or []
         r90_items = "".join(f"<li><strong>{html.escape(r.title)}</strong>: {html.escape(r.description or '')[:85]}</li>" for r in r90_list[:3])
         if not r90_items:
             r90_items = "".join(f"<li><strong>{html.escape(f.title)}</strong>: {html.escape(f.recommendation or '')[:85]}</li>" for f in p2_findings[:3])
         if not r90_items:
-            r90_items = "<li>Build topical authority clusters</li><li>Enhance AI search answer extractability</li><li>Automate continuous re-crawl validation</li>"
+            r90_items = "<li>No 90-day medium-priority items recorded.</li>"
 
         # Master Prioritized Engineering Remediation Backlog Table
         all_sorted = sorted(
@@ -3927,7 +3902,7 @@ class SeoPrintReportRenderer:
         ], size=115)
 
         # Certification Status Banner
-        cert_status = getattr(report, "certification_status", "CERTIFIED")
+        cert_status = getattr(report, "certification_status", None) or "NOT_CERTIFIED"
         if cert_status == "CERTIFIED":
             cert_banner = """
             <div style="background: #f0fdf4; border: 1.5px solid #16a34a; border-radius: 6px; padding: 4mm 6mm; margin-bottom: 5mm; display: flex; align-items: center; justify-content: space-between;">

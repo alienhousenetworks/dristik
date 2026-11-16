@@ -237,6 +237,7 @@ def test_empty_findings_still_score_100_and_a_defect_scores_below():
 
 def test_validation_gate_rewrites_non_blocking_outcome_claim():
     report = ExecutiveReport(
+        org_id="org_test",
         report_id="rep_cal",
         analysis_id="run_cal",
         website_url="https://acme.com",

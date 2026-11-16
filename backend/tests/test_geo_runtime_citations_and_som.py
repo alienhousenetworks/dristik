@@ -25,6 +25,7 @@ def test_executive_report_schema_includes_benchmark_and_citations():
         category_scores={"GEO": CategoryScore(category=Category.GEO, summary="GEO score", score=75.0, grade="B", weight=1.0, impact_level="MEDIUM", findings_count=0)},
     )
     report = ExecutiveReport(
+        org_id="org_test",
         report_id="test_rep_1",
         analysis_id="test_run_1",
         manifest_id="man_1",

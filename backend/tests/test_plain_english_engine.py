@@ -26,6 +26,7 @@ from app.audit.consistency_engine import CrossChapterConsistencyEngine
 
 def _make_report(findings=None) -> ExecutiveReport:
     return ExecutiveReport(
+        org_id="org_test",
         report_id="rep_test_001",
         analysis_id="an_test_001",
         website_url="https://acme-tools.com",

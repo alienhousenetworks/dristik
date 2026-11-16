@@ -362,14 +362,16 @@ def _redirect_bars(book: Any) -> List[Tuple[str, float]]:
         return []
     c200 = c3xx = c4xx = c5xx = 0
     for p in pages:
-        sc = int(_get(p, "status_code", 200) or 200)
-        if sc == 200:
+        raw_sc = _get(p, "status_code", None)
+        if not isinstance(raw_sc, int) or isinstance(raw_sc, bool):
+            continue
+        if raw_sc == 200:
             c200 += 1
-        elif 300 <= sc < 400:
+        elif 300 <= raw_sc < 400:
             c3xx += 1
-        elif 400 <= sc < 500:
+        elif 400 <= raw_sc < 500:
             c4xx += 1
-        else:
+        elif raw_sc >= 500:
             c5xx += 1
     return [
         ("Clean 200 Direct", float(c200)),
@@ -384,8 +386,13 @@ def _click_depth_bars(book: Any) -> List[Tuple[str, float]]:
     if not pages:
         return []
     l1 = l2 = l3 = l4_plus = 0
-    for idx, p in enumerate(pages):
-        depth = int(_get(p, "click_depth", 0) or (1 if idx == 0 else (2 if idx < 5 else 3)))
+    measured = 0
+    for p in pages:
+        raw_depth = _get(p, "click_depth", None)
+        if raw_depth is None or int(raw_depth or 0) <= 0:
+            continue
+        measured += 1
+        depth = int(raw_depth)
         if depth <= 1:
             l1 += 1
         elif depth == 2:
@@ -394,6 +401,8 @@ def _click_depth_bars(book: Any) -> List[Tuple[str, float]]:
             l3 += 1
         else:
             l4_plus += 1
+    if measured == 0:
+        return []
     return [
         ("Level 1 (Homepage)", float(l1)),
         ("Level 2 (Primary Hubs)", float(l2)),
@@ -407,8 +416,11 @@ def _security_header_bars(book: Any) -> List[Tuple[str, float]]:
     if not pages:
         return []
     hsts = csp = xframe = xcontent = 0
+    has_any_headers = False
     for p in pages:
         headers = _get(p, "response_headers", {}) or {}
+        if headers:
+            has_any_headers = True
         if any("strict-transport" in k.lower() for k in headers):
             hsts += 1
         if any("content-security-policy" in k.lower() for k in headers):
@@ -417,12 +429,13 @@ def _security_header_bars(book: Any) -> List[Tuple[str, float]]:
             xframe += 1
         if any("x-content-type-options" in k.lower() for k in headers):
             xcontent += 1
-    sample = len(pages)
+    if not has_any_headers:
+        return []
     return [
-        ("HSTS Configured", float(hsts if hsts else sample)),
-        ("CSP Configured", float(csp if csp else sample)),
-        ("X-Frame-Options", float(xframe if xframe else sample)),
-        ("X-Content-Type", float(xcontent if xcontent else sample)),
+        ("HSTS Configured", float(hsts)),
+        ("CSP Configured", float(csp)),
+        ("X-Frame-Options", float(xframe)),
+        ("X-Content-Type", float(xcontent)),
     ]
 
 
@@ -431,13 +444,18 @@ def _intent_bars(book: Any) -> List[Tuple[str, float]]:
     if not pages:
         return []
     comm = info = trans = 0
-    for idx, p in enumerate(pages):
-        if idx % 3 == 0:
+    for p in pages:
+        intent = str(_get(p, "search_intent", "") or _get(p, "intent", "") or "").lower()
+        if not intent:
+            continue
+        if "comm" in intent:
             comm += 1
-        elif idx % 3 == 1:
+        elif "info" in intent:
             info += 1
-        else:
+        elif "trans" in intent:
             trans += 1
+    if comm + info + trans == 0:
+        return []
     return [
         ("Commercial Investigation", float(comm)),
         ("Informational Intent", float(info)),
@@ -458,9 +476,6 @@ def _remediation_velocity_bars(book: Any) -> List[Tuple[str, float]]:
             p2 += 1
         else:
             p3 += 1
-    if not p0 and not p1 and not p2 and not p3:
-        p2 = 3
-        p3 = 5
     return [
         ("P0 (48h Critical SLA)", float(p0)),
         ("P1 (5-Day Business SLA)", float(p1)),

@@ -581,7 +581,7 @@ class AnalysisOrchestrator:
                 p1_1 = SubPhaseReportBuilder.build_p1_1_ssrf(
                     run_id=analysis_id,
                     website_url=website_url,
-                    resolved_ip="public",
+                    resolved_ip=None,
                     is_safe=True,
                     redirect_chain=[website_url],
                 )
@@ -916,7 +916,7 @@ class AnalysisOrchestrator:
             try:
                 seo_claims = [c for c in blackboard.claim_registry.get_all() if c.category in (Category.TECHNICAL_SEO, Category.ON_PAGE_SEO, Category.CONTENT)]
                 geo_claims = [c for c in blackboard.claim_registry.get_all() if c.category in (Category.GEO, Category.AI_SEARCH)]
-                aeo_claims = [c for c in blackboard.claim_registry.get_all() if c.category == Category.SCHEMA]
+                aeo_claims = [c for c in blackboard.claim_registry.get_all() if c.category in (Category.AI_SEARCH, Category.SCHEMA)]
                 cro_claims = [c for c in blackboard.claim_registry.get_all() if c.category in (Category.UX_CONVERSION, Category.TRUST_AUTHORITY)]
 
                 # SEO Pillar Sub-phase
@@ -2083,10 +2083,10 @@ class AnalysisOrchestrator:
                 }
                 for ch_idx, ch in enumerate(CORE_CHAPTERS):
                     ch_num = f"{ch_idx + 3:02d}"
-                    ch_agent_id = next((aid for aid, cid in AGENT_ROUTING_MAP.items() if cid == ch["id"]), None)
+                    ch_agent_ids = {aid for aid, cid in AGENT_ROUTING_MAP.items() if cid == ch["id"]}
                     ch_findings = [
                         f for f in final_findings
-                        if (getattr(f, "agent_id", None) == ch_agent_id) or (getattr(f, "routed_to", None) == ch["id"])
+                        if (getattr(f, "agent_id", None) in ch_agent_ids) or (getattr(f, "routed_to", None) == ch["id"])
                     ]
                     narr = AgenticChapterSynthesizer.synthesize_narrative(
                         book=synth_book,
@@ -2314,7 +2314,12 @@ class AnalysisOrchestrator:
                 "contradiction_report": blackboard.blackboard_state.get("contradiction_report") or {},
                 "evidence_gaps_count": len(blackboard.blackboard_state.get("evidence_gaps") or []),
             }
-            report.certification_status = "CERTIFIED" if integrity_result["certified"] else "NOT_CERTIFIED"
+            if report.certification_status == "QA_FAILED":
+                pass
+            elif integrity_result["certified"]:
+                report.certification_status = "CERTIFIED"
+            else:
+                report.certification_status = "NOT_CERTIFIED"
             if not integrity_result["certified"]:
                 report.withheld_sections = list(report.withheld_sections or [])
                 report.withheld_sections.append({
@@ -2593,7 +2598,7 @@ class AnalysisOrchestrator:
                     structured_output={"actions": [a.model_dump(mode="json") if hasattr(a, "model_dump") else a for a in (top_10_plan.actions if hasattr(top_10_plan, "actions") else top_10_plan)[:10]]},
                     evidence_tokens=[],
                     findings=[],
-                    confidence=ConfidenceLevel.VERIFIED,
+                    confidence=ConfidenceLevel.VERIFIED if (top_10_plan.actions if hasattr(top_10_plan, "actions") else top_10_plan) else ConfidenceLevel.UNMEASURED,
                 )
                 await self._record_progressive_subphase(p5_6, "top_10_action_plan")
 
@@ -2609,6 +2614,8 @@ class AnalysisOrchestrator:
                     return max(5, int((time.perf_counter() - t_p6) * 1000))
 
                 # 6.1 Adversarial Critic
+                critic_gate_info = blackboard.blackboard_state.get("critic_gate") or {}
+                critic_status_str = str(critic_gate_info.get("status") or "UNMEASURED").upper()
                 p6_1 = SubPhaseReportBuilder.build_generic(
                     run_id=analysis_id,
                     phase_id="phase_06_reporting",
@@ -2620,17 +2627,18 @@ class AnalysisOrchestrator:
                     agent_model="judge_model",
                     execution_mode="reasoning_agent",
                     duration_ms=_p6_dur(),
-                    status=ExecutionStatus.COMPLETED,
+                    status=ExecutionStatus.FAILED if critic_status_str == "FAILED" else ExecutionStatus.COMPLETED,
                     input_summary={"claims_evaluated": len(current_claims)},
                     processing_steps=["Check every specialist claim against evidence ledger", "Downgrade unsupported assertions to GUESSING"],
-                    structured_output={"status": "VERIFIED"},
+                    structured_output={"status": critic_status_str, **critic_gate_info},
                     evidence_tokens=[],
                     findings=[],
-                    confidence=ConfidenceLevel.VERIFIED,
+                    confidence=ConfidenceLevel.VERIFIED if critic_status_str in {"PASSED", "PASS", "VERIFIED"} else ConfidenceLevel.INFERRED,
                 )
                 await self._record_progressive_subphase(p6_1, "adversarial_critic")
 
                 # 6.2 Evidence Integrity Gate
+                integrity_certified = bool(integrity_result.get("certified")) if isinstance(integrity_result, dict) else False
                 p6_2 = SubPhaseReportBuilder.build_generic(
                     run_id=analysis_id,
                     phase_id="phase_06_reporting",
@@ -2645,10 +2653,14 @@ class AnalysisOrchestrator:
                     status=ExecutionStatus.COMPLETED,
                     input_summary={"findings_inspected": len(final_findings)},
                     processing_steps=["Verify SHA-256 evidence tokens", "Block unmeasured vanity metrics from publication"],
-                    structured_output={"zero_fake_enforced": True, "sealed": True},
+                    structured_output={
+                        "zero_fake_enforced": True,
+                        "certified": integrity_certified,
+                        "gate_status": integrity_result.get("status") if isinstance(integrity_result, dict) else "UNKNOWN",
+                    },
                     evidence_tokens=[],
                     findings=[],
-                    confidence=ConfidenceLevel.VERIFIED,
+                    confidence=ConfidenceLevel.VERIFIED if integrity_certified else ConfidenceLevel.INFERRED,
                 )
                 await self._record_progressive_subphase(p6_2, "integrity_gate")
 
@@ -2670,7 +2682,7 @@ class AnalysisOrchestrator:
                     structured_output={"chains_count": len(causal_diagnostic_chains)},
                     evidence_tokens=[],
                     findings=[],
-                    confidence=ConfidenceLevel.VERIFIED,
+                    confidence=ConfidenceLevel.VERIFIED if causal_diagnostic_chains else ConfidenceLevel.UNMEASURED,
                 )
                 await self._record_progressive_subphase(p6_3, "causal_bottlenecks")
 
@@ -2692,11 +2704,12 @@ class AnalysisOrchestrator:
                     structured_output=overall_scores.model_dump(mode="json") if hasattr(overall_scores, "model_dump") else {},
                     evidence_tokens=[],
                     findings=[],
-                    confidence=ConfidenceLevel.VERIFIED,
+                    confidence=ConfidenceLevel.VERIFIED if overall_scores.overall_score is not None else ConfidenceLevel.UNMEASURED,
                 )
                 await self._record_progressive_subphase(p6_4, "honest_scoring")
 
                 # 6.5 Executive Strategy Narrative
+                story_summary_text = narrative_data.get("story_summary", "")
                 p6_5 = SubPhaseReportBuilder.build_generic(
                     run_id=analysis_id,
                     phase_id="phase_06_reporting",
@@ -2711,10 +2724,10 @@ class AnalysisOrchestrator:
                     status=ExecutionStatus.COMPLETED,
                     input_summary={"domain": domain},
                     processing_steps=["Compile executive summary", "Draft strategic trade-offs and what to ignore"],
-                    structured_output={"story_summary": narrative_data.get("story_summary", "")[:500]},
+                    structured_output={"story_summary": story_summary_text[:500]},
                     evidence_tokens=[],
                     findings=[],
-                    confidence=ConfidenceLevel.VERIFIED,
+                    confidence=ConfidenceLevel.INFERRED if story_summary_text else ConfidenceLevel.UNMEASURED,
                 )
                 await self._record_progressive_subphase(p6_5, "executive_narrative")
 
@@ -2733,10 +2746,10 @@ class AnalysisOrchestrator:
                     status=ExecutionStatus.COMPLETED,
                     input_summary={"manifest_id": run.manifest_id},
                     processing_steps=["Compute SHA-256 digests across all audit artifacts", "Sign tamper-evident manifest"],
-                    structured_output={"manifest_id": run.manifest_id, "is_sealed": True},
+                    structured_output={"manifest_id": run.manifest_id, "is_sealed": bool(run.manifest_id)},
                     evidence_tokens=[],
                     findings=[],
-                    confidence=ConfidenceLevel.VERIFIED,
+                    confidence=ConfidenceLevel.VERIFIED if run.manifest_id else ConfidenceLevel.UNMEASURED,
                 )
                 await self._record_progressive_subphase(p6_6, "cryptographic_seal")
 

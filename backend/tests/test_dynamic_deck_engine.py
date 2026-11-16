@@ -122,6 +122,7 @@ def _build_mock_executive_report() -> ExecutiveReport:
         )
     ]
     return ExecutiveReport(
+        org_id="org_test",
         report_id="rep_cs_001",
         analysis_id="an_cs_001",
         website_url="https://cloud-scale.io",

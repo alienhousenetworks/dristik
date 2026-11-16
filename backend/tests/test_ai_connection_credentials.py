@@ -351,10 +351,13 @@ def test_live_mcp_handshake_end_to_end(isolated_db, monkeypatch):
 
 def test_provider_credentials_rely_on_configured_fernet_key(isolated_db, monkeypatch):
     import os
+    from cryptography.fernet import Fernet
     from app.api.routes.integrations import provider_adapters as providers
     monkeypatch.setattr(providers, "DB_PATH", isolated_db / "providers.sqlite3")
+    if not os.getenv("DRISTIK_CONNECT_FERNET_KEY"):
+        monkeypatch.setenv("DRISTIK_CONNECT_FERNET_KEY", Fernet.generate_key().decode("ascii"))
 
-    # With DRISTIK_CONNECT_FERNET_KEY configured from .env, encryption works
+    # With DRISTIK_CONNECT_FERNET_KEY configured, encryption works
     assert os.getenv("DRISTIK_CONNECT_FERNET_KEY")
     body = providers.ProviderCreate(
         provider="openai",
@@ -545,8 +548,12 @@ def test_external_ai_tasks_messaging_and_listing(isolated_db):
 
 
 def test_kimi_provider_creation_and_encryption(isolated_db, monkeypatch):
+    import os
+    from cryptography.fernet import Fernet
     from app.api.routes.integrations import provider_adapters as providers
     monkeypatch.setattr(providers, "DB_PATH", isolated_db / "kimi_providers.sqlite3")
+    if not os.getenv("DRISTIK_CONNECT_FERNET_KEY"):
+        monkeypatch.setenv("DRISTIK_CONNECT_FERNET_KEY", Fernet.generate_key().decode("ascii"))
 
     body = providers.ProviderCreate(
         provider="kimi",

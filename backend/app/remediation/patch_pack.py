@@ -63,14 +63,14 @@ def generate_character_safe_copy(bp: Optional[BusinessProfile], website_url: str
     return CharacterSafeCopy(
         title=title,
         title_char_count=len(title),
-        title_status="optimized" if title else "not_written",
+        title_status="unjudged" if title else "not_written",
         meta_description=meta_description,
         meta_char_count=len(meta_description),
-        meta_status="optimized" if meta_description else "not_written",
+        meta_status="unjudged" if meta_description else "not_written",
         hero_headline=headline,
         hero_subhead=subhead,
         hero_word_count=total_words,
-        hero_status="optimized" if total_words else "not_written",
+        hero_status="unjudged" if total_words else "not_written",
         primary_cta=cta,
     )
 

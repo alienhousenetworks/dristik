@@ -84,7 +84,9 @@ def generate_urls_csv(report: ExecutiveReport) -> str:
         canon = getattr(pr, "canonical_url", "") or ""
         canon_match = "MATCH" if (canon and canon.strip() == p_url.strip()) else ("MISMATCH" if canon else "MISSING")
 
-        depth = depth_map.get(p_url, getattr(pr, "click_depth", 1))
+        depth = depth_map.get(p_url, getattr(pr, "click_depth", None))
+        if depth is None:
+            depth = ""
         status_code = getattr(pr, "status_code", None)
         indexability = getattr(pr, "is_indexable", None)
 

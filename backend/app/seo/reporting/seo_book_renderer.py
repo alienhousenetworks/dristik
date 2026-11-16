@@ -1884,6 +1884,8 @@ def _build_chapter_analysis(
         "risk_vs_measured_impact": narrative.get("business_risk") or "Documented Technical Risk: Evaluated on sampled pages.",
         "strategic_action": narrative.get("recommended_action") or (ch_findings[0].get("recommended_action") if ch_findings else "Maintain current configuration."),
         "data_classification": data_class,
+        "evidence_basis": narrative.get("evidence_basis") or f"Evaluated across {scope_phrase}.",
+        "evidence_citations": narrative.get("evidence_citations") or [],
     }
 
 
@@ -1938,7 +1940,7 @@ def build_seo_book_context(report: Any, page_numbers: Optional[Dict[str, int]] =
     gsc_status = str(_get_val(gsc, "state") or "Not connected or not reported")
     ga4_status = str(_get_val(ga4, "state") or "Not connected or not reported")
     ext_auth = _get_val(report, "external_authority")
-    ext_auth_status = "Connected" if (ext_auth and _get_val(ext_auth, "status") == "MEASURED") else "Unavailable or not connected"
+    ext_auth_status = "Connected" if (ext_auth and _get_val(ext_auth, "status") in ("MEASURED", "CONNECTED")) else "Unavailable or not connected"
 
     # Calculate executive grade
     def _calc_grade(sc: Optional[int]) -> Tuple[str, str]:
@@ -1989,10 +1991,10 @@ def build_seo_book_context(report: Any, page_numbers: Optional[Dict[str, int]] =
     profile_obj = _get_val(report, "business_profile") or {}
     business_profile_summary = {
         "business_name": _get_val(profile_obj, "business_name") or domain,
-        "business_model": str(_get_val(profile_obj, "business_model") or "Digital Services / Commercial Website").replace("_", " ").title(),
-        "industry": _get_val(profile_obj, "industry") or "Technology & Digital Solutions",
-        "niche": _get_val(profile_obj, "niche") or "Enterprise & Commercial Services",
-        "target_geography": _get_val(profile_obj, "geography") or "Global / English",
+        "business_model": str(_get_val(profile_obj, "business_model") or "Not Specified").replace("_", " ").title(),
+        "industry": _get_val(profile_obj, "industry") or "Not Specified",
+        "niche": _get_val(profile_obj, "niche") or "Not Specified",
+        "target_geography": _get_val(profile_obj, "geography") or "Not Specified",
     }
 
     # Report meta
@@ -2246,9 +2248,9 @@ def build_seo_book_context(report: Any, page_numbers: Optional[Dict[str, int]] =
                             value_str = "Third-party competitor data connector not attached"
                             scope_str = "Unavailable"
                         elif pages_crawled > 0 and any(k in check_lower for k in CRAWL_DOM_CHECKS):
-                            status_str = DiagnosticStatus.SAMPLED.value if is_sampled else DiagnosticStatus.PASSED.value
-                            value_str = f"Compliant across {pages_crawled} inspected sample page(s)"
-                            scope_str = f"{pages_crawled} pages sample"
+                            status_str = DiagnosticStatus.SAMPLED.value if is_sampled else DiagnosticStatus.NOT_TESTED.value
+                            value_str = f"Observed in {pages_crawled} crawled page(s); no defect recorded" if is_sampled else "Check not individually instrumented"
+                            scope_str = f"{pages_crawled} pages sample" if is_sampled else "Uninspected"
                         elif pages_crawled > 0:
                             status_str = DiagnosticStatus.NOT_TESTED.value
                             value_str = "Specialized check not instrumented in standard crawl profile"

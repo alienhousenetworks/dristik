@@ -158,6 +158,7 @@ def create_sample_report(pages):
     )
 
     report = ExecutiveReport(
+        org_id="org_test",
         report_id="rep-ent-01",
         analysis_id="run-ent-01",
         website_url="https://example.com",

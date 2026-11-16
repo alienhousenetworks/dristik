@@ -64,6 +64,7 @@ def _make_dummy_report() -> ExecutiveReport:
     )
 
     return ExecutiveReport(
+        org_id="org_test",
         report_id="rep_test_001",
         analysis_id="analysis_test_001",
         website_url="https://acme.com",

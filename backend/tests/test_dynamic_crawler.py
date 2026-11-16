@@ -171,10 +171,12 @@ async def test_browser_render_service_render_pdf_mocked_calls_page_pdf():
             timeout=30000,
         )
         mock_page.emulate_media.assert_awaited_once_with(media="print")
-        # Ensure page.pdf was called with prefer_css_page_size and print_background, and NOT timeout
-        mock_page.pdf.assert_awaited_once_with(
-            prefer_css_page_size=True,
-            print_background=True,
-        )
+        # Ensure page.pdf was called with prefer_css_page_size, print_background, display_header_footer, and NOT timeout
+        mock_page.pdf.assert_awaited_once()
+        pdf_kwargs = mock_page.pdf.call_args.kwargs
+        assert pdf_kwargs.get("prefer_css_page_size") is True
+        assert pdf_kwargs.get("print_background") is True
+        assert pdf_kwargs.get("display_header_footer") is True
+        assert "timeout" not in pdf_kwargs
         mock_page.close.assert_awaited_once()
         mock_context.close.assert_awaited_once()

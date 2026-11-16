@@ -219,6 +219,7 @@ def _build_stub_report(findings=None, story="Standard executive story summary.")
         business_model="B2B SaaS",
     )
     return ExecutiveReport(
+        org_id="org_test",
         report_id="rep_test_01",
         website_url="https://acme.com",
         domain="acme.com",

@@ -103,6 +103,7 @@ def _make_dummy_aeo_report() -> ExecutiveReport:
     )
 
     return ExecutiveReport(
+        org_id="org_test",
         report_id="rep_aeo_test_001",
         analysis_id="analysis_aeo_test_001",
         website_url="https://acme.com",

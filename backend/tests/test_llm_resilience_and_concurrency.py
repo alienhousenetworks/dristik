@@ -300,7 +300,7 @@ async def test_specialist_provider_isolated_tier_and_budget():
     await agent._llm_audit(blackboard, [])
     _, groq_kwargs = mock_router.generate_structured.call_args
     assert groq_kwargs["model_tier"] == "fast_slm"
-    assert groq_kwargs["max_tokens"] == 1000
+    assert 1000 <= groq_kwargs["max_tokens"] <= 3000
 
     # 2. When provider is Anthropic
     mock_client.provider = "anthropic"

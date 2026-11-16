@@ -78,9 +78,10 @@ class CompleteAeoReportGenerator:
         questions_unsupp = getattr(g, "questions_unsupported", 0) if g else 0
 
         # Answer readiness score (0-100)
+        scores_obj = getattr(report, "scores", None)
         answer_readiness_score = getattr(g, "extractability_score", None) if g else None
-        if answer_readiness_score is None and scores:
-            answer_readiness_score = getattr(scores, "geo_score", None)
+        if answer_readiness_score is None and scores_obj is not None:
+            answer_readiness_score = getattr(scores_obj, "geo_score", None)
         if answer_readiness_score is None:
             answer_readiness_score = scorecard.pillar_a_content_readiness.composite_readiness_score
         if answer_readiness_score is None and questions_total > 0:
@@ -144,7 +145,7 @@ class CompleteAeoReportGenerator:
                 "part_name": s.part_name,
                 "description": s.description,
                 "checklist": s.checklist,
-                "status": "EVALUATED",
+                "status": "EVALUATED" if (g or report.page_reports) else "NOT_TESTED",
             }
 
         # Ensure full backward compatibility for previous 20 section key names
@@ -230,16 +231,18 @@ class CompleteAeoReportGenerator:
             "schema_validation": report.schema_validation.model_dump() if report.schema_validation else None,
             "rich_result_rule": "Valid structured data establishes technical eligibility, not proof of rich result SERP appearance.",
         }
+        ext_auth = getattr(report, "external_authority", None)
+        same_as_profiles = ext_auth.get("profiles", []) if isinstance(ext_auth, dict) else (getattr(ext_auth, "profiles", []) or [])
         sections_dict["09_entity_answers_and_knowledge_panels"] = {
             "brand_entity_name": getattr(g, "entity_name", report.domain) if g else report.domain,
             "business_profile": report.business_profile.model_dump() if report.business_profile else None,
-            "same_as_profiles": getattr(report, "external_authority", {}).get("profiles", []) if getattr(report, "external_authority", None) else [],
+            "same_as_profiles": same_as_profiles,
             "knowledge_panel_rule": "Knowledge panels reflect Google Knowledge Graph consensus across external web entities, not schema declarations alone.",
         }
         sections_dict["10_voice_and_conversational_search"] = {
             "voice_search_rule": "Voice search has no universal ranking system. A passage readable aloud is not necessarily selected by a voice assistant.",
             "spoken_readability_passages": questions_supp,
-            "pronunciation_clarity_check": "Verified clear entity names, acronym expansions, and unit specifications.",
+            "pronunciation_clarity_check": "Not separately evaluated in this run." if questions_supp == 0 else f"Evaluated across {questions_supp} answer-ready passage(s).",
         }
         sections_dict["11_ai_answer_engine_visibility"] = {
             "visibility_status": visibility_status,

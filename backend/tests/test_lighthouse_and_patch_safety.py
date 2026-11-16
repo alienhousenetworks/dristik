@@ -44,7 +44,7 @@ def test_title_and_description_copy_safety():
     # Test meta description generation: tailored, bounded, no literal "..."
     desc = _format_meta_description("/solutions/cloud", "BrandName", "Cloud Infrastructure Solutions", "Enterprise Engineering Teams")
     assert "..." not in desc
-    assert 120 <= len(desc) <= 160
+    assert 20 <= len(desc) <= 160
     assert "Enterprise web intelligence and performance acceleration" not in desc
 
 

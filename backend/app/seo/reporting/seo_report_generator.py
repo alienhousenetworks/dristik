@@ -8,6 +8,7 @@ Produces:
 from __future__ import annotations
 
 import html
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 from urllib.parse import quote
@@ -74,7 +75,7 @@ class CompleteSeoReportGenerator:
             "domain": report.domain,
             "website_url": report.website_url,
             "generated_at": report.generated_at,
-            "certification_status": getattr(report, "certification_status", "CERTIFIED"),
+            "certification_status": getattr(report, "certification_status", None) or "NOT_CERTIFIED",
             "health_score": score_val,
             "diagnostic_inventory": report.diagnostic_inventory.model_dump() if getattr(report, "diagnostic_inventory", None) else None,
             "page_level_assessments": [p.model_dump() for p in getattr(report, "page_level_assessments", [])],
@@ -214,7 +215,7 @@ class CompleteSeoReportGenerator:
                 },
                 "deliverable_f_audit_reliability_report": {
                     "honest_scores": report.honest_scores.model_dump() if getattr(report, "honest_scores", None) else None,
-                    "certification_status": getattr(report, "certification_status", "CERTIFIED"),
+                    "certification_status": getattr(report, "certification_status", None) or "NOT_CERTIFIED",
                     "url_coverage_pct": cov_pct,
                     "sampling_status": sampling_status,
                     "quality_gate_results": getattr(report, "quality_gate_results", None),
@@ -224,12 +225,12 @@ class CompleteSeoReportGenerator:
                     "unmeasured_capabilities": [
                         {
                             "source": "Google Search Console",
-                            "status": "CONNECTED" if (report.google_performance and report.google_performance.get("search_console")) else "NOT_CONNECTED",
+                            "status": "CONNECTED" if (report.google_performance and isinstance(report.google_performance.get("search_console"), dict) and report.google_performance["search_console"].get("state") == "CONNECTED") else "NOT_CONNECTED",
                             "reason": "Search Console OAuth2 connector required for live impressions and query clicks."
                         },
                         {
                             "source": "Google Analytics 4",
-                            "status": "CONNECTED" if (report.google_performance and report.google_performance.get("analytics")) else "NOT_CONNECTED",
+                            "status": "CONNECTED" if (report.google_performance and isinstance(report.google_performance.get("analytics"), dict) and report.google_performance["analytics"].get("state") == "CONNECTED") else "NOT_CONNECTED",
                             "reason": "GA4 connector required for live conversion rates and revenue attribution."
                         },
                         {
@@ -252,7 +253,7 @@ class CompleteSeoReportGenerator:
         score_val = getattr(report.scores, "overall_score", None) if getattr(report, "scores", None) else None
         score_display = f"{int(round(score_val))}" if score_val is not None else "N/A"
         
-        score_color = "#10b981" if (score_val and score_val >= 80) else ("#f59e0b" if (score_val and score_val >= 60) else "#ef4444")
+        score_color = "#64748b" if score_val is None else ("#10b981" if score_val >= 80 else ("#f59e0b" if score_val >= 60 else "#ef4444"))
         
         pages_crawled = len(report.page_reports)
         findings_count = len(report.findings)
@@ -1756,7 +1757,7 @@ class CompleteSeoReportGenerator:
                 subtitle="20-SECTION PUBLICATION-GRADE TECHNICAL AUDIT",
                 domain=domain_clean,
                 brand_name=getattr(report.business_profile, "business_name", None) or domain_clean,
-                audit_date=str(report.generated_at or "2026-10-14")[:10],
+                audit_date=str(report.generated_at or datetime.now(timezone.utc).strftime("%Y-%m-%d"))[:10],
                 report_ref=str(report.analysis_id or "DST-SEO")[:12].upper(),
             ),
             parts=[PartSpec(id="seo_body", num="", title="20-SECTION MASTER SEO AUDIT", chapters=chapters)],

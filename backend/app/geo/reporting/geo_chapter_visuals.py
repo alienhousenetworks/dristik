@@ -115,10 +115,10 @@ def geo_scoring_breakdown(report: Any) -> str:
     runs = int(_num(_get(card, "successful_runs")) or 0) if card else 0
 
     vis_disp = f"{int(round(citation_rate))}% citation rate" if (citation_rate is not None and runs > 0) else "Not Measured"
-    acc_disp = "Verified (zero hallucinations)" if (_get(report, "findings") is not None) else "Unassessed"
+    acc_disp = "Measured in live run" if runs > 0 else "Unassessed"
     footprint_disp = f"{runs} evaluated prompt runs" if runs > 0 else "Crawl baseline only"
     comp_disp = "Active bake-off tracked" if _get(report, "competitor_bakeoff") else "Baseline benchmark"
-    conf_disp = "Representative Crawl AST"
+    conf_disp = "Representative Crawl AST" if (_get(report, "page_reports") or _get(_get(report, "crawl_manifest"), "pages")) else "No Crawl Data"
 
     return f"""
     <div class="geo-scoring-dossier">

@@ -120,7 +120,7 @@ class SubPhaseReportBuilder:
                     title="Crawler Failed to Ingest Pages",
                     description=f"Zero pages could be retrieved from {website_url}.",
                     remediation_hint="Check if site blocks headless browsers or has invalid SSL certificates.",
-                    evidence_ids=["crawl_frontier"],
+                    evidence_ids=["crawl_manifest"],
                 )
             )
 
@@ -160,7 +160,7 @@ class SubPhaseReportBuilder:
             },
             evidence_tokens=evidence,
             findings=findings,
-            confidence=ConfidenceLevel.VERIFIED,
+            confidence=ConfidenceLevel.VERIFIED if pages_crawled > 0 else ConfidenceLevel.UNMEASURED,
             errors=[error_msg] if error_msg else [],
             next_phase_handoff={"pages_count": pages_crawled},
         )
@@ -174,7 +174,8 @@ class SubPhaseReportBuilder:
         duration_ms: int = 500,
     ) -> SubPhaseReportContract:
         findings = []
-        if dom_metrics.get("h1_count", 0) == 0:
+        pages_count = dom_metrics.get("pages_count", 0)
+        if pages_count > 0 and dom_metrics.get("h1_count", 0) == 0:
             findings.append(
                 ReportFinding(
                     finding_id="DOM_MISSING_H1",
@@ -223,8 +224,8 @@ class SubPhaseReportBuilder:
             structured_output=dom_metrics,
             evidence_tokens=evidence,
             findings=findings,
-            confidence=ConfidenceLevel.VERIFIED,
-            next_phase_handoff={"dom_evidence_ready": True},
+            confidence=ConfidenceLevel.VERIFIED if pages_count > 0 else ConfidenceLevel.UNMEASURED,
+            next_phase_handoff={"dom_evidence_ready": pages_count > 0},
         )
         return contract.seal()
 
@@ -270,8 +271,8 @@ class SubPhaseReportBuilder:
             },
             evidence_tokens=evidence,
             findings=[],
-            confidence=ConfidenceLevel.VERIFIED,
-            next_phase_handoff={"cas_snapshots_pinned": True},
+            confidence=ConfidenceLevel.VERIFIED if (snapshot_count > 0 and cas_hashes) else ConfidenceLevel.UNMEASURED,
+            next_phase_handoff={"cas_snapshots_pinned": bool(snapshot_count > 0 and cas_hashes)},
         )
         return contract.seal()
 
@@ -326,8 +327,8 @@ class SubPhaseReportBuilder:
             structured_output=telemetry_data,
             evidence_tokens=evidence,
             findings=findings,
-            confidence=ConfidenceLevel.VERIFIED,
-            next_phase_handoff={"transport_secure": True},
+            confidence=ConfidenceLevel.VERIFIED if headers else ConfidenceLevel.UNMEASURED,
+            next_phase_handoff={"transport_secure": bool(headers) and len(findings) == 0},
         )
         return contract.seal()
 
@@ -367,7 +368,7 @@ class SubPhaseReportBuilder:
             structured_output=site_facts,
             evidence_tokens=evidence,
             findings=[],
-            confidence=ConfidenceLevel.VERIFIED,
+            confidence=ConfidenceLevel.VERIFIED if site_facts else ConfidenceLevel.UNMEASURED,
             next_phase_handoff={"site_facts": site_facts},
         )
         return contract.seal()
@@ -488,7 +489,7 @@ class SubPhaseReportBuilder:
             structured_output=intent_data,
             evidence_tokens=[],
             findings=[],
-            confidence=ConfidenceLevel.VERIFIED,
+            confidence=ConfidenceLevel.INFERRED if intent_data.get("page_intents") else ConfidenceLevel.UNMEASURED,
             next_phase_handoff={"intent_map": intent_data},
         )
         return contract.seal()
@@ -501,10 +502,20 @@ class SubPhaseReportBuilder:
     ) -> SubPhaseReportContract:
         conflicts = arbitration_data.get("conflicts", [])
         findings = []
-        for c in conflicts:
+        evidence_tokens = []
+        if conflicts:
+            evidence_tokens.append(
+                EvidenceTokenReference(
+                    evidence_id="brand_arbitration",
+                    token_type="arbitration_log",
+                    locator="phase_02_business/identity_arbitration",
+                    excerpt="; ".join(str(c) for c in conflicts)[:300],
+                )
+            )
+        for idx, c in enumerate(conflicts, start=1):
             findings.append(
                 ReportFinding(
-                    finding_id="IDENTITY_CONFLICT",
+                    finding_id=f"IDENTITY_CONFLICT_{idx}",
                     severity="medium",
                     title="Contradictory Business Positioning Detected",
                     description=str(c),
@@ -532,9 +543,9 @@ class SubPhaseReportBuilder:
                 "Synthesized the authoritative unified business profile for Phase 3",
             ],
             structured_output=arbitration_data,
-            evidence_tokens=[],
+            evidence_tokens=evidence_tokens,
             findings=findings,
-            confidence=ConfidenceLevel.VERIFIED,
+            confidence=ConfidenceLevel.VERIFIED if arbitration_data.get("sealed_profile") else ConfidenceLevel.INFERRED,
             unresolved_issues=[str(c) for c in conflicts],
             next_phase_handoff={"sealed_business_profile": arbitration_data.get("sealed_profile", {})},
         )

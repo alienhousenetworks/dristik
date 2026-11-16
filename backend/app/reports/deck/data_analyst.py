@@ -56,9 +56,7 @@ class DeckDataAnalystAgent:
         ]
 
         # Pages
-        pages = (report.crawl_manifest.pages if report.crawl_manifest and report.crawl_manifest.pages else [])
-        if not pages and report.page_reports:
-            pages = []
+        pages = (report.crawl_manifest.pages if report.crawl_manifest and report.crawl_manifest.pages else None) or report.page_reports or []
 
         # Findings
         findings = report.findings or []
@@ -505,18 +503,21 @@ class DeckDataAnalystAgent:
             # Slide 39: Page-by-Page Table Matrix
             # -----------------------------------------------------------------
             elif s_id == "slide_39_page_rollup":
-                s.table_headers = ["URL Route", "Page Archetype", "Word Count", "Status", "Readability", "Indexation"]
+                s.table_headers = ["URL Route", "Page Archetype", "Word Count", "Status", "TTFB", "Indexation"]
                 rows = []
                 for p in pages[:5]:
                     u = p.url.replace("https://", "").replace("http://", "")
-                    rows.append([u[:24], p.page_type or "general", f"{p.word_count or 350}w", "200 OK", "Grade 8", "Indexed"])
+                    sc = getattr(p, "status_code", None)
+                    sc_disp = str(sc) if isinstance(sc, int) else "Unmeasured"
+                    wc = getattr(p, "word_count", None)
+                    wc_disp = f"{wc}w" if wc is not None else "—"
+                    ttfb = getattr(p, "ttfb_ms", None)
+                    ttfb_disp = f"{int(ttfb)}ms" if ttfb is not None else "—"
+                    idx_flag = getattr(p, "is_indexable", None)
+                    idx_disp = "Indexable" if idx_flag is True else ("Noindex" if idx_flag is False else "Unmeasured")
+                    rows.append([u[:24], getattr(p, "page_type", None) or "general", wc_disp, sc_disp, ttfb_disp, idx_disp])
                 if not rows:
-                    rows = [
-                        ["/ (Homepage)", "homepage", "420w", "200 OK", "Grade 8", "Indexed"],
-                        ["/pricing", "pricing", "280w", "200 OK", "Grade 7", "Indexed"],
-                        ["/features", "product", "510w", "200 OK", "Grade 8", "Indexed"],
-                        ["/about", "about", "340w", "200 OK", "Grade 9", "Indexed"]
-                    ]
+                    rows = [["No crawled pages recorded", "—", "—", "NOT_MEASURED", "—", "—"]]
                 s.table_rows = rows
 
             # -----------------------------------------------------------------
@@ -530,13 +531,16 @@ class DeckDataAnalystAgent:
                         home = p
                         break
                 h_title = getattr(home, "title", None) or domain
-                h_meta = getattr(home, "meta_description", None) or "No meta description extracted from homepage DOM."
-                h_status = getattr(home, "status_code", 200)
-                h_words = getattr(home, "word_count", 0)
-                h_findings = [f for f in findings if any(getattr(home, "url", "") in str(getattr(f, attr, "")) for attr in ["affected_urls", "url", "description"])]
+                h_meta_raw = getattr(home, "meta_description", None) or ""
+                h_meta = h_meta_raw or "No meta description extracted from homepage DOM."
+                h_status = getattr(home, "status_code", None)
+                h_status_disp = f"{h_status}" if h_status is not None else "NOT MEASURED"
+                h_words = getattr(home, "word_count", None)
+                h_words_disp = f"{h_words} words" if h_words is not None else "unmeasured words"
+                h_findings = [f for f in findings if home is not None and any(getattr(home, "url", "") in str(getattr(f, attr, "")) for attr in ["affected_urls", "url", "description"])]
                 s.cards = [
-                    CardSpec(kicker="HOMEPAGE STATUS & DOM", title=h_title[:45], description=f"HTTP status: {h_status} · Word count: {h_words} words · Checked URL: {getattr(home, 'url', domain)[:50]}", metric_value=f"{h_status} OK", badge="HOMEPAGE", badge_color="emerald" if h_status == 200 else "amber"),
-                    CardSpec(kicker="META DESCRIPTION & INTENT", title="Snippet Definition", description=h_meta[:140], badge=f"{len(h_meta)} CHARS", badge_color="sky" if 120 <= len(h_meta) <= 160 else "amber"),
+                    CardSpec(kicker="HOMEPAGE STATUS & DOM", title=h_title[:45], description=f"HTTP status: {h_status_disp} · Word count: {h_words_disp} · Checked URL: {getattr(home, 'url', domain)[:50]}", metric_value=h_status_disp, badge="HOMEPAGE", badge_color="emerald" if h_status == 200 else "amber"),
+                    CardSpec(kicker="META DESCRIPTION & INTENT", title="Snippet Definition", description=h_meta[:140], badge=f"{len(h_meta_raw)} CHARS", badge_color="sky" if 120 <= len(h_meta_raw) <= 160 else "amber"),
                     CardSpec(kicker="HOMEPAGE DEFICITS", title="Verified Template Findings", description=f"{len(h_findings)} defect(s) logged on the homepage template." if h_findings else "Zero template defects flagged on the homepage.", badge="RECORDED", badge_color="rose" if h_findings else "emerald")
                 ]
 
@@ -1239,8 +1243,10 @@ class DeckDataAnalystAgent:
                 ]
 
             elif s_id == "slide_76_csuite_seal":
+                cert_val = getattr(report, "certification_status", None) or "NOT_CERTIFIED"
+                cert_badge_color = "emerald" if cert_val == "CERTIFIED" else ("amber" if cert_val == "PUBLISHED_WITH_LIMITATIONS" else "rose")
                 s.cards = [
-                    CardSpec(kicker="FORMAL CERTIFICATION", title="Dristik Assurance Seal", description=f"Certified audit dossier completed for {domain}. All findings verified against deterministic ground truth.", metric_value="CERTIFIED", badge="SEAL OF TRUTH", badge_color="emerald"),
+                    CardSpec(kicker="FORMAL CERTIFICATION", title="Dristik Assurance Seal", description=f"Audit dossier completed for {domain}. Certification status: {cert_val}.", metric_value=cert_val, badge="SEAL OF TRUTH" if cert_val == "CERTIFIED" else cert_val, badge_color=cert_badge_color),
                     CardSpec(kicker="DELIVERY TIMESTAMP", title="Generated Execution Date", description=report.generated_at or "Measured on audit execution", badge="TIMESTAMP", badge_color="sky"),
                     CardSpec(kicker="LEGAL & COMPLIANCE", title="Confidential Advisory", description="Prepared exclusively for executive leadership. All rights reserved.", badge="PROPRIETARY", badge_color="sky")
                 ]

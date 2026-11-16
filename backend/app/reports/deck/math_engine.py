@@ -65,7 +65,14 @@ class DeterministicMetricEngine:
         cat_gaps: Dict[str, float] = {}
         if scores and scores.category_scores:
             for cat_name, cat_obj in scores.category_scores.items():
-                val = float(cat_obj.score) if hasattr(cat_obj, "score") and cat_obj.score is not None else float(cat_obj) if isinstance(cat_obj, (int, float)) else 0.0
+                if hasattr(cat_obj, "score"):
+                    if cat_obj.score is None or getattr(cat_obj, "status", None) == "NOT_MEASURED":
+                        continue
+                    val = float(cat_obj.score)
+                elif isinstance(cat_obj, (int, float)) and not isinstance(cat_obj, bool):
+                    val = float(cat_obj)
+                else:
+                    continue
                 cat_key = cat_name if isinstance(cat_name, str) else str(cat_name.value)
                 cat_scores[cat_key] = val
                 benchmark = self.BENCHMARKS.get(cat_key, 80.0)
@@ -127,36 +134,36 @@ class DeterministicMetricEngine:
             total_impact += float(imp_val)
 
         # 4. Remediation Potential Calculation
-        # Deterministic formula: potential recovery = min(100 - overall_score, sum(impact_weights) * 1.5)
         raw_gain = (severity_counts["CRITICAL"] * 4.5 + severity_counts["HIGH"] * 2.8 + severity_counts["MEDIUM"] * 1.2)
-        potential_gain = round(min(100.0 - overall_score, max(4.0, raw_gain)), 1)
+        potential_gain = round(min(100.0 - overall_score, raw_gain), 1)
         post_remediation_score = round(min(100.0, overall_score + potential_gain), 1)
 
         # 5. Generative AI Answer Engine Readiness Ratio
-        geo_score = cat_scores.get("GEO", 0.0)
-        geo_ratio = round(geo_score / 100.0, 2)
+        geo_score = cat_scores.get("GEO")
+        geo_ratio = round(geo_score / 100.0, 2) if geo_score is not None else 0.0
 
         # 6. Detailed Metric Objects with Formulas
         metrics: Dict[str, CalculatedMetric] = {}
+        has_overall = scores is not None and scores.overall_score is not None
         metrics["overall_score"] = CalculatedMetric(
             key="overall_score",
             label="Overall Audit Composite Score",
             value=overall_score,
-            formatted_value=f"{int(round(overall_score))}/100",
+            formatted_value=f"{int(round(overall_score))}/100" if has_overall else "Unmeasured",
             units="/100",
             formula="weighted_composite_index(category_scores)",
             benchmark=80.0,
-            delta_to_benchmark=round(80.0 - overall_score, 1)
+            delta_to_benchmark=round(80.0 - overall_score, 1) if has_overall else 0.0
         )
         metrics["ttfb_median"] = CalculatedMetric(
             key="ttfb_median",
             label="Median Time to First Byte",
             value=ttfb_median,
-            formatted_value=f"{ttfb_median}ms",
+            formatted_value=f"{ttfb_median}ms" if sample_size > 0 else "Unmeasured",
             units="ms",
             formula="median(page_ttfb_samples)",
             benchmark=200.0,
-            delta_to_benchmark=round(ttfb_median - 200.0, 1)
+            delta_to_benchmark=round(ttfb_median - 200.0, 1) if sample_size > 0 else 0.0
         )
         metrics["potential_gain"] = CalculatedMetric(
             key="potential_gain",
@@ -171,12 +178,12 @@ class DeterministicMetricEngine:
         metrics["geo_citability"] = CalculatedMetric(
             key="geo_citability",
             label="Generative Answer Engine Citability Index",
-            value=geo_score,
-            formatted_value=f"{int(round(geo_score))}%",
+            value=geo_score if geo_score is not None else 0.0,
+            formatted_value=f"{int(round(geo_score))}%" if geo_score is not None else "Unmeasured",
             units="%",
             formula="extractability_weight * schema_entity_coverage",
             benchmark=75.0,
-            delta_to_benchmark=round(75.0 - geo_score, 1)
+            delta_to_benchmark=round(75.0 - geo_score, 1) if geo_score is not None else 0.0
         )
 
         return MetricBundle(

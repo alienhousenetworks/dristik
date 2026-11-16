@@ -125,7 +125,7 @@ class ValidationGate:
             "; ".join(score_inconsistencies) if score_inconsistencies else ""
         )
 
-        from app.scoring.displayed_score import displayed_composite, story_matches_composite
+        from app.domain.scoring.displayed_score import displayed_composite, story_matches_composite
         dossier_composite = displayed_composite(report)
         story_agrees = story_matches_composite(getattr(report, "story_summary", "") or "", dossier_composite)
         record(
@@ -724,6 +724,12 @@ class ValidationGate:
                     if "audited every url" in all_prose_low or "all urls tested" in all_prose_low or "comprehensive audit of all pages" in all_prose_low:
                         inventory_discrepancies.append("Narrative claims comprehensive audit of all pages despite sampled crawl")
 
+        record(
+            "crawl_inventory_reconciled",
+            len(inventory_discrepancies) == 0,
+            "; ".join(inventory_discrepancies) if inventory_discrepancies else ""
+        )
+
         # -------------------------------------------------------------
         # 14. ZERO CROSS-WIRED EVIDENCE ENFORCEMENT
         # -------------------------------------------------------------
@@ -1186,18 +1192,18 @@ class ValidationGate:
 
         # Gate 09: Score Eligibility and Reproducibility
         cat_scores_dict = report.scores.category_scores if report.scores else {}
-        unmeasured_as_100 = [
+        unmeasured_with_score = [
             k for k, cs in cat_scores_dict.items()
-            if getattr(cs, "status", None) == "NOT_MEASURED" and getattr(cs, "score", None) == 100.0
+            if getattr(cs, "status", None) == "NOT_MEASURED" and getattr(cs, "score", None) is not None
         ]
-        score_elig_ok = len(unmeasured_as_100) == 0
+        score_elig_ok = len(unmeasured_with_score) == 0
         gates["gate_09_score_eligibility"] = {
             "gate_id": "GATE_09_SCORE_ELIGIBILITY",
             "passed": score_elig_ok,
             "status": "PASS" if score_elig_ok else "FAIL",
             "severity": "CRITICAL",
-            "failure_reason": f"Unmeasured category given score 100: {unmeasured_as_100}" if not score_elig_ok else None,
-            "related_ids": unmeasured_as_100,
+            "failure_reason": f"Unmeasured category given numeric score: {unmeasured_with_score}" if not score_elig_ok else None,
+            "related_ids": unmeasured_with_score,
             "required_remediation": "Unmeasured pillars must display NOT_MEASURED and be excluded from composite calculation.",
             "details": "Score eligibility rules respected." if score_elig_ok else "Synthetic score found on unmeasured pillar.",
         }
@@ -1325,20 +1331,30 @@ class ValidationGate:
                         cat_obj.weighted_score = round((cat_obj.score * (cat_obj.weight or 0.0)) / w_scale, 2)
                         repairs_made.append(f"Rescored {cat_name} from 100.0 to {cat_obj.score} due to {len(cat_defects)} HIGH/CRITICAL finding(s).")
 
-        # 1. Reconcile scoring arithmetic
+        # 1. Reconcile scoring arithmetic (exclude NOT_MEASURED / None categories)
         if report.scores and report.scores.category_scores:
             total_weighted = 0.0
-            total_weight = sum(c.weight for c in report.scores.category_scores.values() if c.weight is not None)
+            measured_cats = [
+                c for c in report.scores.category_scores.values()
+                if c.score is not None and getattr(c, "status", None) != "NOT_MEASURED"
+            ]
+            total_weight = sum(c.weight for c in measured_cats if c.weight is not None)
             w_scale = 1.0 if total_weight <= 1.05 else 100.0
             for cat_key, cat_obj in report.scores.category_scores.items():
-                score_val = float(cat_obj.score) if cat_obj.score is not None else 0.0
+                if cat_obj.score is None or getattr(cat_obj, "status", None) == "NOT_MEASURED":
+                    if getattr(cat_obj, "status", None) == "NOT_MEASURED" and cat_obj.score is not None:
+                        cat_obj.score = None
+                    cat_obj.weighted_score = 0.0
+                    continue
+                score_val = float(cat_obj.score)
                 cat_obj.weighted_score = round((score_val * (cat_obj.weight or 0.0)) / w_scale, 2)
                 total_weighted += cat_obj.weighted_score
-            new_overall = round(total_weighted, 1)
-            curr_overall = report.scores.overall_score if report.scores.overall_score is not None else 0.0
-            if abs(curr_overall - new_overall) > 0.1:
-                repairs_made.append(f"Reconciled overall score from {report.scores.overall_score} to exact weighted sum {new_overall}")
-                report.scores.overall_score = new_overall
+            if measured_cats:
+                new_overall = round(total_weighted, 1)
+                curr_overall = report.scores.overall_score if report.scores.overall_score is not None else 0.0
+                if abs(curr_overall - new_overall) > 0.1:
+                    repairs_made.append(f"Reconciled overall score from {report.scores.overall_score} to exact weighted sum {new_overall}")
+                    report.scores.overall_score = new_overall
 
         # 1b. Align composite AI citation score with query matrix or live citation status
         if report.honest_scores and report.honest_scores.ai_citation_score is not None:
@@ -1535,6 +1551,11 @@ class ValidationGate:
         from app.seo.audit.evidence.compatibility_gate import EvidenceCompatibilityGate
         domain_str = (report.domain or report.website_url or "").replace("https://", "").replace("http://", "").split("/")[0] or "target-site.com"
         ledger_keys = set((getattr(report, "evidence_ledger", None) or {}).keys())
+        for entry in (getattr(getattr(report, "claim_ledger", None), "entries", None) or []):
+            src_type = str(getattr(getattr(entry, "source_type", None), "value", getattr(entry, "source_type", "")) or "").upper()
+            if src_type != "UNSUPPORTED":
+                refs = getattr(entry, "evidence_ids", None) or getattr(entry, "evidence_refs", None) or []
+                ledger_keys.update(str(r) for r in refs if r)
         clean_ev_findings = []
         for f in report.findings:
             if getattr(f, "held_from_executive", False):
@@ -1811,7 +1832,7 @@ class ValidationGate:
         try:
             from app.remediation.deduplicator import FindingDeduplicator
             report.findings = FindingDeduplicator.deduplicate(report.findings)
-            from app.intelligence.monitoring.visual_intelligence import visual_intelligence_engine
+            from app.core.monitoring.visual_intelligence import visual_intelligence_engine
             report.visual_intelligence = visual_intelligence_engine.synthesize_visual_intelligence(
                 domain=report.domain,
                 business_profile=report.business_profile,
@@ -1822,8 +1843,8 @@ class ValidationGate:
                 ai_search_matrix=report.ai_search_matrix,
             )
             repairs_made.append("Re-synchronized visual intelligence and defect donut with finalized post-gate findings ledger.")
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning(f"Visual intelligence re-synchronization skipped: {e}")
 
         return report, repairs_made
 

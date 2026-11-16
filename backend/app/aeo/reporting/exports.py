@@ -183,25 +183,28 @@ def generate_aeo_live_benchmark_csv(report: ExecutiveReport) -> str:
     g = report.geo_readiness
     questions = getattr(g, "questions", []) if g else []
 
-    if v_status == "MEASURED" and v_card and getattr(v_card, "queries", 0) > 0:
-        platforms = getattr(v_card, "platforms", ["ChatGPT Search", "Perplexity", "Google AI Overviews"])
-        for idx, q in enumerate(questions):
-            q_text = getattr(q, "question", "")
-            for p_idx, platform in enumerate(platforms):
-                writer.writerow([
-                    f"TC-{idx+1:03d}-{p_idx+1}",
-                    platform,
-                    q_text,
-                    getattr(q, "category", "Commercial"),
-                    getattr(report, "generated_at", ""),
-                    "YES",
-                    "YES" if getattr(q, "status", "") == "SUPPORTED" else "NO",
-                    "YES" if getattr(q, "status", "") == "SUPPORTED" else "NO",
-                    getattr(q, "evidence_url", report.website_url or ""),
-                    "None observed",
-                    "VERIFIED",
-                    "Live test response captured",
-                ])
+    live_rows = getattr(v_card, "results", None) or getattr(report, "ai_search_matrix", None) or []
+    if v_status == "MEASURED" and live_rows:
+        for idx, row in enumerate(live_rows):
+            platform = getattr(row, "engine", None) or getattr(row, "platform", None) or "AI Search"
+            q_text = getattr(row, "query", None) or getattr(row, "question", "")
+            mentioned = getattr(row, "brand_mentioned", None)
+            recommended = getattr(row, "brand_recommended", None)
+            cited = getattr(row, "citation_present", None)
+            writer.writerow([
+                f"TC-{idx+1:03d}",
+                platform,
+                q_text,
+                getattr(row, "category", "Commercial"),
+                getattr(report, "generated_at", ""),
+                "YES" if mentioned is True else ("NO" if mentioned is False else "UNMEASURED"),
+                "YES" if recommended is True else ("NO" if recommended is False else "UNMEASURED"),
+                "YES" if cited is True else ("NO" if cited is False else "UNMEASURED"),
+                getattr(row, "evidence_url", report.website_url or ""),
+                ", ".join(getattr(row, "competitors_observed", []) or []) or "Not recorded",
+                "VERIFIED" if mentioned is not None else "NOT_MEASURED",
+                getattr(row, "notes", "Recorded live test response"),
+            ])
     else:
         # In absence of connected live credentials, emit unmeasured register rows
         for idx, q in enumerate(questions):
@@ -247,11 +250,13 @@ def generate_aeo_brand_facts_csv(report: ExecutiveReport) -> str:
     if report.business_profile and report.business_profile.business_name:
         entity_name = report.business_profile.business_name
 
+    bp_desc = getattr(report.business_profile, "description", None) if report.business_profile else None
     facts = [
-        ("FACT-001", "Identity", f"Official brand name: {entity_name}", report.website_url, "VERIFIED"),
+        ("FACT-001", "Identity", f"Official brand name: {entity_name}", report.website_url, "VERIFIED" if entity_name != report.domain else "INFERRED"),
         ("FACT-002", "Domain", f"Canonical website: {report.website_url}", report.website_url, "VERIFIED"),
-        ("FACT-003", "Offerings", getattr(report.business_profile, "description", "Enterprise software solutions") if report.business_profile else "Primary business capabilities", report.website_url, "SAMPLE_VERIFIED"),
     ]
+    if bp_desc:
+        facts.append(("FACT-003", "Offerings", bp_desc, report.website_url, "SAMPLE_VERIFIED"))
 
     for fid, cat, claim, url, v_stat in facts:
         writer.writerow([
@@ -290,14 +295,16 @@ def generate_aeo_evidence_ledger_csv(report: ExecutiveReport) -> str:
 
     pages = getattr(report, "page_reports", []) or []
     for idx, p in enumerate(pages):
+        real_hash = getattr(p, "snapshot_sha256", None) or getattr(p, "content_hash", None) or "UNAVAILABLE"
+        sc = getattr(p, "status_code", None)
         writer.writerow([
             f"EV-DOM-{idx+1:04d}",
             "DOM_PASSAGE",
             getattr(p, "url", ""),
             "H1: " + ((getattr(p, "h1_tags", None) or getattr(p, "h1", None) or ["Main Content"])[0]),
-            f"sha256-{idx+1:08x}",
+            real_hash,
             getattr(report, "generated_at", ""),
-            "VERIFIED" if getattr(p, "status_code", 200) == 200 else "UNRESOLVED",
+            "VERIFIED" if sc == 200 else ("UNRESOLVED" if sc is not None else "UNMEASURED"),
             "FIRST_PARTY_CRAWL",
         ])
 

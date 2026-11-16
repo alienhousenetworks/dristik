@@ -1117,6 +1117,25 @@ pre {
       <p style="margin: 0;">{{ section.analysis.strategic_action }}</p>
     </div>
   </div>
+  {% if section.analysis.evidence_basis or section.analysis.evidence_citations %}
+  <div class="plain-english" style="margin-top: 8pt; border-left-color: var(--brand); break-inside: avoid;">
+    <strong>Evidence Basis &amp; Traceable Citations</strong>
+    {% if section.analysis.evidence_basis %}
+    <p style="margin: 3pt 0 4pt; font-size: 8.5pt;">{{ section.analysis.evidence_basis }}</p>
+    {% endif %}
+    {% if section.analysis.evidence_citations %}
+    <ul style="margin: 4pt 0 0; padding-left: 14pt; font-size: 8pt; color: var(--muted);">
+      {% for cit in section.analysis.evidence_citations[:5] %}
+      <li style="margin-bottom: 2pt;">
+        {% if cit.evidence_refs %}<code>{{ cit.evidence_refs }}</code> &middot; {% endif %}
+        <strong>[{{ cit.severity }}]</strong> {{ cit.finding_title }}
+        {% if cit.url %} &mdash; <code>{{ cit.url }}</code>{% endif %}
+      </li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+  </div>
+  {% endif %}
   {% elif section.business_explanation %}
   <div class="plain-english">
     <strong>What this means for your business</strong>

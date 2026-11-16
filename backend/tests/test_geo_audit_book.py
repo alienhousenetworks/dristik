@@ -29,6 +29,7 @@ def _mock_geo_report() -> ExecutiveReport:
         ttfb_ms=180.0,
     )
     return ExecutiveReport(
+        org_id="org_test",
         report_id="rep_geo_001",
         analysis_id="analysis_geo_001",
         website_url="https://example.com",

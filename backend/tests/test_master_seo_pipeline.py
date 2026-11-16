@@ -139,6 +139,7 @@ def test_complete_seo_report_generator_html_diagnostic_fields():
     )
 
     report = ExecutiveReport(
+        org_id="org_test",
         report_id="rep-test-001",
         analysis_id="run-test-001",
         domain="example.com",
@@ -208,6 +209,7 @@ def test_adaptive_audit_book_html_diagnostic_fields():
     )
 
     report = ExecutiveReport(
+        org_id="org_test",
         report_id="rep-book-001",
         analysis_id="run-book-001",
         domain="example.com",

@@ -62,6 +62,7 @@ def test_report_critic_reconciles_heading_scope_and_prevents_contradiction():
     )
 
     report = ExecutiveReport(
+        org_id="org_test",
         report_id="rep_critic_test",
         website_url="https://example.com",
         domain="example.com",
@@ -325,6 +326,7 @@ def test_report_critic_converts_missing_to_multiple_h1_and_adds_overall_score_br
     )
 
     report = ExecutiveReport(
+        org_id="org_test",
         report_id="rep_h1_reconcile_test",
         website_url="https://cloudnet.io",
         domain="cloudnet.io",

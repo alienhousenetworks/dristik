@@ -567,8 +567,6 @@ class SectionReportGenerator:
 
         # Section-specific metrics and findings
         findings = [f for f in (report.findings or []) if self._matches_section(f, section_key)]
-        if not findings and report.findings:
-            findings = report.findings[:10]
 
         pages = report.crawl_manifest.pages if (report.crawl_manifest and report.crawl_manifest.pages) else (report.page_reports or [])
         is_seo = section_key == "seo"
@@ -658,9 +656,9 @@ class SectionReportGenerator:
             section_title=title,
             section_findings=findings,
             pages_crawled=len(pages) if pages else None,
-            is_sample_audit=True,
-            has_connector=True,
-            connector_name="Direct Crawl & DOM Analysis",
+            is_sample_audit=bool(pages),
+            has_connector=bool(pages),
+            connector_name="Direct Crawl & DOM Analysis" if pages else "Not Measured",
         )
         business_callout_html = render_section_business_callout(sec_explanation)
 
@@ -1693,12 +1691,20 @@ class SectionReportGenerator:
                     u = getattr(p, "url", "")
                     st = getattr(p, "status_code", None)
                     t = getattr(p, "title", "") or "—"
-                    h1 = (getattr(p, "h1", []) or ["—"])[0]
-                    ttfb = getattr(p, "ttfb_ms", "—")
-                    wc = getattr(p, "word_count", "—")
-                    status_text = str(st) if isinstance(st, int) and not isinstance(st, bool) else "200"
+                    h1_list = getattr(p, "h1", None) or getattr(p, "h1_tags", None) or []
+                    h1 = h1_list[0] if isinstance(h1_list, list) and h1_list else "—"
+                    ux = getattr(p, "ux", None)
+                    ttfb = getattr(p, "ttfb_ms", None)
+                    if ttfb is None and ux is not None:
+                        ttfb = getattr(ux, "ttfb_ms", None)
+                    ttfb = ttfb if ttfb is not None else "—"
+                    wc = getattr(p, "word_count", None)
+                    if wc is None and ux is not None:
+                        wc = getattr(ux, "word_count", None)
+                    wc = wc if wc is not None else "—"
+                    status_text = str(st) if isinstance(st, int) and not isinstance(st, bool) else "NOT_MEASURED"
                     url_text = u if u else "—"
-                    rows.append(f"<tr><td><code style='font-size:10px;'>{url_text}</code></td><td><b>{status_text}</b></td><td>{ttfb}</td><td>{wc}</td><td>{t[:35]}</td><td>{h1[:30]}</td></tr>")
+                    rows.append(f"<tr><td><code style='font-size:10px;'>{url_text}</code></td><td><b>{status_text}</b></td><td>{ttfb}</td><td>{wc}</td><td>{t[:35]}</td><td>{str(h1)[:30]}</td></tr>")
                 parts.append(f"""
                 <h2>02 // Crawled Pages & HTTP Performance Ledger</h2>
                 <table>
@@ -1719,20 +1725,24 @@ class SectionReportGenerator:
             desktop_score = getattr(visual_ux, "desktop_score", None) if visual_ux else None
             mobile_score = getattr(visual_ux, "mobile_score", None) if visual_ux else None
 
+            desktop_disp = f"{desktop_score}<span style=\"font-size:12px;color:#64748b;\">/100</span>" if desktop_score is not None else "<span style=\"font-size:14px;color:#64748b;\">NOT MEASURED</span>"
+            mobile_disp = f"{mobile_score}<span style=\"font-size:12px;color:#64748b;\">/100</span>" if mobile_score is not None else "<span style=\"font-size:14px;color:#64748b;\">NOT MEASURED</span>"
+            cta_state_disp = "AUDITED FROM DOM" if (cro_audit or form_audit or visual_ux) else "NOT MEASURED"
+
             parts.append(f"""
             <h2>01 // Visual Ergonomics & Device UX Benchmark</h2>
             <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:20px;">
                 <div style="border:1px solid #e2e8f0;padding:12px;border-radius:6px;background:#f8fafc;">
                     <div style="font-size:10px;text-transform:uppercase;color:#64748b;font-weight:700;">Desktop Viewport UX</div>
-                    <div style="font-size:22px;font-weight:800;color:#0f172a;margin-top:4px;">{desktop_score if desktop_score is not None else '84'}<span style="font-size:12px;color:#64748b;">/100</span></div>
+                    <div style="font-size:22px;font-weight:800;color:#0f172a;margin-top:4px;">{desktop_disp}</div>
                 </div>
                 <div style="border:1px solid #e2e8f0;padding:12px;border-radius:6px;background:#f8fafc;">
                     <div style="font-size:10px;text-transform:uppercase;color:#64748b;font-weight:700;">Mobile Viewport UX</div>
-                    <div style="font-size:22px;font-weight:800;color:#0f172a;margin-top:4px;">{mobile_score if mobile_score is not None else '78'}<span style="font-size:12px;color:#64748b;">/100</span></div>
+                    <div style="font-size:22px;font-weight:800;color:#0f172a;margin-top:4px;">{mobile_disp}</div>
                 </div>
                 <div style="border:1px solid #e2e8f0;padding:12px;border-radius:6px;background:#f8fafc;">
                     <div style="font-size:10px;text-transform:uppercase;color:#64748b;font-weight:700;">Observed CTA State</div>
-                    <div style="font-size:14px;font-weight:700;color:#0f766e;margin-top:6px;">AUDITED FROM DOM</div>
+                    <div style="font-size:14px;font-weight:700;color:#0f766e;margin-top:6px;">{cta_state_disp}</div>
                 </div>
             </div>
             """)
@@ -1740,7 +1750,10 @@ class SectionReportGenerator:
             if form_audit and getattr(form_audit, "forms", None):
                 f_rows = []
                 for idx, f in enumerate(form_audit.forms[:6], 1):
-                    f_rows.append(f"<tr><td>Form #{idx}</td><td>{getattr(f, 'field_count', '—')} fields</td><td><code>{getattr(f, 'cta_text', 'Submit') or 'Submit'}</code></td><td>{getattr(f, 'has_labels', True)}</td></tr>")
+                    cta_val = getattr(f, 'cta_text', None) or '—'
+                    labels_val = getattr(f, 'has_labels', None)
+                    labels_disp = str(labels_val) if labels_val is not None else 'UNMEASURED'
+                    f_rows.append(f"<tr><td>Form #{idx}</td><td>{getattr(f, 'field_count', '—')} fields</td><td><code>{cta_val}</code></td><td>{labels_disp}</td></tr>")
                 parts.append(f"""
                 <h2>02 // Conversion Form Friction Analysis</h2>
                 <table>

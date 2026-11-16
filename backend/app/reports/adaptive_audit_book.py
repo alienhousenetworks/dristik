@@ -638,18 +638,18 @@ def _build_ch_seo(report: Any, manifest: Dict[str, Any]) -> str:
     pages_count = len(pages)
     disc = getattr(manifest_obj, "total_pages_discovered", pages_count) or pages_count
 
-    # Empirical HTTP breakdown
-    c2xx = sum(1 for p in pages if 200 <= (getattr(p, 'status_code', None) or 200) < 300)
-    c3xx = sum(1 for p in pages if 300 <= (getattr(p, 'status_code', None) or 0) < 400)
-    c4xx = sum(1 for p in pages if 400 <= (getattr(p, 'status_code', None) or 0) < 500)
-    c5xx = sum(1 for p in pages if 500 <= (getattr(p, 'status_code', None) or 0) < 600)
+    # Empirical HTTP breakdown (only count pages with an actual integer status_code)
+    c2xx = sum(1 for p in pages if isinstance(getattr(p, 'status_code', None), int) and 200 <= getattr(p, 'status_code', 0) < 300)
+    c3xx = sum(1 for p in pages if isinstance(getattr(p, 'status_code', None), int) and 300 <= getattr(p, 'status_code', 0) < 400)
+    c4xx = sum(1 for p in pages if isinstance(getattr(p, 'status_code', None), int) and 400 <= getattr(p, 'status_code', 0) < 500)
+    c5xx = sum(1 for p in pages if isinstance(getattr(p, 'status_code', None), int) and 500 <= getattr(p, 'status_code', 0) < 600)
     hsb = getattr(report, "http_status_breakdown", None)
     if hsb:
         c2xx = getattr(hsb, "c2xx", c2xx)
         c3xx = getattr(hsb, "c3xx", c3xx)
         c4xx = getattr(hsb, "c4xx", c4xx)
         c5xx = getattr(hsb, "c5xx", c5xx)
-    pct_2xx = f"{(c2xx / pages_count * 100):.0f}%" if pages_count > 0 else "100%"
+    pct_2xx = f"{(c2xx / pages_count * 100):.0f}%" if pages_count > 0 else "NOT MEASURED"
 
     robots_found = getattr(manifest_obj, "robots_txt_found", None) if manifest_obj else manifest.get("robots_txt_found")
     sitemap_found = getattr(manifest_obj, "sitemap_found", None) if manifest_obj else manifest.get("sitemap_found")
@@ -699,21 +699,26 @@ def _build_ch_geo(report: Any, manifest: Dict[str, Any]) -> str:
             score_ext = getattr(geo_cat, "score", None)
 
     score_disp = f"{float(score_ext):.0f}" if score_ext is not None else "NOT MEASURED"
-    grade = "A" if score_ext and score_ext >= 85 else ("B" if score_ext and score_ext >= 70 else ("C" if score_ext and score_ext >= 50 else "D"))
+    grade = ("A" if score_ext >= 85 else ("B" if score_ext >= 70 else ("C" if score_ext >= 50 else "D"))) if score_ext is not None else "N/A"
 
-    q_total = int(getattr(geo, "questions_total", 0) or 0)
-    q_supp = int(getattr(geo, "questions_supported", 0) or 0)
-    if q_total == 0:
-        q_total = 6
-        q_supp = sum(1 for q in (getattr(geo, "questions", []) or []) if getattr(q, "status", "") == "SUPPORTED")
+    q_list = getattr(geo, "questions", []) or []
+    q_total = int(getattr(geo, "questions_total", 0) or len(q_list))
+    q_supp = int(getattr(geo, "questions_supported", 0) or sum(1 for q in q_list if str(getattr(q, "status", "")).upper() in ("SUPPORTED", "PASS")))
 
     per_engine = getattr(report, "per_engine_geo", None)
     bots = getattr(per_engine, "ai_bot_directives", None) if per_engine else None
     bots_measured = bool(getattr(bots, "robots_measured", False)) if bots else False
-    gpt_status = ("ALLOWED" if getattr(bots, "gptbot_allowed", True) else "BLOCKED") if bots_measured else "NOT AUDITED"
-    perp_status = ("ALLOWED" if getattr(bots, "perplexitybot_allowed", True) else "BLOCKED") if bots_measured else "NOT AUDITED"
-    claude_status = ("ALLOWED" if getattr(bots, "claudebot_allowed", True) else "BLOCKED") if bots_measured else "NOT AUDITED"
-    gext_status = ("ALLOWED" if getattr(bots, "google_extended_allowed", True) else "BLOCKED") if bots_measured else "NOT AUDITED"
+    def _bot_state(attr: str) -> str:
+        if not bots_measured or bots is None:
+            return "NOT AUDITED"
+        val = getattr(bots, attr, None)
+        if val is None:
+            return "NOT AUDITED"
+        return "ALLOWED" if val else "BLOCKED"
+    gpt_status = _bot_state("gptbot_allowed")
+    perp_status = _bot_state("perplexitybot_allowed")
+    claude_status = _bot_state("claudebot_allowed")
+    gext_status = _bot_state("google_extended_allowed")
 
     v_card = getattr(report, "ai_visibility_scorecard", None)
     vis_status = getattr(v_card, "status", "NOT_MEASURED") if v_card else "NOT_MEASURED"
@@ -756,11 +761,11 @@ def _build_ch_geo(report: Any, manifest: Dict[str, Any]) -> str:
                 summary = str(getattr(found_dim, "summary", fallback_desc))
                 score_num = getattr(found_dim, "score", None)
             else:
-                band = "PASS" if score_ext and score_ext >= 75 else "MODERATE"
-                summary = fallback_desc
+                band = ("PASS" if score_ext >= 75 else "MODERATE") if score_ext is not None else "NOT MEASURED"
+                summary = fallback_desc if score_ext is not None else "Dimension not individually scored in this run."
                 score_num = score_ext
 
-        band_color = "#10b981" if band in ("HIGH", "PASS") else ("#f59e0b" if band in ("PARTIAL", "MODERATE") else "#ef4444")
+        band_color = "#10b981" if band in ("HIGH", "PASS") else ("#f59e0b" if band in ("PARTIAL", "MODERATE") else ("#64748b" if band == "NOT MEASURED" else "#ef4444"))
         score_badge = f'<span style="font-family:monospace;font-size:8pt;font-weight:700;color:{band_color};border:1px solid {band_color}40;padding:2px 6px;border-radius:4px;background:{band_color}10;">{band}</span>'
 
         dim_cards_html.append(
@@ -794,7 +799,7 @@ def _build_ch_geo(report: Any, manifest: Dict[str, Any]) -> str:
             )
     else:
         question_rows_html.append(
-            '<tr style="font-size:8pt;"><td colspan="4" style="padding:8px;color:#64748b;font-style:italic;">Evaluated against canonical commercial question graph. Direct definition answers present in crawled AST.</td></tr>'
+            '<tr style="font-size:8pt;"><td colspan="4" style="padding:8px;color:#64748b;font-style:italic;">No commercial buyer question battery records were evaluated in this run.</td></tr>'
         )
 
     # 3. Factual Attribution Rewrites (Before vs After)
@@ -913,19 +918,19 @@ def _build_ch_geo(report: Any, manifest: Dict[str, Any]) -> str:
                 <tr style="border-bottom: 1px solid #e2e8f0;">
                     <td style="padding: 6px 8px; font-weight: 600;">GPTBot</td>
                     <td style="padding: 6px 8px; color: #475569;">OpenAI (ChatGPT Search &amp; Training)</td>
-                    <td style="padding: 6px 8px; text-align: center; font-family: monospace; font-weight: 700; color: {'#10b981' if gpt_status == 'ALLOWED' else '#ef4444'};">{gpt_status}</td>
+                    <td style="padding: 6px 8px; text-align: center; font-family: monospace; font-weight: 700; color: {'#10b981' if gpt_status == 'ALLOWED' else ('#64748b' if gpt_status == 'NOT AUDITED' else '#ef4444')};">{gpt_status}</td>
                     <td style="padding: 6px 8px; color: #334155;">Allow explicitly in robots.txt to qualify for ChatGPT web citations.</td>
                 </tr>
                 <tr style="border-bottom: 1px solid #e2e8f0;">
                     <td style="padding: 6px 8px; font-weight: 600;">PerplexityBot</td>
                     <td style="padding: 6px 8px; color: #475569;">Perplexity AI Search Engine</td>
-                    <td style="padding: 6px 8px; text-align: center; font-family: monospace; font-weight: 700; color: {'#10b981' if perp_status == 'ALLOWED' else '#ef4444'};">{perp_status}</td>
+                    <td style="padding: 6px 8px; text-align: center; font-family: monospace; font-weight: 700; color: {'#10b981' if perp_status == 'ALLOWED' else ('#64748b' if perp_status == 'NOT AUDITED' else '#ef4444')};">{perp_status}</td>
                     <td style="padding: 6px 8px; color: #334155;">Allow indexing and position definition blocks within top 150 words.</td>
                 </tr>
                 <tr style="border-bottom: 1px solid #e2e8f0;">
                     <td style="padding: 6px 8px; font-weight: 600;">ClaudeBot</td>
                     <td style="padding: 6px 8px; color: #475569;">Anthropic Claude Retrieval</td>
-                    <td style="padding: 6px 8px; text-align: center; font-family: monospace; font-weight: 700; color: {'#10b981' if claude_status == 'ALLOWED' else '#ef4444'};">{claude_status}</td>
+                    <td style="padding: 6px 8px; text-align: center; font-family: monospace; font-weight: 700; color: {'#10b981' if claude_status == 'ALLOWED' else ('#64748b' if claude_status == 'NOT AUDITED' else '#ef4444')};">{claude_status}</td>
                     <td style="padding: 6px 8px; color: #334155;">Allow crawler to ensure retrieval models ground answers in factual copy.</td>
                 </tr>
                 <tr>
@@ -1208,8 +1213,8 @@ def _build_ch_aeo_questions(report: Any, manifest: Dict[str, Any]) -> str:
     )
 
     questions = getattr(geo, "questions", []) or []
-    q_total = len(questions) if questions else 6
-    q_supp = sum(1 for q in questions if str(getattr(q, "status", "")).upper() in ("SUPPORTED", "PASS")) if questions else 4
+    q_total = len(questions)
+    q_supp = sum(1 for q in questions if str(getattr(q, "status", "")).upper() in ("SUPPORTED", "PASS"))
 
     rows = []
     if questions:
@@ -1227,22 +1232,11 @@ def _build_ch_aeo_questions(report: Any, manifest: Dict[str, Any]) -> str:
             </tr>
             """)
     else:
-        clusters = [
-            ("Identity & Classification", "What is the core offering and entity classification of this organization?", "SUPPORTED", "Direct corporate definition detected in AST."),
-            ("Target Audience & ICP", "Who is the ideal customer profile and enterprise buyer persona?", "SUPPORTED", "Audience segments and persona use cases articulated on-page."),
-            ("Pricing & Commercials", "What is the commercial pricing tier, licensing model, or entry fee?", "PARTIAL", "Plan tiers listed; custom enterprise quotation required."),
-            ("Capabilities & Features", "What technical integrations and core capabilities are supported?", "SUPPORTED", "Feature taxonomy and integration directory present."),
-            ("Security & Compliance", "What security credentials, SOC2, or data privacy safeguards exist?", "PARTIAL", "Security overview present; formal certification attestations linked."),
-        ]
-        for cat, query, st, snip in clusters:
-            rows.append(f"""
-            <tr style="border-bottom:1px solid #e2e8f0;font-size:7.5pt;">
-                <td style="padding:6px 8px;font-weight:600;color:#0f172a;">{cat}</td>
-                <td style="padding:6px 8px;color:#334155;">{query}</td>
-                <td style="padding:6px 8px;text-align:center;"><span style="font-family:monospace;font-weight:700;color:{'#15803d' if st == 'SUPPORTED' else '#b45309'};background:{'#dcfce7' if st == 'SUPPORTED' else '#fef3c7'};padding:2px 6px;border-radius:2px;">{st}</span></td>
-                <td style="padding:6px 8px;color:#475569;">{snip}</td>
-            </tr>
-            """)
+        rows.append(
+            '<tr style="font-size:7.5pt;"><td colspan="4" style="padding:8px;color:#64748b;font-style:italic;">No commercial question battery was evaluated for this run.</td></tr>'
+        )
+
+    amb_defense = "HIGH" if (q_total > 0 and q_supp == q_total) else ("MODERATE" if q_total > 0 and q_supp > 0 else ("LOW" if q_total > 0 else "NOT MEASURED"))
 
     return f"""
     {callout}
@@ -1250,17 +1244,17 @@ def _build_ch_aeo_questions(report: Any, manifest: Dict[str, Any]) -> str:
     <div class="grid-3" style="margin-bottom: 14px;">
         <div class="card">
             <div class="card-kicker">01 // QUERY UNIVERSE SIZE</div>
-            <div style="font-size: 20pt; font-weight: 800; color: #0f172a; margin: 4px 0;">{q_total} Intent Clusters</div>
+            <div style="font-size: 20pt; font-weight: 800; color: #0f172a; margin: 4px 0;">{f'{q_total} Intent Clusters' if q_total > 0 else 'NOT MEASURED'}</div>
             <p style="font-size: 7.5pt; color: #475569; margin: 0;">Buyer search queries mapped across corporate identity, pricing, and architecture.</p>
         </div>
         <div class="card">
             <div class="card-kicker">02 // DIRECT PASSAGE COVERAGE</div>
-            <div style="font-size: 20pt; font-weight: 800; color: #0f172a; margin: 4px 0;">{q_supp}/{q_total} Resolved</div>
+            <div style="font-size: 20pt; font-weight: 800; color: #0f172a; margin: 4px 0;">{f'{q_supp}/{q_total} Resolved' if q_total > 0 else 'NOT MEASURED'}</div>
             <p style="font-size: 7.5pt; color: #475569; margin: 0;">Inquiries with self-contained answers directly extractable from primary AST nodes.</p>
         </div>
         <div class="card">
             <div class="card-kicker">03 // AMBIGUITY DEFENSE</div>
-            <div style="font-size: 20pt; font-weight: 800; color: #0f172a; margin: 4px 0;">HIGH</div>
+            <div style="font-size: 20pt; font-weight: 800; color: #0f172a; margin: 4px 0;">{amb_defense}</div>
             <p style="font-size: 7.5pt; color: #475569; margin: 0;">Unambiguous subject naming protects against RAG retrieval confusion.</p>
         </div>
     </div>
@@ -1294,12 +1288,20 @@ def _build_ch_aeo_definitions(report: Any, manifest: Dict[str, Any]) -> str:
     passage_rows = []
     for p in pages[:8]:
         url = getattr(p, "url", "Unknown route")
-        h1s = getattr(p, "h1_tags", []) or []
-        h1_text = _esc(h1s[0]) if h1s else _esc(getattr(p, "title", "Core Section"))
-        wc = getattr(p, "word_count", 0) or 0
-        has_lead = wc > 150
-        status_badge = '<span style="font-family:monospace;font-weight:700;color:#15803d;background:#dcfce7;padding:2px 6px;border-radius:2px;">OPTIMAL</span>' if has_lead else '<span style="font-family:monospace;font-weight:700;color:#b45309;background:#fef3c7;padding:2px 6px;border-radius:2px;">DILUTED</span>'
-        note = "Self-contained introductory prose suitable for direct citation." if has_lead else "Introductory prose contains marketing slogans or missing declarative subject."
+        h1s = getattr(p, "h1", None) or getattr(p, "h1_tags", None) or []
+        h1_text = _esc(h1s[0]) if isinstance(h1s, list) and h1s else _esc(getattr(p, "title", "Core Section"))
+        wc = getattr(p, "word_count", None)
+        if wc is None and getattr(p, "ux", None) is not None:
+            wc = getattr(p.ux, "word_count", None)
+        if wc is None:
+            status_badge = '<span style="font-family:monospace;font-weight:700;color:#64748b;background:#f1f5f9;padding:2px 6px;border-radius:2px;">UNMEASURED</span>'
+            note = "Word count not captured for this route."
+        elif wc > 150:
+            status_badge = '<span style="font-family:monospace;font-weight:700;color:#15803d;background:#dcfce7;padding:2px 6px;border-radius:2px;">OPTIMAL</span>'
+            note = "Self-contained introductory prose suitable for direct citation."
+        else:
+            status_badge = '<span style="font-family:monospace;font-weight:700;color:#b45309;background:#fef3c7;padding:2px 6px;border-radius:2px;">DILUTED</span>'
+            note = "Low word count (<150 words); introductory prose may lack declarative depth."
         passage_rows.append(f"""
         <tr style="border-bottom:1px solid #e2e8f0;font-size:7.5pt;">
             <td style="padding:6px 8px;font-family:monospace;font-size:7pt;word-break:break-all;">{_esc(url)}</td>
@@ -1435,11 +1437,31 @@ def _build_ch_aeo_visibility(report: Any, manifest: Dict[str, Any]) -> str:
         generate_section_explanation("ch_aeo_visibility", "Observed AI Answer Engine Visibility & Citations", report, findings)
     )
 
+    per_engine_geo = getattr(report, "per_engine_geo", None)
+    engine_profiles = getattr(per_engine_geo, "engines", None) or getattr(per_engine_geo, "engine_scores", None) or []
+    engine_by_name = {
+        str(getattr(ep, "engine", None) or getattr(ep, "name", "") or "").lower(): ep
+        for ep in (engine_profiles if isinstance(engine_profiles, list) else [])
+    }
+
+    def _eng_row(name: str, model: str, role: str) -> tuple[str, str, str, str, str]:
+        ep = next((v for k, v in engine_by_name.items() if name.split()[0].lower() in k), None)
+        if ep is not None:
+            ep_status = str(getattr(ep, "status", "MEASURED")).upper()
+            ep_rate = getattr(ep, "citation_rate_pct", None)
+            if ep_rate is None:
+                ep_score = getattr(ep, "readiness_score", getattr(ep, "score", None))
+                rate_str = f"{float(ep_score):.0f}/100" if ep_score is not None else "Unmeasured"
+            else:
+                rate_str = f"{float(ep_rate):.0f}%"
+            return (name, model, ep_status, rate_str, role)
+        return (name, model, "NOT_MEASURED", "Unmeasured", role)
+
     ENGINES = [
-        ("ChatGPT Search", "OpenAI GPT-4o Retrieval", vis_status, f"{cit_rate:.0f}%" if cit_rate is not None else "Unmeasured", "Direct URL citations in response synthesis."),
-        ("Perplexity AI", "Perplexity Online Pro", vis_status, f"{cit_rate:.0f}%" if cit_rate is not None else "Unmeasured", "Numbered reference pills and source card ranking."),
-        ("Google Gemini", "Gemini 1.5 Search Grounding", "NOT_MEASURED", "Unmeasured", "AI Overview cards and organic search link carousel."),
-        ("Claude", "Anthropic Claude 3.5 Sonnet", "NOT_MEASURED", "Unmeasured", "Knowledge base grounding and retrieval eligibility."),
+        _eng_row("ChatGPT Search", "OpenAI Retrieval", "Direct URL citations in response synthesis."),
+        _eng_row("Perplexity AI", "Perplexity Online", "Numbered reference pills and source card ranking."),
+        _eng_row("Google Gemini", "Gemini Search Grounding", "AI Overview cards and organic search link carousel."),
+        _eng_row("Claude", "Anthropic Claude Retrieval", "Knowledge base grounding and retrieval eligibility."),
     ]
 
     engine_rows = []
@@ -1500,7 +1522,7 @@ def _build_ch_geo_extractability(report: Any, manifest: Dict[str, Any]) -> str:
             score_ext = getattr(geo_cat, "score", None)
 
     score_disp = f"{float(score_ext):.0f}" if score_ext is not None else "NOT MEASURED"
-    grade = "A" if score_ext and score_ext >= 85 else ("B" if score_ext and score_ext >= 70 else ("C" if score_ext and score_ext >= 50 else "D"))
+    grade = ("A" if score_ext >= 85 else ("B" if score_ext >= 70 else ("C" if score_ext >= 50 else "D"))) if score_ext is not None else "N/A"
 
     findings = [f for f in _report_findings(report) if "GEO" in str(getattr(f, "category", "")).upper()]
     callout = render_section_business_callout(
@@ -1533,10 +1555,10 @@ def _build_ch_geo_extractability(report: Any, manifest: Dict[str, Any]) -> str:
                 band = str(getattr(found_dim, "band", "MODERATE")).upper()
                 summary = str(getattr(found_dim, "summary", fallback_desc))
             else:
-                band = "PASS" if score_ext and score_ext >= 75 else "MODERATE"
-                summary = fallback_desc
+                band = ("PASS" if score_ext >= 75 else "MODERATE") if score_ext is not None else "NOT MEASURED"
+                summary = fallback_desc if score_ext is not None else "Dimension not individually scored in this run."
 
-        band_color = "#15803d" if band in ("HIGH", "PASS") else ("#b45309" if band in ("PARTIAL", "MODERATE") else "#b91c1c")
+        band_color = "#15803d" if band in ("HIGH", "PASS") else ("#b45309" if band in ("PARTIAL", "MODERATE") else ("#64748b" if band == "NOT MEASURED" else "#b91c1c"))
         score_badge = f'<span style="font-family:monospace;font-size:7.5pt;font-weight:700;color:{band_color};border:1px solid {band_color}40;padding:2px 6px;border-radius:2px;background:{band_color}10;">{band}</span>'
 
         dim_cards_html.append(
@@ -1555,7 +1577,7 @@ def _build_ch_geo_extractability(report: Any, manifest: Dict[str, Any]) -> str:
     <div class="grid-2" style="margin-bottom: 14px;">
         <div class="card">
             <div class="card-kicker">01 // EXTRACTABILITY COMPOSITE SCORE</div>
-            <div style="font-size: 22pt; font-weight: 800; color: #0f172a; margin: 4px 0;">{score_disp}<span style="font-size: 11pt; color: #64748b; font-weight: 400;">/100 (Grade {grade})</span></div>
+            <div style="font-size: 22pt; font-weight: 800; color: #0f172a; margin: 4px 0;">{score_disp}<span style="font-size: 11pt; color: #64748b; font-weight: 400;">{f'/100 (Grade {grade})' if score_ext is not None else ''}</span></div>
             <p style="font-size: 7.5pt; color: #475569; margin: 0;">Deterministic evaluation of first-party DOM extractability across 8 dimensions.</p>
         </div>
         <div class="card">
@@ -1604,25 +1626,9 @@ def _build_ch_geo_inquiries(report: Any, manifest: Dict[str, Any]) -> str:
                 f'</tr>'
             )
     else:
-        inquiry_templates = [
-            ("Core Identity", "What does the organization do and what category does it lead?", "SUPPORTED", "Direct corporate definition detected in root AST nodes."),
-            ("Target Audience", "Who is the ideal enterprise buyer and customer persona?", "SUPPORTED", "Customer persona segments articulated in solutions navigation."),
-            ("Pricing Model", "What is the commercial pricing structure or subscription fee?", "PARTIAL", "Plan tiers outlined; enterprise license requires quotation."),
-            ("Key Differentiators", "Why choose this offering over alternatives?", "SUPPORTED", "Comparative capability matrix present in product specifications."),
-            ("Implementation", "What is the typical time-to-value and deployment timeline?", "PARTIAL", "Overview of deployment architecture available in documentation."),
-            ("Enterprise Security", "What compliance credentials and security standards are met?", "SUPPORTED", "Dedicated trust and compliance disclosures linked in footer."),
-        ]
-        for cat, q_text, status, snippet in inquiry_templates:
-            st_color = "#15803d" if status == "SUPPORTED" else "#b45309"
-            st_badge = f'<span style="font-family:monospace;font-size:7pt;font-weight:700;color:{st_color};background:{st_color}10;border:1px solid {st_color}40;padding:2px 6px;border-radius:2px;">{status}</span>'
-            question_rows_html.append(
-                f'<tr style="border-bottom:1px solid #e2e8f0;font-size:7.5pt;">'
-                f'  <td style="padding:6px 8px;font-weight:600;color:#0f172a;">{cat}</td>'
-                f'  <td style="padding:6px 8px;color:#334155;">{q_text}</td>'
-                f'  <td style="padding:6px 8px;text-align:center;">{st_badge}</td>'
-                f'  <td style="padding:6px 8px;color:#475569;">{snippet}</td>'
-                f'</tr>'
-            )
+        question_rows_html.append(
+            '<tr style="font-size:7.5pt;"><td colspan="4" style="padding:8px;color:#64748b;font-style:italic;">No commercial buyer inquiry battery records were evaluated in this run.</td></tr>'
+        )
 
     return f"""
     {callout}
@@ -1652,9 +1658,19 @@ def _build_ch_geo_crawlers(report: Any, manifest: Dict[str, Any]) -> str:
     per_engine = getattr(report, "per_engine_geo", None)
     bots = getattr(per_engine, "ai_bot_directives", None) if per_engine else None
     bots_measured = bool(getattr(bots, "robots_measured", False)) if bots else False
-    gpt_status = ("ALLOWED" if getattr(bots, "gptbot_allowed", True) else "BLOCKED") if bots_measured else "NOT AUDITED"
-    perp_status = ("ALLOWED" if getattr(bots, "perplexitybot_allowed", True) else "BLOCKED") if bots_measured else "NOT AUDITED"
-    claude_status = ("ALLOWED" if getattr(bots, "claudebot_allowed", True) else "BLOCKED") if bots_measured else "NOT AUDITED"
+    def _bot_state(attr: str) -> str:
+        if not bots_measured or bots is None:
+            return "NOT AUDITED"
+        val = getattr(bots, attr, None)
+        if val is None:
+            return "NOT AUDITED"
+        return "ALLOWED" if val else "BLOCKED"
+    gpt_status = _bot_state("gptbot_allowed")
+    perp_status = _bot_state("perplexitybot_allowed")
+    claude_status = _bot_state("claudebot_allowed")
+    gext_status = _bot_state("google_extended_allowed")
+    def _bot_color(st: str) -> str:
+        return "#15803d" if st == "ALLOWED" else ("#64748b" if st == "NOT AUDITED" else "#b91c1c")
 
     findings = [f for f in _report_findings(report) if "BOT" in str(getattr(f, "category", "")).upper() or "ROBOTS" in str(getattr(f, "category", "")).upper() or "CRAWL" in str(getattr(f, "category", "")).upper()]
     callout = render_section_business_callout(
@@ -1675,25 +1691,25 @@ def _build_ch_geo_crawlers(report: Any, manifest: Dict[str, Any]) -> str:
                     <tr>
                         <td style="font-weight:600;">GPTBot</td>
                         <td style="color:#475569;">OpenAI (ChatGPT Search &amp; Training)</td>
-                        <td style="text-align:center; font-family:monospace; font-weight:700; color:{'#15803d' if gpt_status == 'ALLOWED' else '#b91c1c'};">{gpt_status}</td>
+                        <td style="text-align:center; font-family:monospace; font-weight:700; color:{_bot_color(gpt_status)};">{gpt_status}</td>
                         <td style="color:#334155;">Explicitly allow in robots.txt to qualify for ChatGPT web citations.</td>
                     </tr>
                     <tr>
                         <td style="font-weight:600;">PerplexityBot</td>
                         <td style="color:#475569;">Perplexity AI Search Engine</td>
-                        <td style="text-align:center; font-family:monospace; font-weight:700; color:{'#15803d' if perp_status == 'ALLOWED' else '#b91c1c'};">{perp_status}</td>
-                        <td style="color:#334155;">Allow indexing and place 40-60 word definition passages near top of page.</td>
+                        <td style="text-align:center; font-family:monospace; font-weight:700; color:{_bot_color(perp_status)};">{perp_status}</td>
+                        <td style="color:#334155;">Allow indexing and position definition blocks within top 150 words.</td>
                     </tr>
                     <tr>
                         <td style="font-weight:600;">ClaudeBot</td>
                         <td style="color:#475569;">Anthropic Claude Retrieval</td>
-                        <td style="text-align:center; font-family:monospace; font-weight:700; color:{'#15803d' if claude_status == 'ALLOWED' else '#b91c1c'};">{claude_status}</td>
+                        <td style="text-align:center; font-family:monospace; font-weight:700; color:{_bot_color(claude_status)};">{claude_status}</td>
                         <td style="color:#334155;">Ensure clean markdown extraction without client-side rendering bottlenecks.</td>
                     </tr>
                     <tr>
                         <td style="font-weight:600;">Google-Extended</td>
                         <td style="color:#475569;">Google Gemini Training / Grounding</td>
-                        <td style="text-align:center; font-family:monospace; font-weight:700; color:#15803d;">ALLOWED</td>
+                        <td style="text-align:center; font-family:monospace; font-weight:700; color:{_bot_color(gext_status)};">{gext_status}</td>
                         <td style="color:#334155;">Permit access to support AI Overview citations in Google Search.</td>
                     </tr>
                 </tbody>
@@ -1757,21 +1773,11 @@ def _build_ch_geo_rewrites(report: Any, manifest: Dict[str, Any]) -> str:
                 f'</div>'
             )
     else:
-        rewrites_html.append(f"""
-        <div class="card" style="margin-bottom:8px;padding:10px 14px;break-inside:avoid;background:#f8fafc;">
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
-                <div style="background:#fff1f2;border:1px solid #fecdd3;padding:8px 10px;border-radius:4px;">
-                    <span style="font-family:monospace;font-size:7pt;font-weight:700;color:#b91c1c;display:block;margin-bottom:3px;">OBSERVED UNCITED PROSE (AMBIGUOUS):</span>
-                    <p style="font-size:7.5pt;font-style:italic;color:#334155;margin:0;line-height:1.4;">"Our cutting-edge platform empowers modern enterprises with next-generation automated intelligence across workflows."</p>
-                </div>
-                <div style="background:#f0fdf4;border:1px solid #bbf7d0;padding:8px 10px;border-radius:4px;">
-                    <span style="font-family:monospace;font-size:7pt;font-weight:700;color:#15803d;display:block;margin-bottom:3px;">PRESCRIPTIVE ATTRIBUTED REWRITE (CITABLE):</span>
-                    <p style="font-size:7.5pt;font-weight:600;color:#0f172a;margin:0;line-height:1.4;">"{_esc(manifest['brand_name'])} is an enterprise website intelligence system that performs automated audits across SEO, GEO, and CRO telemetry."</p>
-                </div>
-            </div>
-            <div style="font-size:7.5pt;color:#64748b;margin-top:6px;"><strong>Extraction Benefit:</strong> Replaces ambiguous marketing superlatives with explicit entity subject nouns and deterministic capability definitions.</div>
-        </div>
-        """)
+        rewrites_html.append(
+            '<div class="card" style="padding:10px 14px;background:#f8fafc;color:#64748b;font-size:8pt;font-style:italic;">'
+            'No passage rewrite recommendations were generated for this run.'
+            '</div>'
+        )
 
     return f"""
     {callout}
@@ -1834,23 +1840,35 @@ def _build_ch_cro_value_prop(report: Any, manifest: Dict[str, Any]) -> str:
 
     table_body = "".join(vp_rows) or '<tr><td colspan="4" style="padding:8px;color:#64748b;">No individual page metadata records recorded for this run.</td></tr>'
 
+    cro_audit = getattr(report, "cro_audit", None)
+    ux_score = None
+    if getattr(report, "scores", None) and getattr(report.scores, "category_scores", None):
+        ux_cat = report.scores.category_scores.get("UX_CONVERSION")
+        if ux_cat is not None:
+            ux_score = getattr(ux_cat, "score", None)
+    comp_disp = f"{float(ux_score):.0f}/100" if ux_score is not None else "NOT MEASURED"
+    align_disp = getattr(cro_audit, "h1_meta_alignment", None) if cro_audit else None
+    align_disp = str(align_disp).upper() if align_disp else ("MEASURED" if vp_rows else "NOT MEASURED")
+    fric_disp = getattr(cro_audit, "cognitive_friction", None) if cro_audit else None
+    fric_disp = str(fric_disp).upper() if fric_disp else ("LOW" if (ux_score is not None and ux_score >= 80) else ("HIGH" if (ux_score is not None and ux_score < 60) else ("MODERATE" if ux_score is not None else "NOT MEASURED")))
+
     return f"""
     {callout}
 
     <div class="grid-3" style="margin-bottom: 14px;">
         <div class="card">
-            <div class="card-kicker">01 // 5-SECOND COMPREHENSION</div>
-            <div style="font-size: 20pt; font-weight: 800; color: #0f172a; margin: 4px 0;">82% Score</div>
+            <div class="card-kicker">01 // UX &amp; COMPREHENSION SCORE</div>
+            <div style="font-size: 20pt; font-weight: 800; color: #0f172a; margin: 4px 0;">{comp_disp}</div>
             <p style="font-size: 7.5pt; color: #475569; margin: 0;">Evaluation of hero headline specificity and immediate buyer clarity.</p>
         </div>
         <div class="card">
             <div class="card-kicker">02 // H1-TO-META ALIGNMENT</div>
-            <div style="font-size: 20pt; font-weight: 800; color: #0f172a; margin: 4px 0;">STRONG</div>
+            <div style="font-size: 20pt; font-weight: 800; color: #0f172a; margin: 4px 0;">{align_disp}</div>
             <p style="font-size: 7.5pt; color: #475569; margin: 0;">Harmonization between search snippet promise and landing page hero text.</p>
         </div>
         <div class="card">
             <div class="card-kicker">03 // COGNITIVE FRICTION</div>
-            <div style="font-size: 20pt; font-weight: 800; color: #0f172a; margin: 4px 0;">LOW</div>
+            <div style="font-size: 20pt; font-weight: 800; color: #0f172a; margin: 4px 0;">{fric_disp}</div>
             <p style="font-size: 7.5pt; color: #475569; margin: 0;">Direct, uncluttered value propositions minimize user bounce propensity.</p>
         </div>
     </div>
@@ -1878,30 +1896,37 @@ def _build_ch_cro_cta(report: Any, manifest: Dict[str, Any]) -> str:
     pages = getattr(manifest_obj, "pages", []) or getattr(report, "page_reports", []) or []
     cro_audit = getattr(report, "cro_audit", None)
     cta_label = getattr(cro_audit, "primary_cta_text", None) if cro_audit else None
-    cta_display = f'"{_esc(cta_label)}"' if cta_label else "Get Started / Contact"
+    cta_display = f'"{_esc(cta_label)}"' if cta_label else "NOT MEASURED"
 
     findings = [f for f in _report_findings(report) if any(k in str(getattr(f, "category", "")).upper() for k in ("CTA", "CRO", "CONV", "ACTION", "BUTTON"))]
     callout = render_section_business_callout(
         generate_section_explanation("ch_cro_cta", "Call-to-Action (CTA) Hierarchy & Friction Audit", report, findings)
     )
 
-    cta_rows = [
-        ("Homepage Hero", cta_display, "Primary Commercial Action", "HIGH INTENT", "Above the fold; clear visual contrast."),
-        ("Navigation Header", "Book a Demo", "Sticky Persistent CTA", "HIGH INTENT", "Maintains continuous conversion access."),
-        ("Product Section", "Explore Features", "Secondary Discovery CTA", "EXPLORATORY", "Supports mid-funnel buyer research."),
-        ("Footer Anchor", "Start Free Trial", "Terminal Action Anchor", "HIGH INTENT", "Captures end-of-page reading completion."),
-    ]
-
-    cta_cards_html = "".join(
-        f'<tr style="border-bottom:1px solid #e2e8f0;font-size:7.5pt;">'
-        f'  <td style="padding:6px 8px;font-weight:600;color:#0f172a;">{loc}</td>'
-        f'  <td style="padding:6px 8px;font-weight:700;color:#1e3a8a;">{btn}</td>'
-        f'  <td style="padding:6px 8px;color:#334155;">{role}</td>'
-        f'  <td style="padding:6px 8px;text-align:center;"><span style="font-family:monospace;font-size:7pt;font-weight:700;color:#15803d;background:#dcfce7;padding:2px 6px;border-radius:2px;">{tier}</span></td>'
-        f'  <td style="padding:6px 8px;color:#475569;">{rec}</td>'
-        f'</tr>'
-        for loc, btn, role, tier, rec in cta_rows
-    )
+    observed_ctas = getattr(cro_audit, "ctas", None) or getattr(cro_audit, "cta_inventory", None) or []
+    if observed_ctas:
+        cta_cards_html = "".join(
+            f'<tr style="border-bottom:1px solid #e2e8f0;font-size:7.5pt;">'
+            f'  <td style="padding:6px 8px;font-weight:600;color:#0f172a;">{_esc(str(getattr(c, "location", "Page DOM")))}</td>'
+            f'  <td style="padding:6px 8px;font-weight:700;color:#1e3a8a;">{_esc(str(getattr(c, "text", getattr(c, "label", "—"))))}</td>'
+            f'  <td style="padding:6px 8px;color:#334155;">{_esc(str(getattr(c, "role", "Conversion Trigger")))}</td>'
+            f'  <td style="padding:6px 8px;text-align:center;"><span style="font-family:monospace;font-size:7pt;font-weight:700;color:#15803d;background:#dcfce7;padding:2px 6px;border-radius:2px;">{_esc(str(getattr(c, "intent_tier", "DETECTED")).upper())}</span></td>'
+            f'  <td style="padding:6px 8px;color:#475569;">{_esc(str(getattr(c, "assessment", "Observed in crawled DOM.")))}</td>'
+            f'</tr>'
+            for c in observed_ctas[:8]
+        )
+    elif cta_label:
+        cta_cards_html = (
+            f'<tr style="border-bottom:1px solid #e2e8f0;font-size:7.5pt;">'
+            f'  <td style="padding:6px 8px;font-weight:600;color:#0f172a;">Primary Page CTA</td>'
+            f'  <td style="padding:6px 8px;font-weight:700;color:#1e3a8a;">{cta_display}</td>'
+            f'  <td style="padding:6px 8px;color:#334155;">Primary Commercial Action</td>'
+            f'  <td style="padding:6px 8px;text-align:center;"><span style="font-family:monospace;font-size:7pt;font-weight:700;color:#15803d;background:#dcfce7;padding:2px 6px;border-radius:2px;">DETECTED</span></td>'
+            f'  <td style="padding:6px 8px;color:#475569;">Extracted from crawled DOM.</td>'
+            f'</tr>'
+        )
+    else:
+        cta_cards_html = '<tr><td colspan="5" style="padding:8px;color:#64748b;font-style:italic;font-size:7.5pt;">No individual CTA inventory records were captured in this run.</td></tr>'
 
     return f"""
     {callout}
@@ -1945,41 +1970,45 @@ def _build_ch_cro_forms(report: Any, manifest: Dict[str, Any]) -> str:
         generate_section_explanation("ch_cro_forms", "Form Optimization, Inputs & Interactive Usability", report, findings)
     )
 
-    form_rows = [
-        ("Demo Request / Contact", "4 Fields", "OPTIMAL", "Name, Work Email, Company, Use Case.", "Low friction; suitable for B2B qualified pipeline."),
-        ("Newsletter / Digest", "1 Field", "OPTIMAL", "Email Address only.", "Minimal friction; instantaneous submission."),
-        ("Enterprise Consultation", "5 Fields", "MODERATE", "Name, Email, Phone, Company Size, Budget.", "Ensure phone field is strictly marked optional to prevent bounce."),
-    ]
-
-    form_table_html = "".join(
-        f'<tr style="border-bottom:1px solid #e2e8f0;font-size:7.5pt;">'
-        f'  <td style="padding:6px 8px;font-weight:600;color:#0f172a;">{ft}</td>'
-        f'  <td style="padding:6px 8px;font-family:monospace;font-weight:700;">{fc}</td>'
-        f'  <td style="padding:6px 8px;text-align:center;"><span style="font-family:monospace;font-size:7pt;font-weight:700;color:{'#15803d' if st == 'OPTIMAL' else '#b45309'};background:{'#dcfce7' if st == 'OPTIMAL' else '#fef3c7'};padding:2px 6px;border-radius:2px;">{st}</span></td>'
-        f'  <td style="padding:6px 8px;color:#334155;">{fields}</td>'
-        f'  <td style="padding:6px 8px;color:#475569;">{rec}</td>'
-        f'</tr>'
-        for ft, fc, st, fields, rec in form_rows
-    )
+    actual_forms = getattr(form_audit, "forms", None) or [] if form_audit else []
+    if actual_forms:
+        form_table_html = "".join(
+            f'<tr style="border-bottom:1px solid #e2e8f0;font-size:7.5pt;">'
+            f'  <td style="padding:6px 8px;font-weight:600;color:#0f172a;">{_esc(str(getattr(fm, "action", None) or getattr(fm, "url", None) or f"Form #{idx}"))}</td>'
+            f'  <td style="padding:6px 8px;font-family:monospace;font-weight:700;">{getattr(fm, "field_count", "—")} Fields</td>'
+            f'  <td style="padding:6px 8px;text-align:center;"><span style="font-family:monospace;font-size:7pt;font-weight:700;color:#0f172a;background:#f1f5f9;padding:2px 6px;border-radius:2px;">AUDITED</span></td>'
+            f'  <td style="padding:6px 8px;color:#334155;">CTA: {_esc(str(getattr(fm, "cta_text", None) or "—"))}</td>'
+            f'  <td style="padding:6px 8px;color:#475569;">Accessible labels: {getattr(fm, "has_labels", "Unmeasured")}</td>'
+            f'</tr>'
+            for idx, fm in enumerate(actual_forms[:8], start=1)
+        )
+        avg_fields = f"{sum(int(getattr(fm, 'field_count', 0) or 0) for fm in actual_forms) / len(actual_forms):.1f} Avg"
+        labels_ok = "ACTIVE" if all(getattr(fm, "has_labels", False) for fm in actual_forms) else "PARTIAL"
+        forms_count_disp = f"{len(actual_forms)} Form(s)"
+    else:
+        form_table_html = '<tr><td colspan="5" style="padding:8px;color:#64748b;font-style:italic;font-size:7.5pt;">No interactive form audit records were captured in this run.</td></tr>'
+        avg_fields = "NOT MEASURED"
+        labels_ok = "NOT MEASURED"
+        forms_count_disp = "NOT MEASURED"
 
     return f"""
     {callout}
 
     <div class="grid-3" style="margin-bottom: 14px;">
         <div class="card">
-            <div class="card-kicker">01 // FIELD BURDEN STANDARD</div>
-            <div style="font-size: 20pt; font-weight: 800; color: #0f172a; margin: 4px 0;">3–5 Fields</div>
-            <p style="font-size: 7.5pt; color: #475569; margin: 0;">Industry benchmark for enterprise lead capture without completion degradation.</p>
+            <div class="card-kicker">01 // OBSERVED FIELD BURDEN</div>
+            <div style="font-size: 20pt; font-weight: 800; color: #0f172a; margin: 4px 0;">{avg_fields}</div>
+            <p style="font-size: 7.5pt; color: #475569; margin: 0;">Average input count across audited interactive forms (benchmark: 3–5 fields).</p>
         </div>
         <div class="card">
-            <div class="card-kicker">02 // MOBILE KEYBOARD ATTRS</div>
-            <div style="font-size: 20pt; font-weight: 800; color: #0f172a; margin: 4px 0;">ACTIVE</div>
-            <p style="font-size: 7.5pt; color: #475569; margin: 0;">type="email" and autocomplete="email" attributes active on input fields.</p>
+            <div class="card-kicker">02 // ACCESSIBLE LABELS</div>
+            <div style="font-size: 20pt; font-weight: 800; color: #0f172a; margin: 4px 0;">{labels_ok}</div>
+            <p style="font-size: 7.5pt; color: #475569; margin: 0;">Presence of explicit label/aria attributes on audited form inputs.</p>
         </div>
         <div class="card">
-            <div class="card-kicker">03 // INLINE VALIDATION</div>
-            <div style="font-size: 20pt; font-weight: 800; color: #0f172a; margin: 4px 0;">PRESENT</div>
-            <p style="font-size: 7.5pt; color: #475569; margin: 0;">Instantaneous error messaging upon field blur prevents form submit failure.</p>
+            <div class="card-kicker">03 // AUDITED FORM INSTANCES</div>
+            <div style="font-size: 20pt; font-weight: 800; color: #0f172a; margin: 4px 0;">{forms_count_disp}</div>
+            <p style="font-size: 7.5pt; color: #475569; margin: 0;">Total interactive forms inspected across crawled templates.</p>
         </div>
     </div>
 
@@ -2007,22 +2036,20 @@ def _build_ch_cro_trust(report: Any, manifest: Dict[str, Any]) -> str:
         generate_section_explanation("ch_cro_trust", "Trust Architecture, Credibility Signals & Risk Reversal", report, findings)
     )
 
-    trust_rows = [
-        ("Client Proof & Social Verification", "Customer Logos & Enterprise Case Studies", "DETECTED", "Demonstrates proven market adoption and industry peer validation."),
-        ("Data Security & Compliance Badges", "SOC2 Type II, ISO 27001, GDPR Attestations", "DETECTED", "Critical prerequisite for enterprise procurement clearance."),
-        ("Reassurance Microcopy Near CTAs", "No credit card required · Instant setup", "RECOMMENDED", "Lowers perceived barrier to initial product engagement."),
-        ("Privacy & Terms Transparency", "Unobtrusive footer links to active policies", "DETECTED", "Maintains statutory compliance and user privacy confidence."),
-    ]
-
-    trust_table_html = "".join(
-        f'<tr style="border-bottom:1px solid #e2e8f0;font-size:7.5pt;">'
-        f'  <td style="padding:6px 8px;font-weight:600;color:#0f172a;">{elem}</td>'
-        f'  <td style="padding:6px 8px;color:#334155;">{desc}</td>'
-        f'  <td style="padding:6px 8px;text-align:center;"><span style="font-family:monospace;font-size:7pt;font-weight:700;color:{'#15803d' if st == 'DETECTED' else '#b45309'};background:{'#dcfce7' if st == 'DETECTED' else '#fef3c7'};padding:2px 6px;border-radius:2px;">{st}</span></td>'
-        f'  <td style="padding:6px 8px;color:#475569;">{impact}</td>'
-        f'</tr>'
-        for elem, desc, st, impact in trust_rows
-    )
+    cro_audit = getattr(report, "cro_audit", None)
+    trust_signals = getattr(cro_audit, "trust_signals", None) or [] if cro_audit else []
+    if trust_signals:
+        trust_table_html = "".join(
+            f'<tr style="border-bottom:1px solid #e2e8f0;font-size:7.5pt;">'
+            f'  <td style="padding:6px 8px;font-weight:600;color:#0f172a;">{_esc(str(getattr(ts, "name", ts) if not isinstance(ts, dict) else ts.get("name", "Trust Signal")))}</td>'
+            f'  <td style="padding:6px 8px;color:#334155;">{_esc(str(getattr(ts, "detail", "") if not isinstance(ts, dict) else ts.get("detail", "")))}</td>'
+            f'  <td style="padding:6px 8px;text-align:center;"><span style="font-family:monospace;font-size:7pt;font-weight:700;color:#15803d;background:#dcfce7;padding:2px 6px;border-radius:2px;">DETECTED</span></td>'
+            f'  <td style="padding:6px 8px;color:#475569;">Observed in crawled DOM.</td>'
+            f'</tr>'
+            for ts in trust_signals[:8]
+        )
+    else:
+        trust_table_html = '<tr><td colspan="4" style="padding:8px;color:#64748b;font-style:italic;font-size:7.5pt;">No verified trust-signal inventory records were captured in this run.</td></tr>'
 
     return f"""
     {callout}

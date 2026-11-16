@@ -197,8 +197,6 @@ def test_search_console_authorize_uses_registered_google_redirect():
         "organization_name": "Search Org",
     })
     assert signup.status_code == 200, signup.text
-    login = secure_client.post("/api/v1/auth/login", json={"email": email, "password": "OwnerPass1"})
-    assert login.status_code == 200, login.text
     registered = "https://octaos.org/api/v1/external-authority/oauth/callback"
     with patch.object(settings, "GOOGLE_CLIENT_ID", "mock-google-id"), \
          patch.object(settings, "GOOGLE_CLIENT_SECRET", "mock-google-sec"), \
@@ -207,6 +205,8 @@ def test_search_console_authorize_uses_registered_google_redirect():
          patch.object(settings, "GOOGLE_OAUTH_REDIRECT_URI", registered), \
          patch.object(settings, "EXTERNAL_OAUTH_REDIRECT_URI", None), \
          patch.object(settings, "OAUTH_REDIRECT_URI", "https://octaos.org/api/v1/connectors/oauth/callback"):
+        login = secure_client.post("/api/v1/auth/login", json={"email": email, "password": "OwnerPass1"})
+        assert login.status_code == 200, login.text
         res = secure_client.get(
             "/api/v1/connectors/google/oauth/authorize?domain=example.com",
             follow_redirects=False,
@@ -306,8 +306,6 @@ def test_ga4_connector_oauth_hosted_redirect_and_connect():
         "organization_name": "GA4 Org",
     })
     assert signup.status_code == 200, signup.text
-    login = secure_client.post("/api/v1/auth/login", json={"email": email, "password": "OwnerPass1"})
-    assert login.status_code == 200, login.text
     org_id = signup.json()["user"]["org_id"]
 
     # 1. Authorize on a hosted domain with X-Forwarded-Host
@@ -318,6 +316,8 @@ def test_ga4_connector_oauth_hosted_redirect_and_connect():
          patch.object(settings, "GOOGLE_OAUTH_REDIRECT_URI", None), \
          patch.object(settings, "EXTERNAL_OAUTH_REDIRECT_URI", None), \
          patch.object(settings, "OAUTH_REDIRECT_URI", "http://localhost:8000/api/v1/connectors/oauth/callback"):
+        login = secure_client.post("/api/v1/auth/login", json={"email": email, "password": "OwnerPass1"})
+        assert login.status_code == 200, login.text
         res = secure_client.get(
             "/api/v1/connectors/oauth/google_analytics_4/authorize?domain=acme-store.com",
             headers={"Host": "hosted-app.dristik.ai", "X-Forwarded-Proto": "https"},
@@ -328,31 +328,29 @@ def test_ga4_connector_oauth_hosted_redirect_and_connect():
         assert "accounts.google.com/o/oauth2/v2/auth" in loc
         assert "https%3A%2F%2Fhosted-app.dristik.ai%2Fapi%2Fv1%2Fconnectors%2Foauth%2Fcallback" in loc
 
-    # 2. Callback completion
-    state = _sign({
-        "provider": "google_analytics_4",
-        "domain": "acme-store.com",
-        "redirect_uri": "https://hosted-app.dristik.ai/api/v1/connectors/oauth/callback",
-    })
-    mock_token_data = {
-        "access_token": "ya29.mock_ga4_token",
-        "refresh_token": "mock_refresh_token",
-    }
-    with patch("app.connectors.oauth_providers._exchange", return_value=mock_token_data), \
-         patch.object(settings, "GOOGLE_CLIENT_ID", "mock-ga4-id"), \
-         patch.object(settings, "GOOGLE_CLIENT_SECRET", "mock-ga4-sec"):
-        res = secure_client.get(
-            f"/api/v1/connectors/oauth/callback?code=test_code_123&state={state}",
-            headers={"Host": "hosted-app.dristik.ai", "X-Forwarded-Proto": "https"},
-        )
-        assert res.status_code == 200
-        html_text = res.text
-        assert "Connected" in html_text
-        assert "Google Analytics" in html_text
-        assert "Return to Dashboard" in html_text
-        assert "BroadcastChannel('dristik_connector_oauth')" in html_text
-        assert "dristik_connector_oauth_sync" in html_text
-        assert "connector=connected" in html_text
+        # 2. Callback completion
+        state = _sign({
+            "provider": "google_analytics_4",
+            "domain": "acme-store.com",
+            "redirect_uri": "https://hosted-app.dristik.ai/api/v1/connectors/oauth/callback",
+        })
+        mock_token_data = {
+            "access_token": "ya29.mock_ga4_token",
+            "refresh_token": "mock_refresh_token",
+        }
+        with patch("app.connectors.oauth_providers._exchange", return_value=mock_token_data):
+            res = secure_client.get(
+                f"/api/v1/connectors/oauth/callback?code=test_code_123&state={state}",
+                headers={"Host": "hosted-app.dristik.ai", "X-Forwarded-Proto": "https"},
+            )
+            assert res.status_code == 200
+            html_text = res.text
+            assert "Connected" in html_text
+            assert "Google Analytics" in html_text
+            assert "Return to Dashboard" in html_text
+            assert "BroadcastChannel('dristik_connector_oauth')" in html_text
+            assert "dristik_connector_oauth_sync" in html_text
+            assert "connector=connected" in html_text
         assert "window.location.replace" in html_text
 
         # 3. Verify saved integration in connector_store has CONNECTED status

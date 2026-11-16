@@ -110,6 +110,7 @@ def _build_test_report() -> ExecutiveReport:
         )
     ]
     return ExecutiveReport(
+        org_id="org_test",
         report_id="rep_test_001",
         analysis_id="an_test_001",
         website_url="https://acme-analytics.io",

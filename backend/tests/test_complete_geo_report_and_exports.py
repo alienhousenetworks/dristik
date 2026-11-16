@@ -93,6 +93,7 @@ def _make_dummy_geo_report() -> ExecutiveReport:
     )
 
     return ExecutiveReport(
+        org_id="org_test",
         report_id="rep_geo_test_001",
         analysis_id="analysis_geo_test_001",
         website_url="https://acme.com",

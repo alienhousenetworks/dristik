@@ -20,6 +20,7 @@ from app.seo.reporting.seo_book_renderer import seo_audit_book_renderer, build_s
 
 def _make_report(domain="example.com", findings=None, profile=None, manifest=None):
     return ExecutiveReport(
+        org_id="org_test",
         report_id="DST-TEST-ENG",
         analysis_id="test-run-eng",
         website_url=f"https://{domain}",

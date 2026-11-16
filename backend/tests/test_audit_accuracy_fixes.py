@@ -58,6 +58,7 @@ def _make_dummy_report(findings=None, manifest=None):
         intent_adjusted_weights={"ON_PAGE_SEO": 100.0},
     )
     return ExecutiveReport(
+        org_id="org_test",
         report_id="rep_test_accuracy",
         analysis_id="run_test_accuracy",
         website_url="https://example.com",

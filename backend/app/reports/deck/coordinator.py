@@ -45,7 +45,14 @@ class DeckOrchestrator:
         populated = self.analyst.populate_data(blueprint, report)
 
         # 3. Run multi-pass automated quality linting
-        self.linter.lint_blueprint(populated)
+        lint_res = self.linter.lint_blueprint(populated)
+        if not lint_res.passed:
+            import logging
+            logging.getLogger("dristik.deck.coordinator").warning(
+                "Deck blueprint lint flagged %d issue(s): %s",
+                len(lint_res.issues),
+                [getattr(i, "message", str(i)) for i in lint_res.issues[:5]],
+            )
 
         return populated
 

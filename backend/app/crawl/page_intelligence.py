@@ -562,31 +562,31 @@ def fallback_copy_audit(page: PageEvidence, profile: BusinessProfile, seo: PageS
     calculated_score = max(20.0, min(100.0, base_score))
 
     analysis = (
-        f"Evaluated copy on {page.url}: title {len((page.title or '').strip())} chars ({seo.title_status}), "
+        f"Measured copy facts on {page.url}: title {len((page.title or '').strip())} chars ({seo.title_status}), "
         f"meta {len((page.meta_description or '').strip())} chars ({seo.meta_status}), "
-        f"H1 '{h1 or 'absent'}', {page.word_count} words. "
-        f"Identified {len(issues)} high-leverage copywriting and conversion improvements."
+        f"H1 '{h1 or 'absent'}', {page.word_count} words, CTAs: {ctas}. "
+        f"Copywriting specialist LLM pass was skipped; no unverified scores or rewrites generated."
     )
 
     return PageCopyAudit(
-        score=calculated_score,
-        voice="Professional & Authoritative",
-        clarity="High",
-        persuasion="Moderate",
+        score=None,
+        voice="Not evaluated (LLM skipped)",
+        clarity="Not evaluated (LLM skipped)",
+        persuasion="Not evaluated (LLM skipped)",
         audience_fit=audience,
-        cta_quality="Clear Action",
-        geo_score=_compute_geo_score(page),
-        seo_score=calculated_score,
-        issues=issues,
-        what_works=[f"Audited {page.word_count} words of body content", "Content indexing confirmed"],
+        cta_quality="Not evaluated (LLM skipped)",
+        geo_score=None,
+        seo_score=0.0,
+        issues=[],
+        what_works=[],
         analysis=analysis,
-        suggested=suggested,
+        suggested=None,
         specialist_insights={
             "seo": f"Title {len((page.title or '').strip())} characters ({seo.title_status}). Meta {len((page.meta_description or '').strip())} characters ({seo.meta_status}).",
-            "cro": f"Primary CTA recommendation: {sug_cta}.",
+            "cro": f"Observed CTAs: {ctas}.",
             "clarity": f"Word count: {page.word_count}. Readability index: {page.readability_score or 0:.0f}.",
         },
-        llm_status="ok",
+        llm_status="skipped",
         llm_failure_reason=None,
         llm_failure_code=None,
     )

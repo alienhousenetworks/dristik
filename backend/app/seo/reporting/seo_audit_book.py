@@ -479,7 +479,9 @@ def _specialist(book: _Book, fits: bool, evidence: bool, module_name: str) -> Tu
         return "NOT_APPLICABLE", f"Not selected. The stored profile does not describe {module_name}."
     if not book.pages and not evidence:
         return "NOT_TESTED", f"The profile can match {module_name}, and no pages were crawled for it."
-    return "MEASURED", f"The stored profile or page evidence can match {module_name}. {book.sample}"
+    if not evidence:
+        return "NOT_TESTED", f"The profile can match {module_name}, but no dedicated {module_name} check was stored."
+    return "MEASURED", f"Dedicated {module_name} evidence was stored. {book.sample}"
 
 
 def _gsc_line(book: _Book, subject: str) -> Tuple[str, str]:
@@ -1509,7 +1511,7 @@ def _by_section(book: _Book, number: str, label: str) -> Tuple[str, str]:
         wcag = _get(book.report, "wcag_audit")
         if _has(text, "certificate", "ranking score"):
             if wcag is None or not (_num(_get(wcag, "total_checks_performed")) or 0):
-                return "MEASURED", "No automated accessibility screen was stored. " + screen
+                return "NOT_TESTED", "No automated accessibility screen was stored. " + screen
             return "MEASURED", (
                 f"{int(_get(wcag, 'violations_count', 0) or 0)} automated violation(s) in "
                 f"{int(_get(wcag, 'total_checks_performed', 0) or 0)} checks. " + screen
@@ -1546,7 +1548,7 @@ def _by_section(book: _Book, number: str, label: str) -> Tuple[str, str]:
         if extractability is None and not book.pages:
             return "NOT_TESTED", "On-page extractability was not scored. It would not be a live citation rate."
         if extractability is None:
-            return "MEASURED", "Crawl evidence exists. A separate extractability score was not stored. Live citations are a different chapter. " + book.sample
+            return "NOT_TESTED", "A separate extractability score was not stored for this run. Live citations are a different chapter."
         return "MEASURED", f"On-page extractability is {extractability:.0f}. This is not a ChatGPT, Perplexity, or AI Overview citation rate. This line is {label}."
     if number == "47" or number == "K":
         return _ai_line(book, label)

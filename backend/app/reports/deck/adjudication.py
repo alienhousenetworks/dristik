@@ -48,10 +48,6 @@ class BlackboardAdjudicationAuditor:
                 token = f"ev_{idx+1:03d}"
                 token_inventory.append(token)
 
-        # Fallback baseline tokens if none extracted yet
-        if not token_inventory:
-            token_inventory = ["ev_001", "ev_002", "ev_003", "ext_001", "ext_002"]
-
         demoted = 0
         purged = 0
 
@@ -67,8 +63,9 @@ class BlackboardAdjudicationAuditor:
             # Check if finding already cites evidence
             if hasattr(f, "evidence_tokens") and f.evidence_tokens:
                 assigned_tokens = list(f.evidence_tokens)
-            else:
-                # Deterministically bind to corresponding page token
+            elif hasattr(f, "evidence_refs") and f.evidence_refs:
+                assigned_tokens = list(f.evidence_refs)
+            elif token_inventory:
                 assigned_tokens = [token_inventory[idx % len(token_inventory)]]
 
             # Assess confidence rubric

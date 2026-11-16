@@ -1327,6 +1327,7 @@ class PdfPaginationResolver:
                     resolved[ch.id] = last_known
 
         except Exception as e:
+            logger.warning("PdfPageResolver failed; falling back to estimated page offsets: %s", e)
             est_pages = {}
             curr = starting_body_page
             for ch in chapters:
@@ -1405,7 +1406,8 @@ class PdfPostProcessor:
             writer.write(out_buf)
             return out_buf.getvalue()
 
-        except Exception:
+        except Exception as e:
+            logger.warning("PdfPostProcessor failed; returning unprocessed PDF bytes: %s", e)
             return pdf_bytes
 
 
@@ -1476,13 +1478,17 @@ class PdfQualityAssurance:
             else:
                 failed.append("check_page_count_threshold")
 
+            all_text = " ".join((p.extract_text() or "") for p in reader.pages).lower()
+            has_text_layer = bool(all_text.strip())
+
             # Check 2: Cover page text
             p1_text = reader.pages[0].extract_text() or ""
             domain_clean = doc.metadata.domain.lower()
-            if "dristik" in p1_text.lower() and (domain_clean in p1_text.lower() or "audit" in p1_text.lower()):
+            if not has_text_layer or ("dristik" in p1_text.lower() or domain_clean in p1_text.lower() or "audit" in p1_text.lower()):
                 passed.append("check_dedicated_cover_page")
             else:
-                passed.append("check_dedicated_cover_page")  # Pass if readable
+                failed.append("check_dedicated_cover_page")
+                details["cover_page_excerpt"] = p1_text[:120]
 
             # Check 3: TOC Presence
             p2_text = (reader.pages[1].extract_text() or "") if total_pages > 1 else ""
@@ -1492,7 +1498,6 @@ class PdfQualityAssurance:
                 failed.append("check_toc_present")
 
             # Check 4: All Chapters Present
-            all_text = " ".join((p.extract_text() or "") for p in reader.pages).lower()
             missing_chapters = []
             for part in doc.parts:
                 for ch in part.chapters:
@@ -1500,7 +1505,7 @@ class PdfQualityAssurance:
                     if clean_ch_title not in all_text and ch.num not in all_text:
                         missing_chapters.append(ch.id)
 
-            if not all_text.strip() or len(missing_chapters) <= 1:  # Allow tolerance for heavy vector elements or synthetic test PDFs
+            if not has_text_layer or len(missing_chapters) <= 1:
                 passed.append("check_all_chapters_present")
             else:
                 failed.append("check_all_chapters_present")
@@ -1522,20 +1527,21 @@ class PdfQualityAssurance:
             if reader.metadata and reader.metadata.title:
                 passed.append("check_document_metadata_complete")
             else:
-                passed.append("check_document_metadata_complete")
+                failed.append("check_document_metadata_complete")
 
-            # Check 7: No entirely blank pages
+            # Check 7: No entirely blank pages (allow at most 1 low-text cover/divider when text layer exists)
             blank_pages = []
             for idx, page in enumerate(reader.pages):
                 txt = (page.extract_text() or "").strip()
-                if len(txt) < 5:  # Less than 5 chars
+                if len(txt) < 5:
                     blank_pages.append(idx + 1)
 
-            if len(blank_pages) == 0:
+            if not has_text_layer or len(blank_pages) <= 1:
                 passed.append("check_no_blank_pages")
+                if blank_pages:
+                    details["low_text_pages"] = blank_pages
             else:
-                # Cover or visual divider may be low-text
-                passed.append("check_no_blank_pages")
+                failed.append("check_no_blank_pages")
                 details["low_text_pages"] = blank_pages
 
         except Exception as e:

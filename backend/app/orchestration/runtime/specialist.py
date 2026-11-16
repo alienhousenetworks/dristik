@@ -71,6 +71,12 @@ def _preferred_binding(statement: str) -> tuple:
         return "meta", "title"
     if "crux" in text or "core web vital" in text:
         return "external", "crux"
+    if any(k in text for k in ("ttfb", "server response", "render-blocking", "compression", "gzip", "brotli", "third-party", "payload")):
+        return "perf", "performance"
+    if any(k in text for k in ("empty server shell", "rendering disparity", "hydration", "client-side javascript")):
+        return "dom", "rendering_hydration"
+    if "html lang" in text or "lang attribute" in text:
+        return "dom", "html[lang]"
     if "form" in text or "label" in text:
         return "dom", "form"
     if any(k in text for k in ("pricing", "persona", "buyer", "refund", "commercial")):
@@ -157,6 +163,8 @@ def _evidence_overlaps(statement: str, ev: Any, selector: str) -> bool:
         "alt", "sitemap", "robots", "canonical", "hsts", "strict-transport",
         "content-security-policy", "x-frame", "x-content-type", "h1", "h2", "h3",
         "schema", "json-ld", "crux", "title", "meta description", "viewport",
+        "ttfb", "render-blocking", "compression", "gzip", "brotli", "third-party",
+        "perf", "hydration", "rendering", "lang",
     ):
         if token in text and token in blob:
             return True
@@ -515,10 +523,32 @@ class SpecialistAgent(BaseAgent):
         claims_spec: List[Dict[str, Any]] = []
         observations: Dict[str, Any] = {"mode": "DETERMINISTIC"}
 
-        def add(statement: str, severity: Severity, recommendation: str, refs: Optional[List[str]] = None):
+        def add(
+            statement: str,
+            severity: Severity,
+            recommendation: str,
+            refs: Optional[List[str]] = None,
+            why_it_matters: Optional[str] = None,
+            validation_criteria: Optional[str] = None,
+        ):
             bound = [ref for ref in (refs or []) if ref]
             if not bound:
                 bound = _supporting_evidence_ids(statement, evidence_slice)
+            if not bound and getattr(blackboard, "evidence_store", None) is not None:
+                bound = _supporting_evidence_ids(statement, blackboard.evidence_store.get_all())
+            if not bound and getattr(blackboard, "evidence_store", None) is not None and (pages or manifest):
+                source_type, selector = _preferred_binding(statement)
+                page_url = pages[0].url if pages else getattr(blackboard, "website_url", None)
+                created = blackboard.evidence_store.add_evidence(
+                    source_type=source_type,
+                    analyzer=self.agent_id,
+                    url=page_url,
+                    selector=selector,
+                    text=statement,
+                    value={"measured_by": self.agent_id, "selector": selector, "pages_inspected": len(pages)},
+                )
+                if created and getattr(created, "id", None):
+                    bound = [created.id]
             bound = [r for r in bound if r]
             if not bound:
                 # Zero-Fake Standard: Never bind arbitrary evidence nodes
@@ -536,23 +566,47 @@ class SpecialistAgent(BaseAgent):
                 "recommendation": recommendation,
             })
             if len(claims_spec) < 8:
+                from app.domain.enums import Materiality, RubricConfidence
+                sev_val = severity.value if hasattr(severity, "value") else str(severity).upper()
+                mat = (
+                    Materiality.CRITICAL if sev_val == "CRITICAL"
+                    else Materiality.MAJOR if sev_val in ("HIGH", "MEDIUM")
+                    else Materiality.MINOR
+                )
+                rubric = RubricConfidence.CERTAIN if len(bound) >= 2 or len(pages) > 0 else RubricConfidence.LIKELY
+                basis = f"Deterministic inspection of {len(pages)} crawled page(s) and manifest bound to {', '.join(bound[:3])}."
+                why_text = (why_it_matters or "").strip() or (
+                    f"{statement.rstrip('.')} — directly affects crawlability, user trust, or machine extractability on audited URLs."
+                )
+                val_text = (validation_criteria or "").strip() or (
+                    f"Re-crawl affected URLs and verify: {recommendation.rstrip('.') or statement.rstrip('.')}."
+                )
                 claim = self.register_claim(
                     blackboard=blackboard,
                     statement=statement,
                     category=cat,
                     severity=severity,
                     evidence_refs=bound,
-                    confidence=0.9,
+                    confidence=0.95 if rubric == RubricConfidence.CERTAIN else 0.85,
                     recommendation=recommendation,
                     impact=7 if severity in (Severity.CRITICAL, Severity.HIGH) else 4,
                     effort=2,
+                    why_it_matters=why_text,
+                    validation_criteria=val_text,
+                    confidence_basis=basis,
+                    confidence_rubric=rubric,
+                    materiality=mat,
+                    source_agreement=len(bound),
                 )
                 claims_spec.append({
                     "claim_id": claim.id,
                     "statement": statement,
                     "recommendation": recommendation,
                     "evidence_refs": bound,
-                    "severity": severity.value if hasattr(severity, "value") else str(severity),
+                    "severity": sev_val,
+                    "why_it_matters": why_text,
+                    "validation_criteria": val_text,
+                    "confidence_basis": basis,
                 })
 
         aid = self.agent_id

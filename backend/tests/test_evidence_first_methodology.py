@@ -33,6 +33,7 @@ Audit 2 Failure Patterns:
 """
 import pytest
 from datetime import datetime, timezone
+from typing import Tuple
 
 from app.domain.models import (
     ExecutiveReport,

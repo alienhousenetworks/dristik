@@ -314,6 +314,7 @@ class TestAdaptiveAuditBookIntegration:
             ),
         ]
         rep = ExecutiveReport(
+            org_id="org_test",
             report_id="rep_test_full",
             analysis_id="analysis_full_001",
             website_url="https://enterprise-scale.io",
@@ -376,6 +377,7 @@ class TestAdaptiveAuditBookIntegration:
         ]
 
         rep = ExecutiveReport(
+            org_id="org_test",
             report_id="rep_test_print",
             analysis_id="run_test_print",
             domain="enterprise-scale.io",

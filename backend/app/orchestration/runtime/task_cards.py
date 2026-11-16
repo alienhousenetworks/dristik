@@ -25,6 +25,8 @@ SPECIALIST_OUTPUT_SCHEMA = """{
       "confidence_basis": "one sentence: why this level, not the one above it",
       "materiality": "CRITICAL | MAJOR | MINOR",
       "source_agreement": 0,
+      "why_it_matters": "1-2 plain-English sentences on commercial, UX, or visibility consequence",
+      "validation_criteria": "one concrete present-tense check to verify the fix after remediation",
       "recommendation": "string or empty",
       "impact": 5,
       "effort": 3

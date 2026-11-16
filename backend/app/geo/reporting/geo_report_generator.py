@@ -244,7 +244,7 @@ class CompleteGeoReportGenerator:
 
         citation_rate = (
             getattr(v_card, "citation_rate_pct", None)
-            if v_card and getattr(v_card, "measurement_kind", "NOT_MEASURED") != "NOT_MEASURED"
+            if v_card and getattr(v_card, "status", "NOT_MEASURED") == "MEASURED" and getattr(v_card, "measurement_kind", "NOT_MEASURED") != "NOT_MEASURED"
             else None
         )
         cit_display = f"{int(round(citation_rate))}%" if citation_rate is not None else "Unmeasured"
@@ -899,7 +899,7 @@ class CompleteGeoReportGenerator:
             </div>
             <p>Verification that core answers and product facts reside in the initial HTML or server-rendered DOM rather than behind client-only JavaScript interactions (tabs, accordions, infinite scrolls):</p>
             <div class="alert-box info">
-                <strong>Parity Verification:</strong> Headless browser rendering comparison confirms zero critical answers are sequestered behind un-indexed DOM events.
+                <strong>Parity Verification:</strong> NOT_ASSESSED — explicit headless-vs-raw rendering-parity evidence is not attached to this report unless browser rendering diffing was executed.
             </div>
         </section>
 
@@ -949,7 +949,7 @@ class CompleteGeoReportGenerator:
             <div class="field-grid">
                 <div class="field-item">
                     <span class="field-label">Date-Decay & Stale Pricing Risk</span>
-                    <span class="field-val">Low: Primary commercial pages contain recent publication / revision timestamps.</span>
+                    <span class="field-val">Not Assessed — explicit publication and revision timestamps were not extracted across all pages.</span>
                 </div>
                 <div class="field-item">
                     <span class="field-label">Cross-Page Contradictions</span>
@@ -974,9 +974,9 @@ class CompleteGeoReportGenerator:
                     <tr><th>Evaluation Metric</th><th>Observed Value</th><th>Benchmark Target</th><th>Interpretation</th></tr>
                 </thead>
                 <tbody>
-                    <tr><td>Passage Recall@3</td><td>84.2%</td><td>> 80.0%</td><td>Top 3 passages contain necessary factual context</td></tr>
-                    <tr><td>Mean Reciprocal Rank (MRR)</td><td>0.78</td><td>> 0.70</td><td>First retrieved chunk is frequently the direct answer</td></tr>
-                    <tr><td>Chunk Boundary Truncation Risk</td><td>Low</td><td>Low</td><td>Answer blocks fit cleanly within standard 512-token chunks</td></tr>
+                    <tr><td>Passage Recall@3</td><td>Not Measured</td><td>&gt; 80.0%</td><td>Requires local RAG retrieval simulation run on crawled chunks</td></tr>
+                    <tr><td>Mean Reciprocal Rank (MRR)</td><td>Not Measured</td><td>&gt; 0.70</td><td>Requires local RAG retrieval simulation run on crawled chunks</td></tr>
+                    <tr><td>Chunk Boundary Truncation Risk</td><td>Not Assessed</td><td>Low</td><td>Requires chunk-size boundary verification</td></tr>
                 </tbody>
             </table>
         </section>
@@ -998,7 +998,7 @@ class CompleteGeoReportGenerator:
                     <span class="kpi-value" style="color: #38bdf8;">{cit_display}</span>
                 </div>
                 <div class="kpi-card">
-                    <span class="kpi-title">Engages Queried</span>
+                    <span class="kpi-title">Engines Queried</span>
                     <span class="kpi-value">{getattr(v_card, 'engines_measured', 0) if v_card else 0}</span>
                 </div>
             </div>
@@ -1075,14 +1075,14 @@ class CompleteGeoReportGenerator:
                     <tr><th>Lifecycle Stage</th><th>Example AI Search Prompt</th><th>Expected Supporting Asset</th><th>Citability Readiness</th></tr>
                 </thead>
                 <tbody>
-                    <tr><td>1. Discovery</td><td>"What are the best platforms for {html.escape(domain)} services?"</td><td>Homepage & Category Overview</td><td><span class="finding-badge status-supported">READY</span></td></tr>
-                    <tr><td>2. Problem Identification</td><td>"How do teams solve workflow bottlenecks in this sector?"</td><td>Solutions & Use Case Guides</td><td><span class="finding-badge status-partial">NEEDS CONTENT</span></td></tr>
-                    <tr><td>3. Educational</td><td>"Comprehensive guide to modern implementation standards"</td><td>Documentation / Whitepapers</td><td><span class="finding-badge status-supported">READY</span></td></tr>
-                    <tr><td>4. Spec Comparison</td><td>"{domain} vs alternative tools comparison"</td><td>Objective Comparison Table</td><td><span class="finding-badge status-unsupported">CRITICAL GAP</span></td></tr>
-                    <tr><td>5. Vendor Evaluation</td><td>"Is {domain} reliable for enterprise compliance?"</td><td>Trust & Security Center</td><td><span class="finding-badge status-supported">READY</span></td></tr>
-                    <tr><td>6. Pricing & Tiers</td><td>"How much does {domain} cost per seat?"</td><td>Transparent Pricing Table</td><td><span class="finding-badge status-partial">NEEDS SCHEMA</span></td></tr>
-                    <tr><td>7. Trust & Risk</td><td>"Real customer reviews and case studies for {domain}"</td><td>Verified Evidence Register</td><td><span class="finding-badge status-supported">READY</span></td></tr>
-                    <tr><td>8. Troubleshooting</td><td>"Common configuration errors and API documentation"</td><td>Developer Knowledge Base</td><td><span class="finding-badge status-supported">READY</span></td></tr>
+                    <tr><td>1. Discovery</td><td>"What are the best platforms for {html.escape(domain)} services?"</td><td>Homepage & Category Overview</td><td><span class="finding-badge">NOT ASSESSED</span></td></tr>
+                    <tr><td>2. Problem Identification</td><td>"How do teams solve workflow bottlenecks in this sector?"</td><td>Solutions & Use Case Guides</td><td><span class="finding-badge">NOT ASSESSED</span></td></tr>
+                    <tr><td>3. Educational</td><td>"Comprehensive guide to modern implementation standards"</td><td>Documentation / Whitepapers</td><td><span class="finding-badge">NOT ASSESSED</span></td></tr>
+                    <tr><td>4. Spec Comparison</td><td>"{domain} vs alternative tools comparison"</td><td>Objective Comparison Table</td><td><span class="finding-badge">NOT ASSESSED</span></td></tr>
+                    <tr><td>5. Vendor Evaluation</td><td>"Is {domain} reliable for enterprise compliance?"</td><td>Trust & Security Center</td><td><span class="finding-badge">NOT ASSESSED</span></td></tr>
+                    <tr><td>6. Pricing & Tiers</td><td>"How much does {domain} cost per seat?"</td><td>Transparent Pricing Table</td><td><span class="finding-badge">NOT ASSESSED</span></td></tr>
+                    <tr><td>7. Trust & Risk</td><td>"Real customer reviews and case studies for {domain}"</td><td>Verified Evidence Register</td><td><span class="finding-badge">NOT ASSESSED</span></td></tr>
+                    <tr><td>8. Troubleshooting</td><td>"Common configuration errors and API documentation"</td><td>Developer Knowledge Base</td><td><span class="finding-badge">NOT ASSESSED</span></td></tr>
                 </tbody>
             </table>
         </section>
@@ -1118,9 +1118,9 @@ class CompleteGeoReportGenerator:
                     <tr><th>Source Channel</th><th>Presence Status</th><th>Reconciliation Impact</th></tr>
                 </thead>
                 <tbody>
-                    <tr><td>Wikidata / Wikipedia Entity Link</td><td>Review Needed</td><td>Establishes persistent knowledge graph identifiers</td></tr>
-                    <tr><td>G2 / Capterra Verified Listings</td><td>Active</td><td>Provides primary review quotes cited by Perplexity & SearchGPT</td></tr>
-                    <tr><td>GitHub / Developer Documentation</td><td>Active</td><td>Critical for technical queries and code retrieval pipelines</td></tr>
+                    <tr><td>Wikidata / Wikipedia Entity Link</td><td>Not Assessed</td><td>Establishes persistent knowledge graph identifiers</td></tr>
+                    <tr><td>G2 / Capterra Verified Listings</td><td>Not Assessed</td><td>Provides primary review quotes cited by Perplexity & SearchGPT</td></tr>
+                    <tr><td>GitHub / Developer Documentation</td><td>Not Assessed</td><td>Critical for technical queries and code retrieval pipelines</td></tr>
                 </tbody>
             </table>
         </section>

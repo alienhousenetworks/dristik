@@ -40,6 +40,45 @@ def _sev_str(f: Any) -> str:
     return s
 
 
+def _collect_chapter_evidence(defects: List[Any]) -> Tuple[List[str], List[Dict[str, str]]]:
+    """Extracts unique evidence IDs and structured citation records from chapter findings."""
+    seen_ids: List[str] = []
+    citations: List[Dict[str, str]] = []
+    for f in defects or []:
+        title = str(_get(f, "title", "") or _get(f, "finding_title", "") or "").strip()
+        sev = _sev_str(f) or "MEDIUM"
+        urls = [str(u) for u in (_get(f, "affected_urls", []) or []) if u]
+        refs: List[str] = []
+        for field_name in ("evidence_refs", "evidence_ids"):
+            for r in (_get(f, field_name, []) or []):
+                rs = str(r).strip()
+                if rs and rs not in refs:
+                    refs.append(rs)
+        embedded = _get(f, "evidence", []) or []
+        first_snippet = ""
+        for ev in embedded:
+            eid = str(_get(ev, "evidence_id", "") or _get(ev, "source", "") or "").strip()
+            if eid and eid not in refs:
+                refs.append(eid)
+            if not first_snippet:
+                first_snippet = str(_get(ev, "snippet", "") or _get(ev, "value", "") or "").strip()[:140]
+            if not urls and _get(ev, "url", None):
+                urls.append(str(_get(ev, "url")))
+        for r in refs:
+            if r not in seen_ids:
+                seen_ids.append(r)
+        if refs or urls:
+            citations.append({
+                "evidence_id": refs[0] if refs else "",
+                "evidence_refs": ", ".join(refs[:4]),
+                "url": urls[0] if urls else "",
+                "finding_title": title,
+                "severity": sev,
+                "snippet": first_snippet,
+            })
+    return seen_ids, citations[:8]
+
+
 class AIChapterExplanation(BaseModel):
     """
     Structured AI output for executive and technical chapter synthesis.
@@ -297,7 +336,11 @@ class AgenticChapterSynthesizer:
             t = str(_get(f, "title", "") or _get(f, "finding_title", "")).strip()
             sev = str(_get(f, "severity", "MEDIUM")).upper()
             why = str(_get(f, "why_it_matters", "") or _get(f, "description", "")).strip()
-            defect_summaries.append(f"- [{sev}] {t}: {why[:150]}")
+            refs = [str(r) for r in (_get(f, "evidence_refs", []) or _get(f, "evidence_ids", []) or []) if r][:3]
+            urls = [str(u) for u in (_get(f, "affected_urls", []) or []) if u][:2]
+            ref_tag = f" [Evidence: {', '.join(refs)}]" if refs else ""
+            url_tag = f" [URLs: {', '.join(urls)}]" if urls else ""
+            defect_summaries.append(f"- [{sev}] {t}{ref_tag}{url_tag}: {why[:150]}")
 
         discipline = "Generative Engine Optimization (GEO)" if is_geo else "Technical Search Engine Optimization (SEO)"
 
@@ -398,6 +441,8 @@ class AgenticChapterSynthesizer:
                 "remediation": str(parsed.get("prescriptive_fix", fallback_narrative["prescriptive_fix"])),
                 "verification_protocol": str(parsed.get("verification_protocol", fallback_narrative["verification_protocol"])),
                 "verification": str(parsed.get("verification_protocol", fallback_narrative["verification_protocol"])),
+                "evidence_basis": fallback_narrative.get("evidence_basis", ""),
+                "evidence_citations": fallback_narrative.get("evidence_citations", []),
             }
         except Exception as e:
             logger.warning("Chapter AI synthesis failed for Chapter %s (%s): %s", number, sec_title, e)
@@ -479,6 +524,11 @@ class AgenticChapterSynthesizer:
                 f"The {agent_name} audit of {biz_name} ({domain}) identified {len(defects)} verified defect(s) "
                 f"({len(crit_defects)} critical, {len(high_defects)} high severity) across {crawled_count} representative page(s). "
                 f"Primary executive attention is required on: {'; '.join(top_defect_titles[:2])}."
+            )
+        elif crawled_count == 0:
+            exec_summary = (
+                f"The {agent_name} evaluation of {biz_name} ({domain}) could not verify live page telemetry for "
+                f"{sec_title} because 0 pages were crawled in this run."
             )
         else:
             if any(k in agent_lower for k in ["crawl", "index", "robot", "sitemap", "redirect", "canonical", "status"]):
@@ -703,6 +753,22 @@ class AgenticChapterSynthesizer:
         else:
             verification = "Schedule bi-weekly automated crawl surveillance to ensure new template updates maintain clean status."
 
+        ev_ids, ev_citations = _collect_chapter_evidence(defects)
+        if defects and ev_ids:
+            evidence_basis = (
+                f"Backed by {len(ev_ids)} verified evidence artifact(s) ({', '.join(ev_ids[:5])}) "
+                f"across {len(affected_url_samples)} affected URL(s) in {crawled_count} crawled page(s)."
+            )
+        elif defects:
+            evidence_basis = (
+                f"Derived from {len(defects)} chapter finding(s) across {len(affected_url_samples)} affected URL(s) "
+                f"in {crawled_count} crawled page(s)."
+            )
+        elif crawled_count == 0:
+            evidence_basis = "DATA_UNAVAILABLE: 0 pages crawled; no empirical evidence artifacts collected for this chapter."
+        else:
+            evidence_basis = f"Verified across {crawled_count} crawled sample page(s) with 0 defects recorded."
+
         return {
             "agent_id": agent_id,
             "agent_name": agent_name,
@@ -726,6 +792,8 @@ class AgenticChapterSynthesizer:
             "remediation": remediation,
             "verification_protocol": verification,
             "verification": verification,
+            "evidence_basis": evidence_basis,
+            "evidence_citations": ev_citations,
         }
 
     @classmethod

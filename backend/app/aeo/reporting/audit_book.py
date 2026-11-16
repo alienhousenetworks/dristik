@@ -2105,13 +2105,14 @@ def _render_aeo_table(facts: _Facts, number: str) -> str:
         for p in facts.pages[:20]:
             u = str(_get(p, "url", ""))
             has_faq_schema = "FAQPage" in (_get(p, "schema_types", []) or [])
-            faq_cnt = int(_get(p, "faq_count", 0) or (3 if has_faq_schema else 0))
+            raw_faq_cnt = _get(p, "faq_count", None)
+            faq_disp = f"{int(raw_faq_cnt)} Q&A blocks" if raw_faq_cnt is not None else ("Schema detected (count unmeasured)" if has_faq_schema else "0 detected")
             schema_badge = "<span style=\"color:#16a34a;\">Valid JSON-LD</span>" if has_faq_schema else "<span style=\"color:#64748b;\">Missing FAQPage</span>"
-            ext_status = "<span style=\"color:#16a34a;\">Directly Extractable</span>" if faq_cnt > 0 else "<span style=\"color:#f59e0b;\">Prose Only</span>"
+            ext_status = "<span style=\"color:#16a34a;\">Directly Extractable</span>" if (raw_faq_cnt and int(raw_faq_cnt) > 0) or has_faq_schema else "<span style=\"color:#f59e0b;\">Prose Only</span>"
             body.append(
                 "<tr>"
                 f"<td><code>{_esc(u)}</code></td>"
-                f"<td>{faq_cnt} Q&A blocks</td>"
+                f"<td>{faq_disp}</td>"
                 f"<td>{schema_badge}</td>"
                 f"<td>{ext_status}</td>"
                 "</tr>"
@@ -2147,9 +2148,11 @@ def _render_aeo_table(facts: _Facts, number: str) -> str:
         total_claims = _num(_get(claims, "total_claims")) or len(facts.questions)
         verified = _num(_get(claims, "verified_claims")) or len([q for q in facts.questions if q.status == "ANSWERABLE"])
         header = "<tr><th>Audited Claim / Entity Fact</th><th>Evidence Source URL</th><th>Verifiability Status</th><th>Attribution Quality</th></tr>"
+        has_pricing_q = any("pricing" in q.text.lower() for q in facts.questions)
+        pricing_status = "<span style=\"color:#f59e0b;\">PARTIAL</span>" if has_pricing_q else "<span style=\"color:#64748b;\">UNMEASURED</span>"
         rows = [
-            ("Core Product Functionality & Capabilities", f"<code>{_esc(facts.domain)}</code>", "<span style=\"color:#16a34a;\">VERIFIED</span>", "First-Party Homepage"),
-            ("Service Pricing & Commercial Terms", f"<code>{_esc(facts.domain)}/pricing</code>", "<span style=\"color:#f59e0b;\">PARTIAL</span>" if any("pricing" in q.text.lower() for q in facts.questions) else "VERIFIED", "Declared Commercial Table"),
+            ("Core Product Functionality & Capabilities", f"<code>{_esc(facts.domain)}</code>", "<span style=\"color:#16a34a;\">VERIFIED</span>" if facts.pages else "<span style=\"color:#64748b;\">UNMEASURED</span>", "First-Party Homepage"),
+            ("Service Pricing & Commercial Terms", f"<code>{_esc(facts.domain)}/pricing</code>", pricing_status, "Declared Commercial Table"),
             ("Organizational Entity Authority (sameAs)", f"<code>{_esc(facts.domain)}</code>", "<span style=\"color:#16a34a;\">VERIFIED</span>" if "Organization" in facts.schema_types else "<span style=\"color:#dc2626;\">UNVERIFIED</span>", "Schema JSON-LD Graph"),
         ]
         body = "".join(f"<tr><td><strong>{_esc(c)}</strong></td><td>{u}</td><td>{s}</td><td>{_esc(a)}</td></tr>" for c, u, s, a in rows)
@@ -2161,12 +2164,15 @@ def _render_aeo_table(facts: _Facts, number: str) -> str:
         body = []
         for p in facts.pages[:20]:
             u = str(_get(p, "url", ""))
+            pub_date = _get(p, "published_at", None) or _get(p, "date_published", None) or "Not Declared"
+            mod_date = _get(p, "last_modified", None) or _get(p, "date_modified", None) or "Not Declared"
+            fresh_badge = "<span style=\"color:#16a34a;\">Timestamped</span>" if (pub_date != "Not Declared" or mod_date != "Not Declared") else "<span style=\"color:#64748b;\">Unverified</span>"
             body.append(
                 "<tr>"
                 f"<td><code>{_esc(u)}</code></td>"
-                f"<td><code>2026 Active</code></td>"
-                f"<td><code>Synchronized in Crawl</code></td>"
-                f"<td><span style=\"color:#16a34a;\">Current & Fresh</span></td>"
+                f"<td><code>{_esc(str(pub_date))}</code></td>"
+                f"<td><code>{_esc(str(mod_date))}</code></td>"
+                f"<td>{fresh_badge}</td>"
                 "</tr>"
             )
         return f"<div class=\"data-table-wrap\"><table><thead>{header}</thead><tbody>{''.join(body)}</tbody></table></div>"
@@ -2212,13 +2218,17 @@ def _render_aeo_table(facts: _Facts, number: str) -> str:
         body = []
         for p in facts.pages[:20]:
             u = str(_get(p, "url", ""))
-            wc = int(_get(p, "word_count", 0) or 500)
+            raw_bytes = _get(p, "raw_html_bytes", None) or _get(p, "content_length", None)
+            dom_nodes = _get(p, "dom_nodes_count", None) or _get(p, "element_count", None)
+            bytes_disp = f"{int(raw_bytes):,} bytes" if raw_bytes is not None else "Unmeasured"
+            nodes_disp = f"{int(dom_nodes):,} elements" if dom_nodes is not None else "Unmeasured"
+            ssr_disp = "<span style=\"color:#64748b;\">Not Evaluated</span>" if raw_bytes is None else "<span style=\"color:#16a34a;\">Captured</span>"
             body.append(
                 "<tr>"
                 f"<td><code>{_esc(u)}</code></td>"
-                f"<td>{wc * 6} bytes</td>"
-                f"<td>{wc // 2} elements</td>"
-                f"<td><span style=\"color:#16a34a;\">Pre-rendered (SSR Clean)</span></td>"
+                f"<td>{bytes_disp}</td>"
+                f"<td>{nodes_disp}</td>"
+                f"<td>{ssr_disp}</td>"
                 "</tr>"
             )
         return f"<div class=\"data-table-wrap\"><table><thead>{header}</thead><tbody>{''.join(body)}</tbody></table></div>"
@@ -2459,7 +2469,7 @@ def render_aeo_audit_book(report: Any) -> str:
     extractability_val = aeo_cover_figure(report)
     extractability_disp = f"{extractability_val}" if extractability_val is not None else "—"
     story = _esc(_get(report, "story_summary", "") or "Comprehensive answer engine optimization and extraction audit.")
-    rights = _esc(_get(report, "what_site_gets_right", "") or "Clean crawlability baseline and structured question foundations.")
+    rights = _esc(_get(report, "what_site_gets_right", "") or "No strengths recorded in executive summary.")
     holding = _esc(_get(report, "what_is_holding_it_back", "") or "Direct answer passage gaps and entity disambiguation opportunities.")
     opp = _esc(_get(report, "primary_strategic_opportunity", "") or "Publish concise declarative answer blocks under key question headings.")
 

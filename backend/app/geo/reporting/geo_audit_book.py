@@ -325,7 +325,7 @@ def _line(facts: _GeoFacts, number: str, check: str) -> Tuple[str, str]:
             halluc = facts.rates["hallucination"]
             if halluc is not None:
                 return "VERIFIED", f"Measured {halluc:.0f}% hallucination rate across evaluated engine responses."
-            return "SAMPLE_VERIFIED", "Zero critical entity hallucinations recorded in tested sample."
+            return "DATA_UNAVAILABLE", "Live AI answer hallucination rate was not measured on this run."
         if _has(text, "recommendation", "shortlist"):
             return "SAMPLE_VERIFIED", "Shortlist inclusion evaluated across commercial inquiry prompt clusters."
         if _has(text, "positioning", "entity"):
@@ -350,7 +350,7 @@ def _line(facts: _GeoFacts, number: str, check: str) -> Tuple[str, str]:
         bake = facts.bakeoff
         if bake:
             return "VERIFIED", "Competitive bake-off recorded head-to-head metrics against evaluated industry peers."
-        return "SAMPLE_VERIFIED", f"{check}: Evaluated against direct and AI-recommended alternatives."
+        return "DATA_UNAVAILABLE", f"{check}: No live competitive bake-off was executed in this run."
 
     # Part VI
     if number in {"24", "25", "26", "27", "28", "29", "30"}:
@@ -371,16 +371,16 @@ def _line(facts: _GeoFacts, number: str, check: str) -> Tuple[str, str]:
         if _has(text, "crawlability", "robots"):
             if facts.bots:
                 return "VERIFIED", "Robots.txt directives inspected for GPTBot, PerplexityBot, and Google-Extended."
-            return "SAMPLE_VERIFIED", f"Robots directives verified across {facts.crawled} crawled URL(s)."
+            return "NOT_TESTED", "Robots.txt AI bot directives were not inspected in this run."
         if _has(text, "structured data", "schema"):
             if facts.schema_types:
                 return "VERIFIED", f"Detected schema types: {_join(facts.schema_types)}."
-            return "SAMPLE_VERIFIED", "Schema JSON-LD graph inspected across crawled DOM."
+            return "NOT_TESTED" if facts.crawled == 0 else "SAMPLE_VERIFIED", "No schema JSON-LD types detected in crawled DOM." if facts.crawled > 0 else "No pages crawled for schema inspection."
         if _has(text, "rendering", "javascript"):
-            return "SAMPLE_VERIFIED", "DOM parity and server-side rendering verified on crawled HTML."
+            return "NOT_TESTED", "Headless-vs-raw rendering parity was not explicitly tested in this run."
         if _has(text, "http", "security", "reliability"):
-            return "SAMPLE_VERIFIED", "Transport protocol and server response latencies verified within acceptable bounds."
-        return "SAMPLE_VERIFIED", f"{check}: Verified in technical machine readability audit."
+            return "SAMPLE_VERIFIED" if facts.crawled > 0 else "NOT_TESTED", f"HTTP responses recorded across {facts.crawled} crawled page(s)." if facts.crawled > 0 else "No pages crawled for HTTP inspection."
+        return "SAMPLE_VERIFIED" if facts.crawled > 0 else "NOT_TESTED", f"{check}: Assessed across {facts.crawled} crawled page(s)." if facts.crawled > 0 else f"{check}: Not tested (0 pages crawled)."
 
     # Part VIII
     if number in {"37", "38", "39", "40"}:
@@ -504,7 +504,7 @@ def render_geo_audit_book(report: Any) -> str:
     score_val = geo_cover_figure(report)
     score_disp = f"{score_val}" if score_val is not None else "—"
     story = _esc(_get(report, "story_summary", "") or "Comprehensive Generative Engine Optimization audit.")
-    rights = _esc(_get(report, "what_site_gets_right", "") or "Clean technical discoverability baseline.")
+    rights = _esc(_get(report, "what_site_gets_right", "") or "No strengths recorded in executive summary.")
     holding = _esc(_get(report, "what_is_holding_it_back", "") or "Direct passage extraction gaps and competitor comparison presence.")
     opp = _esc(_get(report, "primary_strategic_opportunity", "") or "Deploy concise modular definition passages and structured comparison hubs.")
 
