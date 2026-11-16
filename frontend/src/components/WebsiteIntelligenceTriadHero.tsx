@@ -56,7 +56,7 @@ export function WebsiteIntelligenceTriadHero({
 
   const displayed = buildDisplayedScore(report);
   const overall = displayed.composite != null ? Math.round(displayed.composite) : null;
-  const tone = overall == null ? 'text-ink' : overall >= 80 ? 'text-good' : overall >= 60 ? 'text-warn' : 'text-bad';
+  const tone = overall == null ? 'text-ink' : overall >= 75 ? 'text-good' : overall >= 50 ? 'text-warn' : 'text-bad';
 
   return (
     <section className="space-y-4">

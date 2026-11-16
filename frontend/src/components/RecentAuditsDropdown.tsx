@@ -64,8 +64,8 @@ export function RecentAuditsDropdown({
       return 'bg-paper-100 text-ink-700 dark:bg-paper-100 dark:text-ink-700 border-line animate-pulse';
     }
     if (score == null) return 'bg-paper-200 text-ink-500 border-line';
-    if (score >= 80) return 'bg-good/10 text-good dark:bg-good/10 dark:text-good border-good/30';
-    if (score >= 60) return 'bg-warn/10 text-warn dark:bg-warn/10 dark:text-warn border-warn/30';
+    if (score >= 75) return 'bg-good/10 text-good dark:bg-good/10 dark:text-good border-good/30';
+    if (score >= 50) return 'bg-warn/10 text-warn dark:bg-warn/10 dark:text-warn border-warn/30';
     return 'bg-bad/10 text-bad dark:bg-bad/10 dark:text-bad border-bad/30';
   };
 

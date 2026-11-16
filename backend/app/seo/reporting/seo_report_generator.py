@@ -253,7 +253,7 @@ class CompleteSeoReportGenerator:
         score_val = getattr(report.scores, "overall_score", None) if getattr(report, "scores", None) else None
         score_display = f"{int(round(score_val))}" if score_val is not None else "N/A"
         
-        score_color = "#64748b" if score_val is None else ("#10b981" if score_val >= 80 else ("#f59e0b" if score_val >= 60 else "#ef4444"))
+        score_color = "#64748b" if score_val is None else ("#10b981" if score_val >= 75 else ("#f59e0b" if score_val >= 50 else "#ef4444"))
         
         pages_crawled = len(report.page_reports)
         findings_count = len(report.findings)

@@ -1942,21 +1942,10 @@ def build_seo_book_context(report: Any, page_numbers: Optional[Dict[str, int]] =
     ext_auth = _get_val(report, "external_authority")
     ext_auth_status = "Connected" if (ext_auth and _get_val(ext_auth, "status") in ("MEASURED", "CONNECTED")) else "Unavailable or not connected"
 
-    # Calculate executive grade
-    def _calc_grade(sc: Optional[int]) -> Tuple[str, str]:
-        if sc is None:
-            return "—", "UNMEASURED"
-        if sc >= 90:
-            return "A", "EXEMPLARY"
-        if sc >= 80:
-            return "B", "COMMENDABLE"
-        if sc >= 70:
-            return "C", "MODERATE RISK"
-        if sc >= 60:
-            return "D", "HIGH RISK"
-        return "F", "CRITICAL DEFECTS"
-
-    grade, grade_label = _calc_grade(display_score)
+    # Calculate executive grade using canonical Dristik scale
+    from app.domain.scoring.displayed_score import rating_for_displayed
+    grade, raw_health = rating_for_displayed(float(display_score) if display_score is not None else None)
+    grade_label = raw_health.upper()
 
     def _as_text_list(val: Any) -> List[str]:
         if not val:

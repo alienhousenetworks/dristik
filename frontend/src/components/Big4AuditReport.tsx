@@ -183,8 +183,8 @@ export function Big4AuditReport({
   };
 
   const getScoreBadge = (score: number) => {
-    if (score >= 80) return 'text-good bg-good/10 border-good/30';
-    if (score >= 60) return 'text-warn bg-warn/10 border-warn/30';
+    if (score >= 75) return 'text-good bg-good/10 border-good/30';
+    if (score >= 50) return 'text-warn bg-warn/10 border-warn/30';
     return 'text-bad bg-bad/10 border-bad/30';
   };
 
@@ -1045,7 +1045,7 @@ export function Big4AuditReport({
                             <td className="p-2 text-center">{Math.round(activeShown)}</td>
                             <td className="p-2 text-center text-ink-500">100</td>
                             <td className="p-2 text-right font-sans text-[10px] text-ink-700">
-                              {activeShown >= 80 ? 'Optimal' : activeShown >= 60 ? 'Acceptable' : 'Deficient'}
+                              {activeShown >= 85 ? 'Excellent' : activeShown >= 75 ? 'Good' : activeShown >= 65 ? 'Moderate' : activeShown >= 50 ? 'Needs Attention' : 'Low readiness'}
                             </td>
                           </tr>
                         </tfoot>

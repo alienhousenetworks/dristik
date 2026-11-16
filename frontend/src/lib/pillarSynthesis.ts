@@ -1,19 +1,15 @@
 import { ExecutiveReport, PillarScoreData, WebsiteIntelligenceRollup } from '../types';
+import { gradeForScore, ratingForScore } from '../report/models/scoreLedger';
 
 function getHealth(score: number | null): 'GOOD' | 'FAIR' | 'POOR' {
-  if (score == null) return 'POOR';
-  if (score >= 80) return 'GOOD';
-  if (score >= 60) return 'FAIR';
+  const { tone } = ratingForScore(score);
+  if (tone === 'good') return 'GOOD';
+  if (tone === 'warn') return 'FAIR';
   return 'POOR';
 }
 
 function getGrade(score: number | null): string {
-  if (score == null) return '—';
-  if (score >= 90) return 'A';
-  if (score >= 80) return 'B';
-  if (score >= 70) return 'C';
-  if (score >= 60) return 'D';
-  return 'F';
+  return gradeForScore(score);
 }
 
 export function synthesizePillars(report: ExecutiveReport | undefined | null): WebsiteIntelligenceRollup {

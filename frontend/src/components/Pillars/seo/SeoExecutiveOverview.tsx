@@ -95,10 +95,10 @@ export function SeoExecutiveOverview({
   }));
 
   const getScoreGrade = (score: number) => {
-    if (score >= 90) return { label: 'Optimal', badge: 'bg-good/10 text-good border-good/20' };
+    if (score >= 85) return { label: score >= 93 ? 'Exceptional' : 'Excellent', badge: 'bg-good/10 text-good border-good/20' };
     if (score >= 75) return { label: 'Good', badge: 'bg-pine-500/10 text-pine-600 dark:text-pine-400 border-pine-500/20' };
-    if (score >= 60) return { label: 'Fair', badge: 'bg-warn/10 text-warn border-warn/20' };
-    return { label: 'Needs Attention', badge: 'bg-bad/10 text-bad border-bad/20' };
+    if (score >= 50) return { label: score >= 65 ? 'Moderate' : 'Needs Attention', badge: 'bg-warn/10 text-warn border-warn/20' };
+    return { label: 'Low readiness', badge: 'bg-bad/10 text-bad border-bad/20' };
   };
 
   const grade = seoScore != null ? getScoreGrade(seoScore) : { label: 'Not scored', badge: 'bg-paper-100 text-ink-500 border-line' };
@@ -193,7 +193,7 @@ export function SeoExecutiveOverview({
                         className={`h-full rounded-full transition-all duration-500 ${
                           sub.score >= 85
                             ? 'bg-good'
-                            : sub.score >= 70
+                            : sub.score >= 75
                             ? 'bg-pine-500'
                             : sub.score >= 50
                             ? 'bg-warn'

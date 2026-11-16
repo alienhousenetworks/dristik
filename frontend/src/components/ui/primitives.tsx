@@ -201,7 +201,7 @@ export function ScorePill({ score }: { score?: number | null }) {
     return <span className="score-pill text-ink-400">—</span>;
   }
   const n = Math.round(score);
-  const tone = n >= 80 ? 'text-good bg-good/10' : n >= 60 ? 'text-warn bg-warn/10' : 'text-bad bg-bad/10';
+  const tone = n >= 75 ? 'text-good bg-good/10' : n >= 50 ? 'text-warn bg-warn/10' : 'text-bad bg-bad/10';
   return <span className={cn('score-pill', tone)}>{n}</span>;
 }
 

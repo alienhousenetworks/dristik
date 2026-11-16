@@ -365,7 +365,7 @@ async def get_executive_deck(
     dossier_grade = None
     if report is not None:
         try:
-            from app.scoring.displayed_score import displayed_composite, grade_for_displayed
+            from app.domain.scoring.displayed_score import displayed_composite, grade_for_displayed
             payload = report.model_dump(mode="json") if hasattr(report, "model_dump") else None
             score = displayed_composite(payload) if payload else None
             if score is not None:

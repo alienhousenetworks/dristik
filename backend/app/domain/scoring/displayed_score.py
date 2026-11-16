@@ -95,6 +95,23 @@ def grade_for_displayed(score: float) -> str:
     return "F"
 
 
+def rating_for_displayed(score: Optional[float]) -> tuple[str, str]:
+    """Canonical (letter_grade, health_label) pair across all reports and UI surfaces."""
+    if score is None:
+        return "—", "Unmeasured"
+    if score >= 93:
+        return "A+", "Exceptional"
+    if score >= 85:
+        return "A", "Excellent"
+    if score >= 75:
+        return "B", "Good"
+    if score >= 65:
+        return "C", "Moderate"
+    if score >= 50:
+        return "D", "Needs Attention"
+    return "F", "Low readiness"
+
+
 def _score_claim_pattern(token: Optional[str] = None) -> "re.Pattern[str]":
     number = rf"{re.escape(token)}(?:\.0)?" if token else r"\d+(?:\.\d+)?"
     return re.compile(

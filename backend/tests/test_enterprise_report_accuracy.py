@@ -208,3 +208,29 @@ def test_deck_math_and_adjudication_honest_on_empty_data():
     adj = BlackboardAdjudicationAuditor().audit_report(report_with_finding)
     assert adj.evidence_token_inventory == []
     assert adj.adjudicated_findings[0].evidence_tokens == []
+
+
+def test_canonical_grading_consistency_across_all_surfaces():
+    from app.domain.scoring.displayed_score import grade_for_displayed, rating_for_displayed
+    from app.geo.per_engine_evaluator import _grade_from_score
+    from app.orchestration.public_grader import _grade_letter
+
+    expected = [
+        (95, "A+", "Exceptional"),
+        (88, "A", "Excellent"),
+        (78, "B", "Good"),
+        (68, "C", "Moderate"),
+        (55, "D", "Needs Attention"),
+        (30, "F", "Low readiness"),
+    ]
+    for score, exp_grade, exp_label in expected:
+        assert grade_for_displayed(score) == exp_grade
+        assert rating_for_displayed(score) == (exp_grade, exp_label)
+        assert DeterministicMetricEngine._grade_for_score(float(score)) == exp_grade
+        assert _grade_from_score(float(score)) == exp_grade
+        pg_grade, pg_label, _ = _grade_letter(score)
+        assert pg_grade == exp_grade
+        assert pg_label == exp_label
+
+    assert rating_for_displayed(None) == ("—", "Unmeasured")
+    assert _grade_letter(None)[:2] == (None, "Not measured")

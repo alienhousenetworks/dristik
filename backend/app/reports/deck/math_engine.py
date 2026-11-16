@@ -58,8 +58,11 @@ class DeterministicMetricEngine:
         # 1. Overall Score & Category Scores
         scores = report.scores
         overall_score = float(scores.overall_score) if scores and scores.overall_score is not None else 0.0
-        grade = scores.grade if scores and scores.grade else (self._grade_for_score(overall_score) if overall_score > 0 else "—")
-        health_label = scores.health_label if scores and scores.health_label else ("Calibrated" if overall_score > 0 else "Unmeasured")
+        has_overall_val = scores is not None and scores.overall_score is not None
+        from app.domain.scoring.displayed_score import rating_for_displayed
+        canon_grade, canon_health = rating_for_displayed(overall_score if has_overall_val else None)
+        grade = scores.grade if scores and scores.grade else canon_grade
+        health_label = scores.health_label if scores and scores.health_label else canon_health
 
         cat_scores: Dict[str, float] = {}
         cat_gaps: Dict[str, float] = {}
@@ -204,12 +207,5 @@ class DeterministicMetricEngine:
 
     @staticmethod
     def _grade_for_score(score: float) -> str:
-        if score >= 90.0:
-            return "A+"
-        if score >= 80.0:
-            return "A"
-        if score >= 70.0:
-            return "B"
-        if score >= 60.0:
-            return "C"
-        return "D"
+        from app.domain.scoring.displayed_score import grade_for_displayed
+        return grade_for_displayed(score)

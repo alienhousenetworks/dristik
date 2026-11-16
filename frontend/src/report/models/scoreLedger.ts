@@ -62,6 +62,24 @@ export function gradeForScore(score: number | null): string {
   return 'F';
 }
 
+export type ScoreTone = 'good' | 'warn' | 'bad' | 'neutral';
+
+export function ratingForScore(score: number | null): {
+  grade: string;
+  label: string;
+  tone: ScoreTone;
+} {
+  if (score == null || Number.isNaN(score)) {
+    return { grade: '—', label: 'Unmeasured', tone: 'neutral' };
+  }
+  if (score >= 93) return { grade: 'A+', label: 'Exceptional', tone: 'good' };
+  if (score >= 85) return { grade: 'A', label: 'Excellent', tone: 'good' };
+  if (score >= 75) return { grade: 'B', label: 'Good', tone: 'good' };
+  if (score >= 65) return { grade: 'C', label: 'Moderate', tone: 'warn' };
+  if (score >= 50) return { grade: 'D', label: 'Needs Attention', tone: 'warn' };
+  return { grade: 'F', label: 'Low readiness', tone: 'bad' };
+}
+
 function roundTo(value: number, digits: number): number {
   const factor = 10 ** digits;
   return Math.round((value + Number.EPSILON) * factor) / factor;

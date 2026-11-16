@@ -161,14 +161,19 @@ def normalize_public_domain(raw_domain: str) -> str:
 def _grade_letter(score: Optional[int]) -> tuple[Optional[str], str, Optional[str]]:
     if score is None:
         return None, "Not measured", None
-    if score >= 90:
-        letter, label, nxt = "A", "Strong preliminary readiness", None
-    elif score >= 75:
-        letter, label, nxt = "B", "Preliminary readiness", "A is 90 or above on this bounded check set"
-    elif score >= 50:
-        letter, label, nxt = "C", "Partial preliminary readiness", "B is 75 or above on this bounded check set"
-    else:
-        letter, label, nxt = "D", "Weak preliminary readiness", "C is 50 or above on this bounded check set"
+    from app.domain.scoring.displayed_score import rating_for_displayed
+    letter, label = rating_for_displayed(float(score))
+    nxt = None
+    if score < 50:
+        nxt = "D is 50 or above on this bounded check set"
+    elif score < 65:
+        nxt = "C is 65 or above on this bounded check set"
+    elif score < 75:
+        nxt = "B is 75 or above on this bounded check set"
+    elif score < 85:
+        nxt = "A is 85 or above on this bounded check set"
+    elif score < 93:
+        nxt = "A+ is 93 or above on this bounded check set"
     return letter, label, nxt
 
 

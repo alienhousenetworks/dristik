@@ -698,8 +698,9 @@ def _build_ch_geo(report: Any, manifest: Dict[str, Any]) -> str:
         if geo_cat:
             score_ext = getattr(geo_cat, "score", None)
 
+    from app.domain.scoring.displayed_score import grade_for_displayed
     score_disp = f"{float(score_ext):.0f}" if score_ext is not None else "NOT MEASURED"
-    grade = ("A" if score_ext >= 85 else ("B" if score_ext >= 70 else ("C" if score_ext >= 50 else "D"))) if score_ext is not None else "N/A"
+    grade = grade_for_displayed(float(score_ext)) if score_ext is not None else "N/A"
 
     q_list = getattr(geo, "questions", []) or []
     q_total = int(getattr(geo, "questions_total", 0) or len(q_list))
@@ -1521,8 +1522,9 @@ def _build_ch_geo_extractability(report: Any, manifest: Dict[str, Any]) -> str:
         if geo_cat:
             score_ext = getattr(geo_cat, "score", None)
 
+    from app.domain.scoring.displayed_score import grade_for_displayed
     score_disp = f"{float(score_ext):.0f}" if score_ext is not None else "NOT MEASURED"
-    grade = ("A" if score_ext >= 85 else ("B" if score_ext >= 70 else ("C" if score_ext >= 50 else "D"))) if score_ext is not None else "N/A"
+    grade = grade_for_displayed(float(score_ext)) if score_ext is not None else "N/A"
 
     findings = [f for f in _report_findings(report) if "GEO" in str(getattr(f, "category", "")).upper()]
     callout = render_section_business_callout(

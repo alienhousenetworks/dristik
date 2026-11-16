@@ -39,23 +39,14 @@ _ORIGINAL_DATA_PATTERNS = [
 
 
 def _grade_from_score(score: float) -> str:
-    if score >= 90:
-        return "A+"
-    if score >= 80:
-        return "A"
-    if score >= 70:
-        return "B"
-    if score >= 60:
-        return "C"
-    if score >= 50:
-        return "D"
-    return "F"
+    from app.domain.scoring.displayed_score import grade_for_displayed
+    return grade_for_displayed(score)
 
 
 def _band_from_score(score: float) -> str:
-    if score >= 70:
+    if score >= 75:
         return "high"
-    if score >= 45:
+    if score >= 50:
         return "medium"
     return "low"
 
