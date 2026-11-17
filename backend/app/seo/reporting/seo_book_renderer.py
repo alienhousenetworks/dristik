@@ -1307,6 +1307,286 @@ def _expected_for_metric_check(check_lower: str) -> str:
     return "Conforms to target enterprise technical SEO and search engine specification."
 
 
+_DISCIPLINE_FORBIDDEN_PHRASES: Dict[str, Tuple[str, ...]] = {
+    "sec-local-seo": (
+        "semantic heading hierarchy",
+        "heading hierarchy",
+        "h1-h3",
+        "h1–h3",
+        "h2/h3",
+        "heading outline",
+        "missing h1",
+        "multiple h1",
+        "topic cluster",
+        "pillar page",
+        "render-blocking",
+        "strict-transport-security",
+        "hsts",
+    ),
+    "local_seo": (
+        "semantic heading hierarchy",
+        "heading hierarchy",
+        "h1-h3",
+        "h1–h3",
+        "h2/h3",
+        "heading outline",
+        "missing h1",
+        "multiple h1",
+        "topic cluster",
+        "pillar page",
+    ),
+    "sec-mobile-seo": (
+        "semantic heading hierarchy",
+        "heading hierarchy",
+        "h1-h3",
+        "h1–h3",
+        "h2/h3",
+        "heading outline",
+        "topic cluster",
+        "pillar page",
+        "topical structure",
+        "content depth",
+        "thin copy",
+        "backlink",
+        "referring domain",
+        "localbusiness",
+        "nap consistency",
+    ),
+    "mobile_seo": (
+        "semantic heading hierarchy",
+        "heading hierarchy",
+        "h1-h3",
+        "h1–h3",
+        "h2/h3",
+        "heading outline",
+        "topic cluster",
+        "pillar page",
+        "topical structure",
+        "content depth",
+        "thin copy",
+    ),
+    "sec-offpage-backlinks": (
+        "semantic heading hierarchy",
+        "heading hierarchy",
+        "h1-h3",
+        "h1–h3",
+        "h2/h3",
+        "heading outline",
+        "missing h1",
+        "viewport",
+        "touch target",
+        "tap target",
+        "localbusiness",
+        "nap consistency",
+    ),
+    "backlinks": (
+        "semantic heading hierarchy",
+        "heading hierarchy",
+        "h1-h3",
+        "h1–h3",
+        "h2/h3",
+        "heading outline",
+        "missing h1",
+        "viewport",
+        "touch target",
+        "tap target",
+    ),
+    "sec-core-web-vitals": (
+        "semantic heading hierarchy",
+        "heading hierarchy",
+        "h1-h3",
+        "h1–h3",
+        "h2/h3",
+        "heading outline",
+        "topic cluster",
+        "backlink",
+        "nap consistency",
+    ),
+}
+
+_DISCIPLINE_FALLBACK_CONCLUSIONS: Dict[str, str] = {
+    "sec-local-seo": "Ensure Google Business Profile, LocalBusiness JSON-LD address/telephone, map embeds, and NAP citations are consistent across all location pages.",
+    "local_seo": "Ensure Google Business Profile, LocalBusiness JSON-LD address/telephone, map embeds, and NAP citations are consistent across all location pages.",
+    "sec-mobile-seo": "Verify responsive <meta name='viewport'> configuration, >= 48x48px touch target spacing, and zero horizontal overflow on 375px mobile viewports.",
+    "mobile_seo": "Verify responsive <meta name='viewport'> configuration, >= 48x48px touch target spacing, and zero horizontal overflow on 375px mobile viewports.",
+    "sec-offpage-backlinks": "Monitor referring domain authority, link attribute distribution, and destination URL HTTP 200 resolution via connected backlink telemetry.",
+    "backlinks": "Monitor referring domain authority, link attribute distribution, and destination URL HTTP 200 resolution via connected backlink telemetry.",
+    "sec-core-web-vitals": "Optimize origin TTFB (< 800ms), Largest Contentful Paint (LCP <= 2.5s), Interaction to Next Paint (INP <= 200ms), and Cumulative Layout Shift (CLS <= 0.1).",
+}
+
+
+def validate_chapter_discipline_contract(chapter_key: str, text: str) -> Dict[str, Any]:
+    """
+    Validates chapter prose against its discipline contract and strips/blocks
+    off-discipline generic conclusions (e.g. recommending semantic heading hierarchy
+    inside Local SEO, Mobile SEO, or Backlinks chapters).
+    """
+    norm_key = str(chapter_key or "").strip().lower().replace("_", "-")
+    forbidden = _DISCIPLINE_FORBIDDEN_PHRASES.get(norm_key) or _DISCIPLINE_FORBIDDEN_PHRASES.get(str(chapter_key or "").strip().lower(), ())
+    if not forbidden:
+        for k, phrases in _DISCIPLINE_FORBIDDEN_PHRASES.items():
+            if k in norm_key or norm_key in k:
+                forbidden = phrases
+                break
+
+    raw_text = str(text or "").strip()
+    if not raw_text or not forbidden:
+        return {
+            "chapter_key": chapter_key,
+            "is_valid": True,
+            "violations": [],
+            "cleaned_text": raw_text,
+            "text": raw_text,
+        }
+
+    sentences = re.split(r"(?<=[.!?])\s+", raw_text)
+    kept_sentences: List[str] = []
+    violations: List[str] = []
+
+    for sent in sentences:
+        s_low = sent.lower()
+        matched_phrases = [p for p in forbidden if p in s_low]
+        if matched_phrases:
+            violations.extend(matched_phrases)
+        else:
+            kept_sentences.append(sent)
+
+    cleaned = " ".join(s.strip() for s in kept_sentences if s.strip()).strip()
+    if violations and not cleaned:
+        cleaned = _DISCIPLINE_FALLBACK_CONCLUSIONS.get(norm_key) or _DISCIPLINE_FALLBACK_CONCLUSIONS.get(
+            str(chapter_key or "").strip().lower(),
+            "Maintain compliance with the target chapter specification across inspected URLs.",
+        )
+
+    return {
+        "chapter_key": chapter_key,
+        "is_valid": len(violations) == 0,
+        "violations": list(dict.fromkeys(violations)),
+        "cleaned_text": cleaned,
+        "text": cleaned,
+    }
+
+
+def _compute_ttfb_outlier_diagnostics(report: Any, pages_list: Sequence[Any]) -> Dict[str, Any]:
+    """
+    Computes Mean, Median, and Maximum TTFB across crawled pages and detects
+    whether a single outlier page skews the mean.
+    """
+    manifest = _get_val(report, "crawl_manifest") or {}
+    crawl_health = _get_val(manifest, "crawl_health")
+    timed_pairs: List[Tuple[str, float]] = []
+    for idx, p in enumerate(pages_list or []):
+        raw_t = _get_val(p, "ttfb_ms")
+        try:
+            t_val = float(raw_t or 0.0)
+        except (ValueError, TypeError):
+            t_val = 0.0
+        if t_val > 0:
+            u = str(_get_val(p, "url") or f"/page-{idx + 1}")
+            timed_pairs.append((u, t_val))
+
+    if not timed_pairs:
+        avg_fallback = 0.0
+        if isinstance(crawl_health, dict):
+            try:
+                avg_fallback = float(crawl_health.get("avg_ttfb_ms", 0.0) or 0.0)
+            except (ValueError, TypeError):
+                avg_fallback = 0.0
+        elif getattr(report, "site_speed_audit", None):
+            try:
+                avg_fallback = float(getattr(report.site_speed_audit, "avg_ttfb_ms", 0.0) or 0.0)
+            except (ValueError, TypeError):
+                avg_fallback = 0.0
+        return {
+            "count": 0,
+            "mean_ms": avg_fallback,
+            "median_ms": avg_fallback,
+            "max_ms": avg_fallback,
+            "min_ms": avg_fallback,
+            "second_max_ms": avg_fallback,
+            "is_single_outlier": False,
+            "outlier_url": None,
+            "outlier_narrative": "",
+            "stats_summary": f"Mean: {int(round(avg_fallback)):,} ms | Median: {int(round(avg_fallback)):,} ms | Max: {int(round(avg_fallback)):,} ms" if avg_fallback > 0 else "",
+        }
+
+    sorted_pairs = sorted(timed_pairs, key=lambda x: x[1])
+    vals = [v for _, v in sorted_pairs]
+    n = len(vals)
+    mean_ms = sum(vals) / n
+    mid = n // 2
+    median_ms = vals[mid] if n % 2 == 1 else (vals[mid - 1] + vals[mid]) / 2.0
+    min_ms = vals[0]
+    max_ms = vals[-1]
+    max_url = sorted_pairs[-1][0]
+    second_max_ms = vals[-2] if n >= 2 else min_ms
+
+    outlier_threshold = max(2000.0, median_ms * 3.0)
+    outliers = [(u, v) for u, v in sorted_pairs if v > outlier_threshold]
+    is_single_outlier = bool(n >= 2 and len(outliers) == 1 and median_ms < 1000.0)
+
+    mean_fmt = f"{int(round(mean_ms)):,}"
+    median_fmt = f"{int(round(median_ms)):,}"
+    max_fmt = f"{int(round(max_ms)):,}"
+    min_fmt = f"{int(round(min_ms)):,}"
+    second_max_fmt = f"{int(round(second_max_ms)):,}"
+    sec_fmt = f"{max_ms / 1000.0:.1f}"
+
+    stats_summary = f"Mean: {mean_fmt} ms | Median: {median_fmt} ms | Maximum: {max_fmt} ms"
+    if is_single_outlier:
+        outlier_narrative = (
+            f"One sampled page ({max_url}) recorded an exceptionally high TTFB of {max_fmt} ms (~{sec_fmt}s). "
+            f"The other {n - 1} sampled URLs recorded {min_fmt}–{second_max_fmt} ms (median: {median_fmt} ms). "
+            f"The mean ({mean_fmt} ms) is heavily influenced by this isolated outlier rather than a site-wide server latency issue."
+        )
+    else:
+        outlier_narrative = ""
+
+    return {
+        "count": n,
+        "mean_ms": mean_ms,
+        "median_ms": median_ms,
+        "max_ms": max_ms,
+        "min_ms": min_ms,
+        "second_max_ms": second_max_ms,
+        "is_single_outlier": is_single_outlier,
+        "outlier_url": max_url if is_single_outlier else None,
+        "outlier_narrative": outlier_narrative,
+        "stats_summary": stats_summary,
+    }
+
+
+def _has_connected_external_authority(report: Any) -> Tuple[bool, str]:
+    """Checks report.external_data_sources, report.external_authority, and report.google_performance dynamically."""
+    ext_auth = _get_val(report, "external_authority")
+    if ext_auth:
+        st = str(_get_val(ext_auth, "status") or "").upper()
+        if st in ("MEASURED", "CONNECTED", "AVAILABLE"):
+            rd = _get_val(ext_auth, "referring_domains") or _get_val(ext_auth, "referring_domains_count")
+            bl = _get_val(ext_auth, "total_backlinks") or _get_val(ext_auth, "backlinks_count")
+            detail = f"Connected authority telemetry (Referring domains: {rd if rd is not None else 'measured'}, Backlinks: {bl if bl is not None else 'measured'})"
+            return True, detail
+        cov = _get_val(ext_auth, "coverage") or []
+        if isinstance(cov, list) and any(str(_get_val(c, "status") or "").upper() in ("CONNECTED", "MEASURED") for c in cov):
+            return True, "Connected via external authority provider"
+
+    ext_sources = _get_val(report, "external_data_sources")
+    if isinstance(ext_sources, dict):
+        for k, v in ext_sources.items():
+            if any(tok in str(k).lower() for tok in ("backlink", "authority", "ahrefs", "semrush", "moz", "majestic")):
+                st = str(_get_val(v, "status") or _get_val(v, "state") or v).upper()
+                if st in ("CONNECTED", "MEASURED", "AVAILABLE", "TRUE"):
+                    return True, f"Connected ({k})"
+    elif isinstance(ext_sources, list):
+        for item in ext_sources:
+            name = str(_get_val(item, "name") or _get_val(item, "provider") or "").lower()
+            st = str(_get_val(item, "status") or _get_val(item, "state") or "").upper()
+            if any(tok in name for tok in ("backlink", "authority", "ahrefs", "semrush", "moz")) and st in ("CONNECTED", "MEASURED", "AVAILABLE"):
+                return True, f"Connected ({name})"
+
+    return False, "Requires authorized backlink connector (Ahrefs/Semrush/GSC)"
+
+
 def _resolve_dedicated_metric(
     check_lower: str,
     ch_id: str,
@@ -1327,29 +1607,33 @@ def _resolve_dedicated_metric(
     findings_pool = all_findings if all_findings is not None else ch_findings
     sample_scope = f"{pages_crawled} pages sample" if pages_crawled > 0 else "Uninspected"
 
-    # 1. Server Response & Core Web Vitals (TTFB)
+    # 1. Server Response & Core Web Vitals (TTFB, LCP, INP, CLS)
     if "ttfb" in check_lower or "server response time" in check_lower:
-        avg_ttfb = 0.0
-        crawl_health = _get_val(manifest, "crawl_health")
-        if isinstance(crawl_health, dict):
-            try:
-                avg_ttfb = float(crawl_health.get("avg_ttfb_ms", 0.0) or 0.0)
-            except (ValueError, TypeError):
-                avg_ttfb = 0.0
-        elif getattr(report, "site_speed_audit", None):
-            try:
-                avg_ttfb = float(getattr(report.site_speed_audit, "avg_ttfb_ms", 0.0) or 0.0)
-            except (ValueError, TypeError):
-                avg_ttfb = 0.0
-        if avg_ttfb <= 0 and pages_list:
-            vals = [float(_get_val(p, "ttfb_ms") or 0) for p in pages_list if (_get_val(p, "ttfb_ms") or 0) > 0]
-            if vals:
-                avg_ttfb = sum(vals) / len(vals)
+        ttfb_diag = _compute_ttfb_outlier_diagnostics(report, pages_list)
+        avg_ttfb = ttfb_diag["mean_ms"]
+        med_ttfb = ttfb_diag["median_ms"]
+        max_ttfb = ttfb_diag["max_ms"]
+        stats_str = ttfb_diag["stats_summary"]
 
+        if ttfb_diag["is_single_outlier"]:
+            return (
+                DiagnosticStatus.WARNING.value,
+                f"{stats_str}. {ttfb_diag['outlier_narrative']}",
+                sample_scope,
+            )
         if avg_ttfb > 800:
-            return (DiagnosticStatus.FAILED.value, f"Average TTFB measured at {avg_ttfb:.0f} ms (exceeds 800ms threshold)", sample_scope)
+            return (
+                DiagnosticStatus.FAILED.value,
+                f"{stats_str} (exceeds 800ms threshold)",
+                sample_scope,
+            )
         elif avg_ttfb > 0:
-            return (DiagnosticStatus.PASSED.value, f"Average TTFB measured at {avg_ttfb:.0f} ms (< 800ms target)", sample_scope)
+            status_val = DiagnosticStatus.WARNING.value if max_ttfb > 800 else DiagnosticStatus.PASSED.value
+            return (
+                status_val,
+                f"{stats_str} (median {int(round(med_ttfb)):,} ms < 800ms target)",
+                sample_scope,
+            )
         else:
             ttfb_f = next((f for f in findings_pool if "ttfb" in f"{f.get('title', '')} {f.get('what_was_checked', '')}".lower()), None)
             if ttfb_f:
@@ -1357,14 +1641,61 @@ def _resolve_dedicated_metric(
             return (DiagnosticStatus.NOT_TESTED.value, "TTFB latency not recorded during crawl", "Uninspected")
 
     if "slow loading" in check_lower:
-        crawl_health = _get_val(manifest, "crawl_health")
-        avg_ttfb = float(crawl_health.get("avg_ttfb_ms", 0.0) or 0.0) if isinstance(crawl_health, dict) else 0.0
+        ttfb_diag = _compute_ttfb_outlier_diagnostics(report, pages_list)
         slow_pages = [p for p in pages_list if float(_get_val(p, "ttfb_ms") or 0) > 800]
+        if ttfb_diag["is_single_outlier"]:
+            return (
+                DiagnosticStatus.WARNING.value,
+                f"1 of {pages_crawled} sampled page(s) ({ttfb_diag['outlier_url']}) recorded an isolated outlier TTFB of {int(round(ttfb_diag['max_ms'])):,} ms (Mean: {int(round(ttfb_diag['mean_ms'])):,} ms, Median: {int(round(ttfb_diag['median_ms'])):,} ms). {ttfb_diag['outlier_narrative']}",
+                sample_scope,
+            )
         if slow_pages:
-            return (DiagnosticStatus.FAILED.value, f"{len(slow_pages)} of {pages_crawled} page(s) exceeded 800ms TTFB", sample_scope)
-        if avg_ttfb > 800:
-            return (DiagnosticStatus.FAILED.value, f"{pages_crawled} page(s) exhibit slow server response latency", sample_scope)
+            return (DiagnosticStatus.FAILED.value, f"{len(slow_pages)} of {pages_crawled} page(s) exceeded 800ms TTFB ({ttfb_diag['stats_summary']})", sample_scope)
+        if ttfb_diag["mean_ms"] > 800 and ttfb_diag["median_ms"] > 800:
+            return (DiagnosticStatus.FAILED.value, f"Median TTFB ({int(round(ttfb_diag['median_ms'])):,} ms) exceeds 800ms threshold ({ttfb_diag['stats_summary']})", sample_scope)
         return (DiagnosticStatus.PASSED.value, "0 slow loading URLs (>800ms TTFB) detected in inspected sample", sample_scope)
+
+    if any(k in check_lower for k in ("lcp", "inp", "cls", "core web vital")):
+        field_rows = []
+        lab_rows = []
+        estimated_rows = []
+        for p in pages_list:
+            fp = _get_val(p, "field_performance")
+            if fp and _get_val(fp, "has_field_data"):
+                field_rows.append(
+                    f"CrUX Field p75: LCP {_get_val(fp, 'p75_lcp_ms') or '—'}ms, INP {_get_val(fp, 'p75_inp_ms') or '—'}ms, CLS {_get_val(fp, 'p75_cls') if _get_val(fp, 'p75_cls') is not None else '—'}"
+                )
+            lp = _get_val(p, "lab_performance")
+            if lp:
+                lh_ver = str(_get_val(lp, "lighthouse_audit_version") or "")
+                mode = str(_get_val(lp, "measurement_mode") or _get_val(lp, "source") or "").upper()
+                if "ESTIMATED" in mode or "TIMING" in mode or not lh_ver:
+                    if _get_val(lp, "lcp_ms") is not None or _get_val(lp, "cls_score") is not None:
+                        estimated_rows.append(f"ESTIMATED_FROM_TIMING (not a Lighthouse run): LCP {_get_val(lp, 'lcp_ms') or '—'}ms")
+                elif _get_val(lp, "lcp_ms") is not None or _get_val(lp, "cls_score") is not None:
+                    lab_rows.append(f"Lab Lighthouse ({lh_ver}): LCP {_get_val(lp, 'lcp_ms') or '—'}ms, CLS {_get_val(lp, 'cls_score') if _get_val(lp, 'cls_score') is not None else '—'}")
+        if field_rows or lab_rows:
+            parts = []
+            if field_rows:
+                parts.append(field_rows[0])
+            else:
+                parts.append("Field (CrUX): Not available")
+            if lab_rows:
+                parts.append(lab_rows[0])
+            else:
+                parts.append("Lab (Lighthouse): Not executed")
+            return (DiagnosticStatus.PASSED.value, " | ".join(parts), sample_scope)
+        if estimated_rows:
+            return (
+                DiagnosticStatus.NOT_TESTED.value,
+                f"Field (CrUX): Not available | Lab (Lighthouse): Not executed ({estimated_rows[0]})",
+                sample_scope,
+            )
+        return (
+            DiagnosticStatus.NOT_TESTED.value,
+            "Field (CrUX) and Lab (Lighthouse) LCP/INP/CLS were not measured on this run",
+            "Uninspected",
+        )
 
     # 2. Image SEO and Media Assets (Checks full findings_pool + PageEvidence images!)
     if "missing alt text" in check_lower or "alt text image" in check_lower:
@@ -1564,7 +1895,32 @@ def _resolve_dedicated_metric(
 
     # 8. External Authority & Backlinks
     if any(k in check_lower for k in ["referring domain", "authority profile", "backlink count", "backlink profile"]):
-        return (DiagnosticStatus.UNAVAILABLE.value, "Requires authorized backlink connector (Ahrefs/Semrush/GSC)", "Unavailable")
+        has_auth_conn, auth_detail = _has_connected_external_authority(report)
+        if has_auth_conn:
+            return (DiagnosticStatus.PASSED.value, auth_detail, "Connected provider")
+        return (DiagnosticStatus.UNAVAILABLE.value, auth_detail, "Unavailable")
+
+    # 8b. Local SEO & Google Business Profile
+    if any(k in check_lower for k in ["nap consistency", "localbusiness schema", "google business profile", "map embed", "local citation"]):
+        loc = _get_val(report, "local_seo")
+        if "localbusiness" in check_lower:
+            all_types = {str(t).lower() for p in pages_list for t in (_get_val(p, "schema_types") or [])}
+            has_lb = any("localbusiness" in t or t in ("store", "restaurant", "medicalbusiness", "dentist", "legalservice", "professionalservice") for t in all_types)
+            if has_lb:
+                return (DiagnosticStatus.PASSED.value, "LocalBusiness JSON-LD entity detected with address and telephone", sample_scope)
+            return (DiagnosticStatus.FAILED.value, "No LocalBusiness JSON-LD entity detected across crawled pages", sample_scope)
+        nap_score = _get_val(loc, "nap_consistency_score") if loc else None
+        if nap_score is None and loc:
+            nap_score = _get_val(loc, "nap_consistency_pct")
+        phones_found = sum(1 for p in pages_list if (_get_val(p, "nap_data") or {}).get("phone_numbers") or (_get_val(p, "nap_data") or {}).get("phone"))
+        addrs_found = sum(1 for p in pages_list if (_get_val(p, "nap_data") or {}).get("addresses") or (_get_val(p, "nap_data") or {}).get("address"))
+        if nap_score is not None:
+            score_pct = float(nap_score) * 100.0 if float(nap_score) <= 1.0 and float(nap_score) > 0 else float(nap_score)
+            status_val = DiagnosticStatus.PASSED.value if score_pct >= 80.0 else DiagnosticStatus.FAILED.value
+            return (status_val, f"NAP consistency score: {score_pct:.1f}% (Phones on {phones_found} page(s), Addresses on {addrs_found} page(s))", sample_scope)
+        if phones_found > 0 or addrs_found > 0:
+            return (DiagnosticStatus.SAMPLED.value if is_sampled else DiagnosticStatus.PASSED.value, f"NAP signals extracted: phone numbers on {phones_found} page(s), addresses on {addrs_found} page(s)", sample_scope)
+        return (DiagnosticStatus.NOT_TESTED.value, "No physical NAP or LocalBusiness signals detected in sample", sample_scope)
 
     # 9. Competitor Parity & Market Visibility
     if any(k in check_lower for k in ["competitor parity", "market visibility"]):
@@ -1594,10 +1950,38 @@ def _resolve_dedicated_metric(
 
     # 11. Mobile, JS Rendering, Accessibility, Trust & Analytics
     if "viewport tag" in check_lower or "touch target" in check_lower:
-        if pages_list and "viewport" in check_lower:
-            vp_cnt = sum(1 for p in pages_list if _get_val(p, "has_viewport", True))
-            return (DiagnosticStatus.PASSED.value, f"{vp_cnt}/{len(pages_list)} crawled pages declare responsive <meta name='viewport'>", sample_scope)
-        return (DiagnosticStatus.PASSED.value, "Touch target spacing compliant across mobile viewports", sample_scope)
+        if "viewport" in check_lower:
+            if not pages_list:
+                return (DiagnosticStatus.NOT_TESTED.value, "No crawled pages available for viewport inspection", "Uninspected")
+            vp_cnt = sum(1 for p in pages_list if bool(getattr(p, "viewport", None) or (isinstance(p, dict) and p.get("viewport"))))
+            if vp_cnt == len(pages_list):
+                return (DiagnosticStatus.PASSED.value, f"{vp_cnt}/{len(pages_list)} crawled pages declare responsive <meta name='viewport'>", sample_scope)
+            return (DiagnosticStatus.FAILED.value, f"{len(pages_list) - vp_cnt} of {len(pages_list)} crawled pages missing <meta name='viewport'>", sample_scope)
+        # Touch target spacing: never hardcode PASSED unless visual_ux actually inspected mobile viewports with 0 defects
+        vux = _get_val(report, "visual_ux")
+        if vux is not None:
+            tap_issues = _get_val(vux, "tap_target_issues_count")
+            if tap_issues is None:
+                tap_issues = _get_val(vux, "small_tap_targets_count")
+            if tap_issues is None:
+                tap_issues = _get_val(vux, "touch_target_defects")
+            if isinstance(tap_issues, (int, float)) and not isinstance(tap_issues, bool):
+                if int(tap_issues) == 0:
+                    return (
+                        DiagnosticStatus.SAMPLED.value if is_sampled else DiagnosticStatus.PASSED.value,
+                        "0 touch-target spacing defects (<48x48px) in inspected mobile viewports",
+                        sample_scope,
+                    )
+                return (
+                    DiagnosticStatus.FAILED.value,
+                    f"{int(tap_issues)} touch-target spacing defect(s) (<48x48px) detected on mobile viewport",
+                    sample_scope,
+                )
+        return (
+            DiagnosticStatus.NOT_TESTED.value,
+            "Touch target spacing was not tested (mobile viewport visual UX inspection not executed)",
+            "Uninspected",
+        )
 
     if "standard href link" in check_lower or "client-side render" in check_lower:
         return (DiagnosticStatus.PASSED.value, f"Core content and <a href> navigation pre-rendered in HTML across {pages_crawled} pages", sample_scope)
@@ -1708,8 +2092,92 @@ def _build_chapter_empirical_table(
             "rows": rows,
         }
 
+    # 2b. Core Web Vitals & Page Speed (Dedicated table with Mean, Median, Max, Field vs Lab, and Outlier Diagnosis)
+    if ch_id == "sec-core-web-vitals":
+        ttfb_diag = _compute_ttfb_outlier_diagnostics(report, pages)
+        rows = []
+        for p in pages:
+            full_u = str(_get_val(p, "url") or "")
+            u = _short_url(full_u)
+            ttfb = _get_val(p, "ttfb_ms")
+            ttfb_s = f"{int(round(float(ttfb))):,} ms" if ttfb else "—"
+            fp = _get_val(p, "field_performance")
+            if fp and _get_val(fp, "has_field_data"):
+                field_s = f"LCP {_get_val(fp, 'p75_lcp_ms') or '—'}ms / INP {_get_val(fp, 'p75_inp_ms') or '—'}ms / CLS {_get_val(fp, 'p75_cls') if _get_val(fp, 'p75_cls') is not None else '—'}"
+            else:
+                field_s = "Not available (CrUX)"
+            lp = _get_val(p, "lab_performance")
+            if lp:
+                lh_ver = str(_get_val(lp, "lighthouse_audit_version") or "")
+                mode = str(_get_val(lp, "measurement_mode") or _get_val(lp, "source") or "").upper()
+                if "ESTIMATED" in mode or "TIMING" in mode or not lh_ver:
+                    lab_s = "ESTIMATED_FROM_TIMING (not a Lighthouse run)"
+                else:
+                    lab_s = f"Lighthouse {lh_ver}: LCP {_get_val(lp, 'lcp_ms') or '—'}ms, CLS {_get_val(lp, 'cls_score') if _get_val(lp, 'cls_score') is not None else '—'}"
+            else:
+                lab_s = "Not executed"
+            rows.append([u, ttfb_s, field_s, lab_s])
+        note_parts = [ttfb_diag["stats_summary"]] if ttfb_diag["stats_summary"] else []
+        if ttfb_diag["is_single_outlier"]:
+            note_parts.append(ttfb_diag["outlier_narrative"])
+        return {
+            "title": "Page-by-Page TTFB Latency, Field (CrUX) & Lab (Lighthouse) Core Web Vitals",
+            "note": " ".join(note_parts) if note_parts else "Measured server response latency and Core Web Vitals.",
+            "columns": ["URL Path", "Measured TTFB", "Field CWV (CrUX p75)", "Lab CWV (Lighthouse)"],
+            "rows": rows,
+        }
+
+    # 2c. Mobile SEO & Viewport Usability
+    if ch_id == "sec-mobile-seo":
+        vux = _get_val(report, "visual_ux")
+        tap_issues = _get_val(vux, "tap_target_issues_count") if vux else None
+        rows = []
+        for p in pages:
+            u = _short_url(_get_val(p, "url"))
+            vp = getattr(p, "viewport", None) or (p.get("viewport") if isinstance(p, dict) else None)
+            vp_str = str(vp) if vp else "Missing <meta name='viewport'>"
+            vp_status = "Configured" if vp else "Missing"
+            tap_str = "Not tested" if tap_issues is None else ("Compliant (>=48x48px)" if int(tap_issues) == 0 else f"{int(tap_issues)} defect(s)")
+            rows.append([u, vp_str, vp_status, tap_str])
+        return {
+            "title": "Page-by-Page Mobile Viewport & Touch Target Usability Ledger",
+            "note": "Evaluates <meta name='viewport'> declarations and mobile touch target spacing.",
+            "columns": ["URL Path", "Viewport Meta Content", "Viewport Status", "Touch Target Spacing"],
+            "rows": rows,
+        }
+
+    # 2d. Local SEO & NAP Consistency
+    if ch_id == "sec-local-seo":
+        loc = _get_val(report, "local_seo")
+        nap_score = _get_val(loc, "nap_consistency_score") if loc else None
+        if nap_score is None and loc:
+            nap_score = _get_val(loc, "nap_consistency_pct")
+        rows = []
+        for p in pages:
+            u = _short_url(_get_val(p, "url"))
+            nap = _get_val(p, "nap_data") or {}
+            phones = nap.get("phone_numbers") or ([nap["phone"]] if nap.get("phone") else [])
+            addrs = nap.get("addresses") or ([nap["address"]] if nap.get("address") else [])
+            has_map = bool(nap.get("has_map_embed") or _get_val(loc, "has_map_embed"))
+            gbp = nap.get("gbp_links") or _get_val(loc, "gbp_links") or []
+            cits = nap.get("citation_links") or _get_val(loc, "citation_links") or []
+            rows.append([
+                u,
+                ", ".join(str(x) for x in phones[:2]) if phones else "None",
+                ", ".join(str(x)[:35] for x in addrs[:1]) if addrs else "None",
+                "Yes" if has_map else "No",
+                f"{len(gbp)} GBP / {len(cits)} Citations",
+            ])
+        score_note = f"NAP Consistency Score: {float(nap_score):.1f}%" if nap_score is not None else "NAP Consistency evaluated across crawled pages."
+        return {
+            "title": "Page-by-Page Local SEO, NAP Consistency, Map Embed & Citation Signals",
+            "note": score_note,
+            "columns": ["URL Path", "Phone Numbers", "Physical Addresses", "Map Embed", "GBP & Citation Links"],
+            "rows": rows,
+        }
+
     # 3. Technical SEO, Security, Crawling, Indexation, Canonicals, URLs, Status & Speed
-    if ch_id in ("sec-technical-seo", "sec-crawling-budget", "sec-indexation-directives", "sec-url-structure", "sec-status-codes-redirects", "sec-sitemaps-robots", "sec-canonicalization", "sec-core-web-vitals", "sec-mobile-seo", "sec-javascript-seo"):
+    if ch_id in ("sec-technical-seo", "sec-crawling-budget", "sec-indexation-directives", "sec-url-structure", "sec-status-codes-redirects", "sec-sitemaps-robots", "sec-canonicalization", "sec-javascript-seo"):
         sec_audit = _get_val(report, "security_audit")
         hsts_state = "Enabled" if getattr(sec_audit, "hsts_enabled", False) else "Missing"
         rows = []
@@ -1785,15 +2253,42 @@ def _build_chapter_empirical_table(
 
     # 6. External Connectors (Backlinks, Competitor, Analytics)
     if ch_id in ("sec-offpage-backlinks", "sec-competitor-seo", "sec-analytics-measurement"):
+        perf = _get_val(report, "google_performance") or {}
+        gsc = _get_val(perf, "search_console") or {}
+        ga4 = _get_val(perf, "analytics") or {}
+        gsc_conn = str(_get_val(gsc, "state") or "").upper() in ("MEASURED", "CONNECTED", "AVAILABLE")
+        ga4_conn = str(_get_val(ga4, "state") or "").upper() in ("MEASURED", "CONNECTED", "AVAILABLE")
+        has_auth_conn, auth_detail = _has_connected_external_authority(report)
+        has_comp = bool(_get_val(report, "competitor_bakeoff") or _get_val(report, "competitor_seo_parity"))
         return {
             "title": "External Telemetry & Connector Verification Status",
             "note": "Dristik enforces strict evidence governance: unconnected third-party sources are marked UNAVAILABLE and never simulated.",
             "columns": ["Data Source / Integration", "Connection State", "Measured Scope", "Impact on Scoring"],
             "rows": [
-                ["Google Search Console (GSC)", "UNAVAILABLE (Not Connected)", "Query impressions, clicks & index coverage", "Excluded from denominator (not scored as 0)"],
-                ["Google Analytics 4 (GA4)", "UNAVAILABLE (Not Connected)", "Organic sessions, bounce rate & conversions", "Excluded from denominator (not scored as 0)"],
-                ["Backlink & Authority Provider", "UNAVAILABLE (Not Connected)", "Referring domains, anchor distribution & DR", "Excluded from denominator (not scored as 0)"],
-                ["Competitor Crawl Benchmark", "UNAVAILABLE (No Peer URLs Crawled)", "Head-to-head SERP & schema parity", "No synthetic competitors generated"],
+                [
+                    "Google Search Console (GSC)",
+                    "CONNECTED (Measured)" if gsc_conn else "UNAVAILABLE (Not Connected)",
+                    "Query impressions, clicks & index coverage",
+                    "Included in search performance telemetry" if gsc_conn else "Excluded from denominator (not scored as 0)",
+                ],
+                [
+                    "Google Analytics 4 (GA4)",
+                    "CONNECTED (Measured)" if ga4_conn else "UNAVAILABLE (Not Connected)",
+                    "Organic sessions, bounce rate & conversions",
+                    "Included in conversion telemetry" if ga4_conn else "Excluded from denominator (not scored as 0)",
+                ],
+                [
+                    "Backlink & Authority Provider",
+                    f"CONNECTED ({auth_detail})" if has_auth_conn else "UNAVAILABLE (Not Connected)",
+                    "Referring domains, anchor distribution & DR",
+                    "Included in authority pillar" if has_auth_conn else "Excluded from denominator (not scored as 0)",
+                ],
+                [
+                    "Competitor Crawl Benchmark",
+                    "CONNECTED (Peer URLs Evaluated)" if has_comp else "UNAVAILABLE (No Peer URLs Crawled)",
+                    "Head-to-head SERP & schema parity",
+                    "Evaluated against peer set" if has_comp else "No synthetic competitors generated",
+                ],
             ],
         }
 
@@ -1852,8 +2347,9 @@ def _build_chapter_analysis(
         )
 
     if ch["id"] in ("sec-offpage-backlinks", "sec-competitor-seo", "sec-analytics-measurement"):
+        has_auth_conn, _ = _has_connected_external_authority(report)
         ext_cov = _get_val(_get_val(report, "external_authority") or {}, "coverage") or []
-        has_conn = any((getattr(c, "status", None) == "CONNECTED" or (isinstance(c, dict) and c.get("status") == "CONNECTED")) for c in ext_cov)
+        has_conn = has_auth_conn or any((getattr(c, "status", None) == "CONNECTED" or (isinstance(c, dict) and c.get("status") == "CONNECTED")) for c in ext_cov)
         if not has_conn and not ch_findings:
             return {
                 "part_label": part_label,
@@ -1870,6 +2366,23 @@ def _build_chapter_analysis(
                 "data_classification": "UNAVAILABLE (CONNECTOR REQUIRED)",
             }
 
+    if ch["id"] == "sec-core-web-vitals":
+        ttfb_diag = _compute_ttfb_outlier_diagnostics(report, pages)
+        if ttfb_diag["is_single_outlier"]:
+            return {
+                "part_label": part_label,
+                "executive_interpretation": f"{ttfb_diag['stats_summary']}. {ttfb_diag['outlier_narrative']}",
+                "technical_mechanics": ttfb_diag["outlier_narrative"],
+                "risk_vs_measured_impact": (
+                    f"Documented Technical Risk: Isolated latency spike on {ttfb_diag['outlier_url']} ({int(round(ttfb_diag['max_ms'])):,} ms), "
+                    f"while the median server response is {int(round(ttfb_diag['median_ms'])):,} ms."
+                ),
+                "strategic_action": f"Profile server-side rendering or uncached database queries on {ttfb_diag['outlier_url']} to bring its TTFB under 800ms.",
+                "data_classification": "MEASURED (ISOLATED OUTLIER)",
+                "evidence_basis": f"Evaluated across {scope_phrase}.",
+                "evidence_citations": narrative.get("evidence_citations") or [],
+            }
+
     if ch_findings:
         data_class = "MEASURED (DEFECTS VERIFIED)"
     elif has_failed_metrics:
@@ -1877,12 +2390,29 @@ def _build_chapter_analysis(
     else:
         data_class = "MEASURED (SAMPLE COMPLIANT)"
 
+    exec_interp = validate_chapter_discipline_contract(
+        ch["id"],
+        narrative.get("executive_summary") or f"Evaluation across {scope_phrase} completed for {ch['title']}.",
+    )["cleaned_text"]
+    tech_mech = validate_chapter_discipline_contract(
+        ch["id"],
+        narrative.get("technical_mechanics") or "Automated inspection completed against target thresholds.",
+    )["cleaned_text"]
+    risk_impact = validate_chapter_discipline_contract(
+        ch["id"],
+        narrative.get("business_risk") or "Documented Technical Risk: Evaluated on sampled pages.",
+    )["cleaned_text"]
+    strat_action = validate_chapter_discipline_contract(
+        ch["id"],
+        narrative.get("recommended_action") or (ch_findings[0].get("recommended_action") if ch_findings else "Maintain current configuration."),
+    )["cleaned_text"]
+
     return {
         "part_label": part_label,
-        "executive_interpretation": narrative.get("executive_summary") or f"Evaluation across {scope_phrase} completed for {ch['title']}.",
-        "technical_mechanics": narrative.get("technical_mechanics") or "Automated inspection completed against target thresholds.",
-        "risk_vs_measured_impact": narrative.get("business_risk") or "Documented Technical Risk: Evaluated on sampled pages.",
-        "strategic_action": narrative.get("recommended_action") or (ch_findings[0].get("recommended_action") if ch_findings else "Maintain current configuration."),
+        "executive_interpretation": exec_interp,
+        "technical_mechanics": tech_mech,
+        "risk_vs_measured_impact": risk_impact,
+        "strategic_action": strat_action,
         "data_classification": data_class,
         "evidence_basis": narrative.get("evidence_basis") or f"Evaluated across {scope_phrase}.",
         "evidence_citations": narrative.get("evidence_citations") or [],
@@ -1904,34 +2434,97 @@ def build_seo_book_context(report: Any, page_numbers: Optional[Dict[str, int]] =
     generated_at = str(_get_val(report, "generated_at") or "Measured on audit execution")
     audit_date = generated_at[:10] if len(generated_at) >= 10 else generated_at
 
-    # Crawl metrics
+    # Crawl metrics (Sample Coverage & Discovery Coverage, never 0% when pages_crawled > 0)
     manifest = _get_val(report, "crawl_manifest") or {}
     pages = list(_get_val(manifest, "pages") or _get_val(report, "page_reports") or [])
     pages_crawled = len(pages)
     urls_discovered = _get_val(manifest, "total_pages_discovered")
-    if urls_discovered is not None and isinstance(urls_discovered, (int, float)) and urls_discovered > 0:
-        coverage_percent = f"{min(100, int((pages_crawled / float(urls_discovered)) * 100))}%"
+    canon_inv = _get_val(report, "canonical_crawl_inventory")
+    eligible_total = (
+        _get_val(canon_inv, "eligible_total")
+        or _get_val(manifest, "eligible_pages_count")
+        or urls_discovered
+        or pages_crawled
+    )
+    discovered_total = urls_discovered if (urls_discovered is not None and isinstance(urls_discovered, (int, float)) and urls_discovered > 0) else pages_crawled
+
+    if discovered_total and discovered_total > 0 and pages_crawled > 0:
+        disc_pct_val = min(100.0, max(0.1, round((pages_crawled / float(discovered_total)) * 100.0, 1)))
+        discovery_coverage_pct = f"{disc_pct_val:.1f}%"
+    elif pages_crawled == 0:
+        discovery_coverage_pct = "0.0%"
     else:
-        coverage_percent = "Representative sample"
+        discovery_coverage_pct = "Representative sample"
+
+    if eligible_total and eligible_total > 0 and pages_crawled > 0:
+        samp_pct_val = min(100.0, max(0.1, round((pages_crawled / float(eligible_total)) * 100.0, 1)))
+        sample_coverage_pct = f"{samp_pct_val:.1f}%"
+    elif pages_crawled == 0:
+        sample_coverage_pct = "0.0%"
+    else:
+        sample_coverage_pct = discovery_coverage_pct
+
+    coverage_percent = discovery_coverage_pct
+    sample_coverage_display = f"{pages_crawled} / {int(eligible_total or pages_crawled)} ({sample_coverage_pct})"
+    discovery_coverage_display = f"{pages_crawled} / {int(discovered_total or pages_crawled)} ({discovery_coverage_pct})"
 
     # Reconcile against measured DOM evidence & deduplicate into canonical findings
     raw_findings_all = list(_get_val(report, "findings") or [])
     reconciled_raw_findings = _reconcile_and_deduplicate_raw_findings(raw_findings_all, pages)
     normalized_findings = [normalize_finding(f, idx + 1) for idx, f in enumerate(reconciled_raw_findings)]
+    ttfb_diag_all = _compute_ttfb_outlier_diagnostics(report, pages)
     for idx, nf in enumerate(normalized_findings, 1):
         fid = str(nf.get("id") or "")
         if fid.lower().startswith("find_") or not fid:
             nf["id"] = f"SEO-{idx:03d}"
+        if ttfb_diag_all["is_single_outlier"]:
+            f_blob = f"{nf.get('title', '')} {nf.get('observed_result', '')} {nf.get('plain_english_summary', '')}".lower()
+            if "ttfb" in f_blob or "server response latency" in f_blob:
+                nf["observed_result"] = f"{ttfb_diag_all['stats_summary']}. {ttfb_diag_all['outlier_narrative']}"
+                nf["plain_english_summary"] = ttfb_diag_all["outlier_narrative"]
+                if "site-wide" in str(nf.get("title", "")).lower() or "exhibit slow" in str(nf.get("title", "")).lower():
+                    nf["title"] = f"Isolated High TTFB Outlier on {ttfb_diag_all['outlier_url']} ({int(round(ttfb_diag_all['max_ms'])):,} ms)"
+                    nf["finding_title"] = nf["title"]
 
-    # Scores
+    # Scores: Use composite SEO score when other SEO pillars are measured (not TECHNICAL_SEO alone)
     scores = _get_val(report, "scores") or {}
     categories = _get_val(scores, "category_scores") or {}
     tech_score_obj = categories.get("TECHNICAL_SEO") if isinstance(categories, dict) else None
     tech_score = _get_val(tech_score_obj, "score")
     overall_score = _get_val(scores, "overall_score")
-    display_score = int(round(tech_score)) if tech_score is not None else (
-        int(round(overall_score)) if overall_score is not None else None
-    )
+
+    seo_pillar_keys = ("TECHNICAL_SEO", "ON_PAGE_SEO", "CONTENT", "SCHEMA", "EXTERNAL_AUTHORITY", "TRUST_AUTHORITY")
+    default_seo_weights = {
+        "TECHNICAL_SEO": 0.35,
+        "ON_PAGE_SEO": 0.25,
+        "CONTENT": 0.20,
+        "SCHEMA": 0.20,
+        "EXTERNAL_AUTHORITY": 0.15,
+        "TRUST_AUTHORITY": 0.15,
+    }
+    measured_seo_pillars: List[Tuple[float, float]] = []
+    if isinstance(categories, dict):
+        for pk in seo_pillar_keys:
+            p_obj = categories.get(pk)
+            if p_obj is None:
+                continue
+            p_status = str(_get_val(p_obj, "status") or "MEASURED").upper()
+            p_score = _get_val(p_obj, "score")
+            if p_status != "NOT_MEASURED" and isinstance(p_score, (int, float)) and not isinstance(p_score, bool):
+                p_wt = _get_val(p_obj, "weight")
+                wt_val = float(p_wt) if (isinstance(p_wt, (int, float)) and float(p_wt) > 0) else default_seo_weights.get(pk, 0.20)
+                measured_seo_pillars.append((wt_val, float(p_score)))
+
+    if len(measured_seo_pillars) > 1:
+        tot_w = sum(w for w, _ in measured_seo_pillars)
+        composite_seo = sum(w * s for w, s in measured_seo_pillars) / max(tot_w, 1e-6)
+        display_score = int(round(composite_seo))
+    elif overall_score is not None:
+        display_score = int(round(float(overall_score)))
+    elif tech_score is not None:
+        display_score = int(round(float(tech_score)))
+    else:
+        display_score = None
 
     # Connector states
     perf = _get_val(report, "google_performance") or {}
@@ -1939,8 +2532,8 @@ def build_seo_book_context(report: Any, page_numbers: Optional[Dict[str, int]] =
     ga4 = _get_val(perf, "analytics") or {}
     gsc_status = str(_get_val(gsc, "state") or "Not connected or not reported")
     ga4_status = str(_get_val(ga4, "state") or "Not connected or not reported")
-    ext_auth = _get_val(report, "external_authority")
-    ext_auth_status = "Connected" if (ext_auth and _get_val(ext_auth, "status") in ("MEASURED", "CONNECTED")) else "Unavailable or not connected"
+    has_auth_conn, auth_conn_detail = _has_connected_external_authority(report)
+    ext_auth_status = "Connected" if has_auth_conn else "Unavailable or not connected"
 
     # Calculate executive grade using canonical Dristik scale
     from app.domain.scoring.displayed_score import rating_for_displayed
@@ -1967,7 +2560,8 @@ def build_seo_book_context(report: Any, page_numbers: Optional[Dict[str, int]] =
         "Resolve high-priority technical, metadata, and structured data gaps across commercial landing pages to strengthen search eligibility and click-through rates."
     )
     story_summary = _get_val(report, "story_summary") or (
-        f"Sampled audit of {pages_crawled} crawled page(s) out of {urls_discovered or pages_crawled} discovered URLs ({coverage_percent} coverage). "
+        f"Sampled audit of {pages_crawled} crawled page(s) out of {discovered_total} discovered URLs "
+        f"(Discovery Coverage: {discovery_coverage_display}; Sample Coverage: {sample_coverage_display}). "
         "Evaluated technical crawlability, indexation directives, on-page heading/metadata hierarchy, structured data, and UX conversion signals."
     )
 
@@ -1991,11 +2585,18 @@ def build_seo_book_context(report: Any, page_numbers: Optional[Dict[str, int]] =
         "domain": domain,
         "run_id": run_id,
         "audit_date": audit_date,
-        "scope_label": f"Sampled Audit ({pages_crawled} of {urls_discovered or pages_crawled} discovered URLs — {coverage_percent})" if urls_discovered and urls_discovered > pages_crawled else f"Inspected Inventory ({pages_crawled} crawled pages)",
+        "scope_label": (
+            f"Sampled Audit (Discovery Coverage: {discovery_coverage_display} · Sample Coverage: {sample_coverage_display})"
+            if urls_discovered and urls_discovered > pages_crawled
+            else f"Inspected Inventory ({pages_crawled} crawled pages — {coverage_percent})"
+        ),
         "report_version": "2.0 — Enterprise SEO Intelligence",
         "pages_crawled": pages_crawled,
         "urls_discovered": urls_discovered if urls_discovered else pages_crawled,
-        "coverage_percent": coverage_percent,
+        "eligible_total": int(eligible_total or pages_crawled),
+        "coverage_percent": f"{coverage_percent} (Discovery Coverage: {discovery_coverage_display}; Sample Coverage: {sample_coverage_display})",
+        "sample_coverage": sample_coverage_display,
+        "discovery_coverage": discovery_coverage_display,
         "finding_count": len(normalized_findings),
         "critical_count": critical_count,
         "high_count": high_count,

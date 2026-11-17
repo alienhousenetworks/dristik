@@ -11,6 +11,8 @@ import math
 import re
 from typing import Any, Optional
 
+FORMULA_VERSION = "dristik_central_scoring_v5.1"
+
 
 def _num(value: Any) -> Optional[float]:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
@@ -213,3 +215,41 @@ def displayed_composite(report: Any) -> Optional[float]:
         return None
     composite = sum(score * (weight / weight_sum) for weight, score in measured)
     return _round_to(composite, 1)
+
+
+def compute_ttfb_summary(samples: list[float]) -> dict[str, Any]:
+    """Deterministic TTFB aggregation from raw samples with median, mean, P90, and outlier detection."""
+    clean = sorted(float(v) for v in (samples or []) if isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(float(v)) and float(v) > 0)
+    n = len(clean)
+    if n == 0:
+        return {
+            "sample_size": 0,
+            "min_ms": 0.0,
+            "max_ms": 0.0,
+            "median_ms": 0.0,
+            "mean_ms": 0.0,
+            "p90_ms": 0.0,
+            "trimmed_mean_ms": 0.0,
+            "outliers_ms": [],
+            "outlier_count": 0,
+        }
+    mid = n // 2
+    median_ms = clean[mid] if n % 2 == 1 else (clean[mid - 1] + clean[mid]) / 2.0
+    mean_ms = sum(clean) / n
+    p90_pos = max(0, min(n - 1, math.ceil(0.9 * n) - 1))
+    p90_ms = clean[p90_pos]
+    outlier_threshold = max(2000.0, median_ms * 3.0)
+    outliers = [round(v, 1) for v in clean if n >= 3 and v > outlier_threshold]
+    inliers = [v for v in clean if not (n >= 3 and v > outlier_threshold)] or clean
+    trimmed_mean = sum(inliers) / len(inliers)
+    return {
+        "sample_size": n,
+        "min_ms": round(clean[0], 1),
+        "max_ms": round(clean[-1], 1),
+        "median_ms": round(median_ms, 1),
+        "mean_ms": round(mean_ms, 1),
+        "p90_ms": round(p90_ms, 1),
+        "trimmed_mean_ms": round(trimmed_mean, 1),
+        "outliers_ms": outliers,
+        "outlier_count": len(outliers),
+    }

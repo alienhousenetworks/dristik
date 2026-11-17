@@ -23,7 +23,7 @@ def canonicalize_report_findings(report: Any) -> list[Any]:
     titles on the same affected URL are collapsed; similar issues on different
     pages remain independent findings.
     """
-    raw = list(getattr(report, "findings", []) or [])
+    raw = list(report) if isinstance(report, (list, tuple)) else list(getattr(report, "findings", []) or [])
     canonical: list[Any] = []
     seen: set[tuple[str, tuple[str, ...], str, str, tuple[str, ...]]] = set()
     seen_ids: set[str] = set()
@@ -80,3 +80,31 @@ def canonicalize_report_findings(report: Any) -> list[Any]:
             seen_ids.add(finding_id)
         canonical.append(finding)
     return canonical
+
+
+def summarize_finding_severities(findings: Any) -> dict[str, int]:
+    """Single canonical severity counter over deduplicated findings."""
+    dummy = type("_Rep", (), {"findings": list(findings or [])})()
+    deduped = canonicalize_report_findings(dummy)
+    counts = {"CRITICAL": 0, "HIGH": 0, "MEDIUM": 0, "LOW": 0, "INFO": 0}
+    for f in deduped:
+        if bool(finding_value(f, "held_from_executive", False)):
+            continue
+        raw_sev = finding_value(f, "severity", "MEDIUM")
+        sev = str(getattr(raw_sev, "value", raw_sev) or "MEDIUM").upper()
+        if "CRIT" in sev:
+            counts["CRITICAL"] += 1
+        elif "HIGH" in sev:
+            counts["HIGH"] += 1
+        elif "MED" in sev:
+            counts["MEDIUM"] += 1
+        elif "LOW" in sev:
+            counts["LOW"] += 1
+        else:
+            counts["INFO"] += 1
+    total = sum(counts.values())
+    return {
+        **counts,
+        "total": total,
+        "high_or_critical": counts["CRITICAL"] + counts["HIGH"],
+    }

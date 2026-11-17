@@ -11,6 +11,7 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 _STATUS_LABEL = {
     "VERIFIED": "Verified (directly measured)",
     "SAMPLE_VERIFIED": "Sample verified",
+    "ACCOUNTED_FOR": "Accounted for (documented, not measured)",
     "INFERRED": "Inferred with reasoning",
     "HYPOTHESIS": "Hypothesis awaiting test",
     "DATA_UNAVAILABLE": "Data unavailable",
@@ -21,6 +22,7 @@ _STATUS_LABEL = {
 _STATUS_ORDER = (
     "VERIFIED",
     "SAMPLE_VERIFIED",
+    "ACCOUNTED_FOR",
     "INFERRED",
     "HYPOTHESIS",
     "DATA_UNAVAILABLE",
@@ -92,8 +94,8 @@ def evidence_mix_chart(tally: Dict[str, int]) -> str:
     return f"""
     <div class="evidence-mix-summary-wrap">
         <div class="mix-header">
-            <h4>Empirical Evidence Distribution ({total} Total Checks Evaluated)</h4>
-            <p>Every checklist parameter across Sections 01–50 and Appendices A–O is accounted for under Dristik's 7-state evidence model. Missing data stays unmeasured.</p>
+            <h4>Evidence Distribution ({total} Total Checks Accounted For)</h4>
+            <p>Every checklist parameter across Sections 01–50 and Appendices A–O is accounted for in the audit inventory, but accounted-for is not the same as empirically verified. Only the Verified and Sample verified counts below were measured; Data unavailable and Not tested checks were not measured and are never counted as passed.</p>
         </div>
         {_svg_bars("Audit Taxonomy Evidence Distribution", "Aggregated line counts across all 65 sections and appendices.", bars)}
     </div>
@@ -117,7 +119,7 @@ def geo_scoring_breakdown(report: Any) -> str:
     vis_disp = f"{int(round(citation_rate))}% citation rate" if (citation_rate is not None and runs > 0) else "Not Measured"
     acc_disp = "Measured in live run" if runs > 0 else "Unassessed"
     footprint_disp = f"{runs} evaluated prompt runs" if runs > 0 else "Crawl baseline only"
-    comp_disp = "Active bake-off tracked" if _get(report, "competitor_bakeoff") else "Baseline benchmark"
+    comp_disp = "Active bake-off tracked" if _get(report, "competitor_bakeoff") else "UNTESTED (no comparable competitor run)"
     conf_disp = "Representative Crawl AST" if (_get(report, "page_reports") or _get(_get(report, "crawl_manifest"), "pages")) else "No Crawl Data"
 
     return f"""

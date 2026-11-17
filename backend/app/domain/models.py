@@ -152,6 +152,11 @@ class RemediationPatch(BaseModel):
     is_blocked: bool = False
     blocked_reason: Optional[str] = None
     required_evidence: Optional[str] = None
+    assignee_id: Optional[str] = None
+    assigned_by: Optional[str] = None
+    assigned_at: Optional[str] = None
+    due_date: Optional[str] = None
+    retest_history: List[Dict[str, Any]] = Field(default_factory=list)
 
 class Integration(BaseModel):
     integration_id: str
@@ -417,6 +422,7 @@ class Finding(BaseModel):
     grounded_recommendation: Optional[GroundedRecommendation] = None
     reasoning: Optional[str] = None
     business_impact: Optional[str] = None
+    business_impact_level: Optional[str] = None  # HIGH, MEDIUM, LOW, UNKNOWN (independent of technical severity)
     verification_status: VerificationStatus = VerificationStatus.VERIFIED
     verification_notes: Optional[str] = None
     release_status: ReleaseStatus = ReleaseStatus.PENDING_APPROVAL
@@ -445,6 +451,12 @@ class Finding(BaseModel):
         description="Concrete, checkable acceptance condition that must be true after remediation is applied. Written as a present-tense assertion."
     )
     remediation_verification: Optional[RemediationVerificationReport] = None
+    retest_history: List[RemediationVerificationReport] = Field(default_factory=list)
+    assignee_id: Optional[str] = None
+    assigned_by: Optional[str] = None
+    assigned_at: Optional[str] = None
+    due_date: Optional[str] = None
+    linked_consequences: List[Dict[str, Any]] = Field(default_factory=list)
     resolution_status: str = "OPEN"  # "OPEN", "RESOLVED", "VERIFYING", "REGRESSED"
     evidence_class: EvidenceClass = EvidenceClass.OBSERVED
     evidence_subtype: Optional[str] = "DOM"
@@ -637,10 +649,44 @@ class Finding(BaseModel):
         elif self.description and not self.diagnosis:
             self.diagnosis = self.description
 
-        if self.affected_url_count is None:
+        # Backfill and deduplicate affected_urls from validated evidence, detailed_observations, and surfaces_affected
+        seen_urls: List[str] = []
+        for u in list(self.affected_urls or []):
+            if isinstance(u, str) and u.strip() and u.strip() not in seen_urls:
+                seen_urls.append(u.strip())
+        for ev in list(self.evidence or []):
+            ev_url = getattr(ev, "url", None) if not isinstance(ev, dict) else ev.get("url")
+            if isinstance(ev_url, str) and ev_url.strip() and ev_url.strip() not in seen_urls:
+                seen_urls.append(ev_url.strip())
+            if not isinstance(ev, dict):
+                ev_id = getattr(ev, "evidence_id", None)
+                if isinstance(ev_id, str) and ev_id.strip() and ev_id.strip() not in self.evidence_ids:
+                    self.evidence_ids.append(ev_id.strip())
+                if isinstance(ev_id, str) and ev_id.strip() and ev_id.strip() not in self.evidence_refs:
+                    self.evidence_refs.append(ev_id.strip())
+        for obs in list(self.detailed_observations or []):
+            obs_url = getattr(obs, "url", None) if not isinstance(obs, dict) else obs.get("url")
+            if isinstance(obs_url, str) and obs_url.strip() and obs_url.strip() not in seen_urls:
+                seen_urls.append(obs_url.strip())
+        for surf in list(self.surfaces_affected or []):
+            surf_url = surf.get("url") if isinstance(surf, dict) else getattr(surf, "url", None)
+            if isinstance(surf_url, str) and surf_url.strip() and surf_url.strip() not in seen_urls:
+                seen_urls.append(surf_url.strip())
+        self.affected_urls = seen_urls
+
+        if self.affected_urls:
             self.affected_url_count = len(self.affected_urls)
+        elif self.affected_url_count is None:
+            self.affected_url_count = 0
+
         if self.affected_sample_count is None and self.affected_urls:
             self.affected_sample_count = len(self.affected_urls)
+        elif self.affected_sample_count == 0 and self.affected_urls:
+            self.affected_sample_count = len(self.affected_urls)
+        if self.scope_hit_count is None and self.affected_sample_count is not None:
+            self.scope_hit_count = self.affected_sample_count
+        elif self.scope_hit_count == 0 and self.affected_urls:
+            self.scope_hit_count = len(self.affected_urls)
 
         if self.affected_percentage is None and self.sample_size and self.affected_sample_count is not None:
             self.affected_percentage = round((self.affected_sample_count / max(1, self.sample_size)) * 100.0, 1)
@@ -712,7 +758,108 @@ class Finding(BaseModel):
         if not self.deduplication_key:
             cat_name = self.category.value if hasattr(self.category, "value") else str(self.category)
             self.deduplication_key = f"{cat_name}:{self.title.lower().strip()}"
+
+        if not self.business_impact_level:
+            if self.calibrated_impact and getattr(self.calibrated_impact, "business_impact", None):
+                self.business_impact_level = str(getattr(self.calibrated_impact.business_impact, "value", self.calibrated_impact.business_impact)).upper()
+            elif self.impact >= 8:
+                self.business_impact_level = "HIGH"
+            elif self.impact >= 4:
+                self.business_impact_level = "MEDIUM"
+            elif self.impact >= 1:
+                self.business_impact_level = "LOW"
+            else:
+                self.business_impact_level = "UNKNOWN"
+
+        if self.root_cause and "template markup or http configuration omission" in self.root_cause.lower():
+            self.root_cause = (
+                "Root cause not confirmed. The observed defect is present in the rendered page, "
+                "but the responsible template or deployment configuration has not been isolated."
+            )
+            self.root_cause_status = "diagnostic_gap"
+
+        aff_urls = [u for u in (self.affected_urls or []) if u]
+        ev_cnt = len(self.evidence_ids or self.evidence_refs or self.evidence or [])
+        if len(aff_urls) > 1 and ev_cnt > 0:
+            ev_urls = {getattr(ev, "url", None) for ev in (self.evidence or []) if getattr(ev, "url", None)}
+            verified_url_cnt = len(ev_urls) if ev_urls else min(ev_cnt, len(aff_urls))
+            if verified_url_cnt < len(aff_urls):
+                self.scope = "SAMPLE_VERIFIED"
+                self.scope_status = "SAMPLE_VERIFIED"
+                self.scope_classification = "SAMPLE_VERIFIED"
+                disclosure = (
+                    f"Sample verified on {verified_url_cnt} of {len(aff_urls)} affected URLs; "
+                    "remaining URLs extrapolated from shared template/pattern."
+                )
+                existing_lim = (self.limitations or "").strip()
+                if "sample verified on" not in existing_lim.lower():
+                    self.limitations = f"{existing_lim} {disclosure}".strip() if existing_lim else disclosure
+                    self.data_limitations = self.limitations
+
         return self
+
+    def to_developer_ticket(self) -> dict[str, Any]:
+        """Export finding as a consulting-grade 11-part diagnostic + Jira/Linear/Markdown payload."""
+        sev_str = self.severity.value if hasattr(self.severity, "value") else str(self.severity)
+        cat_str = self.category.value if hasattr(self.category, "value") else str(self.category)
+        status_str = self.status.value if hasattr(self.status, "value") else str(self.status)
+        root_cause_text = self.root_cause or (
+            "Root cause not confirmed. The observed defect is present in the rendered page, "
+            "but the responsible template or deployment configuration has not been isolated."
+        )
+        sections_11 = {
+            "01_what_was_found": self.observed_result or self.description or self.title,
+            "02_what_does_this_mean": self.plain_english_summary or self.concise_summary or self.description,
+            "03_why_does_it_matter": self.why_it_matters or self.business_impact or "Potential search/UX impact.",
+            "04_where_was_it_found": list(self.affected_urls),
+            "05_root_cause": root_cause_text,
+            "06_recommended_solution": self.recommended_solution or self.recommendation,
+            "07_developer_implementation": self.developer_instructions or self.implementation_detail or self.recommendation,
+            "08_acceptance_criteria": self.acceptance_criteria or self.validation_criteria or "Verified resolved on re-crawl.",
+            "09_retest_procedure": list(self.verification_steps) or [self.verification_command or "Re-crawl affected URLs and verify assertion passes."],
+            "10_confidence_and_limitations": self.limitations or f"Confidence: {self.get_confidence_display()} ({self.scope or 'SAMPLE_VERIFIED'})",
+            "11_expected_outcome": self.expected_outcome or "Resolves verified defect without promising unmeasured revenue or ranking lift.",
+        }
+        md_lines = [
+            f"# [{sev_str}] {self.title} (`{self.finding_id}`)",
+            f"- **Technical Severity:** {sev_str} | **Business Impact:** {self.business_impact_level or 'MEDIUM'} | **Status:** {status_str}",
+            f"- **Owner:** {self.owner or 'Engineering'} | **Estimated Effort:** {self.estimated_effort or f'{self.effort} pts (estimate)'}",
+            f"- **Affected URLs ({len(self.affected_urls)}):** {', '.join(self.affected_urls[:5]) or 'N/A'}",
+            f"\n## 1. What Was Found\n{sections_11['01_what_was_found']}",
+            f"\n## 2. Root Cause\n{sections_11['05_root_cause']}",
+            f"\n## 3. Recommended Solution & Implementation\n{sections_11['07_developer_implementation']}",
+            f"\n## 4. Acceptance Criteria & Retest\n- {sections_11['08_acceptance_criteria']}",
+        ]
+        return {
+            "finding_id": self.finding_id,
+            "title": self.title,
+            "category": cat_str,
+            "technical_severity": sev_str,
+            "business_impact": self.business_impact_level or "MEDIUM",
+            "status": status_str,
+            "owner": self.owner or "Engineering",
+            "estimated_effort": self.estimated_effort or f"{self.effort} pts (estimate)",
+            "affected_urls": list(self.affected_urls),
+            "evidence_ids": list(self.evidence_ids or self.evidence_refs),
+            "sections": sections_11,
+            "jira_payload": {
+                "summary": f"[{sev_str}] {self.title}",
+                "issuetype": {"name": "Bug" if sev_str in ("CRITICAL", "HIGH") else "Task"},
+                "priority": {"name": "Highest" if sev_str == "CRITICAL" else ("High" if sev_str == "HIGH" else "Medium")},
+                "labels": ["dristik-audit", cat_str.lower()],
+                "description": "\n".join(md_lines),
+            },
+            "linear_payload": {
+                "title": f"[{sev_str}] {self.title}",
+                "priority": 1 if sev_str == "CRITICAL" else (2 if sev_str == "HIGH" else 3),
+                "description": "\n".join(md_lines),
+            },
+            "markdown": "\n".join(md_lines),
+            "qa_checklist": [
+                sections_11["08_acceptance_criteria"],
+                *sections_11["09_retest_procedure"],
+            ],
+        }
 
     def to_layer2_json(self) -> dict[str, Any]:
         """Layer 2 canonical JSON schema: finding_id, rule_id, evidence_ids, confidence."""
@@ -813,14 +960,51 @@ class Observation(BaseModel):
     evidence_refs: List[str] = Field(default_factory=list)
     severity: Severity = Severity.INFO
 
+class RootCauseLink(BaseModel):
+    root_cause_id: str
+    canonical_observation: str
+    primary_category: Category = Category.TECHNICAL_SEO
+    affected_urls: List[str] = Field(default_factory=list)
+    evidence_ids: List[str] = Field(default_factory=list)
+    discipline_consequences: Dict[str, str] = Field(default_factory=dict)
+    finding_ids: List[str] = Field(default_factory=list)
+
+
 class Contradiction(BaseModel):
     id: str
-    claim_a_id: str
-    claim_b_id: str
-    description: str
-    resolution: str
+    claim_a_id: str = ""
+    claim_b_id: str = ""
+    description: str = ""
+    resolution: str = ""
     winner_claim_id: Optional[str] = None
     routed_to: Optional[str] = None
+    question_text: Optional[str] = None
+    statement_a: Optional[str] = None
+    statement_b: Optional[str] = None
+    source_url_a: Optional[str] = None
+    source_url_b: Optional[str] = None
+    evidence_id_a: Optional[str] = None
+    evidence_id_b: Optional[str] = None
+    disputed_fact: Optional[str] = None
+    conflict_explanation: Optional[str] = None
+    authoritative_correction: Optional[str] = None
+
+    @model_validator(mode="after")
+    def populate_precision_defaults(self) -> "Contradiction":
+        if not self.conflict_explanation and self.description:
+            self.conflict_explanation = self.description
+        if not self.description and self.conflict_explanation:
+            self.description = self.conflict_explanation
+        if not self.authoritative_correction and self.resolution:
+            self.authoritative_correction = self.resolution
+        if not self.resolution and self.authoritative_correction:
+            self.resolution = self.authoritative_correction
+        if not self.evidence_id_a and self.claim_a_id:
+            self.evidence_id_a = self.claim_a_id
+        if not self.evidence_id_b and self.claim_b_id:
+            self.evidence_id_b = self.claim_b_id
+        return self
+
 
 class ContradictionReport(BaseModel):
     id: str
@@ -828,8 +1012,42 @@ class ContradictionReport(BaseModel):
     declared_type: Optional[str] = None
     detected_type: Optional[str] = None
     confidence: float = 0.85
-    reason: str
+    reason: str = ""
     evidence: List[FindingEvidence] = Field(default_factory=list)
+    question_text: Optional[str] = None
+    statement_a: Optional[str] = None
+    statement_b: Optional[str] = None
+    source_url_a: Optional[str] = None
+    source_url_b: Optional[str] = None
+    evidence_id_a: Optional[str] = None
+    evidence_id_b: Optional[str] = None
+    disputed_fact: Optional[str] = None
+    conflict_explanation: Optional[str] = None
+    authoritative_correction: Optional[str] = None
+
+    @model_validator(mode="after")
+    def sync_contradiction_report_fields(self) -> "ContradictionReport":
+        if not self.statement_a and self.declared_type:
+            self.statement_a = self.declared_type
+        if not self.statement_b and self.detected_type:
+            self.statement_b = self.detected_type
+        if not self.conflict_explanation and self.reason:
+            self.conflict_explanation = self.reason
+        if not self.reason and self.conflict_explanation:
+            self.reason = self.conflict_explanation
+        if not self.disputed_fact:
+            self.disputed_fact = self.contradiction_type.replace("_", " ").title()
+        if self.evidence:
+            if not self.source_url_a and getattr(self.evidence[0], "url", None):
+                self.source_url_a = self.evidence[0].url
+            if not self.evidence_id_a and getattr(self.evidence[0], "evidence_id", None):
+                self.evidence_id_a = self.evidence[0].evidence_id
+            if len(self.evidence) > 1:
+                if not self.source_url_b and getattr(self.evidence[1], "url", None):
+                    self.source_url_b = self.evidence[1].url
+                if not self.evidence_id_b and getattr(self.evidence[1], "evidence_id", None):
+                    self.evidence_id_b = self.evidence[1].evidence_id
+        return self
 
 class SemanticBusinessRepresentation(BaseModel):
     industry: str = "Unknown"
@@ -1710,6 +1928,9 @@ class PageEvidence(BaseModel):
     content_authority: Optional[Dict[str, Any]] = None
     lab_performance: Optional[LabPerformanceMetrics] = None
     field_performance: Optional[FieldPerformanceMetrics] = None
+    origin_http_ttfb_ms: Optional[float] = None
+    instrumentation_overhead_ms: Optional[float] = None
+    ttfb_outlier_reason: Optional[str] = None
 
 class CopyIssue(BaseModel):
     area: str
@@ -1862,6 +2083,50 @@ class IndexationAuditRollup(BaseModel):
     pages: List[IndexationPageStatus] = Field(default_factory=list)
     summary: str = ""
 
+class CoverageMetrics(BaseModel):
+    discovered_total: int = 0
+    eligible_total: int = 0
+    excluded_total: int = 0
+    tested_pages: int = 0
+    failed_total: int = 0
+    sample_coverage_pct: float = 0.0
+    discovery_coverage_pct: Optional[float] = None
+    discovery_truncated: bool = False
+    sampling_status: str = "SAMPLED_AUDIT"
+
+
+class TtfbStats(BaseModel):
+    mean_ms: float = 0.0
+    median_ms: float = 0.0
+    max_ms: float = 0.0
+    min_ms: float = 0.0
+    p90_ms: float = 0.0
+    outlier_urls: List[str] = Field(default_factory=list)
+    outlier_explanation: Optional[str] = None
+    page_measurements: Dict[str, float] = Field(default_factory=dict)
+
+
+class CanonicalUrlEntry(BaseModel):
+    url: str
+    normalized_url: str
+    status: str = "discovered_untested"  # tested | failed | excluded | discovered_untested
+    source: str = "sitemap"              # seed | sitemap | link
+    http_status: Optional[int] = None
+    ttfb_ms: Optional[float] = None
+    origin_http_ttfb_ms: Optional[float] = None
+    evidence_ids: List[str] = Field(default_factory=list)
+    finding_ids: List[str] = Field(default_factory=list)
+
+
+class CanonicalUrlRegistry(BaseModel):
+    entries: Dict[str, CanonicalUrlEntry] = Field(default_factory=dict)
+    discovered_total: int = 0
+    eligible_total: int = 0
+    tested_total: int = 0
+    failed_total: int = 0
+    excluded_total: int = 0
+
+
 class CrawlInventory(BaseModel):
     discovered_total: int = 0
     eligible_total: int = 0
@@ -1873,6 +2138,9 @@ class CrawlInventory(BaseModel):
     failed_total: int = 0
     untested_total: int = 0
     url_coverage_pct: Optional[float] = None
+    sample_coverage_pct: Optional[float] = None
+    discovery_coverage_pct: Optional[float] = None
+    discovery_truncated: bool = False
     coverage_denominator: str = "eligible_total"
     discovered_via_sitemap: int = 0
     discovered_via_links: int = 0
@@ -1884,9 +2152,14 @@ class CrawlInventory(BaseModel):
 
     def calculate_coverage(self) -> Optional[float]:
         denom = self.eligible_total if self.eligible_total > 0 else self.discovered_total
+        tested = self.analyzed_total if self.analyzed_total > 0 else self.tested_pages
         if denom <= 0:
             return None
-        return round((self.analyzed_total / denom) * 100.0, 1)
+        if tested <= 0:
+            return 0.0
+        raw_pct = (tested / float(denom)) * 100.0
+        rounded = round(raw_pct, 1)
+        return max(0.1, rounded) if rounded == 0.0 else min(100.0, rounded)
 
 class ExternalDataSource(BaseModel):
     source_name: str
@@ -1923,6 +2196,10 @@ class CrawlManifest(BaseModel):
     indexation_rollup: Optional[IndexationAuditRollup] = None
     crawl_inventory: Union[CrawlInventory, Dict[str, Any]] = Field(default_factory=dict)
     url_coverage_pct: Optional[float] = None
+    sample_coverage_pct: Optional[float] = None
+    discovery_coverage_pct: Optional[float] = None
+    discovery_truncated: bool = False
+    ttfb_stats: Optional[TtfbStats] = None
     sampling_status: str = "NOT_ASSESSED"  # NOT_ASSESSED | FULL_CRAWL | SAMPLED_AUDIT | INTERRUPTED | PARTIAL
     discovered_urls: List[str] = Field(default_factory=list)
     discovered_via_links: List[str] = Field(default_factory=list)
@@ -2847,6 +3124,9 @@ class ExecutiveReport(BaseModel):
     consistency_report: Optional[ConsistencyAuditReport] = None
     quality_gate_results: Optional[Dict[str, Any]] = None
     canonical_crawl_inventory: Optional[CrawlInventory] = None
+    url_registry: Optional[CanonicalUrlRegistry] = None
+    root_cause_links: List[RootCauseLink] = Field(default_factory=list)
+    scoring_methodology_appendix: Optional[Dict[str, Any]] = None
     external_data_sources: List[ExternalDataSource] = Field(default_factory=list)
     issue_ledger: Optional[Dict[str, Any]] = None
 

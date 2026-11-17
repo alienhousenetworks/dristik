@@ -27,6 +27,160 @@ def _clean_type(stype: Any) -> str:
     return ""
 
 
+class SchemaEntityGraphResult(dict):
+    """Dict with attribute access for schema @id entity graph validation results."""
+    def __getattr__(self, name: str) -> Any:
+        try:
+            return self[name]
+        except KeyError as exc:
+            raise AttributeError(name) from exc
+
+
+_CORE_GRAPH_TYPES = {
+    "Organization", "Corporation", "LocalBusiness",
+    "WebSite", "WebPage", "AboutPage", "ContactPage", "CollectionPage", "ItemPage",
+    "Product", "Service", "ProfessionalService", "SoftwareApplication",
+}
+
+
+def validate_schema_entity_graph(schemas: Any, url: str = "") -> SchemaEntityGraphResult:
+    """
+    Validates @id entity relationships across JSON-LD blocks on a page.
+    Checks whether @id references link Organization, WebSite, WebPage, and Product/Service
+    entities and reports broken or orphan @id references alongside JSON-LD required properties.
+    """
+    if isinstance(schemas, dict):
+        root_items = [schemas]
+    elif isinstance(schemas, list):
+        root_items = [s for s in schemas if isinstance(s, dict)]
+    else:
+        root_items = []
+
+    entities: List[Dict[str, Any]] = []
+    for root in root_items:
+        if "@graph" in root and isinstance(root["@graph"], list):
+            for node in root["@graph"]:
+                if isinstance(node, dict):
+                    entities.append(node)
+        else:
+            entities.append(root)
+
+    declared_ids: Dict[str, str] = {}
+    referenced_ids: List[Dict[str, str]] = []
+    entity_outgoing_refs: Dict[int, Set[str]] = {}
+    entity_types: Dict[int, str] = {}
+
+    def _collect_Nested(obj: Any, parent_idx: int, parent_type: str, prop_path: str) -> None:
+        if isinstance(obj, dict):
+            ref_id = obj.get("@id")
+            node_type = _clean_type(obj.get("@type"))
+            non_id_keys = [k for k in obj.keys() if k not in ("@id", "@context")]
+            if isinstance(ref_id, str) and ref_id.strip():
+                clean_id = ref_id.strip()
+                if node_type and len(non_id_keys) >= 2:
+                    # Inline typed entity declaration that also gets referenced by parent
+                    declared_ids[clean_id] = node_type
+                    referenced_ids.append({
+                        "id": clean_id,
+                        "from_type": parent_type,
+                        "field": prop_path,
+                    })
+                    entity_outgoing_refs.setdefault(parent_idx, set()).add(clean_id)
+                else:
+                    # Pure @id pointer reference
+                    referenced_ids.append({
+                        "id": clean_id,
+                        "from_type": parent_type,
+                        "field": prop_path,
+                    })
+                    entity_outgoing_refs.setdefault(parent_idx, set()).add(clean_id)
+            for k, v in obj.items():
+                if k in ("@id", "@type", "@context"):
+                    continue
+                _collect_Nested(v, parent_idx, node_type or parent_type, f"{prop_path}.{k}" if prop_path else k)
+        elif isinstance(obj, list):
+            for item in obj:
+                _collect_Nested(item, parent_idx, parent_type, prop_path)
+
+    for idx, ent in enumerate(entities):
+        stype = _clean_type(ent.get("@type")).rsplit("/", 1)[-1].rsplit("#", 1)[-1] or "Unknown"
+        entity_types[idx] = stype
+        entity_outgoing_refs.setdefault(idx, set())
+        ent_id = ent.get("@id")
+        if isinstance(ent_id, str) and ent_id.strip():
+            # A node with @type or substantive fields declares an entity @id
+            non_id_keys = [k for k in ent.keys() if k not in ("@id", "@context")]
+            if non_id_keys:
+                declared_ids[ent_id.strip()] = stype
+            else:
+                referenced_ids.append({
+                    "id": ent_id.strip(),
+                    "from_type": stype,
+                    "field": "@id",
+                })
+        for k, v in ent.items():
+            if k in ("@id", "@type", "@context", "@graph"):
+                continue
+            _collect_Nested(v, idx, stype, k)
+
+    issues: List[SchemaIssue] = []
+    broken_references: List[str] = []
+    for ref in referenced_ids:
+        target_id = ref["id"]
+        if target_id not in declared_ids:
+            if target_id not in broken_references:
+                broken_references.append(target_id)
+            issues.append(SchemaIssue(
+                url=url,
+                schema_type=ref["from_type"],
+                severity="ERROR",
+                field=f"{ref['field']}.@id" if ref["field"] != "@id" else "@id",
+                message=f"Broken '@id' reference '{target_id}' in {ref['from_type']}.{ref['field']} does not resolve to any declared entity in the JSON-LD graph.",
+            ))
+
+    referenced_id_set = {r["id"] for r in referenced_ids}
+    orphan_entities: List[str] = []
+    core_indices = [idx for idx, t in entity_types.items() if t in _CORE_GRAPH_TYPES]
+
+    if len(core_indices) > 1:
+        for idx in core_indices:
+            ent = entities[idx]
+            stype = entity_types[idx]
+            ent_id = str(ent.get("@id") or "").strip()
+            has_outgoing = bool(entity_outgoing_refs.get(idx))
+            has_incoming = bool(ent_id and ent_id in referenced_id_set)
+            if not ent_id:
+                orphan_label = f"{stype} (missing @id)"
+                orphan_entities.append(orphan_label)
+                issues.append(SchemaIssue(
+                    url=url,
+                    schema_type=stype,
+                    severity="WARNING",
+                    field="@id",
+                    message=f"Core '{stype}' entity is missing an '@id' identifier to link Organization, WebSite, WebPage, and Product/Service nodes.",
+                ))
+            elif not has_outgoing and not has_incoming:
+                orphan_label = f"{stype} ({ent_id})"
+                orphan_entities.append(orphan_label)
+                issues.append(SchemaIssue(
+                    url=url,
+                    schema_type=stype,
+                    severity="WARNING",
+                    field="@id",
+                    message=f"Orphan '@id' entity '{ent_id}' ({stype}) is not linked to or from any Organization, WebSite, WebPage, or Product/Service entity.",
+                ))
+
+    return SchemaEntityGraphResult(
+        declared_ids=sorted(declared_ids.keys()),
+        referenced_ids=sorted(referenced_id_set),
+        broken_references=broken_references,
+        orphan_entities=orphan_entities,
+        linked_types=sorted(set(entity_types.values())),
+        is_valid=len(broken_references) == 0 and len(orphan_entities) == 0,
+        issues=issues,
+    )
+
+
 def validate_schema_entity(entity: Dict[str, Any], url: str) -> List[SchemaIssue]:
     issues: List[SchemaIssue] = []
     stype = _clean_type(entity.get("@type"))
@@ -386,6 +540,11 @@ def analyze_schema_rich_results(pages: List[PageEvidence]) -> SchemaValidationRe
 
         if schemas:
             total_pages_with_schema += 1
+            graph_res = validate_schema_entity_graph(schemas, page.url)
+            for g_iss in graph_res.get("issues", []):
+                if g_iss.severity == "ERROR":
+                    all_issues.append(g_iss)
+                    entities_with_errors += 1
 
         for root_item in schemas:
             if not isinstance(root_item, dict):

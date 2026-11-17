@@ -42,8 +42,24 @@ class RejectPatchRequest(BaseModel):
     rejector: str = "analyst@dristik.ai"
     reason: Optional[str] = None
 
+class AssignRemediationRequest(BaseModel):
+    assignee_id: str
+    assigned_by: Optional[str] = None
+    due_date: Optional[str] = None
+    notes: Optional[str] = None
+
 class ApplyPatchRequest(BaseModel):
     integration_id: str = Field(..., description="ID of the connected platform (WordPress, GitHub, etc.)")
+
+
+def _persist_run_safely(run: Any) -> None:
+    if not run:
+        return
+    try:
+        orchestrator.runs[run.analysis_id] = run
+        orchestrator.repository.save_run(run, findings=run.report.findings if run.report else None)
+    except Exception:
+        pass
 
 def _owned_patch(patch_id: str, user: UserIdentity) -> RemediationPatch:
     patch = _PATCH_REGISTRY.get(patch_id)
@@ -134,6 +150,137 @@ async def reject_patch(
     patch = _owned_patch(patch_id, user)
     return approval_manager.reject_patch(patch, rejector=user.email, reason=req.reason)
 
+
+@router.post("/patches/{patch_id}/assign", response_model=RemediationPatch)
+async def assign_patch(
+    patch_id: str,
+    req: AssignRemediationRequest,
+    user: UserIdentity = Depends(require_permission("findings:assign")),
+):
+    """Assign a remediation patch to an owner/engineer with optional due date."""
+    patch = _owned_patch(patch_id, user)
+    assigned_by = req.assigned_by or user.email or user.user_id
+    updated_patch = approval_manager.assign_patch(
+        patch,
+        assignee_id=req.assignee_id,
+        assigned_by=assigned_by,
+        due_date=req.due_date,
+        notes=req.notes,
+    )
+    analysis_id = (patch.metadata_payload or {}).get("analysis_id")
+    if analysis_id:
+        try:
+            run = require_analysis(analysis_id, user)
+            if run and run.report:
+                for f in (run.report.findings or []):
+                    if f.finding_id == patch.finding_id or f.id == patch.finding_id:
+                        f.assignee_id = updated_patch.assignee_id
+                        f.assigned_by = updated_patch.assigned_by
+                        f.assigned_at = updated_patch.assigned_at
+                        f.due_date = updated_patch.due_date
+                        f.owner = updated_patch.assignee_id
+                for rp in (run.report.remediation_patches or []):
+                    if rp.patch_id == patch.patch_id:
+                        rp.assignee_id = updated_patch.assignee_id
+                        rp.assigned_by = updated_patch.assigned_by
+                        rp.assigned_at = updated_patch.assigned_at
+                        rp.due_date = updated_patch.due_date
+                _persist_run_safely(run)
+        except Exception:
+            pass
+    return updated_patch
+
+
+@router.post("/findings/{analysis_id}/{finding_id}/assign")
+async def assign_finding(
+    analysis_id: str,
+    finding_id: str,
+    req: AssignRemediationRequest,
+    user: UserIdentity = Depends(require_permission("findings:assign")),
+):
+    """Assign an audit finding to a team member, persist to the report/DB, and log in governance audit trail."""
+    run = require_analysis(analysis_id, user)
+    if not run.report:
+        raise HTTPException(status_code=404, detail="Analysis report not found")
+
+    target_finding = None
+    for f in (run.report.findings or []):
+        if f.finding_id == finding_id or f.id == finding_id:
+            target_finding = f
+            break
+    if not target_finding:
+        raise HTTPException(status_code=404, detail=f"Finding '{finding_id}' not found in analysis '{analysis_id}'")
+
+    assigned_by = req.assigned_by or user.email or user.user_id
+    approval_manager.assign_finding(
+        target_finding,
+        assignee_id=req.assignee_id,
+        assigned_by=assigned_by,
+        due_date=req.due_date,
+        notes=req.notes,
+        org_id=run.org_id,
+    )
+
+    # Sync assignment onto any linked patches
+    for p in list(_PATCH_REGISTRY.values()) + list(run.report.remediation_patches or []):
+        if p.finding_id == finding_id:
+            p.assignee_id = target_finding.assignee_id
+            p.assigned_by = target_finding.assigned_by
+            p.assigned_at = target_finding.assigned_at
+            p.due_date = target_finding.due_date
+
+    _persist_run_safely(run)
+    return {
+        "analysis_id": analysis_id,
+        "finding_id": target_finding.finding_id,
+        "assignee_id": target_finding.assignee_id,
+        "assigned_by": target_finding.assigned_by,
+        "assigned_at": target_finding.assigned_at,
+        "due_date": target_finding.due_date,
+        "notes": req.notes,
+        "finding": target_finding,
+    }
+
+
+@router.get("/findings/{analysis_id}/{finding_id}/retest-history")
+async def get_finding_retest_history(
+    analysis_id: str,
+    finding_id: str,
+    user: UserIdentity = Depends(get_current_user),
+):
+    """Return full chronological append-only retest history for a finding."""
+    run = require_analysis(analysis_id, user)
+    if not run.report:
+        raise HTTPException(status_code=404, detail="Analysis report not found")
+
+    target_finding = None
+    for f in (run.report.findings or []):
+        if f.finding_id == finding_id or f.id == finding_id:
+            target_finding = f
+            break
+    if not target_finding:
+        raise HTTPException(status_code=404, detail=f"Finding '{finding_id}' not found in analysis '{analysis_id}'")
+
+    history = [
+        item.model_dump() if hasattr(item, "model_dump") else item
+        for item in (target_finding.retest_history or [])
+    ]
+    return {
+        "analysis_id": analysis_id,
+        "finding_id": target_finding.finding_id,
+        "total_retests": len(history),
+        "latest_status": (
+            target_finding.remediation_verification.status
+            if target_finding.remediation_verification
+            else (history[-1].get("status") if history and isinstance(history[-1], dict) else None)
+        ),
+        "assignee_id": target_finding.assignee_id,
+        "assigned_by": target_finding.assigned_by,
+        "assigned_at": target_finding.assigned_at,
+        "due_date": target_finding.due_date,
+        "retest_history": history,
+    }
+
 def _owned_connector(integration_id: str, user: UserIdentity):
     integration = connector_store.get_integration(integration_id)
     if not integration or not Authorizer.can_access_org(user, integration.org_id):
@@ -187,10 +334,28 @@ async def rollback_patch(
 
 @router.post("/patches/{patch_id}/verify", response_model=VerificationResult)
 async def verify_patch(patch_id: str, user: UserIdentity = Depends(get_current_user)):
-    """Re-check a patch the caller is allowed to see."""
+    """Re-check a patch the caller is allowed to see and append to retest_history."""
     patch = _owned_patch(patch_id, user)
+    res = await verification_engine.verify_remediation(patch)
+    entry = res.model_dump() if hasattr(res, "model_dump") else dict(res)
+    if patch.retest_history is None:
+        patch.retest_history = []
+    patch.retest_history.append(entry)
 
-    return await verification_engine.verify_remediation(patch)
+    analysis_id = (patch.metadata_payload or {}).get("analysis_id")
+    if analysis_id:
+        try:
+            run = require_analysis(analysis_id, user)
+            if run and run.report:
+                for rp in (run.report.remediation_patches or []):
+                    if rp.patch_id == patch.patch_id and rp is not patch:
+                        if rp.retest_history is None:
+                            rp.retest_history = []
+                        rp.retest_history.append(entry)
+                _persist_run_safely(run)
+        except Exception:
+            pass
+    return res
  
 class VerifyFindingRequest(BaseModel):
     finding_id: str
@@ -212,8 +377,10 @@ async def verify_finding_remediation(
     Executes the continuous remediation verification loop:
     FIX -> RECRAWL -> RECHECK -> COMPARE -> CERTIFY
     Operates on live original target URLs and authentic findings.
+    Appends each verification run to finding.retest_history and linked patch.retest_history.
     """
     finding = None
+    run = None
     target_url = req.target_url or req.website_url or ""
 
     if req.analysis_id:
@@ -257,6 +424,10 @@ async def verify_finding_remediation(
     )
     if finding:
         finding.remediation_verification = report
+        if finding.retest_history is None:
+            finding.retest_history = []
+        finding.retest_history.append(report)
+
         if report.status == "RESOLVED":
             finding.status = FindingStatus.VERIFIED
             finding.resolution_status = "RESOLVED"
@@ -267,6 +438,24 @@ async def verify_finding_remediation(
         elif report.status in ("FAILED_RECHECK", "FAILED_RECRAWL", "REGRESSED"):
             finding.status = FindingStatus.OPEN
             finding.resolution_status = "REGRESSED"
+
+        report_dict = report.model_dump() if hasattr(report, "model_dump") else dict(report)
+        seen_patches = set()
+        candidate_patches = list(_PATCH_REGISTRY.values())
+        if run and run.report and run.report.remediation_patches:
+            candidate_patches.extend(run.report.remediation_patches)
+        for p in candidate_patches:
+            if id(p) in seen_patches:
+                continue
+            seen_patches.add(id(p))
+            if p.finding_id == finding.finding_id:
+                if p.retest_history is None:
+                    p.retest_history = []
+                p.retest_history.append(report_dict)
+
+        if run:
+            _persist_run_safely(run)
+
     return report
 
 @router.post("/verify-all/{analysis_id}", response_model=List[RemediationVerificationReport])
@@ -275,7 +464,8 @@ async def verify_all_findings_remediation(
     user: UserIdentity = Depends(get_current_user),
 ):
     """
-    Runs the verification loop across all findings in an analysis run using live original URLs.
+    Runs the verification loop across all findings in an analysis run using live original URLs,
+    appending each new RemediationVerificationReport to finding.retest_history and patch.retest_history.
     """
     run = require_analysis(analysis_id, user)
     if not run.report:
@@ -294,6 +484,10 @@ async def verify_all_findings_remediation(
             analysis_id=analysis_id,
         )
         f.remediation_verification = rep
+        if f.retest_history is None:
+            f.retest_history = []
+        f.retest_history.append(rep)
+
         if rep.status == "RESOLVED":
             f.status = FindingStatus.VERIFIED
             f.resolution_status = "RESOLVED"
@@ -304,7 +498,21 @@ async def verify_all_findings_remediation(
         elif rep.status in ("FAILED_RECHECK", "FAILED_RECRAWL", "REGRESSED"):
             f.status = FindingStatus.OPEN
             f.resolution_status = "REGRESSED"
+
+        rep_dict = rep.model_dump() if hasattr(rep, "model_dump") else dict(rep)
+        seen_patches = set()
+        for p in list(_PATCH_REGISTRY.values()) + list(run.report.remediation_patches or []):
+            if id(p) in seen_patches:
+                continue
+            seen_patches.add(id(p))
+            if p.finding_id == f.finding_id:
+                if p.retest_history is None:
+                    p.retest_history = []
+                p.retest_history.append(rep_dict)
+
         results.append(rep)
+
+    _persist_run_safely(run)
     return results
 
 @router.post("/roi-estimate", response_model=RoiEstimate)

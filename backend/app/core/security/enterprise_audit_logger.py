@@ -10,6 +10,7 @@ from typing import Dict, Any, List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
+from app.db.enterprise_schema import init_enterprise_schema
 from app.identity.authorizer import UserIdentity
 from app.identity.deps import get_current_user
 
@@ -34,6 +35,13 @@ class AuditLogRecord(BaseModel):
 class EnterpriseAuditLogger:
     def __init__(self, db_path: str = "data/dristik_enterprise.db"):
         self.db_path = db_path
+        self._ensure_schema()
+
+    def _ensure_schema(self) -> None:
+        try:
+            init_enterprise_schema(self.db_path)
+        except Exception:
+            pass
 
     def log_event(
         self,
@@ -58,13 +66,14 @@ class EnterpriseAuditLogger:
         )
         _LOCAL_LOGS_CACHE.append(record.model_dump())
 
-        # Persist to SQLite if database exists
+        # Persist to SQLite
         try:
+            self._ensure_schema()
             conn = sqlite3.connect(self.db_path)
             with conn:
                 conn.execute(
                     """
-                    INSERT INTO enterprise_audit_logs (
+                    INSERT OR REPLACE INTO enterprise_audit_logs (
                         id, org_id, user_id, action, resource_type, resource_id,
                         ip_address, user_agent, payload, created_at
                     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -89,8 +98,57 @@ class EnterpriseAuditLogger:
         return record
 
     def list_logs(self, org_id: str, limit: int = 50) -> List[Dict[str, Any]]:
-        org_logs = [log for log in _LOCAL_LOGS_CACHE if log.get("org_id") == org_id]
-        return org_logs[-limit:]
+        merged_by_id: Dict[str, Dict[str, Any]] = {}
+
+        # 1. Load persisted rows from enterprise_audit_logs table
+        try:
+            self._ensure_schema()
+            conn = sqlite3.connect(self.db_path)
+            conn.row_factory = sqlite3.Row
+            rows = conn.execute(
+                """
+                SELECT id, org_id, user_id, action, resource_type, resource_id,
+                       ip_address, user_agent, payload, created_at
+                FROM enterprise_audit_logs
+                WHERE org_id = ?
+                ORDER BY created_at ASC
+                """,
+                (org_id,),
+            ).fetchall()
+            conn.close()
+            for r in rows:
+                raw_payload = r["payload"]
+                parsed_payload: Dict[str, Any] = {}
+                if isinstance(raw_payload, str) and raw_payload.strip():
+                    try:
+                        parsed_payload = json.loads(raw_payload)
+                    except Exception:
+                        parsed_payload = {}
+                elif isinstance(raw_payload, dict):
+                    parsed_payload = raw_payload
+                entry = {
+                    "id": r["id"],
+                    "org_id": r["org_id"],
+                    "user_id": r["user_id"],
+                    "action": r["action"],
+                    "resource_type": r["resource_type"],
+                    "resource_id": r["resource_id"],
+                    "ip_address": r["ip_address"],
+                    "user_agent": r["user_agent"],
+                    "payload": parsed_payload,
+                    "created_at": r["created_at"],
+                }
+                merged_by_id[entry["id"]] = entry
+        except Exception:
+            pass
+
+        # 2. Merge and deduplicate with in-memory _LOCAL_LOGS_CACHE
+        for log in _LOCAL_LOGS_CACHE:
+            if log.get("org_id") == org_id and log.get("id"):
+                merged_by_id[log["id"]] = log
+
+        ordered = sorted(merged_by_id.values(), key=lambda item: str(item.get("created_at") or ""))
+        return ordered[-limit:] if limit > 0 else ordered
 
 
 _audit_logger_singleton: Optional[EnterpriseAuditLogger] = None

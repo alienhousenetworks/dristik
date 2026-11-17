@@ -81,6 +81,102 @@ CTA_REWRITE_SUGGESTIONS = {
 }
 
 
+def evaluate_conversion_journey(
+    pages: List[PageEvidence],
+    business_profile: Optional[Any] = None,
+) -> Dict[str, Any]:
+    """
+    Evaluates the multi-step conversion journey across crawled pages:
+    Landing -> Product/Service Detail -> Pricing/Offer -> Cart/Checkout/Form progression.
+    Identifies observed stages and drop-off friction points without fabricating conversion rates.
+    """
+    landing_urls: List[str] = []
+    detail_urls: List[str] = []
+    pricing_offer_urls: List[str] = []
+    conversion_urls: List[str] = []
+
+    for idx, p in enumerate(pages or []):
+        u = (p.url or "").strip()
+        u_low = u.lower()
+        body_low = (p.body_text or "").lower()
+        ctas_low = " ".join(str(c) for c in (getattr(p, "ctas", None) or [])).lower()
+
+        if idx == 0 or u_low.rstrip("/").count("/") <= 2:
+            landing_urls.append(u)
+        if any(k in u_low for k in ("/product", "/products", "/service", "/services", "/solutions", "/collection", "/shop", "/item", "/features")):
+            detail_urls.append(u)
+        elif idx > 0 and any(k in body_low for k in ("ingredients", "specifications", "how to use", "features", "deliverables", "benefits")):
+            detail_urls.append(u)
+
+        if any(k in u_low for k in ("/pricing", "/plans", "/offers", "/bundles", "/deals", "/packages")) or any(
+            sym in body_low for sym in ("$", "₹", "€", "£", "/mo", "per month", "add to cart", "buy now", "bundle")
+        ):
+            pricing_offer_urls.append(u)
+
+        if (
+            any(k in u_low for k in ("/cart", "/checkout", "/contact", "/demo", "/book", "/signup", "/register", "/quote"))
+            or getattr(p, "forms_count", 0) > 0
+            or any(k in ctas_low for k in ("add to cart", "buy now", "checkout", "book a demo", "get started", "order now", "schedule"))
+        ):
+            conversion_urls.append(u)
+
+    stages = [
+        {
+            "stage_id": "landing",
+            "stage_name": "Landing & Value Hook",
+            "status": "OBSERVED" if landing_urls else "MISSING",
+            "matched_urls": landing_urls[:5],
+        },
+        {
+            "stage_id": "product_service_detail",
+            "stage_name": "Product / Service Detail Exploration",
+            "status": "OBSERVED" if detail_urls else "MISSING",
+            "matched_urls": detail_urls[:5],
+        },
+        {
+            "stage_id": "pricing_and_offer",
+            "stage_name": "Pricing, Offers & Value Evaluation",
+            "status": "OBSERVED" if pricing_offer_urls else "MISSING",
+            "matched_urls": pricing_offer_urls[:5],
+        },
+        {
+            "stage_id": "checkout_or_lead_form",
+            "stage_name": "Cart / Checkout / Lead Capture Progression",
+            "status": "OBSERVED" if conversion_urls else "MISSING",
+            "matched_urls": conversion_urls[:5],
+        },
+    ]
+
+    friction_points: List[Dict[str, str]] = []
+    if not detail_urls and len(pages or []) > 1:
+        friction_points.append({
+            "stage": "product_service_detail",
+            "issue": "No dedicated product or service detail pages observed in crawl sample.",
+            "recommendation": "Link landing page CTAs directly to dedicated product/service detail pages with full specifications.",
+        })
+    if not pricing_offer_urls:
+        friction_points.append({
+            "stage": "pricing_and_offer",
+            "issue": "No transparent pricing, offer, or bundle evaluation step observed across crawled pages.",
+            "recommendation": "Expose clear pricing, package tiers, or product offer details before asking users to commit.",
+        })
+    if not conversion_urls:
+        friction_points.append({
+            "stage": "checkout_or_lead_form",
+            "issue": "No self-serve checkout, cart trigger, or lead capture form observed in crawled pages.",
+            "recommendation": "Ensure every product/service and pricing view includes a direct checkout or low-friction conversion form.",
+        })
+
+    observed_count = sum(1 for s in stages if s["status"] == "OBSERVED")
+    return {
+        "journey_stages": stages,
+        "stages_observed_count": observed_count,
+        "total_stages": len(stages),
+        "journey_completeness_pct": round((observed_count / len(stages)) * 100.0, 1),
+        "dropoff_friction_points": friction_points,
+    }
+
+
 class CroAnalyzer:
     """Deterministic, zero-fake CRO & conversion experience analyzer."""
 
@@ -630,11 +726,16 @@ class CroAnalyzer:
         )
         from app.cro.engine import build_cro_intelligence
 
-        cro_report.intelligence = build_cro_intelligence(
+        cro_Intel_obj = build_cro_intelligence(
             pages=pages,
             raw_html_map=raw_html_map,
             business_profile=business_profile,
         ).model_dump()
+        journey_eval = evaluate_conversion_journey(pages, business_profile)
+        cro_Intel_obj["conversion_journey"] = journey_eval
+        cro_Intel_obj["journey_stages"] = journey_eval["journey_stages"]
+        cro_Intel_obj["dropoff_friction_points"] = journey_eval["dropoff_friction_points"]
+        cro_report.intelligence = cro_Intel_obj
 
         return cro_report, findings
 

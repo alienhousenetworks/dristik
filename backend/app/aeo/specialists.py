@@ -588,17 +588,37 @@ class CompetitiveIntelligenceSpecialist(BaseAeoSpecialist):
 
     def evaluate(self, report: Any) -> SpecialistResult:
         comp = getattr(report, "competitive_report", None)
+        competitors = (
+            comp.get("competitors", [])
+            if isinstance(comp, dict)
+            else getattr(comp, "competitors", []) if comp else []
+        )
+        comp_status = (
+            str(comp.get("status", "")).upper()
+            if isinstance(comp, dict)
+            else str(getattr(comp, "status", "")).upper() if comp else ""
+        )
+        has_measured_competitors = (
+            bool(comp)
+            and len(competitors) > 0
+            and comp_status not in {"UNTESTED", "NOT_TESTED", "NOT_MEASURED", "UNAVAILABLE"}
+            and any(
+                (isinstance(c, dict) and str(c.get("status", "MEASURED")).upper() not in {"UNTESTED", "NOT_TESTED", "NOT_MEASURED"})
+                or (not isinstance(c, dict) and str(getattr(c, "status", "MEASURED")).upper() not in {"UNTESTED", "NOT_TESTED", "NOT_MEASURED"})
+                for c in competitors
+            )
+        )
         return SpecialistResult(
             specialist_id=self.specialist_id,
             specialist_name=self.specialist_name,
             responsibility=self.responsibility,
-            status=EvidenceState.SAMPLE_VERIFIED if comp else EvidenceState.NOT_TESTED,
+            status=EvidenceState.SAMPLE_VERIFIED if has_measured_competitors else EvidenceState.NOT_TESTED,
             summary=(
                 "Competitor report data is present; comparability of engines, queries, regions, and run windows has not been independently established here."
-                if comp else "No competitor answer dataset was available for comparison."
+                if has_measured_competitors else "No measured competitor answer dataset was available for comparison."
             ),
             findings=[],
-            metadata={"has_competitor_data": bool(comp)},
+            metadata={"has_competitor_data": has_measured_competitors, "competitors_count": len(competitors)},
         )
 
 
@@ -627,6 +647,21 @@ class BusinessAttributionSpecialist(BaseAeoSpecialist):
     responsibility = "Connect available search console, analytics, and conversion telemetry to answer pages"
 
     def evaluate(self, report: Any) -> SpecialistResult:
+        lr = getattr(report, "lifecycle_revenue", None)
+        ga4 = getattr(lr, "ga4", None) if lr else None
+        gsc = getattr(lr, "gsc", None) if lr else None
+        ga4_connected = bool(getattr(ga4, "is_connected", False)) if ga4 else False
+        gsc_connected = bool(getattr(gsc, "is_connected", False)) if gsc else False
+        if ga4_connected or gsc_connected:
+            return SpecialistResult(
+                specialist_id=self.specialist_id,
+                specialist_name=self.specialist_name,
+                responsibility=self.responsibility,
+                status=EvidenceState.SAMPLE_VERIFIED,
+                summary="Connected GA4/GSC attribution telemetry inspected for answer pages.",
+                findings=[],
+                metadata={"connector_status": "CONNECTED", "ga4_connected": ga4_connected, "gsc_connected": gsc_connected},
+            )
         return SpecialistResult(
             specialist_id=self.specialist_id,
             specialist_name=self.specialist_name,

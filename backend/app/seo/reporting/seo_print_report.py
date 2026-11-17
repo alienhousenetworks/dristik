@@ -2755,19 +2755,33 @@ class SeoPrintReportRenderer:
     # Chapter 10: Core Web Vitals & Technical Page Performance
     # --------------------------------------------------------------------------
     def _render_sec_10(self, report: ExecutiveReport) -> str:
+        from app.domain.scoring.displayed_score import compute_ttfb_summary
+        pages = self._get_pages(report)
+        raw_samples = [
+            float(self._pval(p, "ttfb_ms", 0.0) or 0.0)
+            for p in pages
+            if (self._pval(p, "ttfb_ms", 0.0) or 0.0) > 0
+        ]
+        ttfb_stats = compute_ttfb_summary(raw_samples)
         summary = report.crawl_summary or {}
         raw_ttfb = summary.get("avg_ttfb_ms")
-        avg_ttfb = float(raw_ttfb) if raw_ttfb is not None else 0.0
-        ttfb_color = "#10b981" if 0 < avg_ttfb < 300 else ("#f59e0b" if avg_ttfb < 600 else ("#ef4444" if avg_ttfb > 0 else "#64748b"))
-        ttfb_grade = "FAST" if 0 < avg_ttfb < 300 else ("MODERATE" if avg_ttfb < 600 else ("SLOW" if avg_ttfb > 0 else "UNMEASURED"))
-        ttfb_display = f"{int(round(avg_ttfb))} ms" if avg_ttfb > 0 else "UNMEASURED"
+        avg_ttfb = ttfb_stats["mean_ms"] if ttfb_stats["sample_size"] > 0 else (float(raw_ttfb) if raw_ttfb is not None else 0.0)
+        med_ttfb = ttfb_stats["median_ms"] if ttfb_stats["sample_size"] > 0 else avg_ttfb
+        outlier_cnt = ttfb_stats["outlier_count"]
+        ttfb_color = "#10b981" if 0 < med_ttfb < 300 else ("#f59e0b" if med_ttfb < 600 else ("#ef4444" if med_ttfb > 0 else "#64748b"))
+        ttfb_grade = (
+            f"n={ttfb_stats['sample_size']} · Median {med_ttfb:.1f}ms"
+            + (f" · {outlier_cnt} outlier(s)" if outlier_cnt else "")
+            if ttfb_stats["sample_size"] > 0
+            else ("FAST" if 0 < avg_ttfb < 300 else ("MODERATE" if avg_ttfb < 600 else ("SLOW" if avg_ttfb > 0 else "UNMEASURED")))
+        )
+        ttfb_display = f"{avg_ttfb:.1f} ms" if avg_ttfb > 0 else "UNMEASURED"
 
         media = report.media_assets
         missing_dims = getattr(media, "missing_explicit_dimensions_count", 0) if media else 0
         webp_ratio = getattr(media, "modern_format_adoption_pct", None) if media else None
         webp_display = f"{webp_ratio:.1f}%" if webp_ratio is not None else "UNMEASURED"
 
-        pages = self._get_pages(report)
         perf_rows = []
         cls_rows = []
         for p in pages:

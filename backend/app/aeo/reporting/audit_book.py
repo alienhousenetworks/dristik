@@ -341,6 +341,16 @@ class _Facts:
         return text
 
     def coverage_sentence(self) -> str:
+        # Full aggregate is stated once per book; later sections get a short pointer so the
+        # 73/100-style paragraph is not repeated in every chapter.
+        if getattr(self, "_coverage_stated", False):
+            if self.assessed == 0:
+                return "Question coverage has no denominator on this run (stated once above)."
+            return (
+                f"Aggregate question coverage ({self.usable} of {self.assessed} usable) is stated once "
+                "in the first coverage section; this section addresses its own facet only."
+            )
+        self._coverage_stated = True
         if self.assessed == 0:
             if self.question_source == "the question-graph counters":
                 return (
@@ -636,7 +646,28 @@ class _Facts:
             return "No contradiction record was stored."
         shown = []
         for item in self.contradictions[:3]:
-            shown.append(_clip(f"{_get(item, 'contradiction_type', 'conflict')}: {_get(item, 'reason', '')}", 160))
+            parts = [f"{_get(item, 'contradiction_type', 'conflict')}"]
+            question = _get(item, "question_text", "")
+            if question:
+                parts.append(f"Question: \"{question}\"")
+            disputed = _get(item, "disputed_fact", "")
+            if disputed:
+                parts.append(f"Disputed fact: {disputed}")
+            a, b = _get(item, "statement_a", ""), _get(item, "statement_b", "")
+            if a or b:
+                ua, ub = _get(item, "source_url_a", ""), _get(item, "source_url_b", "")
+                ea, eb = _get(item, "evidence_id_a", ""), _get(item, "evidence_id_b", "")
+                parts.append(
+                    f"Statement A: \"{a}\" [{ua or 'no URL stored'}; evidence {ea or 'n/a'}] "
+                    f"conflicts with Statement B: \"{b}\" [{ub or 'no URL stored'}; evidence {eb or 'n/a'}]"
+                )
+            why = _get(item, "conflict_explanation", "") or _get(item, "reason", "")
+            if why:
+                parts.append(f"Why they conflict: {why}")
+            fix = _get(item, "authoritative_correction", "")
+            if fix:
+                parts.append(f"Recommended authoritative correction: {fix}")
+            shown.append(". ".join(str(p) for p in parts))
         return f"{len(self.contradictions)} contradiction record(s). {_join(shown, 3)}"
 
     def languages(self) -> List[str]:

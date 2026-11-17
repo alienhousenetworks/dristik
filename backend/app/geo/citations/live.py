@@ -31,6 +31,8 @@ class EngineCitationResult:
     competitor_citations: List[Dict[str, Any]] = field(default_factory=list)
     is_simulation: bool = False
     notice: Optional[str] = None
+    status: str = "NOT_CONFIGURED"
+    is_live: bool = False
 
 
 class QueryBankRequest(BaseModel):
@@ -82,20 +84,110 @@ class LiveAICitationEngine:
         competitors: Optional[List[str]] = None
     ) -> EngineCitationResult:
         """
-        Returns honest NOT_AVAILABLE result when no real API key is configured.
-        Live engine integration requires API keys for each provider.
+        Evaluates a query using configured live adapters from app.geo.adapters.registry.
+        Returns honest NOT_CONFIGURED / is_live=False when no real API key is configured.
         """
-        # No real API integration yet — return honest unconfigured state
+        import asyncio
+        from app.geo.adapters.registry import get_adapter, get_available_adapters
+
+        clean_domain = domain.replace("https://", "").replace("http://", "").split("/")[0].lower().replace("www.", "")
+        adapter = get_adapter(engine)
+        if adapter is None or not adapter.is_configured():
+            available = get_available_adapters()
+            adapter = next((a for a in available if a.engine_id.lower() == engine.lower() and a.is_configured()), None)
+
+        if adapter is None or not adapter.is_configured():
+            return EngineCitationResult(
+                engine=engine,
+                query=query,
+                is_cited=False,
+                citation_rank=None,
+                cited_url=None,
+                extracted_snippet=None,
+                competitor_citations=[],
+                is_simulation=False,
+                notice=f"Live {engine} citation query requires API key configuration. Surface is UNTESTED; no simulated data returned.",
+                status="NOT_CONFIGURED",
+                is_live=False,
+            )
+
+        try:
+            try:
+                loop = asyncio.get_running_loop()
+            except RuntimeError:
+                loop = None
+
+            if loop and loop.is_running():
+                import concurrent.futures
+                with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+                    raw_resp = pool.submit(lambda: asyncio.run(adapter.execute_query(query))).result(timeout=25)
+            else:
+                raw_resp = asyncio.run(adapter.execute_query(query))
+        except Exception as exc:
+            return EngineCitationResult(
+                engine=engine,
+                query=query,
+                is_cited=False,
+                citation_rank=None,
+                cited_url=None,
+                extracted_snippet=None,
+                competitor_citations=[],
+                is_simulation=False,
+                notice=f"Live {engine} query failed ({type(exc).__name__}); surface marked UNTESTED.",
+                status="NOT_CONFIGURED",
+                is_live=False,
+            )
+
+        if not raw_resp or not raw_resp.is_live or raw_resp.error:
+            return EngineCitationResult(
+                engine=engine,
+                query=query,
+                is_cited=False,
+                citation_rank=None,
+                cited_url=None,
+                extracted_snippet=None,
+                competitor_citations=[],
+                is_simulation=False,
+                notice=raw_resp.error if raw_resp and raw_resp.error else f"Live {engine} response unavailable.",
+                status="NOT_CONFIGURED",
+                is_live=False,
+            )
+
+        citations = list(raw_resp.citations or [])
+        cited_url = None
+        citation_rank = None
+        for idx, c_url in enumerate(citations, start=1):
+            if clean_domain and clean_domain in str(c_url).lower():
+                cited_url = str(c_url)
+                citation_rank = idx
+                break
+
+        content_text = raw_resp.raw_content or ""
+        brand_token = clean_domain.split(".")[0] if clean_domain else ""
+        is_cited = bool(cited_url) or (bool(brand_token) and brand_token in content_text.lower())
+
+        comp_cites: List[Dict[str, Any]] = []
+        for comp in (competitors or []):
+            clean_comp = comp.replace("https://", "").replace("http://", "").split("/")[0].lower().replace("www.", "")
+            if not clean_comp:
+                continue
+            for idx, c_url in enumerate(citations, start=1):
+                if clean_comp in str(c_url).lower():
+                    comp_cites.append({"competitor": clean_comp, "rank": idx, "url": str(c_url)})
+                    break
+
         return EngineCitationResult(
             engine=engine,
             query=query,
-            is_cited=False,
-            citation_rank=None,
-            cited_url=None,
-            extracted_snippet=None,
-            competitor_citations=[],
+            is_cited=is_cited,
+            citation_rank=citation_rank,
+            cited_url=cited_url,
+            extracted_snippet=content_text[:280] if content_text else None,
+            competitor_citations=comp_cites,
             is_simulation=False,
-            notice=f"Live {engine} citation query requires API key configuration. No simulated data returned.",
+            notice=None,
+            status="MEASURED",
+            is_live=True,
         )
 
     def evaluate_query_bank(
@@ -124,19 +216,24 @@ class LiveAICitationEngine:
                     "extracted_snippet": res.extracted_snippet,
                     "competitor_citations": res.competitor_citations,
                     "is_simulation": res.is_simulation,
+                    "status": res.status,
+                    "is_live": res.is_live,
                     "notice": res.notice,
                     "queried_at": datetime.now(timezone.utc).isoformat(),
                 })
 
-        share_of_voice_pct = round((total_citations / max(total_evaluations, 1)) * 100, 1)
+        any_live = any(r.get("is_live") for r in results)
+        share_of_voice_pct = round((total_citations / max(total_evaluations, 1)) * 100, 1) if any_live else None
         return {
             "domain": domain,
+            "status": "MEASURED" if any_live else "NOT_CONFIGURED",
+            "is_live": any_live,
             "total_queries": len(queries),
             "total_evaluations": total_evaluations,
             "total_citations": total_citations,
             "share_of_voice_percentage": share_of_voice_pct,
             "evaluations": results,
-            "notice": "Live citation queries require API key configuration. All results reflect actual API availability." if total_citations == 0 else None,
+            "notice": "Live citation queries require API key configuration. All results reflect actual API availability." if not any_live else None,
         }
 
 
@@ -193,6 +290,8 @@ async def get_live_citations_endpoint(
         "cited_url": res.cited_url,
         "extracted_snippet": res.extracted_snippet,
         "is_simulation": res.is_simulation,
+        "status": res.status,
+        "is_live": res.is_live,
         "notice": res.notice,
     }
 

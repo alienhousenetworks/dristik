@@ -6,6 +6,7 @@ interface RemediationFlowModalProps {
   onClose: () => void;
   analysisId: string;
   websiteUrl: string;
+  currentUser?: { email?: string; user_id?: string; full_name?: string } | null;
 }
 
 export const RemediationFlowModal: React.FC<RemediationFlowModalProps> = ({
@@ -13,6 +14,7 @@ export const RemediationFlowModal: React.FC<RemediationFlowModalProps> = ({
   onClose,
   analysisId,
   websiteUrl,
+  currentUser,
 }) => {
   const [patches, setPatches] = useState<RemediationPatch[]>([]);
   const [integrations, setIntegrations] = useState<Integration[]>([]);
@@ -23,6 +25,9 @@ export const RemediationFlowModal: React.FC<RemediationFlowModalProps> = ({
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [verificationResult, setVerificationResult] = useState<VerificationResult | null>(null);
+  const [authUserEmail, setAuthUserEmail] = useState<string>('');
+  const [assigneeInput, setAssigneeInput] = useState<string>('');
+  const [dueDateInput, setDueDateInput] = useState<string>('');
 
   const fetchPatchesAndIntegrations = async () => {
     setLoading(true);
@@ -57,8 +62,19 @@ export const RemediationFlowModal: React.FC<RemediationFlowModalProps> = ({
   useEffect(() => {
     if (isOpen) {
       fetchPatchesAndIntegrations();
+      if (!currentUser?.email) {
+        fetch('/api/v1/auth/me')
+          .then((r) => (r.ok ? r.json() : null))
+          .then((data) => {
+            if (data?.user?.email) setAuthUserEmail(data.user.email);
+          })
+          .catch(() => {});
+      }
     }
-  }, [isOpen, analysisId]);
+  }, [isOpen, analysisId, currentUser?.email]);
+
+  const resolvedApprover =
+    currentUser?.email || authUserEmail || currentUser?.user_id || 'authenticated_user';
 
   const handleApprove = async (patchId: string) => {
     setActionLoading(patchId);
@@ -67,16 +83,43 @@ export const RemediationFlowModal: React.FC<RemediationFlowModalProps> = ({
       const res = await fetch(`/api/v1/remediation/patches/${patchId}/approve`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ approver: 'analyst@dristik.ai' }),
+        body: JSON.stringify({ approver: resolvedApprover }),
       });
       if (res.ok) {
         const updated = await res.json();
         setPatches((prev) => prev.map((p) => (p.patch_id === patchId ? updated : p)));
         if (selectedPatch?.patch_id === patchId) setSelectedPatch(updated);
-        setActionMessage(`✓ Approved patch ${patchId}`);
+        setActionMessage(`✓ Approved patch ${patchId} as ${resolvedApprover}`);
       }
     } catch (e: any) {
       setActionMessage(`Error: ${e.message}`);
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleAssign = async (patchId: string) => {
+    const targetAssignee = assigneeInput.trim() || resolvedApprover;
+    setActionLoading(`assign_${patchId}`);
+    setActionMessage(null);
+    try {
+      const res = await fetch(`/api/v1/remediation/patches/${patchId}/assign`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          assignee_id: targetAssignee,
+          assigned_by: resolvedApprover,
+          due_date: dueDateInput || undefined,
+        }),
+      });
+      if (res.ok) {
+        const updated = await res.json();
+        setPatches((prev) => prev.map((p) => (p.patch_id === patchId ? updated : p)));
+        if (selectedPatch?.patch_id === patchId) setSelectedPatch(updated);
+        setActionMessage(`✓ Assigned patch ${patchId} to ${targetAssignee}`);
+      }
+    } catch (e: any) {
+      setActionMessage(`Assignment error: ${e.message}`);
     } finally {
       setActionLoading(null);
     }
@@ -331,6 +374,70 @@ export const RemediationFlowModal: React.FC<RemediationFlowModalProps> = ({
                   <p className="text-xs text-ink-700 leading-relaxed bg-paper-50 p-3 rounded-lg border border-line">
                     {selectedPatch.explanation}
                   </p>
+                  <div className="flex flex-wrap items-center justify-between gap-2 text-xs bg-paper-50 p-2.5 rounded-lg border border-line">
+                    <div className="flex flex-wrap items-center gap-3">
+                      <span className="font-mono text-ink-600">
+                        Assignee:{' '}
+                        <strong className="text-ink">
+                          {(selectedPatch as any).assignee_id || 'Unassigned'}
+                        </strong>
+                      </span>
+                      {(selectedPatch as any).due_date && (
+                        <span className="font-mono text-ink-600">
+                          Due: <strong className="text-ink">{(selectedPatch as any).due_date}</strong>
+                        </span>
+                      )}
+                      {Array.isArray((selectedPatch as any).retest_history) && (
+                        <span className="font-mono px-2 py-0.5 rounded bg-paper-200 border border-line text-ink-700">
+                          Retests: {(selectedPatch as any).retest_history.length}
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <input
+                        type="text"
+                        value={assigneeInput}
+                        onChange={(e) => setAssigneeInput(e.target.value)}
+                        placeholder={resolvedApprover}
+                        className="px-2 py-1 text-xs rounded border border-line bg-paper-100 text-ink w-36"
+                      />
+                      <input
+                        type="date"
+                        value={dueDateInput}
+                        onChange={(e) => setDueDateInput(e.target.value)}
+                        className="px-2 py-1 text-xs rounded border border-line bg-paper-100 text-ink"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => handleAssign(selectedPatch.patch_id)}
+                        disabled={actionLoading === `assign_${selectedPatch.patch_id}`}
+                        className="px-2.5 py-1 rounded bg-paper-200 hover:bg-paper-300 border border-line text-ink text-xs font-mono"
+                      >
+                        Assign
+                      </button>
+                    </div>
+                  </div>
+                  {Array.isArray((selectedPatch as any).retest_history) &&
+                    (selectedPatch as any).retest_history.length > 0 && (
+                      <div className="p-2.5 rounded-lg bg-paper-50 border border-line space-y-1">
+                        <div className="text-[11px] font-mono font-semibold text-ink-600">
+                          Append-Only Retest History ({(selectedPatch as any).retest_history.length})
+                        </div>
+                        <div className="max-h-24 overflow-y-auto space-y-1">
+                          {(selectedPatch as any).retest_history.map((rt: any, idx: number) => (
+                            <div
+                              key={rt.verification_id || idx}
+                              className="flex items-center justify-between text-[11px] font-mono text-ink-600"
+                            >
+                              <span>
+                                #{idx + 1} • {rt.status || (rt.verified ? 'VERIFIED' : 'CHECKED')}
+                              </span>
+                              <span>{rt.verified_at || rt.checked_at || ''}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                 </div>
 
                 {/* Diff Viewer */}

@@ -46,8 +46,8 @@ class AuditRepository:
         os.makedirs(os.path.dirname(os.path.abspath(self.db_path)), exist_ok=True)
         with self._lock:
             with sqlite3.connect(self.db_path, check_same_thread=False) as conn:
-                self._migrate_sqlite(conn)
                 conn.executescript(SQLITE_SCHEMA)
+                self._migrate_sqlite(conn)
                 conn.commit()
 
     def _migrate_sqlite(self, conn: sqlite3.Connection) -> None:
@@ -60,6 +60,21 @@ class AuditRepository:
                 conn.execute("CREATE INDEX IF NOT EXISTS idx_audits_org_workspace ON audits(org_id, workspace_id)")
         except Exception as e:
             logger.warning(f"Failed to check or alter audits table schema: {e}")
+
+        try:
+            cur_f = conn.execute("PRAGMA table_info(audit_findings)")
+            f_cols = {row[1] for row in cur_f.fetchall()}
+            if f_cols:
+                if "affected_urls_json" not in f_cols:
+                    conn.execute("ALTER TABLE audit_findings ADD COLUMN affected_urls_json TEXT")
+                if "affected_url_count" not in f_cols:
+                    conn.execute("ALTER TABLE audit_findings ADD COLUMN affected_url_count INTEGER")
+                if "root_cause_id" not in f_cols:
+                    conn.execute("ALTER TABLE audit_findings ADD COLUMN root_cause_id TEXT")
+                if "evidence_json" not in f_cols:
+                    conn.execute("ALTER TABLE audit_findings ADD COLUMN evidence_json TEXT")
+        except Exception as e:
+            logger.warning(f"Failed to check or alter audit_findings table schema: {e}")
 
 
     def _get_conn(self) -> sqlite3.Connection:
@@ -155,6 +170,8 @@ class AuditRepository:
             now = datetime.now(timezone.utc).isoformat()
             finding_rows = []
             for finding in findings:
+                if hasattr(finding, "sync_evidence_ids_and_refs"):
+                    finding.sync_evidence_ids_and_refs()
                 finding_id = getattr(finding, "finding_id", None) or getattr(finding, "id", None)
                 category = finding.category.value if hasattr(finding.category, "value") else str(finding.category)
                 severity = finding.severity.value if hasattr(finding.severity, "value") else str(finding.severity)
@@ -163,19 +180,28 @@ class AuditRepository:
                     if getattr(finding, "verification_status", None) and hasattr(finding.verification_status, "value")
                     else str(getattr(finding, "verification_status", "verified"))
                 )
+                aff_urls = list(getattr(finding, "affected_urls", None) or [])
+                aff_cnt = int(getattr(finding, "affected_url_count", None) if getattr(finding, "affected_url_count", None) is not None else len(aff_urls))
+                ev_serialized = [
+                    ev.model_dump() if hasattr(ev, "model_dump") else ev
+                    for ev in (getattr(finding, "evidence", None) or [])
+                ]
                 finding_rows.append((
                     finding_id, run.analysis_id, category, severity, finding.title,
                     finding.description, finding.impact, finding.recommendation,
                     json.dumps(finding.evidence_refs or []),
-                    json.dumps(getattr(finding, "claim_refs", [])), verification, now,
+                    json.dumps(getattr(finding, "claim_refs", [])), verification,
+                    json.dumps(aff_urls), aff_cnt, getattr(finding, "root_cause_id", None),
+                    json.dumps(ev_serialized), now,
                 ))
 
         finding_sql = """
         INSERT OR REPLACE INTO audit_findings (
             finding_id, analysis_id, category, severity, title, description,
             impact, recommendation, evidence_refs_json, claim_refs_json,
-            verification_status, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            verification_status, affected_urls_json, affected_url_count,
+            root_cause_id, evidence_json, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """
 
         with self._lock:
@@ -459,15 +485,24 @@ class AuditRepository:
         INSERT OR REPLACE INTO audit_findings (
             finding_id, analysis_id, category, severity, title, description,
             impact, recommendation, evidence_refs_json, claim_refs_json,
-            verification_status, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            verification_status, affected_urls_json, affected_url_count,
+            root_cause_id, evidence_json, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """
         rows = []
         for f in findings:
+            if hasattr(f, "sync_evidence_ids_and_refs"):
+                f.sync_evidence_ids_and_refs()
             f_id = getattr(f, "finding_id", None) or getattr(f, "id", None)
             cat_val = f.category.value if hasattr(f.category, "value") else str(f.category)
             sev_val = f.severity.value if hasattr(f.severity, "value") else str(f.severity)
             ver_val = f.verification_status.value if getattr(f, "verification_status", None) and hasattr(f.verification_status, "value") else str(getattr(f, "verification_status", "verified"))
+            aff_urls = list(getattr(f, "affected_urls", None) or [])
+            aff_cnt = int(getattr(f, "affected_url_count", None) if getattr(f, "affected_url_count", None) is not None else len(aff_urls))
+            ev_serialized = [
+                ev.model_dump() if hasattr(ev, "model_dump") else ev
+                for ev in (getattr(f, "evidence", None) or [])
+            ]
 
             rows.append((
                 f_id,
@@ -481,6 +516,10 @@ class AuditRepository:
                 json.dumps(f.evidence_refs or []),
                 json.dumps(getattr(f, "claim_refs", [])),
                 ver_val,
+                json.dumps(aff_urls),
+                aff_cnt,
+                getattr(f, "root_cause_id", None),
+                json.dumps(ev_serialized),
                 now,
             ))
         with self._lock:
@@ -569,10 +608,19 @@ class AuditRepository:
             with self._get_conn() as conn:
                 cur = conn.execute("SELECT * FROM audit_findings WHERE analysis_id = ?", (analysis_id,))
                 rows = [dict(r) for r in cur.fetchall()]
+                cur_e = conn.execute("SELECT evidence_id, url FROM audit_evidence WHERE analysis_id = ?", (analysis_id,))
+                ev_url_map = {r["evidence_id"]: r["url"] for r in cur_e.fetchall() if r["url"]}
 
         findings: List[Finding] = []
         for r in rows:
             ev_refs = json.loads(r.get("evidence_refs_json") or "[]")
+            aff_urls = json.loads(r.get("affected_urls_json") or "[]")
+            if not aff_urls and ev_refs:
+                aff_urls = list(dict.fromkeys(ev_url_map[eid] for eid in ev_refs if eid in ev_url_map))
+            aff_cnt = r.get("affected_url_count")
+            if aff_cnt is None:
+                aff_cnt = len(aff_urls)
+            ev_list = json.loads(r.get("evidence_json") or "[]")
             cat_str = r.get("category") or "CONTENT"
             try:
                 cat = Category(cat_str)
@@ -591,9 +639,14 @@ class AuditRepository:
                 severity=sev,
                 title=r["title"],
                 description=r.get("description") or "",
-                impact=r.get("impact") or 5 if isinstance(r.get("impact"), int) else 5,
+                impact=int(r.get("impact")) if str(r.get("impact") or "").isdigit() else 5,
                 recommendation=r.get("recommendation") or "",
+                affected_urls=aff_urls,
+                affected_url_count=int(aff_cnt),
+                root_cause_id=r.get("root_cause_id"),
+                evidence=ev_list,
                 evidence_refs=ev_refs,
+                evidence_ids=ev_refs,
                 verification_status=VerificationStatus.VERIFIED if r.get("verification_status") == "verified" else VerificationStatus.PROVISIONAL,
             ))
         return findings

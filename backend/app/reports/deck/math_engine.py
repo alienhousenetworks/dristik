@@ -96,23 +96,14 @@ class DeterministicMetricEngine:
                 if p.ttfb_ms is not None and p.ttfb_ms > 0:
                     ttfb_vals.append(float(p.ttfb_ms))
 
-        if ttfb_vals:
-            ttfb_sorted = sorted(ttfb_vals)
-            n = len(ttfb_sorted)
-            ttfb_min = round(ttfb_sorted[0], 1)
-            ttfb_max = round(ttfb_sorted[-1], 1)
-            ttfb_median = round(statistics.median(ttfb_sorted), 1)
-            ttfb_mean = round(statistics.mean(ttfb_sorted), 1)
-            p90_idx = int(0.9 * n)
-            ttfb_p90 = round(ttfb_sorted[min(p90_idx, n - 1)], 1)
-            sample_size = float(n)
-        else:
-            ttfb_min = 0.0
-            ttfb_max = 0.0
-            ttfb_median = 0.0
-            ttfb_mean = 0.0
-            ttfb_p90 = 0.0
-            sample_size = 0.0
+        from app.domain.scoring.displayed_score import compute_ttfb_summary
+        ttfb_summary = compute_ttfb_summary(ttfb_vals)
+        ttfb_min = ttfb_summary["min_ms"]
+        ttfb_max = ttfb_summary["max_ms"]
+        ttfb_median = ttfb_summary["median_ms"]
+        ttfb_mean = ttfb_summary["mean_ms"]
+        ttfb_p90 = ttfb_summary["p90_ms"]
+        sample_size = float(ttfb_summary["sample_size"])
 
         ttfb_metrics = {
             "min_ms": ttfb_min,
@@ -120,6 +111,8 @@ class DeterministicMetricEngine:
             "median_ms": ttfb_median,
             "mean_ms": ttfb_mean,
             "p90_ms": ttfb_p90,
+            "trimmed_mean_ms": ttfb_summary["trimmed_mean_ms"],
+            "outlier_count": float(ttfb_summary["outlier_count"]),
             "sample_size": sample_size,
         }
 

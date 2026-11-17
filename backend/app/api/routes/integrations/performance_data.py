@@ -79,10 +79,18 @@ def _crux_metrics(data: dict[str, Any]) -> dict[str, Any]:
 
 
 async def fetch_crux(origin: str, form_factor: str = "PHONE", url: str | None = None) -> dict[str, Any]:
+    from app.core.config import settings
     provider = "Chrome UX Report API"
-    key = os.getenv("GOOGLE_CRUX_API_KEY") or os.getenv("GOOGLE_API_KEY")
+    key = (
+        os.getenv("GOOGLE_CRUX_API_KEY")
+        or os.getenv("CRUX_API_KEY")
+        or getattr(settings, "GOOGLE_CRUX_API_KEY", None)
+        or getattr(settings, "CRUX_API_KEY", None)
+        or os.getenv("GOOGLE_API_KEY")
+        or getattr(settings, "GOOGLE_API_KEY", None)
+    )
     if not key:
-        return _unavailable(provider, "Set GOOGLE_CRUX_API_KEY (or GOOGLE_API_KEY) to enable real CrUX field data.")
+        return _unavailable(provider, "Set GOOGLE_CRUX_API_KEY or CRUX_API_KEY (or GOOGLE_API_KEY) to enable real CrUX field data.")
     try:
         target = _public_web_target(url or origin, allow_path=bool(url))
     except ValueError as exc:
@@ -157,12 +165,20 @@ async def fetch_google_search(query: str, num: int = 10, start: int = 1) -> dict
 
 
 async def fetch_pagespeed(url: str, strategy: str = "mobile", categories: list[str] | None = None) -> dict[str, Any]:
+    from app.core.config import settings
     provider = "Google PageSpeed Insights API / Lighthouse"
     try:
         target = _public_web_target(url)
     except ValueError as exc:
         return {"status": "INVALID_TARGET", "provider": provider, "metrics_available": False, "metrics": {}, "reason": str(exc)}
-    api_key = os.getenv("GOOGLE_PAGESPEED_API_KEY") or os.getenv("GOOGLE_API_KEY")
+    api_key = (
+        os.getenv("GOOGLE_PAGESPEED_API_KEY")
+        or os.getenv("PAGESPEED_API_KEY")
+        or getattr(settings, "GOOGLE_PAGESPEED_API_KEY", None)
+        or getattr(settings, "PAGESPEED_API_KEY", None)
+        or os.getenv("GOOGLE_API_KEY")
+        or getattr(settings, "GOOGLE_API_KEY", None)
+    )
     params: dict[str, Any] = {"url": target, "strategy": strategy.upper()}
     for category in categories or ["PERFORMANCE", "ACCESSIBILITY", "BEST_PRACTICES", "SEO"]:
         params.setdefault("category", [])
@@ -217,10 +233,27 @@ class PageSpeedRequest(BaseModel):
 
 @router.get("/status")
 async def performance_data_status(user: UserIdentity = Depends(get_current_user)):
+    from app.core.config import settings
+    crux_key = (
+        os.getenv("GOOGLE_CRUX_API_KEY")
+        or os.getenv("CRUX_API_KEY")
+        or getattr(settings, "GOOGLE_CRUX_API_KEY", None)
+        or getattr(settings, "CRUX_API_KEY", None)
+        or os.getenv("GOOGLE_API_KEY")
+        or getattr(settings, "GOOGLE_API_KEY", None)
+    )
+    psi_key = (
+        os.getenv("GOOGLE_PAGESPEED_API_KEY")
+        or os.getenv("PAGESPEED_API_KEY")
+        or getattr(settings, "GOOGLE_PAGESPEED_API_KEY", None)
+        or getattr(settings, "PAGESPEED_API_KEY", None)
+        or os.getenv("GOOGLE_API_KEY")
+        or getattr(settings, "GOOGLE_API_KEY", None)
+    )
     return {
-        "crux": {"configured": bool(os.getenv("GOOGLE_CRUX_API_KEY") or os.getenv("GOOGLE_API_KEY")),
+        "crux": {"configured": bool(crux_key),
                  "provider": "Chrome UX Report API", "data_type": "field_data"},
-        "pagespeed": {"configured": bool(os.getenv("GOOGLE_PAGESPEED_API_KEY") or os.getenv("GOOGLE_API_KEY")), "provider": "Google PageSpeed Insights API", "api_key_configured": bool(os.getenv("GOOGLE_PAGESPEED_API_KEY") or os.getenv("GOOGLE_API_KEY")), "can_attempt_without_key": True,
+        "pagespeed": {"configured": bool(psi_key), "provider": "Google PageSpeed Insights API", "api_key_configured": bool(psi_key), "can_attempt_without_key": True,
                       "data_type": "lighthouse_lab_data"},
         "google_programmable_search": {"configured": bool((os.getenv("GOOGLE_CSE_API_KEY") or os.getenv("GOOGLE_API_KEY")) and os.getenv("GOOGLE_CSE_CX")), "provider": "Google Programmable Search JSON API", "data_type": "configured_search_results_not_universal_serp"},
     }

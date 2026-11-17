@@ -66,8 +66,31 @@ class UniversalPatchEngine:
         business_profile: Optional[BusinessProfile] = None,
         website_url: str = "https://example.com",
         commercial_evals: Optional[List[CommercialQueryEvaluation]] = None,
+        pages: Optional[List[Any]] = None,
+        resolved_entity: Optional[Any] = None,
     ) -> List[RemediationPatch]:
         patches: List[RemediationPatch] = []
+        pages_list = list(pages or [])
+        pages_by_url: Dict[str, Any] = {}
+        for p in pages_list:
+            u = getattr(p, "url", None) if not isinstance(p, dict) else p.get("url")
+            if u:
+                pages_by_url[str(u).rstrip("/")] = p
+                pages_by_url[str(u)] = p
+
+        # Collect verified sameAs social/authority links strictly from observed pages or resolved_entity
+        observed_same_as: List[str] = []
+        if resolved_entity and getattr(resolved_entity, "same_as", None):
+            for s_url in resolved_entity.same_as:
+                if s_url and str(s_url).strip() and str(s_url).strip() not in observed_same_as:
+                    observed_same_as.append(str(s_url).strip())
+        social_domains = ("linkedin.com", "twitter.com", "x.com", "instagram.com", "facebook.com", "youtube.com", "github.com", "wikidata.org", "wikipedia.org", "crunchbase.com")
+        for p in pages_list:
+            ext_links = (getattr(p, "external_links", None) if not isinstance(p, dict) else p.get("external_links")) or []
+            for link in ext_links:
+                l_str = str(link.get("url") if isinstance(link, dict) else link).strip()
+                if l_str and any(sd in l_str.lower() for sd in social_domains) and l_str not in observed_same_as:
+                    observed_same_as.append(l_str)
 
         # --- Evidence-gate: resolve business profile fields ------------------
         raw_name = business_profile.business_name if business_profile else ""
@@ -145,6 +168,8 @@ class UniversalPatchEngine:
                 idx=idx + 1,
                 profile_blocked=profile_blocked,
                 profile_block_reason=profile_block_reason,
+                pages_by_url=pages_by_url,
+                default_page=pages_list[0] if pages_list else None,
             )
             if patch:
                 patches.append(patch)
@@ -175,18 +200,16 @@ class UniversalPatchEngine:
                     metadata_payload={"schema_type": "Organization"},
                 )
             else:
-                org_schema = {
+                org_schema: Dict[str, Any] = {
                     "@context": "https://schema.org",
                     "@type": "Organization",
                     "@id": f"{website_url.rstrip('/')}/#organization",
                     "name": biz_name,
                     "url": website_url,
                     "description": val_prop[:200] if val_prop else "",
-                    "sameAs": [
-                        f"https://www.linkedin.com/company/{_slug(biz_name)}",
-                        f"https://twitter.com/{_slug(biz_name)}",
-                    ],
                 }
+                if observed_same_as:
+                    org_schema["sameAs"] = observed_same_as
                 org_patch = RemediationPatch(
                     patch_id=f"PATCH-{len(patches)+1:03d}",
                     finding_id="F-SCHEMA-ORG",
@@ -398,15 +421,22 @@ class UniversalPatchEngine:
         idx: int,
         profile_blocked: bool = False,
         profile_block_reason: str = "",
+        pages_by_url: Optional[Dict[str, Any]] = None,
+        default_page: Optional[Any] = None,
     ) -> Optional[RemediationPatch]:
         cat = finding.category
         title_lower = finding.title.lower()
         desc_lower = (finding.description or getattr(finding, "finding", "") or "").lower()
         rule_id = getattr(finding, "rule_id", "") or ""
 
-        # Extract target URL from finding evidence if available
+        # Extract target URL from finding evidence or affected_urls if available
         ev_url = website_url
         ev_snippet = None
+        if getattr(finding, "affected_urls", None):
+            for u in finding.affected_urls:
+                if u and "://" in str(u):
+                    ev_url = str(u)
+                    break
         if finding.evidence and len(finding.evidence) > 0:
             for ev in finding.evidence:
                 if ev.url and "://" in ev.url:
@@ -414,10 +444,22 @@ class UniversalPatchEngine:
                     break
             ev_snippet = finding.evidence[0].snippet or finding.evidence[0].value
 
+        matched_page = None
+        if pages_by_url:
+            matched_page = pages_by_url.get(ev_url) or pages_by_url.get(ev_url.rstrip("/")) or default_page
+        else:
+            matched_page = default_page
+
+        observed_title = getattr(matched_page, "title", None) if matched_page else None
+        observed_meta = getattr(matched_page, "meta_description", None) if matched_page else None
+        observed_h1s = (getattr(matched_page, "h1", None) or []) if matched_page else []
+        observed_h1 = observed_h1s[0] if observed_h1s else None
+
         from urllib.parse import urlparse
         p_path = urlparse(ev_url).path if "://" in ev_url else ev_url
         if not p_path.startswith("/"):
             p_path = "/" + p_path
+        page_target_file = f"{p_path} (<head> section)" if p_path and p_path != "/" else "index.html (<head> section)"
 
         common_kw = dict(
             patch_id=f"PATCH-{idx:03d}",
@@ -434,97 +476,112 @@ class UniversalPatchEngine:
                 title=f"Canonical Directive: {finding.title[:50]}",
                 category=Category.TECHNICAL_SEO,
                 risk_level=PatchRiskLevel.SAFE_AUTO,
-                target_file="index.html (<head> section)",
+                target_file=page_target_file,
                 operation=PatchOperation.INSERT_HEAD,
-                before_snippet=str(ev_snippet) if ev_snippet else "<!-- Missing or relative canonical tag -->",
+                before_snippet=str(ev_snippet) if ev_snippet else f"<!-- Missing or non-canonical tag on {p_path} -->",
                 after_snippet=f'<link rel="canonical" href="{canonical_target}" />',
                 explanation=finding.recommendation or f"Declares authoritative self-referencing canonical URL for '{canonical_target}'.",
                 confidence=0.98,
                 approval_status=PatchApprovalStatus.APPROVED,
-                metadata_payload={"finding_ref": finding.finding_id, "canonical_url": canonical_target},
+                metadata_payload={"finding_ref": finding.finding_id, "canonical_url": canonical_target, "url_path": p_path},
             )
 
         # 2. Meta description finding
         if "meta_desc" in rule_id.lower() or "meta description" in title_lower:
             is_blocked = profile_blocked
-            clean_vp = val_prop.rstrip(".").strip() if val_prop else "Enterprise software solutions and web acceleration"
-            meta_copy = f"{biz_name} delivers {clean_vp}. Engineered for {niche} with verified enterprise reliability and immediate time-to-value."
+            clean_vp = val_prop.rstrip(".").strip() if val_prop else "Verified solutions and services"
+            meta_copy = f"{biz_name} delivers {clean_vp}. Explore {niche} offerings, specifications, and customer support."
             if len(meta_copy) < 140:
-                meta_copy = f"{meta_copy} Discover how our platform accelerates growth."
+                meta_copy = f"{meta_copy} Visit {biz_name} to learn more."
             if len(meta_copy) > 160:
                 from app.remediation.serp_text import fit_serp_text
                 meta_copy = fit_serp_text(meta_copy, 160)
 
+            before_meta = (
+                f'<meta name="description" content="{observed_meta}">'
+                if observed_meta
+                else (str(ev_snippet) if ev_snippet else f"<!-- Missing meta description tag on {p_path} -->")
+            )
             return RemediationPatch(
                 **common_kw,
                 title=f"Meta Description: {finding.title[:50]}",
                 category=Category.ON_PAGE_SEO,
                 risk_level=PatchRiskLevel.HUMAN_APPROVAL,
-                target_file="index.html (<head> section)",
+                target_file=page_target_file,
                 operation=PatchOperation.REPLACE,
-                before_snippet=str(ev_snippet) if ev_snippet else "<!-- Missing meta description tag -->",
+                before_snippet=before_meta,
                 after_snippet=f'<meta name="description" content="{meta_copy}">',
-                explanation=finding.recommendation or f"Supplies the stored {len(meta_copy)}-character meta description. Length is not a compliance grade.",
+                explanation=finding.recommendation or f"Supplies the stored {len(meta_copy)}-character meta description for {p_path}.",
                 confidence=0.94 if not is_blocked else 0.0,
                 approval_status=PatchApprovalStatus.PENDING,
                 is_blocked=is_blocked,
                 blocked_reason=profile_block_reason if is_blocked else None,
-                metadata_payload={"finding_ref": finding.finding_id, "meta_length": len(meta_copy)},
+                metadata_payload={"finding_ref": finding.finding_id, "meta_length": len(meta_copy), "url_path": p_path},
             )
 
         # 3. Document Title tag finding
         if "title" in rule_id.lower() or ("title" in title_lower and "pixel" not in title_lower and "h1" not in title_lower):
             is_blocked = profile_blocked
             if p_path == "/" or not p_path.strip("/"):
-                opt_title = f"{biz_name} — Enterprise {niche} Platform"
+                opt_title = f"{biz_name} — {niche}"
             elif "pricing" in p_path:
-                opt_title = f"{biz_name} Pricing — Transparent Plans for {niche}"
+                opt_title = f"{biz_name} Pricing — Plans & Offers for {niche}"
             elif "about" in p_path:
-                opt_title = f"About {biz_name} — High-Performance {niche}"
+                opt_title = f"About {biz_name} — {niche}"
             else:
                 opt_title = f"{p_path.strip('/').replace('-', ' ').title()} | {biz_name} — {niche}"
             if len(opt_title) < 50:
-                opt_title = f"{opt_title} & Solutions"
+                opt_title = f"{opt_title} | Official Site"
             if len(opt_title) > 60:
                 opt_title = opt_title[:57].rstrip() + "..."
             opt_title = opt_title[:60]
 
+            before_title = (
+                f"<title>{observed_title}</title>"
+                if observed_title
+                else (str(ev_snippet) if ev_snippet else f"<title>Unoptimized Title ({p_path})</title>")
+            )
             return RemediationPatch(
                 **common_kw,
                 title=f"Title Tag Fix: {finding.title[:50]}",
                 category=Category.ON_PAGE_SEO,
                 risk_level=PatchRiskLevel.HUMAN_APPROVAL,
-                target_file="index.html (<head> section)",
+                target_file=page_target_file,
                 operation=PatchOperation.REPLACE,
-                before_snippet=str(ev_snippet) if ev_snippet else "<title>Unoptimized Title</title>",
+                before_snippet=before_title,
                 after_snippet=f"<title>{opt_title}</title>",
-                explanation=finding.recommendation or f"Optimizes title character density to {len(opt_title)} chars to satisfy Google SERP pixel boundaries (<= 580px).",
+                explanation=finding.recommendation or f"Optimizes title on {p_path} ({len(opt_title)} chars) to satisfy Google SERP pixel boundaries (<= 580px).",
                 confidence=0.95 if not is_blocked else 0.0,
                 approval_status=PatchApprovalStatus.PENDING,
                 is_blocked=is_blocked,
                 blocked_reason=profile_block_reason if is_blocked else None,
-                metadata_payload={"finding_ref": finding.finding_id, "title_length": len(opt_title)},
+                metadata_payload={"finding_ref": finding.finding_id, "title_length": len(opt_title), "url_path": p_path},
             )
 
         # 4. Heading / H1 Hierarchy finding
         if "h1" in rule_id.lower() or "h1" in title_lower or "heading" in title_lower:
             is_blocked = profile_blocked
-            headline = f"{biz_name} — {niche} Built for Scale"
+            headline = f"{biz_name} — {niche}"
+            before_h1 = (
+                f"<h1>{observed_h1}</h1>"
+                if observed_h1
+                else (str(ev_snippet) if ev_snippet else f"<!-- Missing or fragmented <h1> heading on {p_path} -->")
+            )
             return RemediationPatch(
                 **common_kw,
                 title=f"Heading Fix: {finding.title[:50]}",
                 category=Category.ON_PAGE_SEO,
                 risk_level=PatchRiskLevel.HUMAN_APPROVAL,
-                target_file="src/components/Hero.tsx or index.html",
+                target_file=f"{p_path} (main > h1)" if p_path != "/" else "src/components/Hero.tsx or index.html",
                 operation=PatchOperation.REPLACE,
-                before_snippet=str(ev_snippet) if ev_snippet else "<!-- Missing or fragmented <h1> heading -->",
+                before_snippet=before_h1,
                 after_snippet=f'<h1 class="hero-title text-4xl font-bold tracking-tight text-ink-900">\n  {headline}\n</h1>',
-                explanation=finding.recommendation or "Establishes a single semantic top-level <h1> heading declaring the page's core topic.",
+                explanation=finding.recommendation or f"Establishes a single semantic top-level <h1> heading on {p_path} declaring the page's core topic.",
                 confidence=0.93 if not is_blocked else 0.0,
                 approval_status=PatchApprovalStatus.PENDING,
                 is_blocked=is_blocked,
                 blocked_reason=profile_block_reason if is_blocked else None,
-                metadata_payload={"finding_ref": finding.finding_id},
+                metadata_payload={"finding_ref": finding.finding_id, "url_path": p_path},
             )
 
         # 5. Broken link / HTTP status error finding

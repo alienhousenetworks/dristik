@@ -21,7 +21,8 @@ from __future__ import annotations
 import logging
 from typing import Any, Dict, List, Optional, Tuple
 
-from app.crawl.audit.inventory_helper import get_canonical_crawl_inventory
+from app.crawl.audit.inventory_helper import build_canonical_url_registry, get_canonical_crawl_inventory
+from app.remediation.deduplicator import build_root_cause_links
 from app.domain.enums import Category, Severity
 from app.domain.models import (
     ConsistencyAuditReport,
@@ -407,16 +408,16 @@ class CrossChapterConsistencyEngine:
                     return "canonical_issue::generic_cta"
                 if "alt" in txt and ("image" in txt or "img" in txt) and ("missing" in txt or "lack" in txt):
                     return "canonical_issue::missing_image_alt"
-                if "beyond imagination" in txt or ("h1" in txt and ("slogan" in txt or "vague" in txt or "generic" in txt or "category" in txt)):
+                if "h1" in txt and ("slogan" in txt or "vague" in txt or "generic" in txt or "category" in txt):
                     return "canonical_issue::homepage_vague_h1"
                 if ("duplicate" in txt or "identical" in txt or "repeats" in txt or "reuses" in txt or "verbatim" in txt) and "meta description" in txt:
                     return "canonical_issue::duplicate_meta_description"
                 if "open graph" in txt and "missing" in txt:
                     return "canonical_issue::missing_open_graph"
-                if "alienhouse" in txt and ("casing" in txt or "inconsistent" in txt or "brand" in txt or "naming" in txt):
+                if ("casing" in txt or "inconsistent" in txt) and ("brand" in txt or "naming" in txt or "entity" in txt):
                     return "canonical_issue::brand_naming_consistency"
-                if ("'game'" in txt or '"game"' in txt) and ("nav" in txt or "menu" in txt or "label" in txt):
-                    return "canonical_issue::ambiguous_nav_game"
+                if ("ambiguous" in txt or "vague" in txt) and ("nav" in txt or "menu" in txt or "navigation" in txt) and "label" in txt:
+                    return "canonical_issue::ambiguous_nav_label"
                 if "hsts" in txt or "strict-transport-security" in txt:
                     return "canonical_issue::missing_hsts"
                 if "content-security-policy" in txt or ("csp" in txt and "header" in txt):
@@ -435,6 +436,8 @@ class CrossChapterConsistencyEngine:
             unique_findings: Dict[str, Finding] = {}
             duplicates_found = 0
             for f in reconciled_findings:
+                if hasattr(f, "sync_evidence_ids_and_refs"):
+                    f.sync_evidence_ids_and_refs()
                 key = _semantic_rule_key(f)
                 
                 # Issue 3 & 5: Schema severity & remediation realignment
@@ -457,8 +460,11 @@ class CrossChapterConsistencyEngine:
                 if key in unique_findings:
                     duplicates_found += 1
                     existing = unique_findings[key]
+                    if hasattr(existing, "sync_evidence_ids_and_refs"):
+                        existing.sync_evidence_ids_and_refs()
                     merged_urls = list(dict.fromkeys((existing.affected_urls or []) + (f.affected_urls or [])))
                     existing.affected_urls = merged_urls
+                    existing.affected_url_count = len(merged_urls)
                     existing.evidence_refs = list(dict.fromkeys((existing.evidence_refs or []) + (f.evidence_refs or [])))
                     existing.evidence_ids = list(dict.fromkeys((existing.evidence_ids or []) + (f.evidence_ids or [])))
                     if hasattr(existing, "evidence") and hasattr(f, "evidence"):
@@ -467,6 +473,8 @@ class CrossChapterConsistencyEngine:
                         existing.root_cause = f.root_cause
                     if not existing.relevant_code_or_configuration_example and f.relevant_code_or_configuration_example:
                         existing.relevant_code_or_configuration_example = f.relevant_code_or_configuration_example
+                    if hasattr(existing, "sync_evidence_ids_and_refs"):
+                        existing.sync_evidence_ids_and_refs()
                 else:
                     unique_findings[key] = f
 
@@ -530,7 +538,7 @@ class CrossChapterConsistencyEngine:
                 new_f = Finding(
                     finding_id="F-ONPAGE-DUP-DESC",
                     title="Duplicate Meta Descriptions Across Audited URLs",
-                    category=report.findings[0].category if report.findings else Severity.MEDIUM,
+                    category=Category.ON_PAGE_SEO,
                     severity=Severity.MEDIUM,
                     priority=6,
                     affected_urls=dup_urls or [p.url for p in (report.page_reports or [])],
@@ -607,6 +615,32 @@ class CrossChapterConsistencyEngine:
                             f.scope_status = enriched.get("scope_status")
                         if not f.expected_outcome:
                             f.expected_outcome = enriched.get("expected_outcome")
+
+        # -------------------------------------------------------------
+        # 14. Final Finding Sync, Issue Ledger & URL Registry Reconciliation
+        # -------------------------------------------------------------
+        for f in (report.findings or []):
+            if hasattr(f, "sync_evidence_ids_and_refs"):
+                f.sync_evidence_ids_and_refs()
+
+        final_findings_count = len(report.findings or [])
+        final_sev_counts: Dict[str, int] = {}
+        for f in (report.findings or []):
+            s_val = f.severity.value if hasattr(f.severity, "value") else str(f.severity).upper()
+            final_sev_counts[s_val] = final_sev_counts.get(s_val, 0) + 1
+
+        report.issue_ledger = {
+            "total_distinct_findings": final_findings_count,
+            "severity_breakdown": final_sev_counts,
+            "total_affected_url_instances": sum(len(f.affected_urls or []) for f in (report.findings or [])),
+            "open_count": sum(1 for f in (report.findings or []) if str(getattr(f, "status", "OPEN")).upper() in ("OPEN", "FINDINGSTATUS.OPEN")),
+            "verified_count": sum(1 for f in (report.findings or []) if str(getattr(f, "status", "")).upper() in ("VERIFIED", "FINDINGSTATUS.VERIFIED")),
+            "p0_critical_count": sum(1 for f in (report.findings or []) if f.priority >= 9 or str(getattr(f.severity, "value", f.severity)).upper() == "CRITICAL"),
+            "p1_high_count": sum(1 for f in (report.findings or []) if (f.priority in (7, 8) or str(getattr(f.severity, "value", f.severity)).upper() == "HIGH") and not (f.priority >= 9 or str(getattr(f.severity, "value", f.severity)).upper() == "CRITICAL")),
+        }
+
+        report.url_registry = build_canonical_url_registry(report, findings=report.findings)
+        report.root_cause_links = build_root_cause_links(report.findings or [])
 
         # Summary
         is_consistent = len(contradictions) == 0

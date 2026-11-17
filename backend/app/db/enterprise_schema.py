@@ -125,6 +125,41 @@ CREATE TABLE IF NOT EXISTS enterprise_audit_logs (
     payload JSONB,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+-- 9. Enterprise SAML 2.0 SSO Configurations
+CREATE TABLE IF NOT EXISTS enterprise_saml_configs (
+    org_id VARCHAR(64) PRIMARY KEY,
+    idp_entity_id TEXT NOT NULL,
+    sso_url TEXT NOT NULL,
+    certificate TEXT NOT NULL,
+    attribute_mapping JSONB NOT NULL DEFAULT '{}',
+    acs_url TEXT,
+    entity_id TEXT,
+    status VARCHAR(50) NOT NULL DEFAULT 'CONFIGURED',
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- 10. Enterprise SCIM 2.0 Users
+CREATE TABLE IF NOT EXISTS enterprise_scim_users (
+    id VARCHAR(64) PRIMARY KEY,
+    org_id VARCHAR(64) NOT NULL,
+    user_name VARCHAR(255) NOT NULL,
+    display_name VARCHAR(255),
+    active BOOLEAN NOT NULL DEFAULT TRUE,
+    payload JSONB NOT NULL DEFAULT '{}',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- 11. Enterprise SCIM 2.0 Groups
+CREATE TABLE IF NOT EXISTS enterprise_scim_groups (
+    id VARCHAR(64) PRIMARY KEY,
+    org_id VARCHAR(64) NOT NULL,
+    display_name VARCHAR(255) NOT NULL,
+    payload JSONB NOT NULL DEFAULT '{}',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
 """
 
 ENTERPRISE_SQLITE_SCHEMA = """
@@ -239,6 +274,41 @@ CREATE TABLE IF NOT EXISTS enterprise_audit_logs (
     created_at TEXT NOT NULL
 );
 
+-- 9. Enterprise SAML 2.0 SSO Configurations
+CREATE TABLE IF NOT EXISTS enterprise_saml_configs (
+    org_id TEXT PRIMARY KEY,
+    idp_entity_id TEXT NOT NULL,
+    sso_url TEXT NOT NULL,
+    certificate TEXT NOT NULL,
+    attribute_mapping TEXT NOT NULL DEFAULT '{}',
+    acs_url TEXT,
+    entity_id TEXT,
+    status TEXT NOT NULL DEFAULT 'CONFIGURED',
+    updated_at TEXT NOT NULL
+);
+
+-- 10. Enterprise SCIM 2.0 Users
+CREATE TABLE IF NOT EXISTS enterprise_scim_users (
+    id TEXT PRIMARY KEY,
+    org_id TEXT NOT NULL,
+    user_name TEXT NOT NULL,
+    display_name TEXT,
+    active INTEGER NOT NULL DEFAULT 1,
+    payload TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
+-- 11. Enterprise SCIM 2.0 Groups
+CREATE TABLE IF NOT EXISTS enterprise_scim_groups (
+    id TEXT PRIMARY KEY,
+    org_id TEXT NOT NULL,
+    display_name TEXT NOT NULL,
+    payload TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
 -- Indexes for optimal enterprise querying
 CREATE INDEX IF NOT EXISTS idx_workspaces_org ON workspaces(org_id);
 CREATE INDEX IF NOT EXISTS idx_domains_workspace ON domains(workspace_id);
@@ -247,6 +317,8 @@ CREATE INDEX IF NOT EXISTS idx_evidence_nodes_run ON evidence_nodes(audit_run_id
 CREATE INDEX IF NOT EXISTS idx_findings_run ON findings(audit_run_id);
 CREATE INDEX IF NOT EXISTS idx_ai_citations_domain ON ai_citations(domain_id);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_org ON enterprise_audit_logs(org_id);
+CREATE INDEX IF NOT EXISTS idx_scim_users_org ON enterprise_scim_users(org_id);
+CREATE INDEX IF NOT EXISTS idx_scim_groups_org ON enterprise_scim_groups(org_id);
 """
 
 

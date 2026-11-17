@@ -1,14 +1,12 @@
-from typing import Set
-from app.core.enums import UserRole
+from typing import Any, Set, Union
+from app.core.enums import UserRole as CoreUserRole
+from app.domain.enums import UserRole as DomainUserRole
+from app.identity.authorization import ALL_PERMISSIONS, ROLE_PERMISSIONS, Authorizer, UserIdentity
 
-ROLE_PERMISSIONS = {
-    UserRole.SYSTEM_ADMIN: {"all"},
-    UserRole.OWNER: {"audit:create", "audit:read", "audit:delete", "team:manage", "billing:manage"},
-    UserRole.ADMIN: {"audit:create", "audit:read", "audit:delete", "team:manage"},
-    UserRole.MEMBER: {"audit:create", "audit:read"},
-    UserRole.VIEWER: {"audit:read"}
-}
+UserRole = DomainUserRole
 
-def has_permission(role: UserRole, permission: str) -> bool:
-    perms = ROLE_PERMISSIONS.get(role, set())
-    return "all" in perms or permission in perms
+__all__ = ["ALL_PERMISSIONS", "ROLE_PERMISSIONS", "UserRole", "CoreUserRole", "has_permission"]
+
+
+def has_permission(role_or_user: Union[UserIdentity, DomainUserRole, CoreUserRole, str, Any], permission: str) -> bool:
+    return Authorizer.has_permission(role_or_user, permission)

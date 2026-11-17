@@ -93,14 +93,58 @@ def _questions(name: str) -> List[Tuple[str, str, List[str]]]:
     ]
 
 
-def _status_for(blob: str, needles: List[str], hits: List[Tuple[str, str]], key: str) -> str:
+_EXPLICIT_PRICE_CONFLICT_RE = re.compile(
+    r"\b(?:starter|pro|growth|enterprise|basic|free|standard|business|plus)\s+(?:plan|tier)\s+(?:is|costs?|:)?\s*(?:₹|rs\.?\s?|inr\s?|\$|€|£)\s*([\d,]+(?:\.\d+)?)",
+    re.I,
+)
+
+
+_TIER_NAMES_RE = re.compile(
+    r"\b(?:starter|pro|growth|enterprise|basic|free|standard|business|plus|team|scale|individual|agency|lite|premium|ultimate)\b",
+    re.I,
+)
+
+
+def _has_same_tier_price_conflict(blob: str, pages: Optional[List[PageEvidence]] = None) -> bool:
+    tier_prices: Dict[str, set] = {}
+    for m in re.finditer(
+        r"\b(starter|pro|growth|enterprise|basic|free|standard|business|plus)\s+(?:plan|tier)?\s*(?:is|costs?|:|at|for)?\s*((?:₹|rs\.?\s?|inr\s?|\$|€|£)\s*[\d,]+(?:\.\d+)?)",
+        blob,
+        re.I,
+    ):
+        tier = m.group(1).lower()
+        amt = re.sub(r"\s+", "", m.group(2).lower())
+        tier_prices.setdefault(tier, set()).add(amt)
+    if any(len(vals) >= 2 for vals in tier_prices.values()):
+        return True
+
+    # Check if different pages state a single conflicting starting/base price with no tier names
+    if pages and len(pages) >= 2 and not _TIER_NAMES_RE.search(blob):
+        page_single_prices: List[str] = []
+        for p in pages:
+            p_text = " ".join([p.title or "", " ".join(p.h1 or []), p.body_text or ""])
+            p_amts = {m.group(0).lower().replace(" ", "") for m in _PRICING_RE.finditer(p_text)}
+            if len(p_amts) == 1:
+                page_single_prices.append(next(iter(p_amts)))
+        if len(set(page_single_prices)) >= 2:
+            return True
+    return False
+
+
+def _status_for(
+    blob: str,
+    needles: List[str],
+    hits: List[Tuple[str, str]],
+    key: str,
+    pages: Optional[List[PageEvidence]] = None,
+) -> str:
     low = blob.lower()
     found = [n for n in needles if n in low]
     if key == "pricing":
         amounts = {m.group(0).lower().replace(" ", "") for m in _PRICING_RE.finditer(blob)}
-        if len(amounts) >= 2:
+        if _has_same_tier_price_conflict(blob, pages=pages):
             return "CONFLICTING"
-        if amounts:
+        if len(amounts) >= 1:
             return "SUPPORTED"
         if "contact sales" in low or "request a quote" in low:
             return "PARTIAL"
@@ -231,8 +275,8 @@ def _score_content_extractability(
         return GeoDimensionScore(
             key=GeoDimensionKey.CONTENT_EXTRACTABILITY.value,
             label="Content extractability & citation readiness",
-            score=0.0,
-            band="low",
+            score=None,
+            band="unmeasured",
             confidence=0.0,
             summary="Content extractability was not measured because no pages were available.",
             evidence_notes=["pages_analyzed=0"],
@@ -290,14 +334,36 @@ def _score_citation_readiness(passage_res) -> GeoDimensionScore:
     )
 
 
+def _ai_bots_allowed(robots_content: Optional[str]) -> bool:
+    if not robots_content:
+        return True
+    txt = robots_content.lower()
+    ai_bots = ("gptbot", "claudebot", "perplexitybot", "google-extended")
+    current_agents: List[str] = []
+    for raw_line in txt.splitlines():
+        line = raw_line.split("#", 1)[0].strip()
+        if not line:
+            current_agents = []
+            continue
+        if line.startswith("user-agent:"):
+            agent = line.split(":", 1)[1].strip()
+            current_agents.append(agent)
+        elif line.startswith("disallow:"):
+            path = line.split(":", 1)[1].strip()
+            if path == "/" and any(bot in ag for ag in current_agents for bot in ai_bots):
+                return False
+    return True
+
+
 def _score_retrieval_accessibility(
     website_url: str,
     manifest: Optional[CrawlManifest],
+    pages: Optional[List[PageEvidence]] = None,
 ) -> GeoDimensionScore:
     if manifest is None:
         return GeoDimensionScore(
             key=GeoDimensionKey.RETRIEVAL_ACCESSIBILITY.value,
-            label="Retrieval accessibility (HTTPS, robots, sitemap)",
+            label="Retrieval accessibility (HTTPS, robots, sitemap, AI crawlers)",
             score=None,
             band="unmeasured",
             confidence=0.0,
@@ -309,24 +375,88 @@ def _score_retrieval_accessibility(
     robots = bool(manifest.robots_txt_found)
     sitemap = bool(manifest.sitemap_found)
     https = (website_url or "").startswith("https://")
+    ai_bots_ok = _ai_bots_allowed(getattr(manifest, "robots_txt_content", None))
+    llms_or_clean = bool(getattr(manifest, "llms_txt_found", False)) or (
+        pages is None or len(pages) == 0 or all(200 <= getattr(p, "status_code", 200) < 400 for p in pages)
+    )
 
     score = 0.0
     if https:
-        score += 30.0
+        score += 25.0
     if robots:
-        score += 20.0
+        score += 25.0
     if sitemap:
         score += 20.0
+    if ai_bots_ok:
+        score += 20.0
+    if llms_or_clean:
+        score += 10.0
     score = max(0.0, min(100.0, score))
 
     return GeoDimensionScore(
         key=GeoDimensionKey.RETRIEVAL_ACCESSIBILITY.value,
-        label="Retrieval accessibility (HTTPS, robots, sitemap)",
+        label="Retrieval accessibility (HTTPS, robots, sitemap, AI crawlers)",
         score=round(score, 1),
         band=_band(score),
         confidence=0.95,
-        summary=f"https={https}, robots.txt={robots}, sitemap.xml={sitemap}.",
-        evidence_notes=[f"https={https}", f"robots={robots}", f"sitemap={sitemap}"],
+        summary=f"https={https}, robots.txt={robots}, sitemap.xml={sitemap}, ai_bots_allowed={ai_bots_ok}.",
+        evidence_notes=[
+            f"https={https}",
+            f"robots={robots}",
+            f"sitemap={sitemap}",
+            f"ai_bots_allowed={ai_bots_ok}",
+            f"clean_status_or_llms={llms_or_clean}",
+        ],
+        is_measured=True,
+        measurement_note=None,
+    )
+
+
+def _score_structured_data_quality(
+    pages: List[PageEvidence],
+    schema_res: Optional[EntityGraphReport],
+) -> GeoDimensionScore:
+    if not pages:
+        return GeoDimensionScore(
+            key=GeoDimensionKey.STRUCTURED_DATA_QUALITY.value,
+            label="Structured data & entity graph quality",
+            score=None,
+            band="unmeasured",
+            confidence=0.0,
+            summary="Structured data quality was not measured because no pages were available.",
+            evidence_notes=["pages_analyzed=0"],
+            is_measured=False,
+            measurement_note="Crawl at least one page to evaluate JSON-LD and Schema.org entity graph quality.",
+        )
+    schema_types = sorted({t for p in pages for t in (p.schema_types or [])})
+    if schema_res is not None:
+        raw_q = float(getattr(schema_res, "quality_score", 0.0) or 0.0)
+        score = max(0.0, min(100.0, raw_q))
+        summary = getattr(schema_res, "summary", "") or f"Entity graph quality is {score:.1f}/100 across {len(schema_types)} schema type(s)."
+        return GeoDimensionScore(
+            key=GeoDimensionKey.STRUCTURED_DATA_QUALITY.value,
+            label="Structured data & entity graph quality",
+            score=round(score, 1),
+            band=_band(score),
+            confidence=0.90,
+            summary=summary,
+            evidence_notes=[
+                f"schema_types={len(schema_types)}",
+                f"completeness_score={getattr(schema_res, 'completeness_score', 0.0)}",
+                f"consistency_score={getattr(schema_res, 'consistency_score', 0.0)}",
+            ],
+            is_measured=True,
+            measurement_note=None,
+        )
+    score = min(100.0, len(schema_types) * 25.0) if schema_types else 0.0
+    return GeoDimensionScore(
+        key=GeoDimensionKey.STRUCTURED_DATA_QUALITY.value,
+        label="Structured data & entity graph quality",
+        score=round(score, 1),
+        band=_band(score),
+        confidence=0.80,
+        summary=f"Observed {len(schema_types)} Schema.org type(s): {', '.join(schema_types) or 'none'}.",
+        evidence_notes=[f"schema_types={len(schema_types)}"],
         is_measured=True,
         measurement_note=None,
     )
@@ -442,16 +572,19 @@ def _score_ai_engine_visibility(
 
 
 # Dimension weights for composite score
-# NOTE: AI_ENGINE_VISIBILITY is excluded from composite when not measured
+# NOTE: AI_ENGINE_VISIBILITY and LIVE_AI_CITATIONS are excluded from composite when not measured
 _WEIGHTS: Dict[str, float] = {
     GeoDimensionKey.ENTITY_CLARITY.value:          0.20,
-    GeoDimensionKey.ANSWERABILITY.value:           0.25,
+    GeoDimensionKey.ANSWERABILITY.value:           0.20,
     GeoDimensionKey.CONTENT_EXTRACTABILITY.value:  0.15,
-    GeoDimensionKey.CITATION_READINESS.value:      0.15,
+    GeoDimensionKey.STRUCTURED_DATA_QUALITY.value: 0.10,
+    GeoDimensionKey.CITATION_READINESS.value:      0.10,
     GeoDimensionKey.RETRIEVAL_ACCESSIBILITY.value: 0.10,
     GeoDimensionKey.FACTUAL_GROUNDING.value:       0.15,
     GeoDimensionKey.EXTERNAL_AUTHORITY.value:      0.00,  # 0 weight when not measured
-    GeoDimensionKey.AI_ENGINE_VISIBILITY.value:    0.00,  # 0 weight when not measured
+    GeoDimensionKey.SOURCE_CORROBORATION.value:    0.00,  # 0 weight when not measured
+    GeoDimensionKey.AI_ENGINE_VISIBILITY.value:    0.00,  # 0 weight: live AI citations are never conflated with extractability
+    GeoDimensionKey.LIVE_AI_CITATIONS.value:       0.00,  # 0 weight: live AI citations are never conflated with extractability
 }
 
 
@@ -514,29 +647,6 @@ def evaluate_geo_readiness(
         )
 
     blob = _corpus(pages)
-    if not pages:
-        visibility_is_measured = visibility_measured and visibility_score is not None
-        return GeoReadinessReport(
-            visibility_status="MEASURED" if visibility_is_measured else "NOT_CONFIGURED",
-            visibility_message=visibility_detail or (
-                "Live visibility measured separately." if visibility_is_measured
-                else "No analyzed pages; readiness and live visibility are not measured."
-            ),
-            entity_name=name,
-            questions_total=0,
-            questions_supported=0,
-            questions_partial=0,
-            questions_unsupported=0,
-            questions_conflicting=0,
-            headline="No analyzed pages are available. GEO readiness is unmeasured; no readiness score was calculated.",
-            questions=[],
-            dimensions=[],
-            dimension_scores={},
-            schema_types=[],
-            market_country=(country or "Global").strip() or "Global",
-            market_language=(language or "en").strip() or "en",
-            extractability_score=None,
-        )
 
     # ------------------------------------------------------------------
     # 1. Canonical 6-Question Evaluation
@@ -553,7 +663,7 @@ def evaluate_geo_readiness(
     for key, q, needles in _questions(name):
         pattern = re.compile("|".join(re.escape(n) for n in needles if n.strip()), re.I)
         hits = _page_hits(pages, pattern) if needles else []
-        status = _status_for(blob, needles, hits, key)
+        status = _status_for(blob, needles, hits, key, pages=pages)
         url, snippet = hits[0] if hits else (None, None)
         why = {
             "SUPPORTED": "A crawled page contains an explicit, extractable statement for this question.",
@@ -630,16 +740,45 @@ def evaluate_geo_readiness(
     dim_scores[GeoDimensionKey.CONTENT_EXTRACTABILITY.value] = _score_content_extractability(
         pages, passage_res, supported
     )
+    struct_score = _score_structured_data_quality(pages, schema_res)
+    dim_scores[GeoDimensionKey.STRUCTURED_DATA_QUALITY.value] = struct_score
+    dim_scores[GeoDimensionKey.STRUCTURED_DATA.value] = struct_score.model_copy(
+        update={"key": GeoDimensionKey.STRUCTURED_DATA.value}
+    )
     dim_scores[GeoDimensionKey.CITATION_READINESS.value] = _score_citation_readiness(passage_res)
-    dim_scores[GeoDimensionKey.RETRIEVAL_ACCESSIBILITY.value] = _score_retrieval_accessibility(
-        website_url, manifest
+    retr_score = _score_retrieval_accessibility(website_url, manifest, pages=pages)
+    dim_scores[GeoDimensionKey.RETRIEVAL_ACCESSIBILITY.value] = retr_score
+    dim_scores[GeoDimensionKey.AI_CRAWLER_ACCESSIBILITY.value] = retr_score.model_copy(
+        update={
+            "key": GeoDimensionKey.AI_CRAWLER_ACCESSIBILITY.value,
+            "label": "AI crawler & retrieval accessibility",
+        }
     )
-    dim_scores[GeoDimensionKey.FACTUAL_GROUNDING.value] = _score_factual_grounding(
-        claims_res, conflicting
+    fact_score = _score_factual_grounding(claims_res, conflicting)
+    dim_scores[GeoDimensionKey.FACTUAL_GROUNDING.value] = fact_score
+    dim_scores[GeoDimensionKey.FACTUAL_CONSISTENCY.value] = fact_score.model_copy(
+        update={
+            "key": GeoDimensionKey.FACTUAL_CONSISTENCY.value,
+            "label": "Factual consistency & claim grounding",
+        }
     )
-    dim_scores[GeoDimensionKey.EXTERNAL_AUTHORITY.value] = _score_external_authority(entity_res)
-    dim_scores[GeoDimensionKey.AI_ENGINE_VISIBILITY.value] = _score_ai_engine_visibility(
+    ext_auth_score = _score_external_authority(entity_res)
+    dim_scores[GeoDimensionKey.EXTERNAL_AUTHORITY.value] = ext_auth_score
+    dim_scores[GeoDimensionKey.SOURCE_CORROBORATION.value] = ext_auth_score.model_copy(
+        update={
+            "key": GeoDimensionKey.SOURCE_CORROBORATION.value,
+            "label": "Source corroboration & external authority",
+        }
+    )
+    live_vis_score = _score_ai_engine_visibility(
         visibility_measured, visibility_detail, visibility_score
+    )
+    dim_scores[GeoDimensionKey.AI_ENGINE_VISIBILITY.value] = live_vis_score
+    dim_scores[GeoDimensionKey.LIVE_AI_CITATIONS.value] = live_vis_score.model_copy(
+        update={
+            "key": GeoDimensionKey.LIVE_AI_CITATIONS.value,
+            "label": "Live AI citations",
+        }
     )
 
     # Composite extractability score from measured dimensions
@@ -669,6 +808,7 @@ def evaluate_geo_readiness(
             evidence_notes=ds.evidence_notes,
         )
         for ds in dim_scores.values()
+        if ds.key != "structured_data"
     ]
     legacy_dimensions.append(
         GeoDimension(

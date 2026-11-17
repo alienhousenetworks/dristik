@@ -27,6 +27,7 @@ _INDEX_PATH = Path(__file__).with_name("geo_audit_index.json")
 _LABEL = {
     "VERIFIED": "Verified (directly measured)",
     "SAMPLE_VERIFIED": "Sample verified",
+    "ACCOUNTED_FOR": "Accounted for (documented, not measured)",
     "INFERRED": "Inferred with reasoning",
     "HYPOTHESIS": "Hypothesis awaiting validation",
     "DATA_UNAVAILABLE": "Data unavailable",
@@ -37,6 +38,7 @@ _LABEL = {
 _CLASS = {
     "VERIFIED": "measured",
     "SAMPLE_VERIFIED": "clean",
+    "ACCOUNTED_FOR": "inferred",
     "INFERRED": "inferred",
     "HYPOTHESIS": "hypothesis",
     "DATA_UNAVAILABLE": "gap",
@@ -140,6 +142,8 @@ class _GeoFacts:
         self.bakeoff = _get(report, "competitor_bakeoff")
         self.findings = list(_get(report, "findings", None) or [])
         self.schema_validation = _get(report, "schema_validation")
+        ext = _get(report, "external_authority")
+        self.external_measured = bool(ext) and str(_get(ext, "status", "") or "").upper() not in {"", "NOT_CONNECTED", "NOT_CONFIGURED", "UNAVAILABLE"}
 
     def _sample_sentence(self) -> str:
         if self.crawled == 0:
@@ -264,18 +268,18 @@ def _line(facts: _GeoFacts, number: str, check: str) -> Tuple[str, str]:
     if number == "01":
         if _has(text, "readiness", "coverage"):
             if facts.extractability is not None:
-                return "SAMPLE_VERIFIED", f"Extractability score sealed at {facts.extractability:.0f}/100 based on {facts.crawled} crawled page(s)."
-            return "SAMPLE_VERIFIED", f"Readiness evaluated across {facts.crawled} crawled page(s)."
+                return "SAMPLE_VERIFIED" if facts.crawled else "NOT_TESTED", f"Extractability score sealed at {facts.extractability:.0f}/100 based on {facts.crawled} crawled page(s)."
+            return ("SAMPLE_VERIFIED" if facts.crawled else "NOT_TESTED"), f"Readiness evaluated across {facts.crawled} crawled page(s)."
         if _has(text, "visibility overview", "mention", "citation performance"):
             if facts.runs > 0 and facts.rates["citation"] is not None:
                 return "VERIFIED", f"Measured {facts.rates['citation']:.0f}% citation rate across {facts.runs} tested prompt run(s)."
             return "DATA_UNAVAILABLE", "Live multi-engine visibility not recorded on this run. Readiness and visibility remain unbundled."
         if _has(text, "opportunities", "risks", "30, 60"):
             defects = [f for f in facts.findings if _is_defect(f)]
-            return "SAMPLE_VERIFIED", f"{len(defects)} recorded finding(s) prioritized in the remediation roadmap."
+            return "SAMPLE_VERIFIED" if defects else "NOT_TESTED", f"{len(defects)} recorded finding(s) prioritized in the remediation roadmap."
         if _has(text, "differences"):
-            return "VERIFIED", "Strict operational separation: technical readiness does not imply live AI search visibility."
-        return "SAMPLE_VERIFIED", f"{check}: Evaluated on stored crawl baseline."
+            return "ACCOUNTED_FOR", "Strict operational separation: technical readiness does not imply live AI search visibility (methodology statement, not a measurement)."
+        return ("SAMPLE_VERIFIED" if facts.crawled else "NOT_TESTED"), f"{check}: Evaluated on stored crawl baseline." if facts.crawled else f"{check}: No crawl baseline stored."
 
     if number == "02":
         if facts.runs == 0:
@@ -297,7 +301,7 @@ def _line(facts: _GeoFacts, number: str, check: str) -> Tuple[str, str]:
 
     if number == "03":
         if _has(text, "competitors appear"):
-            return "SAMPLE_VERIFIED", "Identified commercial comparison prompts where competitors are retrieved."
+            return ("SAMPLE_VERIFIED" if facts.runs > 0 or facts.bakeoff else "DATA_UNAVAILABLE"), ("Identified commercial comparison prompts where competitors are retrieved." if facts.runs > 0 or facts.bakeoff else "No live run or bake-off stored; competitor retrieval was not measured.")
         if _has(text, "unsupported", "incorrect", "claim"):
             claims = facts.claims
             conflicts = _get(claims, "conflicts", []) or []
@@ -305,8 +309,8 @@ def _line(facts: _GeoFacts, number: str, check: str) -> Tuple[str, str]:
         if _has(text, "pages that lack", "citable"):
             return "SAMPLE_VERIFIED", "Evaluated page extractability across crawled URLs; definition passage gaps identified."
         if _has(text, "third-party corroboration"):
-            return "SAMPLE_VERIFIED", "Third-party digital footprint reviewed against independent publication standards."
-        return "SAMPLE_VERIFIED", f"{check}: Assessed in opportunity analysis."
+            return ("SAMPLE_VERIFIED" if facts.external_measured else "DATA_UNAVAILABLE"), ("Third-party digital footprint reviewed against stored external-authority data." if facts.external_measured else "External authority/corroboration data was not connected; third-party corroboration is unmeasured.")
+        return ("SAMPLE_VERIFIED" if facts.crawled else "NOT_TESTED"), f"{check}: Assessed in opportunity analysis." if facts.crawled else f"{check}: Not tested (0 pages crawled)."
 
     # Part II
     if number == "04":
@@ -317,7 +321,7 @@ def _line(facts: _GeoFacts, number: str, check: str) -> Tuple[str, str]:
     if number in {"05", "06", "07"}:
         if facts.matrix:
             return "SAMPLE_VERIFIED", f"Prompt universe contains {len(facts.matrix)} mapped queries across buyer intent stages."
-        return "SAMPLE_VERIFIED", f"{check}: Structured across branded, category, comparison, and technical prompt archetypes."
+        return "NOT_TESTED", f"{check}: No prompt matrix was stored on this run."
 
     # Part III
     if number in {"08", "09", "10", "11", "12"}:
@@ -326,6 +330,8 @@ def _line(facts: _GeoFacts, number: str, check: str) -> Tuple[str, str]:
             if halluc is not None:
                 return "VERIFIED", f"Measured {halluc:.0f}% hallucination rate across evaluated engine responses."
             return "DATA_UNAVAILABLE", "Live AI answer hallucination rate was not measured on this run."
+        if facts.runs == 0:
+            return "DATA_UNAVAILABLE", f"{check}: Requires live answer-engine runs; none were stored."
         if _has(text, "recommendation", "shortlist"):
             return "SAMPLE_VERIFIED", "Shortlist inclusion evaluated across commercial inquiry prompt clusters."
         if _has(text, "positioning", "entity"):
@@ -339,6 +345,8 @@ def _line(facts: _GeoFacts, number: str, check: str) -> Tuple[str, str]:
             if c_rate is not None:
                 return "VERIFIED", f"Brand citation rate: {c_rate:.0f}% across eligible responses."
             return "DATA_UNAVAILABLE", "Live citation rate not measured on this crawl run."
+        if facts.runs == 0:
+            return "DATA_UNAVAILABLE", f"{check}: No live citation records were stored, so the citation/source footprint is unmeasured."
         if _has(text, "distinct cited", "distribution"):
             return "SAMPLE_VERIFIED", "Citation distribution mapped across brand-owned URLs and third-party references."
         if _has(text, "gap", "missing"):
@@ -350,21 +358,21 @@ def _line(facts: _GeoFacts, number: str, check: str) -> Tuple[str, str]:
         bake = facts.bakeoff
         if bake:
             return "VERIFIED", "Competitive bake-off recorded head-to-head metrics against evaluated industry peers."
-        return "DATA_UNAVAILABLE", f"{check}: No live competitive bake-off was executed in this run."
+        return "NOT_TESTED", f"{check}: UNTESTED. No comparable competitors, prompts, citations, or results were stored; no competitive benchmark was executed."
 
     # Part VI
     if number in {"24", "25", "26", "27", "28", "29", "30"}:
         if _has(text, "extractability", "definitions"):
             if facts.extractability is not None:
                 return "SAMPLE_VERIFIED", f"On-page extractability score: {facts.extractability:.0f}/100 across crawled URLs."
-            return "SAMPLE_VERIFIED", "Passage extractability evaluated across crawled headings and paragraphs."
+            return ("SAMPLE_VERIFIED" if facts.crawled else "NOT_TESTED"), "Passage extractability evaluated across crawled headings and paragraphs."
         if _has(text, "originality", "information gain"):
             if facts.info_gain is not None:
                 return "SAMPLE_VERIFIED", f"Information gain score: {facts.info_gain:.0f}/100. Unique data points detected."
-            return "SAMPLE_VERIFIED", "Evaluated proprietary data and factual density vs generic consensus."
+            return ("SAMPLE_VERIFIED" if facts.crawled else "NOT_TESTED"), "Evaluated proprietary data and factual density vs generic consensus."
         if _has(text, "freshness", "last-modified"):
-            return "SAMPLE_VERIFIED", "Timestamp metadata and content recency audited across crawled sample."
-        return "SAMPLE_VERIFIED", f"{check}: Assessed in website content readiness audit."
+            return ("SAMPLE_VERIFIED" if facts.crawled else "NOT_TESTED"), "Timestamp metadata and content recency audited across crawled sample."
+        return ("SAMPLE_VERIFIED" if facts.crawled else "NOT_TESTED"), f"{check}: Assessed in website content readiness audit."
 
     # Part VII
     if number in {"31", "32", "33", "34", "35", "36"}:
@@ -384,30 +392,30 @@ def _line(facts: _GeoFacts, number: str, check: str) -> Tuple[str, str]:
 
     # Part VIII
     if number in {"37", "38", "39", "40"}:
-        return "SAMPLE_VERIFIED", f"{check}: Evaluated across external digital footprint and third-party corroboration sources."
+        return ("SAMPLE_VERIFIED" if facts.external_measured else "DATA_UNAVAILABLE"), (f"{check}: Evaluated across stored external-authority sources." if facts.external_measured else f"{check}: External authority data was not connected; unmeasured.")
 
     # Part IX
     if number in {"41", "42", "43", "44", "45"}:
         if _has(text, "metrics", "definitions"):
-            return "VERIFIED", "Mathematically explicit definitions: mention rate, citation rate, and recommendation rate."
+            return "ACCOUNTED_FOR", "Metric definitions documented: mention rate, citation rate, and recommendation rate (definitions, not measurements)."
         if _has(text, "referral", "conversion"):
             return "DATA_UNAVAILABLE", "Web analytics connector not linked. AI referral sessions remain unmeasured."
-        return "SAMPLE_VERIFIED", f"{check}: Evaluated under statistical measurement standards."
+        return "ACCOUNTED_FOR", f"{check}: Measurement standard documented; no measurement implied."
 
     # Part X
     if number in {"46", "47", "48", "49", "50"}:
         defects = [f for f in facts.findings if _is_defect(f)]
         if _has(text, "findings", "ledger"):
-            return "SAMPLE_VERIFIED", f"{len(defects)} empirical finding(s) cataloged with structured evidence."
+            return ("SAMPLE_VERIFIED" if defects else "NOT_TESTED"), f"{len(defects)} empirical finding(s) cataloged with structured evidence."
         if _has(text, "roadmap", "prioritized"):
-            return "SAMPLE_VERIFIED", f"Actionable 30/60/90-day plan formulated with assigned owners and effort scores."
-        return "SAMPLE_VERIFIED", f"{check}: Documented in remediation and continuous monitoring framework."
+            return "ACCOUNTED_FOR", "30/60/90-day plan is a prioritization of recorded findings, not a measurement."
+        return "ACCOUNTED_FOR", f"{check}: Documented in the remediation framework (not measured)."
 
     # Part XII - Appendices
     if number in {"A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O"}:
-        return "SAMPLE_VERIFIED", f"{check}: Documented in technical evidence registry."
+        return "ACCOUNTED_FOR", f"{check}: Documented in the technical evidence registry (not measured)."
 
-    return "SAMPLE_VERIFIED", f"{check}: Evaluated under 2026 Enterprise GEO Standard."
+    return "ACCOUNTED_FOR", f"{check}: Accounted for under the enterprise GEO checklist; no measurement implied."
 
 def _chapter_status(codes: Sequence[str]) -> str:
     if any(c == "VERIFIED" for c in codes):
@@ -416,6 +424,8 @@ def _chapter_status(codes: Sequence[str]) -> str:
         return "SAMPLE_VERIFIED"
     if any(c == "INFERRED" for c in codes):
         return "INFERRED"
+    if any(c == "ACCOUNTED_FOR" for c in codes):
+        return "ACCOUNTED_FOR"
     if any(c == "DATA_UNAVAILABLE" for c in codes):
         return "DATA_UNAVAILABLE"
     return "NOT_TESTED"
@@ -578,7 +588,7 @@ def render_geo_audit_book(report: Any) -> str:
             for check in section["checks"]:
                 code, result = _line(facts, number, check)
                 cards = assigned.get(check, [])
-                if any(_is_defect(item) for item in cards):
+                if any(_is_defect(item) for item in cards) and facts.crawled:
                     code = "SAMPLE_VERIFIED"
                     result = result + " Recorded defect finding on this parameter."
                 line_codes.append(code)

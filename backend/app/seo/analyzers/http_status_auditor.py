@@ -97,6 +97,7 @@ class HttpStatusAuditor:
         )
 
         if rollup.count_4xx > 0:
+            urls_4xx = [item.url for item in rollup.pages_4xx if item.url]
             findings.append(Finding(
                 finding_id="finding_http_4xx_errors",
                 category=Category.TECHNICAL_SEO,
@@ -109,6 +110,8 @@ class HttpStatusAuditor:
                 recommendation="Fix broken links pointing to 404 pages or implement 301 redirects to relevant live pages.",
                 why_it_matters="Search engines demote sites with high 404 rates and remove unresolvable URLs from the index.",
                 validation_criteria="Every linked internal URL must resolve with HTTP 200 OK.",
+                affected_urls=urls_4xx,
+                affected_url_count=len(urls_4xx),
                 evidence=[
                     FindingEvidence(
                         url=item.url,
@@ -126,6 +129,7 @@ class HttpStatusAuditor:
             ))
 
         if rollup.count_5xx > 0:
+            urls_5xx = [item.url for item in rollup.pages_5xx if item.url]
             findings.append(Finding(
                 finding_id="finding_http_5xx_errors",
                 category=Category.TECHNICAL_SEO,
@@ -138,6 +142,8 @@ class HttpStatusAuditor:
                 recommendation="Investigate server logs and application error traces to resolve backend server failures.",
                 why_it_matters="Persistent 5xx errors will cause Googlebot to slow crawl rates and de-index affected URLs.",
                 validation_criteria="Server must not return 5xx errors under ordinary crawl load.",
+                affected_urls=urls_5xx,
+                affected_url_count=len(urls_5xx),
                 evidence=[
                     FindingEvidence(
                         url=item.url,

@@ -357,7 +357,6 @@ class FindingRegistry:
                         })
 
                 # Combine evidence tokens and references
-                combined_refs = list(set(existing.evidence_refs + finding.evidence_refs))
                 seen_ev_ids = {e.evidence_id for e in existing.evidence if e.evidence_id}
                 combined_ev = list(existing.evidence)
                 for e in finding.evidence:
@@ -365,6 +364,26 @@ class FindingRegistry:
                         combined_ev.append(e)
                         if e.evidence_id:
                             seen_ev_ids.add(e.evidence_id)
+
+                combined_refs = list(dict.fromkeys(
+                    list(existing.evidence_refs or [])
+                    + list(finding.evidence_refs or [])
+                    + [e.evidence_id for e in combined_ev if getattr(e, "evidence_id", None)]
+                ))
+                combined_ids = list(dict.fromkeys(
+                    list(getattr(existing, "evidence_ids", None) or [])
+                    + list(getattr(finding, "evidence_ids", None) or [])
+                    + combined_refs
+                ))
+                combined_urls: List[str] = []
+                for u in (
+                    list(getattr(existing, "affected_urls", None) or [])
+                    + list(getattr(finding, "affected_urls", None) or [])
+                    + [getattr(e, "url", None) for e in combined_ev]
+                    + [s.get("url") for s in surfaces if isinstance(s, dict)]
+                ):
+                    if isinstance(u, str) and u.strip() and u.strip() not in combined_urls:
+                        combined_urls.append(u.strip())
 
                 # Consolidate sub-observations and detailed observations
                 sub_obs = list(getattr(existing, "sub_observations", []) or [])
@@ -411,12 +430,16 @@ class FindingRegistry:
                 entry.finding = existing.model_copy(update={
                     "severity": best_severity,
                     "impact": best_impact,
+                    "affected_urls": combined_urls,
+                    "affected_url_count": len(combined_urls),
                     "surfaces_affected": surfaces,
                     "evidence_refs": combined_refs,
+                    "evidence_ids": combined_ids,
                     "evidence": combined_ev,
                     "sub_observations": sub_obs,
                     "detailed_observations": detailed_obs,
                 })
+                entry.finding.sync_evidence_ids_and_refs()
                 return entry, False
             else:
                 initial_surfaces = list(getattr(finding, "surfaces_affected", []) or [])
@@ -453,6 +476,7 @@ class FindingRegistry:
                     "sub_observations": init_sub,
                     "detailed_observations": init_detailed,
                 })
+                finding.sync_evidence_ids_and_refs()
                 entry = RegistryEntry(canonical_id=cid, finding=finding)
                 self._entries[cid] = entry
                 self._id_index[finding.finding_id] = cid

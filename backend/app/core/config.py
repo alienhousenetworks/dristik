@@ -350,6 +350,9 @@ class Settings(BaseSettings):
 
     # External ground truth. Absent keys stay NOT_CONFIGURED. Never invent the metric.
     CRUX_API_KEY: Optional[str] = Field(default=None, description="Chrome UX Report API key. Not a substitute for lab TTFB.")
+    GOOGLE_CRUX_API_KEY: Optional[str] = Field(default=None, description="Chrome UX Report API key alias.")
+    PAGESPEED_API_KEY: Optional[str] = Field(default=None, description="Google PageSpeed Insights API key.")
+    GOOGLE_PAGESPEED_API_KEY: Optional[str] = Field(default=None, description="Google PageSpeed Insights API key alias.")
     DATAFORSEO_LOGIN: Optional[str] = None
     DATAFORSEO_PASSWORD: Optional[str] = None
     CLEARBIT_API_KEY: Optional[str] = None

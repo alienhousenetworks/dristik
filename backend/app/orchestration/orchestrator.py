@@ -1447,7 +1447,7 @@ class AnalysisOrchestrator:
                     from app.geo.audit_monitor import run_audit_visibility
                     profile = blackboard.business_profile
                     b_name = getattr(profile, "business_name", None) or domain
-                    b_ind = getattr(profile, "industry", None) or getattr(profile, "niche", None) or "Software & Technology"
+                    b_ind = getattr(profile, "industry", None) or getattr(profile, "niche", None) or "General Business"
                     vis_res = await run_audit_visibility(
                         domain=domain,
                         brand_name=b_name,
@@ -1485,7 +1485,7 @@ class AnalysisOrchestrator:
                     from app.geo.citations.tracker import ai_citation_tracker
                     profile = blackboard.business_profile
                     b_name = getattr(profile, "business_name", None) or domain
-                    b_ind = getattr(profile, "industry", None) or getattr(profile, "niche", None) or "Software & Technology"
+                    b_ind = getattr(profile, "industry", None) or getattr(profile, "niche", None) or "General Business"
                     ai_citation_dash_obj = await ai_citation_tracker.track_buyer_queries(
                         domain=domain,
                         biz_name=b_name,
@@ -1669,6 +1669,12 @@ class AnalysisOrchestrator:
             readability_val = page_ev.readability_score if page_ev else blackboard.blackboard_state.get("readability_score")
             commercial_evals_val = blackboard.commercial_evaluations or blackboard.ai_search_evaluations or []
 
+            cwv_data_val = blackboard.blackboard_state.get("cwv_data") or {}
+            if not cwv_data_val and manifest and getattr(manifest, "crawl_health", None):
+                avg_ttfb_ms = manifest.crawl_health.get("avg_ttfb_ms")
+                if isinstance(avg_ttfb_ms, (int, float)) and avg_ttfb_ms > 0:
+                    cwv_data_val = {"ttfb": float(avg_ttfb_ms) / 1000.0}
+
             overall_scores = self.scoring_engine.calculate_scores(
                 findings=final_findings,
                 business_profile=blackboard.business_profile,
@@ -1679,6 +1685,8 @@ class AnalysisOrchestrator:
                 live_citation_score=live_citation_score,
                 live_benchmark_data=live_bench,
                 manifest=manifest,
+                cwv_data=cwv_data_val,
+                form_audit=form_audit_rep,
             )
             extractability = getattr(geo_readiness, "extractability_score", None)
             if overall_scores is not None and extractability is not None:
@@ -1697,8 +1705,16 @@ class AnalysisOrchestrator:
                 live_citation_score=live_citation_score,
                 live_benchmark_data=live_bench,
                 external_authority_connected=has_external_authority_connected,
+                cwv_data=cwv_data_val,
+                form_audit=form_audit_rep,
             )
             blackboard.honest_scores = honest_scores
+            scoring_methodology_appendix = self.scoring_engine.build_scoring_methodology_appendix(
+                scores=overall_scores,
+                honest_scores=honest_scores,
+                geo_readiness=geo_readiness,
+                crawl_inventory=getattr(manifest, "crawl_inventory", None) if manifest else None,
+            )
 
             # Persist environmental scoring context for downstream nodes / re-runs
             blackboard.blackboard_state["external_authority_connected"] = has_external_authority_connected
@@ -1742,6 +1758,8 @@ class AnalysisOrchestrator:
                 business_profile=blackboard.business_profile,
                 website_url=website_url,
                 commercial_evals=getattr(blackboard, "commercial_evaluations", None),
+                pages=eval_pages,
+                resolved_entity=blackboard.resolved_entity,
             )
             blackboard.remediation_patches = remediation_patches
 
@@ -2052,12 +2070,13 @@ class AnalysisOrchestrator:
 
             try:
                 from app.cro import build_cro_intelligence
+                from app.cro.analyzer import evaluate_conversion_journey
                 competitor_domains = []
                 if competitor_seo_parity_rep is not None:
                     for competitor in getattr(competitor_seo_parity_rep, "competitors", []) or []:
                         if not getattr(competitor, "is_target", False) and getattr(competitor, "domain", None):
                             competitor_domains.append(competitor.domain)
-                cro_audit_rep.intelligence = build_cro_intelligence(
+                rebuilt_cro_intel = build_cro_intelligence(
                     pages=eval_pages,
                     raw_html_map=getattr(blackboard, "raw_html_map", None),
                     business_profile=blackboard.business_profile,
@@ -2067,6 +2086,11 @@ class AnalysisOrchestrator:
                     competitor_domains=competitor_domains,
                     discovered_urls=getattr(manifest, "total_pages_discovered", None) if manifest else None,
                 ).model_dump()
+                journey_eval = evaluate_conversion_journey(eval_pages, blackboard.business_profile)
+                rebuilt_cro_intel["conversion_journey"] = journey_eval
+                rebuilt_cro_intel["journey_stages"] = journey_eval["journey_stages"]
+                rebuilt_cro_intel["dropoff_friction_points"] = journey_eval["dropoff_friction_points"]
+                cro_audit_rep.intelligence = rebuilt_cro_intel
             except Exception as cro_intel_err:
                 logger.info("CRO intelligence rebuild kept the pre-analytics snapshot: %s", cro_intel_err)
 
@@ -2278,6 +2302,21 @@ class AnalysisOrchestrator:
                     {"failure_reasons": gate_result.failure_reasons}
                 )
                 return
+
+            # Re-reconcile after ValidationGate.enforce_gate so finding totals, severity counts,
+            # url_registry, root_cause_links, and scoring_methodology_appendix never drift.
+            try:
+                from app.crawl.audit.consistency_engine import CrossChapterConsistencyEngine
+                from app.crawl.audit.inventory_helper import build_canonical_url_registry
+                from app.remediation.deduplicator import build_root_cause_links
+
+                report, consistency_rep = CrossChapterConsistencyEngine.audit_and_reconcile(report)
+                report.consistency_report = consistency_rep
+                report.scoring_methodology_appendix = scoring_methodology_appendix
+                report.url_registry = build_canonical_url_registry(report)
+                report.root_cause_links = build_root_cause_links(report.findings)
+            except Exception as post_gate_err:
+                logger.warning("Post-gate consistency & registry synchronization note: %s", post_gate_err)
 
             # Final customer-facing integrity gate: after report validation, before sealing
             # the manifest or persisting the report. Keep evidence gaps explicit rather than

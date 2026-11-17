@@ -94,6 +94,57 @@ def _get_canonical_qa_items(
         })
     return items
 
+
+def _build_crawled_breadcrumb_items(
+    clean_url: str,
+    pages: Optional[List[Any]] = None,
+    findings: Optional[List[Any]] = None,
+) -> List[Dict[str, Any]]:
+    """Build BreadcrumbList items strictly from actual crawled URLs on the site (never hardcoded /solutions or /pricing)."""
+    from urllib.parse import urlparse
+
+    items: List[Dict[str, Any]] = [
+        {
+            "@type": "ListItem",
+            "position": 1,
+            "name": "Home",
+            "item": clean_url,
+        }
+    ]
+    seen_urls = {clean_url.rstrip("/")}
+    candidate_urls: List[Tuple[str, str]] = []
+
+    for p in (pages or []):
+        u = (getattr(p, "url", None) if not isinstance(p, dict) else p.get("url")) or ""
+        t = (getattr(p, "title", None) if not isinstance(p, dict) else p.get("title")) or ""
+        if u and u.rstrip("/") not in seen_urls:
+            seen_urls.add(u.rstrip("/"))
+            candidate_urls.append((str(u), str(t)))
+
+    if not candidate_urls and findings:
+        for f in findings:
+            for u in (getattr(f, "affected_urls", None) or []):
+                if u and str(u).rstrip("/") not in seen_urls and str(u).startswith("http"):
+                    seen_urls.add(str(u).rstrip("/"))
+                    candidate_urls.append((str(u), ""))
+
+    pos = 2
+    for u, title in candidate_urls[:4]:
+        parsed = urlparse(u)
+        path_seg = parsed.path.strip("/").split("/")[-1] if parsed.path.strip("/") else ""
+        label = (title.split("|")[0].split("—")[0].split("-")[0].strip() if title else "") or (
+            path_seg.replace("-", " ").replace("_", " ").title() if path_seg else "Page"
+        )
+        items.append({
+            "@type": "ListItem",
+            "position": pos,
+            "name": label[:50],
+            "item": u,
+        })
+        pos += 1
+
+    return items
+
 def build_patch_pack_files(
     bp: Optional[BusinessProfile],
     website_url: str,
@@ -102,6 +153,7 @@ def build_patch_pack_files(
     code_patches: Optional[List[Any]] = None,
     remediation_patches: Optional[List[Any]] = None,
     tech_stack: Optional[Dict[str, Any]] = None,
+    pages: Optional[List[Any]] = None,
 ) -> Dict[str, str]:
     clean_url = website_url.rstrip("/")
     biz_name = (
@@ -177,26 +229,7 @@ def build_patch_pack_files(
             {
                 "@type": "BreadcrumbList",
                 "@id": f"{clean_url}/#breadcrumb",
-                "itemListElement": [
-                    {
-                        "@type": "ListItem",
-                        "position": 1,
-                        "name": "Home",
-                        "item": clean_url
-                    },
-                    {
-                        "@type": "ListItem",
-                        "position": 2,
-                        "name": "Solutions",
-                        "item": f"{clean_url}/solutions"
-                    },
-                    {
-                        "@type": "ListItem",
-                        "position": 3,
-                        "name": "Pricing & FAQs",
-                        "item": f"{clean_url}/pricing"
-                    }
-                ]
+                "itemListElement": _build_crawled_breadcrumb_items(clean_url, pages=pages, findings=findings),
             },
             {
                 "@type": "FAQPage",

@@ -216,7 +216,7 @@ class GeoCitationGapEngine:
                 is_gap = (not was_target_cited) or bool(explicit_comp)
                 if is_gap:
                     comp_citations += 1
-                    comp_name = explicit_comp or (comps[0] if comps else "Competitor")
+                    comp_name = explicit_comp or (comps[0] if comps else "Unverified Competitor")
                     cats = []
                     for s in sources:
                         c_cat = classify_authority_domain(s, clean_target, comps)
@@ -229,22 +229,23 @@ class GeoCitationGapEngine:
                         target_domain=clean_target,
                         brand_name=brand,
                         competitor_name=comp_name,
-                        sources=sources or ["g2.com", "capterra.com"],
-                        authority_cats=cats or [AuthorityCategory.PEER_REVIEW.value],
+                        sources=list(sources or []),
+                        authority_cats=cats or ([AuthorityCategory.GENERAL_WEB.value] if sources else []),
                         has_pricing=has_pricing,
                         has_schema=has_schema_org,
                         has_compliance=has_compliance,
                     )
                     gaps.append(gap)
         else:
-            # When live benchmark results are absent, do NOT invent fabricated competitor citations.
-            # Fail closed with explicit NOT_EVALUATED status.
-            report_status = "NOT_EVALUATED"
+            # When live benchmark results or comparable competitors are absent, do NOT invent fabricated competitor citations.
+            # Fail closed with explicit UNTESTED status.
+            report_status = "UNTESTED"
             primary_bn = "Live AI citation benchmark not run for this domain. Citations require live engine evaluation."
             summary_remedies = ["Execute a live GEO benchmark to measure empirical AI answer engine citations and discover real gaps."]
 
         if benchmark_results:
-            report_status = "AVAILABLE"
+            has_real_sources = any(bool(g.competitor_sources) for g in gaps) or target_citations > 0 or bool(comps)
+            report_status = "AVAILABLE" if has_real_sources else "UNTESTED"
             t_rate = round((target_citations / max(1, total_queries)) * 100, 1)
             c_rate = round((comp_citations / max(1, total_queries)) * 100, 1)
             primary_bn = "Absence of third-party verified directory profiles and missing structured JSON-LD entity graph."

@@ -181,38 +181,22 @@ VERTICALS: List[Dict[str, Any]] = [
     {
         "id": "legal",
         "tokens": ["law firm", "attorney", "legal services", "advocates", "solicitors"],
-        "peers": [
-            {"brand": "Clio", "domain": "clio.com", "overlap": "Adjacent: legal practice platform (not a law firm)"},
-            {"brand": "LegalZoom", "domain": "legalzoom.com", "overlap": "Adjacent: packaged legal services"},
-            {"brand": "Avvo", "domain": "avvo.com", "overlap": "Adjacent: lawyer directory"},
-        ],
+        "peers": [],
     },
     {
         "id": "healthcare_clinic",
         "tokens": ["clinic", "hospital", "dental", "physician", "healthcare practice", "patient portal"],
-        "peers": [
-            {"brand": "Zocdoc", "domain": "zocdoc.com", "overlap": "Adjacent: care discovery marketplace"},
-            {"brand": "Practo", "domain": "practo.com", "overlap": "Adjacent: clinic discovery in India"},
-            {"brand": "Healthgrades", "domain": "healthgrades.com", "overlap": "Adjacent: provider directory"},
-        ],
+        "peers": [],
     },
     {
         "id": "restaurant",
         "tokens": ["restaurant", "cafe", "bakery", "fine dining", "cloud kitchen", "food delivery brand"],
-        "peers": [
-            {"brand": "Zomato", "domain": "zomato.com", "overlap": "Adjacent: restaurant discovery (India)"},
-            {"brand": "OpenTable", "domain": "opentable.com", "overlap": "Adjacent: reservations"},
-            {"brand": "Swiggy", "domain": "swiggy.com", "overlap": "Adjacent: food delivery marketplace"},
-        ],
+        "peers": [],
     },
     {
         "id": "real_estate",
         "tokens": ["real estate", "realtor", "property listing", "brokerage", "housing"],
-        "peers": [
-            {"brand": "Zillow", "domain": "zillow.com", "overlap": "Adjacent: listings marketplace"},
-            {"brand": "MagicBricks", "domain": "magicbricks.com", "overlap": "Adjacent: India listings"},
-            {"brand": "99acres", "domain": "99acres.com", "overlap": "Adjacent: India listings"},
-        ],
+        "peers": [],
     },
     {
         "id": "fintech",
@@ -692,13 +676,13 @@ class CompetitorDiscoveryEngine:
             status = "AVAILABLE"
         else:
             primary_gap = (
-                "No direct rivals identified matching this scale tier. Add 1–3 custom rival domains above to compare."
+                "No direct rivals or SERP overlap data identified matching this scale tier. Benchmark marked UNTESTED."
             )
             offensive_plays = [
                 "Enter a real rival domain in the box above to benchmark.",
             ]
-            method_label = "No direct peers identified. Table shows your audit scores; rival columns remain null."
-            status = "UNAVAILABLE"
+            method_label = "No direct peers or SERP overlap identified. Benchmark status is UNTESTED; rival columns remain null."
+            status = "UNTESTED"
             discovery_method = "none"
 
         return CompetitorBenchmarkMatrix(

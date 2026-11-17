@@ -78,13 +78,13 @@ class BrowserRenderService:
         if not cls.is_available():
             return None, 0, 0.0, {}, "playwright_not_installed", None, None
 
-        start_time = time.time()
         timeout = timeout_ms or settings.PLAYWRIGHT_TIMEOUT_MS
 
         browser = await cls.get_browser()
         if not browser:
             return None, 0, 0.0, {}, "browser_launch_failed", None, None
 
+        render_start_time = time.time()
         context = None
         page = None
         blocked_unsafe_request = False
@@ -134,7 +134,7 @@ class BrowserRenderService:
             # networkidle hangs on long-polling/WebGL sites; DOM + a short hydrate wait is enough
             response = await page.goto(url, wait_until="domcontentloaded", timeout=timeout)
             status_code = response.status if response else 200
-            ttfb_ms = (time.time() - start_time) * 1000
+            ttfb_ms = 0.0
 
             try:
                 await page.wait_for_selector("main, article, h1, [role='main'], body", timeout=4000)
@@ -188,6 +188,19 @@ class BrowserRenderService:
 
                             const fp = paint.find(p => p.name === 'first-paint');
                             const fcp = paint.find(p => p.name === 'first-contentful-paint');
+                            const lcpEntries = performance.getEntriesByType('largest-contentful-paint') || [];
+                            const lastLcp = lcpEntries.length > 0 ? lcpEntries[lcpEntries.length - 1] : null;
+                            const lcpVal = lastLcp ? (lastLcp.startTime || lastLcp.renderTime || lastLcp.loadTime || null) : null;
+
+                            const clsEntries = performance.getEntriesByType('layout-shift') || [];
+                            let clsVal = 0;
+                            let hasCls = false;
+                            clsEntries.forEach(entry => {
+                                if (!entry.hadRecentInput && typeof entry.value === 'number') {
+                                    clsVal += entry.value;
+                                    hasCls = true;
+                                }
+                            });
 
                             let ttfb = 0;
                             if (nav.responseStart && nav.requestStart) {
@@ -252,6 +265,8 @@ class BrowserRenderService:
                                 dom_content_loaded_ms: Math.round(dom_content_loaded * 10) / 10,
                                 load_event_ms: Math.round(load_event * 10) / 10,
                                 fcp_ms: fcp ? Math.round(fcp.startTime * 10) / 10 : null,
+                                lcp_ms: lcpVal !== null ? Math.round(lcpVal * 10) / 10 : null,
+                                cls_score: hasCls ? Math.round(clsVal * 1000) / 1000 : null,
                                 total_transferred_bytes: total_bytes,
                                 js_bytes: js_bytes,
                                 css_bytes: css_bytes,
@@ -270,16 +285,24 @@ class BrowserRenderService:
             except Exception:
                 perf_data = None
 
-            if perf_data and perf_data.get("ttfb_ms") and perf_data["ttfb_ms"] > 0:
-                ttfb_ms = perf_data["ttfb_ms"]
+            wall_clock_render_ms = round((time.time() - render_start_time) * 1000, 1)
+            if isinstance(perf_data, dict):
+                perf_data["wall_clock_render_ms"] = wall_clock_render_ms
+                if perf_data.get("ttfb_ms") and perf_data["ttfb_ms"] > 0:
+                    ttfb_ms = float(perf_data["ttfb_ms"])
+                else:
+                    ttfb_ms = 0.0
+            else:
+                perf_data = {"wall_clock_render_ms": wall_clock_render_ms, "ttfb_ms": 0.0}
+                ttfb_ms = 0.0
 
             resp_headers = {"x-crawler": "playwright-local-js"}
 
             return html_content, status_code, ttfb_ms, resp_headers, None, inner_text, perf_data
 
         except Exception as e:
-            ttfb_ms = (time.time() - start_time) * 1000
-            return None, 0, ttfb_ms, {}, str(e), None, None
+            wall_clock_render_ms = round((time.time() - render_start_time) * 1000, 1)
+            return None, 0, 0.0, {}, str(e), None, {"wall_clock_render_ms": wall_clock_render_ms}
 
         finally:
             if page:

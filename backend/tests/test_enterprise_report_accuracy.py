@@ -234,3 +234,236 @@ def test_canonical_grading_consistency_across_all_surfaces():
 
     assert rating_for_displayed(None) == ("—", "Unmeasured")
     assert _grade_letter(None)[:2] == (None, "Not measured")
+
+
+def test_perfora_ttfb_outlier_aware_summary():
+    from app.domain.scoring.displayed_score import compute_ttfb_summary
+
+    summary = compute_ttfb_summary([287.5, 36207.9, 248.5])
+    assert summary["sample_size"] == 3
+    assert summary["min_ms"] == 248.5
+    assert summary["max_ms"] == 36207.9
+    assert summary["median_ms"] == 287.5
+    assert summary["mean_ms"] == 12248.0
+    assert summary["outliers_ms"] == [36207.9]
+    assert summary["outlier_count"] == 1
+    assert summary["trimmed_mean_ms"] == 268.0
+
+
+def test_finding_root_cause_sanitization_partial_coverage_and_developer_ticket():
+    from app.domain.enums import FindingStatus
+    from app.domain.models import FindingEvidence
+    from app.report_finding_registry import summarize_finding_severities
+
+    f = Finding(
+        finding_id="TECH-PERF-004",
+        category=Category.TECHNICAL_SEO,
+        severity=Severity.HIGH,
+        impact=9,
+        title="Missing Product Schema Offer Fields",
+        description="Product schema lacks priceValidUntil and shippingDetails.",
+        affected_urls=[
+            "https://perforacare.com/",
+            "https://perforacare.com/products/electric-toothbrush",
+            "https://perforacare.com/products/water-flosser",
+            "https://perforacare.com/products/probiotic-mouthwash",
+        ],
+        evidence=[
+            FindingEvidence(
+                evidence_id="ev_001",
+                type="DOM",
+                url="https://perforacare.com/products/electric-toothbrush",
+                snippet='{"@type":"Product","name":"Electric Toothbrush"}',
+                selector_or_header="script[type='application/ld+json']",
+            )
+        ],
+        root_cause="Template markup or HTTP configuration omission on page.",
+        recommendation="Add Offer fields to snippets/product-schema.liquid.",
+    )
+
+    # 1. Generic unproven root-cause is automatically sanitized to explicit diagnostic gap
+    assert "Root cause not confirmed" in f.root_cause
+    assert f.root_cause_status == "diagnostic_gap"
+
+    # 2. Multi-URL finding with 1 evidence record is automatically marked SAMPLE_VERIFIED with limitation disclosure
+    assert f.scope == "SAMPLE_VERIFIED"
+    assert "Sample verified on 1 of 4 affected URLs" in (f.limitations or "")
+
+    # 3. Separated business_impact_level vs technical severity
+    assert f.business_impact_level == "HIGH"
+    assert f.severity == Severity.HIGH
+
+    # 4. 11-part consulting diagnostic & Jira/Linear/Markdown export
+    ticket = f.to_developer_ticket()
+    assert len(ticket["sections"]) == 11
+    assert "01_what_was_found" in ticket["sections"]
+    assert "09_retest_procedure" in ticket["sections"]
+    assert ticket["jira_payload"]["issuetype"]["name"] == "Bug"
+    assert ticket["linear_payload"]["priority"] == 2
+    assert len(ticket["qa_checklist"]) >= 2
+
+    # 5. Canonical severity summary deduplicates and reconciles
+    sev_summary = summarize_finding_severities([f, f])
+    assert sev_summary["total"] == 1
+    assert sev_summary["HIGH"] == 1
+    assert sev_summary["high_or_critical"] == 1
+
+    # 6. All 10 lifecycle states exist on FindingStatus
+    for state_name in (
+        "OPEN", "TRIAGED", "APPROVED", "IN_PROGRESS", "READY_FOR_RETEST",
+        "VERIFIED_FIXED", "RETEST_FAILED", "REOPENED", "ACCEPTED_RISK", "WONT_FIX",
+    ):
+        assert hasattr(FindingStatus, state_name)
+
+
+def test_enterprise_contract_api_endpoints():
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+    from app.api.routes.audits.enterprise_contract import router as enterprise_router
+    from app.domain.models import AnalysisRun, FindingEvidence
+    from app.identity.deps import get_current_user
+    from app.identity.authorizer import UserIdentity
+    from app.orchestration.orchestrator import orchestrator
+
+    app = FastAPI()
+    app.include_router(enterprise_router, prefix="/api/v1")
+    fake_user = UserIdentity(
+        user_id="u_test_1",
+        email="auditor@dristik.ai",
+        org_id="org_test_001",
+        role="system_admin",
+        is_system=True,
+    )
+    app.dependency_overrides[get_current_user] = lambda: fake_user
+
+    finding = Finding(
+        finding_id="FIND-ENT-001",
+        category=Category.TECHNICAL_SEO,
+        severity=Severity.HIGH,
+        impact=8,
+        title="Missing HSTS Header",
+        description="Strict-Transport-Security header is absent.",
+        affected_urls=["https://acme-test.example/", "https://acme-test.example/pricing"],
+        evidence=[
+            FindingEvidence(
+                evidence_id="ev_hsts_1",
+                type="HTTP_HEADER",
+                url="https://acme-test.example/",
+                snippet="HTTP/1.1 200 OK",
+                selector_or_header="strict-transport-security",
+            )
+        ],
+        recommendation="Add Strict-Transport-Security header.",
+    )
+    rep = _minimal_report(
+        findings=[finding],
+        crawl_manifest=CrawlManifest(
+            domain="acme-test.example",
+            website_url="https://acme-test.example",
+            discovered_urls=["https://acme-test.example/", "https://acme-test.example/pricing"],
+            pages=[
+                PageEvidence(
+                    url="https://acme-test.example/",
+                    status_code=200,
+                    title="Acme Home",
+                    ttfb_ms=287.5,
+                )
+            ],
+        ),
+    )
+    from datetime import datetime, timezone
+    now = datetime.now(timezone.utc).isoformat()
+    run = AnalysisRun(
+        analysis_id="ana_ent_001",
+        org_id="org_test_001",
+        website_url="https://acme-test.example",
+        status="completed",
+        progress_percentage=100,
+        created_at=now,
+        updated_at=now,
+        report=rep,
+    )
+    orchestrator.runs["ana_ent_001"] = run
+
+    try:
+        client = TestClient(app)
+
+        # 1. Canonical Audit Record
+        r_audit = client.get("/api/v1/audits/ana_ent_001")
+        assert r_audit.status_code == 200
+        data_audit = r_audit.json()
+        assert data_audit["audit_id"] == "ana_ent_001"
+        assert data_audit["finding_counts"]["HIGH"] == 1
+        assert data_audit["ttfb_summary"]["median_ms"] == 287.5
+
+        # 2. Coverage Panel (7 sources)
+        r_cov = client.get("/api/v1/audits/ana_ent_001/coverage")
+        assert r_cov.status_code == 200
+        data_cov = r_cov.json()
+        assert data_cov["sampling_status"] == "SAMPLED_AUDIT"
+        assert len(data_cov["sources"]) == 7
+
+        # 3. Evidence Manifest
+        r_ev = client.get("/api/v1/audits/ana_ent_001/evidence")
+        assert r_ev.status_code == 200
+        assert r_ev.json()["total_evidence_records"] == 1
+
+        # 4. Canonical Findings Registry
+        r_find = client.get("/api/v1/audits/ana_ent_001/findings")
+        assert r_find.status_code == 200
+        assert r_find.json()["severity_counts"]["total"] == 1
+        assert r_find.json()["findings"][0]["scope"] == "SAMPLE_VERIFIED"
+
+        # 5. 5-Pillar Scorecard (AEO is NOT_TESTED when 0 queries ran)
+        r_sc = client.get("/api/v1/audits/ana_ent_001/scorecard")
+        assert r_sc.status_code == 200
+        pillars_by_name = {p["pillar"]: p for p in r_sc.json()["pillars"]}
+        assert pillars_by_name["AEO"]["status"] == "NOT_TESTED"
+        assert pillars_by_name["AEO"]["score"] is None
+        assert pillars_by_name["Competitive"]["status"] == "NOT_CONFIGURED"
+
+        # 6. Audit Comparison
+        r_cmp = client.get("/api/v1/audits/ana_ent_001/comparison")
+        assert r_cmp.status_code == 200
+        assert r_cmp.json()["summary"]["NEW_ISSUE"] == 1
+
+        # 7. Deliverables Manifest
+        r_rep = client.post("/api/v1/audits/ana_ent_001/reports")
+        assert r_rep.status_code == 200
+        assert r_rep.json()["deliverables"]["developer_ticket_pack_count"] == 1
+
+        # 8. Finding Lifecycle: Assign & Block Direct VERIFIED_FIXED without Retest
+        r_bad = client.post("/api/v1/findings/FIND-ENT-001/assign", json={"status": "VERIFIED_FIXED"})
+        assert r_bad.status_code == 400
+
+        r_assign = client.post(
+            "/api/v1/findings/FIND-ENT-001/assign",
+            json={"owner": "Platform Team", "status": "READY_FOR_RETEST"},
+        )
+        assert r_assign.status_code == 200
+        assert r_assign.json()["status"] == "READY_FOR_RETEST"
+
+        # 9. Finding Retest: Fail -> RETEST_FAILED, Pass -> VERIFIED_FIXED
+        r_retest_fail = client.post(
+            "/api/v1/findings/FIND-ENT-001/retest",
+            json={"passed": False, "observed_after": "Header still missing"},
+        )
+        assert r_retest_fail.status_code == 200
+        assert r_retest_fail.json()["status"] == "RETEST_FAILED"
+
+        r_retest_pass = client.post(
+            "/api/v1/findings/FIND-ENT-001/retest",
+            json={"passed": True, "observed_after": "strict-transport-security: max-age=31536000"},
+        )
+        assert r_retest_pass.status_code == 200
+        assert r_retest_pass.json()["status"] == "VERIFIED_FIXED"
+
+        # 10. 3-Stage Pre-Publication Validation Gate
+        r_val = client.get("/api/v1/reports/ana_ent_001/validation")
+        assert r_val.status_code == 200
+        assert "gate_1_data_integrity" in r_val.json()["three_stage_gates"]
+        assert "gate_2_analytical_completeness" in r_val.json()["three_stage_gates"]
+        assert "gate_3_publication_quality" in r_val.json()["three_stage_gates"]
+    finally:
+        orchestrator.runs.pop("ana_ent_001", None)
+

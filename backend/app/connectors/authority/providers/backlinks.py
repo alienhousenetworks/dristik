@@ -419,9 +419,18 @@ class CommonCrawlProvider(ExternalDataProvider):
         return {"api_key": "public_open_data"}
 
     def collect(self, ctx: CollectContext) -> CollectionResult:
-        result = CollectionResult(provider=self.provider_id, connection_status="CONNECTED")
-        result.note = "Common Crawl Web Graph metrics are computed from quarterly open hyperlink graph releases (data.commoncrawl.org/projects/hyperlinkgraph). They reflect open web topology, not Google PageRank."
-        result.data_state = "MEASURED"
+        result = CollectionResult(provider=self.provider_id, connection_status="NOT_CONFIGURED")
+        result.note = (
+            "Common Crawl Web Graph metrics are computed from quarterly open hyperlink graph releases "
+            "(data.commoncrawl.org/projects/hyperlinkgraph). No records were fetched for this domain; "
+            "surface remains UNAVAILABLE."
+        )
+        if result.records:
+            result.connection_status = "CONNECTED"
+            result.data_state = "MEASURED"
+        else:
+            result.connection_status = "NOT_CONFIGURED"
+            result.data_state = "UNAVAILABLE"
         return result
 
 

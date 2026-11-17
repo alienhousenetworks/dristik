@@ -35,6 +35,348 @@ from app.crawl.retrieval.hybrid_retriever import QueryPlanner
 from app.core.config import settings
 
 
+# Canonical 11 R3 Business-Context AEO Categories
+BUSINESS_CONTEXT_CATEGORIES_11 = [
+    {"id": "brand_identity", "title": "Brand Identity", "intent": "Verify brand origin, mission, legitimacy, and core identity."},
+    {"id": "product_information", "title": "Product Information", "intent": "Verify core product or service lineup, variants, and primary offerings."},
+    {"id": "product_ingredients", "title": "Product Ingredients & Specifications", "intent": "Verify active ingredients, materials, formulation, or technical specifications."},
+    {"id": "product_benefits", "title": "Product Benefits & Outcomes", "intent": "Verify expected results, effectiveness, and substantiated customer outcomes."},
+    {"id": "usage_instructions", "title": "Usage Instructions & Application", "intent": "Verify how to use, apply, or integrate the product in daily routines."},
+    {"id": "safety_and_suitability", "title": "Safety & Suitability Claims", "intent": "Verify safety standards, certifications, suitability, and contraindications."},
+    {"id": "pricing_and_offers", "title": "Pricing & Offers", "intent": "Verify product prices, bundles, discounts, subscriptions, and value packs."},
+    {"id": "shipping_and_returns", "title": "Shipping, Fulfilment & Returns", "intent": "Verify delivery timelines, shipping fees, return windows, and refund policies."},
+    {"id": "customer_support", "title": "Customer Support & Warranty", "intent": "Verify warranty coverage, replacement policies, and customer support channels."},
+    {"id": "product_comparisons", "title": "Product Comparisons & Alternatives", "intent": "Verify how products compare across variants and against market alternatives."},
+    {"id": "purchase_intent", "title": "Purchase Intent & Buying Guide", "intent": "Verify buying guide recommendations, starter kits, and direct checkout paths."},
+]
+
+R3_CATEGORY_IDS = [c["id"] for c in BUSINESS_CONTEXT_CATEGORIES_11]
+R3_CATEGORY_TITLES = {c["id"]: c["title"] for c in BUSINESS_CONTEXT_CATEGORIES_11}
+
+# B2B / Enterprise-only markers that must never pollute consumer / D2C / ecommerce / local audits
+B2B_ENTERPRISE_ONLY_PATTERNS = re.compile(
+    r"\b("
+    r"soc\s*2|iso\s*27001|hipaa|saml|okta|scim|rbac|"
+    r"rest\s+or\s+graphql\s+api|graphql\s+api|rest\s+api|openapi|"
+    r"enterprise\s+customer\s+contracts|b2b\s+corporate\s+customers|"
+    r"dedicated\s+customer\s+success\s+manager|dedicated\s+csm|"
+    r"multi-tenant\s+cloud|dedicated\s+vpc|on-premise|self-hosted\s+vpc|"
+    r"master\s+service\s+agreement|procurement\s+vendor\s+packages|"
+    r"security\s+questionnaires|data\s+processing\s+agreements|dpas|"
+    r"ci/cd|sdk\s+offerings|webhooks|event\s+streaming|"
+    r"seat-based|per\s+seat|fortune\s+500|vp\s+eng|cto"
+    r")\b",
+    re.IGNORECASE,
+)
+
+CONSUMER_BUSINESS_SIGNALS = (
+    "d2c", "dtc", "e-commerce", "ecommerce", "consumer", "retail", "shop", "store",
+    "oral care", "toothpaste", "toothbrush", "mouthwash", "whitening", "dental care",
+    "skincare", "beauty", "cosmetics", "personal care", "wellness", "supplement",
+    "apparel", "fashion", "footwear", "jewelry", "food", "beverage", "restaurant",
+    "cafe", "bakery", "clinic", "salon", "spa", "fitness", "home", "kitchen", "pet",
+)
+
+B2B_SAAS_SIGNALS = (
+    "b2b saas", "enterprise software", "developer tool", "cloud infrastructure",
+    "devops", "cybersecurity", "api platform", "data platform", "b2b platform",
+)
+
+
+def is_consumer_or_non_enterprise_business(
+    business_profile: Optional[BusinessProfile],
+    pages: Optional[List[PageEvidence]] = None,
+) -> bool:
+    """Detect whether the audited site is a consumer/D2C/ecommerce/local business rather than B2B SaaS."""
+    blob_parts: List[str] = []
+    if business_profile:
+        for attr in ("business_model", "industry", "niche", "sub_niche", "value_proposition", "target_audience", "positioning"):
+            val = getattr(business_profile, attr, None)
+            if val:
+                blob_parts.append(str(val))
+        for list_attr in ("products", "services", "personas"):
+            vals = getattr(business_profile, list_attr, None) or []
+            blob_parts.extend(str(v) for v in vals if v)
+    if pages:
+        for p in pages[:10]:
+            blob_parts.append(p.title or "")
+            blob_parts.extend(p.h1 or [])
+            blob_parts.append((p.body_text or "")[:1000])
+
+    blob = " ".join(blob_parts).lower()
+    has_consumer = any(sig in blob for sig in CONSUMER_BUSINESS_SIGNALS)
+    has_b2b_saas = any(sig in blob for sig in B2B_SAAS_SIGNALS)
+    if has_consumer and not has_b2b_saas:
+        return True
+    if business_profile and (business_profile.products or []) and not has_b2b_saas:
+        return True
+    return False
+
+
+def generate_11_category_business_questions(
+    brand: str,
+    business_profile: Optional[BusinessProfile] = None,
+    pages: Optional[List[PageEvidence]] = None,
+    target_count: int = 100,
+) -> List[Dict[str, str]]:
+    """
+    Generates exactly `target_count` (default 100) business-relevant questions across
+    the canonical 11 R3 categories, grounded in the site's actual products, ingredients/features,
+    benefits, usage, safety, pricing, shipping/returns, support, comparisons, and purchase intent.
+    """
+    brand_clean = (brand or "").strip() or (
+        business_profile.business_name.strip()
+        if business_profile and getattr(business_profile, "business_name", None)
+        else "the brand"
+    )
+    niche = (
+        (getattr(business_profile, "niche", None) or getattr(business_profile, "industry", None) or "").strip()
+        if business_profile else ""
+    ) or "consumer products"
+    val_prop = (
+        (getattr(business_profile, "value_proposition", None) or "").strip()
+        if business_profile else ""
+    ) or f"high-quality {niche}"
+
+    products: List[str] = []
+    if business_profile:
+        for p_item in (getattr(business_profile, "products", None) or []) + (getattr(business_profile, "services", None) or []):
+            s_item = str(p_item).strip()
+            if s_item and s_item not in products:
+                products.append(s_item)
+
+    if pages:
+        for p in pages:
+            for h in (p.h1 or []) + (p.h2 or []):
+                h_clean = h.strip()
+                if 3 < len(h_clean) < 55 and h_clean not in products and brand_clean.lower() not in h_clean.lower():
+                    products.append(h_clean)
+
+    p1 = products[0] if len(products) >= 1 else f"{brand_clean} flagship product"
+    p2 = products[1] if len(products) >= 2 else (f"{brand_clean} daily care kit" if len(products) == 1 else f"{brand_clean} essentials")
+    p3 = products[2] if len(products) >= 3 else f"{brand_clean} starter bundle"
+    comp1 = (
+        business_profile.competitors[0]
+        if business_profile and getattr(business_profile, "competitors", None)
+        else f"traditional {niche} brands"
+    )
+
+    category_question_bank: Dict[str, List[tuple]] = {
+        "brand_identity": [
+            (f"What is {brand_clean} and what types of {niche} products does the brand specialize in?", "Verify core brand identity and product category focus."),
+            (f"Who founded {brand_clean} and what inspired the creation of the brand?", "Verify founding story and brand authenticity."),
+            (f"What is {brand_clean}'s core mission and philosophy regarding {val_prop}?", "Audit stated brand mission and customer promise."),
+            (f"Where is {brand_clean} based and where are its products formulated or manufactured?", "Verify brand headquarters and manufacturing origin."),
+            (f"What makes {brand_clean} different from conventional {niche} brands on the market?", "Verify brand differentiation and positioning."),
+            (f"Is {brand_clean} a certified cruelty-free, clean, or sustainably packaged brand?", "Verify ethical and sustainability credentials."),
+            (f"What product categories make up {brand_clean}'s complete catalog?", "Audit breadth of brand catalog."),
+            (f"Who is the primary customer audience that {brand_clean} designs its products for?", "Verify target consumer profile."),
+            (f"Has {brand_clean} been featured in independent media, publications, or industry awards?", "Audit third-party brand recognition."),
+            (f"Where can customers verify official announcements and authentic products from {brand_clean}?", "Verify official domain and brand channels."),
+        ],
+        "product_information": [
+            (f"What are the flagship products offered by {brand_clean}, including {p1} and {p2}?", "Audit primary product catalog and hero SKUs."),
+            (f"What specific product variants, sizes, or flavors are available for {p1}?", "Verify SKU variant and option details."),
+            (f"What is included in the box or package when ordering {p1} from {brand_clean}?", "Verify package contents and accessories."),
+            (f"Does {brand_clean} offer curated product bundles, starter kits, or regimens combining {p1} and {p2}?", "Verify bundle and regimen offerings."),
+            (f"What are the key design features and functional highlights of {p1}?", "Audit core product features."),
+            (f"How does {brand_clean} describe the primary purpose of {p2} and {p3}?", "Verify individual product positioning."),
+            (f"Are replacement heads, refills, or consumable packs available for {p1}?", "Verify refill and repeat-consumable ecosystem."),
+            (f"What new or best-selling products are highlighted on {brand_clean}'s storefront?", "Audit bestseller and new-launch visibility."),
+            (f"Does {brand_clean} offer travel-friendly sizes or portable versions of {p1}?", "Verify portability and travel specifications."),
+            (f"How are {brand_clean}'s products categorized by customer goal or routine step?", "Audit storefront navigation and regimen taxonomy."),
+        ],
+        "product_ingredients": [
+            (f"What are the active ingredients, materials, or core specifications of {p1}?", "Audit full ingredient and specification transparency."),
+            (f"What key functional ingredients are used in {p2} and what role does each play?", "Verify ingredient-level functional explanations."),
+            (f"Are {brand_clean}'s formulations like {p2} free from harsh chemicals, SLS, parabens, or artificial dyes?", "Verify free-from and clean formulation claims."),
+            (f"What are the technical or physical specifications (e.g., battery life, modes, concentration, weight) of {p1}?", "Audit quantitative product specifications."),
+            (f"What active compounds or components power the results of {p3}?", "Verify active formulation components."),
+            (f"Does {brand_clean} disclose the full ingredient list (INCI) or material composition on every product page?", "Audit full label disclosure on product pages."),
+            (f"Are the ingredients in {p2} naturally derived, probiotic, or clinically backed?", "Verify ingredient sourcing and science backing."),
+            (f"What flavoring, scent, or texture agents are used in {brand_clean}'s {p2}?", "Verify sensory and formulation details."),
+            (f"How does {brand_clean} source and quality-test the raw ingredients and components in {p1}?", "Audit quality control and sourcing standards."),
+            (f"Are {brand_clean} products vegan, gluten-free, or alcohol-free?", "Verify dietary and lifestyle formulation attributes."),
+        ],
+        "product_benefits": [
+            (f"What specific benefits and visible outcomes can customers expect from using {p1}?", "Verify primary customer outcome claims."),
+            (f"How quickly do users typically see results when using {p3} or {p1} consistently?", "Audit expected timeline for results."),
+            (f"How does {p2} improve daily hygiene, freshness, or wellness compared to standard products?", "Verify functional benefit differentiation."),
+            (f"What clinical studies, consumer trials, or customer ratings support the effectiveness of {p1}?", "Audit substantiation of efficacy claims."),
+            (f"Can combining {p1}, {p2}, and {p3} deliver better results than using a single product alone?", "Verify multi-product synergy benefits."),
+            (f"What specific customer concerns or pain points is {p2} formulated to address?", "Verify problem-to-benefit mapping."),
+            (f"Does {p3} provide long-lasting results without causing discomfort or sensitivity?", "Audit gentleness + efficacy balance."),
+            (f"What verified customer reviews and before-and-after outcomes are shared for {p1}?", "Audit customer proof of product benefits."),
+            (f"How does regular use of {brand_clean}'s products support long-term preventative care?", "Verify long-term wellness benefits."),
+        ],
+        "usage_instructions": [
+            (f"How do you properly use {p1} step-by-step for the best results?", "Verify clear step-by-step usage instructions."),
+            (f"How often and at what time of day should customers use {p2} and {p3}?", "Verify recommended frequency and routine timing."),
+            (f"How long should each session or application of {p1} and {p3} last?", "Verify duration of application."),
+            (f"In what order should {p1}, {p2}, and {p3} be used together in a daily routine?", "Verify multi-step regimen sequencing."),
+            (f"How do you clean, charge, store, or maintain {p1} between uses?", "Verify care and maintenance instructions."),
+            (f"How often should consumables, brush heads, or refills for {p1} be replaced?", "Verify replacement cadence guidance."),
+            (f"Are there any preparation steps or things to avoid immediately before or after using {p3}?", "Verify pre/post usage best practices."),
+            (f"Can {p2} be used daily without dilution, or does it require specific mixing instructions?", "Verify dosage and application mechanics."),
+            (f"Does {brand_clean} provide a user manual or quick-start guide with {p1}?", "Verify onboarding and usage documentation."),
+        ],
+        "safety_and_suitability": [
+            (f"Are {brand_clean}'s products safe for daily use and suitable for sensitive users?", "Verify daily safety and sensitivity suitability."),
+            (f"Is {p3} enamel-safe or gentle on sensitive teeth, gums, or skin?", "Verify tissue/surface safety claims."),
+            (f"Are {brand_clean}'s products like {p1} and {p2} dermatologist, dentist, or expert tested and approved?", "Verify expert endorsement and safety testing."),
+            (f"What age groups (adults, teens, children) are {brand_clean}'s products suitable for?", "Verify age suitability boundaries."),
+            (f"Are {p2} and {p3} safe to use during pregnancy or alongside dental/medical work such as braces, veneers, or crowns?", "Verify special-condition suitability."),
+            (f"Are there any known side effects, allergens, or contraindications for {p2} or {p3}?", "Audit allergen and precaution disclosures."),
+            (f"What safety certifications (such as FDA registration, CE, RoHS, or waterproof IPX ratings) apply to {p1}?", "Verify product safety certifications."),
+            (f"What should a customer do if they experience irritation or sensitivity while using {p3}?", "Verify safety guidance and customer care advice."),
+            (f"How does {brand_clean} ensure product hygiene and tamper-evident safety in its packaging?", "Verify packaging safety standards."),
+        ],
+        "pricing_and_offers": [
+            (f"How much does {p1} cost on {brand_clean}'s official website?", "Verify transparent unit pricing for hero product."),
+            (f"What is the price range across {brand_clean}'s product lineup including {p2} and {p3}?", "Verify catalog price range transparency."),
+            (f"Does {brand_clean} offer discounted bundle pricing or value packs when buying {p1} and {p2} together?", "Verify bundle savings and multi-pack offers."),
+            (f"Does {brand_clean} offer a subscribe-and-save option for recurring deliveries of {p2} or {p3}?", "Verify subscription discount availability."),
+            (f"Are there first-time buyer promo codes, welcome discounts, or loyalty rewards at {brand_clean}?", "Verify promotional and loyalty incentives."),
+            (f"Does {brand_clean} run seasonal sales, combo offers, or free gift-with-purchase promotions?", "Verify promotional offer structure."),
+            (f"Are taxes and GST included in the displayed product prices on {brand_clean}'s website?", "Verify price inclusivity and checkout transparency."),
+            (f"Does {brand_clean} offer EMI, Buy Now Pay Later (BNPL), UPI, or cash-on-delivery payment options?", "Verify consumer payment method flexibility."),
+            (f"How much can customers save by purchasing a {brand_clean} regimen kit versus individual items?", "Verify bundle value proposition."),
+        ],
+        "shipping_and_returns": [
+            (f"What are {brand_clean}'s standard shipping timelines and delivery estimates across regions?", "Verify shipping speed and delivery expectations."),
+            (f"Does {brand_clean} offer free shipping, and what is the minimum order value required to qualify?", "Verify free shipping threshold."),
+            (f"What is {brand_clean}'s return, replacement, and refund policy for {p1} and consumable items?", "Verify return and refund policy clarity."),
+            (f"How can customers track their {brand_clean} order status once it has been dispatched?", "Verify order tracking workflow."),
+            (f"What is the process for reporting a damaged, defective, or missing item in a {brand_clean} delivery?", "Verify damaged-delivery resolution policy."),
+            (f"Does {brand_clean} support Cash on Delivery (COD) or express shipping options?", "Verify fulfilment and delivery options."),
+            (f"Can customers modify or cancel their {brand_clean} order before it ships?", "Verify order cancellation and modification window."),
+            (f"Does {brand_clean} ship internationally or exclusively within its domestic market?", "Verify geographic shipping coverage."),
+            (f"How long does it take for {brand_clean} to process a refund after a return is approved?", "Verify refund turnaround timeline."),
+        ],
+        "customer_support": [
+            (f"How can customers contact {brand_clean} customer support (email, WhatsApp, phone, or live chat)?", "Verify customer support contact channels."),
+            (f"Does {p1} come with a manufacturer warranty, and what does the warranty cover?", "Verify hardware/product warranty coverage."),
+            (f"How do customers register {p1} for warranty or submit a warranty replacement claim with {brand_clean}?", "Verify warranty claim procedure."),
+            (f"What are {brand_clean}'s customer service operating hours and typical response times?", "Verify support responsiveness expectations."),
+            (f"Does {brand_clean} have a dedicated FAQ or help center for troubleshooting product questions?", "Verify self-service help center availability."),
+            (f"How does {brand_clean} handle subscription pauses, skips, or cancellations for repeat customers?", "Verify subscription management support."),
+            (f"Can customers consult {brand_clean}'s product specialists for personalized product recommendations?", "Verify pre-purchase consultation support."),
+            (f"Where can customers find authentic replacement parts or warranty service for {p1}?", "Verify post-purchase servicing support."),
+            (f"Does {brand_clean} offer a satisfaction guarantee or trial guarantee on select products?", "Verify risk-reversal satisfaction guarantee."),
+        ],
+        "product_comparisons": [
+            (f"How does {brand_clean}'s {p1} compare to {comp1} in features, quality, and price?", "Verify head-to-head competitive comparison."),
+            (f"Why should shoppers choose {brand_clean}'s {p2} over standard supermarket or pharmacy alternatives?", "Verify upgrade rationale over mass-market options."),
+            (f"What is the difference between {brand_clean}'s product variants and which one should a buyer pick?", "Verify internal product line comparison."),
+            (f"How does {p3} compare to professional in-clinic treatments or competing home kits?", "Verify efficacy and value vs alternatives."),
+            (f"What are the pros and cons of {brand_clean}'s {p1} compared to other products in {niche}?", "Verify balanced comparative evaluation."),
+            (f"How does {brand_clean}'s ingredient quality in {p2} compare to conventional formulas?", "Verify formulation superiority claims."),
+            (f"Is {brand_clean}'s {p1} better value for money than competing premium brands?", "Verify price-to-performance positioning."),
+            (f"How do verified buyers rate {brand_clean} compared to other D2C {niche} brands?", "Verify comparative customer sentiment."),
+            (f"What unique features does {p1} offer that competing products at a similar price point lack?", "Verify unique product differentiators."),
+        ],
+        "purchase_intent": [
+            (f"Which {brand_clean} product or starter kit is best for a first-time customer?", "Verify first-time buyer guide recommendation."),
+            (f"Where can customers buy authentic {brand_clean} products online (official store vs marketplaces)?", "Verify authorized purchase channels."),
+            (f"How do I choose the right {brand_clean} product for my specific routine and goals?", "Verify product quiz / buying guide support."),
+            (f"Is {p1} currently in stock and available for immediate purchase on {brand_clean}'s website?", "Verify product availability and stock clarity."),
+            (f"What are the most popular {brand_clean} combos recommended for complete daily care?", "Verify high-intent bundle recommendations."),
+            (f"Can I buy {brand_clean} products as a gift Set or add gift packaging at checkout?", "Verify gifting options and checkout experience."),
+            (f"What should a buyer check on {brand_clean}'s product page before adding {p1} to cart?", "Verify pre-checkout decision information."),
+            (f"How fast is the checkout process on {brand_clean}'s website and is guest checkout supported?", "Verify frictionless purchase path."),
+            (f"Why is buying directly from {brand_clean}'s official website better than third-party sellers?", "Verify direct-to-consumer purchase incentives."),
+        ],
+    }
+
+    validated: List[Dict[str, str]] = []
+    for cat in BUSINESS_CONTEXT_CATEGORIES_11:
+        cid = cat["id"]
+        ctitle = cat["title"]
+        for q_text, intent_desc in category_question_bank.get(cid, []):
+            if len(validated) < target_count:
+                validated.append({
+                    "category_id": cid,
+                    "facet": ctitle,
+                    "question": q_text,
+                    "intent": intent_desc,
+                })
+
+    return validated[:target_count]
+
+
+def validate_questions_against_business_context(
+    questions: List[Any],
+    business_profile: Optional[BusinessProfile],
+    pages: Optional[List[PageEvidence]] = None,
+    brand: str = "",
+    target_count: int = 100,
+) -> List[Any]:
+    """
+    Validates generated questions against the audited site's business context.
+    When the site is a consumer / D2C / ecommerce / local business, filters out all
+    B2B/enterprise-only questions (SOC 2, HIPAA, SAML, REST/GraphQL API, enterprise contracts, etc.)
+    and replaces/fills from the canonical 11 R3 business-context categories.
+    """
+    is_consumer = is_consumer_or_non_enterprise_business(business_profile, pages)
+    if not is_consumer:
+        return questions
+
+    brand_name = (
+        brand
+        or (business_profile.business_name if business_profile and getattr(business_profile, "business_name", None) else "")
+        or "the brand"
+    )
+    replacement_pool = generate_11_category_business_questions(
+        brand=brand_name,
+        business_profile=business_profile,
+        pages=pages,
+        target_count=max(target_count, len(questions) or 100),
+    )
+
+    if not questions:
+        return replacement_pool[:target_count]
+
+    valid_existing: List[Any] = []
+    used_texts = set()
+
+    for q in questions:
+        if isinstance(q, dict):
+            q_text = str(q.get("question") or q.get("generated_question") or "")
+            facet_val = str(q.get("category_id") or q.get("facet") or "")
+        else:
+            q_text = str(getattr(q, "generated_question", "") or getattr(q, "question", "") or "")
+            facet_val = str(getattr(q, "facet", "") or "")
+
+        if not q_text or B2B_ENTERPRISE_ONLY_PATTERNS.search(q_text):
+            continue
+        if facet_val in {"trust_security", "tech_stack"} or "Enterprise Security" in facet_val or "Technology Stack" in facet_val:
+            continue
+
+        norm_q = q_text.strip().lower()
+        if norm_q not in used_texts:
+            used_texts.add(norm_q)
+            valid_existing.append(q)
+
+    # If existing questions don't cover the 11 R3 categories or were B2B templates, use the 11-category pool
+    has_r3_categories = any(
+        (isinstance(q, dict) and (q.get("category_id") in R3_CATEGORY_IDS or q.get("facet") in R3_CATEGORY_TITLES.values()))
+        or (not isinstance(q, dict) and getattr(q, "facet", None) in R3_CATEGORY_TITLES.values())
+        for q in valid_existing
+    )
+    if not has_r3_categories:
+        return replacement_pool[:target_count]
+
+    for rep in replacement_pool:
+        if len(valid_existing) >= target_count:
+            break
+        norm_rep = rep["question"].strip().lower()
+        if norm_rep not in used_texts:
+            used_texts.add(norm_rep)
+            valid_existing.append(rep)
+
+    return valid_existing[:target_count]
+
+
 # 10 Core Strategic Facets for Comprehensive Website & Business Intelligence
 SANDBOX_FACETS = [
     {
@@ -322,23 +664,56 @@ class DynamicQuestionSandboxEngine:
                     ai_thinking_steps=ai_thinking_steps,
                 )
 
-        tasks = []
-        for facet in SANDBOX_FACETS:
-            facet_id = facet["id"]
-            facet_title = facet["title"]
-            facet_questions = await self._synthesize_facet_questions(
-                facet_id=facet_id,
+        is_consumer = is_consumer_or_non_enterprise_business(profile, pages)
+        target_total = budget.question_count()
+        raw_question_specs: List[Dict[str, str]] = []
+
+        if is_consumer:
+            raw_question_specs = generate_11_category_business_questions(
                 brand=brand,
-                niche=niche,
-                val_prop=val_prop,
-                corpus_pages=corpus_pages,
-                site_context=site_context,
-                profile=profile,
+                business_profile=profile,
+                pages=pages,
+                target_count=target_total,
             )
-            for item in facet_questions[:questions_per_facet]:
-                q_id = f"Q-{q_counter:03d}"
-                q_counter += 1
-                tasks.append(_eval_one(q_id, facet_id, facet_title, item["question"], item["intent"]))
+        else:
+            questions_per_facet = budget.questions_per_facet()
+            for facet in SANDBOX_FACETS:
+                facet_id = facet["id"]
+                facet_title = facet["title"]
+                facet_questions = await self._synthesize_facet_questions(
+                    facet_id=facet_id,
+                    brand=brand,
+                    niche=niche,
+                    val_prop=val_prop,
+                    corpus_pages=corpus_pages,
+                    site_context=site_context,
+                    profile=profile,
+                )
+                for item in facet_questions[:questions_per_facet]:
+                    raw_question_specs.append({
+                        "category_id": facet_id,
+                        "facet": facet_title,
+                        "question": item["question"],
+                        "intent": item["intent"],
+                    })
+
+        # Validate questions against business context BEFORE scoring so irrelevant B2B
+        # questions never enter a consumer brand's 100-question denominator.
+        validated_specs = validate_questions_against_business_context(
+            questions=raw_question_specs,
+            business_profile=profile,
+            pages=pages,
+            brand=brand,
+            target_count=target_total,
+        )
+
+        tasks = []
+        for item in validated_specs[:target_total]:
+            q_id = f"Q-{q_counter:03d}"
+            q_counter += 1
+            facet_id = item.get("category_id") or item.get("facet") or "brand_identity"
+            facet_title = item.get("facet") or R3_CATEGORY_TITLES.get(facet_id, facet_id)
+            tasks.append(_eval_one(q_id, facet_id, facet_title, item["question"], item["intent"]))
 
         all_evaluations = list(await asyncio.gather(*tasks))
 

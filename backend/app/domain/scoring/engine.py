@@ -12,7 +12,8 @@ from app.domain.models import (
     CheckResult,
     LLMJudgeRecord,
     AuditScopeInfo,
-    HonestScores
+    HonestScores,
+    GeoReadinessReport,
 )
 from app.domain.enums import Category, Severity, BusinessIntent, EvidenceClass
 from app.domain.scoring.weights import compute_intent_adjusted_weights
@@ -442,14 +443,41 @@ class ScoringEngine:
                             s = audience_readability_score(readability, audience=getattr(business_profile, "target_audience", None) or "b2b")
                             evidence_list.append({"readability": readability, "status": "PASS" if s >= 0.7 else "PARTIAL"})
                     elif cid == "form_field_count_curve":
-                        form_field_count = 3.0
-                        for f in check_findings:
-                            if "field" in f.title.lower():
-                                form_field_count = 7.0
+                        form_audit = kwargs.get("form_audit")
+                        pages_list = kwargs.get("pages") or (getattr(manifest, "pages", None) if manifest is not None else None)
+                        input_counts: List[float] = []
+                        if form_audit is not None:
+                            forms_attr = getattr(form_audit, "forms", None) or (form_audit.get("forms") if isinstance(form_audit, dict) else None) or []
+                            for fa in forms_attr:
+                                ic = getattr(fa, "input_count", None) if not isinstance(fa, dict) else fa.get("input_count")
+                                if isinstance(ic, (int, float)) and ic > 0:
+                                    input_counts.append(float(ic))
+                        if not input_counts and pages_list:
+                            for p in pages_list:
+                                p_forms = getattr(p, "forms", None) or (p.get("forms") if isinstance(p, dict) else None) or []
+                                for pf in p_forms:
+                                    if isinstance(pf, dict):
+                                        if isinstance(pf.get("input_count"), (int, float)) and pf["input_count"] > 0:
+                                            input_counts.append(float(pf["input_count"]))
+                                        elif isinstance(pf.get("inputs"), list) and len(pf["inputs"]) > 0:
+                                            input_counts.append(float(len(pf["inputs"])))
+                        if input_counts:
+                            form_field_count = sum(input_counts) / len(input_counts)
+                        else:
+                            form_field_count = 3.0
+                            for f in check_findings:
+                                if "field" in f.title.lower():
+                                    form_field_count = 7.0
                         if form_field_count <= 3.0:
                             s = 1.0
                         else:
                             s = log_normal_curve(form_field_count, p10=3.0, median=8.0, higher_is_better=False)
+                        evidence_list.append({
+                            "metric": "mean_form_fields",
+                            "value": round(form_field_count, 2),
+                            "forms_sampled": len(input_counts),
+                            "status": "PASS" if s >= 0.75 else "PARTIAL",
+                        })
                     elif cat_enum == Category.SCHEMA and not has_schema:
                         s = 0.0
                         passed = 0
@@ -671,6 +699,18 @@ class ScoringEngine:
                             passed = 0
                             failed = sample_size
                             status = "NOT_MEASURED"
+                        elif (
+                            scope.measured_pages <= 0
+                            or (kwargs.get("pages") is not None and len(kwargs.get("pages")) == 0)
+                            or (manifest is not None and getattr(manifest, "pages", None) is not None and len(getattr(manifest, "pages")) == 0)
+                            or (cid in ("kg_wikidata_resolution", "bayesian_review_rating") and not external_authority_connected)
+                        ):
+                            # Unmatched checks with 0 crawled pages or unavailable external authority must NOT default to s=1.0
+                            is_measured = False
+                            s = 0.0
+                            passed = 0
+                            failed = 0
+                            status = "NOT_MEASURED"
                         else:
                             s = 1.0
                             passed = sample_size
@@ -850,12 +890,33 @@ class ScoringEngine:
                         applied = min(drift, room) if drift > 0 else drift
                         last["points_earned"] = max(0.0, round(last["points_earned"] + applied, 1))
 
+            discovered_urls_count = (
+                len(scope.discovered_urls)
+                if getattr(scope, "discovered_urls", None)
+                else (
+                    getattr(manifest, "total_pages_discovered", 0)
+                    if manifest is not None and getattr(manifest, "total_pages_discovered", 0) > 0
+                    else max(scope.requested_pages, scope.measured_pages, 1)
+                )
+            )
+            max_pages_crawled = max(0, scope.measured_pages)
+            sample_coverage_ratio = min(1.0, max_pages_crawled / max(discovered_urls_count, 1)) if max_pages_crawled > 0 else 0.0
+            cat_conf = round(
+                min(0.95, (0.40 + 0.35 * cat_coverage + 0.20 * sample_coverage_ratio) if discovered_urls_count > max_pages_crawled else (0.50 + 0.45 * cat_coverage)),
+                2,
+            )
+            half_width = round(max(2.0, (1.0 - cat_conf) * 25.0), 1)
+            score_interval = (
+                max(0.0, round(raw_cat_score - half_width, 1)),
+                min(100.0, round(raw_cat_score + half_width, 1)),
+            )
+
             category_scores[cat_key] = CategoryScore(
                 category=cat_enum,
                 score=final_cat_score,
-                confidence=round(min(0.95, 0.50 + 0.45 * cat_coverage), 2),
+                confidence=cat_conf,
                 coverage=round(cat_coverage, 2),
-                score_interval=(round(max(0.0, raw_cat_score - 5.0), 1), round(min(100.0, raw_cat_score + 5.0), 1)),
+                score_interval=score_interval,
                 weight=0.0,  # Will be assigned during intent re-normalization
                 weighted_score=0.0,
                 strengths=cat_strengths[:3],
@@ -1026,6 +1087,8 @@ class ScoringEngine:
         plan_tier: str = "starter",
         live_benchmark_data: Optional[Dict[str, Any]] = None,
         external_authority_connected: bool = False,
+        cwv_data: Optional[Dict[str, float]] = None,
+        form_audit: Optional[Any] = None,
     ) -> HonestScores:
         """
         Specialized Views:
@@ -1042,6 +1105,8 @@ class ScoringEngine:
             live_citation_score=live_citation_score,
             live_benchmark_data=live_benchmark_data,
             performance_metrics=performance_metrics,
+            cwv_data=cwv_data,
+            form_audit=form_audit,
             plan_tier=plan_tier
         )
         extractability = getattr(geo_readiness, "extractability_score", None) if geo_readiness is not None else None
@@ -1145,3 +1210,149 @@ class ScoringEngine:
             status="AVAILABLE",
             ai_citation_status=ai_citation_status,
         )
+
+    def build_scoring_methodology_appendix(
+        self,
+        scores: OverallScoreResult,
+        honest_scores: Optional[HonestScores] = None,
+        geo_readiness: Optional[GeoReadinessReport] = None,
+        crawl_inventory: Optional[Any] = None,
+    ) -> Dict[str, Any]:
+        """Build a deterministic, versioned scoring methodology appendix reproducing all pillar & composite scores."""
+        pillars_detail: Dict[str, Any] = {}
+        excluded_pillars: List[str] = []
+        derivation_steps: List[Dict[str, Any]] = []
+        total_weighted_points = 0.0
+
+        for cat_key, cat_score in (scores.category_scores or {}).items():
+            included_checks = []
+            excluded_checks = []
+            for chk in (cat_score.check_results or []):
+                chk_entry = {
+                    "check_id": chk.check_id,
+                    "name": chk.name,
+                    "weight": chk.weight,
+                    "score": chk.score,
+                    "status": chk.status,
+                    "sample_size": chk.sample_size,
+                    "passed": chk.passed,
+                    "failed": chk.failed,
+                }
+                if chk.status == "NOT_MEASURED" or chk.coverage <= 0.0:
+                    excluded_checks.append(chk_entry)
+                else:
+                    included_checks.append(chk_entry)
+
+            is_measured_pillar = cat_score.status != "NOT_MEASURED" and cat_score.score is not None and (cat_score.weight or 0.0) > 0.0
+            if not is_measured_pillar:
+                excluded_pillars.append(cat_key)
+
+            weighted_pts = round((cat_score.score or 0.0) * float(cat_score.weight or 0.0), 2) if is_measured_pillar else 0.0
+            total_weighted_points += weighted_pts
+            if is_measured_pillar:
+                derivation_steps.append({
+                    "pillar": cat_key,
+                    "raw_score": cat_score.score,
+                    "normalized_weight": round(float(cat_score.weight or 0.0), 4),
+                    "weighted_contribution": weighted_pts,
+                    "expression": f"{cat_score.score} * {float(cat_score.weight or 0.0):.4f} = {weighted_pts}",
+                })
+
+            pillars_detail[cat_key] = {
+                "category": cat_key,
+                "status": cat_score.status,
+                "raw_score": cat_score.score,
+                "weight": round(float(cat_score.weight or 0.0), 4),
+                "weighted_score": weighted_pts,
+                "measured_coverage": cat_score.coverage,
+                "confidence": cat_score.confidence,
+                "score_interval": list(cat_score.score_interval) if cat_score.score_interval else None,
+                "included_checks": included_checks,
+                "excluded_unavailable_checks": excluded_checks,
+            }
+
+        tested_pages = 0
+        discovered_total = 0
+        if crawl_inventory is not None:
+            tested_pages = int(
+                getattr(crawl_inventory, "tested_pages", 0)
+                or getattr(crawl_inventory, "analyzed_total", 0)
+                or (crawl_inventory.get("tested_pages", 0) if isinstance(crawl_inventory, dict) else 0)
+                or 0
+            )
+            discovered_total = int(
+                getattr(crawl_inventory, "discovered_total", 0)
+                or getattr(crawl_inventory, "eligible_total", 0)
+                or (crawl_inventory.get("discovered_total", 0) if isinstance(crawl_inventory, dict) else 0)
+                or 0
+            )
+        if tested_pages <= 0:
+            for cs in (scores.category_scores or {}).values():
+                for chk in (cs.check_results or []):
+                    if chk.sample_size > tested_pages:
+                        tested_pages = chk.sample_size
+        if discovered_total <= 0:
+            discovered_total = max(tested_pages, 1)
+
+        sample_coverage_ratio = min(1.0, tested_pages / max(discovered_total, 1)) if tested_pages > 0 else 0.0
+        sample_coverage_pct = round(sample_coverage_ratio * 100.0, 1)
+
+        geo_dims: Dict[str, Any] = {}
+        if geo_readiness is not None and getattr(geo_readiness, "dimension_scores", None):
+            for d_key, d_val in geo_readiness.dimension_scores.items():
+                geo_dims[d_key] = {
+                    "score": getattr(d_val, "score", None),
+                    "is_measured": getattr(d_val, "is_measured", False),
+                    "band": getattr(d_val, "band", "unmeasured"),
+                }
+
+        reproduced_composite = round(max(0.0, min(100.0, total_weighted_points)), 1)
+
+        return {
+            "formula_version": "dristik_central_scoring_v5.1",
+            "methodology_version": self.rubric.methodology_version,
+            "pillars": pillars_detail,
+            "severity_adjustments": {
+                "CRITICAL": {"graded_check_multiplier": 0.0, "deduction_fraction": 1.0, "gate_cap_eligible": True},
+                "HIGH": {"graded_check_multiplier": 0.20, "deduction_fraction": 0.80, "gate_cap_eligible": True},
+                "MEDIUM": {"graded_check_multiplier": 0.50, "deduction_fraction": 0.50, "gate_cap_eligible": False},
+                "LOW": {"graded_check_multiplier": 0.80, "deduction_fraction": 0.20, "gate_cap_eligible": False},
+                "diminishing_returns_rule": "Single-charge root-cause deduplication: primary finding takes full check weight deduction; downstream consequences charge 0.0 additional points.",
+            },
+            "sample_coverage_confidence_model": {
+                "tested_pages": tested_pages,
+                "discovered_total": discovered_total,
+                "sample_coverage_pct": sample_coverage_pct,
+                "confidence_formula": "min(0.95, 0.40 + 0.35 * check_coverage + 0.20 * (tested_pages / max(discovered_total, 1)))",
+                "interval_half_width_formula": "round(max(2.0, (1.0 - confidence) * 25.0), 1)",
+            },
+            "unavailable_data_exclusion_rules": {
+                "excluded_pillars": excluded_pillars,
+                "authority_rule": "Excluded (NOT_MEASURED) when external backlink/authority connector is not connected and no verified authority evidence exists.",
+                "live_ai_visibility_rule": "Excluded (NOT_MEASURED) when no live AI engine responses were recorded; never substituted with on-page readiness.",
+                "weight_renormalization": "Active measured pillar weights are proportionally re-normalized to sum to 1.0000.",
+            },
+            "composite_derivation": {
+                "steps": derivation_steps,
+                "sum_of_weighted_contributions": reproduced_composite,
+                "overall_score": scores.overall_score,
+                "grade": scores.grade,
+                "honest_overall_score": getattr(honest_scores, "overall_score", None) if honest_scores else None,
+            },
+            "geo_extractability_formula": {
+                "extractability_score": getattr(geo_readiness, "extractability_score", None) if geo_readiness else None,
+                "weights": {
+                    "entity_clarity": 0.20,
+                    "answerability": 0.20,
+                    "content_extractability": 0.15,
+                    "structured_data_quality": 0.10,
+                    "citation_readiness": 0.10,
+                    "retrieval_accessibility": 0.10,
+                    "factual_grounding": 0.15,
+                    "source_corroboration": 0.00,
+                    "live_ai_citations": 0.00,
+                },
+                "dimensions": geo_dims,
+                "separation_rule": "live_ai_citations (AI engine visibility) has 0.0 weight in on-page extractability and remains None when no live AI query run occurred.",
+            },
+        }

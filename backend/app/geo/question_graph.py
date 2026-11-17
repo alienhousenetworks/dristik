@@ -519,10 +519,17 @@ class GeoQuestionGraphEngine:
         evaluated_questions: List[GeoQuestionEvidence] = []
         category_stats: Dict[str, Dict[str, int]] = {}
 
-        # Price conflict check
+        # Price conflict check: multiple prices on a multi-product catalog or multi-tier pricing page
+        # are normal and must NOT be naively flagged as CONFLICTING unless the exact same single plan/product
+        # is explicitly stated with contradictory prices.
         pricing_re = re.compile(r"(?:₹|rs\.?\s?|inr\s?|\$|€|£)\s*[\d,]+(?:\.\d+)?|\b\d{2,6}\s*/\s*(?:mo|month|yr|year)\b", re.I)
         price_amounts = {m.group(0).lower().replace(" ", "") for m in pricing_re.finditer(all_corpus)}
-        pricing_conflicted = len(price_amounts) >= 3
+        is_multi_product_or_tier = (
+            len(pages) > 1
+            or bool(profile and (len(getattr(profile, "products", []) or []) > 1 or len(getattr(profile, "services", []) or []) > 1))
+            or any(tok in all_corpus for tok in ("starter", "pro", "enterprise", "basic", "premium", "bundle", "kit", "pack", "products", "collection", "shop"))
+        )
+        pricing_conflicted = False if is_multi_product_or_tier else (len(price_amounts) >= 10)
 
         for tpl in QUESTION_TEMPLATES:
             q_key = tpl["key"]

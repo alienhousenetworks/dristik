@@ -16,17 +16,8 @@ outcomes are marked NOT_TESTED or DATA_UNAVAILABLE.
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
-from enum import Enum
 from typing import Any, Dict, List, Optional
-
-
-class EvidenceState(str, Enum):
-    VERIFIED = "VERIFIED"
-    SAMPLE_VERIFIED = "SAMPLE_VERIFIED"
-    INFERRED = "INFERRED"
-    NOT_TESTED = "NOT_TESTED"
-    DATA_UNAVAILABLE = "DATA_UNAVAILABLE"
-    NOT_APPLICABLE = "NOT_APPLICABLE"
+from app.domain.enums import EvidenceState
 
 
 @dataclass
@@ -347,17 +338,37 @@ class AeoMetricsCalculator:
         # -------------------------------------------------------------
         # Pillar D: Business Outcomes
         # -------------------------------------------------------------
-        # In absence of Google Analytics / Search Console OAuth credentials, report DATA_UNAVAILABLE
-        pillar_d = BusinessOutcomesPillar(
-            answer_page_visits=None,
-            ai_referral_sessions=None,
-            qualified_leads=None,
-            assisted_conversions=None,
-            attributed_revenue=None,
-            ai_referral_conversion_rate_pct=None,
-            state=EvidenceState.DATA_UNAVAILABLE,
-            notes="Requires authenticated Google Analytics 4 or Search Console connector. Zero synthetic conversions reported.",
-        )
+        lr = getattr(report, "lifecycle_revenue", None)
+        ga4 = getattr(lr, "ga4", None) if lr else None
+        gsc = getattr(lr, "gsc", None) if lr else None
+        ga4_connected = bool(getattr(ga4, "is_connected", False)) if ga4 else False
+        gsc_connected = bool(getattr(gsc, "is_connected", False)) if gsc else False
+
+        if ga4_connected or gsc_connected:
+            visits = getattr(gsc, "clicks", None) if gsc_connected else None
+            conv_rate = getattr(ga4, "conversion_rate", None) if ga4_connected else None
+            pillar_d = BusinessOutcomesPillar(
+                answer_page_visits=visits,
+                ai_referral_sessions=None,
+                qualified_leads=None,
+                assisted_conversions=None,
+                attributed_revenue=None,
+                ai_referral_conversion_rate_pct=conv_rate,
+                state=EvidenceState.SAMPLE_VERIFIED if (visits is not None or conv_rate is not None) else EvidenceState.DATA_UNAVAILABLE,
+                notes="Derived from connected GA4 / Search Console telemetry.",
+            )
+        else:
+            # In absence of Google Analytics / Search Console OAuth credentials, report DATA_UNAVAILABLE
+            pillar_d = BusinessOutcomesPillar(
+                answer_page_visits=None,
+                ai_referral_sessions=None,
+                qualified_leads=None,
+                assisted_conversions=None,
+                attributed_revenue=None,
+                ai_referral_conversion_rate_pct=None,
+                state=EvidenceState.DATA_UNAVAILABLE,
+                notes="Requires authenticated Google Analytics 4 or Search Console connector. Zero synthetic conversions reported.",
+            )
 
         # -------------------------------------------------------------
         # 10 Core Formulas Registry

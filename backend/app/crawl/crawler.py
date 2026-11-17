@@ -4,6 +4,8 @@ Performs recursive multi-page crawling, sitemap discovery, robots.txt parsing,
 Firecrawl dynamic fallback for SPAs/WAFs, and deterministic multi-page SEO & AI-search evidence extraction.
 """
 import time
+import math
+import statistics
 import re
 import asyncio
 import logging
@@ -20,9 +22,10 @@ except ImportError:
 logger = logging.getLogger("dristik.crawler")
 
 from app.core.config import settings
-from app.domain.models import PageEvidence, CrawlManifest
+from app.domain.models import PageEvidence, CrawlManifest, TtfbStats
 from app.core.security.ssrf import is_safe_url
 from app.domain.evidence.store import EvidenceStore
+from app.seo.audit.discovery.coverage import calculate_crawl_coverage
 
 # Deterministic Analyzers
 from app.crawl.analyzers.html import analyze_html_content, distill_semantic_content
@@ -44,6 +47,82 @@ from app.crawl.analyzers.dynamic_content import extract_embedded_cms_content, ne
 from app.crawl.analyzers.visible import extract_visible_page
 from app.crawl.browser import BrowserRenderService
 from app.crawl.response_limits import ResponseTooLargeError, read_response_limited
+
+
+def compute_ttfb_stats(pages: List[Any]) -> TtfbStats:
+    """
+    Computes TTFB statistical distribution across crawled pages and isolates single-page/anomalous outliers.
+    """
+    measurements: Dict[str, float] = {}
+    vals: List[float] = []
+    for idx, p in enumerate(pages or []):
+        if isinstance(p, (int, float)):
+            u = f"https://example.com/page-{idx + 1}"
+            v = round(float(p), 1)
+        elif isinstance(p, dict):
+            u = str(p.get("url") or f"https://example.com/page-{idx + 1}")
+            v = round(float(p.get("ttfb_ms") or 0.0), 1)
+        else:
+            u = str(getattr(p, "url", None) or f"https://example.com/page-{idx + 1}")
+            v = round(float(getattr(p, "ttfb_ms", 0.0) or 0.0), 1)
+        measurements[u] = v
+        vals.append(v)
+
+    if not vals:
+        return TtfbStats()
+
+    vals_sorted = sorted(vals)
+    mean_ms = round(sum(vals) / len(vals), 1)
+    median_ms = round(float(statistics.median(vals_sorted)), 1)
+    min_ms = round(vals_sorted[0], 1)
+    max_ms = round(vals_sorted[-1], 1)
+    p90_idx = min(len(vals_sorted) - 1, max(0, int(math.ceil(0.90 * len(vals_sorted))) - 1))
+    p90_ms = round(vals_sorted[p90_idx], 1)
+
+    outlier_urls: List[str] = []
+    outlier_explanation: Optional[str] = None
+
+    if len(vals) >= 2 and median_ms < 1000.0:
+        threshold = max(2000.0, median_ms * 3.0)
+        outlier_urls = [u for u, v in measurements.items() if v > threshold]
+        if outlier_urls:
+            non_outlier_vals = [v for u, v in measurements.items() if u not in outlier_urls]
+            if len(outlier_urls) == 1 and non_outlier_vals:
+                out_url = outlier_urls[0]
+                out_val = measurements[out_url]
+                sec = round(out_val / 1000.0, 1)
+                rem_min = round(min(non_outlier_vals), 1)
+                rem_max = round(max(non_outlier_vals), 1)
+                outlier_explanation = (
+                    f"One sampled page ({out_url}) recorded an exceptionally high TTFB of "
+                    f"{out_val:g} ms (~{sec:g}s), whereas the remaining {len(non_outlier_vals)} sampled URLs "
+                    f"recorded {rem_min:g}–{rem_max:g} ms (median {median_ms:g} ms). "
+                    f"The mean ({mean_ms:g} ms) is heavily skewed by this isolated outlier."
+                )
+            elif non_outlier_vals:
+                rem_min = round(min(non_outlier_vals), 1)
+                rem_max = round(max(non_outlier_vals), 1)
+                outlier_explanation = (
+                    f"{len(outlier_urls)} sampled pages ({', '.join(outlier_urls)}) recorded exceptionally high TTFB "
+                    f"up to {max_ms:g} ms, whereas the remaining {len(non_outlier_vals)} sampled URLs "
+                    f"recorded {rem_min:g}–{rem_max:g} ms (median {median_ms:g} ms). "
+                    f"The mean ({mean_ms:g} ms) is skewed by these outliers."
+                )
+            for p in (pages or []):
+                if hasattr(p, "url") and hasattr(p, "ttfb_outlier_reason") and getattr(p, "url", None) in outlier_urls:
+                    if not getattr(p, "ttfb_outlier_reason", None):
+                        p.ttfb_outlier_reason = outlier_explanation
+
+    return TtfbStats(
+        mean_ms=mean_ms,
+        median_ms=median_ms,
+        max_ms=max_ms,
+        min_ms=min_ms,
+        p90_ms=p90_ms,
+        outlier_urls=outlier_urls,
+        outlier_explanation=outlier_explanation,
+        page_measurements=measurements,
+    )
 
 class CrawlerService:
     def __init__(self):
@@ -253,17 +332,18 @@ class CrawlerService:
             try:
                 pw_html, pw_status, pw_ttfb, pw_headers, pw_err, pw_text, pw_perf = await BrowserRenderService.render_page(url)
                 if pw_err == "ssrf_blocked_browser_request":
-                    return None, None, 0, (time.time() - start_time) * 1000, {}, 0, "SSRF blocked unsafe browser redirect or subresource", None
+                    return None, None, 0, 0.0, {}, 0, "SSRF blocked unsafe browser redirect or subresource", None
                 if pw_html:
                     max_response_bytes = int(getattr(settings, "CRAWL_MAX_RESPONSE_BYTES", 5 * 1024 * 1024) or 5 * 1024 * 1024)
                     if len(pw_html.encode("utf-8")) > max_response_bytes:
-                        return None, None, 0, (time.time() - start_time) * 1000, {}, 0, "rendered_response_too_large", None
+                        return None, None, 0, 0.0, {}, 0, "rendered_response_too_large", None
                     headers = pw_headers or {"x-crawler": "playwright-local-js"}
+                    w3c_ttfb = float(pw_perf.get("ttfb_ms") or 0.0) if isinstance(pw_perf, dict) else (float(pw_ttfb) if pw_ttfb and pw_ttfb > 0 else 0.0)
                     return (
                         pw_html,
                         pw_text,
                         pw_status if pw_status else 0,
-                        pw_ttfb if pw_ttfb > 0 else ((time.time() - start_time) * 1000),
+                        w3c_ttfb,
                         headers,
                         len(pw_html.encode("utf-8")),
                         None,
@@ -274,7 +354,7 @@ class CrawlerService:
 
         # Tier 2: Cloud Firecrawl Dynamic Rendering Fallback
         if not settings.FIRECRAWL_API_KEY or not settings.FIRECRAWL_API_KEY.strip():
-            return None, None, 0, (time.time() - start_time) * 1000, {}, 0, "js_render_unavailable", None
+            return None, None, 0, 0.0, {}, 0, "js_render_unavailable", None
 
         try:
             async with client.stream(
@@ -304,21 +384,21 @@ class CrawlerService:
                         payload = html_content or f"<html><body><article>{markdown}</article></body></html>"
                         payload_bytes = len(payload.encode("utf-8"))
                         if payload_bytes > max_response_bytes:
-                            return None, None, 0, (time.time() - start_time) * 1000, {}, 0, "rendered_response_too_large", None
-                        ttfb_ms = (time.time() - start_time) * 1000
+                            return None, None, 0, 0.0, {}, 0, "rendered_response_too_large", None
+                        wall_clock_ms = round((time.time() - start_time) * 1000, 1)
                         return (
                             payload,
                             markdown,
                             200,
-                            ttfb_ms,
+                            0.0,
                             {"x-crawler": "firecrawl-js"},
                             payload_bytes,
                             None,
-                            None,
+                            {"wall_clock_render_ms": wall_clock_ms, "ttfb_ms": 0.0},
                         )
-                return None, None, fc_resp.status_code, (time.time() - start_time) * 1000, {}, 0, f"firecrawl HTTP {fc_resp.status_code}", None
+                return None, None, fc_resp.status_code, 0.0, {}, 0, f"firecrawl HTTP {fc_resp.status_code}", None
         except Exception as exc:
-            return None, None, 0, (time.time() - start_time) * 1000, {}, 0, str(exc), None
+            return None, None, 0, 0.0, {}, 0, str(exc), None
 
     async def _fetch_page_with_fallbacks(
         self,
@@ -396,6 +476,8 @@ class CrawlerService:
                     ttfb_ms = round(ttfb_hop, 1)
                     timing_data = {
                         "ttfb_ms": ttfb_ms,
+                        "origin_http_ttfb_ms": ttfb_ms,
+                        "instrumentation_overhead_ms": 0.0,
                         "download_ms": round(max(0.0, hop_latency - ttfb_hop), 1),
                         "total_transferred_bytes": len(content),
                     }
@@ -422,19 +504,37 @@ class CrawlerService:
             ):
                 return None, 0, ttfb_ms, {}, 0, direct_err, None, redirect_chain, final_url, None
 
+        origin_http_ttfb_ms = round(float(ttfb_ms), 1) if ttfb_ms and ttfb_ms > 0 else 0.0
         html, markdown, status, js_ttfb, headers, nbytes, js_err, js_perf = await self._js_render_page(url, client, start_time)
         if html:
+            w3c_js_ttfb = 0.0
+            if isinstance(js_perf, dict) and (js_perf.get("ttfb_ms") or 0) > 0:
+                w3c_js_ttfb = round(float(js_perf["ttfb_ms"]), 1)
+            elif (headers or {}).get("x-crawler") == "playwright-local-js" and js_ttfb and js_ttfb > 0:
+                w3c_js_ttfb = round(float(js_ttfb), 1)
+
+            effective_ttfb = origin_http_ttfb_ms if origin_http_ttfb_ms > 0 else w3c_js_ttfb
+            wall_clock_ms = (
+                float(js_perf.get("wall_clock_render_ms"))
+                if isinstance(js_perf, dict) and js_perf.get("wall_clock_render_ms") is not None
+                else round((time.time() - start_time) * 1000, 1)
+            )
+            overhead_ms = round(max(0.0, wall_clock_ms - effective_ttfb), 1)
+            merged_perf = dict(js_perf) if isinstance(js_perf, dict) else {}
+            merged_perf["ttfb_ms"] = effective_ttfb
+            merged_perf["origin_http_ttfb_ms"] = origin_http_ttfb_ms if origin_http_ttfb_ms > 0 else None
+            merged_perf["instrumentation_overhead_ms"] = overhead_ms
             return (
                 html,
                 status,
-                js_ttfb or ttfb_ms,
+                effective_ttfb,
                 headers,
                 nbytes,
                 None,
                 markdown,
                 redirect_chain,
                 final_url,
-                js_perf,
+                merged_perf,
             )
         return None, 0, ttfb_ms, {}, 0, direct_err or js_err, None, redirect_chain, final_url, None
 
@@ -550,6 +650,16 @@ class CrawlerService:
                     raw_http_content = html_content
                     rendered_dom_content = None
                     rendering_disparity_data = None
+                    origin_http_ttfb_ms: Optional[float] = (
+                        round(float(timing_data.get("origin_http_ttfb_ms")), 1)
+                        if isinstance(timing_data, dict) and timing_data.get("origin_http_ttfb_ms") is not None
+                        else (round(float(ttfb_ms), 1) if ttfb_ms and ttfb_ms > 0 else None)
+                    )
+                    instrumentation_overhead_ms: float = (
+                        round(float(timing_data.get("instrumentation_overhead_ms") or 0.0), 1)
+                        if isinstance(timing_data, dict)
+                        else 0.0
+                    )
 
                     if (
                         settings.JS_RENDER_THIN_PAGES
@@ -557,6 +667,7 @@ class CrawlerService:
                         and is_thin_shell
                         and embedded.get("word_count", 0) < 80
                     ):
+                        js_fallback_start = time.time()
                         js_html, js_status, js_ttfb, js_headers, js_bytes, js_err, js_md, js_chain, js_final, js_timing = await self._fetch_page_with_fallbacks(
                             page_url, client, force_js=True
                         )
@@ -564,8 +675,29 @@ class CrawlerService:
                             rendered_dom_content = js_html
                             html_content = js_html
                             status_code = js_status or status_code
-                            ttfb_ms = js_ttfb or ttfb_ms
-                            timing_data = js_timing or timing_data
+                            # Preserve valid (>0) HTTP TTFB; never overwrite with total JS/Firecrawl render time
+                            if origin_http_ttfb_ms and origin_http_ttfb_ms > 0:
+                                ttfb_ms = origin_http_ttfb_ms
+                            elif isinstance(js_timing, dict) and (js_timing.get("ttfb_ms") or 0) > 0:
+                                ttfb_ms = round(float(js_timing["ttfb_ms"]), 1)
+                            elif (js_headers or {}).get("x-crawler") == "playwright-local-js" and js_ttfb and js_ttfb > 0:
+                                ttfb_ms = round(float(js_ttfb), 1)
+
+                            wall_clock_js = (
+                                float(js_timing.get("wall_clock_render_ms"))
+                                if isinstance(js_timing, dict) and js_timing.get("wall_clock_render_ms") is not None
+                                else round((time.time() - js_fallback_start) * 1000, 1)
+                            )
+                            instrumentation_overhead_ms = round(max(0.0, wall_clock_js - float(ttfb_ms or 0.0)), 1)
+                            if isinstance(js_timing, dict):
+                                timing_data = dict(js_timing)
+                                timing_data["ttfb_ms"] = ttfb_ms
+                                timing_data["origin_http_ttfb_ms"] = origin_http_ttfb_ms
+                                timing_data["instrumentation_overhead_ms"] = instrumentation_overhead_ms
+                            elif isinstance(timing_data, dict):
+                                timing_data["ttfb_ms"] = ttfb_ms
+                                timing_data["origin_http_ttfb_ms"] = origin_http_ttfb_ms
+                                timing_data["instrumentation_overhead_ms"] = instrumentation_overhead_ms
                             resp_headers = js_headers or resp_headers
                             content_bytes = js_bytes or content_bytes
                             markdown = js_md or markdown
@@ -731,6 +863,8 @@ class CrawlerService:
                         html_lang=meta_res.get("html_lang"),
                         nap_data=html_res.get("nap_data"),
                         content_authority=html_res.get("content_authority"),
+                        origin_http_ttfb_ms=origin_http_ttfb_ms if origin_http_ttfb_ms is not None else perf_res.get("ttfb_ms", 0.0),
+                        instrumentation_overhead_ms=instrumentation_overhead_ms,
                     )
 
             # Iteratively fetch top priority pages until target_max_pages reached or queue empty
@@ -887,7 +1021,8 @@ class CrawlerService:
         duplicate_titles = {t: urls for t, urls in title_map.items() if len(urls) > 1}
         duplicate_descriptions = {d: urls for d, urls in desc_map.items() if len(urls) > 1}
 
-        avg_ttfb = round(total_ttfb / max(len(crawled_pages), 1), 1)
+        ttfb_stats = compute_ttfb_stats(crawled_pages)
+        avg_ttfb = ttfb_stats.mean_ms
 
         # Orphan detection: Sitemap URLs that receive 0 internal links from crawled pages
         s_urls = list(sitemap_urls or [])
@@ -907,7 +1042,7 @@ class CrawlerService:
         crawled_urls_set = {p.url for p in crawled_pages}
         all_discovered = list(discovered_urls or []) if discovered_urls else list(crawled_urls_set)
         untested_urls = [u for u in all_discovered if u not in crawled_urls_set]
-        url_cov_pct = round((urls_crawled_cnt / max(urls_discovered_cnt, 1)) * 100.0, 1)
+        url_cov_pct = calculate_crawl_coverage(urls_crawled_cnt, urls_discovered_cnt)
         # A capped/truncated discovery inventory is never a full-site crawl,
         # even when every URL discovered before the cap was analyzed.
         samp_status = (
@@ -923,6 +1058,7 @@ class CrawlerService:
             "discovered_via_links": max(0, urls_discovered_cnt - len(s_urls)),
             "discovered_total": urls_discovered_cnt,
             "eligible_total": urls_discovered_cnt,
+            "excluded_total": 0,
             "total_unique_discovered": urls_discovered_cnt,
             "total_queued": urls_discovered_cnt,
             "total_attempted": urls_crawled_cnt + len(broken_links),
@@ -935,7 +1071,11 @@ class CrawlerService:
             "total_redirects": len(all_redirect_chains),
             "total_errors": len(broken_links),
             "failed_pages": len(broken_links),
+            "failed_total": len(broken_links),
             "url_coverage_pct": url_cov_pct,
+            "sample_coverage_pct": url_cov_pct,
+            "discovery_coverage_pct": url_cov_pct,
+            "discovery_truncated": discovery_truncated,
             "coverage_denominator": "eligible_total",
             "sampling_status": samp_status,
             "seed_urls_count": 1,
@@ -949,6 +1089,8 @@ class CrawlerService:
             "urls_crawled": urls_crawled_cnt,
             "urls_skipped": urls_skipped_cnt,
             "url_coverage_pct": url_cov_pct,
+            "sample_coverage_pct": url_cov_pct,
+            "discovery_coverage_pct": url_cov_pct,
             "sampling_status": samp_status,
             "skip_reasons": {
                 "budget_cap_reached": max(0, urls_skipped_cnt - len(broken_links)),
@@ -1000,6 +1142,8 @@ class CrawlerService:
             "sampling_note": sampling_note,
             "sampling_status": samp_status,
             "url_coverage_pct": url_cov_pct,
+            "sample_coverage_pct": url_cov_pct,
+            "discovery_coverage_pct": url_cov_pct,
             "crawl_inventory": crawl_inventory,
             "roles_filled": seen_roles,
             "roles_missing": missing_roles,
@@ -1021,6 +1165,14 @@ class CrawlerService:
             "broken_links_count": len(broken_links),
             "broken_links": broken_links,
             "avg_ttfb_ms": avg_ttfb,
+            "mean_ttfb_ms": ttfb_stats.mean_ms,
+            "median_ttfb_ms": ttfb_stats.median_ms,
+            "max_ttfb_ms": ttfb_stats.max_ms,
+            "min_ttfb_ms": ttfb_stats.min_ms,
+            "p90_ttfb_ms": ttfb_stats.p90_ms,
+            "ttfb_outlier_urls": ttfb_stats.outlier_urls,
+            "ttfb_outlier_explanation": ttfb_stats.outlier_explanation,
+            "ttfb_stats": ttfb_stats.model_dump(),
             "total_words_across_site": total_words,
             "orphan_pages_count": len(orphan_urls),
             "redirect_chains_count": len(all_redirect_chains),
@@ -1032,6 +1184,9 @@ class CrawlerService:
                     "status": p.status_code,
                     "words": p.word_count,
                     "ttfb_ms": p.ttfb_ms,
+                    "origin_http_ttfb_ms": p.origin_http_ttfb_ms,
+                    "instrumentation_overhead_ms": p.instrumentation_overhead_ms,
+                    "ttfb_outlier_reason": p.ttfb_outlier_reason,
                     "render_blocking_count": p.lab_performance.render_blocking_count if p.lab_performance else 0,
                     "fcp_ms": p.lab_performance.fcp_ms if p.lab_performance else None,
                     "transferred_kb": p.lab_performance.total_transferred_kb if p.lab_performance else 0.0,
@@ -1047,6 +1202,7 @@ class CrawlerService:
             domain=base_domain,
             base_url=base_url,
             total_pages_discovered=urls_discovered_cnt,
+            total_pages_crawled=urls_crawled_cnt,
             pages=crawled_pages,
             sitemap_found=sitemap_found,
             sitemap_url=sitemap_url,
@@ -1059,6 +1215,10 @@ class CrawlerService:
             orphan_urls=orphan_urls,
             crawl_inventory=crawl_inventory,
             url_coverage_pct=url_cov_pct,
+            sample_coverage_pct=url_cov_pct,
+            discovery_coverage_pct=url_cov_pct,
+            discovery_truncated=discovery_truncated,
+            ttfb_stats=ttfb_stats,
             sampling_status=samp_status,
             discovered_urls=all_discovered,
             discovered_via_sitemap=s_urls,

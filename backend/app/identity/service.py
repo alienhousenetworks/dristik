@@ -7,6 +7,7 @@ from typing import Optional, Tuple
 
 from app.core.config import settings
 from app.domain.enums import UserRole
+from app.identity.authorization import ALL_PERMISSIONS
 from app.identity.authorizer import ORG_STAFF_ROLES, Authorizer, UserIdentity
 from app.identity.security import new_token, password_errors
 from app.identity.store import get_store
@@ -31,13 +32,14 @@ def reset_login_failures() -> None:
 
 
 def public_user(user: UserIdentity) -> dict:
+    role_val = getattr(user.role, "value", str(user.role))
     return {
         "user_id": user.user_id,
         "email": user.email,
         "full_name": user.full_name,
         "org_id": user.org_id,
         "org_name": user.org_name,
-        "role": user.role.value,
+        "role": role_val,
         "role_label": Authorizer.role_label(user.role),
         "is_system": Authorizer.is_system(user),
         "is_active": user.is_active,
@@ -45,10 +47,10 @@ def public_user(user: UserIdentity) -> dict:
         "last_login_at": user.last_login_at,
         "auth_provider": getattr(user, "auth_provider", "local") or "local",
         "avatar_url": getattr(user, "avatar_url", None),
-        "permissions": sorted(p for p in (
-            "mission:create", "mission:read", "staff:invite", "org:manage",
-            "system:manage", "contact:read", "account:delete", "orgs:list_all",
-        ) if Authorizer.can_perform(user, p)),
+        "permissions": sorted(
+            p for p in ALL_PERMISSIONS
+            if Authorizer.has_permission(user, p)
+        ),
     }
 
 

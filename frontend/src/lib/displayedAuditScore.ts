@@ -7,6 +7,8 @@ import {
   REPORT_PILLARS,
 } from '../report/models/scoreLedger';
 
+export const DISPLAYED_SCORE_FORMULA_VERSION = 'dristik_central_scoring_v5.1';
+
 /**
  * One score for the dashboard and the PDF.
  * GEO uses the measured extractability composite. A category score of 100

@@ -146,17 +146,20 @@ class LighthouseRunner:
         """
         timing = dom_timing or {}
 
-        # 1. Core Web Vitals Extraction (prefer measured timing or calculate from navigation)
-        fcp_ms = float(timing.get("fcp_ms") or max(ttfb_ms + 100.0, 450.0))
-        lcp_ms = float(timing.get("lcp_indicator_ms") or timing.get("lcp_ms") or (fcp_ms + 600.0))
-        cls_score = float(timing.get("cls_risk_score") or timing.get("cls_score") or 0.02)
-        tbt_ms = float(timing.get("tbt_proxy_ms") or timing.get("tbt_ms") or 50.0)
+        # 1. Core Web Vitals Extraction (prefer measured timing; never fabricate LCP when missing)
+        raw_fcp = timing.get("fcp_ms")
+        raw_lcp = timing.get("lcp_indicator_ms") if timing.get("lcp_indicator_ms") is not None else timing.get("lcp_ms")
+        fcp_ms = float(raw_fcp) if raw_fcp is not None else max(ttfb_ms + 100.0, 450.0)
+        lcp_observed_ms: Optional[float] = float(raw_lcp) if raw_lcp is not None else None
+        lcp_for_score = lcp_observed_ms if lcp_observed_ms is not None else (fcp_ms + 600.0)
+        cls_score = float(timing.get("cls_risk_score") if timing.get("cls_risk_score") is not None else (timing.get("cls_score") if timing.get("cls_score") is not None else 0.02))
+        tbt_ms = float(timing.get("tbt_proxy_ms") if timing.get("tbt_proxy_ms") is not None else (timing.get("tbt_ms") if timing.get("tbt_ms") is not None else 50.0))
         speed_index_ms = float(timing.get("speed_index_ms") or (fcp_ms * 1.35))
 
         # 2. Performance Category Score (exact Lighthouse v10 log-normal blend)
         score_fcp = _log_normal_score(fcp_ms, **LIGHTHOUSE_CURVE_PARAMS["fcp"])
         score_si = _log_normal_score(speed_index_ms, **LIGHTHOUSE_CURVE_PARAMS["si"])
-        score_lcp = _log_normal_score(lcp_ms, **LIGHTHOUSE_CURVE_PARAMS["lcp"])
+        score_lcp = _log_normal_score(lcp_for_score, **LIGHTHOUSE_CURVE_PARAMS["lcp"])
         score_tbt = _log_normal_score(tbt_ms, **LIGHTHOUSE_CURVE_PARAMS["tbt"])
         score_cls = _log_normal_score(cls_score, **LIGHTHOUSE_CURVE_PARAMS["cls"])
 
@@ -264,17 +267,24 @@ class LighthouseRunner:
         # 6. Raw vs Rendered DOM Difference
         dom_diff = cls.compare_raw_vs_rendered_dom(raw_html, rendered_html)
 
+        has_measured_cwv = raw_fcp is not None and lcp_observed_ms is not None
+        audit_version = (
+            "MEASURED_W3C_PAINT_TIMING"
+            if has_measured_cwv
+            else "ESTIMATED_FROM_TIMING (Not a measured Lighthouse run)"
+        )
+
         return {
             "lighthouse_performance_score": perf_score,
             "lighthouse_accessibility_score": a11y_score,
             "lighthouse_best_practices_score": bp_score,
             "lighthouse_seo_score": seo_score,
-            "lcp_ms": round(lcp_ms, 1),
+            "lcp_ms": round(lcp_observed_ms, 1) if lcp_observed_ms is not None else None,
             "cls_score": round(cls_score, 3),
             "tbt_ms": round(tbt_ms, 1),
             "fcp_ms": round(fcp_ms, 1),
             "speed_index_ms": round(speed_index_ms, 1),
             "raw_vs_rendered_diff": dom_diff,
             "accessibility_issues": a11y_issues,
-            "lighthouse_audit_version": "Estimated from response timing. Not a Google Lighthouse run.",
+            "lighthouse_audit_version": audit_version,
         }

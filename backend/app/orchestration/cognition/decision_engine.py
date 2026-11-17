@@ -94,6 +94,10 @@ class DecisionEngine:
                 elif any(k in clean_url.lower() for k in ["terms", "privacy", "cookie", "legal"]):
                     surface_weight = 0.80  # Low traffic utility surface
 
+            affected_urls = list(dict.fromkeys(
+                ev.url.strip() for ev in attached_ev if getattr(ev, "url", None) and str(ev.url).strip()
+            ))
+
             finding = Finding(
                 finding_id=f_id,
                 category=claim.category,
@@ -101,6 +105,8 @@ class DecisionEngine:
                 title=claim.statement,
                 finding=claim.statement,
                 description=claim.verification_notes or claim.statement,
+                affected_urls=affected_urls,
+                affected_url_count=len(affected_urls),
                 evidence=attached_ev,
                 evidence_refs=[ev.evidence_id for ev in attached_ev],
                 evidence_ids=[ev.evidence_id for ev in attached_ev],

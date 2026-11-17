@@ -31,7 +31,12 @@ def resolve_crux_api_key(explicit: Optional[str] = None) -> Optional[str]:
     for value in (
         getattr(settings, "CRUX_API_KEY", None),
         os.getenv("CRUX_API_KEY"),
+        getattr(settings, "GOOGLE_CRUX_API_KEY", None),
+        os.getenv("GOOGLE_CRUX_API_KEY"),
+        getattr(settings, "PAGESPEED_API_KEY", None),
         os.getenv("PAGESPEED_API_KEY"),
+        getattr(settings, "GOOGLE_PAGESPEED_API_KEY", None),
+        os.getenv("GOOGLE_PAGESPEED_API_KEY"),
         getattr(settings, "GOOGLE_API_KEY", None),
         os.getenv("GOOGLE_API_KEY"),
     ):

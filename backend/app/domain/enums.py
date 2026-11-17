@@ -292,9 +292,54 @@ class EvidenceConfidence(str, Enum):
 
 class EvidenceState(str, Enum):
     OBSERVED = "OBSERVED"
+    EMPIRICALLY_VERIFIED = "EMPIRICALLY_VERIFIED"
+    VERIFIED = "VERIFIED"
+    SAMPLE_VERIFIED = "SAMPLE_VERIFIED"
+    ACCOUNTED_FOR = "ACCOUNTED_FOR"
     INFERRED = "INFERRED"
     ESTIMATED = "ESTIMATED"
     UNAVAILABLE = "UNAVAILABLE"
+    DATA_UNAVAILABLE = "DATA_UNAVAILABLE"
+    NOT_TESTED = "NOT_TESTED"
+    NOT_APPLICABLE = "NOT_APPLICABLE"
+
+    @property
+    def is_empirically_verified(self) -> bool:
+        return self in {
+            EvidenceState.OBSERVED,
+            EvidenceState.EMPIRICALLY_VERIFIED,
+            EvidenceState.VERIFIED,
+            EvidenceState.SAMPLE_VERIFIED,
+        }
+
+    @classmethod
+    def normalize(cls, val: object) -> "EvidenceState":
+        raw = str(getattr(val, "value", val) or "NOT_TESTED").strip().upper()
+        mapping = {
+            "OBSERVED": cls.OBSERVED,
+            "MEASURED": cls.EMPIRICALLY_VERIFIED,
+            "LIVE_MEASURED": cls.EMPIRICALLY_VERIFIED,
+            "EMPIRICALLY_VERIFIED": cls.EMPIRICALLY_VERIFIED,
+            "VERIFIED": cls.VERIFIED,
+            "PASSED": cls.VERIFIED,
+            "FAILED": cls.VERIFIED,
+            "SAMPLED": cls.SAMPLE_VERIFIED,
+            "SAMPLE_VERIFIED": cls.SAMPLE_VERIFIED,
+            "ACCOUNTED_FOR": cls.ACCOUNTED_FOR,
+            "INFERRED": cls.INFERRED,
+            "SIMULATED": cls.INFERRED,
+            "SIMULATION_ONLY": cls.INFERRED,
+            "ESTIMATED": cls.ESTIMATED,
+            "UNAVAILABLE": cls.DATA_UNAVAILABLE,
+            "DATA_UNAVAILABLE": cls.DATA_UNAVAILABLE,
+            "NOT_CONNECTED": cls.DATA_UNAVAILABLE,
+            "NOT_CONFIGURED": cls.NOT_TESTED,
+            "NOT_TESTED": cls.NOT_TESTED,
+            "NOT_EXECUTED": cls.NOT_TESTED,
+            "NOT_MEASURED": cls.NOT_TESTED,
+            "NOT_APPLICABLE": cls.NOT_APPLICABLE,
+        }
+        return mapping.get(raw, cls.NOT_TESTED)
 
 
 class EvidenceClass(str, Enum):
@@ -433,14 +478,20 @@ class AiVisibilityStatus(str, Enum):
 # GEO DIMENSION KEYS — indexes into GeoReadinessReport.dimension_scores
 # ---------------------------------------------------------------------------
 class GeoDimensionKey(str, Enum):
-    ENTITY_CLARITY          = "entity_clarity"
-    ANSWERABILITY           = "answerability"
-    CONTENT_EXTRACTABILITY  = "content_extractability"
-    CITATION_READINESS      = "citation_readiness"
-    RETRIEVAL_ACCESSIBILITY = "retrieval_accessibility"
-    FACTUAL_GROUNDING       = "factual_grounding"
-    EXTERNAL_AUTHORITY      = "external_authority"
-    AI_ENGINE_VISIBILITY    = "ai_engine_visibility"
+    ENTITY_CLARITY           = "entity_clarity"
+    ANSWERABILITY            = "answerability"
+    CONTENT_EXTRACTABILITY   = "content_extractability"
+    STRUCTURED_DATA          = "structured_data"
+    STRUCTURED_DATA_QUALITY  = "structured_data_quality"
+    CITATION_READINESS       = "citation_readiness"
+    SOURCE_CORROBORATION     = "source_corroboration"
+    RETRIEVAL_ACCESSIBILITY  = "retrieval_accessibility"
+    AI_CRAWLER_ACCESSIBILITY = "ai_crawler_accessibility"
+    FACTUAL_GROUNDING        = "factual_grounding"
+    FACTUAL_CONSISTENCY      = "factual_consistency"
+    EXTERNAL_AUTHORITY       = "external_authority"
+    AI_ENGINE_VISIBILITY     = "ai_engine_visibility"
+    LIVE_AI_CITATIONS        = "live_ai_citations"
 
 
 class AnalysisStage(str, Enum):
@@ -615,10 +666,16 @@ class ImpactLevel(str, Enum):
 
 class FindingStatus(str, Enum):
     OPEN = "OPEN"
+    TRIAGED = "TRIAGED"
+    APPROVED = "APPROVED"
     IN_PROGRESS = "IN_PROGRESS"
+    READY_FOR_RETEST = "READY_FOR_RETEST"
+    RETEST_FAILED = "RETEST_FAILED"
     FIXED = "FIXED"               # Code deployed by developer
     VERIFIED = "VERIFIED"         # Confirmed resolved by re-crawl / automated retest
     VERIFIED_FIXED = "VERIFIED_FIXED"
+    REOPENED = "REOPENED"
+    WONT_FIX = "WONT_FIX"
     UNRESOLVED = "UNRESOLVED"
     NOT_APPLICABLE = "NOT_APPLICABLE"
     NOT_TESTED = "NOT_TESTED"
@@ -628,20 +685,21 @@ class FindingStatus(str, Enum):
 
 class DiagnosticStatus(str, Enum):
     """
-    Controlled 6-state status model for audit checks and diagnostic inventory:
-    - PASSED: The test ran and the condition was verified satisfied.
-    - FAILED: The test ran and a defect was observed with evidence.
-    - NOT_TESTED: No test was performed during this audit execution.
-    - UNAVAILABLE: Required data, integration (GSC/GA4/PageSpeed), or access was unavailable.
-    - INFERRED: A conclusion was inferred rather than directly measured.
-    - SAMPLED: Only part of the relevant scope was inspected.
+    Canonical explicit result states for audit checks and diagnostic inventory.
     """
     PASSED = "PASSED"
     FAILED = "FAILED"
-    NOT_TESTED = "NOT_TESTED"
-    UNAVAILABLE = "UNAVAILABLE"
+    VERIFIED = "VERIFIED"
+    MEASURED = "MEASURED"
     INFERRED = "INFERRED"
     SAMPLED = "SAMPLED"
+    SAMPLE_VERIFIED = "SAMPLE_VERIFIED"
+    NOT_TESTED = "NOT_TESTED"
+    NOT_CONFIGURED = "NOT_CONFIGURED"
+    UNAVAILABLE = "UNAVAILABLE"
+    SIMULATION_ONLY = "SIMULATION_ONLY"
+    CONFLICTED = "CONFLICTED"
+    STALE = "STALE"
 
 
 

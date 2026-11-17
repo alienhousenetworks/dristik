@@ -261,6 +261,10 @@ def analyze_local_seo(
     home_url = pages[0].url if pages else f"https://{target_domain}"
 
     if is_local_intent and phone_conflicts and len(phone_conflicts) > 1:
+        conflict_urls = list(dict.fromkeys(
+            u for p_conf in phone_conflicts for u in (p_conf.get("pages") or [])
+            if isinstance(u, str) and u.strip() and not u.startswith("schema:")
+        )) or [home_url]
         findings.append(
             Finding(
                 finding_id="local_seo_nap_phone_conflict",
@@ -272,14 +276,18 @@ def analyze_local_seo(
                 category=Category.TECHNICAL_SEO,
                 severity=Severity.HIGH,
                 confidence=0.95,
-                rubric_confidence=RubricConfidence.VERIFIED,
+                confidence_rubric=RubricConfidence.VERIFIED,
                 evidence_class=EvidenceClass.OBSERVED,
+                affected_urls=conflict_urls,
+                affected_url_count=len(conflict_urls),
                 evidence=[
                     FindingEvidence(
                         source="crawler_nap_extractor",
-                        detail=f"Found {len(phone_conflicts)} phone variants: {', '.join(p['phone'] for p in phone_conflicts[:3])}",
-                        url=home_url,
+                        value=f"Found {len(phone_conflicts)} phone variants: {', '.join(p['phone'] for p in phone_conflicts[:3])}",
+                        snippet=f"Found {len(phone_conflicts)} phone variants: {', '.join(p['phone'] for p in phone_conflicts[:3])}",
+                        url=u,
                     )
+                    for u in conflict_urls
                 ],
                 recommendation=(
                     "Standardize a single authoritative phone number across your website header, footer, contact page, "
@@ -300,12 +308,15 @@ def analyze_local_seo(
                 category=Category.TRUST_AUTHORITY,
                 severity=Severity.MEDIUM,
                 confidence=0.90,
-                rubric_confidence=RubricConfidence.VERIFIED,
+                confidence_rubric=RubricConfidence.VERIFIED,
                 evidence_class=EvidenceClass.OBSERVED,
+                affected_urls=[home_url],
+                affected_url_count=1,
                 evidence=[
                     FindingEvidence(
                         source="crawler_nap_extractor",
-                        detail="Checked footer, contact, and header links across crawled pages. Found 0 GBP or Maps embeds.",
+                        value="0 GBP or Maps embeds",
+                        snippet="Checked footer, contact, and header links across crawled pages. Found 0 GBP or Maps embeds.",
                         url=home_url,
                     )
                 ],
@@ -318,6 +329,7 @@ def analyze_local_seo(
     if local_landing_pages:
         failing_locals = [lp for lp in local_landing_pages if lp.status in ("CRITICAL", "INCOMPLETE")]
         if failing_locals:
+            failing_urls = [lp.url for lp in failing_locals if lp.url]
             findings.append(
                 Finding(
                     finding_id="local_seo_incomplete_landing_pages",
@@ -329,14 +341,18 @@ def analyze_local_seo(
                     category=Category.TECHNICAL_SEO,
                     severity=Severity.HIGH,
                     confidence=0.95,
-                    rubric_confidence=RubricConfidence.VERIFIED,
+                    confidence_rubric=RubricConfidence.VERIFIED,
                     evidence_class=EvidenceClass.OBSERVED,
+                    affected_urls=failing_urls,
+                    affected_url_count=len(failing_urls),
                     evidence=[
                         FindingEvidence(
                             source="crawler_local_landing_audit",
-                            detail=f"Incomplete landing pages: {', '.join(lp.url for lp in failing_locals[:3])}",
-                            url=failing_locals[0].url,
+                            value=", ".join(lp.issues),
+                            snippet=f"Incomplete landing page ({lp.url}): {', '.join(lp.issues)}",
+                            url=lp.url,
                         )
+                        for lp in failing_locals
                     ],
                     recommendation=(
                         "For each localized landing page, implement distinct NAP coordinates, embedded local maps, customer reviews from that area, "

@@ -1587,6 +1587,25 @@ class ValidationGate:
             if ev_cnt == 0:
                 repairs_made.append(f"Quarantined unbacked finding {f.finding_id} ('{f.title}') from executive facts.")
             else:
+                aff_urls = [u for u in (getattr(f, "affected_urls", None) or []) if u]
+                if len(aff_urls) > 1:
+                    ev_urls = {getattr(ev, "url", None) for ev in (f.evidence or []) if getattr(ev, "url", None)}
+                    verified_url_cnt = max(len(ev_urls), min(ev_cnt, len(aff_urls)) if not ev_urls else len(ev_urls))
+                    if verified_url_cnt < len(aff_urls):
+                        f.scope = "SAMPLE_VERIFIED"
+                        f.scope_status = "SAMPLE_VERIFIED"
+                        f.scope_classification = "SAMPLE_VERIFIED"
+                        disclosure = (
+                            f"Sample verified on {verified_url_cnt} of {len(aff_urls)} affected URLs; "
+                            "remaining URLs extrapolated from shared template/pattern."
+                        )
+                        existing_lim = str(getattr(f, "limitations", None) or "").strip()
+                        if "sample verified on" not in existing_lim.lower():
+                            f.limitations = f"{existing_lim} {disclosure}".strip() if existing_lim else disclosure
+                            f.data_limitations = f.limitations
+                            repairs_made.append(
+                                f"Marked finding {f.finding_id} as SAMPLE_VERIFIED ({verified_url_cnt}/{len(aff_urls)} URLs backed by direct evidence)."
+                            )
                 clean_ev_findings.append(f)
         report.findings = clean_ev_findings
 

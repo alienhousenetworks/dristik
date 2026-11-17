@@ -289,18 +289,28 @@ class SpecialistAuditorAgent:
         if verification_method:
             steps.append(f"Execute inspection method: {verification_method}")
 
-        if self.domain == "CANONICAL":
+        title_l = f"{title} {acceptance_criteria or ''}".lower()
+        if any(k in title_l for k in ("local", "google maps", "map embed", "nap", "gbp", "google business profile", "location page")):
+            steps.append('Inspect rendered DOM for <iframe src*="google.com/maps">, valid LocalBusiness JSON-LD address/telephone properties, and consistent NAP across location pages.')
+            steps.append("Confirm Google Business Profile links and local citations match the canonical business name, address, and telephone.")
+        elif any(k in title_l for k in ("mobile", "viewport", "touch target", "tap target", "horizontal overflow")):
+            steps.append('Inspect <head> for <meta name="viewport" content="width=device-width, initial-scale=1">.')
+            steps.append("Emulate a 375px mobile viewport and verify tap-target spacing >= 48x48px with zero horizontal overflow.")
+        elif self.domain == "CANONICAL":
             steps.append("Inspect page source and verify the <link rel='canonical'> href matches the authoritative self-referencing URL.")
             steps.append("Confirm the canonical URL returns an HTTP 200 status code without secondary redirect hops.")
         elif self.domain == "REDIRECT":
             steps.append("Make a direct HTTP request to the target URL and verify it responds with HTTP 200 OK or a single 301 hop.")
             steps.append("Verify no infinite loops or intermediate 302 temporary redirects occur.")
-        elif self.domain == "SPEED":
-            steps.append("Run server latency benchmarks across 5 consecutive requests to verify TTFB remains under 600ms.")
-            steps.append("Audit server response caching rules and CDN edge configuration.")
-        elif self.domain == "SCHEMA":
-            steps.append("Validate the updated structured data markup using the Schema.org / Google Rich Results validator.")
-            steps.append("Ensure zero syntax errors and verify all mandatory entity properties are present.")
+        elif self.domain == "SPEED" or any(k in title_l for k in ("ttfb", "lcp", "inp", "cls", "compression", "brotli", "gzip", "core web vital")):
+            steps.append("Verify response headers include Content-Encoding: br|gzip and origin TTFB remains < 800ms across 5 consecutive requests.")
+            steps.append("Confirm Core Web Vitals meet thresholds: LCP <= 2.5s, INP <= 200ms, and CLS <= 0.1.")
+        elif self.domain == "SCHEMA" or any(k in title_l for k in ("schema", "json-ld", "structured data", "@id")):
+            steps.append("Validate JSON-LD syntax, required Rich Result properties, and @id entity graph resolution using the Schema.org / Google Rich Results validator.")
+            steps.append("Ensure zero syntax errors and verify Organization, WebSite, WebPage, and Product/Service @id references resolve.")
+        elif any(k in title_l for k in ("backlink", "referring domain", "off-page", "external authority")):
+            steps.append("Verify referring domain link attributes (dofollow vs rel='nofollow'/'sponsored'), anchor text diversity, and target URL 200 resolution.")
+            steps.append("Confirm linked destination pages resolve directly without redirect chains or 404 errors.")
         elif self.domain == "CONTENT" and ("heading" in title.lower() or "h1" in title.lower()):
             steps.append("Inspect the rendered HTML document outline and verify exactly one unique <h1> element exists.")
             steps.append("Ensure subsequent section headers follow a logical <h2> and <h3> hierarchy.")
@@ -776,24 +786,45 @@ class PlainEnglishEngine:
         # Testable Acceptance Criteria
         raw_acceptance = cls._clean_internal_text(_get_val(finding, "acceptance_criteria") or _get_val(finding, "validation_criteria"))
         title_l = str(title).lower()
-        if raw_acceptance and "with zero " not in raw_acceptance and "according to standard" not in raw_acceptance:
+        blob_l = f"{title} {category} {subcategory} {recommended_action} {observed_result}".lower()
+        is_generic_http200 = bool(
+            raw_acceptance
+            and "endpoint resolves with http 200" in raw_acceptance.lower()
+            and not any(k in blob_l for k in ("404", "500", "redirect", "broken link", "status code", "canonical"))
+        )
+        if (
+            raw_acceptance
+            and not is_generic_http200
+            and "with zero " not in raw_acceptance
+            and "according to standard" not in raw_acceptance
+        ):
             acceptance_val = raw_acceptance
+        elif any(k in blob_l for k in ["local seo", "localbusiness", "google maps", "map embed", "nap ", "nap consistency", "google business profile", "gbp", "location page", "local citation", "physical address", "storefront"]):
+            acceptance_val = 'Verify <iframe src*="google.com/maps"> embed, LocalBusiness JSON-LD address and telephone properties, and 100% NAP consistency across location pages.'
+        elif any(k in blob_l for k in ["mobile", "viewport", "touch target", "tap target", "responsive", "horizontal overflow", "horizontal scroll"]):
+            acceptance_val = 'Verify <meta name="viewport" content="width=device-width, initial-scale=1"> and mobile tap-target spacing >= 48x48px with zero horizontal overflow at 375px width.'
+        elif any(k in blob_l for k in ["ttfb", "lcp", "inp", "cls", "core web vital", "cwv", "compression", "brotli", "gzip", "server response", "latency", "page speed", "render-blocking"]):
+            acceptance_val = "Verify Content-Encoding: br|gzip, origin TTFB < 800ms, LCP <= 2.5s, INP <= 200ms, and CLS <= 0.1."
+        elif any(k in blob_l for k in ["backlink", "referring domain", "off-page", "link attribute", "anchor text diversity", "domain authority", "external authority"]):
+            acceptance_val = "Verify referring domain link attributes, anchor text diversity, and target URL 200 resolution."
+        elif any(k in blob_l for k in ["schema", "json-ld", "structured data", "rich result", "@id", "entity graph"]):
+            acceptance_val = "Validate JSON-LD syntax, required Rich Result properties, and @id entity graph resolution in Google Rich Results Test with zero syntax errors."
         elif any(k in title_l for k in ["meta description", "meta desc", "description"]):
             acceptance_val = "All applicable indexable pages declare a non-empty, unique meta description within length policy (50–160 characters)."
         elif any(k in title_l for k in ["alt", "image"]):
             acceptance_val = "All informative <img> elements declare descriptive alt text; decorative images correctly declare alt=\"\"."
         elif any(k in title_l for k in ["canonical", "rel=canonical"]):
             acceptance_val = "Target page declares a valid self-referential or intended rel=canonical URL that resolves with HTTP 200."
-        elif any(k in title_l for k in ["schema", "json-ld", "structured data"]):
-            acceptance_val = "Target page includes a valid JSON-LD entity conforming to schema.org standards with zero syntax errors in Google Rich Results Test."
         elif any(k in title_l for k in ["cta", "call to action", "call-to-action", "custom build"]):
             acceptance_val = "CTA text and target destination are clear, unique, and align with page-specific conversion intent."
         elif any(k in title_l for k in ["h1", "heading"]):
             acceptance_val = "Each page contains a single clear H1 tag accurately communicating the primary service or topic."
         elif any(k in title_l for k in ["hsts", "strict-transport-security"]):
             acceptance_val = "Strict-Transport-Security header is served over HTTPS with max-age >= 31536000 and includeSubDomains."
+        elif any(k in blob_l for k in ["aeo", "geo", "answer engine", "extractability", "citation", "llms.txt", "gptbot", "perplexitybot"]):
+            acceptance_val = "Verify self-contained 40-60 word answer passage is present in server-rendered HTML and accessible to AI crawlers."
         else:
-            acceptance_val = f"Endpoint resolves with HTTP 200 and passes automated {category} compliance validation."
+            acceptance_val = f"Verify affected template markup or configuration satisfies {category} specification on re-crawl."
 
         # Verification steps
         ver_steps = _get_val(finding, "verification_steps")
@@ -840,21 +871,6 @@ class PlainEnglishEngine:
                 "observation": str(e_obs),
                 "scope": str(e_scope),
                 "timestamp": str(e_ts),
-            })
-
-        if not evidence_list:
-            evidence_list.append({
-                "id": f"EV-{raw_id}-01",
-                "url": str(affected_urls[0] if affected_urls else ""),
-                "element": str(agent.domain.lower()),
-                "observed_value": str(observed_result),
-                "expected_condition": str(acceptance_val),
-                "test_method": "deterministic_inspection",
-                "snippet": str(observed_result)[:120],
-                "source": "crawl_inspection",
-                "observation": str(observed_result),
-                "scope": scope_status,
-                "timestamp": "Audit crawl execution",
             })
 
         # Confidence & Limitations
@@ -985,6 +1001,7 @@ class PlainEnglishEngine:
             "expected_outcome": str(expected_outcome),
             "root_cause": str(root_cause_val) if root_cause_val else None,
             "acceptance_criteria": str(acceptance_val),
+            "validation_criteria": str(acceptance_val),
             "verification_command": str(verification_cmd),
             "responsible_role": str(responsible_role),
             "estimated_effort": str(estimated_effort),

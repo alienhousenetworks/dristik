@@ -467,11 +467,28 @@ from app.report_finding_registry import (
 )
 
 
+# Finding IDs whose full card was already rendered in the current book (reset per build).
+_DETAILED_CARDS_RENDERED: set = set()
+
+
 def _format_finding_cards(findings: List[Any], limit: int = 8, detailed: bool = False) -> str:
     """Use short chapter references; reserve full plain-English narratives for the findings register."""
     cards = []
     for idx, finding in enumerate(findings[:limit]):
         if detailed:
+            fid = str(_finding_value(finding, "finding_id", _finding_value(finding, "id", "")) or "")
+            if fid and fid in _DETAILED_CARDS_RENDERED:
+                # Full card already printed in an earlier chapter: reference it instead of repeating it.
+                title = _esc(_finding_value(finding, "title", "Finding"))
+                cards.append(
+                    '<div class="card finding-reference" style="margin:6px 0;padding:9px 12px;break-inside:avoid;">'
+                    f'<div style="font-size:9pt;font-weight:700;color:#0f172a;">{title}</div>'
+                    f'<div style="font-size:7.5pt;color:#64748b;margin-top:3px;">{_esc(fid)} · full detail appears in an earlier chapter and the findings register</div>'
+                    '</div>'
+                )
+                continue
+            if fid:
+                _DETAILED_CARDS_RENDERED.add(fid)
             enriched = PlainEnglishEngine.enrich_finding(finding, idx + 1)
             cards.append(render_plain_english_finding_card(enriched))
             continue
@@ -762,8 +779,8 @@ def _build_ch_geo(report: Any, manifest: Dict[str, Any]) -> str:
                 summary = str(getattr(found_dim, "summary", fallback_desc))
                 score_num = getattr(found_dim, "score", None)
             else:
-                band = ("PASS" if score_ext >= 75 else "MODERATE") if score_ext is not None else "NOT MEASURED"
-                summary = fallback_desc if score_ext is not None else "Dimension not individually scored in this run."
+                band = "NOT MEASURED"
+                summary = "Dimension not individually scored in this run; the aggregate score is not used to infer a per-dimension result."
                 score_num = score_ext
 
         band_color = "#10b981" if band in ("HIGH", "PASS") else ("#f59e0b" if band in ("PARTIAL", "MODERATE") else ("#64748b" if band == "NOT MEASURED" else "#ef4444"))
@@ -1557,8 +1574,8 @@ def _build_ch_geo_extractability(report: Any, manifest: Dict[str, Any]) -> str:
                 band = str(getattr(found_dim, "band", "MODERATE")).upper()
                 summary = str(getattr(found_dim, "summary", fallback_desc))
             else:
-                band = ("PASS" if score_ext >= 75 else "MODERATE") if score_ext is not None else "NOT MEASURED"
-                summary = fallback_desc if score_ext is not None else "Dimension not individually scored in this run."
+                band = "NOT MEASURED"
+                summary = "Dimension not individually scored in this run; the aggregate score is not used to infer a per-dimension result."
 
         band_color = "#15803d" if band in ("HIGH", "PASS") else ("#b45309" if band in ("PARTIAL", "MODERATE") else ("#64748b" if band == "NOT MEASURED" else "#b91c1c"))
         score_badge = f'<span style="font-family:monospace;font-size:7.5pt;font-weight:700;color:{band_color};border:1px solid {band_color}40;padding:2px 6px;border-radius:2px;background:{band_color}10;">{band}</span>'
@@ -2232,6 +2249,7 @@ def build_adaptive_publication_document(
     """
     Transforms an ExecutiveReport into a fully articulated, publication-grade PublicationDocument.
     """
+    _DETAILED_CARDS_RENDERED.clear()
     family = detect_report_family(report, report_type)
     manifest = build_publication_manifest(
         report,

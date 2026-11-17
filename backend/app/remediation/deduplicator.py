@@ -11,7 +11,7 @@ Guarantees:
 """
 import re
 from typing import List, Dict, Any, Tuple, Optional
-from app.domain.models import Finding, FindingCalibratedImpact, FindingEvidence, SubObservation
+from app.domain.models import Finding, FindingCalibratedImpact, FindingEvidence, RootCauseLink, SubObservation
 from app.domain.enums import Severity, ImpactLevel, FindingClassification, Category
 
 
@@ -268,19 +268,44 @@ class FindingDeduplicator:
                 continue
 
             group = cluster_buckets[c_id]
+            rc_id = c_id if str(c_id).startswith("RC_") else f"RC_{c_id}"
             # Build detailed sub-observations from all members
             detailed_obs: List[SubObservation] = []
             sub_obs_titles: List[str] = []
             merged_evidence: List[FindingEvidence] = []
             seen_ev_selectors = set()
             surfaces: List[Dict[str, Any]] = []
+            merged_urls: List[str] = []
+            linked_consequences: List[Dict[str, Any]] = []
 
             for f in group:
+                f.sync_evidence_ids_and_refs()
                 sub_obs_titles.append(f.title)
+                for u in (f.affected_urls or []):
+                    if isinstance(u, str) and u.strip() and u.strip() not in merged_urls:
+                        merged_urls.append(u.strip())
+                for ev_u_item in (f.evidence or []):
+                    ev_u = getattr(ev_u_item, "url", None)
+                    if isinstance(ev_u, str) and ev_u.strip() and ev_u.strip() not in merged_urls:
+                        merged_urls.append(ev_u.strip())
+
+                for existing_lc in (getattr(f, "linked_consequences", None) or []):
+                    if isinstance(existing_lc, dict) and existing_lc not in linked_consequences:
+                        linked_consequences.append(existing_lc)
+                cat_str = f.category.value if hasattr(f.category, "value") else str(f.category)
+                linked_consequences.append({
+                    "finding_id": f.finding_id,
+                    "category": cat_str,
+                    "discipline": cat_str,
+                    "title": f.title,
+                    "consequence": f.why_it_matters or f.business_impact or f.description or f.title,
+                    "affected_urls": list(f.affected_urls or []),
+                })
+
                 primary_ev = f.evidence[0] if (f.evidence and len(f.evidence) > 0) else None
                 sel = primary_ev.selector if primary_ev and primary_ev.selector else (primary_ev.element if primary_ev else None)
                 snip = (primary_ev.snippet or primary_ev.value) if primary_ev else None
-                url = primary_ev.url if primary_ev else None
+                url = primary_ev.url if primary_ev else (f.affected_urls[0] if f.affected_urls else None)
 
                 detailed_obs.append(
                     SubObservation(
@@ -313,10 +338,14 @@ class FindingDeduplicator:
             if len(group) == 1:
                 # Single observation matching cluster — preserve identity but standardize
                 f = group[0]
-                f.root_cause_id = c_id
+                f.root_cause_id = rc_id
                 f.classification = cluster_def["classification"]
                 f.sub_observations = sub_obs_titles
                 f.detailed_observations = detailed_obs
+                f.affected_urls = merged_urls
+                f.affected_url_count = len(merged_urls)
+                if not f.linked_consequences:
+                    f.linked_consequences = linked_consequences
                 if surfaces:
                     f.surfaces_affected = surfaces
                 if not f.calibrated_impact:
@@ -326,6 +355,7 @@ class FindingDeduplicator:
                         confidence=f.confidence,
                         is_blocking=False
                     )
+                f.sync_evidence_ids_and_refs()
                 deduplicated.append(f)
             else:
                 # Multiple redundant observations merged into canonical root-cause finding
@@ -336,6 +366,10 @@ class FindingDeduplicator:
                 best_priority = max((f.priority for f in group if f.priority is not None), default=7)
 
                 capped_evidence = merged_evidence[:8]
+                for ev_c in capped_evidence:
+                    ev_c_u = getattr(ev_c, "url", None)
+                    if isinstance(ev_c_u, str) and ev_c_u.strip() and ev_c_u.strip() not in merged_urls:
+                        merged_urls.append(ev_c_u.strip())
                 kept_ev_ids = {ev.evidence_id for ev in capped_evidence if getattr(ev, "evidence_id", None)}
                 all_ev_ids = {ev.evidence_id for f in group for ev in (f.evidence or []) if getattr(ev, "evidence_id", None)}
                 dropped_ev_ids = all_ev_ids - kept_ev_ids
@@ -348,7 +382,10 @@ class FindingDeduplicator:
                     category=cluster_def["category"],
                     severity=max_sev,
                     classification=cluster_def["classification"],
-                    root_cause_id=c_id,
+                    root_cause_id=rc_id,
+                    affected_urls=merged_urls,
+                    affected_url_count=len(merged_urls),
+                    linked_consequences=linked_consequences,
                     sub_observations=sub_obs_titles,
                     detailed_observations=detailed_obs,
                     surfaces_affected=surfaces,
@@ -357,6 +394,7 @@ class FindingDeduplicator:
                     recommendation=cluster_def["unified_recommendation"],
                     evidence=capped_evidence,
                     evidence_refs=merged_refs,
+                    evidence_ids=merged_refs,
                     confidence=max((f.confidence for f in group), default=0.90),
                     impact=best_impact,
                     priority=best_priority,
@@ -374,6 +412,7 @@ class FindingDeduplicator:
         # Step 3: Deduplicate remaining unclustered findings by title similarity
         seen_titles: Dict[str, Finding] = {}
         for f in unclustered:
+            f.sync_evidence_ids_and_refs()
             clean_title = re.sub(r"[^\w\s]", "", f.title.lower()).strip()
             # Normalize common prefixes/suffixes
             clean_title = re.sub(r"^(missing|lacks?|unclear|duplicate|weak)\s+", "", clean_title)
@@ -393,17 +432,36 @@ class FindingDeduplicator:
                         description=f.description or getattr(f, "finding", "") or f.title,
                         selector=primary_ev.selector if primary_ev and primary_ev.selector else (primary_ev.element if primary_ev else None),
                         snippet=(primary_ev.snippet or primary_ev.value) if primary_ev else None,
-                        url=primary_ev.url if primary_ev else None,
+                        url=primary_ev.url if primary_ev else (f.affected_urls[0] if f.affected_urls else None),
                         severity=f.severity,
                         category=f.category,
                         evidence_refs=f.evidence_refs or []
                     )
                 )
-                # Combine evidence tokens
+                # Combine affected_urls, evidence, and evidence_refs
+                for u in (f.affected_urls or []):
+                    if isinstance(u, str) and u.strip() and u.strip() not in existing.affected_urls:
+                        existing.affected_urls.append(u.strip())
+                for ev in comp_evs:
+                    if ev not in existing.evidence:
+                        existing.evidence.append(ev)
+                    if getattr(ev, "url", None) and ev.url.strip() not in existing.affected_urls:
+                        existing.affected_urls.append(ev.url.strip())
                 seen_refs = set(existing.evidence_refs)
                 for ref in (f.evidence_refs or []):
                     if ref not in seen_refs:
                         existing.evidence_refs.append(ref)
+                        seen_refs.add(ref)
+                cat_str = f.category.value if hasattr(f.category, "value") else str(f.category)
+                existing.linked_consequences.append({
+                    "finding_id": f.finding_id,
+                    "category": cat_str,
+                    "discipline": cat_str,
+                    "title": f.title,
+                    "consequence": f.why_it_matters or f.business_impact or f.description or f.title,
+                    "affected_urls": list(f.affected_urls or []),
+                })
+                existing.sync_evidence_ids_and_refs()
                 continue
 
             # Populate initial self-observation on unclustered finding
@@ -420,21 +478,27 @@ class FindingDeduplicator:
                         description=f.description or getattr(f, "finding", "") or f.title,
                         selector=primary_ev.selector if primary_ev and primary_ev.selector else (primary_ev.element if primary_ev else None),
                         snippet=(primary_ev.snippet or primary_ev.value) if primary_ev else None,
-                        url=primary_ev.url if primary_ev else None,
+                        url=primary_ev.url if primary_ev else (f.affected_urls[0] if f.affected_urls else None),
                         severity=f.severity,
                         category=f.category,
                         evidence_refs=f.evidence_refs or []
                     )
                 ]
+            f.sync_evidence_ids_and_refs()
 
             seen_titles[clean_title] = f
             deduplicated.append(f)
 
         from app.scoring.calibration import calibrate_finding
         for finding in deduplicated:
+            finding.sync_evidence_ids_and_refs()
             calibrate_finding(finding)
 
         return deduplicated
+
+    @classmethod
+    def build_root_cause_links(cls, findings: List[Finding]) -> List[RootCauseLink]:
+        return build_root_cause_links(findings)
 
     @classmethod
     def get_severity_breakdown(cls, findings: List[Finding]) -> Tuple[Dict[str, int], int]:
@@ -458,4 +522,86 @@ class FindingDeduplicator:
 
         total = sum(counts.values())
         return counts, total
+
+
+def build_root_cause_links(findings: List[Finding]) -> List[RootCauseLink]:
+    """
+    Constructs RootCauseLink objects linking canonical observations, affected URLs,
+    evidence IDs, and discipline-specific consequences across clustered findings.
+    """
+    if not findings:
+        return []
+
+    links_by_rc: Dict[str, RootCauseLink] = {}
+    for f in findings:
+        if hasattr(f, "sync_evidence_ids_and_refs"):
+            f.sync_evidence_ids_and_refs()
+        raw_rc = getattr(f, "root_cause_id", None)
+        if not raw_rc or " " in str(raw_rc):
+            title_desc = f"{f.title} {f.description}".lower()
+            matched = None
+            for cluster in ROOT_CAUSE_CLUSTERS:
+                if any(kw in title_desc for kw in cluster["keywords"]):
+                    matched = cluster["id"]
+                    break
+            raw_rc = matched or f"RC_{f.finding_id}"
+
+        rc_id = str(raw_rc) if str(raw_rc).startswith("RC_") else f"RC_{raw_rc}"
+        cat_val = f.category if isinstance(f.category, Category) else Category.TECHNICAL_SEO
+        cat_key = cat_val.value if hasattr(cat_val, "value") else str(cat_val)
+
+        if rc_id not in links_by_rc:
+            links_by_rc[rc_id] = RootCauseLink(
+                root_cause_id=rc_id,
+                canonical_observation=f.observed_result or f.description or f.title,
+                primary_category=cat_val,
+                affected_urls=[],
+                evidence_ids=[],
+                discipline_consequences={},
+                finding_ids=[],
+            )
+
+        link = links_by_rc[rc_id]
+        if f.finding_id and f.finding_id not in link.finding_ids:
+            link.finding_ids.append(f.finding_id)
+        for u in (f.affected_urls or []):
+            if u and u not in link.affected_urls:
+                link.affected_urls.append(u)
+        for eid in (f.evidence_ids or f.evidence_refs or []):
+            if eid and eid not in link.evidence_ids:
+                link.evidence_ids.append(eid)
+        link.discipline_consequences.setdefault(
+            cat_key,
+            f.why_it_matters or f.business_impact or f.description or f.title,
+        )
+
+        for lc in (getattr(f, "linked_consequences", None) or []):
+            if isinstance(lc, dict):
+                lc_cat = str(lc.get("discipline") or lc.get("category") or cat_key)
+                lc_cons = str(lc.get("consequence") or lc.get("title") or "")
+                if lc_cat and lc_cons:
+                    link.discipline_consequences.setdefault(lc_cat, lc_cons)
+                lc_fid = lc.get("finding_id")
+                if lc_fid and lc_fid not in link.finding_ids:
+                    link.finding_ids.append(str(lc_fid))
+                for u in (lc.get("affected_urls") or []):
+                    if u and u not in link.affected_urls:
+                        link.affected_urls.append(u)
+
+        for obs in (getattr(f, "detailed_observations", None) or []):
+            obs_cat = getattr(obs, "category", None)
+            obs_cat_key = obs_cat.value if hasattr(obs_cat, "value") else (str(obs_cat) if obs_cat else "")
+            if obs_cat_key:
+                link.discipline_consequences.setdefault(
+                    obs_cat_key,
+                    getattr(obs, "description", None) or getattr(obs, "title", ""),
+                )
+            obs_id = getattr(obs, "observation_id", None)
+            if obs_id and obs_id not in link.finding_ids:
+                link.finding_ids.append(obs_id)
+            obs_url = getattr(obs, "url", None)
+            if obs_url and obs_url not in link.affected_urls:
+                link.affected_urls.append(obs_url)
+
+    return list(links_by_rc.values())
 

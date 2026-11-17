@@ -4,6 +4,7 @@ Calculates true Bayesian multi-signal confidence from evidence quality, coverage
 cross-page consistency, model agreement, and contradiction penalties.
 """
 from typing import Dict, Any, List, Optional
+import math
 from pydantic import BaseModel, Field
 from app.domain.models import Claim, PageEvidence
 from app.evidence.store import EvidenceStore
@@ -46,14 +47,21 @@ class CalibratedConfidenceEngine:
         grounded_claims = sum(1 for c in claims if len(c.evidence_refs) > 0)
         grounding_ratio = grounded_claims / max(1, total_claims)
 
-        # 2. Sample coverage. Saturates at the deep-audit budget (default 5),
-        # which is sample confidence, not proof the whole site was rendered.
+        # 2. Sample coverage: blends deep-audit budget attainment with domain discovery coverage
+        # when index_url_count exceeds the sample target, so a 5/504 (1%) sample does not claim 100% coverage.
         crawled_count = len(pages)
         target = sample_target if sample_target and sample_target > 0 else 5
-        coverage_score = min(1.0, crawled_count / float(target)) if crawled_count > 0 else 0.0
+        budget_coverage = min(1.0, crawled_count / float(target)) if crawled_count > 0 else 0.0
         index_coverage = None
         if index_url_count and index_url_count > 0:
-            index_coverage = round(min(1.0, crawled_count / float(index_url_count)), 2)
+            raw_index_ratio = min(1.0, crawled_count / float(index_url_count)) if crawled_count > 0 else 0.0
+            index_coverage = round(raw_index_ratio, 2)
+            if index_url_count > target:
+                coverage_score = round((0.40 * budget_coverage) + (0.60 * math.sqrt(raw_index_ratio)), 4)
+            else:
+                coverage_score = raw_index_ratio
+        else:
+            coverage_score = budget_coverage
 
         # 3. Contradiction Penalty (CONTESTED DOM vs ext counts)
         from app.domain.enums import VerificationStatus, SourceIntegrityLabel
