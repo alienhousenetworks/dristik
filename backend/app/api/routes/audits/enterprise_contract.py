@@ -704,7 +704,8 @@ async def get_report_validation_gates(
     return {
         "audit_id": analysis_id,
         "is_valid": val_res.is_valid and qg_res.get("all_passed", False),
-        "certification_status": getattr(run.report, "certification_status", "CERTIFIED"),
+        "certification_status": getattr(run.report, "certification_status", "NOT_CERTIFIED") or "NOT_CERTIFIED",
+        "publication_status": getattr(run.report, "publication_status", "DRAFT") or "DRAFT",
         "three_stage_gates": {
             "gate_1_data_integrity": {
                 "passed": gate_1_passed,

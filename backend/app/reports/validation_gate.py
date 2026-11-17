@@ -16,7 +16,11 @@ from app.domain.models import (
     OverallScoreResult,
     CategoryScore,
 )
-from app.domain.enums import Severity, Category
+from app.domain.enums import Severity, Category, PublicationStatus
+try:
+    from app.core.config import settings
+except Exception:
+    settings = None
 
 
 BANNED_TERMS = [
@@ -1908,8 +1912,29 @@ class ValidationGate:
         has_gate_failure = any(g.get("status") == "FAIL" for g in gates_dict.values())
         has_gate_warning = any(g.get("status") == "WARNING" for g in gates_dict.values())
 
+        guard_enabled = bool(getattr(settings, "REPORT_PUBLICATION_GUARD", True)) if settings else True
+
+        # Check for unmeasured mandatory tests (e.g. CRO unmeasured interactions/forms)
+        unmeasured_reasons: List[str] = []
+        cro_rep = getattr(repaired_report, "cro_audit", None)
+        if cro_rep is not None:
+            intel = getattr(cro_rep, "intelligence", None)
+            form_rep = getattr(repaired_report, "form_audit", None)
+            if form_rep is None and (not intel or not (isinstance(intel, dict) and intel.get("sections"))):
+                unmeasured_reasons.append("CRO form and interactive browser testing unmeasured; cannot certify conversion readiness.")
+
+        blocking_reasons: List[str] = []
+        if not final_result.is_valid:
+            blocking_reasons.extend([f"Validation gate failed check: {c} - {final_result.failure_reasons.get(c, '')}" for c in final_result.failed_checks])
+        if has_gate_failure:
+            for gname, gdata in gates_dict.items():
+                if gdata.get("status") == "FAIL":
+                    blocking_reasons.append(f"Quality gate {gname} failed: {gdata.get('details', '')}")
+
         if not final_result.is_valid or has_gate_failure:
             repaired_report.certification_status = "QA_FAILED"
+            repaired_report.publication_status = PublicationStatus.BLOCKED
+            repaired_report.publication_blocking_reasons = blocking_reasons
             withheld = []
             for check in final_result.failed_checks:
                 sec = (
@@ -1924,9 +1949,113 @@ class ValidationGate:
                     "reason": f"Section withheld from formal certification due to unresolved gate check: {check}"
                 })
             repaired_report.withheld_sections = withheld
-        elif has_gate_warning:
+        elif guard_enabled and (has_gate_warning or unmeasured_reasons):
             repaired_report.certification_status = "PUBLISHED_WITH_LIMITATIONS"
+            repaired_report.publication_status = PublicationStatus.INTERNAL_REVIEW
+            repaired_report.publication_blocking_reasons = unmeasured_reasons or [
+                f"Gate warning on {gname}: {gdata.get('details', '')}" for gname, gdata in gates_dict.items() if gdata.get("status") == "WARNING"
+            ]
         else:
             repaired_report.certification_status = "CERTIFIED"
+            repaired_report.publication_status = PublicationStatus.READY_FOR_PUBLICATION
+            repaired_report.publication_blocking_reasons = []
 
         return repaired_report, final_result
+
+
+@dataclass
+class PublicationValidationReport:
+    is_publishable: bool
+    status: PublicationStatus
+    checks_passed: List[str] = field(default_factory=list)
+    checks_failed: List[str] = field(default_factory=list)
+    blocking_reasons: List[str] = field(default_factory=list)
+    warnings: List[str] = field(default_factory=list)
+
+
+class ReportPublicationValidator:
+    """Automated cross-deliverable publication QA and blocking gate."""
+
+    @classmethod
+    def validate_publication_bundle(
+        cls,
+        report: ExecutiveReport,
+        deliverable_manifests: Optional[Dict[str, Any]] = None,
+    ) -> PublicationValidationReport:
+        passed: List[str] = []
+        failed: List[str] = []
+        blocking: List[str] = []
+        warnings: List[str] = []
+
+        # 1. Run ID & Domain check
+        run_id = report.report_id or report.analysis_id or getattr(report, "audit_id", None)
+        if not run_id:
+            failed.append("run_id_check")
+            blocking.append("Report has missing or empty audit_run_id.")
+        else:
+            passed.append("run_id_check")
+
+        if not report.domain:
+            failed.append("domain_check")
+            blocking.append("Report has missing domain.")
+        else:
+            passed.append("domain_check")
+
+        # 2. Cross-deliverable Run ID parity
+        if deliverable_manifests:
+            for deliv_name, dmeta in deliverable_manifests.items():
+                d_run_id = dmeta.get("report_id") or dmeta.get("analysis_id") or dmeta.get("audit_id")
+                if d_run_id and d_run_id != run_id:
+                    failed.append(f"run_id_parity_{deliv_name}")
+                    blocking.append(f"Deliverable '{deliv_name}' has mismatched run_id: {d_run_id} vs canonical {run_id}.")
+                else:
+                    passed.append(f"run_id_parity_{deliv_name}")
+
+                d_score = dmeta.get("score") or dmeta.get("overall_score")
+                if d_score is not None and report.scores and abs(float(d_score) - float(report.scores.overall_score)) > 0.05:
+                    failed.append(f"score_parity_{deliv_name}")
+                    blocking.append(f"Deliverable '{deliv_name}' has conflicting overall score {d_score} vs {report.scores.overall_score}.")
+                elif d_score is not None:
+                    passed.append(f"score_parity_{deliv_name}")
+
+        # 3. CRO false assurance check
+        cro_rep = getattr(report, "cro_audit", None)
+        if cro_rep:
+            intel = getattr(cro_rep, "intelligence", None)
+            form_rep = getattr(report, "form_audit", None)
+            if form_rep is None and (not intel or not (isinstance(intel, dict) and intel.get("sections"))):
+                if report.certification_status == "CERTIFIED":
+                    failed.append("cro_assurance_check")
+                    blocking.append("CRO forms and browser interaction tests are unmeasured; report cannot be CERTIFIED.")
+                else:
+                    passed.append("cro_assurance_check")
+                    warnings.append("CRO forms/UX unmeasured - publication marked with limitations.")
+            else:
+                passed.append("cro_assurance_check")
+
+        # 4. Evidence reference completeness on verified defects
+        untraceable = [f.finding_id for f in (report.findings or []) if not (f.evidence or f.evidence_refs or f.evidence_ids or getattr(f, "raw_observation", None))]
+        if untraceable:
+            failed.append("evidence_traceability_check")
+            blocking.append(f"{len(untraceable)} findings lack backing evidence references: {untraceable[:3]}.")
+        else:
+            passed.append("evidence_traceability_check")
+
+        # 5. Schema contradiction check
+        schema_rep = getattr(report, "schema_validation", None)
+        if schema_rep:
+            passed.append("schema_consistency_check")
+
+        is_publishable = len(blocking) == 0
+        status = PublicationStatus.READY_FOR_PUBLICATION if is_publishable and not warnings else (
+            PublicationStatus.INTERNAL_REVIEW if is_publishable else PublicationStatus.BLOCKED
+        )
+
+        return PublicationValidationReport(
+            is_publishable=is_publishable,
+            status=status,
+            checks_passed=passed,
+            checks_failed=failed,
+            blocking_reasons=blocking,
+            warnings=warnings,
+        )

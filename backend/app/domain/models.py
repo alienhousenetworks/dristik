@@ -15,6 +15,7 @@ from app.domain.enums import (
     EvidenceConfidence,
     AnalysisStage,
     ClaimType,
+    PublicationStatus,
     ReleaseStatus,
     UserRole,
     DataResidency,
@@ -157,6 +158,10 @@ class RemediationPatch(BaseModel):
     assigned_at: Optional[str] = None
     due_date: Optional[str] = None
     retest_history: List[Dict[str, Any]] = Field(default_factory=list)
+
+    @property
+    def assigned_to(self) -> Optional[str]:
+        return self.assignee_id
 
 class Integration(BaseModel):
     integration_id: str
@@ -483,6 +488,8 @@ class Finding(BaseModel):
 
     # Industry-Standard SEO Diagnostic Specification Fields
     audit_id: Optional[str] = None
+    audit_run_id: Optional[str] = None
+    is_root_cause: bool = True
     finding_title: Optional[str] = None
     concise_summary: Optional[str] = None
     detailed_diagnosis: Optional[str] = None
@@ -881,6 +888,63 @@ class Finding(BaseModel):
             "materiality": self.materiality.value if hasattr(self.materiality, "value") else str(self.materiality),
             "source_agreement": int(self.source_agreement or 0),
         }
+
+    @property
+    def id(self) -> str:
+        return self.finding_id
+
+    @property
+    def recommended_fix(self) -> str:
+        return self.recommended_action or self.recommendation or ""
+
+
+class AuditFinding(BaseModel):
+    id: str
+    audit_run_id: str = ""
+    discipline: str = "SEO"
+    category: str = "TECHNICAL_SEO"
+    title: str
+    description: str = ""
+    severity: str = "HIGH"
+    confidence: str = "HIGH"
+    evidence_status: str = "OBSERVED"
+    verification_status: str = "OBSERVED"
+    affected_urls: List[str] = Field(default_factory=list)
+    evidence_ids: List[str] = Field(default_factory=list)
+    root_cause: Optional[str] = None
+    root_cause_confidence: Optional[str] = None
+    business_impact: Optional[str] = None
+    impact_basis: Optional[str] = "INFERRED"
+    recommended_fix: str = ""
+    owner: Optional[str] = "Engineering"
+    estimated_effort: Optional[str] = "MEDIUM"
+    acceptance_criteria: List[str] = Field(default_factory=list)
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+    model_config = ConfigDict(extra="ignore")
+
+    def to_finding(self) -> "Finding":
+        from app.domain.enums import Severity, Category
+        sev = getattr(Severity, self.severity.upper(), Severity.MEDIUM)
+        cat = getattr(Category, self.category.upper(), Category.TECHNICAL_SEO)
+        return Finding(
+            finding_id=self.id,
+            audit_run_id=self.audit_run_id,
+            audit_id=self.audit_run_id,
+            title=self.title,
+            description=self.description,
+            severity=sev,
+            category=cat,
+            affected_urls=self.affected_urls,
+            evidence_ids=self.evidence_ids,
+            recommendation=self.recommended_fix,
+            recommended_action=self.recommended_fix,
+            root_cause_id=self.root_cause,
+            business_impact=self.business_impact,
+            owner=self.owner,
+            validation_criteria="; ".join(self.acceptance_criteria) if self.acceptance_criteria else None,
+        )
+
 
 class ClaimEvidenceLink(BaseModel):
     link_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
@@ -1598,6 +1662,37 @@ class CategoryScore(BaseModel):
     status: str = "MEASURED" # "MEASURED" | "PARTIAL" | "NOT_MEASURED"
     provenance: Optional[str] = None
 
+class ScoreDefinition(BaseModel):
+    metric_id: str
+    name: str
+    discipline: str
+    version: str = "v5.1"
+    formula: str
+    weights: Dict[str, float] = Field(default_factory=dict)
+    direction: str = "HIGHER_IS_BETTER"
+    required_tests: List[str] = Field(default_factory=list)
+    minimum_coverage: Optional[float] = 0.60
+    missing_data_policy: str = "DISCLOSE_UNMEASURED_NO_PENALTY"
+
+    model_config = ConfigDict(extra="ignore")
+
+
+class ScoreResult(BaseModel):
+    id: str
+    audit_run_id: str
+    metric_id: str
+    score: Optional[float] = None  # None if unmeasured
+    status: str = "MEASURED"  # MEASURED | UNMEASURED | PARTIAL | NOT_CALCULATED
+    coverage: Optional[float] = 1.0
+    confidence: Optional[str] = "HIGH"
+    evidence_ids: List[str] = Field(default_factory=list)
+    formula_version: str = "v5.1"
+    exclusions: List[str] = Field(default_factory=list)
+    limitations: List[str] = Field(default_factory=list)
+
+    model_config = ConfigDict(extra="ignore")
+
+
 class OverallScoreResult(BaseModel):
     overall_score: float # 0 - 100
     overall_confidence: float = 0.90 # 0 - 1.00
@@ -1607,6 +1702,13 @@ class OverallScoreResult(BaseModel):
     category_scores: Dict[str, CategoryScore] = Field(default_factory=dict)
     intent_adjusted_weights: Dict[str, float] = Field(default_factory=dict)
     mathematical_derivation: List[Dict[str, Any]] = Field(default_factory=list)
+    website_geo_readiness_score: Optional[float] = None
+    observed_ai_visibility_score: Optional[float] = None
+    aeo_readiness_score: Optional[float] = None
+    cro_score: Optional[float] = None
+    business_impact_score: Optional[float] = None
+    formula_version: str = "dristik_central_scoring_v5.1"
+    score_results: Dict[str, ScoreResult] = Field(default_factory=dict)
 
 class RoadmapItem(BaseModel):
     timeframe: str # "7_days", "30_days", "90_days"
@@ -2540,6 +2642,14 @@ class SchemaValidationReport(BaseModel):
     detected_types: List[str] = Field(default_factory=list)
     issues: List[SchemaIssue] = Field(default_factory=list)
     summary: str = ""
+    json_ld_blocks: int = 0
+    microdata_blocks: int = 0
+    syntax_valid: bool = True
+    semantic_validation: str = "PASS"  # PASS | PARTIAL | FAIL | NOT_MEASURED
+    evidence_ids: List[str] = Field(default_factory=list)
+    canonical_inventory: Dict[str, Any] = Field(default_factory=dict)
+    has_explicit_organization_schema: bool = False
+    has_graph_organization_reference: bool = False
 
 class PerEngineAiScore(BaseModel):
     engine_name: str  # "ChatGPT / SearchGPT" | "Perplexity" | "Google AI Overviews" | "Claude / Gemini"
@@ -3084,6 +3194,8 @@ class ExecutiveReport(BaseModel):
     evidence_ledger: Dict[str, Dict[str, Any]] = Field(default_factory=dict)
     integrity_repairs_log: List[Dict[str, Any]] = Field(default_factory=list)
     certification_status: str = "NOT_ASSESSED"  # Set to CERTIFIED only after the configured integrity gate passes.
+    publication_status: PublicationStatus = PublicationStatus.DRAFT
+    publication_blocking_reasons: List[str] = Field(default_factory=list)
     withheld_sections: List[Dict[str, str]] = Field(default_factory=list)
     meta_rollup: Optional[MetaBucketRollup] = None
     heading_hierarchy: Optional[HeadingHierarchyRollup] = None
@@ -3160,6 +3272,22 @@ class AnalysisRequest(BaseModel):
     @classmethod
     def check_request_workspace_id(cls, v: Optional[str]) -> Optional[str]:
         return validate_tenant_workspace_id(v, required=False)
+
+class AuditRun(BaseModel):
+    id: str
+    tenant_id: str = "default_tenant"
+    domain: str
+    started_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    completed_at: Optional[datetime] = None
+    crawl_snapshot_id: str = ""
+    configuration_version: str = "2026.1"
+    agent_manifest_version: str = "v1"
+    evidence_registry_version: str = "v1"
+    status: str = "completed"
+    publication_status: PublicationStatus = PublicationStatus.DRAFT
+
+    model_config = ConfigDict(extra="ignore")
+
 
 class AnalysisRun(BaseModel):
     analysis_id: str

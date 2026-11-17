@@ -71,7 +71,8 @@ def _is_usable(ev: Optional[Evidence], ref: str) -> bool:
     if ev is None:
         return bool(ref)
     payload = _as_dict(ev.value)
-    status = str(payload.get("status") or (ev.metadata or {}).get("status") or "").upper()
+    meta = getattr(ev, "metadata", None) or {}
+    status = str(payload.get("status") or meta.get("status") or "").upper()
     if status in _STUB_STATUSES:
         return False
     return True
@@ -85,9 +86,9 @@ def _source_key(ref: str, ev: Optional[Evidence]) -> Optional[str]:
     if str(ref).startswith("ext_"):
         if ev is None:
             return "ext:unknown"
-        meta = ev.metadata or {}
-        payload = _as_dict(ev.value)
-        name = str(meta.get("source") or payload.get("source") or ev.analyzer or "external").lower()
+        meta = getattr(ev, "metadata", None) or {}
+        payload = _as_dict(getattr(ev, "value", None))
+        name = str(meta.get("source") or payload.get("source") or getattr(ev, "analyzer", None) or "external").lower()
         return f"ext:{name}"
     return f"other:{str(ref).split('_')[0]}"
 
@@ -95,16 +96,16 @@ def _source_key(ref: str, ev: Optional[Evidence]) -> Optional[str]:
 def _basis_of(ev: Optional[Evidence]) -> str:
     if ev is None:
         return ""
-    meta = ev.metadata or {}
-    payload = _as_dict(ev.value)
+    meta = getattr(ev, "metadata", None) or {}
+    payload = _as_dict(getattr(ev, "value", None))
     return str(meta.get("confidence_basis") or payload.get("confidence_basis") or "").lower()
 
 
 def _conflicts(ev: Optional[Evidence]) -> List[str]:
     if ev is None:
         return []
-    meta = ev.metadata or {}
-    payload = _as_dict(ev.value)
+    meta = getattr(ev, "metadata", None) or {}
+    payload = _as_dict(getattr(ev, "value", None))
     raw = meta.get("conflicts_with") or payload.get("conflicts_with") or []
     if isinstance(raw, str):
         return [raw]

@@ -295,7 +295,7 @@ class SpecialistAuditorAgent:
             steps.append("Confirm Google Business Profile links and local citations match the canonical business name, address, and telephone.")
         elif any(k in title_l for k in ("mobile", "viewport", "touch target", "tap target", "horizontal overflow")):
             steps.append('Inspect <head> for <meta name="viewport" content="width=device-width, initial-scale=1">.')
-            steps.append("Emulate a 375px mobile viewport and verify tap-target spacing >= 48x48px with zero horizontal overflow.")
+            steps.append("Emulate a 375px mobile viewport and verify tap-target spacing >= 48x48px without horizontal overflow.")
         elif self.domain == "CANONICAL":
             steps.append("Inspect page source and verify the <link rel='canonical'> href matches the authoritative self-referencing URL.")
             steps.append("Confirm the canonical URL returns an HTTP 200 status code without secondary redirect hops.")
@@ -799,24 +799,24 @@ class PlainEnglishEngine:
             and "according to standard" not in raw_acceptance
         ):
             acceptance_val = raw_acceptance
+        elif any(k in title_l for k in ["cta", "call to action", "call-to-action", "custom build"]):
+            acceptance_val = "CTA text and target destination are clear, unique, and align with page-specific conversion intent."
         elif any(k in blob_l for k in ["local seo", "localbusiness", "google maps", "map embed", "nap ", "nap consistency", "google business profile", "gbp", "location page", "local citation", "physical address", "storefront"]):
             acceptance_val = 'Verify <iframe src*="google.com/maps"> embed, LocalBusiness JSON-LD address and telephone properties, and 100% NAP consistency across location pages.'
         elif any(k in blob_l for k in ["mobile", "viewport", "touch target", "tap target", "responsive", "horizontal overflow", "horizontal scroll"]):
-            acceptance_val = 'Verify <meta name="viewport" content="width=device-width, initial-scale=1"> and mobile tap-target spacing >= 48x48px with zero horizontal overflow at 375px width.'
+            acceptance_val = 'Verify <meta name="viewport" content="width=device-width, initial-scale=1"> and mobile tap-target spacing >= 48x48px without horizontal overflow at 375px width.'
         elif any(k in blob_l for k in ["ttfb", "lcp", "inp", "cls", "core web vital", "cwv", "compression", "brotli", "gzip", "server response", "latency", "page speed", "render-blocking"]):
             acceptance_val = "Verify Content-Encoding: br|gzip, origin TTFB < 800ms, LCP <= 2.5s, INP <= 200ms, and CLS <= 0.1."
         elif any(k in blob_l for k in ["backlink", "referring domain", "off-page", "link attribute", "anchor text diversity", "domain authority", "external authority"]):
             acceptance_val = "Verify referring domain link attributes, anchor text diversity, and target URL 200 resolution."
         elif any(k in blob_l for k in ["schema", "json-ld", "structured data", "rich result", "@id", "entity graph"]):
-            acceptance_val = "Validate JSON-LD syntax, required Rich Result properties, and @id entity graph resolution in Google Rich Results Test with zero syntax errors."
+            acceptance_val = "Validate JSON-LD syntax, required Rich Result properties, and @id entity graph resolution in Google Rich Results Test without syntax errors."
         elif any(k in title_l for k in ["meta description", "meta desc", "description"]):
             acceptance_val = "All applicable indexable pages declare a non-empty, unique meta description within length policy (50–160 characters)."
         elif any(k in title_l for k in ["alt", "image"]):
             acceptance_val = "All informative <img> elements declare descriptive alt text; decorative images correctly declare alt=\"\"."
         elif any(k in title_l for k in ["canonical", "rel=canonical"]):
             acceptance_val = "Target page declares a valid self-referential or intended rel=canonical URL that resolves with HTTP 200."
-        elif any(k in title_l for k in ["cta", "call to action", "call-to-action", "custom build"]):
-            acceptance_val = "CTA text and target destination are clear, unique, and align with page-specific conversion intent."
         elif any(k in title_l for k in ["h1", "heading"]):
             acceptance_val = "Each page contains a single clear H1 tag accurately communicating the primary service or topic."
         elif any(k in title_l for k in ["hsts", "strict-transport-security"]):

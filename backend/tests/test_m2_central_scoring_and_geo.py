@@ -294,7 +294,8 @@ def test_calibrated_confidence_scales_with_domain_discovery_sample_coverage():
         index_url_count=50,
     )
 
-    assert res_sparse.evidence_coverage < 1.0
+    assert res_sparse.signals_breakdown["page_coverage"] < 1.0
+    assert res_sparse.index_coverage < 1.0
     assert res_full.evidence_coverage == 1.0
     assert res_sparse.confidence_score < res_full.confidence_score
 

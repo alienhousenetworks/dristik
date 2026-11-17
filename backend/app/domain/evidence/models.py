@@ -69,6 +69,37 @@ class Evidence(BaseModel):
         if isinstance(data, dict):
             if "evidence_id" in data and "id" not in data:
                 data["id"] = data["evidence_id"]
+            if "evidence_type" in data and "source_type" not in data:
+                data["source_type"] = data["evidence_type"]
+            if "source" in data and "source_reference" not in data:
+                data["source_reference"] = data["source"]
+            if "capture_method" in data and "collection_method" not in data:
+                data["collection_method"] = data["capture_method"]
+            if "content_hash" in data:
+                if not data.get("hash"):
+                    data["hash"] = data["content_hash"]
+                if not data.get("integrity_hash"):
+                    data["integrity_hash"] = data["content_hash"]
+            if "storage_uri" in data and "raw_snapshot_id" not in data:
+                data["raw_snapshot_id"] = data["storage_uri"]
+            if "test_status" in data and "collection_status" not in data:
+                ts = str(data["test_status"]).upper()
+                if ts in ("OBSERVED", "SUCCESS", "VERIFIED"):
+                    data["collection_status"] = CollectionStatus.SUCCESS
+                elif ts in ("NOT_TESTED", "NOT_RUN"):
+                    data["collection_status"] = CollectionStatus.NOT_TESTED
+                elif ts in ("UNAVAILABLE", "NOT_CONNECTED"):
+                    data["collection_status"] = CollectionStatus.UNAVAILABLE
+                elif ts in ("FAILED", "INVALID_EVIDENCE"):
+                    data["collection_status"] = CollectionStatus.FAILED
+                else:
+                    data["collection_status"] = CollectionStatus.SUCCESS
+            if "analyzer" not in data:
+                data["analyzer"] = data.get("capture_method") or "deterministic_scanner"
+            if "hash" not in data:
+                import hashlib
+                raw = str(data.get("raw_observation") or data.get("value") or data.get("url") or data.get("id"))
+                data["hash"] = hashlib.sha256(raw.encode("utf-8")).hexdigest()
             if not data.get("source_reference") and data.get("url"):
                 data["source_reference"] = data["url"]
             if not data.get("integrity_hash") and data.get("hash"):
@@ -80,6 +111,31 @@ class Evidence(BaseModel):
             if data.get("normalized_observation") is None:
                 data["normalized_observation"] = data.get("value") if data.get("value") is not None else data.get("text")
         return data
+
+    @property
+    def evidence_type(self) -> str:
+        return self.source_type
+
+    @property
+    def source(self) -> str:
+        return self.source_reference or self.url or ""
+
+    @property
+    def capture_method(self) -> str:
+        return self.collection_method or self.analyzer
+
+    @property
+    def content_hash(self) -> str:
+        return self.integrity_hash or self.hash or self.content_sha256
+
+    @property
+    def storage_uri(self) -> Optional[str]:
+        return self.raw_snapshot_id
+
+    @property
+    def test_status(self) -> str:
+        val = self.collection_status.value if hasattr(self.collection_status, "value") else str(self.collection_status)
+        return val.lower()
 
     @property
     def evidence_id(self) -> str:

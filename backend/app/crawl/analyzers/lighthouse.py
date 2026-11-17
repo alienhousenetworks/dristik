@@ -271,7 +271,7 @@ class LighthouseRunner:
         audit_version = (
             "MEASURED_W3C_PAINT_TIMING"
             if has_measured_cwv
-            else "ESTIMATED_FROM_TIMING (Not a measured Lighthouse run)"
+            else "ESTIMATED_FROM_TIMING (Not a Google Lighthouse run)"
         )
 
         return {
@@ -279,7 +279,7 @@ class LighthouseRunner:
             "lighthouse_accessibility_score": a11y_score,
             "lighthouse_best_practices_score": bp_score,
             "lighthouse_seo_score": seo_score,
-            "lcp_ms": round(lcp_observed_ms, 1) if lcp_observed_ms is not None else None,
+            "lcp_ms": round(lcp_observed_ms, 1) if lcp_observed_ms is not None else (round(lcp_for_score, 1) if dom_timing is None else None),
             "cls_score": round(cls_score, 3),
             "tbt_ms": round(tbt_ms, 1),
             "fcp_ms": round(fcp_ms, 1),

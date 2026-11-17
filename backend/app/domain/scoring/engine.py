@@ -700,9 +700,11 @@ class ScoringEngine:
                             failed = sample_size
                             status = "NOT_MEASURED"
                         elif (
-                            scope.measured_pages <= 0
-                            or (kwargs.get("pages") is not None and len(kwargs.get("pages")) == 0)
-                            or (manifest is not None and getattr(manifest, "pages", None) is not None and len(getattr(manifest, "pages")) == 0)
+                            (cat_enum in (Category.ON_PAGE_SEO, Category.CONTENT) and (
+                                (kwargs.get("pages") is not None and len(kwargs.get("pages")) == 0)
+                                or (manifest is not None and getattr(manifest, "pages", None) is not None and len(getattr(manifest, "pages")) == 0)
+                                or scope.measured_pages <= 0
+                            ))
                             or (cid in ("kg_wikidata_resolution", "bayesian_review_rating") and not external_authority_connected)
                         ):
                             # Unmatched checks with 0 crawled pages or unavailable external authority must NOT default to s=1.0
@@ -1276,14 +1278,19 @@ class ScoringEngine:
         if crawl_inventory is not None:
             tested_pages = int(
                 getattr(crawl_inventory, "tested_pages", 0)
+                or getattr(crawl_inventory, "total_pages_crawled", 0)
+                or len(getattr(crawl_inventory, "pages", []) or [])
                 or getattr(crawl_inventory, "analyzed_total", 0)
                 or (crawl_inventory.get("tested_pages", 0) if isinstance(crawl_inventory, dict) else 0)
+                or (crawl_inventory.get("total_pages_crawled", 0) if isinstance(crawl_inventory, dict) else 0)
                 or 0
             )
             discovered_total = int(
                 getattr(crawl_inventory, "discovered_total", 0)
+                or getattr(crawl_inventory, "total_pages_discovered", 0)
                 or getattr(crawl_inventory, "eligible_total", 0)
                 or (crawl_inventory.get("discovered_total", 0) if isinstance(crawl_inventory, dict) else 0)
+                or (crawl_inventory.get("total_pages_discovered", 0) if isinstance(crawl_inventory, dict) else 0)
                 or 0
             )
         if tested_pages <= 0:

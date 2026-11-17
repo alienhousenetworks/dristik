@@ -35,15 +35,24 @@ def get_canonical_crawl_inventory(
     if manifest is None and report is not None and getattr(report, "crawl_manifest", None) is not None:
         manifest = report.crawl_manifest
 
+    def _mget(obj: Any, key: str, default: Any = None) -> Any:
+        if obj is None:
+            return default
+        if isinstance(obj, dict):
+            return obj.get(key, default)
+        return getattr(obj, key, default)
+
     pages_crawled = 0
     if report and getattr(report, "page_reports", None):
         pages_crawled = len(report.page_reports)
-    elif manifest and getattr(manifest, "pages", None):
-        pages_crawled = len(manifest.pages)
+    elif manifest:
+        mpages = _mget(manifest, "pages")
+        if mpages and hasattr(mpages, "__len__"):
+            pages_crawled = len(mpages)
 
     crawl_inv_dict = {}
-    if manifest and getattr(manifest, "crawl_inventory", None):
-        ci = manifest.crawl_inventory
+    if manifest and _mget(manifest, "crawl_inventory"):
+        ci = _mget(manifest, "crawl_inventory")
         if not hasattr(ci, "_mock_return_value"):
             if isinstance(ci, dict):
                 crawl_inv_dict = ci
@@ -51,11 +60,11 @@ def get_canonical_crawl_inventory(
                 crawl_inv_dict = ci.model_dump()
 
     crawl_summary = getattr(report, "crawl_summary", {}) if report and isinstance(getattr(report, "crawl_summary", None), dict) else {}
-    crawl_budget = getattr(manifest, "crawl_budget", {}) if manifest and isinstance(getattr(manifest, "crawl_budget", None), dict) else {}
-    crawl_health = getattr(manifest, "crawl_health", {}) if manifest and isinstance(getattr(manifest, "crawl_health", None), dict) else {}
+    crawl_budget = _mget(manifest, "crawl_budget") if manifest and isinstance(_mget(manifest, "crawl_budget"), dict) else {}
+    crawl_health = _mget(manifest, "crawl_health") if manifest and isinstance(_mget(manifest, "crawl_health"), dict) else {}
 
     # Discovered total: check all candidate sources
-    raw_disc_urls = getattr(manifest, "discovered_urls", None) if manifest else None
+    raw_disc_urls = _mget(manifest, "discovered_urls") if manifest else None
     disc_urls_count = len(raw_disc_urls) if isinstance(raw_disc_urls, (list, set, tuple)) else 0
 
     disc_candidates = [
@@ -63,7 +72,7 @@ def get_canonical_crawl_inventory(
         crawl_inv_dict.get("total_unique_discovered"),
         crawl_budget.get("urls_discovered") if isinstance(crawl_budget, dict) else None,
         crawl_summary.get("total_pages_discovered") if isinstance(crawl_summary, dict) else None,
-        getattr(manifest, "total_pages_discovered", None),
+        _mget(manifest, "total_pages_discovered"),
         disc_urls_count,
         pages_crawled,
     ]
@@ -75,7 +84,7 @@ def get_canonical_crawl_inventory(
         crawl_inv_dict.get("total_crawled_tested"),
         crawl_budget.get("urls_crawled") if isinstance(crawl_budget, dict) else None,
         crawl_summary.get("total_pages_crawled") if isinstance(crawl_summary, dict) else None,
-        getattr(manifest, "total_pages_crawled", None),
+        _mget(manifest, "total_pages_crawled"),
         pages_crawled,
     ]
     tested_pages = max([int(x) for x in tested_candidates if isinstance(x, (int, float)) and not hasattr(x, "_mock_return_value")] or [pages_crawled])

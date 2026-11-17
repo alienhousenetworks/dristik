@@ -471,13 +471,13 @@ from app.report_finding_registry import (
 _DETAILED_CARDS_RENDERED: set = set()
 
 
-def _format_finding_cards(findings: List[Any], limit: int = 8, detailed: bool = False) -> str:
+def _format_finding_cards(findings: List[Any], limit: int = 8, detailed: bool = False, dedupe: bool = True) -> str:
     """Use short chapter references; reserve full plain-English narratives for the findings register."""
     cards = []
     for idx, finding in enumerate(findings[:limit]):
         if detailed:
             fid = str(_finding_value(finding, "finding_id", _finding_value(finding, "id", "")) or "")
-            if fid and fid in _DETAILED_CARDS_RENDERED:
+            if dedupe and fid and fid in _DETAILED_CARDS_RENDERED:
                 # Full card already printed in an earlier chapter: reference it instead of repeating it.
                 title = _esc(_finding_value(finding, "title", "Finding"))
                 cards.append(
@@ -1214,7 +1214,7 @@ def _build_ch_appendix(report: Any, manifest: Dict[str, Any]) -> str:
         <p style="font-size: 8pt; color: #475569; margin: 4px 0 10px 0;">
             Finding status and evidence coverage depend on the recorded source data; not every finding is necessarily independently verified.
         </p>
-        {_format_finding_cards(findings, limit=100, detailed=True)}
+        {_format_finding_cards(findings, limit=100, detailed=True, dedupe=False)}
     </div>
     """
 

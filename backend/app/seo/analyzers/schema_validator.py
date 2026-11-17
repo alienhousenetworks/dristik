@@ -529,13 +529,19 @@ def analyze_schema_rich_results(pages: List[PageEvidence]) -> SchemaValidationRe
     total_entities = 0
     entities_with_errors = 0
     entities_with_warnings = 0
+    json_ld_blocks_count = 0
+    has_explicit_org = False
+    has_graph_org = False
 
     for page in pages:
         schemas = page.raw_schema or []
+        json_ld_blocks_count += len(schemas)
         if not schemas and page.schema_types:
             total_pages_with_schema += 1
             for t in page.schema_types:
                 detected_types.add(t)
+                if t in ("Organization", "Corporation", "LocalBusiness"):
+                    has_explicit_org = True
             continue
 
         if schemas:
@@ -550,10 +556,23 @@ def analyze_schema_rich_results(pages: List[PageEvidence]) -> SchemaValidationRe
             if not isinstance(root_item, dict):
                 continue
 
+            root_type = _clean_type(root_item.get("@type"))
+            if root_type in ("Organization", "Corporation", "LocalBusiness"):
+                has_explicit_org = True
+
             # Flatten @graph items if present
-            candidates = [root_item]
+            candidates = []
             if "@graph" in root_item and isinstance(root_item["@graph"], list):
-                candidates.extend([g for g in root_item["@graph"] if isinstance(g, dict)])
+                for g in root_item["@graph"]:
+                    if isinstance(g, dict):
+                        candidates.append(g)
+                        gtype = _clean_type(g.get("@type"))
+                        if gtype in ("Organization", "Corporation", "LocalBusiness"):
+                            has_graph_org = True
+                if root_item.get("@type"):
+                    candidates.append(root_item)
+            else:
+                candidates.append(root_item)
 
             for entity in candidates:
                 stype = _clean_type(entity.get("@type"))
@@ -588,6 +607,17 @@ def analyze_schema_rich_results(pages: List[PageEvidence]) -> SchemaValidationRe
             "Rich-result syntax is not an entity-graph quality score."
         )
 
+    sem_val = "PASS" if (entities_with_errors == 0 and entities_with_warnings == 0) else ("PARTIAL" if entities_with_errors == 0 else "FAIL")
+    canon_inv = {
+        "detected_types": sorted(detected_types),
+        "json_ld_blocks": json_ld_blocks_count,
+        "syntax_valid": entities_with_errors == 0,
+        "semantic_validation": sem_val,
+        "evidence_ids": [f"ev_schema_{i+1:02d}" for i in range(min(5, len(all_issues)))],
+        "has_explicit_organization_schema": has_explicit_org,
+        "has_graph_organization_reference": has_graph_org,
+    }
+
     return SchemaValidationReport(
         total_pages_with_schema=total_pages_with_schema,
         total_entities_detected=total_entities,
@@ -597,4 +627,11 @@ def analyze_schema_rich_results(pages: List[PageEvidence]) -> SchemaValidationRe
         detected_types=sorted(detected_types),
         issues=all_issues,
         summary=summary,
+        json_ld_blocks=json_ld_blocks_count,
+        syntax_valid=entities_with_errors == 0,
+        semantic_validation=sem_val,
+        evidence_ids=canon_inv["evidence_ids"],
+        canonical_inventory=canon_inv,
+        has_explicit_organization_schema=has_explicit_org,
+        has_graph_organization_reference=has_graph_org,
     )

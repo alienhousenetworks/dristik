@@ -76,12 +76,17 @@ sys.modules["app.agents.seo"] = seo_agents
 sys.modules["app.agents.aeo"] = aeo_mod
 sys.modules["app.agents.cro"] = cro_mod
 
-_aeo_shim = types.ModuleType("app.agents.aeo.direct_answer_agent")
-_aeo_shim.DirectAnswerAgent = getattr(aeo_mod, "DirectAnswerAgent", None)
+class _LazyAeoShim(types.ModuleType):
+    def __getattr__(self, name: str):
+        if name == "DirectAnswerAgent":
+            from app.aeo.agents import DirectAnswerAgent
+            return DirectAnswerAgent
+        raise AttributeError(f"module {self.__name__!r} has no attribute {name!r}")
+
+_aeo_shim = _LazyAeoShim("app.agents.aeo.direct_answer_agent")
 sys.modules["app.agents.aeo.direct_answer_agent"] = _aeo_shim
 
-_aeo_canon_shim = types.ModuleType("app.agents.aeo.direct_answers")
-_aeo_canon_shim.DirectAnswerAgent = getattr(aeo_mod, "DirectAnswerAgent", None)
+_aeo_canon_shim = _LazyAeoShim("app.agents.aeo.direct_answers")
 sys.modules["app.agents.aeo.direct_answers"] = _aeo_canon_shim
 
 

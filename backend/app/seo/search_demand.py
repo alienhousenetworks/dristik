@@ -148,7 +148,7 @@ def build_search_demand(
     if measured_keywords:
         sources.append("dataforseo")
 
-    status = "MEASURED" if sources else "NOT_CONFIGURED"
+    status = "MEASURED" if sources else "NOT_CONNECTED"
     if status == "MEASURED":
         note = (
             "Query and rank rows from "
@@ -157,7 +157,8 @@ def build_search_demand(
         )
     else:
         note = (
-            "Search Console and DataForSEO keyword volume providers are NOT_CONFIGURED for this audit. "
+            "Search Console and DataForSEO keyword volume providers are NOT_CONNECTED for this audit; "
+            "query-level search volume advice is skipped. "
             "On-page topic clusters are extracted from crawled headings/titles; external search volume is unmeasured."
         )
 

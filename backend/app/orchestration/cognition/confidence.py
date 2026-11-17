@@ -112,7 +112,7 @@ class CalibratedConfidenceEngine:
 
         return ConfidenceResult(
             confidence_score=round(final_score, 2),
-            evidence_coverage=round(coverage_score, 2),
+            evidence_coverage=round(budget_coverage, 2),
             status=status,
             signals_breakdown={
                 "grounding_ratio": round(grounding_ratio, 2),

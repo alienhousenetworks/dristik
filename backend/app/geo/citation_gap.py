@@ -238,14 +238,14 @@ class GeoCitationGapEngine:
                     gaps.append(gap)
         else:
             # When live benchmark results or comparable competitors are absent, do NOT invent fabricated competitor citations.
-            # Fail closed with explicit UNTESTED status.
-            report_status = "UNTESTED"
+            # Fail closed with explicit NOT_EVALUATED status.
+            report_status = "NOT_EVALUATED"
             primary_bn = "Live AI citation benchmark not run for this domain. Citations require live engine evaluation."
             summary_remedies = ["Execute a live GEO benchmark to measure empirical AI answer engine citations and discover real gaps."]
 
         if benchmark_results:
             has_real_sources = any(bool(g.competitor_sources) for g in gaps) or target_citations > 0 or bool(comps)
-            report_status = "AVAILABLE" if has_real_sources else "UNTESTED"
+            report_status = "AVAILABLE" if has_real_sources else "NOT_EVALUATED"
             t_rate = round((target_citations / max(1, total_queries)) * 100, 1)
             c_rate = round((comp_citations / max(1, total_queries)) * 100, 1)
             primary_bn = "Absence of third-party verified directory profiles and missing structured JSON-LD entity graph."

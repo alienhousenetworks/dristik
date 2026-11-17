@@ -32,6 +32,7 @@ class CroReportGenerator:
         website_url: str = "",
         generated_at: str = "",
         analysis_id: str = "",
+        findings: Optional[list] = None,
     ) -> Dict[str, Any]:
         payload = intel.model_dump()
         payload["domain"] = domain
@@ -39,6 +40,17 @@ class CroReportGenerator:
         payload["generated_at"] = generated_at
         payload["analysis_id"] = analysis_id
         payload["chapters"] = intel.chapters
+        payload["findings"] = findings or []
+        payload["test_groups"] = {
+            "page_structure_dom": "DOM_CHECKED",
+            "mobile_viewport_ux": "NOT_TESTED",
+            "desktop_layout_ux": "NOT_TESTED",
+            "interactive_forms": "NOT_TESTED",
+            "conversion_analytics": "UNAVAILABLE",
+        }
+        payload["certification_status"] = "NOT_CERTIFIED"
+        payload["assurance_status"] = "EVALUATED_WITH_LIMITATIONS"
+        payload["certification_disclaimer"] = "Mandatory browser-level interaction and conversion analytics tests were unmeasured; this audit cannot provide certified conversion assurance."
         return payload
 
     def render_html_report(

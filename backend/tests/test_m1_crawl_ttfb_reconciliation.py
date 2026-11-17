@@ -145,7 +145,7 @@ def test_lighthouse_unmeasured_timing_does_not_fabricate_lcp_and_crux_aliases(mo
         dom_timing={"ttfb_ms": 250.0, "download_ms": 40.0},
     )
     assert res["lcp_ms"] is None
-    assert res["lighthouse_audit_version"] == "ESTIMATED_FROM_TIMING (Not a measured Lighthouse run)"
+    assert "Not a Google Lighthouse run" in res["lighthouse_audit_version"]
 
     measured_res = LighthouseRunner.evaluate_lighthouse_metrics(
         url="https://example.com/",

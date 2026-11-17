@@ -223,7 +223,7 @@ class LiveAICitationEngine:
                 })
 
         any_live = any(r.get("is_live") for r in results)
-        share_of_voice_pct = round((total_citations / max(total_evaluations, 1)) * 100, 1) if any_live else None
+        share_of_voice_pct = round((total_citations / max(total_evaluations, 1)) * 100, 1) if (any_live or total_evaluations > 0) else None
         return {
             "domain": domain,
             "status": "MEASURED" if any_live else "NOT_CONFIGURED",

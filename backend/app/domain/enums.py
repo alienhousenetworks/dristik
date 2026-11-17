@@ -509,6 +509,14 @@ class AnalysisStage(str, Enum):
     STOPPED = "stopped"
 
 
+class PublicationStatus(str, Enum):
+    DRAFT = "DRAFT"
+    INTERNAL_REVIEW = "INTERNAL_REVIEW"
+    BLOCKED = "BLOCKED"
+    READY_FOR_PUBLICATION = "READY_FOR_PUBLICATION"
+    PUBLISHED = "PUBLISHED"
+
+
 class ReleaseStatus(str, Enum):
     PENDING_APPROVAL = "PENDING_APPROVAL"
     APPROVED = "APPROVED"
@@ -665,12 +673,18 @@ class ImpactLevel(str, Enum):
 
 
 class FindingStatus(str, Enum):
+    OBSERVED = "OBSERVED"
+    INFERRED = "INFERRED"
     OPEN = "OPEN"
     TRIAGED = "TRIAGED"
     APPROVED = "APPROVED"
     IN_PROGRESS = "IN_PROGRESS"
+    REMEDIATION_PROPOSED = "REMEDIATION_PROPOSED"
+    FIX_APPLIED = "FIX_APPLIED"
     READY_FOR_RETEST = "READY_FOR_RETEST"
+    VERIFICATION_PENDING = "VERIFICATION_PENDING"
     RETEST_FAILED = "RETEST_FAILED"
+    VERIFICATION_FAILED = "VERIFICATION_FAILED"
     FIXED = "FIXED"               # Code deployed by developer
     VERIFIED = "VERIFIED"         # Confirmed resolved by re-crawl / automated retest
     VERIFIED_FIXED = "VERIFIED_FIXED"

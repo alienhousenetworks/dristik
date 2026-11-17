@@ -56,7 +56,7 @@ R3_CATEGORY_TITLES = {c["id"]: c["title"] for c in BUSINESS_CONTEXT_CATEGORIES_1
 # B2B / Enterprise-only markers that must never pollute consumer / D2C / ecommerce / local audits
 B2B_ENTERPRISE_ONLY_PATTERNS = re.compile(
     r"\b("
-    r"soc\s*2|iso\s*27001|hipaa|saml|okta|scim|rbac|"
+    r"soc\s*2|iso\s*27001|hipaa|saml|okta|scim|rbac|saas|multi-seat|multi\s*seat|sla|"
     r"rest\s+or\s+graphql\s+api|graphql\s+api|rest\s+api|openapi|"
     r"enterprise\s+customer\s+contracts|b2b\s+corporate\s+customers|"
     r"dedicated\s+customer\s+success\s+manager|dedicated\s+csm|"

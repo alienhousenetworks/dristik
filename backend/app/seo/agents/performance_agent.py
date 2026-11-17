@@ -8,7 +8,6 @@ from app.orchestration.runtime.base_agent import BaseAgent
 from app.orchestration.cognition.blackboard import CognitiveBlackboard
 from app.domain.enums import Category, Severity, ClaimType
 from app.domain.models import Finding, FindingEvidence
-from app.crawl.crawler import compute_ttfb_stats
 
 
 class PerformanceAgent(BaseAgent):
@@ -21,6 +20,8 @@ class PerformanceAgent(BaseAgent):
         )
 
     async def run(self, blackboard: CognitiveBlackboard) -> Dict[str, Any]:
+        from app.crawl.crawler import compute_ttfb_stats
+
         manifest = getattr(blackboard, "crawl_manifest", None)
         pages = (
             list(manifest.pages)

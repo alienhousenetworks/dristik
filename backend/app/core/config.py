@@ -73,6 +73,8 @@ class Settings(BaseSettings):
     ENVIRONMENT: str = "development"
     # Development/test convenience only; production startup validation rejects DEBUG=True.
     DEBUG: bool = True
+    # Enterprise publication guard: blocks false CERTIFIED / PASSED on unmeasured checks
+    REPORT_PUBLICATION_GUARD: bool = Field(default=True, description="Guard against publishing unverified or contradictory audit deliverables")
     # Number of reverse proxies whose X-Forwarded-For hops may be trusted.
     # Zero means the socket address is the client. A browser cannot raise this.
     TRUSTED_PROXY_HOPS: int = Field(default=0, ge=0, le=5)
