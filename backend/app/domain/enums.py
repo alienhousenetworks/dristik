@@ -703,6 +703,7 @@ class DiagnosticStatus(str, Enum):
     """
     PASSED = "PASSED"
     FAILED = "FAILED"
+    WARNING = "WARNING"
     VERIFIED = "VERIFIED"
     MEASURED = "MEASURED"
     INFERRED = "INFERRED"
