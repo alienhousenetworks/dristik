@@ -2129,6 +2129,10 @@ class PageReport(BaseModel):
     copywriting: PageCopyAudit = Field(default_factory=PageCopyAudit)
     ux: PageUxSignals = Field(default_factory=PageUxSignals)
     findings: List[str] = Field(default_factory=list)
+    h1_tags: List[str] = Field(default_factory=list)
+    is_homepage: bool = False
+    status_code: int = 200
+    word_count: int = 0
 
 class RenderedVsRawDelta(BaseModel):
     raw_word_count: int = 0
@@ -2474,6 +2478,32 @@ class FormAuditItem(BaseModel):
     has_captcha_or_honeypot: bool = False
     has_confirmation_destination: bool = False
     friction_risk: str = "LOW"  # "LOW" | "MEDIUM" | "HIGH"
+    required_fields_count: int = 0
+    placeholders_as_labels_count: int = 0
+    autofill_supported_count: int = 0
+    mobile_keyboard_optimized: bool = True
+    privacy_notice_present: bool = False
+    validation_messages_present: bool = False
+
+    @property
+    def action(self) -> Optional[str]:
+        return self.form_action
+
+    @property
+    def url(self) -> str:
+        return self.page_url
+
+    @property
+    def field_count(self) -> int:
+        return self.input_count
+
+    @property
+    def cta_text(self) -> str:
+        return self.submit_button_text
+
+    @property
+    def has_labels(self) -> bool:
+        return self.missing_labels_count == 0
 
 class FormAuditReport(BaseModel):
     total_forms_detected: int = 0
@@ -2484,6 +2514,10 @@ class FormAuditReport(BaseModel):
     cro_friction_grade: str = "A"
     friction_score: float = 0.0
     actionable_remedies: List[str] = Field(default_factory=list)
+    forms_with_autofill_support: int = 0
+    forms_with_mobile_keyboards: int = 0
+    forms_with_privacy_notices: int = 0
+    controlled_test_disclaimer: str = "Automated inspection only. No live customer data was submitted to external endpoints."
 
 class CtaAuditItem(BaseModel):
     page_url: str
@@ -2494,6 +2528,34 @@ class CtaAuditItem(BaseModel):
     placement_zone: str = "BODY"  # "HERO" | "HEADER" | "BODY" | "FOOTER"
     is_passive_friction: bool = False
     suggested_rewrite: Optional[str] = None
+    is_primary: bool = False
+    contrast_ratio: Optional[float] = None
+    is_accessible_touch_target: bool = True
+    destination_valid: bool = True
+    is_repeated: bool = False
+    prominence_score: float = 75.0
+
+    @property
+    def location(self) -> str:
+        return self.placement_zone or "Page DOM"
+
+    @property
+    def text(self) -> str:
+        return self.cta_text
+
+    @property
+    def role(self) -> str:
+        return f"{self.intent_category.replace('_', ' ').title()} ({self.element_type})"
+
+    @property
+    def intent_tier(self) -> str:
+        return self.intent_category
+
+    @property
+    def assessment(self) -> str:
+        if self.suggested_rewrite:
+            return f"Rewrite suggestion: '{self.suggested_rewrite}'"
+        return "Observed in crawled DOM."
 
 class CtaAnalysisRollup(BaseModel):
     total_ctas_detected: int = 0
@@ -2505,6 +2567,10 @@ class CtaAnalysisRollup(BaseModel):
     hero_cta_text: Optional[str] = None
     ctas: List[CtaAuditItem] = Field(default_factory=list)
     action_clarity_score: float = 0.0
+    primary_ctas_count: int = 0
+    secondary_ctas_count: int = 0
+    contrast_pass_rate: float = 100.0
+    repeated_consistency_detected: bool = False
 
 class SocialProofAuditRollup(BaseModel):
     total_testimonials: int = 0
@@ -2546,6 +2612,47 @@ class CroAuditReport(BaseModel):
     actionable_remedies: List[str] = Field(default_factory=list)
     # Separate from overall_cro_score. The four CRO dimensions live here and are not blended into the sealed category score.
     intelligence: Optional[Dict[str, Any]] = None
+
+    @property
+    def primary_cta_text(self) -> Optional[str]:
+        if self.cta_analysis and self.cta_analysis.hero_cta_text:
+            return self.cta_analysis.hero_cta_text
+        if self.cta_analysis and self.cta_analysis.ctas:
+            return self.cta_analysis.ctas[0].cta_text
+        return None
+
+    @property
+    def ctas(self) -> List[Any]:
+        if self.cta_analysis and self.cta_analysis.ctas:
+            return self.cta_analysis.ctas
+        return []
+
+    @property
+    def cta_inventory(self) -> List[Any]:
+        return self.ctas
+
+    @property
+    def trust_signals(self) -> List[Dict[str, Any]]:
+        signals: List[Dict[str, Any]] = []
+        if self.social_proof:
+            for badge in (self.social_proof.trust_badges_detected or []):
+                signals.append({"name": "Trust Badge / Certification", "detail": badge})
+            for claim in (self.social_proof.quantified_proof_claims or []):
+                signals.append({"name": "Quantified Proof Claim", "detail": claim})
+            if self.social_proof.client_logos_detected:
+                signals.append({"name": "Client / Partner Logos", "detail": f"{self.social_proof.client_logos_detected} logos detected"})
+            if self.social_proof.total_testimonials:
+                signals.append({"name": "Customer Testimonials", "detail": f"{self.social_proof.total_testimonials} testimonials detected"})
+        if self.pricing_psychology:
+            for sig in (self.pricing_psychology.guarantee_signals or []):
+                signals.append({"name": "Guarantee / Risk Reversal", "detail": sig})
+            if self.pricing_psychology.has_money_back_guarantee:
+                signals.append({"name": "Money-Back Guarantee", "detail": "Detected in commercial copy"})
+        return signals
+
+    @property
+    def form_audit(self) -> Optional[Any]:
+        return self.form_friction
 
 class MediaAssetItem(BaseModel):
     url: str

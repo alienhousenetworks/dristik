@@ -725,16 +725,90 @@ class CroAnalyzer:
             actionable_remedies=remedies,
         )
         from app.cro.engine import build_cro_intelligence
+        from app.cro.journey_mapper import journey_mapper
+        from app.cro.value_prop_analyzer import value_prop_analyzer
+        from app.cro.ecommerce_saas_analyzer import ecommerce_saas_analyzer
+        from app.cro.accessibility.wcag_cro_integrator import wcag_cro_integrator
+        from app.cro.behavioral_analytics import behavioral_analytics_evaluator
+        from app.cro.experimentation_engine import experimentation_engine
+        from app.cro.scoring import cro_scoring_engine
+        from app.cro.recommendations import recommendation_generator
 
         cro_Intel_obj = build_cro_intelligence(
             pages=pages,
             raw_html_map=raw_html_map,
             business_profile=business_profile,
         ).model_dump()
+        domain_name = pages[0].url.split("//")[-1].split("/")[0] if pages else ""
+
+        # Phase 6.2: Visual Journey Mapping
+        journey_res = journey_mapper.map_journey(pages, raw_html_map, domain=domain_name)
         journey_eval = evaluate_conversion_journey(pages, business_profile)
         cro_Intel_obj["conversion_journey"] = journey_eval
         cro_Intel_obj["journey_stages"] = journey_eval["journey_stages"]
         cro_Intel_obj["dropoff_friction_points"] = journey_eval["dropoff_friction_points"]
+        cro_Intel_obj["journey_graph"] = journey_res.model_dump()
+        findings.extend(journey_res.journey_findings)
+
+        # Phase 6.3: Value Proposition 6-Question Model
+        vp_res = value_prop_analyzer.analyze(pages, raw_html_map, business_profile)
+        cro_Intel_obj["value_prop_intelligence"] = vp_res.model_dump()
+
+        # Phase 6.6: E-Commerce & SaaS Conversion Funnel
+        ecom_saas_res = ecommerce_saas_analyzer.analyze(pages, raw_html_map, business_profile)
+        cro_Intel_obj["commercial_intelligence"] = ecom_saas_res.model_dump()
+
+        # Phase 6.7: WCAG 2.2 AA Conversion Friction
+        wcag_res = wcag_cro_integrator.evaluate(pages, raw_html_map)
+        cro_Intel_obj["wcag_cro_accessibility"] = wcag_res.model_dump()
+        findings.extend(wcag_res.wcag_findings)
+
+        # Phase 6.8: Behavioral Analytics
+        behavioral_res = behavioral_analytics_evaluator.evaluate()
+        cro_Intel_obj["behavioral_analytics"] = behavioral_res.model_dump()
+
+        # Phase 6.9: Experiment Recommendation Engine
+        experiments = experimentation_engine.generate_experiments(
+            findings=findings,
+            value_prop_defects=vp_res.defects,
+            journey_defects=[{"type": "loop", "count": len(journey_res.navigation_loops)}],
+            domain=domain_name,
+        )
+        cro_Intel_obj["experiment_proposals"] = [e.model_dump() for e in experiments]
+
+        # Phase 6.10: Calibrated 10-Dimension Scorecard (10% each)
+        scorecard = cro_scoring_engine.evaluate(
+            value_prop_score=vp_res.overall_value_prop_score,
+            visual_score=round(overall_score, 1),
+            cta_score=cta_rollup.action_clarity_score,
+            journey_defects_count=len(journey_res.dead_ends) + len(journey_res.navigation_loops),
+            form_score=max(30.0, 100.0 - (form_rep.friction_score if form_rep else 0.0)),
+            mobile_defects_count=wcag_res.touch_target_violations_count,
+            a11y_score=wcag_res.accessibility_score,
+            trust_score=social_proof_audit.trust_authority_score,
+            checkout_score=ecom_saas_res.composite_checkout_score,
+            analytics_connected=False,
+        )
+        cro_Intel_obj["ten_dimension_scorecard"] = scorecard.model_dump()
+
+        # Phase 6.11: Comprehensive Recommendations
+        comp_recs = recommendation_generator.generate(
+            hero_headline=vp_res.hero_headline,
+            passive_ctas_count=cta_rollup.passive_generic_count,
+            journey_loops_count=len(journey_res.navigation_loops),
+            dead_ends_count=len(journey_res.dead_ends),
+            form_missing_labels=form_rep.forms_with_missing_labels if form_rep else 0,
+            form_high_friction_count=len([f for f in (form_rep.forms if form_rep else []) if f.friction_risk == "HIGH"]),
+            mobile_defects_count=wcag_res.touch_target_violations_count,
+            experiments=experiments,
+            pricing_detected=pricing_audit.pricing_page_detected,
+        )
+        cro_Intel_obj["comprehensive_recommendations"] = comp_recs.model_dump()
+        remedies.extend(comp_recs.top_3_quick_wins)
+        cro_report.actionable_remedies = list(dict.fromkeys(remedies))
+
+        cro_report.overall_cro_score = scorecard.overall_cro_score
+        cro_report.cro_grade = scorecard.cro_grade
         cro_report.intelligence = cro_Intel_obj
 
         return cro_report, findings

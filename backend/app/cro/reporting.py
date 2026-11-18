@@ -251,14 +251,20 @@ cro_report_generator = CroReportGenerator()
 
 def render_cro_audit_book(report: Any) -> str:
     """Renders the CRO audit book HTML from an executive report."""
-    intel = build_from_executive_report(report)
-    return cro_report_generator.render_html_report(
-        intel,
-        domain=getattr(report, "domain", "") or "",
-        website_url=getattr(report, "website_url", "") or "",
-        generated_at=str(getattr(report, "generated_at", "") or ""),
-        analysis_id=str(getattr(report, "analysis_id", "") or getattr(report, "report_id", "") or ""),
-    )
+    try:
+        from app.reports.adaptive_audit_book import build_adaptive_publication_document
+        from app.reports.publishing_engine import PublicationHtmlRenderer
+        doc = build_adaptive_publication_document(report, report_type="CRO")
+        return PublicationHtmlRenderer.render(doc)
+    except Exception:
+        intel = build_from_executive_report(report)
+        return cro_report_generator.render_html_report(
+            intel,
+            domain=getattr(report, "domain", "") or "",
+            website_url=getattr(report, "website_url", "") or "",
+            generated_at=str(getattr(report, "generated_at", "") or ""),
+            analysis_id=str(getattr(report, "analysis_id", "") or getattr(report, "report_id", "") or ""),
+        )
 
 
 __all__ = [

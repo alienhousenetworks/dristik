@@ -3351,7 +3351,14 @@ def build_cro_intelligence(
 def build_from_executive_report(report: Any) -> CroIntelligenceReport:
     """Rebuild the CRO audit from a sealed report. Stored pages win over a stale snapshot."""
     manifest = getattr(report, "crawl_manifest", None)
-    pages = list(getattr(manifest, "pages", None) or [])
+    pages: List[Any] = []
+    if isinstance(manifest, dict):
+        pages = list(manifest.get("pages") or [])
+    elif manifest is not None:
+        pages = list(getattr(manifest, "pages", None) or [])
+    if not pages:
+        pages = list(getattr(report, "page_reports", None) or [])
+
     performance = getattr(report, "google_performance", None) or {}
     if not isinstance(performance, dict):
         performance = {}
@@ -3360,9 +3367,16 @@ def build_from_executive_report(report: Any) -> CroIntelligenceReport:
     for competitor in getattr(parity, "competitors", None) or []:
         if not getattr(competitor, "is_target", False) and getattr(competitor, "domain", None):
             domains.append(competitor.domain)
-    discovered = getattr(manifest, "total_pages_discovered", None) if manifest is not None else None
+
+    if isinstance(manifest, dict):
+        discovered = manifest.get("total_pages_discovered") or manifest.get("discovered_urls")
+    elif manifest is not None:
+        discovered = getattr(manifest, "total_pages_discovered", None)
+    else:
+        discovered = None
+
     if pages:
-        return build_cro_intelligence(
+        intel = build_cro_intelligence(
             pages=pages,
             business_profile=getattr(report, "business_profile", None),
             analytics=performance.get("analytics"),
@@ -3371,7 +3385,55 @@ def build_from_executive_report(report: Any) -> CroIntelligenceReport:
             competitor_domains=domains,
             discovered_urls=discovered,
         )
-    stored = getattr(getattr(report, "cro_audit", None), "intelligence", None)
-    if isinstance(stored, dict) and stored.get("sections"):
-        return CroIntelligenceReport.model_validate(stored)
-    return build_cro_intelligence(pages=[])
+    else:
+        stored = getattr(getattr(report, "cro_audit", None), "intelligence", None)
+        if isinstance(stored, dict) and stored.get("sections"):
+            intel = CroIntelligenceReport.model_validate(stored)
+        else:
+            intel = build_cro_intelligence(pages=[])
+
+    report_findings = getattr(report, "findings", []) or []
+    if report_findings:
+        existing_summaries = {f.finding.strip().lower() for f in intel.findings}
+        existing_ids = {f.finding_id for f in intel.findings}
+        extra_records: List[CroFindingRecord] = []
+        idx_counter = len(intel.findings) + 1
+        for rf in report_findings:
+            cat = str(getattr(rf, "category", "")).upper()
+            if not any(k in cat for k in ("UX", "CRO", "CONV")):
+                continue
+            title = getattr(rf, "title", "") or getattr(rf, "description", "") or ""
+            if not title or title.strip().lower() in existing_summaries:
+                continue
+            fid = getattr(rf, "id", None)
+            if not fid or fid in existing_ids:
+                fid = f"CRO-{idx_counter:03d}"
+                idx_counter += 1
+            sev = str(getattr(rf, "severity", "MEDIUM")).upper()
+            prio = "High" if ("HIGH" in sev or "CRITICAL" in sev) else ("Low" if "LOW" in sev else "Medium")
+            extra_records.append(
+                CroFindingRecord(
+                    finding_id=fid,
+                    priority=prio,
+                    finding=title,
+                    evidence=str(getattr(rf, "evidence", "") or getattr(rf, "description", "") or "Captured during comprehensive site audit."),
+                    observed_scope=f"Inspected sample of {len(pages)} page(s).",
+                    hypothesis=f"{getattr(rf, 'recommendation', 'Address this issue.')} Validated via post-remediation measurement.",
+                    recommended_action=getattr(rf, "recommendation", "Review and remediate according to UX/CRO best practices."),
+                    primary_metric="Completed conversions per eligible visitor",
+                    owner="Product / CRO Lead",
+                    evidence_state="Observed",
+                    section=1,
+                    specialist="Conversion Rate Optimization",
+                    effort="Medium",
+                    confidence="Medium. Verified defect.",
+                    funnel_stage="Conversion",
+                    affected_scope=f"Sample size of {len(pages)} page(s).",
+                    negative_risk="Test changes against a control before sitewide deployment.",
+                )
+            )
+        if extra_records:
+            intel.findings.extend(extra_records)
+            intel.roadmap = _roadmap(intel.findings)
+
+    return intel

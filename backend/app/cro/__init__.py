@@ -50,6 +50,20 @@ from app.cro.reporting import (
     cro_report_generator,
     render_cro_audit_book,
 )
+from app.cro.visual_inspector import (
+    VisualInspector,
+    visual_inspector,
+    VIEWPORT_PROFILES,
+    VIEWPORT_DISCLOSURE,
+)
+from app.cro.journey_mapper import JourneyMapper, journey_mapper
+from app.cro.value_prop_analyzer import ValuePropAnalyzer, value_prop_analyzer
+from app.cro.ecommerce_saas_analyzer import EcommerceSaasAnalyzer, ecommerce_saas_analyzer
+from app.cro.accessibility.wcag_cro_integrator import WcagCroIntegrator, wcag_cro_integrator
+from app.cro.behavioral_analytics import BehavioralAnalyticsEvaluator, behavioral_analytics_evaluator
+from app.cro.experimentation_engine import ExperimentationEngine, experimentation_engine
+from app.cro.scoring import CroScoringEngine, cro_scoring_engine
+from app.cro.recommendations import RecommendationGenerator, recommendation_generator
 
 __all__ = [
     # Pillar
@@ -91,4 +105,25 @@ __all__ = [
     "CroReportGenerator",
     "cro_report_generator",
     "render_cro_audit_book",
+    # Phase 6 Core Engines
+    "VisualInspector",
+    "visual_inspector",
+    "VIEWPORT_PROFILES",
+    "VIEWPORT_DISCLOSURE",
+    "JourneyMapper",
+    "journey_mapper",
+    "ValuePropAnalyzer",
+    "value_prop_analyzer",
+    "EcommerceSaasAnalyzer",
+    "ecommerce_saas_analyzer",
+    "WcagCroIntegrator",
+    "wcag_cro_integrator",
+    "BehavioralAnalyticsEvaluator",
+    "behavioral_analytics_evaluator",
+    "ExperimentationEngine",
+    "experimentation_engine",
+    "CroScoringEngine",
+    "cro_scoring_engine",
+    "RecommendationGenerator",
+    "recommendation_generator",
 ]

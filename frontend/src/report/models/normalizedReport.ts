@@ -384,6 +384,42 @@ export interface NormalizedReport {
       cta: string;
       schemaType: string;
     };
+    tenDimensionScorecard?: Array<{
+      id: string;
+      name: string;
+      score: number | null;
+      status: string;
+      evidenceClass: string;
+      evidenceBasis: string;
+    }>;
+    buyerQuestions?: Array<{
+      questionNumber: number;
+      question: string;
+      answered: boolean;
+      confidenceScore: number;
+      detectedStatement?: string;
+      observedGap?: string;
+    }>;
+    journeyStages?: Array<{
+      num: string;
+      name: string;
+      desc: string;
+      friction: string;
+    }>;
+    experiments?: Array<{
+      id: string;
+      title: string;
+      hypothesis: string;
+      primaryMetric: string;
+      sampleSize: number;
+      durationDays: number;
+    }>;
+    ctaAnalysis?: {
+      highIntentCount: number;
+      exploratoryCount: number;
+      passiveCount: number;
+      primaryCtaText?: string;
+    };
   };
 
   // Chapter 06: Page-by-Page Audit
@@ -936,6 +972,37 @@ export function normalizeExecutiveReport(report: ExecutiveReport): NormalizedRep
         statementB: c.detected_type || 'Observed DOM Value',
         conflict: c.reason,
       })),
+      tenDimensionScorecard: ((report as any).cro_audit?.intelligence?.ten_dimension_scorecard?.dimensions || []).map((d: any) => ({
+        id: d.id,
+        name: d.name,
+        score: typeof d.score === 'number' ? d.score : null,
+        status: d.status || 'UNMEASURED',
+        evidenceClass: d.evidence_class || 'HEURISTIC_INSPECTION',
+        evidenceBasis: d.evidence_basis || '',
+      })),
+      buyerQuestions: ((report as any).cro_audit?.intelligence?.value_prop_intelligence?.buyer_questions || []).map((q: any) => ({
+        questionNumber: q.question_number,
+        question: q.question,
+        answered: Boolean(q.answered),
+        confidenceScore: typeof q.confidence_score === 'number' ? q.confidence_score : 0,
+        detectedStatement: q.detected_statement,
+        observedGap: q.observed_gap,
+      })),
+      journeyStages: (report as any).cro_audit?.intelligence?.conversion_journey?.journey_stages,
+      experiments: ((report as any).cro_audit?.intelligence?.experiment_proposals || []).map((e: any) => ({
+        id: e.experiment_id,
+        title: e.title,
+        hypothesis: e.hypothesis,
+        primaryMetric: e.primary_metric,
+        sampleSize: e.sample_size_per_variant || 10000,
+        durationDays: e.minimum_duration_days || 14,
+      })),
+      ctaAnalysis: (report as any).cro_audit?.cta_analysis ? {
+        highIntentCount: (report as any).cro_audit.cta_analysis.high_intent_count || 0,
+        exploratoryCount: (report as any).cro_audit.cta_analysis.exploratory_count || 0,
+        passiveCount: (report as any).cro_audit.cta_analysis.passive_generic_count || 0,
+        primaryCtaText: (report as any).cro_audit.cta_analysis.hero_cta_text,
+      } : undefined,
     },
 
     pages: {

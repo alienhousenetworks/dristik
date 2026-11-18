@@ -716,4 +716,43 @@ class DiagnosticStatus(str, Enum):
     STALE = "STALE"
 
 
+class EvidenceStatus(str, Enum):
+    """
+    Mandatory 8-status evidence classification framework for enterprise audits.
+    """
+    OBSERVED = "OBSERVED"           # Directly captured fact (DOM element, HTTP header)
+    MEASURED = "MEASURED"           # Actual numerical measurement (TTFB, payload bytes)
+    DERIVED = "DERIVED"             # Reproducible calculation from measured inputs
+    INFERRED = "INFERRED"           # Reasoned interpretation or heuristic
+    RECOMMENDED = "RECOMMENDED"     # Proposed remediation action
+    NOT_TESTED = "NOT_TESTED"       # Check never executed
+    UNAVAILABLE = "UNAVAILABLE"     # Source could not be accessed / connector not configured
+    NOT_APPLICABLE = "NOT_APPLICABLE" # Test does not apply to target
+
+
+class MetricDirection(str, Enum):
+    HIGHER_IS_BETTER = "HIGHER_IS_BETTER"
+    LOWER_IS_BETTER = "LOWER_IS_BETTER"
+
+
+class MissingDataRule(str, Enum):
+    FAIL_CLOSED = "FAIL_CLOSED"
+    NEUTRAL_EXCLUDE = "NEUTRAL_EXCLUDE"
+    UNMEASURED_FLAG = "UNMEASURED_FLAG"
+
+
+class RootCauseTaxonomy(str, Enum):
+    MISSING_ALT_TEXT = "MISSING_ALT_TEXT"
+    UNOPTIMIZED_TTFB = "UNOPTIMIZED_TTFB"
+    CANONICAL_MISMATCH = "CANONICAL_MISMATCH"
+    SCHEMA_SYNTAX_ERROR = "SCHEMA_SYNTAX_ERROR"
+    ORPHAN_URL = "ORPHAN_URL"
+    MISSING_H1 = "MISSING_H1"
+    CTA_FRICTION = "CTA_FRICTION"
+    FORM_ACCESSIBILITY = "FORM_ACCESSIBILITY"
+    UNSECURED_CONNECTION = "UNSECURED_CONNECTION"
+    GENERIC = "GENERIC"
+
+
+
 

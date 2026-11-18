@@ -57,15 +57,37 @@ class FormAccessibilityAnalyzer:
                     input_count = len(substantive_inputs)
                     input_types = [inp.get("type", "text").lower() for inp in substantive_inputs]
 
-                    # Missing labels check (missing 'id' matching a <label for="id"> or not wrapped in <label>)
+                    # Missing labels check & placeholder anti-pattern
                     missing_labels = 0
+                    placeholders_as_labels = 0
+                    required_count = 0
+                    autofill_count = 0
+                    mobile_keyboard_ok = True
+
                     for inp in substantive_inputs:
                         inp_id = inp.get("id")
                         has_explicit_label = bool(inp_id and f.find("label", attrs={"for": inp_id}))
                         has_parent_label = bool(inp.find_parent("label"))
                         has_aria_label = bool(inp.get("aria-label") or inp.get("aria-labelledby"))
-                        if not (has_explicit_label or has_parent_label or has_aria_label):
+                        has_label = has_explicit_label or has_parent_label or has_aria_label
+                        has_placeholder = bool(inp.get("placeholder"))
+
+                        if not has_label:
                             missing_labels += 1
+                            if has_placeholder:
+                                placeholders_as_labels += 1
+
+                        if inp.get("required") is not None or inp.get("aria-required") == "true":
+                            required_count += 1
+
+                        if inp.get("autocomplete"):
+                            autofill_count += 1
+
+                        # Mobile keyboard check for phone or numeric inputs
+                        name_or_id = (inp.get("name") or inp.get("id") or "").lower()
+                        i_type = inp.get("type", "text").lower()
+                        if any(k in name_or_id for k in ("phone", "tel", "mobile")) and i_type not in ("tel", "number"):
+                            mobile_keyboard_ok = False
 
                     # Submit button text
                     submit_btn = f.find(["button", "input"], attrs={"type": "submit"}) or f.find("button")
@@ -81,10 +103,22 @@ class FormAccessibilityAnalyzer:
                     # Confirmation destination
                     has_conf = bool(f_action and ("thank" in f_action.lower() or "confirm" in f_action.lower() or "success" in f_action.lower()))
 
+                    # Privacy notice in form or immediate sibling
+                    has_privacy = bool(
+                        f.find("a", href=re.compile(r"privacy|terms", re.I))
+                        or (f.parent and f.parent.find("a", href=re.compile(r"privacy|terms", re.I)))
+                    )
+
+                    # Validation messages
+                    has_validation = bool(
+                        f.find(class_=re.compile(r"error|invalid|feedback|helper|validation", re.I))
+                        or f.find(attrs={"aria-describedby": True})
+                    )
+
                     friction_risk = "LOW"
                     if input_count > 6 or missing_labels > 0:
                         friction_risk = "HIGH"
-                    elif input_count > 4 or not has_captcha:
+                    elif input_count > 4 or not has_captcha or placeholders_as_labels > 0:
                         friction_risk = "MEDIUM"
 
                     forms_detected.append(FormAuditItem(
@@ -97,7 +131,13 @@ class FormAccessibilityAnalyzer:
                         submit_button_text=submit_text,
                         has_captcha_or_honeypot=has_captcha,
                         has_confirmation_destination=has_conf,
-                        friction_risk=friction_risk
+                        friction_risk=friction_risk,
+                        required_fields_count=required_count,
+                        placeholders_as_labels_count=placeholders_as_labels,
+                        autofill_supported_count=autofill_count,
+                        mobile_keyboard_optimized=mobile_keyboard_ok,
+                        privacy_notice_present=has_privacy,
+                        validation_messages_present=has_validation,
                     ))
             # If raw HTML not provided, do NOT fabricate or synthesize fake form elements.
 
@@ -105,6 +145,9 @@ class FormAccessibilityAnalyzer:
         missing_lbl = sum(1 for f in forms_detected if f.missing_labels_count > 0)
         no_captcha = sum(1 for f in forms_detected if not f.has_captcha_or_honeypot)
         no_conf = sum(1 for f in forms_detected if not f.has_confirmation_destination)
+        autofill_forms = sum(1 for f in forms_detected if f.autofill_supported_count > 0)
+        mobile_kb_forms = sum(1 for f in forms_detected if f.mobile_keyboard_optimized)
+        privacy_forms = sum(1 for f in forms_detected if f.privacy_notice_present)
 
         remedies = []
         if missing_lbl > 0:
@@ -115,6 +158,8 @@ class FormAccessibilityAnalyzer:
             remedies.append("Replace generic 'Submit' button copy with value-driven CTAs (e.g., 'Claim Your Strategy Report' or 'Schedule VIP Demo').")
         if any(f.input_count > 5 for f in forms_detected):
             remedies.append("Consider reducing initial fields on high-friction forms or using a multi-step flow to decrease cognitive fatigue.")
+        if any(f.placeholders_as_labels_count > 0 for f in forms_detected):
+            remedies.append("Replace disappearing placeholder labels with persistent floating or above-input labels to preserve context during typing.")
 
         if total_forms == 0:
             grade = "N/A"
@@ -140,7 +185,10 @@ class FormAccessibilityAnalyzer:
             forms_without_confirmation=no_conf,
             cro_friction_grade=grade,
             friction_score=friction_score,
-            actionable_remedies=remedies
+            actionable_remedies=remedies,
+            forms_with_autofill_support=autofill_forms,
+            forms_with_mobile_keyboards=mobile_kb_forms,
+            forms_with_privacy_notices=privacy_forms,
         )
 
 

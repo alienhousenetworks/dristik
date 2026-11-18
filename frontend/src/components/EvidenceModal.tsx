@@ -37,7 +37,7 @@ export function EvidenceModal({ evidenceId, ledger, findings, onClose }: Evidenc
       });
     }
     (findings || []).forEach((f, fIdx) => {
-      const fid = (f as any).finding_id || f.id || `F-${fIdx + 1}`;
+      const fid = f.finding_id || (f as any).id || `F-${fIdx + 1}`;
       (f.evidence || []).forEach((ev, evIdx) => {
         const eid = ev.evidence_id || ev.source || `${fid}-EV-${evIdx + 1}`;
         const existing = map.get(eid);

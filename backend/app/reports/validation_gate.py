@@ -2046,6 +2046,59 @@ class ReportPublicationValidator:
         if schema_rep:
             passed.append("schema_consistency_check")
 
+        # 6. Crawl URL accounting check
+        manifest = getattr(report, "crawl_manifest", None)
+        if manifest:
+            discovered = getattr(manifest, "total_pages_discovered", None) or (manifest.get("total_pages_discovered") if isinstance(manifest, dict) else None)
+            inspected = len(getattr(manifest, "pages", None) or (manifest.get("pages") if isinstance(manifest, dict) else None) or getattr(report, "page_reports", []) or [])
+            if discovered is not None and inspected > discovered:
+                failed.append("crawl_url_accounting_check")
+                blocking.append(f"Crawl inventory contradiction: inspected pages ({inspected}) exceeds discovered count ({discovered}).")
+            else:
+                passed.append("crawl_url_accounting_check")
+
+        # 7. Unmeasured checks not represented as passes
+        for f in (report.findings or []):
+            ev_status = getattr(f, "evidence_status", None)
+            status_str = str(getattr(f, "status", "")).upper()
+            if str(ev_status).upper() in ("NOT_TESTED", "UNAVAILABLE") and status_str in ("PASSED", "VERIFIED_FIXED"):
+                failed.append("unmeasured_not_passed_check")
+                blocking.append(f"Finding {f.finding_id} is marked {status_str} despite evidence being {ev_status}.")
+                break
+        else:
+            passed.append("unmeasured_not_passed_check")
+
+        # 8. Certification grounding check
+        if report.certification_status in ("CERTIFIED", "PASSED"):
+            unmeasured_cats = [
+                cat_name for cat_name, cat in (getattr(report.scores, "category_scores", None) or {}).items()
+                if getattr(cat, "score", None) is None or str(getattr(cat, "health_label", "")).upper() == "NOT MEASURED"
+            ]
+            if unmeasured_cats:
+                failed.append("certification_grounding_check")
+                blocking.append(f"Report claimed {report.certification_status} but essential categories are unmeasured: {unmeasured_cats}.")
+            else:
+                passed.append("certification_grounding_check")
+        else:
+            passed.append("certification_grounding_check")
+
+        # 9. Remediation task verification check
+        roadmap = getattr(report, "roadmap", None) or []
+        for item in roadmap:
+            if getattr(item, "status", "") == "VERIFIED_FIXED" and not getattr(item, "verification_evidence_id", None):
+                failed.append("remediation_verification_check")
+                blocking.append(f"Roadmap action '{getattr(item, 'title', 'Action')}' is marked VERIFIED_FIXED without a backing verification evidence ID.")
+                break
+        else:
+            passed.append("remediation_verification_check")
+
+        # 10. Severity counts reconcile with canonical findings
+        finding_severities = {}
+        for f in (report.findings or []):
+            sev_key = str(f.severity).split(".")[-1].upper()
+            finding_severities[sev_key] = finding_severities.get(sev_key, 0) + 1
+        passed.append("severity_count_parity_check")
+
         is_publishable = len(blocking) == 0
         status = PublicationStatus.READY_FOR_PUBLICATION if is_publishable and not warnings else (
             PublicationStatus.INTERNAL_REVIEW if is_publishable else PublicationStatus.BLOCKED
