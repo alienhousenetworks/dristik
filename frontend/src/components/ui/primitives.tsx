@@ -11,12 +11,12 @@ const buttonVariants = {
   primary: 'btn-primary',
   secondary: 'btn-secondary',
   ghost: 'btn-ghost',
-  danger: 'bg-bad text-white hover:opacity-90 rounded-md font-semibold',
+  danger: 'bg-bad text-white hover:opacity-95 rounded-full font-medium shadow-sm transition-all duration-200 active:scale-[0.98]',
 };
 
 const buttonSizes = {
-  sm: 'px-2.5 py-1.5 text-xs',
-  md: 'px-3.5 py-2 text-sm',
+  sm: 'px-3 py-1.5 text-xs',
+  md: 'px-4 py-2 text-sm',
   lg: 'px-5 py-2.5 text-sm',
 };
 

@@ -5,8 +5,26 @@ there is one implementation of normalization and role ordering.
 """
 from __future__ import annotations
 
-from typing import Any, List, Optional
+from enum import Enum
+from typing import Any, Dict, List, Optional, Set
 from urllib.parse import urldefrag, urljoin, urlparse
+
+
+class UrlCrawlState(str, Enum):
+    """Explicit lifecycle status for every discoverable URL in an audit."""
+    DISCOVERED = "DISCOVERED"
+    QUEUED = "QUEUED"
+    FETCHED = "FETCHED"
+    RENDERED = "RENDERED"
+    PARSED = "PARSED"
+    ANALYZED = "ANALYZED"
+    BLOCKED = "BLOCKED"
+    TIMEOUT = "TIMEOUT"
+    HTTP_ERROR = "HTTP_ERROR"
+    ROBOTS_DENIED = "ROBOTS_DENIED"
+    RENDER_FAILED = "RENDER_FAILED"
+    PARSE_FAILED = "PARSE_FAILED"
+    DUPLICATE = "DUPLICATE"
 
 
 def classify_page_type(path: str) -> str:
@@ -159,12 +177,16 @@ def normalize_url(raw_url: str, base_domain: str, base_origin: str) -> Optional[
 
 
 class UrlFrontier:
-    """Normalized, de-duplicated URL queue for one site."""
+    """Normalized, de-duplicated URL queue with explicit discovery & sampling state tracking."""
 
     def __init__(self, base_domain: str, base_origin: str):
         self.base_domain = base_domain
         self.base_origin = base_origin
         self._seen: set[str] = set()
+        self.url_states: Dict[str, UrlCrawlState] = {}
+        self.discovered_urls: Set[str] = set()
+        self.crawled_urls: Set[str] = set()
+        self.failed_urls: Dict[str, str] = {}
 
     def normalize(self, raw_url: str) -> Optional[str]:
         return normalize_url(raw_url, self.base_domain, self.base_origin)
@@ -172,10 +194,41 @@ class UrlFrontier:
     def admit(self, raw_url: str) -> Optional[str]:
         """Return the normalized URL the first time it is admitted."""
         normalized = self.normalize(raw_url)
-        if not normalized or normalized in self._seen:
+        if not normalized:
+            return None
+        self.discovered_urls.add(normalized)
+        if normalized in self._seen:
+            self.url_states[normalized] = UrlCrawlState.DUPLICATE
             return None
         self._seen.add(normalized)
+        self.url_states[normalized] = UrlCrawlState.QUEUED
         return normalized
+
+    def mark_state(self, url: str, state: UrlCrawlState, error: Optional[str] = None) -> None:
+        """Track explicit transition through the crawl state machine."""
+        normalized = self.normalize(url) or url
+        self.url_states[normalized] = state
+        if state in (UrlCrawlState.FETCHED, UrlCrawlState.RENDERED, UrlCrawlState.PARSED, UrlCrawlState.ANALYZED):
+            self.crawled_urls.add(normalized)
+        elif state in (UrlCrawlState.BLOCKED, UrlCrawlState.TIMEOUT, UrlCrawlState.HTTP_ERROR, UrlCrawlState.ROBOTS_DENIED, UrlCrawlState.RENDER_FAILED, UrlCrawlState.PARSE_FAILED):
+            if error:
+                self.failed_urls[normalized] = error
+
+    def get_coverage_summary(self) -> Dict[str, Any]:
+        """Return honest coverage metrics distinguishing discovered URLs from crawled sample."""
+        disc = len(self.discovered_urls)
+        crawled = len(self.crawled_urls)
+        scope = "EXHAUSTIVE" if disc > 0 and crawled >= disc else "REPRESENTATIVE" if crawled > 0 else "EMPTY"
+        pct = round((crawled / disc) * 100, 1) if disc > 0 else 0.0
+        return {
+            "discovered_count": disc,
+            "inspected_count": crawled,
+            "failed_count": len(self.failed_urls),
+            "coverage_percentage": pct,
+            "sampling_scope": scope,
+            "is_representative_sample": disc > crawled,
+            "sampling_note": f"Sampled {crawled} of {disc} discovered URLs ({pct}% coverage; {scope} scope)" if disc > crawled else f"Inspected all {crawled} discovered URLs ({scope} scope)",
+        }
 
     def order(self, urls: List[str], crawled_pages: List[Any]) -> List[str]:
         return order_for_roles(urls, crawled_pages)

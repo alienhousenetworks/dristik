@@ -56,10 +56,11 @@ class ViewportStateInspection(BaseModel):
     width: int
     height: int
     device_type: str
-    tested: bool = True
+    tested: bool = False
+    execution_mode: str = "STATIC_DOM_HEURISTIC"  # PLAYWRIGHT_LIVE | STATIC_DOM_HEURISTIC
     screenshot_captured: bool = False
     above_the_fold_height: int = 900
-    full_page_height_est: int = 2400
+    full_page_height_est: Optional[int] = None
     has_horizontal_overflow: bool = False
     overflow_risk: str = "LOW"
     navigation_state: str = "COLLAPSED_OR_DESKTOP" # "EXPANDED_HAMBURGER", "HEADER_BAR", "NOT_FOUND"
@@ -116,6 +117,7 @@ class VisualInspector:
         all_defects: List[Dict[str, Any]] = []
 
         for vp_name, vp_cfg in VIEWPORT_PROFILES.items():
+            vp_rendered = (rendered_evidence or {}).get(vp_name) if isinstance(rendered_evidence, dict) else None
             vp_res = cls._inspect_viewport(
                 vp_name=vp_name,
                 cfg=vp_cfg,
@@ -123,6 +125,7 @@ class VisualInspector:
                 modals=modals,
                 sticky_ctas=sticky_ctas,
                 inferred_page_type=inferred_page_type,
+                vp_rendered=vp_rendered,
             )
             viewports[vp_name] = vp_res
             all_defects.extend(vp_res.defects)
@@ -191,6 +194,7 @@ class VisualInspector:
         modals: List[str],
         sticky_ctas: List[str],
         inferred_page_type: str,
+        vp_rendered: Optional[Dict[str, Any]] = None,
     ) -> ViewportStateInspection:
         w = cfg["width"]
         h = cfg["height"]
@@ -252,17 +256,20 @@ class VisualInspector:
                 "detail": f"On long mobile viewports ({w}x{h}), primary action loses persistent visibility as visitor scrolls.",
             })
 
+        live = isinstance(vp_rendered, dict) and bool(vp_rendered)
+        has_overflow = bool(vp_rendered.get("horizontal_overflow", False)) if live else False
         return ViewportStateInspection(
             viewport_name=vp_name,
             width=w,
             height=h,
             device_type=cfg["device_type"],
             tested=True,
-            screenshot_captured=False, # True when Playwright screenshot engine executes
+            execution_mode="PLAYWRIGHT_LIVE" if live else "STATIC_DOM_HEURISTIC",
+            screenshot_captured=bool(vp_rendered.get("screenshot_captured", False)) if live else False,
             above_the_fold_height=h,
-            full_page_height_est=h * 3,
-            has_horizontal_overflow=False,
-            overflow_risk="LOW",
+            full_page_height_est=vp_rendered.get("scroll_height") if live else None,
+            has_horizontal_overflow=has_overflow,
+            overflow_risk="HIGH" if has_overflow else ("LOW" if live else "UNVERIFIED_STATIC"),
             navigation_state=nav_state,
             modal_popup_detected=bool(modals),
             modal_types=modals,
@@ -270,7 +277,7 @@ class VisualInspector:
             sticky_cta_texts=sticky_ctas,
             above_fold_cta_count=above_fold_count,
             below_fold_cta_count=below_fold_count,
-            touch_target_violations=touch_violations,
+            touch_target_violations=int(vp_rendered.get("small_touch_targets", touch_violations)) if live else touch_violations,
             defects=defects,
         )
 

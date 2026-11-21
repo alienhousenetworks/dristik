@@ -39,9 +39,9 @@ export default {
         bad: channel('bad'),
       },
       fontFamily: {
-        serif: ['Instrument Serif', 'Georgia', 'serif'],
-        sans: ['Source Sans 3', 'system-ui', 'sans-serif'],
-        mono: ['IBM Plex Mono', 'ui-monospace', 'monospace'],
+        serif: ['-apple-system', 'BlinkMacSystemFont', '"SF Pro Display"', '"SF Pro Text"', 'Inter', 'system-ui', 'sans-serif'],
+        sans: ['-apple-system', 'BlinkMacSystemFont', '"SF Pro Text"', '"SF Pro Display"', 'Inter', 'system-ui', 'sans-serif'],
+        mono: ['"SF Mono"', 'SFMono-Regular', 'ui-monospace', 'Menlo', 'Monaco', 'Consolas', 'monospace'],
       },
       fontSize: {
         display: ['2.5rem', { lineHeight: '1.1', letterSpacing: '-0.03em' }],

@@ -195,13 +195,13 @@ export function PillarNavBar({
         className={cn('workspace-link text-xs font-medium', active && 'is-active')}
       >
         <div className="flex items-center gap-2.5 truncate">
-          <Icon className={cn('w-4 h-4 shrink-0', active ? 'text-ink' : 'text-ink-500')} />
+          <Icon className={cn('w-4 h-4 shrink-0', active ? 'text-white' : 'text-ink-500')} />
           {!collapsed && <span className="truncate">{item.label}</span>}
         </div>
         {!collapsed && (
           <div className="flex items-center gap-1.5 shrink-0">
             {item.badge != null && (
-              <span className="text-[10px] font-mono px-1.5 py-0.5 rounded-md bg-ink/5 text-ink-600">{item.badge}</span>
+              <span className={cn('text-[10px] font-mono px-2 py-0.5 rounded-full', active ? 'bg-white/20 text-white font-medium' : 'bg-ink/5 text-ink-600')}>{item.badge}</span>
             )}
             {item.score != null && <ScorePill score={item.score} />}
           </div>

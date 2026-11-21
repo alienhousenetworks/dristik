@@ -65,6 +65,8 @@ class CroPillar:
                 res = await agent.run(blackboard)
                 if isinstance(res, list):
                     findings.extend(res)
+                elif isinstance(res, dict) and isinstance(res.get("findings"), list):
+                    findings.extend(res["findings"])
         return findings
 
     def calculate_pillar_score(

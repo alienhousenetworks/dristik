@@ -167,6 +167,25 @@ def get_canonical_crawl_inventory(
     raw_seed = crawl_inv_dict.get("seed_urls_count", 1)
     seed_urls_count = int(raw_seed) if isinstance(raw_seed, (int, float)) and not hasattr(raw_seed, "_mock_return_value") else 1
 
+    deeply_inspected_cand = crawl_inv_dict.get("urls_deeply_inspected", pages_crawled)
+    urls_deeply_inspected = int(deeply_inspected_cand) if isinstance(deeply_inspected_cand, (int, float)) and not hasattr(deeply_inspected_cand, "_mock_return_value") else pages_crawled
+
+    findings_list = list(getattr(report, "findings", None) or []) if report else []
+    verified_urls = set()
+    for f in findings_list:
+        aff = getattr(f, "affected_urls", None) or getattr(f, "affected_urls_sample", None) or []
+        for u in aff:
+            if u:
+                verified_urls.add(str(u))
+    urls_with_verified_findings = len(verified_urls)
+
+    urls_tested_by_specialist = crawl_inv_dict.get("urls_tested_by_specialist") or {
+        "technical_seo": tested_pages,
+        "content_seo": urls_deeply_inspected,
+        "structured_data": urls_deeply_inspected,
+        "performance": rendered_pages,
+    }
+
     return CrawlInventory(
         discovered_total=disc_total,
         eligible_total=eligible_total,
@@ -189,6 +208,9 @@ def get_canonical_crawl_inventory(
         tested_pages=tested_pages,
         total_unique_discovered=disc_total,
         total_crawled_tested=tested_pages,
+        urls_deeply_inspected=urls_deeply_inspected,
+        urls_tested_by_specialist=urls_tested_by_specialist,
+        urls_with_verified_findings=urls_with_verified_findings,
     )
 
 

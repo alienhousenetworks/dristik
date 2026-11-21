@@ -74,7 +74,7 @@ class VisualUxFrictionAgent(BaseAgent):
 
 
 class FormAbandonmentAgent(BaseAgent):
-    """Audits input count, required vs optional friction, and form abandonment triggers."""
+    """Audits input count, required vs optional friction, and form abandonment triggers via real DOM inspection."""
     def __init__(self, model_router=None):
         super().__init__(
             agent_id="cro.form_friction.v3",
@@ -83,19 +83,30 @@ class FormAbandonmentAgent(BaseAgent):
         )
 
     async def run(self, blackboard: CognitiveBlackboard) -> Dict[str, Any]:
+        from app.cro.form_analyzer import FormAccessibilityAnalyzer
         pages = getattr(blackboard, "pages", []) or []
-        contact_pages = [p for p in pages if any(k in (p.url or "").lower() for k in ["contact", "signup", "register", "demo"])]
-
-        has_forms = len(contact_pages) > 0
+        report = FormAccessibilityAnalyzer.analyze_forms(pages)
+        total_forms = report.total_forms_detected
+        avg_fields = (
+            round(sum(f.input_count for f in report.forms) / total_forms, 1)
+            if total_forms > 0
+            else None
+        )
+        friction_rating = (
+            "NOT_MEASURED"
+            if total_forms == 0
+            else ("HIGH" if report.friction_score >= 60 else ("MEDIUM" if report.friction_score >= 30 else "LOW"))
+        )
         return {
             "agent_id": self.agent_id,
             "domain": "cro",
             "specialty": "form_abandonment",
-            "status": "completed" if has_forms else "UNMEASURED",
+            "status": "completed" if total_forms > 0 else "UNMEASURED",
             "observations": {
-                "detected_forms": len(contact_pages),
-                "average_field_count": 3 if has_forms else None,
-                "form_friction_rating": "LOW" if has_forms else "NOT_MEASURED",
+                "detected_forms": total_forms,
+                "average_field_count": avg_fields,
+                "forms_with_missing_labels": report.forms_with_missing_labels,
+                "form_friction_rating": friction_rating,
             },
             "claims": [],
         }

@@ -923,7 +923,7 @@ class ValidationGate:
         }
 
         # Gate 2: Coverage Gate
-        from app.audit.inventory_helper import get_canonical_crawl_inventory
+        from app.crawl.audit.inventory_helper import get_canonical_crawl_inventory
         canon_inv = get_canonical_crawl_inventory(manifest, report)
         disc_total = canon_inv.discovered_total
         tested_count = canon_inv.tested_pages

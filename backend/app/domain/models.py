@@ -2255,6 +2255,9 @@ class CrawlInventory(BaseModel):
     tested_pages: int = 0  # alias for analyzed_total
     total_unique_discovered: int = 0  # alias for discovered_total
     total_crawled_tested: int = 0  # alias for analyzed_total
+    urls_deeply_inspected: int = 0
+    urls_tested_by_specialist: Dict[str, int] = Field(default_factory=dict)
+    urls_with_verified_findings: int = 0
 
     def calculate_coverage(self) -> Optional[float]:
         denom = self.eligible_total if self.eligible_total > 0 else self.discovered_total

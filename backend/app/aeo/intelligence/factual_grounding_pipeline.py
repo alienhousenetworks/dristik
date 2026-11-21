@@ -15,9 +15,20 @@ E.g., verifies stated prices against actual catalog values directly.
 """
 from __future__ import annotations
 
+from enum import Enum
 import re
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 from pydantic import BaseModel, Field
+
+
+class AnswerabilityState(str, Enum):
+    ANSWERABLE = "ANSWERABLE"
+    PARTIAL = "PARTIAL"
+    UNANSWERABLE = "UNANSWERABLE"
+    CONFLICTING = "CONFLICTING"
+    OUT_OF_SCOPE = "OUT_OF_SCOPE"
+    NOT_TESTED = "NOT_TESTED"
+    ERROR = "ERROR"
 
 
 class FactualValidationResult(BaseModel):
@@ -27,6 +38,20 @@ class FactualValidationResult(BaseModel):
     empirical_reference_value: Any
     observed_text_value: Any
     discrepancy_note: Optional[str] = None
+
+
+class AnswerabilityEvaluationResult(BaseModel):
+    question: str
+    answerability_state: AnswerabilityState
+    relevance_passed: bool
+    relevance_rejection_reason: Optional[str] = None
+    grounding_score_pct: float = 0.0
+    total_claims: int = 0
+    supported_claims: int = 0
+    first_party_citation_url: Optional[str] = None
+    first_party_passage_snippet: Optional[str] = None
+    validations: List[FactualValidationResult] = Field(default_factory=list)
+    contradictions: List[CrossPageContradiction] = Field(default_factory=list)
 
 
 class CrossPageContradiction(BaseModel):
@@ -119,30 +144,21 @@ class FactualGroundingPipeline:
                 )
             )
 
-        # 2. Contradiction Detection across pages
+        # 2. Contradiction Detection across pages using ContradictionDetector
         if pages_content_map and len(pages_content_map) >= 2:
-            # Check for shipping threshold contradictions (e.g. Free shipping over $50 vs $75)
-            urls = list(pages_content_map.keys())
-            ship_matches: List[tuple] = []
-            for u in urls:
-                m = re.search(r'free shipping (?:over|above)\s*(?:\$|₹)\s*(\d+)', pages_content_map[u], re.I)
-                if m:
-                    ship_matches.append((u, int(m.group(1)), m.group(0)))
-
-            if len(ship_matches) >= 2:
-                for i in range(len(ship_matches) - 1):
-                    for j in range(i + 1, len(ship_matches)):
-                        if ship_matches[i][1] != ship_matches[j][1]:
-                            contradictions.append(
-                                CrossPageContradiction(
-                                    topic="Free Shipping Threshold",
-                                    page_a_url=ship_matches[i][0],
-                                    page_a_statement=ship_matches[i][2],
-                                    page_b_url=ship_matches[j][0],
-                                    page_b_statement=ship_matches[j][2],
-                                    conflict_severity="HIGH",
-                                )
-                            )
+            from app.aeo.intelligence.contradiction_detector import ContradictionDetector
+            contra_report = ContradictionDetector.audit_pages(pages_content_map)
+            for c in contra_report.conflicts:
+                contradictions.append(
+                    CrossPageContradiction(
+                        topic=c.field,
+                        page_a_url=c.left_surface,
+                        page_a_statement=c.left_value,
+                        page_b_url=c.right_surface,
+                        page_b_statement=c.right_value,
+                        conflict_severity=c.severity.value,
+                    )
+                )
 
         total_claims = len(claims)
         grounding_score = round((grounded_count / max(total_claims, 1)) * 100, 1)
@@ -161,4 +177,124 @@ class FactualGroundingPipeline:
             validations=validations,
             contradictions_detected=contradictions,
             critic_verdict=critic,
+        )
+
+    @classmethod
+    def validate_stage_a_relevance(
+        cls,
+        question: str,
+        passage_text: str,
+        target_entities: Optional[List[str]] = None,
+    ) -> Tuple[bool, Optional[str]]:
+        """
+        Stage A Relevance Gate:
+        Rejects passages that do not address the question's core subject or business entities.
+        Irrelevant passages are rejected immediately and cannot earn grounding points.
+        """
+        if not passage_text or len(passage_text.strip()) < 15:
+            return False, "Passage is empty or contains insufficient text."
+
+        p_low = passage_text.lower()
+        q_low = question.lower()
+
+        # Stop words to filter out
+        stop_words = {"what", "how", "why", "which", "where", "when", "who", "does", "the", "and", "is", "are", "for", "with", "from"}
+        q_tokens = [w for w in re.findall(r'[a-zA-Z0-9]+', q_low) if len(w) > 2 and w not in stop_words]
+
+        # Check entity match if provided
+        entities = target_entities or []
+        entity_match = any(e.lower() in p_low for e in entities) if entities else True
+
+        # Check keyword overlap
+        overlap = sum(1 for token in q_tokens if token in p_low)
+        min_overlap = min(2, len(q_tokens)) if q_tokens else 1
+
+        if not entity_match and overlap < min_overlap:
+            return False, f"Stage A Relevance Failed: passage lacks matching business entity and has only {overlap}/{len(q_tokens)} keyword overlap."
+
+        if overlap < min_overlap and not entity_match:
+            return False, f"Stage A Relevance Failed: passage does not address the question subject (insufficient overlap)."
+
+        return True, None
+
+    @classmethod
+    def evaluate_grounded_answerability(
+        cls,
+        question: str,
+        candidate_passages: List[Dict[str, Any]],  # [{"url": str, "text": str, "entities": List[str]}]
+        claims: List[str],
+        empirical_catalog: Dict[str, Any],
+        pages_content_map: Optional[Dict[str, str]] = None,
+    ) -> AnswerabilityEvaluationResult:
+        """
+        Two-stage Answerability & Grounding evaluation:
+        Stage A: Mandatory relevance gating on candidate passages.
+        Stage B: Claim-level verification only if Stage A passes.
+        """
+        if not candidate_passages:
+            return AnswerabilityEvaluationResult(
+                question=question,
+                answerability_state=AnswerabilityState.UNANSWERABLE,
+                relevance_passed=False,
+                relevance_rejection_reason="No candidate passages retrieved for question.",
+                grounding_score_pct=0.0,
+            )
+
+        # Stage A: Filter candidate passages through relevance gate
+        required_entities = list(empirical_catalog.get("products", []))
+        if "brand_name" in empirical_catalog:
+            required_entities.append(empirical_catalog["brand_name"])
+
+        relevant_passages: List[Dict[str, Any]] = []
+        rejection_reasons: List[str] = []
+
+        for p in candidate_passages:
+            passed, reason = cls.validate_stage_a_relevance(
+                question=question,
+                passage_text=p.get("text", ""),
+                target_entities=required_entities if required_entities else None,
+            )
+            if passed:
+                relevant_passages.append(p)
+            else:
+                rejection_reasons.append(reason or "Irrelevant passage")
+
+        if not relevant_passages:
+            return AnswerabilityEvaluationResult(
+                question=question,
+                answerability_state=AnswerabilityState.UNANSWERABLE,
+                relevance_passed=False,
+                relevance_rejection_reason=f"All {len(candidate_passages)} candidate passage(s) rejected: {rejection_reasons[0] if rejection_reasons else 'insufficient relevance'}",
+                grounding_score_pct=0.0,
+            )
+
+        # Stage B: Run claim grounding pipeline against empirical catalog & validated passages
+        report = cls.run_grounding_pipeline(
+            claims=claims,
+            empirical_catalog=empirical_catalog,
+            pages_content_map=pages_content_map,
+        )
+
+        # Determine state
+        best_passage = relevant_passages[0]
+        if report.contradictions_detected:
+            state = AnswerabilityState.CONFLICTING
+        elif report.factual_grounding_score_pct >= 90.0:
+            state = AnswerabilityState.ANSWERABLE
+        elif report.factual_grounding_score_pct > 0.0:
+            state = AnswerabilityState.PARTIAL
+        else:
+            state = AnswerabilityState.UNANSWERABLE
+
+        return AnswerabilityEvaluationResult(
+            question=question,
+            answerability_state=state,
+            relevance_passed=True,
+            grounding_score_pct=report.factual_grounding_score_pct,
+            total_claims=report.total_claims_evaluated,
+            supported_claims=report.grounded_claims_count,
+            first_party_citation_url=best_passage.get("url"),
+            first_party_passage_snippet=best_passage.get("text", "")[:280],
+            validations=report.validations,
+            contradictions=report.contradictions_detected,
         )

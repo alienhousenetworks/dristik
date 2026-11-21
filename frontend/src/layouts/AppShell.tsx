@@ -286,7 +286,7 @@ export function AppShell(props: AppShellProps) {
                       className={`workspace-link text-sm ${item.active ? 'is-active' : ''}`}
                     >
                       <span className="flex items-center gap-2.5 min-w-0">
-                        <Icon className="h-4 w-4 shrink-0" aria-hidden />
+                        <Icon className={`h-4 w-4 shrink-0 ${item.active ? 'text-white' : 'text-ink-500'}`} aria-hidden />
                         {!compact && <span className="truncate">{item.label}</span>}
                       </span>
                     </button>

@@ -61,6 +61,10 @@ export interface EnterpriseSeoAssessment {
     sampling_status: string;
     urls_discovered: number | null;
     urls_crawled: number | null;
+    urls_rendered?: number | null;
+    urls_deeply_inspected?: number | null;
+    urls_tested_by_specialist?: Record<string, number>;
+    urls_with_verified_findings?: number | null;
   };
   scores: ScoreRow[];
   chapters: Chapter[];
@@ -142,6 +146,51 @@ export function EnterpriseSeoPanel({
             Not executed in this phase: {assessment.deferred_modules.join(', ')}.
           </p>
         ) : null}
+
+        {/* 6-Tier Reconciled URL Inventory */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 pt-3">
+          <div className="card p-3 bg-paper-subtle border border-ink-100 dark:border-ink-800">
+            <span className="text-[11px] uppercase tracking-wider text-ink-400 font-semibold">Discovered</span>
+            <p className="text-xl font-bold font-mono text-ink mt-0.5">{assessment.coverage.urls_discovered != null ? `${assessment.coverage.urls_discovered} URLs` : '—'}</p>
+            <span className="text-[11px] text-ink-500">Sitemap &amp; links</span>
+          </div>
+          <div className="card p-3 bg-paper-subtle border border-ink-100 dark:border-ink-800">
+            <span className="text-[11px] uppercase tracking-wider text-ink-400 font-semibold">Crawled</span>
+            <p className="text-xl font-bold font-mono text-ink mt-0.5">{assessment.coverage.urls_crawled != null ? `${assessment.coverage.urls_crawled} URLs` : '—'}</p>
+            <span className="text-[11px] text-ink-500">HTTP/GET response</span>
+          </div>
+          <div className="card p-3 bg-paper-subtle border border-ink-100 dark:border-ink-800">
+            <span className="text-[11px] uppercase tracking-wider text-ink-400 font-semibold">Rendered</span>
+            <p className="text-xl font-bold font-mono text-ink mt-0.5">{assessment.coverage.urls_rendered ?? assessment.coverage.urls_crawled ?? '—'}</p>
+            <span className="text-[11px] text-ink-500">Headless DOM</span>
+          </div>
+          <div className="card p-3 bg-paper-subtle border border-ink-100 dark:border-ink-800">
+            <span className="text-[11px] uppercase tracking-wider text-ink-400 font-semibold">Deeply Inspected</span>
+            <p className="text-xl font-bold font-mono text-ink mt-0.5">{assessment.coverage.urls_deeply_inspected ?? assessment.coverage.urls_crawled ?? '—'}</p>
+            <span className="text-[11px] text-ink-500">Full AST &amp; schema</span>
+          </div>
+          <div className="card p-3 bg-paper-subtle border border-ink-100 dark:border-ink-800">
+            <span className="text-[11px] uppercase tracking-wider text-ink-400 font-semibold">Verified Issues</span>
+            <p className="text-xl font-bold font-mono text-red-600 dark:text-red-400 mt-0.5">{assessment.coverage.urls_with_verified_findings ?? '—'}</p>
+            <span className="text-[11px] text-ink-500">Confirmed defects</span>
+          </div>
+          <div className="card p-3 bg-paper-subtle border border-ink-100 dark:border-ink-800">
+            <span className="text-[11px] uppercase tracking-wider text-ink-400 font-semibold">Sampling Mode</span>
+            <p className="text-xs font-semibold font-mono text-ink-600 dark:text-ink-300 mt-1">{assessment.coverage.sampling_status}</p>
+            <span className="text-[11px] text-ink-500">Execution scope</span>
+          </div>
+        </div>
+
+        {assessment.coverage.urls_tested_by_specialist && Object.keys(assessment.coverage.urls_tested_by_specialist).length > 0 && (
+          <div className="flex flex-wrap items-center gap-2 pt-2 text-xs">
+            <span className="text-ink-500 font-medium">Specialist Coverage:</span>
+            {Object.entries(assessment.coverage.urls_tested_by_specialist).map(([spec, count]) => (
+              <span key={spec} className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-ink-100 dark:bg-ink-800 text-ink-700 dark:text-ink-300">
+                {spec.replace(/_/g, ' ')}: <strong className="ml-1 font-mono">{count}</strong>
+              </span>
+            ))}
+          </div>
+        )}
       </section>
 
       <section className="space-y-3">

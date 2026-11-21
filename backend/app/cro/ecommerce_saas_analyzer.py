@@ -172,6 +172,18 @@ class EcommerceSaasAnalyzer:
             ecom_score -= 10.0
         ecom_score = max(35.0, min(95.0, ecom_score))
 
+        # Inspect guest checkout & coupon friction strictly from observed checkout text (never fabricate)
+        guest_checkout_obs = bool(
+            has_checkout
+            and re.search(r"(guest\s+checkout|continue\s+as\s+guest|checkout\s+without\s+account)", combined_text, re.I)
+        )
+        coupon_state = "NONE"
+        if has_checkout:
+            if re.search(r"(promo\s+code|coupon\s+code|discount\s+code)", combined_text, re.I):
+                coupon_state = "EXPANDED_DISTRACTING"
+            else:
+                coupon_state = "NONE"
+
         ecom_audit = EcommerceFlowAudit(
             is_ecommerce_site=is_ecom,
             product_pages_analyzed=product_pages,
@@ -184,9 +196,9 @@ class EcommerceSaasAnalyzer:
             review_stars_or_count_detected=has_reviews,
             cart_page_detected=has_cart,
             checkout_page_detected=has_checkout,
-            guest_checkout_supported=True,
+            guest_checkout_supported=guest_checkout_obs,
             payment_methods_detected=payment_methods,
-            coupon_field_friction="COLLAPSED_ACCORDION" if has_checkout else "NONE",
+            coupon_field_friction=coupon_state,
             store_friction_score=ecom_score,
         )
 

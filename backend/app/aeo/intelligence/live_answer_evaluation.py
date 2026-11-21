@@ -39,6 +39,8 @@ class LiveAnswerEvaluationReport(BaseModel):
     average_completeness_pct: float
     citation_correctness_rate_pct: float
     hallucination_rate_pct: float
+    connection_status: str = "CONNECTED"  # "CONNECTED", "CREDENTIALS_NOT_CONFIGURED", "NOT_TESTED"
+    status_note: Optional[str] = None
     results: List[AeoLiveAnswerTestResult] = Field(default_factory=list)
     actionable_remediation: List[str] = Field(default_factory=list)
 
@@ -55,7 +57,26 @@ class LiveAnswerEvaluationEngine:
         brand_name: str,
         tested_queries: List[Dict[str, Any]],  # {"question_id": str, "question": str, "surface": str, "response": str, "citations": List[str]}
         expected_facts: Optional[Dict[str, str]] = None,
+        tracked_competitors: Optional[List[str]] = None,
+        connection_status: str = "CONNECTED",
     ) -> LiveAnswerEvaluationReport:
+        if not tested_queries:
+            status = connection_status if connection_status != "CONNECTED" else "CREDENTIALS_NOT_CONFIGURED"
+            return LiveAnswerEvaluationReport(
+                total_questions_tested=0,
+                direct_answer_rate_pct=0.0,
+                average_completeness_pct=0.0,
+                citation_correctness_rate_pct=0.0,
+                hallucination_rate_pct=0.0,
+                connection_status=status,
+                status_note=(
+                    "Live citation benchmarking was not executed because engine API credentials are not configured for this analysis run. "
+                    "In accordance with Dristik measurement integrity rules, citation metrics remain unmeasured rather than simulated."
+                ),
+                results=[],
+                actionable_remediation=["Configure Perplexity / OpenAI API keys in workspace integrations to enable live AI citation verification."],
+            )
+
         results: List[AeoLiveAnswerTestResult] = []
         recs: List[str] = []
 
@@ -66,6 +87,8 @@ class LiveAnswerEvaluationEngine:
 
         clean_domain = domain.lower().replace("www.", "")
         facts = expected_facts or {}
+        default_competitors = ["Oral-B", "Colgate", "Philips", "Quip", "Crest"]
+        competitor_pool = tracked_competitors if tracked_competitors is not None else default_competitors
 
         for item in tested_queries:
             qid = item.get("question_id", "Q-001")
@@ -105,9 +128,9 @@ class LiveAnswerEvaluationEngine:
             comp = 100.0 if (is_direct and acc and not has_hallucination) else (60.0 if is_direct else 0.0)
             total_comp += comp
 
-            # 5. Competitors detected
+            # 5. Competitors detected (dynamically from tracked pool, not hardcoded)
             comps_found = []
-            for c_name in ["Oral-B", "Colgate", "Philips", "Quip"]:
+            for c_name in competitor_pool:
                 if c_name.lower() in resp.lower() and c_name.lower() != brand_name.lower():
                     comps_found.append(c_name)
 
@@ -143,6 +166,8 @@ class LiveAnswerEvaluationEngine:
             average_completeness_pct=avg_comp,
             citation_correctness_rate_pct=cit_rate,
             hallucination_rate_pct=hal_rate,
+            connection_status="CONNECTED",
+            status_note=f"Successfully evaluated {len(tested_queries)} live engine queries.",
             results=results,
             actionable_remediation=recs,
         )

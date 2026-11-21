@@ -120,12 +120,12 @@ export function Pricing({ onSelectPlan }: PricingProps) {
 
         {/* Currency & Scope Toggles */}
         <div className="flex flex-col sm:flex-row items-start gap-3 pt-4">
-          <div className="inline-flex p-1 bg-paper-100 rounded border border-line text-sm">
+          <div className="inline-flex p-1 bg-paper-200/70 rounded-full text-xs">
             <button
               type="button"
               onClick={() => setPlanType('sprints')}
-              className={`px-4 py-1.5 rounded transition-colors font-medium ${
-                planType === 'sprints' ? 'bg-ink text-paper-50' : 'text-ink-700 hover:text-ink'
+              className={`px-4 py-1.5 rounded-full transition-all duration-200 font-semibold ${
+                planType === 'sprints' ? 'bg-paper-50 text-ink shadow-sm' : 'text-ink-500 hover:text-ink'
               }`}
             >
               Sprints
@@ -133,20 +133,20 @@ export function Pricing({ onSelectPlan }: PricingProps) {
             <button
               type="button"
               onClick={() => setPlanType('monitoring')}
-              className={`px-4 py-1.5 rounded transition-colors font-medium ${
-                planType === 'monitoring' ? 'bg-ink text-paper-50' : 'text-ink-700 hover:text-ink'
+              className={`px-4 py-1.5 rounded-full transition-all duration-200 font-semibold ${
+                planType === 'monitoring' ? 'bg-paper-50 text-ink shadow-sm' : 'text-ink-500 hover:text-ink'
               }`}
             >
               Monitoring
             </button>
           </div>
 
-          <div className="inline-flex p-1 bg-paper-100 rounded border border-line text-sm">
+          <div className="inline-flex p-1 bg-paper-200/70 rounded-full text-xs">
             <button
               type="button"
               onClick={() => setCurrency('INR')}
-              className={`px-3 py-1.5 rounded transition-colors ${
-                currency === 'INR' ? 'bg-pine text-paper-50 font-bold' : 'text-ink-700'
+              className={`px-3 py-1.5 rounded-full transition-all duration-200 font-semibold ${
+                currency === 'INR' ? 'bg-pine-solid text-white shadow-sm' : 'text-ink-500 hover:text-ink'
               }`}
             >
               ₹ INR
@@ -154,8 +154,8 @@ export function Pricing({ onSelectPlan }: PricingProps) {
             <button
               type="button"
               onClick={() => setCurrency('USD')}
-              className={`px-3 py-1.5 rounded transition-colors ${
-                currency === 'USD' ? 'bg-pine text-paper-50 font-bold' : 'text-ink-700'
+              className={`px-3 py-1.5 rounded-full transition-all duration-200 font-semibold ${
+                currency === 'USD' ? 'bg-pine-solid text-white shadow-sm' : 'text-ink-500 hover:text-ink'
               }`}
             >
               $ USD

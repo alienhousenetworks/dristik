@@ -28,6 +28,28 @@ from app.domain.models import Ga4AttributionData, RemediationPatch
 from app.evidence.models import EvidenceRef
 import hashlib
 
+AI_REFERRAL_DOMAINS = {
+    "chatgpt.com": "ChatGPT",
+    "chat.openai.com": "ChatGPT",
+    "perplexity.ai": "Perplexity",
+    "claude.ai": "Claude",
+    "gemini.google.com": "Gemini",
+    "copilot.microsoft.com": "Microsoft Copilot",
+    "poe.com": "Poe",
+    "you.com": "You.com",
+}
+
+
+def classify_ai_referral(hostname: str) -> Optional[str]:
+    """Identify if a referring hostname belongs to a known AI platform."""
+    if not hostname:
+        return None
+    h = hostname.lower().strip()
+    for domain, engine_name in AI_REFERRAL_DOMAINS.items():
+        if h == domain or h.endswith("." + domain):
+            return engine_name
+    return None
+
 
 class GoogleAnalytics4Connector(BaseConnector, ExternalTelemetryConnector):
     """
@@ -354,6 +376,17 @@ class GoogleAnalytics4Connector(BaseConnector, ExternalTelemetryConnector):
                 if conversions is not None and sessions > 0
                 else None
             ),
+            "ai_referral_sessions_confirmed": None,
+            "ai_referral_sessions_probable": None,
+            "ai_referral_conversions": None,
+            "ai_referral_breakdown": {
+                "ChatGPT": None,
+                "Perplexity": None,
+                "Claude": None,
+                "Gemini": None,
+                "Copilot": None,
+            },
+            "attribution_model": "FIRST_TOUCH_AND_SESSION_ASSISTED",
             "top_landing_pages": [],
         }
         ev_hash = hashlib.sha256(json.dumps(metrics, sort_keys=True).encode()).hexdigest()

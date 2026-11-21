@@ -89,16 +89,25 @@ class BehavioralAnalyticsEvaluator:
                 ],
             )
 
-        # Measured payload
+        # Measured payload — strict counting-unit discipline (never divide purchases/sessions into unique_user_conversion_rate)
         sessions = payload.get("sessions")
         key_events = payload.get("key_events") or payload.get("conversions")
         purchases = payload.get("purchases")
         form_starts = payload.get("form_starts")
         form_completions = payload.get("form_completions")
+        unique_converters = payload.get("unique_converters")
+        eligible_users = payload.get("eligible_users")
 
         cr = None
-        if isinstance(sessions, (int, float)) and sessions > 0 and isinstance(purchases, (int, float)):
-            cr = round(purchases / sessions, 4)
+        if isinstance(unique_converters, (int, float)) and isinstance(eligible_users, (int, float)) and eligible_users > 0:
+            cr = round(unique_converters / eligible_users, 4)
+
+        raw_dev_seg = payload.get("device_segmentation")
+        device_seg = (
+            raw_dev_seg
+            if isinstance(raw_dev_seg, dict) and raw_dev_seg
+            else {"desktop": None, "mobile": None, "tablet": None}
+        )
 
         return BehavioralAnalyticsSummary(
             is_connected=True,
@@ -109,7 +118,7 @@ class BehavioralAnalyticsEvaluator:
             form_completions=int(form_completions) if isinstance(form_completions, (int, float)) else None,
             purchases=int(purchases) if isinstance(purchases, (int, float)) else None,
             unique_user_conversion_rate=cr,
-            device_segmentation=payload.get("device_segmentation", {"desktop": 0.60, "mobile": 0.35, "tablet": 0.05}),
+            device_segmentation=device_seg,
             traffic_sources=payload.get("traffic_sources", []),
             funnel_steps=[
                 FunnelDropoffStep(step_name="Landing Page", events=sessions, dropoff_rate=0.0, is_measured=True),

@@ -1115,6 +1115,33 @@ export interface IndexationAuditRollup {
   summary: string;
 }
 
+export interface CrawlInventory {
+  discovered_total: number;
+  eligible_total: number;
+  queued_total: number;
+  fetched_total: number;
+  rendered_total: number;
+  analyzed_total: number;
+  excluded_total: number;
+  failed_total: number;
+  untested_total: number;
+  url_coverage_pct?: number | null;
+  sample_coverage_pct?: number | null;
+  discovery_coverage_pct?: number | null;
+  discovery_truncated?: boolean;
+  coverage_denominator?: string;
+  discovered_via_sitemap?: number;
+  discovered_via_links?: number;
+  seed_urls_count?: number;
+  sampling_status?: string;
+  tested_pages?: number;
+  total_unique_discovered?: number;
+  total_crawled_tested?: number;
+  urls_deeply_inspected?: number;
+  urls_tested_by_specialist?: Record<string, number>;
+  urls_with_verified_findings?: number;
+}
+
 export interface CrawlManifest {
   domain: string;
   base_url: string;
@@ -1126,6 +1153,7 @@ export interface CrawlManifest {
   robots_txt_content?: string;
   crawl_health: Record<string, unknown>;
   indexation_rollup?: IndexationAuditRollup;
+  crawl_inventory?: CrawlInventory;
 }
 
 export interface ContradictionReport {

@@ -45,6 +45,10 @@ from app.api.routes.audits.reports_progressive import router as reports_progress
 from app.tenancy.white_label import router as white_label_router
 from app.api.copilot import router as copilot_router
 from app.api.routes.platform.seo_tools import router as seo_tools_router
+from app.routers.seo_orchestrator_router import router as seo_orchestrator_router
+from app.routers.cro_router import router as cro_enterprise_router
+from app.routers.seo_connectors_router import router as seo_connectors_router
+from app.routers.seo_unified_api_router import router as seo_unified_api_router
 
 # Mounted at both /api/v1 and /api.
 # The in-memory SCIM and SAML configure routes stay unmounted until they
@@ -89,6 +93,9 @@ _PREFIXED_ROUTERS = (
     white_label_router,
     copilot_router,
     seo_tools_router,
+    seo_connectors_router,
+    seo_unified_api_router,
+    cro_enterprise_router,
 )
 
 
@@ -98,3 +105,4 @@ def mount_http(app: FastAPI) -> None:
             app.include_router(router, prefix=prefix)
     # Also mount universal_connect_router at root so /mcp and /connect are directly accessible
     app.include_router(universal_connect_router)
+    app.include_router(seo_orchestrator_router)

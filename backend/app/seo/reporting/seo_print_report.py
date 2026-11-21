@@ -17,7 +17,7 @@ import math
 from typing import Any, Dict, List, Optional, Tuple
 
 from app.domain.models import ExecutiveReport, Finding, FindingStatus
-from app.audit.inventory_helper import get_canonical_crawl_inventory
+from app.crawl.audit.inventory_helper import get_canonical_crawl_inventory
 
 
 # Standard 20 Sections Specification
@@ -1775,30 +1775,34 @@ class SeoPrintReportRenderer:
         </div>
 
         <div class="status-summary-card">
-            <h4>2.2 Authoritative Crawl Inventory &amp; URL Accounting</h4>
+            <h4>2.2 Authoritative Crawl Inventory &amp; 6-Tier URL Accounting</h4>
             <div class="kpi-grid">
                 <div class="kpi-card">
-                    <span class="kpi-label">Seed URLs</span>
-                    <div class="kpi-val">{canon_inv.seed_urls_count}</div>
-                </div>
-                <div class="kpi-card">
-                    <span class="kpi-label">Via Internal Links</span>
-                    <div class="kpi-val">{canon_inv.discovered_via_links}</div>
-                </div>
-                <div class="kpi-card">
-                    <span class="kpi-label">Via Sitemap</span>
-                    <div class="kpi-val">{canon_inv.discovered_via_sitemap}</div>
-                </div>
-                <div class="kpi-card">
-                    <span class="kpi-label">Total Discovered</span>
+                    <span class="kpi-label">Discovered URLs</span>
                     <div class="kpi-val" style="color: #0284c7;">{disc_total}</div>
+                    <span class="kpi-sub">Sitemap ({canon_inv.discovered_via_sitemap}) + Links ({canon_inv.discovered_via_links})</span>
+                </div>
+                <div class="kpi-card">
+                    <span class="kpi-label">HTTP Crawled</span>
+                    <div class="kpi-val" style="color: #10b981;">{canon_inv.fetched_total}</div>
+                    <span class="kpi-sub">Network fetched</span>
+                </div>
+                <div class="kpi-card">
+                    <span class="kpi-label">Rendered URLs</span>
+                    <div class="kpi-val" style="color: #0f766e;">{canon_inv.rendered_total}</div>
+                    <span class="kpi-sub">Headless DOM executed</span>
+                </div>
+                <div class="kpi-card">
+                    <span class="kpi-label">Deeply Inspected</span>
+                    <div class="kpi-val" style="color: #4338ca;">{canon_inv.urls_deeply_inspected}</div>
+                    <span class="kpi-sub">Full AST &amp; schema parsed</span>
                 </div>
             </div>
             <div class="kpi-grid" style="margin-bottom: 0;">
                 <div class="kpi-card">
-                    <span class="kpi-label">Successfully Analyzed</span>
-                    <div class="kpi-val" style="color: #10b981;">{tested_pages}</div>
-                    <span class="kpi-sub">HTTP 200 + DOM rendered</span>
+                    <span class="kpi-label">Verified Issues</span>
+                    <div class="kpi-val" style="color: {'#ef4444' if canon_inv.urls_with_verified_findings > 0 else '#10b981'};">{canon_inv.urls_with_verified_findings}</div>
+                    <span class="kpi-sub">URLs with confirmed defects</span>
                 </div>
                 <div class="kpi-card">
                     <span class="kpi-label">Untested Scope</span>
@@ -1811,7 +1815,7 @@ class SeoPrintReportRenderer:
                     <span class="kpi-sub">Socket / timeout failures</span>
                 </div>
                 <div class="kpi-card">
-                    <span class="kpi-label">Coverage (Denominator: {canon_inv.coverage_denominator})</span>
+                    <span class="kpi-label">Sample Coverage ({canon_inv.sampling_status})</span>
                     <div class="kpi-val" style="color: #0284c7;">{cov_pct}%</div>
                     <span class="kpi-sub">{tested_pages} / {eligible_total} eligible URLs</span>
                 </div>

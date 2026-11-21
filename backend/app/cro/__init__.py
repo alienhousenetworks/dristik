@@ -62,8 +62,19 @@ from app.cro.ecommerce_saas_analyzer import EcommerceSaasAnalyzer, ecommerce_saa
 from app.cro.accessibility.wcag_cro_integrator import WcagCroIntegrator, wcag_cro_integrator
 from app.cro.behavioral_analytics import BehavioralAnalyticsEvaluator, behavioral_analytics_evaluator
 from app.cro.experimentation_engine import ExperimentationEngine, experimentation_engine
-from app.cro.scoring import CroScoringEngine, cro_scoring_engine
+from app.cro.scoring import (
+    CroScoringEngine,
+    cro_scoring_engine,
+    EnterpriseCroScoringEngine,
+    enterprise_cro_scoring_engine,
+)
 from app.cro.recommendations import RecommendationGenerator, recommendation_generator
+from app.cro.orchestrator import CROAuditOrchestrator
+from app.cro.remediation_center import CRORemediationCenter
+from app.cro.verification_engine import CROIndependentVerificationEngine
+from app.cro.monitoring import CROMonitoringEngine
+from app.cro.quality import CROQualityAssuranceEngine
+from app.cro.reports import CROReportBuilder, cro_report_builder
 
 __all__ = [
     # Pillar

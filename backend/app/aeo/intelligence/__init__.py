@@ -33,6 +33,12 @@ from app.aeo.intelligence.factual_grounding_pipeline import (
     FactualValidationResult,
     CrossPageContradiction,
 )
+from app.aeo.intelligence.contradiction_detector import (
+    ContradictionDetector,
+    ContradictionReport,
+    FactConflict,
+    ConflictSeverity,
+)
 from app.aeo.intelligence.live_answer_evaluation import (
     LiveAnswerEvaluationEngine,
     LiveAnswerEvaluationReport,
@@ -84,6 +90,10 @@ __all__ = [
     "FactualGroundingPipelineReport",
     "FactualValidationResult",
     "CrossPageContradiction",
+    "ContradictionDetector",
+    "ContradictionReport",
+    "FactConflict",
+    "ConflictSeverity",
     "LiveAnswerEvaluationEngine",
     "LiveAnswerEvaluationReport",
     "AeoLiveAnswerTestResult",

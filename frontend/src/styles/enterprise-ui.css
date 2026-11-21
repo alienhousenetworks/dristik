@@ -2,31 +2,31 @@
    Application UI only. Print/report-specific styles remain in index.css. */
 
 :root {
-  --app-canvas: #f6f8fa;
+  --app-canvas: #f5f5f7;
   --app-surface: #ffffff;
-  --app-surface-muted: #f8fafc;
-  --app-border: #e2e8f0;
-  --app-border-strong: #cbd5e1;
-  --app-text: #111827;
-  --app-muted: #64748b;
-  --app-accent: #0f766e;
-  --app-accent-hover: #115e59;
-  --app-accent-soft: #f0fdfa;
-  --app-shadow: 0 1px 2px rgb(15 23 42 / 0.04), 0 8px 24px rgb(15 23 42 / 0.035);
+  --app-surface-muted: #fbfbfd;
+  --app-border: rgba(0, 0, 0, 0.08);
+  --app-border-strong: rgba(0, 0, 0, 0.16);
+  --app-text: #1d1d1f;
+  --app-muted: #86868b;
+  --app-accent: #0071e3;
+  --app-accent-hover: #0077ed;
+  --app-accent-soft: rgba(0, 113, 227, 0.08);
+  --app-shadow: 0 4px 20px rgba(0, 0, 0, 0.04), 0 1px 3px rgba(0, 0, 0, 0.02);
 }
 
 .dark {
-  --app-canvas: #0b0f14;
-  --app-surface: #111820;
-  --app-surface-muted: #151e27;
-  --app-border: #283442;
-  --app-border-strong: #3a4a5c;
-  --app-text: #e5eaf0;
-  --app-muted: #9aa9ba;
-  --app-accent: #5eead4;
-  --app-accent-hover: #99f6e4;
-  --app-accent-soft: #122b2b;
-  --app-shadow: 0 1px 2px rgb(0 0 0 / 0.18), 0 12px 32px rgb(0 0 0 / 0.12);
+  --app-canvas: #000000;
+  --app-surface: #161617;
+  --app-surface-muted: #1d1d1f;
+  --app-border: rgba(255, 255, 255, 0.12);
+  --app-border-strong: rgba(255, 255, 255, 0.22);
+  --app-text: #f5f5f7;
+  --app-muted: #86868b;
+  --app-accent: #2997ff;
+  --app-accent-hover: #47a7ff;
+  --app-accent-soft: rgba(41, 151, 255, 0.16);
+  --app-shadow: 0 4px 24px rgba(0, 0, 0, 0.35), 0 1px 4px rgba(0, 0, 0, 0.25);
 }
 
 html { scroll-behavior: smooth; }
@@ -35,11 +35,13 @@ body {
   color: var(--app-text);
   font-size: 14px;
   line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
-::selection { background: rgb(15 118 110 / .16); }
+::selection { background: rgba(0, 113, 227, 0.2); }
 :focus-visible { outline: 2px solid var(--app-accent); outline-offset: 2px; }
 button, a, input, select, textarea { -webkit-tap-highlight-color: transparent; }
-button { transition: background-color 140ms ease, border-color 140ms ease, color 140ms ease, box-shadow 140ms ease; }
+button { transition: all 180ms cubic-bezier(0.25, 0.1, 0.25, 1); }
 button:disabled { cursor: not-allowed; }
 a { text-underline-offset: 3px; }
 
@@ -49,62 +51,67 @@ a { text-underline-offset: 3px; }
 aside[aria-label="Primary"] {
   background: var(--app-surface) !important;
   border-color: var(--app-border) !important;
-  box-shadow: 1px 0 0 rgb(15 23 42 / .015);
+  box-shadow: 1px 0 0 var(--app-border);
 }
 aside[aria-label="Primary"] > div:first-child {
-  min-height: 64px;
+  min-height: 60px;
   padding-inline: 18px;
   border-color: var(--app-border);
 }
 aside[aria-label="Primary"] > div:first-child button > span:first-child {
   width: 32px;
   height: 32px;
-  border-radius: 9px;
+  border-radius: 9999px;
   background: var(--app-accent);
   color: #fff;
-  box-shadow: 0 2px 5px rgb(15 118 110 / .18);
+  box-shadow: 0 2px 8px rgba(0, 113, 227, 0.3);
 }
 aside[aria-label="Primary"] > div:first-child button > span:last-child {
-  letter-spacing: -.035em;
-  font-size: 17px;
+  letter-spacing: -.03em;
+  font-size: 16px;
+  font-weight: 600;
 }
 aside[aria-label="Primary"] .workspace-link {
   min-height: 38px;
-  padding: 8px 11px;
-  border-radius: 7px;
+  padding: 8px 12px;
+  border-radius: 10px;
   color: var(--app-muted);
   font-weight: 500;
+  transition: all 180ms ease;
 }
 aside[aria-label="Primary"] .workspace-link:hover {
   color: var(--app-text);
   background: var(--app-surface-muted);
 }
 aside[aria-label="Primary"] .workspace-link.is-active {
-  color: var(--app-accent);
-  background: var(--app-accent-soft);
-  box-shadow: inset 2px 0 0 var(--app-accent);
-  font-weight: 650;
+  color: #ffffff !important;
+  background: var(--app-accent);
+  box-shadow: 0 2px 8px rgba(0, 113, 227, 0.28);
+  font-weight: 600;
 }
 aside[aria-label="Primary"] .border-t { border-color: var(--app-border); }
 
 header.topbar {
-  height: 64px;
+  height: 60px;
   padding-inline: clamp(12px, 2vw, 28px);
-  background: color-mix(in srgb, var(--app-surface) 92%, transparent) !important;
+  background: color-mix(in srgb, var(--app-surface) 80%, transparent) !important;
   border-color: var(--app-border) !important;
-  backdrop-filter: blur(16px) saturate(1.15);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
 }
-header.topbar button { border-radius: 7px; }
+header.topbar button { border-radius: 9999px; }
 header.topbar button:hover { background: var(--app-surface-muted); }
 header.topbar kbd {
   background: var(--app-surface-muted);
-  padding: 2px 5px;
-  border-radius: 5px;
+  padding: 2px 6px;
+  border-radius: 6px;
+  border: 1px solid var(--app-border);
 }
 header.topbar .card {
   background: var(--app-surface);
   border-color: var(--app-border);
   box-shadow: var(--app-shadow);
+  border-radius: 16px;
 }
 main#main { min-width: 0; }
 main#main > * { min-width: 0; }

@@ -213,6 +213,9 @@ class CoverageStatement(BaseModel):
     urls_requested: int | None = None
     urls_crawled: int | None = None
     urls_rendered: int | None = None
+    urls_deeply_inspected: int | None = None
+    urls_tested_by_specialist: dict[str, int] = Field(default_factory=dict)
+    urls_with_verified_findings: int | None = None
     discovered_denominator_known: bool
     sampling_status: str
     statement: str

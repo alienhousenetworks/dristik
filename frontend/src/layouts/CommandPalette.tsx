@@ -65,31 +65,31 @@ export function CommandPalette({
   let lastGroup = '';
 
   return (
-    <div className="fixed inset-0 z-command flex items-start justify-center p-4 pt-[12vh]">
-      <button type="button" className="scrim absolute inset-0" aria-label="Close command menu" onClick={onClose} />
+    <div className="fixed inset-0 z-command flex items-start justify-center p-4 pt-[14vh] bg-black/30 dark:bg-black/60 backdrop-blur-md">
+      <button type="button" className="scrim absolute inset-0 bg-transparent" aria-label="Close command menu" onClick={onClose} />
       <div
         role="dialog"
         aria-modal="true"
         aria-label="Command menu"
-        className="relative w-full max-w-xl card shadow-overlay overflow-hidden"
+        className="relative w-full max-w-xl card shadow-2xl overflow-hidden rounded-[20px] border border-line/70 bg-paper-50/95 backdrop-blur-2xl"
       >
-        <div className="p-3 border-b border-line">
-          <SearchField autoFocus value={query} onChange={setQuery} placeholder="Search pages, audits, and actions" label="Command menu" />
-          <p className="mt-2 text-[11px] text-ink-400">↑↓ to move · Enter to open · Esc to close</p>
+        <div className="p-3.5 border-b border-line/60">
+          <SearchField autoFocus value={query} onChange={setQuery} placeholder="Spotlight search: pages, audits, actions" label="Command menu" />
+          <p className="mt-2 text-[11px] text-ink-400 font-medium">↑↓ navigate · Return to select · Esc to close</p>
         </div>
-        <div ref={listRef} className="max-h-[50vh] overflow-y-auto py-1" role="listbox">
-          {results.length === 0 && <p className="px-4 py-8 text-center text-sm text-ink-500">No matches.</p>}
+        <div ref={listRef} className="max-h-[50vh] overflow-y-auto p-1.5 space-y-0.5" role="listbox">
+          {results.length === 0 && <p className="px-4 py-8 text-center text-sm text-ink-500">No matches found.</p>}
           {results.map((action, index) => {
             const showGroup = action.group !== lastGroup;
             lastGroup = action.group;
             return (
               <React.Fragment key={action.id}>
-                {showGroup && <p className="px-3 pt-3 pb-1 text-[10px] uppercase tracking-[0.04em] text-ink-400 font-semibold">{action.group}</p>}
+                {showGroup && <p className="px-3 pt-2.5 pb-1 text-[10px] uppercase tracking-[0.08em] text-ink-400 font-semibold">{action.group}</p>}
                 <button
                   type="button"
                   role="option"
                   aria-selected={index === active}
-                  className={`w-full text-left px-3 py-2 text-sm ${index === active ? 'bg-paper-200 text-ink' : 'text-ink-700 hover:bg-paper-100'}`}
+                  className={`w-full text-left px-3.5 py-2.5 text-sm rounded-xl transition-all duration-150 ${index === active ? 'bg-pine-solid text-white font-medium shadow-sm' : 'text-ink hover:bg-paper-100'}`}
                   onMouseEnter={() => setActive(index)}
                   onClick={() => {
                     action.onSelect();

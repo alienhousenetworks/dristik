@@ -14,7 +14,7 @@ export function Tabs<T extends string>({
   label?: string;
 }) {
   return (
-    <div role="tablist" aria-label={label} className="inline-flex flex-wrap gap-1 rounded-lg bg-paper-100 p-1">
+    <div role="tablist" aria-label={label} className="inline-flex flex-wrap gap-1 rounded-full bg-paper-200/60 p-1">
       {items.map((item) => {
         const selected = item.id === value;
         return (
@@ -25,8 +25,8 @@ export function Tabs<T extends string>({
             aria-selected={selected}
             onClick={() => onChange(item.id)}
             className={cn(
-              'px-3 py-1.5 rounded-md text-sm',
-              selected ? 'bg-paper-50 text-ink shadow-xs font-semibold' : 'text-ink-500 hover:text-ink',
+              'px-3.5 py-1.5 rounded-full text-xs transition-all duration-200',
+              selected ? 'bg-paper-50 text-ink shadow-sm font-semibold' : 'text-ink-500 hover:text-ink font-medium',
             )}
           >
             {item.label}

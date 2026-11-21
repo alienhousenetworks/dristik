@@ -14,7 +14,7 @@ from typing import Any, Dict, List, Optional
 from urllib.parse import quote
 
 from app.domain.models import ExecutiveReport, Finding, FindingStatus
-from app.audit.inventory_helper import get_canonical_crawl_inventory
+from app.crawl.audit.inventory_helper import get_canonical_crawl_inventory
 from app.seo.reporting.seo_print_report import (
     SeoPrintReportRenderer,
     calculate_chapter_page_numbers as calc_print_page_numbers,

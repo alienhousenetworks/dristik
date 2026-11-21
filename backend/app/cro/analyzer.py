@@ -185,6 +185,7 @@ class CroAnalyzer:
         pages: List[PageEvidence],
         raw_html_map: Optional[Dict[str, str]] = None,
         business_profile: Optional[Any] = None,
+        analytics_payload: Optional[Dict[str, Any]] = None,
     ) -> Tuple[CroAuditReport, List[Finding]]:
         raw_html_map = raw_html_map or {}
         findings: List[Finding] = []
@@ -568,7 +569,7 @@ class CroAnalyzer:
                 effort=1,
                 priority=2,
                 recommendation=f"Replace generic button copy with specific, value-driven alternatives: {sample_sug or 'e.g. Schedule VIP Demo, Claim Your Free Report'}.",
-                why_it_matters="High-intent action verbs clarify the outcome of clicking, reducing hesitation and boosting conversion by up to 25%.",
+                why_it_matters="Action-specific verbs clarify the outcome of clicking and reduce decision hesitation (heuristic assessment; validate conversion impact experimentally).",
                 validation_criteria="All interactive CTA buttons must contain specific outcome verbs and eliminate generic 'Submit' or 'Click Here' labels.",
                 evidence_class=EvidenceClass.OBSERVED,
                 evidence_subtype="DOM_TEXT",
@@ -610,7 +611,7 @@ class CroAnalyzer:
                 effort=1,
                 priority=1,
                 recommendation="Position an action-oriented primary button (e.g. 'Get Started Free' or 'Book a Demo') in direct proximity to the main headline.",
-                why_it_matters="Over 50% of visitor exits happen above the fold when no immediate value path is presented.",
+                why_it_matters="Visitors landing on key entry pages need a clear above-the-fold next step; actual bounce/exit impact must be measured via analytics.",
                 validation_criteria="Hero section must display at least one prominent primary conversion button above the fold.",
                 evidence_class=EvidenceClass.OBSERVED,
                 evidence_subtype="DOM",
@@ -763,8 +764,8 @@ class CroAnalyzer:
         cro_Intel_obj["wcag_cro_accessibility"] = wcag_res.model_dump()
         findings.extend(wcag_res.wcag_findings)
 
-        # Phase 6.8: Behavioral Analytics
-        behavioral_res = behavioral_analytics_evaluator.evaluate()
+        # Phase 6.8: Behavioral Analytics (wire real connected payload if supplied; never fabricate)
+        behavioral_res = behavioral_analytics_evaluator.evaluate(analytics_payload=analytics_payload)
         cro_Intel_obj["behavioral_analytics"] = behavioral_res.model_dump()
 
         # Phase 6.9: Experiment Recommendation Engine
@@ -787,7 +788,8 @@ class CroAnalyzer:
             a11y_score=wcag_res.accessibility_score,
             trust_score=social_proof_audit.trust_authority_score,
             checkout_score=ecom_saas_res.composite_checkout_score,
-            analytics_connected=False,
+            analytics_connected=behavioral_res.is_connected,
+            analytics_conversion_rate=behavioral_res.unique_user_conversion_rate,
         )
         cro_Intel_obj["ten_dimension_scorecard"] = scorecard.model_dump()
 

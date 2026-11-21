@@ -2,10 +2,19 @@
 import sys
 __path__ = []
 
-from app.crawl import audit
-from app.crawl.audit import consistency_engine, diagnostic_inventory, inventory_helper, manifest, regression_engine, ledger, snapshots, page_analysis
-
 sys.modules["app.audit"] = sys.modules[__name__]
+
+from app.crawl.audit import (
+    consistency_engine,
+    diagnostic_inventory,
+    inventory_helper,
+    manifest,
+    regression_engine,
+    ledger,
+    snapshots,
+    page_analysis,
+)
+
 sys.modules["app.audit.consistency_engine"] = consistency_engine
 sys.modules["app.audit.diagnostic_inventory"] = diagnostic_inventory
 sys.modules["app.audit.inventory_helper"] = inventory_helper

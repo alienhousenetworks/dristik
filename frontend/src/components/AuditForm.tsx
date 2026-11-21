@@ -220,22 +220,22 @@ export function AuditForm({
                 type="button"
                 onClick={() => handleTogglePillar(pillar.key)}
                 disabled={isLoading}
-                className={`p-2.5 rounded-lg border text-left transition-all cursor-pointer select-none flex flex-col justify-between ${
+                className={`p-3 rounded-2xl border text-left transition-all duration-200 cursor-pointer select-none flex flex-col justify-between ${
                   isSelected
-                    ? 'bg-card border-ink/40 shadow-xs ring-1 ring-ink/20'
-                    : 'bg-paper-100/50 border-line/60 opacity-60 hover:opacity-90'
+                    ? 'bg-paper-50 border-pine/80 shadow-sm ring-2 ring-pine/20'
+                    : 'bg-paper-100/60 border-line/70 opacity-60 hover:opacity-90 hover:bg-paper-100'
                 }`}
               >
-                <div className="flex items-center justify-between gap-1 mb-1">
-                  <span className="font-sans font-bold text-xs text-ink flex items-center gap-1.5">
-                    <span className={`w-3.5 h-3.5 rounded flex items-center justify-center text-[10px] ${
-                      isSelected ? 'bg-pine text-white' : 'border border-line bg-paper-200 text-transparent'
+                <div className="flex items-center justify-between gap-1 mb-1.5">
+                  <span className="font-sans font-semibold text-xs text-ink flex items-center gap-1.5">
+                    <span className={`w-4 h-4 rounded-full flex items-center justify-center text-[10px] transition-colors ${
+                      isSelected ? 'bg-pine text-white font-bold' : 'border border-line bg-paper-200 text-transparent'
                     }`}>
                       ✓
                     </span>
                     {pillar.name}
                   </span>
-                  <span className={`text-[9px] font-mono font-semibold px-1.5 py-0.2 rounded border ${pillar.colorClass}`}>
+                  <span className={`text-[9px] font-mono font-semibold px-2 py-0.5 rounded-full border ${pillar.colorClass}`}>
                     {pillar.key.toUpperCase()}
                   </span>
                 </div>

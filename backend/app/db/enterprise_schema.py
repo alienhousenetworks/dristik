@@ -331,3 +331,6 @@ def init_enterprise_schema(db_path: str = "data/dristik_enterprise.db"):
         conn.commit()
     finally:
         conn.close()
+
+    from app.db.seo_orchestrator_schema import init_seo_orchestrator_schema
+    init_seo_orchestrator_schema(db_path)

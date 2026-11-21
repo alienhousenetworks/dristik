@@ -41,16 +41,28 @@ class CroReportGenerator:
         payload["analysis_id"] = analysis_id
         payload["chapters"] = intel.chapters
         payload["findings"] = findings or []
+        coverage = intel.coverage or {}
+        rendered_status = str(coverage.get("rendered_dom_status") or "NOT_VERIFIED_BY_CRO_ENGINE")
+        journey_status = str(coverage.get("journey_execution_status") or "NOT_EXECUTED")
+        analytics_measured = any(m.status == "MEASURED" for m in (intel.metrics or []))
+        has_rendered = "VERIFIED" in rendered_status and "NOT_VERIFIED" not in rendered_status
+        has_journeys = journey_status != "NOT_EXECUTED"
+
         payload["test_groups"] = {
-            "page_structure_dom": "DOM_CHECKED",
-            "mobile_viewport_ux": "NOT_TESTED",
-            "desktop_layout_ux": "NOT_TESTED",
-            "interactive_forms": "NOT_TESTED",
-            "conversion_analytics": "UNAVAILABLE",
+            "page_structure_dom": "DOM_CHECKED" if intel.sample_size > 0 else "NOT_TESTED",
+            "mobile_viewport_ux": "TESTED" if has_rendered else "NOT_TESTED",
+            "desktop_layout_ux": "TESTED" if has_rendered else "NOT_TESTED",
+            "interactive_forms": "TESTED" if has_journeys else "NOT_TESTED",
+            "conversion_analytics": "MEASURED" if analytics_measured else "UNAVAILABLE",
         }
-        payload["certification_status"] = "NOT_CERTIFIED"
-        payload["assurance_status"] = "EVALUATED_WITH_LIMITATIONS"
-        payload["certification_disclaimer"] = "Mandatory browser-level interaction and conversion analytics tests were unmeasured; this audit cannot provide certified conversion assurance."
+        all_certified = has_rendered and has_journeys and analytics_measured
+        payload["certification_status"] = "CERTIFIED" if all_certified else "NOT_CERTIFIED"
+        payload["assurance_status"] = "FULLY_EVALUATED" if all_certified else "EVALUATED_WITH_LIMITATIONS"
+        payload["certification_disclaimer"] = (
+            "Browser interaction tests and connected conversion analytics were verified for this audit."
+            if all_certified
+            else "Mandatory browser-level interaction and conversion analytics tests were unmeasured; this audit cannot provide certified conversion assurance."
+        )
         return payload
 
     def render_html_report(

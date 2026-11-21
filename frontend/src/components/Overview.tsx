@@ -166,22 +166,22 @@ export function Overview({
       {/* ─────────────────────────────────────────────────────────────
           1. ENTERPRISE SCORECARD HERO
           ───────────────────────────────────────────────────────────── */}
-      <Card className="p-6 sm:p-8 bg-paper-100/90 border border-line relative overflow-hidden">
+      <Card className="p-6 sm:p-8 bg-paper-50 rounded-[24px] border border-line/80 shadow-[0_4px_24px_rgba(0,0,0,0.03)] relative overflow-hidden">
         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6 relative z-10">
-          <div className="space-y-2 max-w-2xl">
+          <div className="space-y-2.5 max-w-2xl">
             <div className="flex items-center gap-2">
-              <span className="text-[10px] font-mono uppercase tracking-[0.04em] text-ink-700 font-bold">
-                Audit summary
+              <span className="text-[10px] font-mono uppercase tracking-[0.08em] text-pine font-bold bg-pine/10 px-2 py-0.5 rounded-full border border-pine/20">
+                Audit Intelligence
               </span>
-              <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-paper-50 border border-line text-ink-500 font-semibold">
+              <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-paper-100 border border-line text-ink-500 font-semibold">
                 {report ? 'Report snapshot' : 'Awaiting report'}
               </span>
             </div>
-            <h1 className="font-sans text-3xl sm:text-4xl text-ink font-semibold tracking-tight">
+            <h1 className="font-sans text-3xl sm:text-4xl text-ink font-semibold tracking-[-0.03em]">
               {report?.domain || profile?.business_name || 'Website Audit Intelligence'}
             </h1>
-            <p className="text-xs text-ink-600 leading-relaxed">
-              A summary of the pages checked in this audit. A readiness score is not the same as proof that AI search engines cite the site.
+            <p className="text-sm text-ink-500 leading-relaxed">
+              A verified summary of the pages inspected in this audit run.
             </p>
             {typeof report?.crawl_manifest?.crawl_health?.sampling_note === 'string' && (
               <p className="text-xs text-ink-700 leading-relaxed border-l-2 border-line pl-3">
@@ -190,25 +190,25 @@ export function Overview({
             )}
           </div>
 
-          <div className="flex items-center gap-4 shrink-0 bg-paper-50 p-4 rounded-xl border border-line">
+          <div className="flex items-center gap-5 shrink-0 bg-paper-100/70 p-5 rounded-2xl border border-line/60">
             <div className="text-right">
               <span className="label text-[10px] text-ink-500 block">Overall Score</span>
               <span className={`font-sans text-4xl sm:text-5xl font-bold leading-none ${overallScore != null ? scoreTone(overallScore) : 'text-ink-400'}`}>
                 {overallScore != null ? overallScore.toFixed(1) : '—'}
               </span>
-              <span className="text-xs text-ink-400 block mt-0.5">/ 100</span>
+              <span className="text-xs text-ink-400 block mt-0.5 font-medium">/ 100</span>
             </div>
-            <div className="h-12 w-px bg-line" />
+            <div className="h-12 w-px bg-line/80" />
             <div className="space-y-1 text-xs">
-              <div className="flex items-center gap-1.5 font-mono">
+              <div className="flex items-center gap-2 font-mono">
                 <span className="text-ink-400">Pages:</span>
                 <span className="font-bold text-ink">{report?.crawl_manifest?.pages?.length ?? '—'}</span>
               </div>
-              <div className="flex items-center gap-1.5 font-mono">
+              <div className="flex items-center gap-2 font-mono">
                 <span className="text-ink-400">Issues:</span>
                 <span className="font-bold text-ink">{report?.findings?.length ?? '—'}</span>
               </div>
-              <div className="flex items-center gap-1.5 font-mono">
+              <div className="flex items-center gap-2 font-mono">
                 <span className="text-ink-400">Patches:</span>
                 <span className="font-bold text-good">{Array.isArray(report?.code_patches) || Array.isArray(report?.remediation_patches) ? (report?.code_patches?.length || 0) + (report?.remediation_patches?.length || 0) : '—'} {Array.isArray(report?.code_patches) || Array.isArray(report?.remediation_patches) ? 'ready' : 'not reported'}</span>
               </div>
@@ -338,24 +338,26 @@ export function Overview({
                     onNavigate?.(disc.id);
                   }
                 }}
-                className="card p-5 hover:border-ink hover:shadow-md transition-all cursor-pointer space-y-3 flex flex-col justify-between group focus-visible:outline-2 focus-visible:outline-offset-2"
+                className="card p-6 rounded-[22px] bg-paper-50 border border-line/80 shadow-[0_4px_20px_rgba(0,0,0,0.03)] hover:shadow-[0_12px_36px_rgba(0,0,0,0.07)] hover:border-pine/50 transition-all duration-300 cursor-pointer space-y-3 flex flex-col justify-between group focus-visible:outline-2 focus-visible:outline-offset-2"
               >
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                      <Icon className={`w-4 h-4 ${disc.color}`} />
+                      <div className="w-8 h-8 rounded-full bg-paper-100 flex items-center justify-center">
+                        <Icon className={`w-4 h-4 ${disc.color}`} />
+                      </div>
                       <span className="font-semibold text-ink text-sm">{disc.shortName}</span>
                     </div>
                     <div className="flex items-center gap-1.5">
                       <span className={`font-mono text-sm font-bold ${disc.score != null ? scoreTone(disc.score) : "text-ink-400"}`}>
                         {disc.score != null ? Math.round(disc.score) : '—'}
                       </span>
-                      <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-paper-200 text-ink-600">
+                      <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-paper-200/80 text-ink-600 font-medium">
                         {disc.score != null ? disc.grade : "Not measured"}
                       </span>
                     </div>
                   </div>
-                  <h3 className="font-sans text-base font-semibold text-ink group-hover:text-ink transition-colors">
+                  <h3 className="font-sans text-base font-semibold text-ink group-hover:text-pine transition-colors">
                     {disc.name}
                   </h3>
                   <p className="text-xs text-ink-500 line-clamp-2 leading-relaxed">
@@ -363,11 +365,11 @@ export function Overview({
                   </p>
                 </div>
 
-                <div className="pt-2 border-t border-line/60 flex items-center justify-between text-xs">
+                <div className="pt-3 border-t border-line/60 flex items-center justify-between text-xs">
                   <span className="font-mono text-ink-400 text-[11px]">
                     {disc.issuesCount} findings logged
                   </span>
-                  <span className="text-ink-700 font-medium flex items-center gap-1 group-hover:translate-x-0.5 transition-transform">
+                  <span className="text-pine font-medium flex items-center gap-1 group-hover:translate-x-0.5 transition-transform">
                     Inspect <ArrowRight className="w-3.5 h-3.5" />
                   </span>
                 </div>

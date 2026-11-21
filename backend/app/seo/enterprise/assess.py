@@ -1677,11 +1677,24 @@ class _Builder:
             known = True
         gsc = _channel(_get(_get(self.report, "google_performance"), "search_console"))
         ga4 = _channel(_get(_get(self.report, "google_performance"), "analytics"))
+        deeply_inspected = len(self.pages) if self.pages else (self.crawled or None)
+        verified_finding_urls = len({url for f in self.proposed for url in getattr(f, "affected_urls", []) if url})
+        specialist_coverage = {
+            "technical_seo": self.crawled or 0,
+            "on_page_seo": deeply_inspected or 0,
+            "structured_data": deeply_inspected or 0,
+            "content_seo": deeply_inspected or 0,
+            "performance": self.rendered or 0,
+            "authority": (self.crawled or 0) if _backlinks_present(self.report) else 0,
+        }
         return CoverageStatement(
             urls_discovered=self.discovered,
             urls_requested=self.crawled,
             urls_crawled=self.crawled,
             urls_rendered=self.rendered or None,
+            urls_deeply_inspected=deeply_inspected,
+            urls_tested_by_specialist=specialist_coverage,
+            urls_with_verified_findings=verified_finding_urls,
             discovered_denominator_known=known,
             sampling_status=self.sampling_status,
             statement=statement,

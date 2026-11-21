@@ -55,20 +55,20 @@ export function Modal({
   const ref = useDialog(open, onClose);
   if (!open) return null;
   return (
-    <div className="fixed inset-0 z-modal flex items-end sm:items-center justify-center p-3 sm:p-6">
-      <button type="button" className="scrim absolute inset-0" aria-label="Close dialog" onClick={onClose} />
+    <div className="fixed inset-0 z-modal flex items-end sm:items-center justify-center p-3 sm:p-6 bg-black/30 dark:bg-black/60 backdrop-blur-md">
+      <button type="button" className="scrim absolute inset-0 bg-transparent" aria-label="Close dialog" onClick={onClose} />
       <div
         ref={ref}
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        className={cn('relative card w-full max-w-lg shadow-overlay p-5 sm:p-6', className)}
+        className={cn('relative card w-full max-w-lg shadow-2xl rounded-[24px] border border-line/70 bg-paper-50/95 backdrop-blur-2xl p-6 sm:p-7', className)}
       >
-        <h2 id={titleId} className="font-sans text-2xl text-ink">
+        <h2 id={titleId} className="font-sans text-2xl font-semibold tracking-[-0.025em] text-ink">
           {title}
         </h2>
-        {description && <p className="mt-1 text-sm text-ink-500">{description}</p>}
-        <div className="mt-4">{children}</div>
+        {description && <p className="mt-1 text-sm text-ink-500 leading-relaxed">{description}</p>}
+        <div className="mt-5">{children}</div>
       </div>
     </div>
   );
@@ -122,17 +122,17 @@ export function Sheet({
   const ref = useDialog(open, onClose);
   if (!open) return null;
   return (
-    <div className="fixed inset-0 z-modal flex justify-end">
-      <button type="button" className="scrim absolute inset-0" aria-label="Close panel" onClick={onClose} />
+    <div className="fixed inset-0 z-modal flex justify-end bg-black/25 dark:bg-black/60 backdrop-blur-sm">
+      <button type="button" className="scrim absolute inset-0 bg-transparent" aria-label="Close panel" onClick={onClose} />
       <div
         ref={ref}
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        className="relative h-full w-full max-w-md bg-paper-50 border-l border-line shadow-overlay p-5 overflow-y-auto"
+        className="relative h-full w-full max-w-md bg-paper-50/95 backdrop-blur-2xl border-l border-line shadow-2xl p-6 overflow-y-auto"
       >
-        <div className="flex items-center justify-between gap-3 mb-4">
-          <h2 id={titleId} className="font-sans text-2xl text-ink">
+        <div className="flex items-center justify-between gap-3 mb-5">
+          <h2 id={titleId} className="font-sans text-2xl font-semibold tracking-[-0.025em] text-ink">
             {title}
           </h2>
           <Button variant="ghost" size="sm" onClick={onClose}>
