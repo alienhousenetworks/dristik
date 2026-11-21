@@ -306,8 +306,9 @@ class DeepWcagAuditor:
             headings = soup.find_all(re.compile(r"^h[1-6]$"))
             heading_levels = [int(h.name[1]) for h in headings]
             h1s = [h for h in headings if h.name == "h1"]
-            if not h1s and getattr(page, "h1", None) and len(page.h1) > 0:
-                h1s = [h for h in page.h1 if h.strip()]
+            evidence_h1 = getattr(p, "h1", None) or []
+            if not h1s and evidence_h1:
+                h1s = [h for h in evidence_h1 if isinstance(h, str) and h.strip()]
             empty_headings = [h for h in headings if not h.get_text(strip=True)]
 
             hierarchy_issues = []
