@@ -1,11 +1,20 @@
 import { ExecutiveReport, PillarScoreData, WebsiteIntelligenceRollup } from '../types';
 import { gradeForScore, ratingForScore } from '../report/models/scoreLedger';
 
-function getHealth(score: number | null): 'GOOD' | 'FAIR' | 'POOR' {
+function getHealth(score: number | null): 'GOOD' | 'FAIR' | 'POOR' | 'UNMEASURED' {
+  if (score == null) return 'UNMEASURED';
   const { tone } = ratingForScore(score);
   if (tone === 'good') return 'GOOD';
   if (tone === 'warn') return 'FAIR';
   return 'POOR';
+}
+
+function measuredBlend(parts: Array<[number, number | null]>): number | null {
+  const present = parts.filter((part): part is [number, number] => part[1] != null);
+  if (present.length === 0) return null;
+  const weight = present.reduce((sum, part) => sum + part[0], 0);
+  if (weight <= 0) return null;
+  return Math.round(present.reduce((sum, part) => sum + part[0] * part[1], 0) / weight);
 }
 
 function getGrade(score: number | null): string {
@@ -19,9 +28,9 @@ export function synthesizePillars(report: ExecutiveReport | undefined | null): W
       name,
       shortName,
       categoryTag,
-      score: 0,
+      score: null,
       grade: '—',
-      health: 'POOR',
+      health: 'UNMEASURED',
       headline: 'Awaiting Audit Data',
       summary: 'No audit evidence available yet.',
       highlights: [],
@@ -46,8 +55,8 @@ export function synthesizePillars(report: ExecutiveReport | undefined | null): W
       website_experience: emptyPillar('website_experience', 'Website Experience (SXO)', 'Experience (SXO)', 'SXO'),
       conversion_intelligence: emptyPillar('conversion_intelligence', 'Conversion Intelligence (CRO)', 'Conversion (CRO)', 'CRO'),
       brand_entity_intelligence: emptyPillar('brand_entity_intelligence', 'Brand & Entity Intelligence', 'Brand & Entity', 'Entity'),
-      sxo_score: 0,
-      sxo_health: 'POOR',
+      sxo_score: null,
+      sxo_health: 'UNMEASURED',
     };
   }
 
@@ -67,13 +76,12 @@ export function synthesizePillars(report: ExecutiveReport | undefined | null): W
   // ─────────────────────────────────────────────────────────────
   // 1. SEO: SEARCH ENGINE OPTIMIZATION (Technical SEO as primary)
   // ─────────────────────────────────────────────────────────────
-  const techScore = techCat?.score != null ? Math.round(techCat.score) : (honest?.google_score != null ? Math.round(honest.google_score) : null);
-  const onPageScore = onPageCat?.score != null ? Math.round(onPageCat.score) : null;
-  const contentScore = contentCat?.score != null ? Math.round(contentCat.score) : null;
-  const seoComponents = [techScore, onPageScore, contentScore].filter((s): s is number => s != null);
-  const seoScore = honest?.google_score != null
-    ? Math.round(honest.google_score)
-    : (seoComponents.length > 0 ? Math.round(seoComponents.reduce((a, b) => a + b, 0) / seoComponents.length) : (techScore ?? null));
+  const measuredCategory = (cat: { score?: number | null; status?: string } | undefined) =>
+    cat?.score != null && cat.status !== 'NOT_MEASURED' ? Math.round(cat.score) : null;
+  const techScore = measuredCategory(techCat);
+  const onPageScore = measuredCategory(onPageCat);
+  const contentScore = measuredCategory(contentCat);
+  const seoScore = measuredBlend([[0.45, techScore], [0.35, onPageScore], [0.20, contentScore]]);
 
   const seoFindings = findings.filter(f =>
     f.category === 'TECHNICAL_SEO' || f.category === 'ON_PAGE_SEO' || f.category === 'CONTENT'
@@ -131,8 +139,8 @@ export function synthesizePillars(report: ExecutiveReport | undefined | null): W
     highlights: [
       perEngine?.measurement_note || 'Per-engine matrix is an on-page writing exercise, not a live query.',
       liveCitations != null ? `Live citation score: ${Math.round(liveCitations)}/100` : 'Live visibility: not measured',
-      `Original Information Gain: ${infoGainScore != null ? `${infoGainScore}/100` : 'Analyzed'}`,
-      `Commercial Query Matrix: ${report.ai_search_matrix?.length || 0} queries monitored`,
+      `Original Information Gain: ${infoGainScore != null ? `${infoGainScore}/100` : 'Not measured'}`,
+      `Commercial query set: ${report.ai_search_matrix?.length || 0} buyer-simulation queries`,
     ],
     findingsCount: geoFindings.length,
   };
@@ -174,7 +182,7 @@ export function synthesizePillars(report: ExecutiveReport | undefined | null): W
         ? `Entity graph quality: ${Math.round(graphQuality)}/100 (${graphPresent ?? 0} of ${graphApplicable ?? 0} applicable properties)`
         : `JSON-LD types observed: ${report.geo_readiness?.schema_types?.length || 0}`,
       `Agent Bot Access: ${botDirectives?.robots_measured ? `${botPermissionCount}/4 major AI crawlers allowed` : 'Not measured'}`,
-      `llms.txt Machine File: ${botDirectives?.llms_txt_found ? '✅ Detected' : '⚡ Generated ready'}`,
+      `llms.txt: ${botDirectives?.llms_txt_found ? 'Detected' : 'Not found'}`,
       `Q&A Extractability: ${report.geo_readiness?.questions_supported || 0} supported answers`,
     ],
     findingsCount: aeoFindings.length,

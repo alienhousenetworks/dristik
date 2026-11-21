@@ -13,6 +13,74 @@ from typing import Dict, Any, Optional, AsyncGenerator, List
 
 logger = logging.getLogger(__name__)
 
+_PRIOR_AUDIT_SKIP_STATUS = {"queued", "running", "failed", "error", "cancelled", "canceled"}
+
+
+def _sha256_hex(value: Any) -> bool:
+    text = str(value or "").strip().lower()
+    return len(text) == 64 and all(ch in "0123456789abcdef" for ch in text)
+
+
+def _stored_evidence_is_linkable(row: Any) -> bool:
+    """A stored row can be cited. A minted hash_ or sha_ prefix cannot."""
+    if row is None:
+        return False
+    content_sha = str(getattr(row, "content_sha256", "") or "")
+    digest = str(getattr(row, "hash", "") or "")
+    if content_sha.startswith(("sha_", "hash_")) or digest.startswith(("sha_", "hash_")):
+        return False
+    if content_sha and not _sha256_hex(content_sha):
+        return False
+    return bool(getattr(row, "id", None))
+
+
+def _prior_audit_snapshots(repository: Any, org_id: Any, domain: str, analysis_id: str) -> List[Any]:
+    """Completed scores for this org and domain. A new process has no in-memory twin."""
+    from app.domain.models import AuditSnapshot
+
+    clean = str(org_id or "").strip()
+    if not clean or clean in FORBIDDEN_TENANT_IDENTIFIERS or clean in {"org_default", "default"}:
+        return []
+    try:
+        rows = repository.list_runs(clean, limit=30)
+    except Exception:
+        logger.info("prior audit scores were not loaded")
+        return []
+    snapshots = []
+    for row in reversed(rows or []):
+        if str(row.get("analysis_id") or "") == str(analysis_id or ""):
+            continue
+        if str(row.get("domain") or "").lower() != str(domain or "").lower():
+            continue
+        if str(row.get("status") or "").lower() in _PRIOR_AUDIT_SKIP_STATUS:
+            continue
+        score = row.get("score_overall")
+        if isinstance(score, bool) or not isinstance(score, (int, float)):
+            continue
+        raw_date = str(row.get("completed_at") or row.get("created_at") or "")
+        label = None
+        for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d"):
+            try:
+                label = datetime.strptime(raw_date[:19], fmt).strftime("%b %d, %Y")
+                break
+            except ValueError:
+                continue
+        if label is None:
+            continue
+        run_id = str(row.get("analysis_id") or "")
+        snapshots.append(AuditSnapshot(
+            snapshot_id=run_id or f"prior_{domain}",
+            run_label=run_id or "Prior run",
+            date=label,
+            score=float(score),
+            category_scores={},
+            evidence_seal=str(row.get("output_hash") or run_id),
+            verified_schema_types=[],
+            findings_count=0,
+            status="HEALTHY",
+        ))
+    return snapshots
+
 from app.core.config import settings
 from app.core.constants import FORBIDDEN_TENANT_IDENTIFIERS
 
@@ -1345,15 +1413,18 @@ class AnalysisOrchestrator:
                 host_and_redirects_rep = await probe_host_and_redirects(domain_or_url=website_url, canonical_target=website_url)
             except Exception:
                 from app.domain.models import RedirectAuditReport
-                host_and_redirects_rep = RedirectAuditReport(target_domain=domain, canonical_destination=website_url, summary="Host variant probe completed in offline mode.")
+                host_and_redirects_rep = RedirectAuditReport(
+                    target_domain=domain,
+                    canonical_destination=website_url,
+                    summary="Host variant probe did not complete. www, apex, and protocol variants were not measured.",
+                )
 
             raw_findings = self.decision_engine.synthesize_findings(current_claims, blackboard.evidence_store)
             if cro_finding is not None:
                 raw_findings = [f for f in raw_findings if f.finding_id != "find_cro_001"]
                 raw_findings.append(cro_finding)
 
-            # Ingest empirical analyzer findings into raw_findings with verified evidence
-            from app.domain.evidence.models import Evidence
+            # Link analyzer findings only to evidence already stored with a real hash.
             analyzer_finding_groups = [
                 can_findings,
                 http_findings,
@@ -1369,49 +1440,27 @@ class AnalysisOrchestrator:
                 serp_findings,
                 indexation_findings,
             ]
+            store = blackboard.evidence_store if hasattr(blackboard, "evidence_store") else None
             for group in analyzer_finding_groups:
                 for f in (group or []):
                     if not f or not getattr(f, "finding_id", None):
                         continue
                     ev_refs = []
                     for ev in (getattr(f, "evidence", []) or []):
-                        ev_id = getattr(ev, "evidence_id", None) or f"ev_det_{len(raw_findings):03d}"
-                        ev_url = getattr(ev, "url", None) or (f.affected_urls[0] if getattr(f, "affected_urls", None) else website_url)
-                        ev_sel = getattr(ev, "selector", None) or getattr(ev, "element", None)
-                        ev_text = getattr(ev, "snippet", None) or getattr(ev, "value", None) or f.title
-                        if hasattr(blackboard, "evidence_store") and blackboard.evidence_store:
-                            if not blackboard.evidence_store.get(ev_id):
-                                blackboard.evidence_store.add(Evidence(
-                                    id=ev_id,
-                                    source_type="dom",
-                                    analyzer="deterministic",
-                                    url=ev_url,
-                                    selector=ev_sel,
-                                    text=str(ev_text)[:500],
-                                    value=ev_text,
-                                    hash=f"hash_{ev_id}",
-                                    content_sha256=f"sha_{ev_id}",
-                                ))
-                        ev_refs.append(ev_id)
-                    if not ev_refs:
-                        page_target = (getattr(f, "affected_urls", []) or [website_url])[0]
-                        existing_ev = next((e.id for e in (blackboard.evidence_store.get_all() if blackboard.evidence_store else []) if e.url and page_target in e.url), None)
-                        if existing_ev:
-                            ev_refs.append(existing_ev)
-                        else:
-                            minted_id = f"ev_det_{len(raw_findings):03d}"
-                            if hasattr(blackboard, "evidence_store") and blackboard.evidence_store:
-                                blackboard.evidence_store.add(Evidence(
-                                    id=minted_id,
-                                    source_type="dom",
-                                    analyzer="deterministic",
-                                    url=page_target,
-                                    text=f.title,
-                                    hash=f"hash_{minted_id}",
-                                    content_sha256=f"sha_{minted_id}",
-                                ))
-                            ev_refs.append(minted_id)
-                    f.evidence_refs = list(set((f.evidence_refs or []) + ev_refs))
+                        ev_id = getattr(ev, "evidence_id", None) or (ev.get("evidence_id") if isinstance(ev, dict) else None)
+                        stored = store.get(ev_id) if store is not None and ev_id else None
+                        if _stored_evidence_is_linkable(stored):
+                            ev_refs.append(str(ev_id))
+                    if not ev_refs and store is not None:
+                        page_target = (getattr(f, "affected_urls", []) or [None])[0]
+                        if page_target:
+                            for existing in store.get_all():
+                                if _stored_evidence_is_linkable(existing) and existing.url and page_target in existing.url:
+                                    ev_refs.append(existing.id)
+                                    break
+                    # Leave evidence_refs empty when nothing stored has a real hash.
+                    # A minted ev_det_ id is not a fetched body.
+                    f.evidence_refs = list(dict.fromkeys((f.evidence_refs or []) + ev_refs))
                     if not any(x.finding_id == f.finding_id for x in raw_findings):
                         raw_findings.append(f)
 
@@ -1687,6 +1736,7 @@ class AnalysisOrchestrator:
                 manifest=manifest,
                 cwv_data=cwv_data_val,
                 form_audit=form_audit_rep,
+                pages=eval_pages_val,
             )
             extractability = getattr(geo_readiness, "extractability_score", None)
             if overall_scores is not None and extractability is not None:
@@ -1707,6 +1757,8 @@ class AnalysisOrchestrator:
                 external_authority_connected=has_external_authority_connected,
                 cwv_data=cwv_data_val,
                 form_audit=form_audit_rep,
+                manifest=manifest,
+                pages=eval_pages_val,
             )
             blackboard.honest_scores = honest_scores
             scoring_methodology_appendix = self.scoring_engine.build_scoring_methodology_appendix(
@@ -1792,6 +1844,13 @@ class AnalysisOrchestrator:
                     base_url=website_url
                 )
             twin = self.digital_twins[domain]
+            if not twin.historical_snapshots:
+                twin.historical_snapshots = _prior_audit_snapshots(
+                    self.repository,
+                    getattr(run, "org_id", None),
+                    domain,
+                    analysis_id,
+                )
             twin.update_from_mission(
                 blackboard.business_profile,
                 blackboard.pages,
@@ -1966,19 +2025,26 @@ class AnalysisOrchestrator:
 
             # Synthesize Lifecycle Revenue Intelligence with genuine provider connection states
             from app.connectors.lifecycle_revenue import lifecycle_service
+            coverage_rows = external_authority_payload.get("coverage", [])
             gsc_conn = any(
                 (isinstance(c, dict) and c.get("provider") == "google_search_console" and c.get("status") == "CONNECTED")
-                for c in external_authority_payload.get("coverage", [])
+                for c in coverage_rows
             )
             ga4_conn = any(
                 (isinstance(c, dict) and c.get("provider") == "google_analytics_4" and c.get("status") == "CONNECTED")
-                for c in external_authority_payload.get("coverage", [])
+                for c in coverage_rows
+            )
+            crm_conn = any(
+                isinstance(c, dict)
+                and str(c.get("provider") or "").lower() in {"crm", "hubspot", "salesforce"}
+                and c.get("status") == "CONNECTED"
+                for c in coverage_rows
             )
             lifecycle_rep = lifecycle_service.synthesize_lifecycle_intelligence(
                 domain=domain,
                 gsc_connected=gsc_conn,
                 ga4_connected=ga4_conn,
-                crm_connected=False,
+                crm_connected=crm_conn,
             )
 
             # Synthesize first-class Evidence Taxonomy & Epistemic Hierarchy report
@@ -3260,6 +3326,8 @@ class AnalysisOrchestrator:
                     live_citation_score=live_citation,
                     live_benchmark_data=live_bench,
                     external_authority_connected=has_ext_authority,
+                    manifest=blackboard.crawl_manifest,
+                    pages=eval_pages,
                 )
                 blackboard.honest_scores = honest_scores
 

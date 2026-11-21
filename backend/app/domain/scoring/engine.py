@@ -140,6 +140,132 @@ def _matches_check(check_id: str, finding: Finding) -> bool:
     return any(kw in title_low or kw in desc_low for kw in keywords)
 
 
+def _page_field(page: Any, name: str, default: Any = None) -> Any:
+    if isinstance(page, dict):
+        return page.get(name, default)
+    return getattr(page, name, default)
+
+
+def _crawl_pages(pages: Any, manifest: Any) -> List[Any]:
+    raw = pages
+    if raw is None and manifest is not None:
+        raw = getattr(manifest, "pages", None)
+    kept: List[Any] = []
+    for page in raw or []:
+        url = str(_page_field(page, "url", "") or "")
+        if url.startswith(("http://", "https://")):
+            kept.append(page)
+    return kept
+
+
+def _http_urls(*groups: Any) -> List[str]:
+    seen: List[str] = []
+    for group in groups:
+        for raw in group or []:
+            if isinstance(raw, str) and raw.startswith(("http://", "https://")) and raw not in seen:
+                seen.append(raw)
+    return seen
+
+
+def _finding_urls(finding: Finding) -> List[str]:
+    evidence_urls: List[str] = []
+    for item in getattr(finding, "evidence", None) or []:
+        url = item.get("url") if isinstance(item, dict) else getattr(item, "url", None)
+        if url:
+            evidence_urls.append(str(url))
+    return _http_urls(getattr(finding, "affected_urls", None), evidence_urls)
+
+
+def _count_bool_pages(pages: List[Any], predicate: Any) -> Optional[Dict[str, Any]]:
+    passed = 0
+    failed = 0
+    evidence: List[Dict[str, Any]] = []
+    for page in pages:
+        if predicate(page):
+            passed += 1
+        else:
+            failed += 1
+            if len(evidence) < 5:
+                evidence.append({"url": _page_field(page, "url"), "status": "FAIL"})
+    total = passed + failed
+    if total <= 0:
+        return None
+    return {"s": passed / total, "passed": passed, "failed": failed, "sample_size": total, "evidence": evidence}
+
+
+def _page_observation(check_id: str, pages: List[Any]) -> Optional[Dict[str, Any]]:
+    """Count a check from stored page fields. No pages means no observation."""
+    if not pages:
+        return None
+    if check_id == "title_present":
+        return _count_bool_pages(pages, lambda page: bool(str(_page_field(page, "title") or "").strip()))
+    if check_id == "meta_desc_present":
+        return _count_bool_pages(pages, lambda page: bool(str(_page_field(page, "meta_description") or "").strip()))
+    if check_id == "single_h1_present":
+        def _one_h1(page: Any) -> bool:
+            headings = _page_field(page, "h1", None)
+            if isinstance(headings, str):
+                return bool(headings.strip())
+            if not isinstance(headings, (list, tuple)):
+                return False
+            return len([item for item in headings if str(item).strip()]) == 1
+        return _count_bool_pages(pages, _one_h1)
+    if check_id == "https_on_all_urls":
+        return _count_bool_pages(pages, lambda page: str(_page_field(page, "url", "")).startswith("https://"))
+    if check_id == "viewport_meta_declared":
+        return _count_bool_pages(pages, lambda page: bool(str(_page_field(page, "viewport") or "").strip()))
+    if check_id == "indexable_url_share":
+        return _count_bool_pages(pages, lambda page: bool(_page_field(page, "is_indexable", False)))
+    if check_id == "canonical_valid_rate":
+        return _count_bool_pages(
+            pages,
+            lambda page: str(_page_field(page, "canonical_status", "") or "").lower() in {"self", "valid"},
+        )
+    if check_id == "image_alt_text_rate":
+        total = 0
+        missing = 0
+        evidence = []
+        for page in pages:
+            try:
+                images = int(_page_field(page, "total_images", 0) or 0)
+                without = int(_page_field(page, "images_without_alt", 0) or 0)
+            except (TypeError, ValueError):
+                continue
+            if images <= 0:
+                continue
+            total += images
+            missing += min(max(without, 0), images)
+            if without > 0 and len(evidence) < 5:
+                evidence.append({
+                    "url": _page_field(page, "url"),
+                    "status": "FAIL",
+                    "detail": f"{without} image(s) without alt text",
+                })
+        if total <= 0:
+            return None
+        passed = total - missing
+        return {"s": passed / total, "passed": passed, "failed": missing, "sample_size": total, "evidence": evidence}
+    return None
+
+
+def _finding_observation(findings: List[Finding]) -> Dict[str, Any]:
+    """Cited URLs failed. One finding with no URL is one failure, not a crawl-wide rate."""
+    urls: List[str] = []
+    evidence: List[Dict[str, Any]] = []
+    for finding in findings:
+        for url in _finding_urls(finding):
+            if url not in urls:
+                urls.append(url)
+        if len(evidence) < 5:
+            evidence.append({
+                "url": (_finding_urls(finding)[:1] or ["cited_url"])[0],
+                "status": "FAIL",
+                "detail": finding.title,
+            })
+    sample = len(urls) or 1
+    return {"s": 0.0, "passed": 0, "failed": sample, "sample_size": sample, "evidence": evidence}
+
+
 class ScoringEngine:
     def __init__(self, rubric: Optional[ScoringRubricV5] = None):
         self.rubric = rubric or load_scoring_rubric_v5()
@@ -197,6 +323,7 @@ class ScoringEngine:
         inp_val = float(cwv["inp"]) if "inp" in cwv else None
         cls_val = float(cwv["cls"]) if "cls" in cwv else None
         ttfb_val = float(cwv["ttfb"]) if "ttfb" in cwv else None
+        pages_list = _crawl_pages(kwargs.get("pages"), manifest)
 
         # Check for catastrophic gate conditions
         has_sitewide_noindex = any(
@@ -337,15 +464,27 @@ class ScoringEngine:
                     sub_weight_total += w
                     total_cat_weight_possible += w
 
-                    # Default check state
-                    s = 1.0
-                    passed = 1
+                    # A check stays unmeasured until a page field, a live query table,
+                    # or a finding with cited URLs produces a count.
+                    s = 0.0
+                    passed = 0
                     failed = 0
-                    sample_size = max(1, scope.measured_pages)
+                    sample_size = 0
                     evidence_list: List[Dict[str, Any]] = []
-                    status = "PASS"
-                    is_measured = True
+                    status = "NOT_MEASURED"
+                    is_measured = False
+                    counts_locked = False
                     llm_judge = None
+
+                    def _record(obs: Dict[str, Any]) -> None:
+                        nonlocal s, passed, failed, sample_size, is_measured, counts_locked
+                        s = float(obs["s"])
+                        passed = int(obs["passed"])
+                        failed = int(obs["failed"])
+                        sample_size = int(obs["sample_size"])
+                        is_measured = True
+                        counts_locked = True
+                        evidence_list.extend(obs.get("evidence") or [])
 
                     # Find findings targeting this check / category
                     check_findings = matched_findings_by_check.get(cid, [])
@@ -359,92 +498,129 @@ class ScoringEngine:
                         passed = 0
                         failed = 0
                     elif cid == "robots_txt_rfc9309":
-                        if manifest is not None and not getattr(manifest, "robots_txt_found", True):
-                            s = 0.0
-                            passed = 0
-                            failed = sample_size
-                            evidence_list.append({"url": "robots.txt", "status": "FAIL", "detail": "robots.txt file was not detected at domain root."})
+                        robots_found = getattr(manifest, "robots_txt_found", None) if manifest is not None else None
+                        if robots_found is False:
+                            _record({
+                                "s": 0.0, "passed": 0, "failed": 1, "sample_size": 1,
+                                "evidence": [{"url": "robots.txt", "status": "FAIL", "detail": "robots.txt was not detected at the domain root."}],
+                            })
                         elif check_findings:
-                            s = 0.0
-                            passed = 0
-                            failed = sample_size
-                            evidence_list.append({"url": "robots.txt", "status": "FAIL", "detail": check_findings[0].title})
-                        else:
-                            s = 1.0
+                            _record(_finding_observation(check_findings))
+                        elif robots_found is True:
+                            _record({
+                                "s": 1.0, "passed": 1, "failed": 0, "sample_size": 1,
+                                "evidence": [{"url": "robots.txt", "status": "PASS", "detail": "robots.txt was fetched."}],
+                            })
                     elif cid == "sitemap_urls_valid_200":
-                        if manifest is not None and not getattr(manifest, "sitemap_found", True):
-                            site_size = len(manifest.pages) if getattr(manifest, "pages", None) else sample_size
+                        sitemap_found = getattr(manifest, "sitemap_found", None) if manifest is not None else None
+                        if sitemap_found is False:
+                            site_size = len(getattr(manifest, "pages", None) or pages_list)
                             if site_size <= 25:
-                                s = 0.5
-                                passed = int(round(s * sample_size))
-                                failed = sample_size - passed
-                                evidence_list.append({"url": "sitemap.xml", "status": "ADVISORY", "detail": "XML Sitemap not discovered; on small sites (<= 25 pages) with complete internal linking, impact is advisory."})
+                                _record({
+                                    "s": 0.5, "passed": 0, "failed": 1, "sample_size": 1,
+                                    "evidence": [{"url": "sitemap.xml", "status": "ADVISORY", "detail": "XML sitemap was not discovered. This is one file observation, not a sitewide pass."}],
+                                })
                             else:
-                                s = 0.0
-                                passed = 0
-                                failed = sample_size
-                                evidence_list.append({"url": "sitemap.xml", "status": "FAIL", "detail": "XML Sitemap is missing or unreferenced in robots.txt."})
+                                _record({
+                                    "s": 0.0, "passed": 0, "failed": 1, "sample_size": 1,
+                                    "evidence": [{"url": "sitemap.xml", "status": "FAIL", "detail": "XML sitemap is missing or unreferenced."}],
+                                })
                         elif check_findings:
-                            top_f = max(check_findings, key=severity_rank)
-                            s = 0.0 if top_f.severity in (Severity.CRITICAL, Severity.HIGH) else 0.5
-                            passed = int(round(s * sample_size))
-                            failed = sample_size - passed
-                            evidence_list.append({"url": "sitemap.xml", "status": "FAIL", "detail": top_f.title})
-                        else:
-                            s = 1.0
+                            _record(_finding_observation(check_findings))
+                        elif sitemap_found is True:
+                            _record({
+                                "s": 1.0, "passed": 1, "failed": 0, "sample_size": 1,
+                                "evidence": [{"url": "sitemap.xml", "status": "PASS", "detail": "XML sitemap was fetched."}],
+                            })
                     elif cid == "https_on_all_urls":
-                        if is_https is None:
+                        https_pages = _page_observation(cid, pages_list)
+                        if https_pages is not None:
+                            _record(https_pages)
+                        elif is_https is None:
                             is_measured = False
-                            status = "NOT_MEASURED"
                         else:
-                            s = 1.0 if is_https else 0.0
                             domain_lbl = getattr(business_profile, "domain", None) or getattr(business_profile, "business_name", "") or "homepage"
                             if is_https:
-                                evidence_list.append({"url": domain_lbl, "status": "PASS", "detail": "All inspected pages served securely over HTTPS."})
+                                detail = "The audited URL was requested over HTTPS. This is one URL, not every page on the host."
+                                status_lbl = "PASS"
                             else:
-                                evidence_list.append({"url": domain_lbl, "status": "FAIL", "detail": "Homepage requested over insecure HTTP."})
+                                detail = "The audited URL was requested over insecure HTTP."
+                                status_lbl = "FAIL"
+                            _record({
+                                "s": 1.0 if is_https else 0.0,
+                                "passed": 1 if is_https else 0,
+                                "failed": 0 if is_https else 1,
+                                "sample_size": 1,
+                                "evidence": [{"url": domain_lbl, "status": status_lbl, "detail": detail}],
+                            })
                     elif cid == "tls_version_valid":
-                        if is_https is None:
-                            is_measured = False
-                            status = "NOT_MEASURED"
-                        else:
-                            s = 1.0 if is_https else 0.0
+                        # HTTP has no TLS. HTTPS alone does not record the protocol version.
+                        if is_https is False:
+                            _record({
+                                "s": 0.0, "passed": 0, "failed": 1, "sample_size": 1,
+                                "evidence": [{"url": "homepage", "status": "FAIL", "detail": "The audited URL was requested over HTTP, so TLS was not negotiated."}],
+                            })
                     elif cid == "security_headers_hardening":
-                        hsts_finding = next((f for f in primary_findings if "hsts" in f.title.lower() or "hsts" in f.finding_id.lower()), None)
-                        s = 0.5 if hsts_finding else 1.0
-                        if hsts_finding:
-                            evidence_list.append({"url": "response_headers", "status": "PARTIAL", "detail": "Strict-Transport-Security header absent."})
+                        header_rows = []
+                        for page in pages_list:
+                            raw_headers = _page_field(page, "security_headers") or _page_field(page, "response_headers") or {}
+                            if isinstance(raw_headers, dict) and raw_headers:
+                                header_rows.append({str(key).lower(): value for key, value in raw_headers.items()})
+                        if header_rows:
+                            passed_headers = sum(1 for headers in header_rows if "strict-transport-security" in headers)
+                            _record({
+                                "s": passed_headers / len(header_rows),
+                                "passed": passed_headers,
+                                "failed": len(header_rows) - passed_headers,
+                                "sample_size": len(header_rows),
+                                "evidence": [{"metric": "hsts", "status": "PASS" if passed_headers == len(header_rows) else "FAIL"}],
+                            })
+                        elif check_findings:
+                            _record(_finding_observation(check_findings))
                     elif cid == "cwv_lcp":
                         if lcp_val is not None:
-                            s = log_normal_curve(lcp_val, p10=check_def.p10 or 2.5, median=check_def.median or 4.0, higher_is_better=False)
-                            evidence_list.append({"metric": "LCP", "value": f"{lcp_val:.2f}s", "status": "PASS" if s >= 0.75 else "FAIL"})
-                        else:
-                            is_measured = False
+                            curve = log_normal_curve(lcp_val, p10=check_def.p10 or 2.5, median=check_def.median or 4.0, higher_is_better=False)
+                            _record({
+                                "s": curve, "passed": 1 if curve >= 0.5 else 0, "failed": 0 if curve >= 0.5 else 1, "sample_size": 1,
+                                "evidence": [{"metric": "LCP", "value": f"{lcp_val:.2f}s", "status": "PASS" if curve >= 0.75 else "FAIL", "detail": "One lab or field observation, not one result per crawled page."}],
+                            })
                     elif cid == "cwv_inp":
                         if inp_val is not None:
-                            s = log_normal_curve(inp_val, p10=check_def.p10 or 200.0, median=check_def.median or 500.0, higher_is_better=False)
-                        else:
-                            is_measured = False
+                            curve = log_normal_curve(inp_val, p10=check_def.p10 or 200.0, median=check_def.median or 500.0, higher_is_better=False)
+                            _record({"s": curve, "passed": 1 if curve >= 0.5 else 0, "failed": 0 if curve >= 0.5 else 1, "sample_size": 1, "evidence": [{"metric": "INP", "value": inp_val}]})
                     elif cid == "cwv_cls":
                         if cls_val is not None:
-                            s = log_normal_curve(cls_val, p10=check_def.p10 or 0.10, median=check_def.median or 0.25, higher_is_better=False)
-                        else:
-                            is_measured = False
+                            curve = log_normal_curve(cls_val, p10=check_def.p10 or 0.10, median=check_def.median or 0.25, higher_is_better=False)
+                            _record({"s": curve, "passed": 1 if curve >= 0.5 else 0, "failed": 0 if curve >= 0.5 else 1, "sample_size": 1, "evidence": [{"metric": "CLS", "value": cls_val}]})
                     elif cid == "cwv_ttfb":
                         if ttfb_val is not None:
-                            s = log_normal_curve(ttfb_val, p10=check_def.p10 or 0.8, median=check_def.median or 1.8, higher_is_better=False)
-                        else:
-                            is_measured = False
+                            curve = log_normal_curve(ttfb_val, p10=check_def.p10 or 0.8, median=check_def.median or 1.8, higher_is_better=False)
+                            _record({
+                                "s": curve, "passed": 1 if curve >= 0.5 else 0, "failed": 0 if curve >= 0.5 else 1, "sample_size": 1,
+                                "evidence": [{"metric": "TTFB", "value": ttfb_val, "detail": "TTFB is one timing. It is not LCP, INP, or CLS."}],
+                            })
                     elif cid == "audience_flesch_reading_ease":
-                        if readability is None or isinstance(readability, bool) or not isinstance(readability, (int, float)) or not math.isfinite(float(readability)):
+                        reading = readability
+                        if reading is None and pages_list:
+                            sampled = [
+                                float(_page_field(page, "readability_score"))
+                                for page in pages_list
+                                if isinstance(_page_field(page, "readability_score", None), (int, float))
+                                and not isinstance(_page_field(page, "readability_score", None), bool)
+                                and float(_page_field(page, "readability_score")) > 0
+                            ]
+                            if sampled:
+                                reading = sum(sampled) / len(sampled)
+                        if reading is None or isinstance(reading, bool) or not isinstance(reading, (int, float)) or not math.isfinite(float(reading)):
                             is_measured = False
-                            status = "NOT_MEASURED"
                         else:
-                            s = audience_readability_score(readability, audience=getattr(business_profile, "target_audience", None) or "b2b")
-                            evidence_list.append({"readability": readability, "status": "PASS" if s >= 0.7 else "PARTIAL"})
+                            curve = audience_readability_score(float(reading), audience=getattr(business_profile, "target_audience", None) or "b2b")
+                            _record({
+                                "s": curve, "passed": 1 if curve >= 0.5 else 0, "failed": 0 if curve >= 0.5 else 1, "sample_size": 1,
+                                "evidence": [{"readability": reading, "status": "PASS" if curve >= 0.7 else "PARTIAL"}],
+                            })
                     elif cid == "form_field_count_curve":
                         form_audit = kwargs.get("form_audit")
-                        pages_list = kwargs.get("pages") or (getattr(manifest, "pages", None) if manifest is not None else None)
                         input_counts: List[float] = []
                         if form_audit is not None:
                             forms_attr = getattr(form_audit, "forms", None) or (form_audit.get("forms") if isinstance(form_audit, dict) else None) or []
@@ -463,270 +639,149 @@ class ScoringEngine:
                                             input_counts.append(float(len(pf["inputs"])))
                         if input_counts:
                             form_field_count = sum(input_counts) / len(input_counts)
-                        else:
-                            form_field_count = 3.0
-                            for f in check_findings:
-                                if "field" in f.title.lower():
-                                    form_field_count = 7.0
-                        if form_field_count <= 3.0:
-                            s = 1.0
-                        else:
-                            s = log_normal_curve(form_field_count, p10=3.0, median=8.0, higher_is_better=False)
-                        evidence_list.append({
-                            "metric": "mean_form_fields",
-                            "value": round(form_field_count, 2),
-                            "forms_sampled": len(input_counts),
-                            "status": "PASS" if s >= 0.75 else "PARTIAL",
-                        })
-                    elif cat_enum == Category.SCHEMA and not has_schema:
-                        s = 0.0
-                        passed = 0
-                        failed = 1
-                        evidence_list.append({"schema": "missing", "status": "FAIL", "detail": "No Schema.org types recorded in crawl sample."})
-                    elif cid == "ai_brand_mention_rate":
-                        if live_benchmark_data and "overall_mention_rate_pct" in live_benchmark_data:
-                            sample_size = positive_query_count(live_benchmark_data.get("total_queries"))
-                            if sample_size is None:
-                                is_measured = False
-                                status = "NOT_MEASURED"
-                                s = 0.0
-                                passed = 0
-                                sample_size = 0
-                            else:
-                                s = min(1.0, max(0.0, float(live_benchmark_data["overall_mention_rate_pct"]) / 100.0))
-                                passed = int(round(s * sample_size))
-                                failed = sample_size - passed
-                                _, low, high = wilson_interval(passed, sample_size)
-                                evidence_list.append({
-                                    "metric": "brand_mention_rate",
-                                    "observed_rate": f"{s*100:.1f}%",
-                                    "wilson_ci": [round(low, 3), round(high, 3)],
-                                    "sample_size": sample_size,
-                                    "status": "PASS" if s >= 0.6 else "PARTIAL",
-                                    "detail": f"Observed brand mention rate: {s*100:.1f}% across {sample_size} engine queries."
-                                })
-                        elif live_citation_score is not None:
-                            s = min(1.0, max(0.0, live_citation_score / 100.0))
-                            sample_size = self.rubric.plans.get(plan_tier, self.rubric.plans["starter"]).ai_search_min_sample
-                            passed = int(s * sample_size)
-                            failed = sample_size - passed
-                        else:
-                            is_measured = False
-                            status = "NOT_MEASURED"
-
-                    elif cid == "ai_domain_citation_rate":
-                        if live_benchmark_data and "overall_first_party_citation_rate_pct" in live_benchmark_data:
-                            sample_size = positive_query_count(live_benchmark_data.get("total_queries"))
-                            if sample_size is None:
-                                is_measured = False
-                                status = "NOT_MEASURED"
-                                s = 0.0
-                                passed = 0
-                                sample_size = 0
-                            else:
-                                s = min(1.0, max(0.0, float(live_benchmark_data["overall_first_party_citation_rate_pct"]) / 100.0))
-                                passed = int(round(s * sample_size))
-                                failed = sample_size - passed
-                                _, low, high = wilson_interval(passed, sample_size)
-                                evidence_list.append({
-                                    "metric": "domain_citation_rate",
-                                    "observed_rate": f"{s*100:.1f}%",
-                                    "wilson_ci": [round(low, 3), round(high, 3)],
-                                    "sample_size": sample_size,
-                                    "status": "PASS" if s >= 0.4 else "PARTIAL",
-                                    "detail": f"Own-domain citation link rate: {s*100:.1f}% across {sample_size} queries."
-                                })
-                        elif live_citation_score is not None:
-                            sample_size = self.rubric.plans.get(plan_tier, self.rubric.plans["starter"]).ai_search_min_sample
-                            domain_finding = next((f for f in check_findings if "citation" in f.title.lower()), None)
-                            if domain_finding:
-                                s = 0.20 if domain_finding.severity in (Severity.CRITICAL, Severity.HIGH) else 0.50
-                            else:
-                                s = min(1.0, max(0.0, (live_citation_score * 0.7) / 100.0))
-                            passed = int(round(s * sample_size))
-                            failed = sample_size - passed
-                            evidence_list.append({
-                                "metric": "domain_citation_rate",
-                                "status": "PASS" if s >= 0.5 else "PARTIAL",
-                                "detail": f"Estimated domain citation rate: {s*100:.1f}%."
+                            curve = 1.0 if form_field_count <= 3.0 else log_normal_curve(form_field_count, p10=3.0, median=8.0, higher_is_better=False)
+                            _record({
+                                "s": curve,
+                                "passed": len(input_counts) if curve >= 0.5 else 0,
+                                "failed": 0 if curve >= 0.5 else len(input_counts),
+                                "sample_size": len(input_counts),
+                                "evidence": [{
+                                    "metric": "mean_form_fields",
+                                    "value": round(form_field_count, 2),
+                                    "forms_sampled": len(input_counts),
+                                    "status": "PASS" if curve >= 0.75 else "PARTIAL",
+                                }],
                             })
-                        else:
-                            is_measured = False
-                            status = "NOT_MEASURED"
-
+                        elif check_findings:
+                            _record(_finding_observation(check_findings))
+                    elif cat_enum == Category.SCHEMA and has_schema is False:
+                        _record({
+                            "s": 0.0, "passed": 0, "failed": 1, "sample_size": 1,
+                            "evidence": [{"schema": "missing", "status": "FAIL", "detail": "No Schema.org types were recorded on the crawled pages."}],
+                        })
+                    elif cid == "ai_brand_mention_rate":
+                        query_count = positive_query_count((live_benchmark_data or {}).get("total_queries"))
+                        if live_benchmark_data and "overall_mention_rate_pct" in live_benchmark_data and query_count is not None:
+                            rate = min(1.0, max(0.0, float(live_benchmark_data["overall_mention_rate_pct"]) / 100.0))
+                            rate_passed = int(round(rate * query_count))
+                            _, low, high = wilson_interval(rate_passed, query_count)
+                            _record({
+                                "s": rate, "passed": rate_passed, "failed": query_count - rate_passed, "sample_size": query_count,
+                                "evidence": [{
+                                    "metric": "brand_mention_rate",
+                                    "observed_rate": f"{rate*100:.1f}%",
+                                    "wilson_ci": [round(low, 3), round(high, 3)],
+                                    "sample_size": query_count,
+                                    "status": "PASS" if rate >= 0.6 else "PARTIAL",
+                                    "detail": f"Observed brand mention rate: {rate*100:.1f}% across {query_count} engine queries.",
+                                }],
+                            })
+                    elif cid == "ai_domain_citation_rate":
+                        query_count = positive_query_count((live_benchmark_data or {}).get("total_queries"))
+                        if live_benchmark_data and "overall_first_party_citation_rate_pct" in live_benchmark_data and query_count is not None:
+                            rate = min(1.0, max(0.0, float(live_benchmark_data["overall_first_party_citation_rate_pct"]) / 100.0))
+                            rate_passed = int(round(rate * query_count))
+                            _, low, high = wilson_interval(rate_passed, query_count)
+                            _record({
+                                "s": rate, "passed": rate_passed, "failed": query_count - rate_passed, "sample_size": query_count,
+                                "evidence": [{
+                                    "metric": "domain_citation_rate",
+                                    "observed_rate": f"{rate*100:.1f}%",
+                                    "wilson_ci": [round(low, 3), round(high, 3)],
+                                    "sample_size": query_count,
+                                    "status": "PASS" if rate >= 0.4 else "PARTIAL",
+                                    "detail": f"Own-domain citation link rate: {rate*100:.1f}% across {query_count} queries.",
+                                }],
+                            })
                     elif cid == "ai_displacement_resistance":
                         if live_benchmark_data and "share_of_model" in live_benchmark_data:
                             som = live_benchmark_data["share_of_model"]
                             total_q = positive_query_count(live_benchmark_data.get("total_queries"))
-                            if total_q is None:
-                                is_measured = False
-                                status = "NOT_MEASURED"
-                                sample_size = 0
-                            else:
-                                sample_size = total_q
+                            if total_q is not None:
                                 displacements = som.get("competitor_displacements", [])
                                 comp_only_rate = som.get("competitor_only_rate")
                                 if comp_only_rate is not None:
-                                    s = max(0.0, min(1.0, 1.0 - float(comp_only_rate)))
+                                    rate = max(0.0, min(1.0, 1.0 - float(comp_only_rate)))
                                 else:
-                                    s = max(0.0, min(1.0, 1.0 - (len(displacements) / max(1, total_q))))
-                                passed = int(round(s * sample_size))
-                                failed = sample_size - passed
-                                evidence_list.append({
-                                    "metric": "displacement_resistance",
-                                    "brand_presence": som.get("share_of_model_pct", 0.0),
-                                    "displacements_count": len(displacements),
-                                    "status": "PASS" if s >= 0.75 else "PARTIAL",
-                                    "detail": f"Displacement resistance {s*100:.1f}% ({len(displacements)} competitor displacement events)."
+                                    rate = max(0.0, min(1.0, 1.0 - (len(displacements) / max(1, total_q))))
+                                rate_passed = int(round(rate * total_q))
+                                _record({
+                                    "s": rate, "passed": rate_passed, "failed": total_q - rate_passed, "sample_size": total_q,
+                                    "evidence": [{
+                                        "metric": "displacement_resistance",
+                                        "brand_presence": som.get("share_of_model_pct", 0.0),
+                                        "displacements_count": len(displacements),
+                                        "status": "PASS" if rate >= 0.75 else "PARTIAL",
+                                        "detail": f"Displacement resistance {rate*100:.1f}% ({len(displacements)} competitor displacement events).",
+                                    }],
                                 })
                         elif check_findings:
-                            top_f = max(check_findings, key=severity_rank)
-                            s = 0.20 if top_f.severity in (Severity.CRITICAL, Severity.HIGH) else 0.50
-                            passed = int(round(s * sample_size))
-                            failed = sample_size - passed
-                        elif live_citation_score is not None:
-                            s = 0.70
-                            sample_size = self.rubric.plans.get(plan_tier, self.rubric.plans["starter"]).ai_search_min_sample
-                            passed = int(round(s * sample_size))
-                            failed = sample_size - passed
-                        else:
-                            is_measured = False
-                            status = "NOT_MEASURED"
-
+                            _record(_finding_observation(check_findings))
                     elif cid == "ai_decision_stage_mention":
                         if live_benchmark_data and "share_of_model" in live_benchmark_data:
                             som = live_benchmark_data["share_of_model"]
                             dec_data = som.get("stage_breakdown", {}).get("decision", {})
-                            dec_total = dec_data.get("total", 8)
-                            dec_mentioned = dec_data.get("mentioned", 0)
-                            sample_size = max(1, dec_total)
-                            s = max(0.0, min(1.0, dec_mentioned / sample_size))
-                            passed = dec_mentioned
-                            failed = sample_size - passed
-                            evidence_list.append({
-                                "stage": "decision",
-                                "total_decision_queries": sample_size,
-                                "decision_mentions": dec_mentioned,
-                                "status": "PASS" if s >= 0.6 else "PARTIAL",
-                                "detail": f"Mentioned in {dec_mentioned}/{sample_size} high-intent decision prompts."
-                            })
+                            dec_total = positive_query_count(dec_data.get("total"))
+                            if dec_total is not None:
+                                dec_mentioned = int(dec_data.get("mentioned") or 0)
+                                dec_mentioned = max(0, min(dec_total, dec_mentioned))
+                                rate = dec_mentioned / dec_total
+                                _record({
+                                    "s": rate, "passed": dec_mentioned, "failed": dec_total - dec_mentioned, "sample_size": dec_total,
+                                    "evidence": [{
+                                        "stage": "decision",
+                                        "total_decision_queries": dec_total,
+                                        "decision_mentions": dec_mentioned,
+                                        "status": "PASS" if rate >= 0.6 else "PARTIAL",
+                                        "detail": f"Mentioned in {dec_mentioned}/{dec_total} high-intent decision prompts.",
+                                    }],
+                                })
                         elif check_findings:
-                            top_f = max(check_findings, key=severity_rank)
-                            s = 0.20 if top_f.severity in (Severity.CRITICAL, Severity.HIGH) else 0.50
-                            passed = int(round(s * sample_size))
-                            failed = sample_size - passed
-                        elif live_citation_score is not None:
-                            s = min(1.0, max(0.0, (live_citation_score * 0.8) / 100.0))
-                            sample_size = self.rubric.plans.get(plan_tier, self.rubric.plans["starter"]).ai_search_min_sample
-                            passed = int(round(s * sample_size))
-                            failed = sample_size - passed
-                        else:
-                            is_measured = False
-                            status = "NOT_MEASURED"
-
+                            _record(_finding_observation(check_findings))
                     elif cid == "ai_fact_precision_recall":
                         if live_benchmark_data and "ai_answer_diff" in live_benchmark_data:
                             diff_data = live_benchmark_data["ai_answer_diff"]
                             precision = diff_data.get("fact_precision")
-                            if precision is not None:
-                                s = max(0.0, min(1.0, float(precision)))
-                                sample_size = diff_data.get("total_claims", 10)
-                                passed = int(round(s * sample_size))
-                                failed = sample_size - passed
-                                evidence_list.append({
-                                    "metric": "fact_precision",
-                                    "verified_claims": diff_data.get("verified_claims", 0),
-                                    "unverified_claims": diff_data.get("unverified_claims", 0),
-                                    "contradictions": diff_data.get("contradictions", 0),
-                                    "status": "PASS" if s >= 0.8 else "PARTIAL",
-                                    "detail": f"Fact precision: {s*100:.1f}% across extracted claims."
+                            claim_count = positive_query_count(diff_data.get("total_claims"))
+                            if claim_count is None:
+                                verified = diff_data.get("verified_claims")
+                                unverified = diff_data.get("unverified_claims")
+                                if isinstance(verified, (int, float)) and isinstance(unverified, (int, float)) and not isinstance(verified, bool) and not isinstance(unverified, bool):
+                                    claim_count = positive_query_count(int(verified) + int(unverified))
+                            if precision is not None and claim_count is not None:
+                                rate = max(0.0, min(1.0, float(precision)))
+                                rate_passed = int(round(rate * claim_count))
+                                _record({
+                                    "s": rate, "passed": rate_passed, "failed": claim_count - rate_passed, "sample_size": claim_count,
+                                    "evidence": [{
+                                        "metric": "fact_precision",
+                                        "verified_claims": diff_data.get("verified_claims", 0),
+                                        "unverified_claims": diff_data.get("unverified_claims", 0),
+                                        "contradictions": diff_data.get("contradictions", 0),
+                                        "status": "PASS" if rate >= 0.8 else "PARTIAL",
+                                        "detail": f"Fact precision: {rate*100:.1f}% across {claim_count} extracted claims.",
+                                    }],
                                 })
-                            else:
-                                s = 0.70
-                                sample_size = 10
-                                passed = 7
-                                failed = 3
                         elif check_findings:
-                            top_f = max(check_findings, key=severity_rank)
-                            s = 0.20 if top_f.severity in (Severity.CRITICAL, Severity.HIGH) else 0.60
-                            passed = int(round(s * sample_size))
-                            failed = sample_size - passed
-                        elif live_citation_score is not None:
-                            s = 0.65
-                            sample_size = self.rubric.plans.get(plan_tier, self.rubric.plans["starter"]).ai_search_min_sample
-                            passed = int(round(s * sample_size))
-                            failed = sample_size - passed
-                            evidence_list.append({
-                                "detail": "Provisional fact recall based on live citation run."
-                            })
-                        else:
-                            is_measured = False
-                            status = "NOT_MEASURED"
+                            _record(_finding_observation(check_findings))
                     else:
-                        # Graded or Binary check evaluated against findings
-                        if check_findings:
-                            if check_def.check_type == "binary":
-                                s = 0.0
-                                passed = 0
-                                failed = 1
-                            elif check_def.check_type == "graded":
-                                top_f = max(check_findings, key=severity_rank)
-                                if top_f.severity == Severity.CRITICAL:
-                                    s = 0.0
-                                elif top_f.severity == Severity.HIGH:
-                                    s = 0.20
-                                elif top_f.severity == Severity.MEDIUM:
-                                    s = 0.50
-                                else:
-                                    s = 0.80
-                                passed = int(round(s * sample_size))
-                                failed = sample_size - passed
-                            else:
-                                s = 0.30
-                                passed = 0
-                                failed = 1
-
-                            for f in check_findings:
-                                evidence_list.append({
-                                    "url": f.evidence_refs[0] if f.evidence_refs else "crawl_sample",
-                                    "status": "FAIL" if s < 0.5 else "PARTIAL",
-                                    "detail": f.title
-                                })
-                        elif cat_enum == Category.AI_SEARCH and live_citation_score is None and not live_benchmark_data:
-                            # CRITICAL INTEGRITY RULE: AI_SEARCH checks without live data or findings MUST NOT silently PASS!
-                            is_measured = False
-                            s = 0.0
-                            passed = 0
-                            failed = sample_size
-                            status = "NOT_MEASURED"
-                        elif (
-                            (cat_enum in (Category.ON_PAGE_SEO, Category.CONTENT) and (
-                                (kwargs.get("pages") is not None and len(kwargs.get("pages")) == 0)
-                                or (manifest is not None and getattr(manifest, "pages", None) is not None and len(getattr(manifest, "pages")) == 0)
-                                or scope.measured_pages <= 0
-                            ))
-                            or (cid in ("kg_wikidata_resolution", "bayesian_review_rating") and not external_authority_connected)
-                        ):
-                            # Unmatched checks with 0 crawled pages or unavailable external authority must NOT default to s=1.0
-                            is_measured = False
-                            s = 0.0
-                            passed = 0
-                            failed = 0
-                            status = "NOT_MEASURED"
-                        else:
-                            s = 1.0
-                            passed = sample_size
-                            failed = 0
+                        page_hit = _page_observation(cid, pages_list)
+                        if page_hit is not None:
+                            _record(page_hit)
+                        elif check_findings:
+                            _record(_finding_observation(check_findings))
 
                     if is_measured:
                         sub_weight_measured += w
                         total_cat_weight_measured += w
                         sub_score_accum += w * s
 
-                    # Status & intervals. An unmeasured check stays unmeasured.
                     if not is_measured:
                         status = "NOT_MEASURED"
                         s = 0.0
+                        sample_size = 0
+                        passed = 0
+                        failed = 0
                     elif s >= 0.75:
                         status = "PASS"
                     elif s >= 0.40:
@@ -734,16 +789,16 @@ class ScoringEngine:
                     else:
                         status = "DEFICIT"
 
-                    # Reconcile sample counts
-                    if check_def.check_type == "binary":
+                    if is_measured and not counts_locked:
+                        if sample_size <= 0:
+                            sample_size = 1
                         passed = sample_size if s >= 0.5 else 0
                         failed = sample_size - passed
-                    else:
-                        passed = int(round(s * sample_size))
-                        failed = sample_size - passed
+                    elif is_measured and passed + failed != sample_size:
+                        failed = max(0, sample_size - passed)
 
                     ci = None
-                    if sample_size > 1 or check_def.check_type == "graded":
+                    if is_measured and sample_size > 0 and (sample_size > 1 or check_def.check_type == "graded"):
                         _, low, high = wilson_interval(passed, sample_size)
                         ci = (low, high)
 
@@ -847,13 +902,15 @@ class ScoringEngine:
                         raw_cat_score = gate.cap_score
                         cat_weaknesses.insert(0, f"Score capped at {gate.cap_score:.0f} by gate: {gate.reason}")
 
-            # Coverage threshold semantics: >= 60% MEASURED, 30-59.99% PARTIAL, <30% NOT_MEASURED
-            if cat_coverage >= 0.60:
-                cat_status = "MEASURED"
-            elif cat_coverage >= 0.30:
-                cat_status = "PARTIAL"
-            else:
+            # No measured weight is NOT_MEASURED. Any measured weight below 60% stays
+            # PARTIAL so one observed defect is not dropped from the score.
+            if total_cat_weight_measured <= 0:
                 cat_status = "NOT_MEASURED"
+                raw_cat_score = 0.0
+            elif cat_coverage >= 0.60:
+                cat_status = "MEASURED"
+            else:
+                cat_status = "PARTIAL"
 
             summary = (
                 f"{raw_cat_score:.0f}/100 based on {len(category_checks)} check evaluations. "
@@ -983,7 +1040,9 @@ class ScoringEngine:
 
         overall_score = round(max(0.0, min(100.0, overall_weighted_sum)), 1)
 
-        if overall_score >= 93:
+        if not active_cats:
+            grade, health = "—", "Not scored"
+        elif overall_score >= 93:
             grade, health = "A+", "Exceptional"
         elif overall_score >= 85:
             grade, health = "A", "Excellent"
@@ -1022,9 +1081,9 @@ class ScoringEngine:
     def apply_measured_geo_score(self, scores: Optional[OverallScoreResult], extractability: Optional[float]) -> Optional[OverallScoreResult]:
         """Replace a rubric GEO score with the measured extractability composite.
 
-        GEO checks with no matching findings take a perfect pass. That pass is not
-        a measurement. Extractability is the measured GEO number, so the category
-        score and its points in the overall follow that composite.
+        Rubric checks with no page or finding count stay unmeasured. Extractability
+        is the measured GEO number, so the category score and its points in the
+        overall follow that composite when the category was already scored.
         """
         if scores is None or extractability is None:
             return scores
@@ -1036,22 +1095,41 @@ class ScoringEngine:
             return scores
         value = max(0.0, min(100.0, value))
         geo = scores.category_scores.get(Category.GEO.value)
-        if geo is None or geo.score is None:
+        if geo is None:
             return scores
 
         weight = float(geo.weight or 0.0)
-        fraction = weight / 100.0 if weight > 1.5 else weight
-        old_points = float(geo.weighted_score) if geo.weighted_score is not None else round(float(geo.score) * fraction, 2)
-        new_points = round(value * fraction, 2)
+        if geo.score is None or weight <= 0:
+            # The rubric did not measure GEO. Extractability is still a measurement,
+            # so it enters the overall instead of being dropped with the empty checks.
+            others = [
+                row for key, row in scores.category_scores.items()
+                if key != Category.GEO.value and row is not None and row.score is not None and float(row.weight or 0) > 0
+            ]
+            other_weight = sum(float(row.weight) for row in others)
+            geo_weight = 0.15 if other_weight > 0 else 1.0
+            if other_weight > 0:
+                scale = (1.0 - geo_weight) / other_weight
+                for row in others:
+                    row.weight = round(float(row.weight) * scale, 4)
+                    row.weighted_score = round(float(row.score) * float(row.weight), 2)
+            geo.weight = round(geo_weight, 4)
+            new_points = round(value * geo_weight, 2)
+            carried = sum(float(row.weighted_score or 0) for row in others)
+            scores.overall_score = round(max(0.0, min(100.0, carried + new_points)), 1)
+        else:
+            fraction = weight / 100.0 if weight > 1.5 else weight
+            old_points = float(geo.weighted_score) if geo.weighted_score is not None else round(float(geo.score) * fraction, 2)
+            new_points = round(value * fraction, 2)
+            scores.overall_score = round(max(0.0, min(100.0, float(scores.overall_score or 0.0) - old_points + new_points)), 1)
         geo.score = round(value, 1)
         geo.weighted_score = new_points
         geo.status = "MEASURED"
         geo.provenance = "GEO_EXTRACTABILITY"
         geo.summary = (
             f"{geo.score:.0f}/100 from the measured extractability composite. "
-            "Rubric checks with no matching findings are not a perfect score."
+            "Checks with no page or finding count are not a perfect score."
         )
-        scores.overall_score = round(max(0.0, min(100.0, float(scores.overall_score or 0.0) - old_points + new_points)), 1)
         overall_score = scores.overall_score
         if overall_score >= 93:
             grade, health = "A+", "Exceptional"
@@ -1091,6 +1169,9 @@ class ScoringEngine:
         external_authority_connected: bool = False,
         cwv_data: Optional[Dict[str, float]] = None,
         form_audit: Optional[Any] = None,
+        manifest: Optional[Any] = None,
+        audit_scope: Optional[AuditScopeInfo] = None,
+        pages: Optional[List[Any]] = None,
     ) -> HonestScores:
         """
         Specialized Views:
@@ -1109,7 +1190,10 @@ class ScoringEngine:
             performance_metrics=performance_metrics,
             cwv_data=cwv_data,
             form_audit=form_audit,
-            plan_tier=plan_tier
+            plan_tier=plan_tier,
+            manifest=manifest,
+            audit_scope=audit_scope,
+            pages=pages,
         )
         extractability = getattr(geo_readiness, "extractability_score", None) if geo_readiness is not None else None
         if extractability is not None:
@@ -1130,18 +1214,12 @@ class ScoringEngine:
         google_score = weighted_mean([(0.40, tech_score), (0.30, onpage_score), (0.30, schema_score)])
 
         # AI Readiness View: GEO category score blended with question support when both exist.
+        # Buyer-simulation before_score values are not a live engine run.
         support_points = None
         if geo_readiness is not None and getattr(geo_readiness, "questions_total", 0) > 0:
             support_ratio = getattr(geo_readiness, "questions_supported", 0) / geo_readiness.questions_total
             support_points = support_ratio * 100.0
             ai_readiness_score = weighted_mean([(0.6, geo_score), (0.4, support_points)])
-        elif commercial_evals:
-            valid_comm = [getattr(c, "before_score", None) for c in commercial_evals if getattr(c, "before_score", None) is not None]
-            if valid_comm:
-                avg_comm = sum(valid_comm) / len(valid_comm)
-                ai_readiness_score = weighted_mean([(0.5, geo_score), (0.5, avg_comm * 10.0)])
-            else:
-                ai_readiness_score = None if geo_score is None else round(geo_score, 1)
         else:
             ai_readiness_score = None if geo_score is None else round(geo_score, 1)
 
@@ -1163,15 +1241,17 @@ class ScoringEngine:
             (0.30, ai_readiness_score),
         ])
 
+        visibility_measured = ai_visibility_status == "MEASURED" and ai_visibility_score is not None
         if overall is None:
             band = "Not scored"
-        elif overall >= 90:
+        elif visibility_measured and ai_visibility_score < 15 and overall >= 75:
+            band = "Structure Ready (Uncited)"
+        elif visibility_measured and overall >= 90:
             band = "Category Benchmark"
+        elif visibility_measured and overall >= 75:
+            band = "Citation Ready"
         elif overall >= 75:
-            if ai_visibility_status == "MEASURED" and ai_visibility_score is not None and ai_visibility_score < 15:
-                band = "Structure Ready (Uncited)"
-            else:
-                band = "Citation Ready"
+            band = "Structure Ready (Uncited)"
         elif overall >= 50:
             band = "Fragile Presence"
         else:

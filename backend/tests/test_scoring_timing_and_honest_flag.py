@@ -379,7 +379,7 @@ def test_external_authority_findings_in_scores_and_roadmap(
         external_authority_connected=True,
     )
     trust_connected = connected_scores.category_scores[Category.TRUST_AUTHORITY.value]
-    assert trust_connected.status == "MEASURED"
+    assert trust_connected.status in {"MEASURED", "PARTIAL"}
     assert trust_connected.score is not None
     assert trust_connected.score < 100.0, "External finding did not deduct from Trust score"
     assert trust_connected.weight > 0.0
@@ -479,11 +479,12 @@ async def test_dag_node_honest_scoring_runner():
     res = await test_orch.run_pipeline_node(run.analysis_id, "node_honest_scoring")
     assert res["success"] is True, f"run_pipeline_node failed: {res}"
     assert blackboard.scores is not None
-    # Parity requirement: blackboard.honest_scores MUST be set by node_honest_scoring
+    # Parity requirement: blackboard.honest_scores MUST be set by node_honest_scoring.
+    # UX and content were not crawled, so the human view stays blank.
     assert hasattr(blackboard, "honest_scores")
     assert blackboard.honest_scores is not None
     assert blackboard.honest_scores.google_score is not None
-    assert blackboard.honest_scores.human_score is not None
+    assert blackboard.honest_scores.human_score is None
 
 
 # =============================================================================
@@ -629,6 +630,7 @@ async def test_honest_scores_site_level_schema_consistency(business_profile):
         readability=readability_val,
         external_authority_connected=False,
         manifest=manifest,
+        pages=pages,
     )
     blackboard.scores = step15_scores
 
@@ -641,6 +643,8 @@ async def test_honest_scores_site_level_schema_consistency(business_profile):
         readability=readability_val,
         geo_readiness=getattr(blackboard, "geo_readiness", None),
         external_authority_connected=False,
+        manifest=manifest,
+        pages=pages,
     )
     blackboard.honest_scores = step15_honest
     blackboard.blackboard_state["has_schema"] = site_has_schema
@@ -654,13 +658,10 @@ async def test_honest_scores_site_level_schema_consistency(business_profile):
         f"calculate_honest_scores received has_schema={recorded_args.get('has_schema')}, expected True"
     )
 
-    # Invariant 2: Schema category score is 100.0 (full credit, not 0.0)
-    assert step15_scores.category_scores[Category.SCHEMA.value].score == 100.0
-
-    # Invariant 3: Google perspective score awards full Schema points: 0.4*100 + 0.3*100 + 0.3*100 = 100.0
-    assert step15_honest.google_score == 100.0, (
-        f"Step 15 google_score is {step15_honest.google_score}, expected 100.0 (regressed if homepage-only evaluated)"
-    )
+    # has_schema=True does not award a perfect schema score. Homepage types [] must not force 0 either.
+    schema_score = step15_scores.category_scores[Category.SCHEMA.value]
+    assert schema_score.status == "NOT_MEASURED"
+    assert schema_score.score is None
 
     # --- Part 2: DAG Node Runner (node_honest_scoring) Parity Verification ---
     res = await test_orch.run_pipeline_node(analysis_id, "node_honest_scoring")
@@ -670,8 +671,8 @@ async def test_honest_scores_site_level_schema_consistency(business_profile):
     node_honest = blackboard.honest_scores
 
     # Invariant 4: Mathematical Identity across all perspectives
-    assert node_honest.google_score == 100.0
-    assert abs(step15_honest.google_score - node_honest.google_score) < 1e-6, (
+    assert step15_honest.google_score == node_honest.google_score
+    assert abs((step15_honest.google_score or 0) - (node_honest.google_score or 0)) < 1e-6, (
         f"Discrepancy detected between Step 15 ({step15_honest.google_score}) and node_honest_scoring ({node_honest.google_score})"
     )
     assert step15_honest.human_score == node_honest.human_score
@@ -752,6 +753,8 @@ async def test_honest_scores_empty_manifest_resilience(business_profile):
             readability=readability,
             geo_readiness=None,
             external_authority_connected=False,
+            manifest=empty_manifest,
+            pages=[],
         )
         blackboard.scores = step15_scores
         blackboard.honest_scores = step15_honest
@@ -763,7 +766,7 @@ async def test_honest_scores_empty_manifest_resilience(business_profile):
     assert blackboard.scores is not None
     assert blackboard.honest_scores is not None
     assert blackboard.honest_scores.google_score is not None
-    assert blackboard.honest_scores.human_score is not None
+    assert blackboard.honest_scores.human_score is None
     assert blackboard.blackboard_state["has_schema"] is False
     assert blackboard.blackboard_state["readability_score"] is None
 

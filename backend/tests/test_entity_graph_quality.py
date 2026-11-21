@@ -167,6 +167,12 @@ def test_contradiction_is_not_blocking_and_lowers_the_schema_score():
     )
     engine = ScoringEngine()
     before = engine.calculate_scores([conflict], profile, has_schema=True)
-    # A second pass without the finding stays higher. Empty findings stay perfect.
+    # No finding is not a perfect schema score. The cited contradiction is a measured deficit.
     clean = engine.calculate_scores([], profile, has_schema=True)
-    assert before.category_scores[Category.SCHEMA.value].score < clean.category_scores[Category.SCHEMA.value].score
+    scored = before.category_scores[Category.SCHEMA.value]
+    untouched = clean.category_scores[Category.SCHEMA.value]
+    assert scored.score is not None
+    assert scored.score < 75
+    assert any(item.status == "DEFICIT" for item in scored.check_results)
+    assert untouched.score is None
+    assert untouched.status == "NOT_MEASURED"

@@ -2468,7 +2468,7 @@ export interface PillarScoreData {
   categoryTag: string;
   score: number | null;
   grade: string;
-  health: 'GOOD' | 'FAIR' | 'POOR';
+  health: 'GOOD' | 'FAIR' | 'POOR' | 'UNMEASURED';
   headline: string;
   summary: string;
   highlights: string[];
@@ -2499,7 +2499,7 @@ export interface WebsiteIntelligenceRollup {
   conversion_intelligence: PillarScoreData;
   brand_entity_intelligence: PillarScoreData;
   sxo_score: number | null;
-  sxo_health: 'GOOD' | 'FAIR' | 'POOR';
+  sxo_health: 'GOOD' | 'FAIR' | 'POOR' | 'UNMEASURED';
 }
 
 export type AppView =

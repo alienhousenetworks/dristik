@@ -192,8 +192,8 @@ SCORING_RUBRIC_V4: Dict[str, Any] = {
         },
     },
     "score_bands": [
-        {"band": "Category Benchmark", "min_score": 90, "max_score": 100, "status": "Best-in-class technical and citation posture"},
-        {"band": "Citation Ready", "min_score": 75, "max_score": 89.9, "status": "Strong discoverability with minor friction points"},
+        {"band": "Category Benchmark", "min_score": 90, "max_score": 100, "status": "Requires ai_visibility_status MEASURED. An on-page score alone is not this band."},
+        {"band": "Citation Ready", "min_score": 75, "max_score": 89.9, "status": "Only when a live citation run is MEASURED and the citation score is at least 15. Otherwise the band is Structure Ready (Uncited)."},
         {"band": "Fragile Presence", "min_score": 50, "max_score": 74.9, "status": "At risk of being filtered by answer engines and search bots"},
         {"band": "Low readiness", "min_score": 0, "max_score": 49.9, "status": "Severe indexing or accessibility issues blocking revenue"},
     ],

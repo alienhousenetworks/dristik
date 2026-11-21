@@ -224,15 +224,22 @@ def test_unknown_high_severity_does_not_become_high_business_impact():
     assert finding.calibrated_impact.is_blocking is False
 
 
-def test_empty_findings_still_score_100_and_a_defect_scores_below():
+def test_empty_findings_do_not_pass_uninspected_checks():
     engine = ScoringEngine()
     profile = _profile()
-    assert engine.calculate_scores([], profile).overall_score == 100.0
+    empty = engine.calculate_scores([], profile)
+    assert empty.overall_score == 0.0
+    assert empty.health_label == "Not scored"
     degraded = engine.calculate_scores(
         [_finding(finding_id="hsts", title="Missing HSTS Header", description="Strict-Transport-Security is absent.")],
         profile,
     )
-    assert degraded.overall_score < 100.0
+    checks = {item.check_id: item for item in degraded.category_scores["TECHNICAL_SEO"].check_results}
+    header = checks["security_headers_hardening"]
+    assert header.status == "DEFICIT"
+    assert header.passed == 0
+    assert header.sample_size == 1
+    assert header.failed == 1
 
 
 def test_validation_gate_rewrites_non_blocking_outcome_claim():

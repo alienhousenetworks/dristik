@@ -89,7 +89,7 @@ def test_honest_ai_citation_stays_null_without_a_live_run():
         findings=[],
         business_profile=BusinessProfile(business_name="Acme"),
     )
-    assert scores.ai_readiness_score is not None
+    assert scores.ai_readiness_score is None
     assert scores.ai_citation_score is None
     assert scores.ai_visibility_score is None
     assert scores.ai_visibility_status == "NOT_MEASURED"
@@ -134,8 +134,11 @@ async def test_agent_readiness_does_not_invent_a_score_without_pages(monkeypatch
         from app.domain.models import AgentReadinessSignal
         return AgentReadinessSignal(key="llms_txt", status="NOT_MEASURED", summary="skipped")
 
+    # The intelligence path and app.geo.agent_readiness can be two module objects.
+    # Patch the copy the pipeline imports, or a live 404 becomes a score of 0.
+    monkeypatch.setattr("app.geo.agent_readiness._llms_txt_signal", _no_network)
     monkeypatch.setattr("app.intelligence.geo.agent_readiness._llms_txt_signal", _no_network)
-    from app.intelligence.geo.agent_readiness import evaluate_agent_readiness
+    from app.geo.agent_readiness import evaluate_agent_readiness
     report = await evaluate_agent_readiness("https://example.com", [], manifest=None)
     assert report.score is None
     assert any(signal.status == "NOT_MEASURED" for signal in report.signals)
@@ -247,9 +250,8 @@ def test_null_evidence_category_grades_provisional_neutral():
         findings=findings,
         business_profile=BusinessProfile(business_name="Acme")
     )
-    # UX_CONVERSION has 0 findings and 0 positive signals in an active audit
+    # UX with no page fields and no findings is not a perfect score.
     ux_score = scores.category_scores.get(Category.UX_CONVERSION)
-    # Under v5 rubric, checks are evaluated directly against evidence
-    assert ux_score.score == 100.0
-    assert ux_score.status == "MEASURED"
+    assert ux_score.score is None
+    assert ux_score.status == "NOT_MEASURED"
 

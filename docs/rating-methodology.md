@@ -265,13 +265,13 @@ In Scoring Engine v5.0, specialized views are **derived directly from the underl
 | Specialized View | Primary Check Pillars | Formulation |
 |---|---|---|
 | **Human Experience** | UX & Conversion, Audience Readability, Form Friction | $0.50 \times \text{UX\_Conversion} + 0.50 \times \text{Content}$ |
-| **Google Readiness** | Technical Infrastructure, Sitemaps, On-Page Signals, Schema | $0.45 \times \text{Technical\_SEO} + 0.35 \times \text{On\_Page\_SEO} + 0.20 \times \text{Schema}$ |
+| **Google Readiness** | Technical, On-page, Schema. This is not the SEO card. | $0.40 \times \text{Technical} + 0.30 \times \text{On-page} + 0.30 \times \text{Schema}$ |
 | **AI Readiness** | Entity Resolution, Answerability, DOM Grounding | $0.60 \times \text{GEO} + 0.40 \times \text{Schema}$ (when measured) |
 
 ### AI Visibility (Live Engine Measurement)
 
 AI Visibility is reported **only when a live engine citation benchmark has been executed**:
-- If executed: The measured citation rate across the plan's minimum query sample (e.g., $N \ge 10$ for Starter, $N \ge 25$ for Growth).
+- If executed with a per-query count: the measured citation rate uses that count. A rate without `total_queries` is not a sample.
 - If not executed: Reported as `None` / `NOT_MEASURED`. On-page readiness is **never** copied or fabricated into the visibility slot.
 
 ### Honest Overall
@@ -285,8 +285,9 @@ AI visibility is not inside this weighted sum.
 
 | Honest overall | Band |
 | --- | --- |
-| 90–100 | Category benchmark |
-| 75–89.9 | Citation ready |
+| 90–100 and live visibility MEASURED | Category benchmark |
+| 75–89.9 and live visibility MEASURED, citation score at least 15 | Citation ready |
+| 75 or above when live visibility is missing, or when the measured citation score is under 15 | Structure ready (uncited) |
 | 50–74.9 | Fragile presence |
 | Below 50 | Low readiness |
 
@@ -296,7 +297,7 @@ AI visibility is not inside this weighted sum.
 
 The cards recombine the numbers above. They are display blends. They are not a second deduction engine.
 
-Health on a card: 80 or above is Good, 60–79 is Fair, below 60 is Poor. A blank score is shown as Poor.
+Health on a card: 80 or above is Good, 60–79 is Fair, below 60 is Poor. A blank score is Unmeasured. It is not a measured failure.
 
 Card letter: 90 A, 80 B, 70 C, 60 D, otherwise F.
 
@@ -327,7 +328,7 @@ Equal average of whichever of these exist:
 
 ### CRO card
 
-Equal average of the human honest score and `100 − form friction` (section 11). If the form audit did not run, the card is the human score. If neither number exists, the card falls back to 65 so the layout still has a figure. That 65 is a display fallback, not a measurement.
+The card uses the measured UX category score. A missing form audit does not invent a conversion rate. If the UX category was not measured, the card is blank.
 
 ### Competitor card
 

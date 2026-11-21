@@ -101,14 +101,20 @@ def test_scoring_engine_caps_unverified_severity_deduction():
         evidence_refs=[]
     )
 
-    honest_scores = engine.calculate_honest_scores(
-        findings=[unverified_critical],
+    inputs = dict(
         business_profile=profile,
         has_schema=True,
         is_https=True,
-        readability=70.0
+        readability=70.0,
     )
+    honest_scores = engine.calculate_honest_scores(findings=[unverified_critical], **inputs)
+    baseline = engine.calculate_honest_scores(findings=[], **inputs)
+    scored = engine.calculate_scores(findings=[unverified_critical], **inputs)
 
-    # In v5 methodology, unverified hypotheses (RubricConfidence.GUESSING / SINGLE_SOURCE_UNVERIFIED)
-    # do not penalize scores (human_score remains >= 99.0).
-    assert honest_scores.human_score >= 99.0
+    # GUESSING does not enter the score. Readability 70 is the only human observation.
+    ux = scored.category_scores[Category.UX_CONVERSION.value]
+    assert ux.status == "NOT_MEASURED"
+    assert ux.score is None
+    assert honest_scores.human_score == baseline.human_score
+    assert honest_scores.human_score is not None
+    assert honest_scores.human_score == scored.category_scores[Category.CONTENT.value].score

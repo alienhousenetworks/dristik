@@ -37,12 +37,12 @@ export function Report({
   const targetAnalysisId = report.analysis_id || report.report_id;
 
   // Honest score values if present, or category scores if present, else null
-  const humanScore = honest?.human_score ?? (scores.category_scores?.['UX_CONVERSION']?.score != null ? Math.round(scores.category_scores['UX_CONVERSION'].score * 0.95) : null);
-  const googleScore = honest?.google_score ?? (scores.category_scores?.['TECHNICAL_SEO']?.score != null ? Math.round(scores.category_scores['TECHNICAL_SEO'].score * 0.95) : null);
-  const aiScore = honest?.ai_citation_score != null
-    ? honest.ai_citation_score
-    : (honest?.ai_visibility_status === 'MEASURED' ? honest?.ai_visibility_score ?? null : null);
-  const scoreBand = honest?.score_band ?? (aiScore != null ? (aiScore >= 75 ? 'Citation Ready' : aiScore >= 50 ? 'Fragile Presence' : 'Low readiness') : 'Pending Verification');
+  const humanScore = honest?.human_score ?? null;
+  const googleScore = honest?.google_score ?? null;
+  const aiScore = honest?.ai_visibility_status === 'MEASURED'
+    ? (honest?.ai_visibility_score ?? honest?.ai_citation_score ?? null)
+    : null;
+  const scoreBand = honest?.score_band ?? 'Pending Verification';
   const evidenceRefs = honest?.evidence_refs || report.findings.slice(0, 6).flatMap((f) => f.evidence_refs || []);
   const uniqueEvRefs = Array.from(new Set(evidenceRefs)).slice(0, 8);
   const integrityGate = (report.quality_gate_results?.final_report_integrity ?? null) as {

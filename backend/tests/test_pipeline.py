@@ -225,10 +225,11 @@ def test_deterministic_scoring_math():
         primary_intent=BusinessIntent.SAAS
     )
     
-    # Test perfect score
+    # No crawl observations is not a perfect score.
     clean_scores = scoring.calculate_scores([], profile)
-    assert clean_scores.overall_score == 100.0
-    assert clean_scores.grade == "A+"
+    assert clean_scores.overall_score == 0.0
+    assert clean_scores.grade == "—"
+    assert clean_scores.health_label == "Not scored"
     
     # Test score with critical deduction
     f_crit = Finding(
@@ -241,15 +242,14 @@ def test_deterministic_scoring_math():
     )
     degraded = scoring.calculate_scores([f_crit], profile)
     assert degraded.overall_score < 100.0
-    # Unknown CRITICAL findings step business impact down to HIGH and default
-    # confidence is LIKELY (medium). 25 * 0.85 * 0.75 = 15.9, so the pillar is 84.1.
     tech = degraded.category_scores["TECHNICAL_SEO"]
+    assert tech.status != "NOT_MEASURED"
+    assert tech.score is not None
+    assert tech.score <= 20.0
     assert tech.deductions[0]["points_lost"] == 6.0
-    assert tech.score == 20.0
     assert tech.deductions[0]["title"] == "Broken canonical and server errors"
-    empty_summary = clean_scores.category_scores["CONTENT"].summary
-    assert clean_scores.category_scores["CONTENT"].score == 100.0
-    assert "100/100" in empty_summary or "No verified defects" in empty_summary
+    assert clean_scores.category_scores["CONTENT"].score is None
+    assert clean_scores.category_scores["CONTENT"].status == "NOT_MEASURED"
 
 @pytest.mark.asyncio
 async def test_end_to_end_orchestration(monkeypatch):

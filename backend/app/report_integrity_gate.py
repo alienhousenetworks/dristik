@@ -88,6 +88,37 @@ def validate_final_report(report: Any, manifest: Any | None = None) -> dict[str,
         if len(dangling_refs) > 20:
             warnings.append(f"{len(dangling_refs) - 20} additional dangling references omitted")
 
+    synthetic_hashes: list[str] = []
+
+    def _note_hash(owner: str, value: Any) -> None:
+        text = str(value or "").strip()
+        if not text:
+            return
+        lowered = text.lower()
+        if lowered.startswith(("sha_", "hash_")) or not re.fullmatch(r"[0-9a-fA-F]{64}", text):
+            synthetic_hashes.append(f"{owner}: {text[:24]}")
+
+    ledger_items = evidence_ledger.values() if isinstance(evidence_ledger, dict) else []
+    for item in ledger_items:
+        if not isinstance(item, dict):
+            item = getattr(item, "__dict__", {}) if not isinstance(item, dict) else item
+        owner = str(item.get("id") or "ledger")
+        _note_hash(owner, item.get("content_sha256"))
+        digest = str(item.get("hash") or "")
+        if digest.lower().startswith(("sha_", "hash_")):
+            synthetic_hashes.append(f"{owner}: {digest[:24]}")
+    for finding in findings:
+        for evidence in (getattr(finding, "evidence", None) or []):
+            owner = str(getattr(evidence, "evidence_id", None) or getattr(finding, "finding_id", "finding"))
+            _note_hash(owner, getattr(evidence, "content_sha256", None))
+            digest = str(getattr(evidence, "hash", "") or "")
+            if digest.lower().startswith(("sha_", "hash_")):
+                synthetic_hashes.append(f"{owner}: {digest[:24]}")
+    if synthetic_hashes:
+        blockers.append(
+            "evidence hash is not a SHA-256 of a fetched body: " + "; ".join(synthetic_hashes[:20])
+        )
+
     scores = getattr(report, "scores", None)
     overall = getattr(scores, "overall_score", None)
     if isinstance(overall, bool) or not isinstance(overall, (int, float)) or not math.isfinite(float(overall)) or not 0 <= float(overall) <= 100:

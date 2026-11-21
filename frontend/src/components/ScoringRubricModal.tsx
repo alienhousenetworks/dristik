@@ -361,13 +361,13 @@ export function ScoringRubricModal({ isOpen, onClose }: ScoringRubricModalProps)
                   range: '90 – 100',
                   band: 'Category Benchmark',
                   color: 'text-good border-good bg-good/10',
-                  desc: 'Exceptional architectural health. Schema, mobile viewport, direct answer definition, and crawlability meet institutional standards.',
+                  desc: 'Requires a measured live citation run. On-page structure alone is not this band.',
                 },
                 {
                   range: '75 – 89',
                   band: 'Citation Ready',
                   color: 'text-ink-700 border-line bg-paper-200',
-                  desc: 'Strong discoverability with minor friction points. Capable of being cited by answer engines but has room for copy and CTA improvements.',
+                  desc: 'Only when live visibility is measured and the citation score is at least 15. Without that run the label is Structure Ready (Uncited).',
                 },
                 {
                   range: '50 – 74',
