@@ -3192,6 +3192,23 @@ def build_seo_book_context(report: Any, page_numbers: Optional[Dict[str, int]] =
         },
     ]
 
+    from app.seo.reporting.canonical_seo_pdf_bridge import (
+        collect_unified_seo_pdf_bundle,
+        render_enterprise_seo_addendum_html,
+    )
+    unified_bundle = getattr(report, "_unified_seo_bundle", None)
+    if unified_bundle is None:
+        try:
+            unified_bundle = collect_unified_seo_pdf_bundle(
+                report=report,
+                include_deterministic_gap_checks=False,
+            )
+        except Exception:
+            unified_bundle = None
+    enterprise_seo_addendum_html = (
+        render_enterprise_seo_addendum_html(unified_bundle) if unified_bundle else ""
+    )
+
     return {
         "report": report_dict,
         "toc_items": toc_items,
@@ -3208,6 +3225,7 @@ def build_seo_book_context(report: Any, page_numbers: Optional[Dict[str, int]] =
         "evidence_records": evidence_records,
         "glossary": glossary,
         "methodology": methodology,
+        "enterprise_seo_addendum_html": enterprise_seo_addendum_html,
     }
 
 

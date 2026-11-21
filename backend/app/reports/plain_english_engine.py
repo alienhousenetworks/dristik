@@ -977,6 +977,44 @@ class PlainEnglishEngine:
         if not root_cause_val:
             root_cause_val = f"Template markup or HTTP configuration omission on {len(affected_urls) or 1} audited route(s)."
         code_val = cls._clean_internal_text(_get_val(finding, "relevant_code_or_configuration_example"))
+        code_patch_obj = _get_val(finding, "code_patch")
+        if not code_val and code_patch_obj:
+            code_val = cls._clean_internal_text(
+                _get_val(code_patch_obj, "diff") or _get_val(code_patch_obj, "after_snippet")
+            )
+        expected_cond = cls._clean_internal_text(
+            _get_val(finding, "expected_or_reference_behavior") or _get_val(finding, "expected_condition")
+        )
+        diff_obs_exp = cls._clean_internal_text(_get_val(finding, "difference_observed_expected"))
+        risk_inaction = cls._clean_internal_text(_get_val(finding, "risk_of_inaction"))
+        ux_impact = cls._clean_internal_text(_get_val(finding, "user_experience_impact"))
+        impl_steps = [str(s) for s in (_get_val(finding, "implementation_steps") or []) if s]
+        sub_obs = [
+            str(s)
+            for s in (list(_get_val(finding, "sub_observations") or []) + list(_get_val(finding, "secondary_symptoms") or []))
+            if s
+        ]
+        evidence_ids = list(
+            dict.fromkeys(
+                str(x)
+                for x in (
+                    list(_get_val(finding, "evidence_ids") or [])
+                    + list(_get_val(finding, "evidence_refs") or [])
+                    + list(_get_val(finding, "evidence_references") or [])
+                )
+                if x
+            )
+        )
+        ver_status = _get_val(finding, "verification_status")
+        ver_status_str = str(getattr(ver_status, "value", ver_status) or "") if ver_status is not None else ""
+        ver_notes = cls._clean_internal_text(_get_val(finding, "verification_notes"))
+        affected_platforms = [str(p) for p in (_get_val(finding, "affected_platforms") or []) if p]
+        affected_prompts = [str(p) for p in (_get_val(finding, "affected_prompts") or []) if p]
+        affected_entities = [str(e) for e in (_get_val(finding, "affected_entities") or []) if e]
+        competitor_refs = [str(c) for c in (_get_val(finding, "competitor_references") or []) if c]
+        dq_state = _get_val(finding, "data_quality_state")
+        dq_state_str = str(getattr(dq_state, "value", dq_state) or "") if dq_state is not None else ""
+        is_hypothesis = bool(_get_val(finding, "is_hypothesis", False))
 
         return {
             "id": str(raw_id),
@@ -996,18 +1034,33 @@ class PlainEnglishEngine:
             "developer_instructions": str(developer_instructions),
             "verification_steps": verification_steps,
             "evidence": evidence_list,
+            "evidence_ids": evidence_ids,
             "confidence": conf_str,
             "limitations": str(limitations),
             "expected_outcome": str(expected_outcome),
+            "expected_condition": str(expected_cond) if expected_cond else None,
+            "difference_observed_expected": str(diff_obs_exp) if diff_obs_exp else None,
+            "risk_of_inaction": str(risk_inaction) if risk_inaction else None,
+            "user_experience_impact": str(ux_impact) if ux_impact else None,
+            "sub_observations": sub_obs,
+            "implementation_steps": impl_steps,
             "root_cause": str(root_cause_val) if root_cause_val else None,
             "acceptance_criteria": str(acceptance_val),
             "validation_criteria": str(acceptance_val),
             "verification_command": str(verification_cmd),
+            "verification_status": ver_status_str or None,
+            "verification_notes": ver_notes or None,
             "responsible_role": str(responsible_role),
             "estimated_effort": str(estimated_effort),
             "dependencies": dependencies,
             "priority_rationale": str(priority_rationale),
             "relevant_code_or_configuration_example": str(code_val) if code_val else None,
+            "affected_platforms": affected_platforms,
+            "affected_prompts": affected_prompts,
+            "affected_entities": affected_entities,
+            "competitor_references": competitor_refs,
+            "data_quality_state": dq_state_str or None,
+            "is_hypothesis": is_hypothesis,
             "agent_id": _get_val(finding, "agent_id") or _get_val(finding, "originating_agent_id"),
             "category": category,
             "subcategory": subcategory,
@@ -1451,31 +1504,84 @@ def render_plain_english_finding_card(f: Dict[str, Any]) -> str:
             <span style="font-size: 8.5pt; color: #92400e; margin-left: 4px;">{_esc(root_cause)}</span>
         </div>
         """
+    extra_obs_bits: List[str] = []
+    if f.get("expected_condition"):
+        extra_obs_bits.append(f"<p class='finding-block-text' style='margin-top:4px;'><strong>Expected Condition:</strong> {_esc(f.get('expected_condition'))}</p>")
+    if f.get("difference_observed_expected"):
+        extra_obs_bits.append(f"<p class='finding-block-text' style='margin-top:4px;'><strong>Gap (Observed vs Expected):</strong> {_esc(f.get('difference_observed_expected'))}</p>")
+    sub_obs = f.get("sub_observations") or []
+    if sub_obs:
+        extra_obs_bits.append(
+            "<div style='margin-top:4px;'><strong style='font-size:7.5pt;'>Supporting Observations:</strong><ul style='margin:2px 0 0 18px;font-size:8pt;'>"
+            + "".join(f"<li>{_esc(s)}</li>" for s in sub_obs)
+            + "</ul></div>"
+        )
+    extra_obs_html = "".join(extra_obs_bits)
 
     # 2. In simple English
     plain_english = _esc(f.get("plain_english_summary", ""))
 
     # 3. Why this matters
     business_impact = _esc(f.get("business_impact", ""))
+    extra_impact_bits: List[str] = []
+    if f.get("risk_of_inaction"):
+        extra_impact_bits.append(f"<p class='finding-block-text' style='margin-top:4px;'><strong>Risk of Inaction:</strong> {_esc(f.get('risk_of_inaction'))}</p>")
+    if f.get("user_experience_impact"):
+        extra_impact_bits.append(f"<p class='finding-block-text' style='margin-top:4px;'><strong>User Experience Impact:</strong> {_esc(f.get('user_experience_impact'))}</p>")
+    if f.get("priority_rationale"):
+        extra_impact_bits.append(f"<p class='finding-block-text' style='margin-top:4px;font-size:8pt;color:#475569;'><strong>Priority Rationale:</strong> {_esc(f.get('priority_rationale'))}</p>")
+    extra_impact_html = "".join(extra_impact_bits)
 
     # 4. What did Dristik check?
     what_checked = _esc(f.get("what_was_checked", ""))
 
-    # 5. Which pages are affected?
+    # 5. Which pages are affected? (All URLs + GEO platforms/prompts/entities, zero silent truncation)
     urls = f.get("affected_urls", [])
+    scope_extras: List[str] = []
     if urls:
-        urls_html = "<ul class=\"affected-urls-list\">" + "".join(f"<li><code>{_esc(u)}</code></li>" for u in urls[:5])
-        if len(urls) > 5:
-            urls_html += f"<li><em>...plus {len(urls) - 5} additional sampled URL(s)</em></li>"
-        urls_html += "</ul>"
+        urls_html = "<ul class=\"affected-urls-list\">" + "".join(f"<li><code>{_esc(u)}</code></li>" for u in urls) + "</ul>"
     else:
         urls_html = "<p class=\"meta-note\">Specific URL list was not supplied. This issue may be systemic across templates.</p>"
+    if f.get("affected_platforms"):
+        scope_extras.append(f"<strong>AI Platforms:</strong> {_esc(', '.join(str(x) for x in f['affected_platforms']))}")
+    if f.get("affected_prompts"):
+        scope_extras.append(f"<strong>Prompts:</strong> {_esc(', '.join(str(x) for x in f['affected_prompts']))}")
+    if f.get("affected_entities"):
+        scope_extras.append(f"<strong>Entities:</strong> {_esc(', '.join(str(x) for x in f['affected_entities']))}")
+    if f.get("competitor_references"):
+        scope_extras.append(f"<strong>Competitor Refs:</strong> {_esc(', '.join(str(x) for x in f['competitor_references']))}")
+    if scope_extras:
+        urls_html += "<p class='finding-block-text' style='margin-top:4px;font-size:8pt;'>" + " · ".join(scope_extras) + "</p>"
 
     # 6. Recommended solution
     rec_solution = _esc(f.get("recommended_action", ""))
+    impl_steps = f.get("implementation_steps") or []
+    impl_steps_html = (
+        "<ol style='margin:6px 0 0 18px;font-size:8pt;'>" + "".join(f"<li>{_esc(s)}</li>" for s in impl_steps) + "</ol>"
+        if impl_steps else ""
+    )
+    deps = f.get("dependencies") or []
+    role_effort_bits = []
+    if f.get("responsible_role"):
+        role_effort_bits.append(f"<strong>Owner / Role:</strong> {_esc(f.get('responsible_role'))}")
+    if f.get("estimated_effort"):
+        role_effort_bits.append(f"<strong>Estimated Effort:</strong> {_esc(f.get('estimated_effort'))}")
+    if deps:
+        role_effort_bits.append(f"<strong>Dependencies:</strong> {_esc(', '.join(str(d) for d in deps))}")
+    role_effort_html = (
+        "<p style='margin:6px 0 0 0;font-size:8pt;color:#475569;'>" + " · ".join(role_effort_bits) + "</p>"
+        if role_effort_bits else ""
+    )
 
     # 7. Developer instructions
     dev_instructions = _esc(f.get("developer_instructions", "Developer-level instructions have not been supplied."))
+    code_ex = f.get("relevant_code_or_configuration_example")
+    code_ex_html = ""
+    if code_ex and str(code_ex).strip() and str(code_ex).strip() not in str(f.get("developer_instructions") or ""):
+        code_ex_html = (
+            "<div style='margin-top:6px;'><strong style='font-size:7.5pt;color:#334155;'>Code / Configuration Patch:</strong>"
+            f"<pre class=\"code-block\" style=\"background: #0f172a; color: #38bdf8; font-family: ui-monospace, monospace; font-size: 7.5pt; padding: 10px 12px; border-radius: 4px; white-space: pre-wrap; margin: 4px 0 0 0; line-height: 1.45;\"><code>{_esc(code_ex)}</code></pre></div>"
+        )
 
     # 8. Verification steps
     ver_steps = f.get("verification_steps", [])
@@ -1492,12 +1598,28 @@ def render_plain_english_finding_card(f: Dict[str, Any]) -> str:
         steps_html = "<ol class=\"verification-steps-list\">" + "".join(f"<li>{_esc(s)}</li>" for s in ver_steps) + "</ol>"
     else:
         steps_html = "<p class=\"meta-note\">Verification steps pending technical review.</p>"
+    ver_cmd_bits: List[str] = []
+    if f.get("verification_command"):
+        ver_cmd_bits.append(f"<p style='margin:6px 0 0 0;font-size:8pt;'><strong>Verification Command:</strong> <code>{_esc(f.get('verification_command'))}</code></p>")
+    if f.get("verification_status") or f.get("verification_notes"):
+        ver_cmd_bits.append(
+            f"<p style='margin:4px 0 0 0;font-size:8pt;color:#475569;'><strong>Verification State:</strong> {_esc(f.get('verification_status') or 'Recorded')}"
+            + (f" — {_esc(f.get('verification_notes'))}" if f.get("verification_notes") else "")
+            + "</p>"
+        )
+    ver_cmd_html = "".join(ver_cmd_bits)
 
-    # 9. Supporting evidence
+    # 9. Supporting evidence (ALL rows + explicit evidence_ids / evidence_refs)
     evidence = f.get("evidence", [])
+    evidence_ids = f.get("evidence_ids") or []
+    ev_ids_line = (
+        f"<p style='margin:0 0 6px 0;font-size:7.5pt;font-family:ui-monospace,monospace;color:#334155;'>"
+        f"<strong>Evidence References:</strong> {_esc(', '.join(str(x) for x in evidence_ids))}</p>"
+        if evidence_ids else ""
+    )
     if evidence:
         ev_rows = []
-        for e in evidence[:4]:
+        for e in evidence:
             ev_rows.append(
                 f"<tr><td><code>{_esc(e.get('id', '—'))}</code></td>"
                 f"<td>{_esc(e.get('source', 'DOM'))}</td>"
@@ -1505,6 +1627,7 @@ def render_plain_english_finding_card(f: Dict[str, Any]) -> str:
                 f"<td>{_esc(e.get('scope', 'Sampled'))}</td></tr>"
             )
         evidence_html = f"""
+        {ev_ids_line}
         <table class="print-table evidence-mini-table">
             <thead>
                 <tr><th>Evidence ID</th><th>Source</th><th>Observation</th><th>Scope</th></tr>
@@ -1514,6 +1637,8 @@ def render_plain_english_finding_card(f: Dict[str, Any]) -> str:
             </tbody>
         </table>
         """
+    elif ev_ids_line:
+        evidence_html = ev_ids_line
     else:
         evidence_html = "<p class=\"meta-note\">Direct DOM observation recorded during audit execution.</p>"
 
@@ -1523,6 +1648,18 @@ def render_plain_english_finding_card(f: Dict[str, Any]) -> str:
 
     # 11. Expected outcome
     expected_outcome = _esc(f.get("expected_outcome", "Restores compliance with search and accessibility standards."))
+
+    dq_badge = (
+        f"<span class='finding-scope-badge'>{_esc(f.get('data_quality_state'))}</span>"
+        if f.get("data_quality_state") else ""
+    )
+    hyp_badge = (
+        "<span class='finding-scope-badge' style='background:#fef3c7;color:#92400e;'>HYPOTHESIS</span>"
+        if f.get("is_hypothesis") else ""
+    )
+    cat_meta = _esc(f.get("category") or "")
+    subcat_meta = _esc(f.get("subcategory") or "")
+    cat_pill = f"<span class='finding-scope-badge'>{cat_meta}" + (f" · {subcat_meta}" if subcat_meta and subcat_meta != cat_meta else "") + "</span>" if cat_meta else ""
 
     return f"""
     <article class="finding-card sev-{sev_class} report-avoid-break" id="finding-{f_id}" style="border-left: 4.5px solid {border_col}; margin-bottom: 22px;">
@@ -1536,6 +1673,7 @@ def render_plain_english_finding_card(f: Dict[str, Any]) -> str:
                 </span>
                 <span class="finding-scope-badge">{scope_status}</span>
                 <span class="finding-lifecycle-badge">{lifecycle}</span>
+                {cat_pill}{dq_badge}{hyp_badge}
             </div>
             <div class="finding-meta-right">
                 <span class="who-affected-label"><strong>Who is affected:</strong> {who_affected}</span>
@@ -1551,6 +1689,7 @@ def render_plain_english_finding_card(f: Dict[str, Any]) -> str:
             <h4 class="finding-block-title">1. What was found?</h4>
             <p class="finding-block-text">{observed_result}</p>
             {root_cause_html}
+            {extra_obs_html}
         </div>
 
         <!-- 2. WHAT DOES THIS MEAN IN SIMPLE ENGLISH? -->
@@ -1567,6 +1706,7 @@ def render_plain_english_finding_card(f: Dict[str, Any]) -> str:
         <div class="finding-block">
             <h4 class="finding-block-title">3. Why does this matter to your business?</h4>
             <p class="finding-block-text">{business_impact}</p>
+            {extra_impact_html}
         </div>
 
         <!-- 4. WHAT DID DRISTIK CHECK? -->
@@ -1586,6 +1726,8 @@ def render_plain_english_finding_card(f: Dict[str, Any]) -> str:
             <h4 class="finding-block-title">6. Recommended solution</h4>
             <div class="solution-box" style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 4px; padding: 10px 12px;">
                 <p class="finding-block-text" style="margin: 0; color: #0f172a; font-weight: 500;">{rec_solution}</p>
+                {impl_steps_html}
+                {role_effort_html}
             </div>
         </div>
 
@@ -1593,6 +1735,7 @@ def render_plain_english_finding_card(f: Dict[str, Any]) -> str:
         <div class="finding-block dev-instructions-block" style="margin: 12px 0;">
             <h4 class="finding-block-title" style="color: #334155;">7. Technical implementation instructions (Developer details)</h4>
             <pre class="code-block" style="background: #0f172a; color: #38bdf8; font-family: ui-monospace, monospace; font-size: 7.5pt; padding: 10px 12px; border-radius: 4px; white-space: pre-wrap; margin: 4px 0 0 0; line-height: 1.45;"><code>{dev_instructions}</code></pre>
+            {code_ex_html}
         </div>
 
         <!-- 8. HOW TO VERIFY THE FIX -->
@@ -1600,6 +1743,7 @@ def render_plain_english_finding_card(f: Dict[str, Any]) -> str:
             <h4 class="finding-block-title">8. How to verify the fix (Retest procedure)</h4>
             {steps_html}
             {acceptance_html}
+            {ver_cmd_html}
         </div>
 
         <!-- 9. SUPPORTING EVIDENCE -->

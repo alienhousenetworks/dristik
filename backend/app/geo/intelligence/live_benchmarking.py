@@ -48,8 +48,8 @@ class LiveBenchmarkRunReport(BaseModel):
     brand_name: str
     surfaces_tested_count: int
     surfaces_untested_count: int
-    overall_mention_rate: float  # Percentage of tested surfaces that mentioned brand
-    overall_citation_rate: float  # Percentage of tested surfaces that cited brand domain
+    overall_mention_rate: Optional[float] = None  # None when 0 surfaces tested
+    overall_citation_rate: Optional[float] = None  # None when 0 surfaces tested
     surface_results: List[ProbedSurfaceResult] = Field(default_factory=list)
     observations: List[str] = Field(default_factory=list)
 
@@ -117,6 +117,16 @@ class LiveBenchmarkingEngine:
                 # Competitors mentioned
                 comps_found = [c for c in competitors if re.search(rf"\b{re.escape(c)}\b", resp_text, re.I)]
 
+                # Compute actual rank if listed in numbered order; do not hardcode rank=1
+                actual_rank = None
+                if brand_mentioned:
+                    for line in resp_text.splitlines():
+                        if re.search(rf"\b{re.escape(brand_name)}\b", line, re.I):
+                            m_rank = re.match(r"^\s*(?:#)?(\d+)[\.\):]", line)
+                            if m_rank:
+                                actual_rank = int(m_rank.group(1))
+                                break
+
                 results.append(
                     ProbedSurfaceResult(
                         surface_name=surface,
@@ -124,18 +134,18 @@ class LiveBenchmarkingEngine:
                         query_text=query,
                         response_text=resp_text,
                         brand_mentioned=brand_mentioned,
-                        mention_rank=1 if brand_mentioned else None,
+                        mention_rank=actual_rank,
                         is_recommended=is_rec,
                         citations_found=citations,
                         competitors_mentioned=comps_found,
                         latency_ms=latency,
-                        statistical_run_count=3,
+                        statistical_run_count=int(data.get("run_count", 1)),
                     )
                 )
 
         untested_count = len(cls.SUPPORTED_SURFACES) - tested_count
-        mention_rate = round((mentioned_count / max(tested_count, 1)) * 100, 1) if tested_count > 0 else 0.0
-        citation_rate = round((cited_count / max(tested_count, 1)) * 100, 1) if tested_count > 0 else 0.0
+        mention_rate = round((mentioned_count / tested_count) * 100, 1) if tested_count > 0 else None
+        citation_rate = round((cited_count / tested_count) * 100, 1) if tested_count > 0 else None
 
         obs = []
         if tested_count == 0:

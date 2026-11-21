@@ -898,6 +898,35 @@ class CrawlerService:
                                     22 + int((len(crawled_pages) / max(target_max_pages, 1)) * 12)
                                 )
 
+            # Fetch remaining URLs that share a path with a defect seen on at least two fetched pages.
+            # shortcut: stops at DRISTIK_TEMPLATE_EXPANSION_CAP, raise it to verify every sibling.
+            if crawled_pages:
+                try:
+                    from app.crawl.template_discovery import build_page_template_intelligence, expansion_cap
+                    preview = build_page_template_intelligence(
+                        [page.model_dump() for page in crawled_pages],
+                        list(discovered_urls_pool),
+                    )
+                    pending = []
+                    for candidate in preview.get("expansion_urls") or []:
+                        norm_c = self._normalize_url(candidate, base_domain, base_origin) or candidate
+                        if norm_c not in visited_urls and norm_c not in crawled_page_urls:
+                            pending.append(candidate)
+                    batch = pending[:expansion_cap()]
+                    if batch:
+                        for candidate in batch:
+                            visited_urls.add(self._normalize_url(candidate, base_domain, base_origin) or candidate)
+                        expanded = await asyncio.gather(*[fetch_and_analyze_single_page(candidate) for candidate in batch])
+                        for res in expanded:
+                            if not res:
+                                continue
+                            norm_res = self._normalize_url(res.url, base_domain, base_origin) or res.url
+                            if norm_res not in crawled_page_urls:
+                                crawled_page_urls.add(norm_res)
+                                crawled_pages.append(res)
+                except Exception as exc:
+                    logger.warning("[Crawler] Template expansion skipped: %s", exc)
+
         # Check if any pages could be reached
         if not crawled_pages:
             diag_msg = f"Failed to connect to or crawl website '{target_url}'."
@@ -1068,6 +1097,8 @@ class CrawlerService:
             "rendered_pages": sum(1 for p in crawled_pages if p.render_mode in ("playwright_js", "firecrawl_js")),
             "total_untested": len(untested_urls),
             "untested_pages": len(untested_urls),
+            "urls_deeply_inspected": 0,
+            "full_site_audit": False,
             "total_redirects": len(all_redirect_chains),
             "total_errors": len(broken_links),
             "failed_pages": len(broken_links),
@@ -1136,6 +1167,21 @@ class CrawlerService:
         )
         if missing_roles:
             sampling_note += f" Roles not fetched in this budget: {', '.join(missing_roles)}."
+        page_template: Dict[str, Any] = {}
+        try:
+            from app.crawl.template_discovery import build_page_template_intelligence
+            page_template = build_page_template_intelligence(
+                [page.model_dump() for page in crawled_pages],
+                all_discovered,
+                failed_urls=[item.get("url", "") for item in broken_links if item.get("url")],
+            )
+            sampling_note += " " + str(page_template.get("statement") or "")
+            crawl_inventory["urls_deeply_inspected"] = int(page_template.get("urls_deeply_analyzed") or 0)
+            crawl_inventory["rendered_pages"] = int(page_template.get("urls_rendered") or 0)
+            crawl_inventory["total_rendered"] = int(page_template.get("urls_rendered") or 0)
+            crawl_inventory["full_site_audit"] = bool(page_template.get("full_site_audit"))
+        except Exception as exc:
+            logger.warning("[Crawler] Page template coverage skipped: %s", exc)
 
         crawl_health = {
             "total_pages_crawled": len(crawled_pages),
@@ -1177,6 +1223,7 @@ class CrawlerService:
             "orphan_pages_count": len(orphan_urls),
             "redirect_chains_count": len(all_redirect_chains),
             "crawl_budget": crawl_budget,
+            "page_template": page_template,
             "page_breakdown": [
                 {
                     "url": p.url,

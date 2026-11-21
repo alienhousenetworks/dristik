@@ -2457,8 +2457,53 @@ def _finding_card(finding: Any) -> str:
 
     url_rows = ""
     if urls:
-        url_items = "".join(f"<tr><td><code>{_esc(u)}</code></td><td><span class=\"badge-sm\">Verified in Crawl</span></td></tr>" for u in urls[:5])
+        url_items = "".join(f"<tr><td><code>{_esc(u)}</code></td><td><span class=\"badge-sm\">Verified in Crawl</span></td></tr>" for u in urls)
         url_rows = f"<div class=\"data-table-wrap\"><table><thead><tr><th>Affected Sample URL</th><th>Observation Basis</th></tr></thead><tbody>{url_items}</tbody></table></div>"
+
+    extra_lines: List[str] = []
+    plain_eng = str(_get(finding, "plain_english_summary", "") or "").strip()
+    if plain_eng:
+        extra_lines.append(f'<p class="finding-desc"><strong>In Simple English:</strong> {_esc(plain_eng)}</p>')
+    if root_cause:
+        extra_lines.append(f'<p class="finding-desc"><strong>Root Cause:</strong> {_esc(root_cause)}</p>')
+    dev_inst = str(_get(finding, "developer_instructions", "") or "").strip()
+    if dev_inst:
+        extra_lines.append(f'<p class="finding-desc"><strong>Developer Instructions:</strong> <code>{_esc(dev_inst)}</code></p>')
+    code_ex = str(_get(finding, "relevant_code_or_configuration_example", "") or "").strip()
+    if not code_ex:
+        cp = _get(finding, "code_patch", None)
+        if cp:
+            code_ex = str(_get(cp, "diff", "") or _get(cp, "after_snippet", "") or "").strip()
+    if code_ex:
+        extra_lines.append(f'<pre style="background:#0f172a;color:#e2e8f0;padding:6px 8px;border-radius:4px;font-size:10px;white-space:pre-wrap;"><code>{_esc(code_ex)}</code></pre>')
+    ver_steps = [str(s) for s in (_get(finding, "verification_steps", None) or []) if s]
+    if ver_steps:
+        extra_lines.append('<p class="finding-desc"><strong>Verification Steps:</strong> ' + _esc(" | ".join(ver_steps)) + "</p>")
+    ver_cmd = str(_get(finding, "verification_command", "") or "").strip()
+    if ver_cmd:
+        extra_lines.append(f'<p class="finding-desc"><strong>Verification Command:</strong> <code>{_esc(ver_cmd)}</code></p>')
+    ev_ids = list(
+        dict.fromkeys(
+            str(x)
+            for x in (
+                list(_get(finding, "evidence_ids", None) or [])
+                + list(_get(finding, "evidence_refs", None) or [])
+                + list(_get(finding, "evidence_references", None) or [])
+            )
+            if x
+        )
+    )
+    if ev_ids:
+        extra_lines.append(f'<p class="finding-desc" style="font-size:11px;"><strong>Evidence References:</strong> <code>{_esc(", ".join(ev_ids))}</code></p>')
+    deps = [str(d) for d in (_get(finding, "dependencies", None) or _get(finding, "implementation_dependencies", None) or []) if d]
+    lim = str(_get(finding, "limitations", "") or _get(finding, "data_limitations", "") or "").strip()
+    if deps or lim:
+        meta_bits = []
+        if deps:
+            meta_bits.append(f"Dependencies: {_esc(', '.join(deps))}")
+        if lim:
+            meta_bits.append(f"Limitations: {_esc(lim)}")
+        extra_lines.append(f'<p class="finding-desc" style="font-size:11px;color:#64748b;">{" | ".join(meta_bits)}</p>')
 
     return f"""
     <div class="finding-card {severity}">
@@ -2466,6 +2511,7 @@ def _finding_card(finding: Any) -> str:
         <div class="status">{_esc(status)} · {_esc(scope_badge)} · Priority: {_esc(severity)} · Owner: {_esc(owner)}</div>
         <p class="finding-desc"><strong>Observed Issue:</strong> {_esc(desc)}</p>
         <p class="finding-desc"><strong>Why It Matters:</strong> {_esc(why)}</p>
+        {''.join(extra_lines)}
         <p class="finding-rec"><strong>Recommended Fix:</strong> {_esc(rec)}</p>
         <p class="finding-desc" style="font-size:11px;color:#64748b;"><strong>Validation:</strong> {_esc(validation)} | <strong>Expected:</strong> {_esc(expected)}</p>
         {url_rows}

@@ -1188,6 +1188,11 @@ class SeoPrintReportRenderer:
 
     def render(self, report: ExecutiveReport, page_numbers: Optional[Dict[str, int]] = None) -> str:
         """Main entry point to generate the print document."""
+        from app.report_finding_registry import canonicalize_report_findings
+        canon = canonicalize_report_findings(report)
+        if canon and len(canon) > len(report.findings or []):
+            report.findings = canon
+
         if not page_numbers:
             page_numbers = calculate_chapter_page_numbers(report)
 
@@ -1205,6 +1210,20 @@ class SeoPrintReportRenderer:
             self._render_chapter(sec_id, sec_title, report, page_numbers.get(sec_id, 3))
             for sec_id, sec_title in self.sections
         ])
+
+        # Render Enterprise SEO Intelligence Addendum (9-dim scorecard, remediation code diffs, verification proof)
+        enterprise_addendum_html = ""
+        try:
+            from app.seo.reporting.canonical_seo_pdf_bridge import (
+                collect_unified_seo_pdf_bundle,
+                render_enterprise_seo_addendum_html,
+            )
+            bundle = getattr(report, "_unified_seo_bundle", None) or collect_unified_seo_pdf_bundle(
+                report=report, include_deterministic_gap_checks=False
+            )
+            enterprise_addendum_html = render_enterprise_seo_addendum_html(bundle)
+        except Exception:
+            enterprise_addendum_html = ""
 
         # Render Screen Action Bar (hidden in print)
         toolbar_html = self._render_screen_toolbar(domain, analysis_id)
@@ -1230,6 +1249,9 @@ class SeoPrintReportRenderer:
 
         <!-- 20 Comprehensive Audit Chapters -->
         {chapters_html}
+
+        <!-- Enterprise SEO Overhaul Intelligence Addendum -->
+        {enterprise_addendum_html}
     </div>
 </body>
 </html>
@@ -3576,6 +3598,18 @@ class SeoPrintReportRenderer:
         </div>
         """
 
+        enterprise_geo_html = ""
+        try:
+            from app.geo.reporting.builder import (
+                load_latest_enterprise_geo_dataset,
+                render_enterprise_geo_dossier_fragment,
+            )
+            ent_geo = load_latest_enterprise_geo_dataset(report)
+            if ent_geo:
+                enterprise_geo_html = render_enterprise_geo_dossier_fragment(ent_geo)
+        except Exception:
+            enterprise_geo_html = ""
+
         return f"""
         <div class="kpi-grid">
             <div class="kpi-card">
@@ -3613,6 +3647,7 @@ class SeoPrintReportRenderer:
         </div>
 
         {geo_table}
+        {enterprise_geo_html}
         """
 
     # --------------------------------------------------------------------------
@@ -3834,13 +3869,99 @@ class SeoPrintReportRenderer:
             </div>
             """
 
-        # Optional code fix block
+        # Optional code fix block (also fall back to code_patch or developer_instructions)
+        code_text = f.relevant_code_or_configuration_example
+        if not code_text and getattr(f, "code_patch", None):
+            code_text = getattr(f.code_patch, "diff", None) or getattr(f.code_patch, "after_snippet", None)
         code_block = ""
-        if f.relevant_code_or_configuration_example:
+        if code_text:
             code_block = f"""
             <div class="field-item full-width">
                 <span class="field-label">Production Code / Configuration Fix</span>
-                <pre class="code-example"><code>{html.escape(f.relevant_code_or_configuration_example)}</code></pre>
+                <pre class="code-example"><code>{html.escape(code_text)}</code></pre>
+            </div>
+            """
+
+        dev_block = ""
+        if getattr(f, "developer_instructions", None):
+            dev_block = f"""
+            <div class="field-item full-width">
+                <span class="field-label">Developer Implementation Instructions</span>
+                <span class="field-val">{html.escape(f.developer_instructions)}</span>
+            </div>
+            """
+
+        plain_block = ""
+        if getattr(f, "plain_english_summary", None):
+            plain_block = f"""
+            <div class="field-item full-width" style="background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 4px; padding: 2mm 3mm;">
+                <span class="field-label" style="color: #1e40af;">In Simple English</span>
+                <span class="field-val" style="color: #1e3a8a;">{html.escape(f.plain_english_summary)}</span>
+            </div>
+            """
+
+        urls_block = ""
+        if f.affected_urls:
+            urls_joined = ", ".join(f"<code>{html.escape(str(u))}</code>" for u in f.affected_urls)
+            urls_block = f"""
+            <div class="field-item full-width">
+                <span class="field-label">Affected URLs ({len(f.affected_urls)})</span>
+                <span class="field-val" style="font-size: 7.5pt;">{urls_joined}</span>
+            </div>
+            """
+
+        ev_ids = list(
+            dict.fromkeys(
+                str(x)
+                for x in (
+                    list(getattr(f, "evidence_ids", None) or [])
+                    + list(getattr(f, "evidence_refs", None) or [])
+                    + list(getattr(f, "evidence_references", None) or [])
+                )
+                if x
+            )
+        )
+        ev_block = ""
+        if ev_ids:
+            ev_block = f"""
+            <div class="field-item">
+                <span class="field-label">Evidence References</span>
+                <span class="field-val"><code>{html.escape(", ".join(ev_ids))}</code></span>
+            </div>
+            """
+
+        ver_extra_block = ""
+        ver_steps_list = getattr(f, "verification_steps", None) or []
+        ver_cmd = getattr(f, "verification_command", None)
+        if ver_steps_list or ver_cmd:
+            v_parts = []
+            if ver_steps_list:
+                v_parts.append("<ol class='steps-list'>" + "".join(f"<li>{html.escape(str(s))}</li>" for s in ver_steps_list) + "</ol>")
+            if ver_cmd:
+                v_parts.append(f"<p style='font-size:7.5pt;margin-top:1mm;'><strong>Command:</strong> <code>{html.escape(str(ver_cmd))}</code></p>")
+            ver_extra_block = f"""
+            <div class="field-item full-width">
+                <span class="field-label">Retest &amp; Verification Procedure</span>
+                {"".join(v_parts)}
+            </div>
+            """
+
+        meta_extra_block = ""
+        deps_list = getattr(f, "dependencies", None) or getattr(f, "implementation_dependencies", None) or []
+        lim_text = getattr(f, "limitations", None) or getattr(f, "data_limitations", None)
+        conf_pct = f"{int(round(float(f.confidence) * 100))}%" if isinstance(getattr(f, "confidence", None), (int, float)) else ""
+        extra_meta_parts = []
+        if conf_pct:
+            extra_meta_parts.append(f"<strong>Confidence:</strong> {conf_pct}")
+        if deps_list:
+            extra_meta_parts.append(f"<strong>Dependencies:</strong> {html.escape(', '.join(str(d) for d in deps_list))}")
+        if lim_text:
+            extra_meta_parts.append(f"<strong>Limitations:</strong> {html.escape(str(lim_text))}")
+        if extra_meta_parts:
+            meta_extra_block = f"""
+            <div class="field-item full-width">
+                <span class="field-label">Confidence, Dependencies &amp; Limitations</span>
+                <span class="field-val" style="font-size: 7.5pt;">{" · ".join(extra_meta_parts)}</span>
             </div>
             """
 
@@ -3872,6 +3993,8 @@ class SeoPrintReportRenderer:
             </div>
             <p class="finding-desc">{desc_esc}</p>
             <div class="field-grid">
+                {plain_block}
+                {urls_block}
                 {causal_block}
                 {gap_block}
                 {alt_block}
@@ -3888,6 +4011,7 @@ class SeoPrintReportRenderer:
                     <span class="field-val highlight">{rec_esc}</span>
                 </div>
                 {steps_block}
+                {dev_block}
                 {code_block}
                 <div class="field-item">
                     <span class="field-label">Validation Acceptance Test</span>
@@ -3897,7 +4021,10 @@ class SeoPrintReportRenderer:
                     <span class="field-label">Verification Method</span>
                     <span class="field-val">{verif_method}</span>
                 </div>
+                {ver_extra_block}
+                {ev_block}
                 {outcome_block}
+                {meta_extra_block}
             </div>
         </div>
         """

@@ -235,32 +235,69 @@ async def test_event_store_sse_stream():
 
 
 def test_api_router_endpoints(temp_db):
-    """Tests FastAPI router endpoints for initiating, querying, and cancelling audits."""
+    """Tests FastAPI router endpoints enforce auth, tenant isolation, and audit lifecycle."""
+    from app.domain.enums import UserRole
+    from app.identity.authorizer import UserIdentity
+    from app.identity.deps import get_current_user
+
     client = TestClient(app)
 
-    # 1. Start audit
-    resp = client.post(
+    # 0. Unauthenticated request must fail closed with 401
+    unauth = client.post(
         "/api/v1/seo/orchestrator/audits",
-        json={
-            "domain": "api-brand.com",
-            "mode": "QUICK",
-            "workspace_id": "ws_api_test",
-        },
+        json={"domain": "api-brand.com", "mode": "QUICK", "workspace_id": "ws_api_test"},
     )
-    assert resp.status_code == 202
-    data = resp.json()
-    assert "audit_id" in data
-    assert data["mode"] == "QUICK"
-    audit_id = data["audit_id"]
+    assert unauth.status_code == 401
 
-    # 2. Query status
-    status_resp = client.get(f"/api/v1/seo/orchestrator/audits/{audit_id}/status")
-    assert status_resp.status_code == 200
-    status_data = status_resp.json()
-    assert status_data["audit_id"] == audit_id
-    assert status_data["domain"] == "api-brand.com"
+    user_a = UserIdentity(
+        user_id="usr_seo_a",
+        org_id="org_seo_a",
+        email="seo-a@example.test",
+        role=UserRole.OWNER,
+        is_active=True,
+    )
+    user_b = UserIdentity(
+        user_id="usr_seo_b",
+        org_id="org_seo_b",
+        email="seo-b@example.test",
+        role=UserRole.OWNER,
+        is_active=True,
+    )
 
-    # 3. Cancel audit
-    cancel_resp = client.post(f"/api/v1/seo/orchestrator/audits/{audit_id}/cancel")
-    assert cancel_resp.status_code == 200
-    assert cancel_resp.json()["status"] == "CANCELLED"
+    try:
+        app.dependency_overrides[get_current_user] = lambda: user_a
+
+        # 1. Start audit
+        resp = client.post(
+            "/api/v1/seo/orchestrator/audits",
+            json={
+                "domain": "api-brand.com",
+                "mode": "QUICK",
+                "workspace_id": "ws_api_test",
+            },
+        )
+        assert resp.status_code == 202
+        data = resp.json()
+        assert "audit_id" in data
+        assert data["mode"] == "QUICK"
+        audit_id = data["audit_id"]
+
+        # 2. Query status as owner org
+        status_resp = client.get(f"/api/v1/seo/orchestrator/audits/{audit_id}/status")
+        assert status_resp.status_code == 200
+        status_data = status_resp.json()
+        assert status_data["audit_id"] == audit_id
+        assert status_data["domain"] == "api-brand.com"
+
+        # 3. Cross-tenant query must be denied (404)
+        app.dependency_overrides[get_current_user] = lambda: user_b
+        other_resp = client.get(f"/api/v1/seo/orchestrator/audits/{audit_id}/status")
+        assert other_resp.status_code == 404
+
+        # 4. Cancel audit as owner org
+        app.dependency_overrides[get_current_user] = lambda: user_a
+        cancel_resp = client.post(f"/api/v1/seo/orchestrator/audits/{audit_id}/cancel")
+        assert cancel_resp.status_code == 200
+        assert cancel_resp.json()["status"] == "CANCELLED"
+    finally:
+        app.dependency_overrides.clear()

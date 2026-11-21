@@ -47,6 +47,7 @@ from app.api.copilot import router as copilot_router
 from app.api.routes.platform.seo_tools import router as seo_tools_router
 from app.routers.seo_orchestrator_router import router as seo_orchestrator_router
 from app.routers.cro_router import router as cro_enterprise_router
+from app.routers.geo_router import router as geo_enterprise_router
 from app.routers.seo_connectors_router import router as seo_connectors_router
 from app.routers.seo_unified_api_router import router as seo_unified_api_router
 
@@ -96,6 +97,7 @@ _PREFIXED_ROUTERS = (
     seo_connectors_router,
     seo_unified_api_router,
     cro_enterprise_router,
+    geo_enterprise_router,
 )
 
 

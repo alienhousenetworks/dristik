@@ -198,6 +198,21 @@ def _section_for_finding(finding: Any) -> str:
     if "INFO" in fid or "GAIN" in fid or "FLUFF" in fid:
         return "26"
 
+    if cat == "AI_VISIBILITY" or cat == "MARKET_INTENT":
+        return "08"
+    if cat == "CITATION_INTELLIGENCE":
+        return "13"
+    if cat == "ENTITY_CONSISTENCY":
+        return "33"
+    if cat == "CONTENT_QUALITY":
+        return "24"
+    if cat == "TECHNICAL_READINESS":
+        return "31"
+    if cat == "EXTERNAL_REPUTATION":
+        return "37"
+    if cat == "COMPETITIVE_INTELLIGENCE":
+        return "20"
+
     if cat == "TECHNICAL_SEO":
         return "31"
     if cat == "SCHEMA":
@@ -228,38 +243,86 @@ def _assign(findings: Sequence[Any], checks: Sequence[str]) -> Dict[str, List[An
             assigned[checks[0]].append(finding)
     return assigned
 
+def _stored_line(label: str, value: Any) -> str:
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    return f'<p class="finding-desc"><strong>{_esc(label)}:</strong> {_esc(text)}</p>'
+
+
 def _finding_card(finding: Any) -> str:
-    finding_id = str(_get(finding, "finding_id", "GEO-001"))
-    if not finding_id.startswith("GEO-"):
-        finding_id = f"GEO-{finding_id}"
-    title = str(_get(finding, "title", "Generative Visibility Defect"))
-    status = str(_get(finding, "status", "OPEN"))
-    severity = str(_get(finding, "severity", "HIGH")).upper()
-    owner = str(_get(finding, "owner", "GEO Strategy & Engineering"))
-    scope = _join(_get(finding, "affected_urls", []) or ["Site-wide / Benchmark Queries"], limit=3)
+    """Render complete finding card preserving ALL old and new GEO finding fields."""
+    from app.reports.plain_english_engine import PlainEnglishEngine, render_plain_english_finding_card
 
-    desc = str(_get(finding, "description", "") or "Observed defect in generative engine optimization readiness.")
-    why = str(_get(finding, "why_it_matters", "") or "Degrades brand recommendation and citation probability in AI search engines.")
-    rec = str(_get(finding, "recommendation", "") or "Deploy prescriptive structured content and technical discoverability fixes.")
-    cause = str(_get(finding, "potential_cause", "") or "Missing explicit definition passage or unstructured tabular comparison data.")
-    expected = str(_get(finding, "expected_condition", "") or "Concise, extractable passage and verifiable machine-readable entity declaration.")
-    validation = str(_get(finding, "validation_criteria", "") or "Automated re-crawl and repeat benchmark query confirms citation emergence.")
+    enriched = PlainEnglishEngine.enrich_finding(finding)
+    return render_plain_english_finding_card(enriched)
 
-    return f"""
-    <div class="finding-card {severity.lower()}">
-        <div class="finding-title"><strong>{_esc(finding_id)}</strong>: {_esc(title)}</div>
-        <div class="status">Status: {_esc(status)} · Priority: {_esc(severity)} · Owner: {_esc(owner)}</div>
-        <p class="finding-desc"><strong>Observed Condition:</strong> {_esc(desc)}</p>
-        <p class="finding-desc"><strong>Potential Cause:</strong> {_esc(cause)}</p>
-        <p class="finding-desc"><strong>Why It Matters:</strong> {_esc(why)}</p>
-        <p class="finding-rec"><strong>Recommended Action:</strong> {_esc(rec)}</p>
-        <div class="finding-specs">
-            <span><strong>Scope:</strong> <code>{_esc(scope)}</code></span>
-            <span><strong>Validation:</strong> {_esc(validation)}</span>
-            <span><strong>Expected:</strong> {_esc(expected)}</span>
-        </div>
-    </div>
-    """
+
+def _rate_text(label: str, count: int, denominator: int, rate: Any) -> str:
+    if rate is None:
+        return f"{label}: not measured ({count} of {denominator})."
+    return f"{label}: {count} of {denominator} ({rate}%)."
+
+
+def _execution_ledger(facts: _GeoFacts) -> str:
+    """Print stored engine responses. An empty ledger is not a zero score."""
+    from app.geo.visibility_metrics import compute_visibility_metrics
+
+    records = list(facts.records or [])
+    metrics = compute_visibility_metrics(records)
+    failed = int(_num(_get(facts.card, "failed_runs")) or 0) if facts.card is not None else metrics["failed_or_blocked"]
+    if not records:
+        reason = str(_get(facts.card, "not_measured_reason", "") or "").strip()
+        note = reason or "No engine response was stored."
+        return (
+            '<section class="seo-section" id="geo-live-evidence">'
+            "<h4>Live AI search evidence</h4>"
+            f"<p class=\"status\">NOT TESTED. {_esc(note)} "
+            "Mention rate, recommendation rate, and citation rate are not zero.</p>"
+            f"<p>Failed or blocked executions recorded on the scorecard: {failed}. "
+            "They are excluded from any later denominator.</p>"
+            "</section>"
+        )
+    summary = " ".join([
+        _rate_text("Mention rate", metrics["mentions"], metrics["valid_responses"], metrics["mention_rate_pct"]),
+        _rate_text(
+            "Recommendation rate",
+            metrics["recommendations"],
+            metrics["recommendation_responses"],
+            metrics["recommendation_rate_pct"],
+        ),
+        _rate_text("Citation rate", metrics["client_citations"], metrics["valid_responses"], metrics["citation_rate_pct"]),
+        (
+            "Citation share: not measured."
+            if metrics["citation_share_pct"] is None
+            else f"Citation share: {metrics['citation_share_pct']}% "
+                 f"({metrics['client_citations']} client citations, {metrics['competitor_citations']} competitor citations)."
+        ),
+        f"Failed or blocked executions excluded from these rates: {failed}.",
+    ])
+    rows = []
+    for record in records:
+        query = _get(record, "query_text", "") or _get(record, "buyer_query", "")
+        engine = _get(record, "engine_name", "") or _get(record, "engine_id", "")
+        answer = _clip(_get(record, "verbatim_answer", "") or _get(record, "raw_response_text", ""), 800)
+        cited = _get(record, "cited_url", "") or ", ".join(str(url) for url in (_get(record, "cited_urls", None) or []))
+        mentioned = "yes" if _get(record, "brand_mentioned", _get(record, "was_mentioned", False)) else "no"
+        rows.append(
+            "<article class=\"check\">"
+            f"<h5>{_esc(engine or 'Engine not stored')} · mention {mentioned}</h5>"
+            f"<p><strong>Prompt:</strong> {_esc(query or 'Prompt text was not stored.')}</p>"
+            f"<p><strong>Response excerpt:</strong> {_esc(answer or 'Response text was not stored.')}</p>"
+            f"<p><strong>Citation:</strong> {_esc(cited or 'No citation URL was stored.')}</p>"
+            f"<p class=\"status\">{_esc(_get(record, 'timestamp', '') or 'Timestamp not stored')}</p>"
+            "</article>"
+        )
+    return (
+        '<section class="seo-section" id="geo-live-evidence">'
+        "<h4>Live AI search evidence</h4>"
+        f"<p>{_esc(summary)}</p>"
+        f"{''.join(rows)}"
+        "</section>"
+    )
 
 def _line(facts: _GeoFacts, number: str, check: str) -> Tuple[str, str]:
     text = check.lower()
@@ -503,9 +566,36 @@ def geo_cover_figure(report: Any) -> Optional[int]:
     return None
 
 def render_geo_audit_book(report: Any) -> str:
-    """Renders the complete 50-chapter + 15-appendix Enterprise GEO Audit Book."""
+    """Renders the complete 50-chapter + 15-appendix Enterprise GEO Audit Book.
+
+    Automatically merges any tenant-matched Enterprise GEO Audit dataset from GEOStore
+    (canonical findings, dual scorecard, recommendations, 13-deliverable remediation pack,
+    verifications, experiments, entities, citations, and QA gate) so both old and new
+    findings appear in every GEO PDF export.
+    """
+    from app.geo.reporting.builder import (
+        load_latest_enterprise_geo_dataset,
+        render_enterprise_geo_dossier_fragment,
+    )
+
     payload = json.loads(_INDEX_PATH.read_text(encoding="utf-8"))
     facts = _GeoFacts(report)
+    enterprise_dataset = load_latest_enterprise_geo_dataset(report)
+    enterprise_dossier_html = ""
+    if enterprise_dataset:
+        seen_ids = {str(_get(f, "finding_id", "") or "").strip().lower() for f in facts.findings if _get(f, "finding_id")}
+        seen_titles = {str(_get(f, "title", "") or "").strip().lower() for f in facts.findings if _get(f, "title")}
+        for gf in enterprise_dataset.get("findings") or []:
+            gfid = str(gf.get("finding_id") or "").strip().lower()
+            gtitle = str(gf.get("title") or "").strip().lower()
+            if (gfid and gfid in seen_ids) or (gtitle and gtitle in seen_titles):
+                continue
+            facts.findings.append(gf)
+            if gfid:
+                seen_ids.add(gfid)
+            if gtitle:
+                seen_titles.add(gtitle)
+        enterprise_dossier_html = render_enterprise_geo_dossier_fragment(enterprise_dataset)
     grouped: Dict[str, List[Any]] = {}
     for finding in facts.findings:
         grouped.setdefault(_section_for_finding(finding), []).append(finding)
@@ -624,4 +714,4 @@ def render_geo_audit_book(report: Any) -> str:
     toc.append("</ol></nav>")
     mix_chart = evidence_mix_chart(tally)
 
-    return "\n".join([exec_block, mix_chart, toc[0], toc[1], *toc[2:], *blocks])
+    return "\n".join([exec_block, mix_chart, toc[0], toc[1], *toc[2:], *blocks, _execution_ledger(facts), enterprise_dossier_html])

@@ -38,7 +38,23 @@ def render_enterprise_appendix(report: Any) -> str:
             "The indexed chapters above still use the sealed report.</p>"
             "</section>"
         )
-    return _render(assessment)
+    base_html = _render(assessment)
+    try:
+        from app.seo.reporting.canonical_seo_pdf_bridge import (
+            collect_unified_seo_pdf_bundle,
+            render_enterprise_seo_addendum_html,
+        )
+        bundle = getattr(report, "_unified_seo_bundle", None) or collect_unified_seo_pdf_bundle(
+            report=report,
+            assessment=assessment,
+            include_deterministic_gap_checks=False,
+        )
+        addendum = render_enterprise_seo_addendum_html(bundle)
+        if addendum:
+            return base_html + "\n" + addendum
+    except Exception:
+        pass
+    return base_html
 
 
 def _render(assessment: EnterpriseSeoAssessment) -> str:

@@ -41,7 +41,7 @@ from app.cro.models import (
 from app.cro.monitoring import CROMonitoringEngine
 from app.cro.orchestrator import CROAuditOrchestrator
 from app.cro.remediation_center import CRORemediationCenter
-from app.cro.reports.builder import CROReportBuilder
+from app.cro.reports.builder import CROPdfUnavailableError, CROReportBuilder
 from app.cro.reports.section_registry import CRO_REPORT_PROFILES
 from app.cro.specialists.analytics_attribution import (
     build_connector_capability_registry,
@@ -987,7 +987,10 @@ async def create_cro_report(req: CreateReportRequest, user: UserIdentity = Depen
     tenant = _tenant(user)
     _require_audit(tenant, req.audit_id)
     builder = CROReportBuilder(get_cro_store())
-    rep, _content = await builder.publish_report(tenant_id=tenant, audit_id=req.audit_id, profile=req.profile, fmt=req.format)
+    try:
+        rep, _content = await builder.publish_report(tenant_id=tenant, audit_id=req.audit_id, profile=req.profile, fmt=req.format)
+    except CROPdfUnavailableError as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
     return {
         "report": rep.model_dump(),
         "download_url": f"/api/v1/cro/reports/{rep.report_id}/download",

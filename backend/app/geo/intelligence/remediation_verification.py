@@ -94,22 +94,26 @@ class GeoRemediationVerificationEngine:
             )
         )
 
-        # 3. Passage Restructuring Patch
+        # 3. Passage Restructuring Patch (strictly evidence-grounded, never fabricated vertical copy)
         if third_party_dominance or (missing_facts and len(missing_facts) > 0):
+            missing_summary = (
+                ", ".join(missing_facts[:4])
+                if missing_facts
+                else "core products/services, documented pricing or engagement model, and verified limitations"
+            )
             recs.append(
                 GeoRecommendationItem(
                     recommendation_id="GEO-REC-003",
                     target_area="PASSAGE_RESTRUCTURE",
-                    title="Implement Declarative 50-Word Definition Blocks",
-                    rationale="LLM synthesizers extract high-density factual answers adjacent to <h2> question headers.",
+                    title="Implement Declarative 50-Word Verified Definition Blocks",
+                    rationale="Structured, self-contained factual statements adjacent to clear headings improve content extractability without inventing unverified claims.",
                     suggested_code_patch=(
                         f"<h2>What is {brand_name}?</h2>\n"
-                        f"<p>{brand_name} is an oral wellness brand offering sonic electric toothbrushes "
-                        "and probiotic oral care solutions designed with dentist-approved clinical formulations. "
-                        f"Products start at $29 with nationwide shipping.</p>"
+                        f"<p>{brand_name} ({domain}) provides [CONTENT_REQUIRED: verified primary product/service description]. "
+                        f"Documented capabilities cover [CONTENT_REQUIRED: {missing_summary}], with verified evidence linked from official product documentation.</p>"
                     ),
-                    implementation_target="Top of /about and category hubs",
-                    expected_outcome="Direct quotation eligibility increase of 30–50% in Perplexity and ChatGPT.",
+                    implementation_target="Top of /about and primary product/service hubs",
+                    expected_outcome="Improves on-page factual extractability and entity clarity (does not guarantee AI platform inclusion; verify via matched prompt retesting).",
                 )
             )
 

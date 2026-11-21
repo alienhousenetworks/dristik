@@ -678,19 +678,7 @@ export function DynamicQuestionSandboxView({
   const [showSystemLogModal, setShowSystemLogModal] = useState<boolean>(false);
 
   const facets = useMemo(() => {
-    const list = Array.from(new Set(evaluations.map((e) => e.facet))).filter(Boolean);
-    return list.length > 0 ? list : [
-      'Identity, Category & Core Mission',
-      'Target Audience, ICP & Disqualifiers',
-      'Pricing, Packaging & Commercial Model',
-      'Core Capabilities, Features & Product Mechanics',
-      'Technology Stack, Architecture & Integrations',
-      'Competitive Moat, Differentiation & Alternatives',
-      'Trust, Enterprise Security & Regulatory Compliance',
-      'Customer Proof, Case Studies & Quantified ROI',
-      'Implementation, Support & Customer Success',
-      'High-Intent Purchase & Conversion Paths',
-    ];
+    return Array.from(new Set(evaluations.map((e) => e.facet))).filter(Boolean);
   }, [evaluations]);
 
   const isGap = (e: DynamicSandboxQuestionEvaluation) =>
@@ -1065,13 +1053,23 @@ export function DynamicQuestionSandboxView({
                         {item.question_id}
                       </span>
                       <span className="text-[11px] font-medium text-ink-500 bg-paper-100 px-2 py-0.5 rounded">
-                        {item.facet.split(',')[0].trim()}
+                        {(item.facet || 'Segment not stored').split(',')[0].trim()}
                       </span>
                       {getStatusBadge(item.answerability_status)}
                       <AnswerRiskBadge risk={item.answer_risk} />
                     </div>
                     <h4 className="text-sm font-semibold text-ink leading-snug">{item.generated_question}</h4>
-                    <p className="text-xs text-ink-500 italic line-clamp-1">Intent: {item.buyer_intent}</p>
+                    <p className="text-xs text-ink-600">
+                      <span className="font-mono font-semibold text-ink-500">Segment</span>{' '}
+                      {[item.facet, item.source_section].filter(Boolean).join(' · ') || 'Segment not stored'}
+                    </p>
+                    <p className="text-xs text-ink whitespace-pre-wrap leading-relaxed">
+                      <span className="font-mono font-semibold text-ink-500">RAG answer</span>{' '}
+                      {answers.ragAnswer || 'No RAG answer was stored.'}
+                    </p>
+                    {item.buyer_intent && (
+                      <p className="text-xs text-ink-500 italic">Intent: {item.buyer_intent}</p>
+                    )}
                     {/* Inline grounding bar in collapsed view */}
                     {grounding !== null && (
                       <div className="pt-1 max-w-xs">

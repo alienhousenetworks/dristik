@@ -189,3 +189,68 @@ class CROQualityAssuranceEngine:
             blockers=blockers,
             warnings=warnings,
         )
+
+
+# ── Publication gate for the CRO intelligence report (CroIntelligenceReport) ──
+_NO_CTA_RE = re.compile(r"\bno (primary )?cta\b|\bcta (is |was )?missing\b", re.I)
+_NO_FORM_RE = re.compile(r"\bno (qualification or contact )?form\b|\bform (is |was )?(missing|absent)\b", re.I)
+_MONEY_RE = re.compile(r"[$€£₹]\s?\d|\d+(\.\d+)?\s?%\s*(uplift|lift|increase|more conversions)", re.I)
+_VISUAL_KEY_RE = re.compile(r"mobile|viewport|visual|screenshot|responsive", re.I)
+
+
+class CroPublicationGate:
+    """Outcome of the CRO pre-publication gate. `reasons` lists every blocker."""
+
+    def __init__(self, reasons: List[str]):
+        self.reasons = reasons
+        self.passed = not reasons
+
+
+def cro_publication_gate(intel: Any, pdf_qa: Any = None) -> CroPublicationGate:
+    """Blocks publication on contradictions, unreproducible scores and failed PDF QA.
+
+    `intel` is a CroIntelligenceReport. `pdf_qa` is an optional PdfValidationReport.
+    """
+    reasons: List[str] = []
+    checks = [c for s in intel.sections for c in s.checks]
+
+    # CTA / form marked absent while passing evidence exists.
+    cta_seen = any(c.outcome == "pass" and c.evidence and "cta" in c.key.lower() for c in checks)
+    form_seen = any(c.outcome == "pass" and c.evidence and "form" in c.key.lower() for c in checks)
+    for f in intel.findings:
+        if cta_seen and _NO_CTA_RE.search(f.finding):
+            reasons.append(f"{f.finding_id}: CTA reported missing but CTA evidence exists.")
+        if form_seen and _NO_FORM_RE.search(f.finding):
+            reasons.append(f"{f.finding_id}: form reported absent but form evidence exists.")
+        if f.evidence_state in ("VERIFIED", "SAMPLE_VERIFIED") and not (f.evidence or "").strip():
+            reasons.append(f"{f.finding_id}: verified finding has no evidence.")
+        if _MONEY_RE.search(f.impact_estimate or "") and not any(m.status == "MEASURED" and "revenue" in m.metric.lower() for m in intel.metrics):
+            reasons.append(f"{f.finding_id}: financial impact claimed without a measured revenue dataset.")
+
+    ids = [f.finding_id for f in intel.findings]
+    if len(ids) != len(set(ids)):
+        reasons.append("Duplicate finding IDs.")
+    section_nums = {int(s.number) for s in intel.sections if str(s.number).isdigit()}
+    reasons += [f"{f.finding_id}: references unknown section {f.section}." for f in intel.findings if section_nums and f.section not in section_nums]
+
+    # Rendered-UX checks must not pass without rendered pages.
+    if not (intel.coverage or {}).get("rendered_pages"):
+        reasons += [f"{c.check_id}: visual/mobile check passed without rendered pages." for c in checks if c.outcome == "pass" and _VISUAL_KEY_RE.search(c.key) and c.evidence_state in ("VERIFIED", "SAMPLE_VERIFIED")][:5]
+
+    # Metrics: no value unless measured; never zero for unavailable data.
+    for m in intel.metrics:
+        if m.status != "MEASURED" and m.value is not None:
+            reasons.append(f"Metric '{m.metric}' has a value but status {m.status}.")
+
+    # Score reproducibility: experience score = passed / (passed + failed).
+    for d in intel.dimensions:
+        if d.score is not None and d.passed_checks + d.failed_checks > 0:
+            expected = round(100 * d.passed_checks / (d.passed_checks + d.failed_checks), 1)
+            if abs(expected - d.score) > 0.05:
+                reasons.append(f"Dimension '{d.name}' score {d.score} is not reproducible (expected {expected}).")
+        if d.score is not None and d.status in ("UNMEASURED", "DATA_UNAVAILABLE"):
+            reasons.append(f"Dimension '{d.name}' has a score but status {d.status}.")
+
+    if pdf_qa is not None and not getattr(pdf_qa, "is_valid", True):
+        reasons.append("PDF QA failed: " + ", ".join(getattr(pdf_qa, "failed_checks", []) or ["unknown"]))
+    return CroPublicationGate(reasons)

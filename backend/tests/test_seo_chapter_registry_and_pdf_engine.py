@@ -45,4 +45,19 @@ def test_enterprise_pdf_engine_render():
     assert "perforacare.com" in html_out
     assert "Table of Contents" in html_out
     assert "505 URLs" in html_out
+    assert "Test Defect" in html_out
+    assert "PASS (No regression blockers)" not in html_out
     assert "Chapter 18" in html_out  # Technical SEO
+
+
+def test_enterprise_pdf_does_not_invent_coverage_or_a_pass():
+    engine = EnterprisePdfEngine()
+    html_out = engine.render_publication(
+        assessment=None,
+        report_data={"domain": "empty.example", "analysis_id": "EMPTY"},
+        profile="executive",
+    )
+    assert "505 URLs" not in html_out
+    assert "Not measured" in html_out
+    assert "NOT TESTED" in html_out
+    assert "96%" not in html_out

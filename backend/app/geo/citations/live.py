@@ -29,6 +29,7 @@ class EngineCitationResult:
     cited_url: Optional[str]
     extracted_snippet: Optional[str]
     competitor_citations: List[Dict[str, Any]] = field(default_factory=list)
+    is_mentioned: bool = False
     is_simulation: bool = False
     notice: Optional[str] = None
     status: str = "NOT_CONFIGURED"
@@ -164,7 +165,9 @@ class LiveAICitationEngine:
 
         content_text = raw_resp.raw_content or ""
         brand_token = clean_domain.split(".")[0] if clean_domain else ""
-        is_cited = bool(cited_url) or (bool(brand_token) and brand_token in content_text.lower())
+        # Strictly separate observed URL citation from brand text mention.
+        is_mentioned = bool(brand_token) and brand_token in content_text.lower()
+        is_cited = bool(cited_url)
 
         comp_cites: List[Dict[str, Any]] = []
         for comp in (competitors or []):
@@ -184,6 +187,7 @@ class LiveAICitationEngine:
             cited_url=cited_url,
             extracted_snippet=content_text[:280] if content_text else None,
             competitor_citations=comp_cites,
+            is_mentioned=is_mentioned,
             is_simulation=False,
             notice=None,
             status="MEASURED",
@@ -210,6 +214,7 @@ class LiveAICitationEngine:
                 results.append({
                     "engine": res.engine,
                     "query": res.query,
+                    "is_mentioned": res.is_mentioned,
                     "is_cited": res.is_cited,
                     "citation_rank": res.citation_rank,
                     "cited_url": res.cited_url,
@@ -222,14 +227,17 @@ class LiveAICitationEngine:
                     "queried_at": datetime.now(timezone.utc).isoformat(),
                 })
 
-        any_live = any(r.get("is_live") for r in results)
-        share_of_voice_pct = round((total_citations / max(total_evaluations, 1)) * 100, 1) if (any_live or total_evaluations > 0) else None
+        live_count = sum(1 for r in results if r.get("is_live"))
+        any_live = live_count > 0
+        # Missing API credentials must never produce a 0.0% visibility score.
+        share_of_voice_pct = round((total_citations / live_count) * 100, 1) if any_live else None
         return {
             "domain": domain,
             "status": "MEASURED" if any_live else "NOT_CONFIGURED",
             "is_live": any_live,
             "total_queries": len(queries),
             "total_evaluations": total_evaluations,
+            "live_evaluations": live_count,
             "total_citations": total_citations,
             "share_of_voice_percentage": share_of_voice_pct,
             "evaluations": results,
@@ -311,7 +319,7 @@ async def evaluate_dynamic_sandbox_100(
     and evaluates answerability, crawled answers, and citability gaps against first-party evidence.
     """
     from app.seo.business.entity_resolver import UniversalEntityResolver
-    from app.intelligence.geo.dynamic_sandbox import DynamicQuestionSandboxEngine
+    from app.geo.dynamic_sandbox import DynamicQuestionSandboxEngine
     from app.domain.models import PageEvidence
 
     page_objs = []

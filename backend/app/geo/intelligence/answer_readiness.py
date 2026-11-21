@@ -79,11 +79,11 @@ class AnswerReadinessEngine:
             # 5. Purchase Intent
             {"id": "Q-08", "cat": QuestionCategory.PURCHASE_INTENT, "q": f"Where can customers buy {b} and what is the return/refund policy?"},
             # 6. Trust & Reputation
-            {"id": "Q-09", "cat": QuestionCategory.TRUST_AND_REPUTATION, "q": f"What clinical tests, certifications, or dentist endorsements support {b}?"},
+            {"id": "Q-09", "cat": QuestionCategory.TRUST_AND_REPUTATION, "q": f"What independent reviews, certifications, or third-party validations support {b}?"},
             # 7. Customer Objections
-            {"id": "Q-10", "cat": QuestionCategory.CUSTOMER_OBJECTIONS, "q": f"Does {b} have any harmful ingredients, sulfates, or hidden fees?"},
+            {"id": "Q-10", "cat": QuestionCategory.CUSTOMER_OBJECTIONS, "q": f"What limitations, safety disclosures, compliance terms, or fees should buyers know about {b}?"},
             # 8. Local & Regional Intent
-            {"id": "Q-11", "cat": QuestionCategory.LOCAL_AND_REGIONAL, "q": f"Does {b} offer international shipping and local warranty support?"},
+            {"id": "Q-11", "cat": QuestionCategory.LOCAL_AND_REGIONAL, "q": f"Which regions, languages, shipping zones, or local support options does {b} cover?"},
         ]
 
     @classmethod

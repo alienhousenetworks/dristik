@@ -153,16 +153,27 @@ class CompleteGeoReportGenerator:
                     "scorecard": v_card.model_dump() if v_card else None,
                     "citation_rate": citation_rate,
                 },
-                "11_citation_analysis_and_source_attribution": {
-                    "distinct_citations_found": None,
-                    "citation_count_status": "NOT_MEASURED: successful response count is not a distinct citation count.",
-                    "source_distribution": None,
-                },
-                "12_answer_accuracy_and_brand_representation": {
-                    "hallucinations_detected": None,
-                    "hallucination_status": "NOT_ASSESSED",
-                    "brand_sentiment_context": "Assessed only when validated live responses and a grounded claim set are available.",
-                },
+                "11_citation_analysis_and_source_attribution": (
+                    lambda _recs: {
+                        "distinct_citations_found": len({str(r.get("cited_url")) for r in _recs if isinstance(r, dict) and r.get("cited_url")}) if _recs else None,
+                        "citation_count_status": "MEASURED" if any(isinstance(r, dict) and r.get("cited_url") for r in _recs) else "NOT_MEASURED: no distinct cited URLs captured in observatory records.",
+                        "source_distribution": {
+                            "owned_cited_records": sum(1 for r in _recs if isinstance(r, dict) and r.get("brand_cited")),
+                            "competitor_cited_records": sum(1 for r in _recs if isinstance(r, dict) and r.get("competitors_cited")),
+                        } if _recs else None,
+                    }
+                )(list(getattr(v_card, "observatory_records", None) or []) if v_card else []),
+                "12_answer_accuracy_and_brand_representation": (
+                    lambda _recs: {
+                        "hallucinations_detected": sum(1 for r in _recs if isinstance(r, dict) and r.get("claim_accuracy") == "HALLUCINATED") if _recs else None,
+                        "hallucination_status": "MEASURED" if _recs else "NOT_ASSESSED",
+                        "brand_sentiment_context": (
+                            getattr(v_card, "observatory_summary", {}).get("sentiment_distribution")
+                            if v_card and isinstance(getattr(v_card, "observatory_summary", None), dict)
+                            else "Assessed only when validated live responses and a grounded claim set are available."
+                        ),
+                    }
+                )(list(getattr(v_card, "observatory_records", None) or []) if v_card else []),
                 "13_competitive_geo_benchmarking": {
                     "competitor_report": report.competitive_report,
                     "competitor_parity": report.competitor_seo_parity.model_dump() if report.competitor_seo_parity else None,

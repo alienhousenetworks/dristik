@@ -28,6 +28,7 @@ import {
 import { DynamicQuestionSandboxView } from '../DynamicQuestionSandboxView';
 import { AeoAuditBook } from '../../report/aeoIndex/AeoAuditBook';
 import { AeoAnalyticsDashboard } from '../AeoAnalyticsDashboard';
+import { sandboxAnswers } from '../../lib/sandboxAnswers';
 
 interface AeoWorkspaceViewProps {
   report: ExecutiveReport;
@@ -116,6 +117,25 @@ export function resolveQuestionCategory(q: any): string {
   return q?.category || 'General';
 }
 
+/** Facet is the query segment. source_section is the crawled heading it was answered from. */
+export function questionSegment(q: {
+  facet?: string | null;
+  source_section?: string | null;
+  category?: string | null;
+  question_key?: string | null;
+}): string {
+  const facet = (q?.facet || '').trim();
+  const section = (q?.source_section || '').trim();
+  const category = q?.category && q.category !== 'General' ? q.category.trim() : '';
+  const mapped = q?.question_key ? QUESTION_KEY_CATEGORY_MAP[q.question_key] : '';
+  const parts = [facet || category || mapped, section].filter(Boolean);
+  return parts.join(' · ') || 'Segment not stored';
+}
+
+function storedQuestionText(q: { generated_question?: string | null; question_text?: string | null }): string {
+  return (q.generated_question || q.question_text || '').trim() || 'Question text was not stored.';
+}
+
 export function AeoWorkspaceView({ report, analysisId, onOpenPatchPack }: AeoWorkspaceViewProps) {
   const [activeSubTab, setActiveSubTab] = useState<AeoSubTab>('overview');
   const [copiedLlms, setCopiedLlms] = useState(false);
@@ -168,16 +188,14 @@ export function AeoWorkspaceView({ report, analysisId, onOpenPatchPack }: AeoWor
 
   // Filtered Questions
   const filteredQuestions = sandboxEvals.filter((q: any) => {
-    const qText = q.question_text || q.generated_question || '';
-    const qCat = q.category || q.facet || '';
-    const qIntent = q.intent || q.buyer_intent || 'INFORMATIONAL';
+    const qText = `${storedQuestionText(q)} ${q.rag_answer || ''} ${q.crawled_answer || ''}`;
+    const qCat = questionSegment(q);
+    const qIntent = (q.intent || q.buyer_intent || '').toUpperCase();
     const matchesSearch =
       !questionSearch ||
       qText.toLowerCase().includes(questionSearch.toLowerCase()) ||
       qCat.toLowerCase().includes(questionSearch.toLowerCase());
-    const matchesIntent =
-      selectedIntentFilter === 'ALL' ||
-      qIntent.toUpperCase() === selectedIntentFilter;
+    const matchesIntent = selectedIntentFilter === 'ALL' || qIntent === selectedIntentFilter;
     return matchesSearch && matchesIntent;
   });
 
@@ -763,71 +781,50 @@ export function AeoWorkspaceView({ report, analysisId, onOpenPatchPack }: AeoWor
               </div>
             </div>
 
-            {/* Questions Table */}
-            <div className="overflow-x-auto border border-line rounded-lg">
-              <table className="w-full text-left text-xs font-mono">
-                <thead className="bg-paper-100 text-ink-500 border-b border-line text-[11px]">
-                  <tr>
-                    <th className="p-2.5">Question Text</th>
-                    <th className="p-2.5">Category</th>
-                    <th className="p-2.5">Intent</th>
-                    <th className="p-2.5">Priority</th>
-                    <th className="p-2.5">Answerability Status</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-line/60 bg-paper">
-                  {filteredQuestions.length > 0 ? (
-                    filteredQuestions.map((q: any, idx: number) => {
-                      const isAnswerable =
-                        q.answerability_status === 'ANSWERABLE' && q.is_answerable !== false;
-                      const isPartial = q.answerability_status === 'PARTIAL';
-                      return (
-                        <tr key={idx} className="hover:bg-paper-50 transition-colors">
-                          <td className="p-2.5 text-ink font-sans font-medium text-xs max-w-md">
-                            {q.question_text}
-                          </td>
-                          <td className="p-2.5 text-ink-500 text-[11px]">
-                            {resolveQuestionCategory(q)}
-                          </td>
-                          <td className="p-2.5">
-                            <span className="px-1.5 py-0.5 rounded bg-paper-200 text-ink-700 text-[10px] font-bold">
-                              {q.intent || 'INFORMATIONAL'}
-                            </span>
-                          </td>
-                          <td className="p-2.5 font-bold text-ink">
-                            {typeof q.priority_score === 'number'
-                              ? q.priority_score.toFixed(2)
-                              : typeof q.business_importance_score === 'number'
-                              ? q.business_importance_score.toFixed(2)
-                              : '0.80'}
-                          </td>
-                          <td className="p-2.5">
-                            {isAnswerable ? (
-                              <span className="inline-flex items-center gap-1 font-mono text-[10px] px-2 py-0.5 rounded bg-good/10 text-good font-bold">
-                                <CheckCircle2 className="w-3 h-3" /> ANSWERABLE
-                              </span>
-                            ) : isPartial ? (
-                              <span className="inline-flex items-center gap-1 font-mono text-[10px] px-2 py-0.5 rounded bg-warn/10 text-warn font-bold">
-                                <AlertTriangle className="w-3 h-3" /> PARTIAL
-                              </span>
-                            ) : (
-                              <span className="inline-flex items-center gap-1 font-mono text-[10px] px-2 py-0.5 rounded bg-bad/10 text-bad font-bold">
-                                <XCircle className="w-3 h-3" /> UNANSWERED
-                              </span>
-                            )}
-                          </td>
-                        </tr>
-                      );
-                    })
-                  ) : (
-                    <tr>
-                      <td colSpan={5} className="p-6 text-center text-ink-400 font-sans">
-                        No questions match the current filter criteria.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
+            <div className="space-y-3">
+              {sandboxEvals.length === 0 ? (
+                <p className="p-6 text-center text-sm text-ink-500 font-sans">
+                  No questions were stored on this audit. Segments and RAG answers are not measured.
+                </p>
+              ) : filteredQuestions.length === 0 ? (
+                <p className="p-6 text-center text-sm text-ink-400 font-sans">
+                  No questions match the current filter criteria.
+                </p>
+              ) : (
+                filteredQuestions.map((q: any, idx: number) => {
+                  const answers = sandboxAnswers(q);
+                  const status = q.answerability_status || 'NOT STORED';
+                  const tone =
+                    status === 'ANSWERABLE'
+                      ? 'bg-good/10 text-good'
+                      : status === 'PARTIAL'
+                      ? 'bg-warn/10 text-warn'
+                      : 'bg-bad/10 text-bad';
+                  return (
+                    <article key={q.question_id || idx} className="rounded-lg border border-line bg-paper p-3.5 space-y-2">
+                      <div className="flex flex-wrap items-start justify-between gap-2">
+                        <h4 className="text-sm font-semibold text-ink font-sans leading-snug">
+                          {storedQuestionText(q)}
+                        </h4>
+                        <span className={`inline-flex items-center gap-1 font-mono text-[10px] px-2 py-0.5 rounded font-bold ${tone}`}>
+                          {status}
+                        </span>
+                      </div>
+                      <p className="text-xs text-ink-600">
+                        <span className="font-mono font-semibold text-ink-500">Segment</span>{' '}
+                        {questionSegment(q)}
+                      </p>
+                      <p className="text-xs text-ink whitespace-pre-wrap leading-relaxed">
+                        <span className="font-mono font-semibold text-ink-500">RAG answer</span>{' '}
+                        {answers.ragAnswer || 'No RAG answer was stored.'}
+                      </p>
+                      {(q.intent || q.buyer_intent) && (
+                        <p className="text-[11px] text-ink-500">Intent: {q.intent || q.buyer_intent}</p>
+                      )}
+                    </article>
+                  );
+                })
+              )}
             </div>
           </Card>
 
@@ -866,59 +863,47 @@ export function AeoWorkspaceView({ report, analysisId, onOpenPatchPack }: AeoWor
                 Stage A: Domain Relevance Gating
               </span>
               <p className="text-ink-700 leading-relaxed">
-                Before testing sentence claims, Dristik enforces domain and catalog entity matching. Out-of-scope queries (e.g. asking an oral care brand about software development) are rejected immediately as <code className="font-bold">UNANSWERABLE</code> with 0% grounding, eliminating false-positive grounding scores.
+                Each row below is a stored question. The segment is its facet and crawled heading. The RAG answer is the stored grounded answer, or the passage the crawl actually contained. Nothing is filled in when that field was not stored.
               </p>
             </div>
 
-            {/* Stage B Claim Grounding Table */}
             <div className="space-y-3 pt-2">
               <h4 className="text-xs font-mono font-semibold text-ink-700 uppercase">
-                Stage B: Factual Claim Grounding vs Verified Catalog
+                Stored questions, segments, and RAG answers
               </h4>
-              <div className="space-y-2 text-xs font-mono">
-                {[
-                  {
-                    claim: 'Offers smart electric toothbrushes with sonic pulse technology.',
-                    source: 'Verified against product catalog (Electric Toothbrush PDP)',
-                    status: 'GROUNDED',
-                    score: 95,
-                  },
-                  {
-                    claim: 'Provides zero-alcohol, chemical-free oral rinses in therapeutic flavors.',
-                    source: 'Verified against mouthwash ingredient tables',
-                    status: 'GROUNDED',
-                    score: 92,
-                  },
-                  {
-                    claim: 'Free nationwide shipping provided on all orders over ₹499.',
-                    source: 'Contradiction flagged with FAQ page stating ₹599 threshold',
-                    status: 'CONTRADICTED',
-                    score: 40,
-                  },
-                ].map((item, idx) => (
-                  <div
-                    key={idx}
-                    className="p-3.5 rounded-lg border border-line bg-paper-50 flex flex-col sm:flex-row sm:items-center justify-between gap-2"
-                  >
-                    <div className="space-y-1">
-                      <span className="font-medium text-ink block font-sans">{item.claim}</span>
-                      <span className="text-[11px] text-ink-500 font-mono">{item.source}</span>
-                    </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                      <span className="font-bold text-ink">{item.score}%</span>
-                      <span
-                        className={`text-[10px] font-mono px-2 py-0.5 rounded font-bold ${
-                          item.status === 'GROUNDED'
-                            ? 'bg-good/10 text-good'
-                            : 'bg-bad/10 text-bad'
-                        }`}
-                      >
-                        {item.status}
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
+              {sandboxEvals.length === 0 ? (
+                <p className="p-4 rounded-lg border border-line bg-paper-50 text-sm text-ink-500">
+                  No RAG answers were stored for this audit.
+                </p>
+              ) : (
+                <div className="space-y-2">
+                  {sandboxEvals.map((q: any, idx: number) => {
+                    const answers = sandboxAnswers(q);
+                    const grounding =
+                      typeof q.grounding_ratio === 'number'
+                        ? `${Math.round(q.grounding_ratio * 100)}% grounding`
+                        : 'Grounding not measured';
+                    return (
+                      <article key={q.question_id || idx} className="p-3.5 rounded-lg border border-line bg-paper-50 space-y-1.5">
+                        <div className="flex flex-wrap items-start justify-between gap-2">
+                          <h5 className="font-medium text-ink font-sans text-sm">{storedQuestionText(q)}</h5>
+                          <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-paper-200 text-ink-700 font-bold">
+                            {q.answerability_status || 'NOT STORED'}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-ink-600">
+                          <span className="font-mono font-semibold">Segment</span> {questionSegment(q)}
+                        </p>
+                        <p className="text-xs text-ink whitespace-pre-wrap leading-relaxed">
+                          <span className="font-mono font-semibold text-ink-500">RAG answer</span>{' '}
+                          {answers.ragAnswer || 'No RAG answer was stored.'}
+                        </p>
+                        <p className="text-[11px] font-mono text-ink-500">{grounding}</p>
+                      </article>
+                    );
+                  })}
+                </div>
+              )}
             </div>
 
             {/* Declarative Answer Block Guidelines */}

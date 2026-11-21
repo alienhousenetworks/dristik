@@ -31,7 +31,7 @@ def test_score_interpretation_bands():
     assert interpret_score(65.0) == ScoreInterpretation.NEEDS_IMPROVEMENT
     assert interpret_score(45.0) == ScoreInterpretation.WEAK
     assert interpret_score(25.0) == ScoreInterpretation.CRITICAL
-    assert interpret_score(None) == ScoreInterpretation.CRITICAL
+    assert interpret_score(None) == ScoreInterpretation.UNMEASURED
 
 
 def test_metric_score_calculation():
@@ -185,4 +185,30 @@ async def test_orchestrator_post_audit_synthesis(tmp_path):
     remed_tasks = assessment["remediation_tasks"]
     assert len(remed_tasks) >= 1
     assert remed_tasks[0]["task_id"].startswith("REM_")
-    assert remed_tasks[0]["implementation"]["platform"] == "NEXTJS_REACT"
+    # Without detected framework headers, stack honestly falls back to GENERIC_HTML
+    assert remed_tasks[0]["implementation"]["platform"] == "GENERIC_HTML"
+    assert remed_tasks[0]["implementation"]["stack_confidence"] == "GENERIC_FALLBACK"
+
+    # With observed Next.js server headers on crawled pages, platform is honestly DETECTED
+    orch_next = SEOAuditOrchestrator(
+        audit_id="audit_synth_next_002",
+        domain="next-synth.com",
+        config=AuditConfiguration(target_url="https://next-synth.com", mode=AuditMode.QUICK),
+        db_path=db_file,
+        seed_pages=[
+            {
+                "url": "https://next-synth.com/",
+                "status_code": 200,
+                "headers": {"x-powered-by": "Next.js 14.2"},
+                "html": "<html><head></head><body><h1>Welcome</h1></body></html>",
+                "title": "",
+                "h1": ["Welcome"],
+                "word_count": 40,
+            }
+        ],
+    )
+    res_next = await orch_next.run()
+    next_tasks = res_next["canonical_assessment"]["remediation_tasks"]
+    assert len(next_tasks) >= 1
+    assert next_tasks[0]["implementation"]["platform"] == "NEXTJS_REACT"
+    assert next_tasks[0]["implementation"]["stack_confidence"] == "DETECTED"

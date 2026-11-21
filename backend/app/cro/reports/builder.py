@@ -96,6 +96,10 @@ def render_funnel_svg(funnels: List[Dict[str, Any]]) -> str:
     return "".join(parts)
 
 
+class CROPdfUnavailableError(RuntimeError):
+    """Raised when the headless browser cannot produce a PDF."""
+
+
 class CROReportBuilder:
     """Builds JSON, HTML, and PDF CRO reports from the canonical CROStore dataset."""
 
@@ -415,15 +419,8 @@ a {{ color: #1d4ed8; text-decoration: none; }}
                 raw_bytes = pdf_bytes
                 ext = "pdf"
             else:
-                # Deterministic minimal valid PDF fallback when Chromium is disabled in CI/sandbox
-                raw_bytes = _build_minimal_valid_pdf(
-                    title=json_payload["title"],
-                    domain=audit.domain,
-                    audit_id=audit_id,
-                    experience_score=sc_model.experience_score,
-                    findings_count=len(json_payload["findings"]),
-                )
-                ext = "pdf"
+                # A stub PDF would pass as a real report, so fail instead of persisting one.
+                raise CROPdfUnavailableError("PDF rendering engine unavailable; report not persisted. Use format=html.")
         else:
             raw_bytes = html_doc.encode("utf-8")
             ext = "html"
@@ -454,38 +451,6 @@ a {{ color: #1d4ed8; text-decoration: none; }}
         )
         self.store.save_report(rep)
         return rep, raw_bytes
-
-
-def _build_minimal_valid_pdf(
-    *,
-    title: str,
-    domain: str,
-    audit_id: str,
-    experience_score: Optional[float],
-    findings_count: int,
-) -> bytes:
-    """Standards-compliant single-page PDF fallback when headless Chromium is unavailable."""
-    safe_line = f"Dristik CRO Report | {title} | {domain} | Audit {audit_id} | Score: {experience_score} | Findings: {findings_count}"
-    safe_line = safe_line.replace("(", "[").replace(")", "]").replace("\\", "/")[:110]
-    stream = f"BT /F1 11 Tf 40 760 Td ({safe_line}) Tj ET".encode("latin-1", errors="replace")
-    objs = [
-        b"1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj\n",
-        b"2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj\n",
-        b"3 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >> endobj\n",
-        b"4 0 obj << /Length " + str(len(stream)).encode() + b" >> stream\n" + stream + b"\nendstream endobj\n",
-        b"5 0 obj << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> endobj\n",
-    ]
-    out = bytearray(b"%PDF-1.4\n")
-    offsets = [0]
-    for obj in objs:
-        offsets.append(len(out))
-        out.extend(obj)
-    xref_pos = len(out)
-    out.extend(f"xref\n0 {len(objs)+1}\n0000000000 65535 f \n".encode())
-    for off in offsets[1:]:
-        out.extend(f"{off:010d} 00000 n \n".encode())
-    out.extend(f"trailer << /Size {len(objs)+1} /Root 1 0 R >>\nstartxref\n{xref_pos}\n%%EOF\n".encode())
-    return bytes(out)
 
 
 cro_report_builder = CROReportBuilder()

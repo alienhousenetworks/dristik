@@ -84,10 +84,11 @@ export interface BrokenLinkItem {
 
 interface InternalLinkGraphViewProps {
   report: ExecutiveReport;
+  backendGraph?: Record<string, any> | null;
   onSelectFinding?: (f: Finding) => void;
 }
 
-export function InternalLinkGraphView({ report, onSelectFinding }: InternalLinkGraphViewProps) {
+export function InternalLinkGraphView({ report, backendGraph, onSelectFinding }: InternalLinkGraphViewProps) {
   const [zoomLevel, setZoomLevel] = useState(1);
   const [panOffset, setPanOffset] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
@@ -104,127 +105,73 @@ export function InternalLinkGraphView({ report, onSelectFinding }: InternalLinkG
   const domain = report.domain || 'example.com';
   const homepageUrl = report.website_url || `https://${domain}/`;
 
-  // 1. Synthesize or Extract Graph Nodes & Edges from crawled pages
+  // 1. Use authoritative backend BFS/PageRank graph when available, else run real BFS over crawled pages (ZERO fake fallback URLs)
   const { nodes, edges, suggestedLinks, brokenLinks } = useMemo(() => {
-    const rawPages = (report.crawl_manifest?.pages || report.page_reports || []) as Array<Record<string, any>>;
+    const centerX = 450;
+    const centerY = 350;
+    const ringRadii = [0, 110, 190, 260, 320];
 
-    // Base pages list
-    const pageList = rawPages.length > 0 ? rawPages : [
-      {
-        url: homepageUrl,
-        title: `${domain} Homepage`,
-        status_code: 200,
-        internal_links: [
-          `https://${domain}/products`,
-          `https://${domain}/services`,
-          `https://${domain}/blog`,
-          `https://${domain}/about`,
-        ],
-        word_count: 850,
-      },
-      {
-        url: `https://${domain}/products`,
-        title: 'Product Catalog',
-        status_code: 200,
-        internal_links: [
-          homepageUrl,
-          `https://${domain}/products/enterprise`,
-          `https://${domain}/products/starter`,
-        ],
-        word_count: 600,
-      },
-      {
-        url: `https://${domain}/products/enterprise`,
-        title: 'Enterprise Solution',
-        status_code: 200,
-        internal_links: [`https://${domain}/products`, `https://${domain}/contact`],
-        word_count: 900,
-      },
-      {
-        url: `https://${domain}/products/starter`,
-        title: 'Starter Pack',
-        status_code: 200,
-        internal_links: [`https://${domain}/products`],
-        word_count: 450,
-      },
-      {
-        url: `https://${domain}/services`,
-        title: 'Consulting & Services',
-        status_code: 200,
-        internal_links: [homepageUrl, `https://${domain}/contact`],
-        word_count: 520,
-      },
-      {
-        url: `https://${domain}/blog`,
-        title: 'SEO Resource Hub',
-        status_code: 200,
-        internal_links: [homepageUrl, `https://${domain}/blog/internal-linking-guide`],
-        word_count: 700,
-      },
-      {
-        url: `https://${domain}/blog/internal-linking-guide`,
-        title: 'Complete Guide to Internal Linking',
-        status_code: 200,
-        internal_links: [`https://${domain}/blog`, `https://${domain}/broken-sample-page`],
-        word_count: 1400,
-      },
-      {
-        url: `https://${domain}/about`,
-        title: 'About Our Team',
-        status_code: 200,
-        internal_links: [homepageUrl],
-        word_count: 380,
-      },
-      {
-        url: `https://${domain}/contact`,
-        title: 'Customer Contact',
-        status_code: 200,
-        internal_links: [homepageUrl],
-        word_count: 290,
-      },
-      {
-        url: `https://${domain}/legacy-orphan-landing`,
-        title: 'Old Promotional Campaign',
-        status_code: 200,
-        internal_links: [],
-        word_count: 310,
-      },
-      {
-        url: `https://${domain}/broken-sample-page`,
-        title: '404 Missing Endpoint',
-        status_code: 404,
-        internal_links: [],
-        word_count: 0,
-      },
-    ];
+    if (backendGraph && Array.isArray(backendGraph.nodes) && backendGraph.nodes.length > 0) {
+      const depthGroups: Record<number, any[]> = { 0: [], 1: [], 2: [], 3: [], 4: [] };
+      backendGraph.nodes.forEach((n: any) => {
+        const d = Math.min(Math.max(Number(n.click_depth ?? 0), 0), 4);
+        depthGroups[d].push(n);
+      });
+      const positioned: LinkGraphNode[] = [];
+      Object.entries(depthGroups).forEach(([depthStr, group]) => {
+        const depth = Number(depthStr);
+        const radius = ringRadii[depth];
+        const count = group.length;
+        group.forEach((n, index) => {
+          let x = centerX;
+          let y = centerY;
+          if (depth > 0 && count > 0) {
+            const angle = (2 * Math.PI * index) / count - Math.PI / 2;
+            x = centerX + radius * Math.cos(angle);
+            y = centerY + radius * Math.sin(angle);
+          }
+          positioned.push({ ...n, x, y });
+        });
+      });
+      return {
+        nodes: positioned,
+        edges: (backendGraph.edges || []) as LinkGraphEdge[],
+        suggestedLinks: (backendGraph.suggested_links || []) as SuggestedLink[],
+        brokenLinks: (backendGraph.broken_links || []) as BrokenLinkItem[],
+      };
+    }
 
-    // Compute directed edges
+    const pageList = (report.crawl_manifest?.pages || report.page_reports || []) as Array<Record<string, any>>;
+    if (pageList.length === 0) {
+      return { nodes: [], edges: [], suggestedLinks: [], brokenLinks: [] };
+    }
+
     const computedEdges: LinkGraphEdge[] = [];
     const inDegreeMap: Record<string, number> = {};
     const outDegreeMap: Record<string, number> = {};
+    const adjList: Record<string, string[]> = {};
     const brokenList: BrokenLinkItem[] = [];
 
     pageList.forEach((p) => {
       const src = p.url;
       const targets: string[] = Array.isArray(p.internal_links) ? p.internal_links : [];
       outDegreeMap[src] = targets.length;
+      adjList[src] = targets;
 
       targets.forEach((tgt) => {
         inDegreeMap[tgt] = (inDegreeMap[tgt] || 0) + 1;
         const targetPage = pageList.find((item) => item.url === tgt);
         const isBroken = targetPage ? targetPage.status_code >= 400 : false;
-
         const edge: LinkGraphEdge = {
           id: `${src}->${tgt}`,
           source: src,
           target: tgt,
-          anchor_text: p.title ? `Read ${p.title.slice(0, 25)}` : 'Internal Reference',
+          anchor_text: targetPage?.title || tgt,
           link_context: 'body',
           is_broken: isBroken,
           status_code: targetPage ? targetPage.status_code : 200,
         };
         computedEdges.push(edge);
-
         if (isBroken) {
           brokenList.push({
             source_url: src,
@@ -237,7 +184,22 @@ export function InternalLinkGraphView({ report, onSelectFinding }: InternalLinkG
       });
     });
 
-    // Helper to classify taxonomy
+    // Real BFS click depth from homepage
+    const bfsDepth: Record<string, number> = {};
+    const rootUrl = pageList.find((p) => p.url === homepageUrl)?.url || pageList[0].url;
+    bfsDepth[rootUrl] = 0;
+    const queue: string[] = [rootUrl];
+    while (queue.length > 0) {
+      const curr = queue.shift()!;
+      const nextDepth = bfsDepth[curr] + 1;
+      for (const nxt of adjList[curr] || []) {
+        if (bfsDepth[nxt] == null || bfsDepth[nxt] > nextDepth) {
+          bfsDepth[nxt] = nextDepth;
+          queue.push(nxt);
+        }
+      }
+    }
+
     const classifyType = (url: string): PageTaxonomyType => {
       const path = url.replace(/^https?:\/\/[^/]+/i, '').toLowerCase();
       if (!path || path === '/' || path === '') return 'homepage';
@@ -248,20 +210,9 @@ export function InternalLinkGraphView({ report, onSelectFinding }: InternalLinkG
       return 'utility';
     };
 
-    // Helper to calculate click depth from root via heuristic
-    const getDepth = (url: string): number => {
-      if (url === homepageUrl || url.endsWith('.com/') || url.endsWith('.com')) return 0;
-      const segments = url.replace(/^https?:\/\/[^/]+/i, '').split('/').filter(Boolean);
-      if (url.includes('orphan')) return 4;
-      return Math.min(segments.length, 4);
-    };
+    const getDepth = (url: string): number => (bfsDepth[url] != null ? Math.min(bfsDepth[url], 4) : 4);
 
-    // Calculate layout coordinates along concentric radial rings (Center = 400, 300)
-    const centerX = 450;
-    const centerY = 350;
-    const ringRadii = [0, 110, 190, 260, 320]; // Depth 0, 1, 2, 3, 4+
-
-    // Group pages by depth
+    // Group pages by BFS depth
     const depthGroups: Record<number, any[]> = { 0: [], 1: [], 2: [], 3: [], 4: [] };
     pageList.forEach((p) => {
       const d = Math.min(getDepth(p.url), 4);

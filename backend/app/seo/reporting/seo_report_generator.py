@@ -77,6 +77,7 @@ class CompleteSeoReportGenerator:
             "generated_at": report.generated_at,
             "certification_status": getattr(report, "certification_status", None) or "NOT_CERTIFIED",
             "health_score": score_val,
+            "enterprise_seo_bundle": getattr(report, "_unified_seo_bundle", None),
             "diagnostic_inventory": report.diagnostic_inventory.model_dump() if getattr(report, "diagnostic_inventory", None) else None,
             "page_level_assessments": [p.model_dump() for p in getattr(report, "page_level_assessments", [])],
             "crawled_pages_telemetry": [
@@ -1670,11 +1671,26 @@ class CompleteSeoReportGenerator:
             {sec_20_content}
         </section>
 
+        {self._render_enterprise_addendum_section(report)}
+
     </main>
 
 </body>
 </html>
         """
+
+    def _render_enterprise_addendum_section(self, report: ExecutiveReport) -> str:
+        try:
+            from app.seo.reporting.canonical_seo_pdf_bridge import (
+                collect_unified_seo_pdf_bundle,
+                render_enterprise_seo_addendum_html,
+            )
+            bundle = getattr(report, "_unified_seo_bundle", None) or collect_unified_seo_pdf_bundle(
+                report=report, include_deterministic_gap_checks=False
+            )
+            return render_enterprise_seo_addendum_html(bundle)
+        except Exception:
+            return ""
 
     def render_print_html_report(
         self,

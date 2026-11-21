@@ -125,15 +125,30 @@ class BrandEntityIntelligenceAgent:
         )
         facts.append(fact_domain)
 
-        # 4. Business Category Identification
-        category = "E-Commerce / Consumer Products"
+        # 4. Business Category Identification (derived dynamically from title/schema/HTML, never hardcoded to one vertical)
+        category = "Unclassified (Insufficient Crawl Evidence)"
         cat_state = FactEvidenceState.INFERRED
-        if "oral" in homepage_html.lower() or "teeth" in homepage_html.lower():
-            category = "Consumer Health / Oral Wellness"
-            cat_state = FactEvidenceState.SAMPLE_VERIFIED
-        elif "crm" in homepage_html.lower() or "saas" in homepage_html.lower():
-            category = "B2B SaaS / Enterprise Software"
-            cat_state = FactEvidenceState.SAMPLE_VERIFIED
+        for s in schemas:
+            if s.get("industry") or s.get("category"):
+                category = str(s.get("industry") or s.get("category")).strip()
+                cat_state = FactEvidenceState.OBSERVED
+                break
+        if cat_state != FactEvidenceState.OBSERVED:
+            title_m = re.search(r"<title[^>]*>(.*?)</title>", homepage_html, re.I | re.S)
+            if title_m:
+                raw_title = re.sub(r"\s+", " ", title_m.group(1)).strip()
+                parts = re.split(r"\s*[-|–—:]\s*", raw_title)
+                descriptive = [p.strip() for p in parts if p.strip() and brand_name.lower() not in p.lower()]
+                if descriptive:
+                    category = descriptive[0][:80]
+                    cat_state = FactEvidenceState.SAMPLE_VERIFIED
+        if cat_state == FactEvidenceState.INFERRED:
+            if any(k in homepage_html.lower() for k in ("saas", "software", "platform", "api")):
+                category = "Software & Digital Platforms"
+                cat_state = FactEvidenceState.SAMPLE_VERIFIED
+            elif any(k in homepage_html.lower() for k in ("cart", "checkout", "shop", "add to bag")):
+                category = "E-Commerce / Consumer Products"
+                cat_state = FactEvidenceState.SAMPLE_VERIFIED
 
         fact_category = BrandFactRecord(
             attribute_name="Business Category",
@@ -215,12 +230,16 @@ class BrandEntityIntelligenceAgent:
         )
         facts.append(fact_socials)
 
-        # 9. Official Website Verification
+        # 9. Official Website Verification (only mark SSL verified if an HTTPS page URL was crawled)
+        has_https_crawl = any(str(p.get("url", "")).lower().startswith("https://") for p in pages)
         fact_web = BrandFactRecord(
             attribute_name="Official Website Verification",
-            attribute_value={"primary_url": f"https://{domain}/", "is_ssl_active": True},
-            evidence_state=FactEvidenceState.OBSERVED,
-            confidence=1.0,
+            attribute_value={
+                "primary_url": f"https://{domain}/",
+                "https_observed_in_crawl": has_https_crawl if pages else None,
+            },
+            evidence_state=FactEvidenceState.OBSERVED if (pages or homepage_html) else FactEvidenceState.NOT_TESTED,
+            confidence=1.0 if has_https_crawl else 0.75,
         )
         facts.append(fact_web)
 

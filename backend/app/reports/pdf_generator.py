@@ -530,16 +530,19 @@ async def get_complete_seo_report(
     analysis_id: str,
     format: str = "html",
     template: str = "book",
+    profile: Optional[str] = None,
     download: bool = False,
     user: UserIdentity = Depends(get_current_user)
 ):
     """
     Renders the complete publication-grade SEO Audit Book & Remediation Report.
-    template='book': returns the master 42-chapter book publication layout (default).
+    profile='complete_book'|'executive'|'technical'|'content'|'remediation'|'verification'|'evidence':
+        routes through the 63-chapter + 9-appendix EnterprisePdfEngine with 11-part chapter anatomy.
+    template='book': returns the master book publication layout (default).
     template='classic': returns legacy 20-section presentation.
     format='html' | 'print': returns publication A4 HTML document.
     format='pdf': returns real application/pdf. Set download=true for attachment disposition.
-    format='json': returns structured 20-section JSON payload.
+    format='json': returns structured JSON payload.
     """
     run = require_analysis(analysis_id, user)
     report = getattr(run, "report", None)
@@ -550,6 +553,65 @@ async def get_complete_seo_report(
             status_code=422,
             detail="Report publication blocked by Publication Quality Gate failures. Evidence integrity checks must pass before release."
         )
+
+    if profile:
+        from app.routers.seo_unified_api_router import _resolve_audit_bundle
+        from app.seo.reporting.enterprise_pdf_engine import enterprise_pdf_engine
+
+        bundle = _resolve_audit_bundle(analysis_id, user)
+        domain_clean = (report.domain or "website").replace("https://", "").replace("http://", "").split("/")[0]
+        raw_rep = report.model_dump() if hasattr(report, "model_dump") else {}
+        report_data = {
+            **raw_rep,
+            "domain": domain_clean,
+            "analysis_id": analysis_id,
+            "crawl_manifest": {"pages": bundle["pages"]},
+            "findings": bundle["findings"],
+            "evidence": bundle["evidence"],
+            "mathematical_scorecard": bundle["scorecard"],
+            "remediation_tasks": bundle["tasks"],
+            "verification_runs": bundle.get("verification_runs") or [],
+            "internal_link_graph": bundle.get("link_graph"),
+            "legacy_sections": bundle.get("legacy_sections") or {},
+            "methodology_version": (bundle["scorecard"] or {}).get("methodology_version", "dristik_seo_v3.0"),
+            "executive_summary_finding_count": len(bundle["findings"]),
+        }
+        html_out, qa_rep, sha_hash = enterprise_pdf_engine.publish_with_qa_gate(
+            assessment=bundle["assessment"],
+            report_data=report_data,
+            profile=profile,
+        )
+        if not qa_rep.is_certified and format.lower() == "pdf":
+            raise HTTPException(
+                status_code=422,
+                detail=f"Enterprise SEO QA Gate blocked PDF publication: {qa_rep.blocking_reasons}",
+            )
+        if format.lower() == "pdf":
+            pdf_bytes = await enterprise_pdf_engine.render_pdf_bytes(html_out)
+            if not pdf_bytes:
+                raise HTTPException(status_code=503, detail="PDF rendering engine is currently unavailable.")
+            disposition = "attachment" if download else "inline"
+            return Response(
+                content=pdf_bytes,
+                media_type="application/pdf",
+                headers={
+                    "Content-Disposition": f'{disposition}; filename="{domain_clean}_{profile}_seo_book.pdf"',
+                    "X-Dristik-Integrity-SHA256": sha_hash,
+                    "X-Dristik-QA-Status": qa_rep.status,
+                },
+            )
+        return Response(
+            content=html_out,
+            media_type="text/html",
+            headers={"X-Dristik-Integrity-SHA256": sha_hash, "X-Dristik-QA-Status": qa_rep.status},
+        )
+
+    from app.seo.reporting.canonical_seo_pdf_bridge import enrich_report_for_pdf
+    report = enrich_report_for_pdf(
+        report,
+        org_id=getattr(user, "org_id", None),
+        workspace_id=getattr(run, "workspace_id", None),
+    )
 
     from app.seo.reporting import seo_report_generator
     from app.seo.reporting import seo_audit_book_renderer
@@ -867,15 +929,23 @@ async def get_complete_cro_report(
     if format.lower() == "json":
         return cro_report_generator.render_json_report(intel, **kwargs)
 
-    if format.lower() in ("print", "print_html"):
-        from app.reports.adaptive_audit_book import render_adaptive_audit_book_html
-        return Response(content=render_adaptive_audit_book_html(report, report_type="CRO"), media_type="text/html")
+    if format.lower() in ("print", "print_html", "pdf"):
+        from app.cro.quality import cro_publication_gate
+        from app.cro.reporting import build_cro_publication_document
+        from app.reports.publishing_engine import PdfPublishingPipeline, PublicationHtmlRenderer
 
-    if format.lower() == "pdf":
-        from app.reports.adaptive_audit_book import render_adaptive_audit_book_pdf
-        pdf_bytes, qa = await render_adaptive_audit_book_pdf(report, report_type="CRO")
+        doc = build_cro_publication_document(report, intel)
+        if format.lower() != "pdf":
+            return Response(content=PublicationHtmlRenderer.render(doc), media_type="text/html")
+        pdf_bytes, qa = await PdfPublishingPipeline.render_publication_pdf(doc)
         if not pdf_bytes:
-            raise HTTPException(status_code=503, detail="PDF rendering engine is currently unavailable.")
+            raise HTTPException(
+                status_code=503,
+                detail="PDF rendering engine is currently unavailable. Open the report with ?format=print and use 'Print / Save as PDF'.",
+            )
+        gate = cro_publication_gate(intel, qa)
+        if not gate.passed:
+            raise HTTPException(status_code=422, detail="CRO report publication blocked: " + "; ".join(gate.reasons[:10]))
         domain_clean = (report.domain or "website").replace("https://", "").replace("http://", "").split("/")[0]
         return Response(
             content=pdf_bytes,
@@ -1091,6 +1161,14 @@ async def get_section_pdf_report(
             detail="Report publication blocked by Publication Quality Gate failures. Evidence integrity checks must pass before release."
         )
 
+    if section_key.lower() == "seo":
+        from app.seo.reporting.canonical_seo_pdf_bridge import enrich_report_for_pdf
+        report = enrich_report_for_pdf(
+            report,
+            org_id=getattr(user, "org_id", None),
+            workspace_id=getattr(run, "workspace_id", None),
+        )
+
     from app.reports.section_exports import section_report_generator
     html_content = section_report_generator.render_section_html(report, section_key)
     if format.lower() == "html":
@@ -1098,7 +1176,17 @@ async def get_section_pdf_report(
 
     domain_clean = (report.domain or "website").replace("https://", "").replace("http://", "").split("/")[0]
     disposition = "attachment" if download else "inline"
-    cache_key = f"{analysis_id}:{section_key.lower()}"
+    geo_version_tag = ""
+    if section_key.lower() == "geo":
+        try:
+            from app.db.geo_schema import get_geo_store
+            tenant_id = str(getattr(report, "org_id", None) or getattr(user, "org_id", None) or "default")
+            latest = get_geo_store().list_audits(tenant_id, domain=domain_clean, limit=1)
+            if latest:
+                geo_version_tag = f":{latest[0].audit_id}:{latest[0].updated_at}"
+        except Exception:
+            geo_version_tag = ""
+    cache_key = f"{analysis_id}:{section_key.lower()}:{len(getattr(report, 'findings', []) or [])}{geo_version_tag}"
     filename = f"{domain_clean}_{section_key.lower()}_audit_book.pdf" if section_key.lower() == "seo" else f"{domain_clean}_{section_key.lower()}_audit.pdf"
 
     if cache_key in _SECTION_PDF_CACHE:

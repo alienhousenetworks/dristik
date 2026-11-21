@@ -3348,6 +3348,42 @@ def build_cro_intelligence(
     )
 
 
+def _map_finding_to_cro_section(category: str, title: str, description: str) -> int:
+    """Map a general or audit finding to its most relevant CRO taxonomy section (1-55)."""
+    text = f"{category} {title} {description}".lower()
+    if any(k in text for k in ("cta", "call to action", "button", "trigger", "action")):
+        return 18  # Call-to-action optimization
+    if any(k in text for k in ("form", "input", "placeholder", "label", "autocomplete", "validation", "submit")):
+        return 26  # Form UX and lead capture
+    if any(k in text for k in ("mobile", "viewport", "touch", "responsive", "small screen", "small mobile")):
+        return 31  # Mobile conversion optimization
+    if any(k in text for k in ("wcag", "accessibility", "aria", "contrast", "alt text", "screen reader")):
+        return 33  # Accessibility and inclusive conversion design
+    if any(k in text for k in ("speed", "performance", "lcp", "cls", "inp", "ttfb", "latency", "render-blocking", "slow")):
+        return 32  # Page speed and interaction performance
+    if any(k in text for k in ("checkout", "cart", "basket", "payment", "shipping", "order", "transaction")):
+        return 29  # E-commerce cart and checkout
+    if any(k in text for k in ("nav", "menu", "header", "footer", "breadcrumb", "hierarchy", "links", "link")):
+        return 11  # Navigation and information architecture
+    if any(k in text for k in ("headline", "hero", "copy", "h1", "h2", "typography", "readability")):
+        return 17  # Headline and copywriting quality
+    if any(k in text for k in ("value prop", "offering", "usp", "differentiation", "promise")):
+        return 16  # Value proposition and differentiation
+    if any(k in text for k in ("trust", "social proof", "review", "rating", "testimonial", "security", "badge", "credential", "logo")):
+        return 21  # Trust, credibility and reassurance
+    if any(k in text for k in ("pricing", "price", "discount", "tier", "guarantee", "refund")):
+        return 22  # Pricing and offer presentation
+    if any(k in text for k in ("product", "service", "catalog", "category", "feature")):
+        return 20  # Product and service presentation
+    if any(k in text for k in ("analytics", "tracking", "ga4", "gtm", "event", "conversion goal", "telemetry")):
+        return 46  # Analytics implementation and event taxonomy
+    if any(k in text for k in ("technical", "error", "broken", "500", "404", "crash", "failure", "blocker")):
+        return 34  # Technical failures and conversion blockers
+    if any(k in text for k in ("competitor", "competitive", "parity", "market", "benchmark")):
+        return 5   # Competitive conversion benchmarking
+    return 4       # Conversion opportunity and risk assessment
+
+
 def build_from_executive_report(report: Any) -> CroIntelligenceReport:
     """Rebuild the CRO audit from a sealed report. Stored pages win over a stale snapshot."""
     manifest = getattr(report, "crawl_manifest", None)
@@ -3392,38 +3428,68 @@ def build_from_executive_report(report: Any) -> CroIntelligenceReport:
         else:
             intel = build_cro_intelligence(pages=[])
 
-    report_findings = getattr(report, "findings", []) or []
-    if report_findings:
+    try:
+        from app.report_finding_registry import canonicalize_report_findings
+        report_findings = canonicalize_report_findings(report) or []
+    except Exception:
+        report_findings = list(getattr(report, "findings", []) or [])
+
+    # Gather any additional audit or specialist findings on the report
+    extra_sources = [
+        getattr(report, "findings", []) or [],
+        getattr(report, "audit_findings", []) or [],
+        getattr(getattr(report, "cro_audit", None), "findings", []) or [],
+    ]
+    all_source_findings = list(report_findings)
+    seen_keys = {
+        (
+            str(getattr(f, "title", None) or getattr(f, "finding", None) or getattr(f, "description", None) or "")
+            .strip()
+            .lower()
+        )
+        for f in all_source_findings
+    }
+    for src in extra_sources:
+        for f in src:
+            f_key = str(getattr(f, "title", None) or getattr(f, "finding", None) or getattr(f, "description", None) or "").strip().lower()
+            if f_key and f_key not in seen_keys:
+                all_source_findings.append(f)
+                seen_keys.add(f_key)
+
+    if all_source_findings:
         existing_summaries = {f.finding.strip().lower() for f in intel.findings}
         existing_ids = {f.finding_id for f in intel.findings}
         extra_records: List[CroFindingRecord] = []
         idx_counter = len(intel.findings) + 1
-        for rf in report_findings:
-            cat = str(getattr(rf, "category", "")).upper()
-            if not any(k in cat for k in ("UX", "CRO", "CONV")):
-                continue
-            title = getattr(rf, "title", "") or getattr(rf, "description", "") or ""
+        for rf in all_source_findings:
+            title = getattr(rf, "title", "") or getattr(rf, "finding", "") or getattr(rf, "description", "") or ""
             if not title or title.strip().lower() in existing_summaries:
                 continue
-            fid = getattr(rf, "id", None)
+            cat = str(getattr(rf, "category", "")).upper()
+            fid = getattr(rf, "id", None) or getattr(rf, "finding_id", None)
             if not fid or fid in existing_ids:
                 fid = f"CRO-{idx_counter:03d}"
                 idx_counter += 1
+            existing_ids.add(fid)
+            existing_summaries.add(title.strip().lower())
             sev = str(getattr(rf, "severity", "MEDIUM")).upper()
             prio = "High" if ("HIGH" in sev or "CRITICAL" in sev) else ("Low" if "LOW" in sev else "Medium")
+            rec = getattr(rf, "recommendation", None) or getattr(rf, "how_to_fix", None) or getattr(rf, "recommended_action", None) or "Review and remediate according to best practices."
+            ev = str(getattr(rf, "evidence", "") or getattr(rf, "evidence_refs", "") or getattr(rf, "description", "") or "Captured during comprehensive site audit.")
+            target_sec = _map_finding_to_cro_section(cat, title, ev)
             extra_records.append(
                 CroFindingRecord(
                     finding_id=fid,
                     priority=prio,
                     finding=title,
-                    evidence=str(getattr(rf, "evidence", "") or getattr(rf, "description", "") or "Captured during comprehensive site audit."),
+                    evidence=ev,
                     observed_scope=f"Inspected sample of {len(pages)} page(s).",
-                    hypothesis=f"{getattr(rf, 'recommendation', 'Address this issue.')} Validated via post-remediation measurement.",
-                    recommended_action=getattr(rf, "recommendation", "Review and remediate according to UX/CRO best practices."),
+                    hypothesis=f"{rec} Validated via post-remediation measurement.",
+                    recommended_action=rec,
                     primary_metric="Completed conversions per eligible visitor",
                     owner="Product / CRO Lead",
                     evidence_state="Observed",
-                    section=1,
+                    section=target_sec,
                     specialist="Conversion Rate Optimization",
                     effort="Medium",
                     confidence="Medium. Verified defect.",

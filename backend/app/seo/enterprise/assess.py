@@ -1503,6 +1503,25 @@ class _Builder:
             ("19.8", "Device-specific performance regressions require field device splits, which were not stored."),
         ):
             self.mark(subchapter_id, "NOT_TESTED", note)
+        mobile = _get(_get(self.report, "crawl_manifest"), "mobile_validation") or {}
+        measured_devices = [
+            device
+            for run in _as_list(_get(mobile, "runs"))
+            for device in _as_list(_get(run, "devices"))
+            if _get(device, "layout_measured")
+        ]
+        if measured_devices:
+            overflows = [device for device in measured_devices if _get(device, "has_horizontal_overflow")]
+            touches = [device for device in measured_devices if _as_list(_get(device, "failed_touch_targets"))]
+            self.mark("19.1", "MEASURED", f"Emulated browser layouts were measured on {len(measured_devices)} viewport(s). This is not a physical device.")
+            if overflows:
+                self.mark("19.4", "MEASURED", f"Horizontal overflow was measured on {len(overflows)} emulated viewport(s). Not a physical device.")
+            if touches:
+                self.mark("19.5", "MEASURED", f"Undersized touch targets were measured on {len(touches)} emulated viewport(s). Not a physical device.")
+            else:
+                self.mark("19.5", "NO_ISSUE", f"No undersized touch target was measured on {len(measured_devices)} emulated viewport(s). Not a physical device.")
+        elif _get(mobile, "verification_status") == "DATA_UNAVAILABLE":
+            self.mark("19.5", "DATA_UNAVAILABLE", str(_get(mobile, "error") or "The emulated browser did not run."))
 
     def _security(self) -> None:
         security = self.bundle.security
@@ -1565,7 +1584,15 @@ class _Builder:
                 self.mark(subchapter_id, "MEASURED", "URLs matched this class by pattern. The class is uncertain without a template map.")
             else:
                 self.mark(subchapter_id, "NOT_APPLICABLE", "No URL of this class was in the checked inventory. That absence is not a defect.")
-        self.mark("17.1", "MEASURED", "Remaining URLs were left as unclassified pages. They were not forced into an e-commerce model.")
+        templates = _as_list(_get(_get(_get(self.report, "crawl_manifest"), "page_template"), "templates"))
+        if templates:
+            self.mark(
+                "17.1",
+                "MEASURED",
+                f"{len(templates)} template(s) were clustered from fetched HTML. Unfetched URLs were not assigned those templates.",
+            )
+        else:
+            self.mark("17.1", "MEASURED", "Remaining URLs were left as unclassified pages. They were not forced into an e-commerce model.")
         for subchapter_id in ("17.4", "17.6", "17.7", "17.9", "17.10", "17.12"):
             self.mark(subchapter_id, "NOT_APPLICABLE" if subchapter_id != "17.12" else "NOT_TESTED",
                       "No sector rule was selected." if subchapter_id == "17.12" else "This page class was not identified in the checked URLs.")
@@ -1675,23 +1702,34 @@ class _Builder:
                 "That is the fetched inventory, not proof that every public URL was found."
             )
             known = True
+        intel = _get(_get(self.report, "crawl_manifest"), "page_template") or {}
+        rendered = _optional_int(_get(intel, "urls_rendered"))
+        deeply_inspected = _optional_int(_get(intel, "urls_deeply_analyzed"))
+        if rendered is None:
+            rendered = self.rendered if self.pages else None
+        if deeply_inspected is None:
+            deeply_inspected = rendered
+        rendered_label = "not measured" if rendered is None else str(rendered)
+        deep_label = "not measured" if deeply_inspected is None else str(deeply_inspected)
+        statement += f" Rendered {rendered_label}. Deeply analyzed {deep_label}."
+        if _get(intel, "full_site_audit") is not True and "not a complete site audit" not in statement and "not proof" not in statement:
+            statement += " This is not a full-site audit."
         gsc = _channel(_get(_get(self.report, "google_performance"), "search_console"))
         ga4 = _channel(_get(_get(self.report, "google_performance"), "analytics"))
-        deeply_inspected = len(self.pages) if self.pages else (self.crawled or None)
         verified_finding_urls = len({url for f in self.proposed for url in getattr(f, "affected_urls", []) if url})
         specialist_coverage = {
             "technical_seo": self.crawled or 0,
-            "on_page_seo": deeply_inspected or 0,
-            "structured_data": deeply_inspected or 0,
-            "content_seo": deeply_inspected or 0,
-            "performance": self.rendered or 0,
+            "on_page_seo": self.crawled or 0,
+            "structured_data": self.crawled or 0,
+            "content_seo": self.crawled or 0,
+            "performance": rendered or 0,
             "authority": (self.crawled or 0) if _backlinks_present(self.report) else 0,
         }
         return CoverageStatement(
             urls_discovered=self.discovered,
             urls_requested=self.crawled,
             urls_crawled=self.crawled,
-            urls_rendered=self.rendered or None,
+            urls_rendered=rendered,
             urls_deeply_inspected=deeply_inspected,
             urls_tested_by_specialist=specialist_coverage,
             urls_with_verified_findings=verified_finding_urls,

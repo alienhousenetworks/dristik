@@ -1617,6 +1617,10 @@ pre {
   {% endif %}
 </section>
 
+{% if enterprise_seo_addendum_html %}
+{{ enterprise_seo_addendum_html | safe }}
+{% endif %}
+
 <!-- ======================================================
      11. METHODOLOGY & LIMITATIONS
      ====================================================== -->

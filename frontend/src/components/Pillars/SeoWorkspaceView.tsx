@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { ExecutiveReport, Finding } from '../../types';
 import { SearchConsoleAttributionView } from '../SearchConsoleAttributionView';
 import { PillarShell } from '../ui';
@@ -9,14 +9,21 @@ import { CrawlExplorerView } from './seo/CrawlExplorerView';
 import { InternalLinkGraphView } from './seo/InternalLinkGraphView';
 import { SeoIntegrationsView } from './seo/SeoIntegrationsView';
 import { SeoFindingsWorkspace } from './seo/SeoFindingsWorkspace';
+import { SeoRemediationCenter } from './seo/SeoRemediationCenter';
 import { SeoIntelligenceWorkspace } from './seo/SeoIntelligenceWorkspace';
 import { SeoCrawlArchitecture } from './seo/SeoCrawlArchitecture';
 import { SeoOnPageExperience } from './seo/SeoOnPageExperience';
 import { SeoMarketIntelligence } from './seo/SeoMarketIntelligence';
-import { SeoIssuesAndAppendix } from './seo/SeoIssuesAndAppendix';
 import { AuditIndex } from '../../report/auditIndex/AuditIndex';
-import { EnterpriseSeoAudit } from './seo/EnterpriseSeoAudit';
+import { EnterpriseSeoAssessment, EnterpriseSeoAudit } from './seo/EnterpriseSeoAudit';
 import { DeltaAnalyticsDashboard } from '../DeltaAnalyticsDashboard';
+import {
+  seoApi,
+  SeoAuditHistory,
+  SeoConnectorStatus,
+  SeoRemediationTask,
+  SeoScorecardReport,
+} from '../../services/seoApi';
 
 interface SeoWorkspaceViewProps {
   report: ExecutiveReport;
@@ -36,9 +43,22 @@ export type EnterpriseSeoTab =
   | 'gsc'
   | 'integrations'
   | 'issues'
+  | 'remediation'
   | 'index'
   | 'enterprise'
   | 'history';
+
+const SEO_CATEGORIES = new Set([
+  'TECHNICAL_SEO',
+  'ON_PAGE_SEO',
+  'CONTENT',
+  'STRUCTURED_DATA',
+  'PERFORMANCE',
+  'AUTHORITY',
+  'LOCAL_SEO',
+  'INTERNATIONAL_SEO',
+  'ECOMMERCE_SEO',
+]);
 
 export function SeoWorkspaceView({
   report,
@@ -48,15 +68,51 @@ export function SeoWorkspaceView({
 }: SeoWorkspaceViewProps) {
   const [activeTab, setActiveTab] = useState<EnterpriseSeoTab>('overview');
   const [overviewMode, setOverviewMode] = useState<'dashboard' | 'briefing'>('dashboard');
+  const [selectedProfile, setSelectedProfile] = useState<string>('complete_book');
+  const [scorecard, setScorecard] = useState<SeoScorecardReport | null>(null);
+  const [assessment, setAssessment] = useState<EnterpriseSeoAssessment | null>(null);
+  const [tasks, setTasks] = useState<SeoRemediationTask[]>([]);
+  const [connectors, setConnectors] = useState<SeoConnectorStatus[]>([]);
+  const [history, setHistory] = useState<SeoAuditHistory | null>(null);
+  const [backendGraph, setBackendGraph] = useState<Record<string, any> | null>(null);
+
+  const effectiveAuditId = analysisId || report.analysis_id || report.report_id || '';
+
+  const refreshBackendData = () => {
+    if (!effectiveAuditId) return;
+    seoApi.getOverview(effectiveAuditId).then((ov) => {
+      if (ov?.scorecard) setScorecard(ov.scorecard);
+      if (ov?.coverage) setAssessment((prev) => ({ ...(prev || ({} as any)), coverage: ov.coverage }));
+    }).catch(() => {});
+    seoApi.getTasks(effectiveAuditId).then((res) => {
+      if (Array.isArray(res?.tasks)) setTasks(res.tasks);
+    }).catch(() => {});
+    seoApi.listConnectors().then((res) => {
+      if (Array.isArray(res)) setConnectors(res);
+    }).catch(() => {});
+    seoApi.getHistory(effectiveAuditId).then((res) => {
+      if (res) setHistory(res);
+    }).catch(() => {});
+    seoApi.getLinkGraph(effectiveAuditId).then((res) => {
+      if (res && Array.isArray(res.nodes)) setBackendGraph(res);
+    }).catch(() => {});
+  };
+
+  useEffect(() => {
+    refreshBackendData();
+  }, [effectiveAuditId]);
 
   const seoFindings = (report.findings || []).filter(
-    (f) => f.category === 'TECHNICAL_SEO' || f.category === 'ON_PAGE_SEO' || f.category === 'CONTENT'
+    (f) => SEO_CATEGORIES.has(String(f.category || '').toUpperCase())
   );
 
-  const rawScore = report.scores?.category_scores?.['TECHNICAL_SEO']?.score ?? report.honest_scores?.google_score;
-  const seoScore = rawScore != null && Number.isFinite(rawScore) ? Math.round(rawScore) : 74;
+  // Strictly canonical score — NEVER fall back to a hardcoded magic number like 74
+  const rawScore =
+    scorecard?.overall_health_score ??
+    report.scores?.category_scores?.['TECHNICAL_SEO']?.score ??
+    report.honest_scores?.google_score;
+  const seoScore = rawScore != null && Number.isFinite(rawScore) ? Math.round(rawScore) : null;
 
-  // Handle tab switching with backward compatibility normalization
   const handleTabChange = (rawId: string) => {
     switch (rawId) {
       case 'crawl':
@@ -88,6 +144,7 @@ export function SeoWorkspaceView({
       case 'gsc':
       case 'integrations':
       case 'issues':
+      case 'remediation':
       case 'index':
       case 'enterprise':
       case 'history':
@@ -102,35 +159,45 @@ export function SeoWorkspaceView({
     <PillarShell
       kicker="Website search performance"
       title="Search Engine Optimization (SEO)"
-      description="Understand how search engines discover, crawl, interpret and rank the pages checked in this audit. Review technical issues, page content, local and international targeting, and connected Search Console data."
+      description="Canonical enterprise SEO operating system: 40 specialist diagnostics, reconciled 6-tier crawl inventory, 9-dimension mathematical scorecard, stack-aware remediation, live re-crawl verification, and multi-profile PDF publishing."
       scoreLabel="SEO Health Index"
-      score={seoScore != null ? `${seoScore}/100` : '—'}
+      score={seoScore != null ? `${seoScore}/100` : 'Unmeasured'}
       metaLabel="Issues"
       meta={`${seoFindings.length} flagged`}
       actions={
         <div className="flex flex-wrap items-center gap-2">
-          <SectionExportButtons
-            analysisId={analysisId || report.analysis_id || report.report_id}
-            sectionKey="seo"
-            sectionLabel="SEO"
-          />
-          {(analysisId || report.analysis_id || report.report_id) && (
+          <SectionExportButtons analysisId={effectiveAuditId} sectionKey="seo" sectionLabel="SEO" />
+          {effectiveAuditId && (
             <>
+              <select
+                aria-label="SEO Report Publication Profile"
+                value={selectedProfile}
+                onChange={(e) => setSelectedProfile(e.target.value)}
+                className="px-2 py-1.5 text-xs rounded-lg border border-line bg-paper text-ink"
+              >
+                <option value="complete_book">Complete SEO Audit Book</option>
+                <option value="executive">Executive SEO Brief</option>
+                <option value="technical">Technical SEO Report</option>
+                <option value="content">Content SEO Report</option>
+                <option value="remediation">Remediation Plan</option>
+                <option value="verification">Verification Report</option>
+                <option value="evidence">Evidence Appendix</option>
+              </select>
               <a
-                href={`/api/v1/reports/${analysisId || report.analysis_id || report.report_id}/seo-report?format=pdf&download=true`}
+                href={`/api/v1/reports/${effectiveAuditId}/seo-report?profile=${encodeURIComponent(selectedProfile)}&format=pdf&download=true`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-line bg-paper-100 hover:bg-paper-200 text-ink transition-colors"
-                title="Open the dedicated SEO master audit book as a PDF"
+                title="Download the canonical QA-gated SEO Audit Book PDF"
               >
                 SEO Book PDF
               </a>
               <a
-                href={`/api/v1/reports/${analysisId || report.analysis_id || report.report_id}/seo-report?format=print`}
+                href={`/api/v1/reports/${effectiveAuditId}/seo-report?profile=${encodeURIComponent(selectedProfile)}&format=print`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-line bg-paper-100 hover:bg-paper-200 text-ink transition-colors"
-                title="Open the dedicated SEO master audit book for printing"
+                title="Open the print-ready SEO Audit Book HTML"
               >
                 SEO Book Print
               </a>
@@ -148,7 +215,8 @@ export function SeoWorkspaceView({
         { id: 'integrations', label: 'Connectors & Data' },
         { id: 'market', label: 'Local & Global' },
         { id: 'gsc', label: 'Search Console' },
-        { id: 'issues', label: `Findings & Fixes (${seoFindings.length})` },
+        { id: 'issues', label: `Findings (${seoFindings.length})` },
+        { id: 'remediation', label: `Remediation & Verify (${tasks.length})` },
         { id: 'index', label: 'Audit Index' },
         { id: 'enterprise', label: 'Enterprise Assessment' },
         { id: 'history', label: 'History & Regressions' },
@@ -156,29 +224,20 @@ export function SeoWorkspaceView({
       activeTab={activeTab}
       onTab={handleTabChange}
     >
-      {/* ─────────────────────────────────────────────────────────────
-          1. EXECUTIVE OVERVIEW / DASHBOARD TAB
-          ───────────────────────────────────────────────────────────── */}
       {activeTab === 'overview' && (
         <div className="space-y-6">
           <div className="flex items-center justify-between border-b border-line pb-3">
-            <span className="text-xs uppercase font-bold text-ink-500 tracking-wider">
-              Overview Presentation Mode:
-            </span>
+            <span className="text-xs uppercase font-bold text-ink-500 tracking-wider">Overview Presentation Mode:</span>
             <div className="flex items-center border border-line rounded-lg p-0.5 bg-paper-subtle">
               <button
                 onClick={() => setOverviewMode('dashboard')}
-                className={`px-3 py-1 text-xs font-semibold rounded-md transition-colors ${
-                  overviewMode === 'dashboard' ? 'bg-paper shadow-xs text-ink' : 'text-ink-500 hover:text-ink'
-                }`}
+                className={`px-3 py-1 text-xs font-semibold rounded-md ${overviewMode === 'dashboard' ? 'bg-paper shadow-xs text-ink' : 'text-ink-500'}`}
               >
                 Operations Dashboard
               </button>
               <button
                 onClick={() => setOverviewMode('briefing')}
-                className={`px-3 py-1 text-xs font-semibold rounded-md transition-colors ${
-                  overviewMode === 'briefing' ? 'bg-paper shadow-xs text-ink' : 'text-ink-500 hover:text-ink'
-                }`}
+                className={`px-3 py-1 text-xs font-semibold rounded-md ${overviewMode === 'briefing' ? 'bg-paper shadow-xs text-ink' : 'text-ink-500'}`}
               >
                 Executive Briefing
               </button>
@@ -188,6 +247,10 @@ export function SeoWorkspaceView({
           {overviewMode === 'dashboard' ? (
             <SeoExecutiveDashboard
               report={report}
+              assessment={assessment}
+              scorecard={scorecard}
+              connectors={connectors}
+              history={history}
               seoFindings={seoFindings}
               onNavigateTab={handleTabChange}
               onSelectFinding={onSelectFinding}
@@ -203,106 +266,39 @@ export function SeoWorkspaceView({
         </div>
       )}
 
-      {/* ─────────────────────────────────────────────────────────────
-          2. CRAWL EXPLORER TAB (PHASE 9)
-          ───────────────────────────────────────────────────────────── */}
-      {activeTab === 'discovery' && (
-        <CrawlExplorerView
-          report={report}
-          onSelectFinding={onSelectFinding}
-        />
-      )}
-
-      {/* ─────────────────────────────────────────────────────────────
-          LINK GRAPH EXPLORER TAB
-          ───────────────────────────────────────────────────────────── */}
+      {activeTab === 'discovery' && <CrawlExplorerView report={report} onSelectFinding={onSelectFinding} />}
       {activeTab === 'linkgraph' && (
-        <InternalLinkGraphView
-          report={report}
-          onSelectFinding={onSelectFinding}
-        />
+        <InternalLinkGraphView report={report} backendGraph={backendGraph} onSelectFinding={onSelectFinding} />
       )}
-
-      {/* ─────────────────────────────────────────────────────────────
-          3. CRAWL & ARCHITECTURE TAB
-          ───────────────────────────────────────────────────────────── */}
-      {activeTab === 'architecture' && (
-        <SeoCrawlArchitecture report={report} />
-      )}
-
-      {/* ─────────────────────────────────────────────────────────────
-          4. ON-PAGE & SERP TAB
-          ───────────────────────────────────────────────────────────── */}
-      {activeTab === 'onpage' && (
-        <SeoOnPageExperience report={report} />
-      )}
-
-      {/* ─────────────────────────────────────────────────────────────
-          5. KEYWORD & CONTENT INTELLIGENCE TAB (PHASE 11)
-          ───────────────────────────────────────────────────────────── */}
+      {activeTab === 'architecture' && <SeoCrawlArchitecture report={report} />}
+      {activeTab === 'onpage' && <SeoOnPageExperience report={report} />}
       {activeTab === 'intelligence' && (
-        <SeoIntelligenceWorkspace
-          report={report}
-          onOpenConnectors={onOpenConnectors}
-        />
+        <SeoIntelligenceWorkspace report={report} onOpenConnectors={() => setActiveTab('integrations')} />
       )}
-
-      {/* ─────────────────────────────────────────────────────────────
-          6. LOCAL, GLOBAL & COMPETITORS TAB
-          ───────────────────────────────────────────────────────────── */}
-      {activeTab === 'market' && (
-        <SeoMarketIntelligence report={report} />
-      )}
-
-      {/* ─────────────────────────────────────────────────────────────
-          7. SEARCH CONSOLE TAB
-          ───────────────────────────────────────────────────────────── */}
+      {activeTab === 'market' && <SeoMarketIntelligence report={report} />}
       {activeTab === 'gsc' && (
         <SearchConsoleAttributionView
           domain={report.domain}
-          analysisId={analysisId}
+          analysisId={effectiveAuditId}
           onOpenConnectors={() => onOpenConnectors?.('google_search_console')}
         />
       )}
-
-      {/* ─────────────────────────────────────────────────────────────
-          INTEGRATIONS & CONNECTORS TAB (PHASE 14)
-          ───────────────────────────────────────────────────────────── */}
-      {activeTab === 'integrations' && (
-        <SeoIntegrationsView />
-      )}
-
-      {/* ─────────────────────────────────────────────────────────────
-          8. FINDINGS & REMEDIATION WORKSPACE TAB (PHASE 10)
-          ───────────────────────────────────────────────────────────── */}
+      {activeTab === 'integrations' && <SeoIntegrationsView onConnectorsUpdated={setConnectors} />}
       {activeTab === 'issues' && (
         <SeoFindingsWorkspace
           report={report}
+          auditId={effectiveAuditId}
           seoFindings={seoFindings}
+          tasks={tasks}
           onSelectFinding={onSelectFinding}
+          onTasksChanged={refreshBackendData}
         />
       )}
-
-      {/* ─────────────────────────────────────────────────────────────
-          9. FULL AUDIT INDEX
-          ───────────────────────────────────────────────────────────── */}
-      {activeTab === 'index' && (
-        <AuditIndex report={report} />
+      {activeTab === 'remediation' && (
+        <SeoRemediationCenter auditId={effectiveAuditId} tasks={tasks} onTasksUpdated={refreshBackendData} />
       )}
-
-      {/* ─────────────────────────────────────────────────────────────
-          10. ENTERPRISE ASSESSMENT
-          ───────────────────────────────────────────────────────────── */}
-      {activeTab === 'enterprise' && (
-        <EnterpriseSeoAudit
-          analysisId={analysisId || report.analysis_id || report.report_id}
-          report={report}
-        />
-      )}
-
-      {/* ─────────────────────────────────────────────────────────────
-          11. HISTORY & REGRESSION TRENDS
-          ───────────────────────────────────────────────────────────── */}
+      {activeTab === 'index' && <AuditIndex report={report} />}
+      {activeTab === 'enterprise' && <EnterpriseSeoAudit analysisId={effectiveAuditId} report={report} />}
       {activeTab === 'history' && <DeltaAnalyticsDashboard />}
     </PillarShell>
   );

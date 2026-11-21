@@ -26,9 +26,9 @@ def test_live_ai_citation_query_bank():
     assert data["total_evaluations"] == 4
     assert "share_of_voice_percentage" in data
     assert len(data["evaluations"]) == 4
-    # Without API keys, all citations should be NOT_AVAILABLE (zero-fake)
+    # Without API keys, all citations should be NOT_CONFIGURED (never 0.0% visibility)
     assert data["total_citations"] == 0
-    assert data["share_of_voice_percentage"] == 0.0
+    assert data["share_of_voice_percentage"] is None
 
 
 def test_live_ai_citation_single_query():

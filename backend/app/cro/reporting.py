@@ -41,28 +41,8 @@ class CroReportGenerator:
         payload["analysis_id"] = analysis_id
         payload["chapters"] = intel.chapters
         payload["findings"] = findings or []
-        coverage = intel.coverage or {}
-        rendered_status = str(coverage.get("rendered_dom_status") or "NOT_VERIFIED_BY_CRO_ENGINE")
-        journey_status = str(coverage.get("journey_execution_status") or "NOT_EXECUTED")
-        analytics_measured = any(m.status == "MEASURED" for m in (intel.metrics or []))
-        has_rendered = "VERIFIED" in rendered_status and "NOT_VERIFIED" not in rendered_status
-        has_journeys = journey_status != "NOT_EXECUTED"
-
-        payload["test_groups"] = {
-            "page_structure_dom": "DOM_CHECKED" if intel.sample_size > 0 else "NOT_TESTED",
-            "mobile_viewport_ux": "TESTED" if has_rendered else "NOT_TESTED",
-            "desktop_layout_ux": "TESTED" if has_rendered else "NOT_TESTED",
-            "interactive_forms": "TESTED" if has_journeys else "NOT_TESTED",
-            "conversion_analytics": "MEASURED" if analytics_measured else "UNAVAILABLE",
-        }
-        all_certified = has_rendered and has_journeys and analytics_measured
-        payload["certification_status"] = "CERTIFIED" if all_certified else "NOT_CERTIFIED"
-        payload["assurance_status"] = "FULLY_EVALUATED" if all_certified else "EVALUATED_WITH_LIMITATIONS"
-        payload["certification_disclaimer"] = (
-            "Browser interaction tests and connected conversion analytics were verified for this audit."
-            if all_certified
-            else "Mandatory browser-level interaction and conversion analytics tests were unmeasured; this audit cannot provide certified conversion assurance."
-        )
+        payload.update(compute_cro_status(intel))
+        payload["test_groups"] = {k: v for k, v in payload.items() if k in ("page_structure_dom", "mobile_viewport_ux", "desktop_layout_ux", "interactive_forms", "conversion_analytics")}
         return payload
 
     def render_html_report(
@@ -261,26 +241,235 @@ a {{ color: #1c1915; }}
 cro_report_generator = CroReportGenerator()
 
 
+def compute_cro_status(intel: CroIntelligenceReport) -> Dict[str, str]:
+    """Single source of truth for certification and test-group status (JSON, HTML and PDF)."""
+    coverage = intel.coverage or {}
+    rendered = str(coverage.get("rendered_dom_status") or "NOT_VERIFIED_BY_CRO_ENGINE")
+    has_rendered = "VERIFIED" in rendered and "NOT_VERIFIED" not in rendered
+    has_journeys = str(coverage.get("journey_execution_status") or "NOT_EXECUTED") != "NOT_EXECUTED"
+    analytics = any(m.status == "MEASURED" for m in (intel.metrics or []))
+    certified = has_rendered and has_journeys and analytics
+    return {
+        "page_structure_dom": "DOM_CHECKED" if intel.sample_size > 0 else "NOT_TESTED",
+        "mobile_viewport_ux": "TESTED" if has_rendered else "NOT_TESTED",
+        "desktop_layout_ux": "TESTED" if has_rendered else "NOT_TESTED",
+        "interactive_forms": "TESTED" if has_journeys else "NOT_TESTED",
+        "conversion_analytics": "MEASURED" if analytics else "UNAVAILABLE",
+        "certification_status": "CERTIFIED" if certified else "NOT_CERTIFIED",
+        "assurance_status": "FULLY_EVALUATED" if certified else "EVALUATED_WITH_LIMITATIONS",
+        "certification_disclaimer": (
+            "Browser interaction tests and connected conversion analytics were verified for this audit."
+            if certified
+            else "Mandatory browser-level interaction and conversion analytics tests were unmeasured; this audit cannot provide certified conversion assurance."
+        ),
+    }
+
+
+_STATE_COLOR = {
+    "VERIFIED": "#15803d", "SAMPLE_VERIFIED": "#15803d", "INFERRED": "#b45309", "HYPOTHESIS": "#b45309",
+    "NOT_TESTED": "#64748b", "DATA_UNAVAILABLE": "#64748b", "NOT_APPLICABLE": "#94a3b8",
+}
+
+
+def _badge(state: str) -> str:
+    return f'<span class="mono" style="font-weight:700;font-size:6.5pt;color:{_STATE_COLOR.get(state, "#334155")};">{_esc(state)}</span>'
+
+
+def _section_html(section: Any, findings: list) -> str:
+    """Section block following the objective/observation/diagnosis/recommendation/verification/limitations framework."""
+    rows = "".join(
+        f"<tr><td>{_badge(c.evidence_state)}</td><td>{_esc(c.label)}</td><td>{_esc(c.outcome)}</td>"
+        f"<td>{_esc(c.summary)}</td><td class=\"mono\" style=\"font-size:6.5pt;\">{_esc(', '.join(c.evidence[:3]) or '—')}</td></tr>"
+        for c in section.checks if c.outcome != "not_applicable"
+    )
+    open_ = sum(1 for c in section.checks if c.outcome in ("unmeasured", "not_tested"))
+    diag = "".join(
+        f'<div class="card" style="margin:6px 0;"><div class="card-kicker">{_esc(f.finding_id)} · {_esc(f.priority)} · {_esc(f.evidence_state)}</div>'
+        f"<p><strong>Observation:</strong> {_esc(f.finding)}</p><p><strong>Evidence:</strong> {_esc(f.evidence)} ({_esc(f.observed_scope)})</p>"
+        f"<p><strong>Root cause:</strong> {_esc(f.root_cause)}</p><p><strong>Recommendation:</strong> {_esc(f.recommended_action)}</p>"
+        f"<p><strong>Owner / effort:</strong> {_esc(f.owner)} · {_esc(f.effort)} · confidence {_esc(f.confidence)}</p>"
+        f"<p><strong>Hypothesis (untested):</strong> {_esc(f.hypothesis)}</p>"
+        f"<p><strong>Primary metric:</strong> {_esc(f.primary_metric)} · <strong>Retest:</strong> {_esc(f.validation)}</p>"
+        f"<p><strong>Impact:</strong> {_esc(f.impact_estimate)}</p></div>"
+        for f in findings
+    ) or '<p style="font-size:8pt;color:#475569;">No defect met the evidence bar in this section on the audited sample.</p>'
+    limits = f"{open_} check(s) were not tested or had no data source and are not scored." if open_ else "All applicable checks in this section produced an observation."
+    return (
+        f'<h3 id="cro-{_esc(section.number)}" style="font-size:11pt;margin:16px 0 4px 0;">{_esc(section.number)}. {_esc(section.title)}</h3>'
+        f'<p class="meta" style="font-size:7.5pt;color:#475569;">Status {_esc(section.status)} · specialist {_esc(section.specialist)}</p>'
+        f'<table class="print-table"><thead><tr><th>State</th><th>Check</th><th>Outcome</th><th>Observation</th><th>Evidence</th></tr></thead><tbody>{rows}</tbody></table>'
+        f"{diag}<p style=\"font-size:7.5pt;color:#64748b;\"><strong>Limitations:</strong> {_esc(limits)}</p>"
+    )
+
+
+def build_cro_publication_document(report: Any, intel: Optional[CroIntelligenceReport] = None) -> Any:
+    """Builds the CRO PublicationDocument from CroIntelligenceReport so every format shares one data source."""
+    from app.cro.cro_chapter_visuals import cro_ten_dimension_scorecard_svg
+    from app.reports.adaptive_audit_book import (
+        _build_ch_cro_cta, _build_ch_cro_forms, _build_ch_cro_trust, build_publication_manifest,
+    )
+    from app.reports.publishing_engine import ChapterSpec, PartSpec, PublicationDocument, PublicationMetadata
+
+    intel = intel or build_from_executive_report(report)
+    man = build_publication_manifest(report, "CRO")
+    status = compute_cro_status(intel)
+    exp = next((d for d in intel.dimensions if d.id == "experience"), None)
+    score = exp.score if exp else None
+    meta = PublicationMetadata(
+        family="CRO", title=man["title"], subtitle=man["subtitle"], domain=man["domain"], brand_name=man["brand_name"],
+        audit_date=man["audit_date"], report_ref=man["report_ref"], classification=man["classification"], purpose=man["purpose"],
+        score_display=f"{score:.1f}" if score is not None else "NOT MEASURED", grade="NOT GRADED", overall_score=score,
+        pages_crawled=intel.sample_size, findings_count=len(intel.findings),
+    )
+
+    cov = intel.coverage or {}
+    dims = "".join(
+        f"<tr><td>{_esc(d.name)}</td><td>{_esc(_score_label(d.score, d.status))}</td><td>{_esc(d.status)}</td><td>{_esc(d.note)}</td></tr>"
+        for d in intel.dimensions
+    )
+    metrics = "".join(
+        f"<tr><td>{_esc(m.metric)}</td><td>{_esc(m.display)}</td><td>{_esc(m.status)}</td><td>{_esc(m.note)}</td></tr>"
+        for m in intel.metrics
+    )
+    svg = cro_ten_dimension_scorecard_svg(
+        [{"name": d.name, "score": d.score, "status": "MEASURED" if d.score is not None else "UNMEASURED"} for d in intel.dimensions]
+    )
+    top = "".join(
+        f"<li><strong>{_esc(f.finding_id)}</strong> ({_esc(f.priority)}): {_esc(f.finding)} — "
+        f"<span style='color:#475569;'>{_esc(f.recommended_action[:120])}</span></li>"
+        for f in intel.findings[:15]
+    ) or "<li>No finding met the evidence bar.</li>"
+    exec_html = (
+        f'<p style="font-size:9pt;">{_esc(intel.scope_note)} Business model: <strong>{_esc(intel.business_model)}</strong> ({_esc(intel.model_basis)}).</p>'
+        f'<div class="card"><div class="card-kicker">COVERAGE</div><p>{_esc(cov.get("inspected_pages"))} page(s) inspected of '
+        f'{_esc(cov.get("discovered_urls") if cov.get("discovered_urls") is not None else "unknown")} discovered ({_esc(cov.get("status"))}). '
+        f'Rendered DOM: {_esc(cov.get("rendered_dom_status"))}. Journeys: {_esc(cov.get("journey_execution_status"))}.</p>'
+        f'<p>{_esc(status["certification_disclaimer"])}</p></div>'
+        f'<h3>Scorecard</h3>{svg}<table class="print-table"><thead><tr><th>Dimension</th><th>Score</th><th>Status</th><th>Basis</th></tr></thead><tbody>{dims}</tbody></table>'
+        f'<h3>Conversion metrics</h3><table class="print-table"><thead><tr><th>Metric</th><th>Value</th><th>Status</th><th>Note</th></tr></thead><tbody>{metrics}</tbody></table>'
+        f'<h3>Highest-priority findings ({len(intel.findings)} total)</h3><ul>{top}</ul>'
+    )
+
+    by_section: Dict[int, list] = {}
+    for f in intel.findings:
+        by_section.setdefault(f.section, []).append(f)
+
+    parts: list = []
+    pid = "cro_p0"
+    parts.append(PartSpec(id=pid, num="", title="EXECUTIVE SUMMARY", chapters=[
+        ChapterSpec(id="cro_exec", num="01", part_id=pid, part_title="EXECUTIVE SUMMARY", title="Executive summary and scorecard",
+                    desc="Coverage, scores, metrics and top findings.", html_content=exec_html)]))
+    n = 2
+    excluded: list = []
+    for part in intel.parts:
+        owned = [s for s in intel.sections if s.part == part["id"]]
+        applicable = [s for s in owned if s.status != "NOT_APPLICABLE"]
+        excluded += [s for s in owned if s.status == "NOT_APPLICABLE"]
+        if not applicable:
+            continue
+        ppid = f"cro_part_{part['id']}"
+        body = "".join(_section_html(s, by_section.get(int(s.number), [])) for s in applicable)
+        parts.append(PartSpec(id=ppid, num=part["id"], title=f"PART {part['id']} — {part['title'].upper()}", chapters=[
+            ChapterSpec(id=f"cro_{part['id'].lower()}", num=f"{n:02d}", part_id=ppid, part_title=f"PART {part['id']}",
+                        title=part["title"], desc=f"Sections {part.get('sections', '')}", html_content=body)]))
+        n += 1
+
+    rm = intel.roadmap or {}
+    roadmap_html = "".join(f"<h3>{_esc(k)}</h3><ul>{''.join(f'<li>{_esc(i)}</li>' for i in v)}</ul>" for k, v in rm.items() if v) or "<p>No roadmap items.</p>"
+    reg = "".join(
+        f"<tr>"
+        f'<td class="mono" style="font-weight:700;">{_esc(f.finding_id)}</td>'
+        f'<td><span class="mono" style="font-size:7pt;font-weight:700;color:{_STATE_COLOR.get(f.evidence_state, "#334155")};">{_esc(f.priority).upper()}</span></td>'
+        f'<td><strong>{_esc(f.finding)}</strong></td>'
+        f'<td class="mono" style="font-size:7pt;">{_esc(f.observed_scope)}</td>'
+        f'<td class="mono" style="font-size:7pt;">{_esc(f.evidence[:60] if len(f.evidence) > 60 else f.evidence)}</td>'
+        f'<td style="font-size:7.5pt;">{_esc(f.recommended_action)}</td>'
+        f'<td style="font-size:7.5pt;">{_esc(f.owner)}</td>'
+        f'<td style="font-size:7.5pt;">{_esc(f.effort)}</td>'
+        f"</tr>"
+        for f in intel.findings
+    )
+    detailed_cards = "".join(
+        f'<div class="card" style="margin:8px 0;padding:10px 12px;border-left:4px solid {_STATE_COLOR.get(f.evidence_state, "#0f172a")};break-inside:avoid;">'
+        f'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">'
+        f'<span class="mono" style="font-size:8pt;font-weight:700;">{_esc(f.finding_id)} // {_esc(f.priority).upper()} PRIORITY</span>'
+        f'<span class="mono" style="font-size:7pt;padding:2px 6px;background:#f1f5f9;border-radius:2px;">{_esc(f.evidence_state)}</span>'
+        f'</div>'
+        f'<div style="font-size:10pt;font-weight:700;color:#0f172a;margin-bottom:6px;">{_esc(f.finding)}</div>'
+        f'<p style="font-size:8pt;color:#334155;margin:3px 0;"><strong>Observed Scope:</strong> {_esc(f.observed_scope)}</p>'
+        f'<p style="font-size:8pt;color:#334155;margin:3px 0;"><strong>Evidence:</strong> {_esc(f.evidence)}</p>'
+        f'<p style="font-size:8pt;color:#334155;margin:3px 0;"><strong>Root Cause:</strong> {_esc(f.root_cause)}</p>'
+        f'<div style="background:#f8fafc;padding:6px 10px;border-radius:4px;margin:6px 0;border:1px solid #e2e8f0;">'
+        f'<strong style="font-size:7.5pt;color:#0f172a;text-transform:uppercase;">Recommended Remediation:</strong>'
+        f'<p style="font-size:8pt;color:#1e293b;margin:2px 0;">{_esc(f.recommended_action)}</p>'
+        f'</div>'
+        f'<div style="display:flex;gap:14px;font-size:7.5pt;color:#64748b;margin-top:4px;">'
+        f'<span><strong>Owner:</strong> {_esc(f.owner)}</span>'
+        f'<span><strong>Effort:</strong> {_esc(f.effort)}</span>'
+        f'<span><strong>Primary Metric:</strong> {_esc(f.primary_metric)}</span>'
+        f'<span><strong>Validation:</strong> {_esc(f.validation)}</span>'
+        f'</div>'
+        f'</div>'
+        for f in intel.findings
+    )
+    scope = "".join(f"<li>{_esc(s.number)}. {_esc(s.title)} — NOT_APPLICABLE for this business model</li>" for s in excluded) or "<li>No section was excluded.</li>"
+    apps = "".join(
+        f'<div class="card" style="margin:6px 0;"><div class="card-kicker">APPENDIX {_esc(a.id)} · {_esc(a.status)}</div><strong>{_esc(a.title)}</strong>'
+        f"<p>{_esc(a.summary)}</p></div>" for a in intel.appendices
+    )
+    tail_id = "cro_tail"
+    parts.append(PartSpec(id=tail_id, num="", title="REMEDIATION AND REGISTERS", chapters=[
+        ChapterSpec(
+            id="cro_register",
+            num=f"{n:02d}",
+            part_id=tail_id,
+            part_title="REMEDIATION AND REGISTERS",
+            title="Institutional Findings Register & Strategic Roadmap",
+            desc=f"Complete register of all {len(intel.findings)} verified findings and prioritized remediation actions.",
+            html_content=(
+                f'<div class="card" style="margin-bottom:14px;">'
+                f'<div class="card-kicker">INSTITUTIONAL FINDINGS REGISTER ({len(intel.findings)} ITEMS)</div>'
+                f'<table class="print-table" style="margin-top:8px;">'
+                f'<thead><tr><th>ID</th><th>Priority</th><th>Finding</th><th>Scope</th><th>Evidence</th><th>Recommendation</th><th>Owner</th><th>Effort</th></tr></thead>'
+                f'<tbody>{reg}</tbody>'
+                f'</table>'
+                f'</div>'
+                f'<h3 style="font-size:11pt;margin:18px 0 8px 0;">Detailed Finding Diagnoses &amp; Remediation Specifications</h3>'
+                f'{detailed_cards}'
+                f'<div class="decorative-separator" style="margin:20px 0;"></div>'
+                f'<h3 style="font-size:11pt;margin:18px 0 8px 0;">Consolidated Remediation Roadmap</h3>'
+                f'{roadmap_html}'
+            ),
+        ),
+        ChapterSpec(id="cro_scope", num=f"{n + 1:02d}", part_id=tail_id, part_title="REMEDIATION AND REGISTERS", title="Scope register and appendices",
+                    desc="Excluded sections and appendices.", html_content=f"<h3>Excluded sections</h3><ul>{scope}</ul>{apps}"),
+    ]))
+    # Per-record CTA, form and trust registries come from the report's cro_audit data (spec appendices D/E).
+    reg_id = "cro_registries"
+    parts.append(PartSpec(id=reg_id, num="", title="EVIDENCE REGISTRIES", chapters=[
+        ChapterSpec(id=cid, num=f"{n + 2 + i:02d}", part_id=reg_id, part_title="EVIDENCE REGISTRIES", title=title,
+                    desc=title, html_content=fn(report, man))
+        for i, (cid, title, fn) in enumerate([
+            ("cro_cta_registry", "CTA evidence registry", _build_ch_cro_cta),
+            ("cro_form_registry", "Form evidence registry", _build_ch_cro_forms),
+            ("cro_trust_registry", "Trust and credibility registry", _build_ch_cro_trust),
+        ])
+    ]))
+    count = sum(len(p.chapters) for p in parts)
+    toc_pages = max(1, -(-(count + len(parts)) // 30))
+    return PublicationDocument(metadata=meta, parts=parts, toc_pages=toc_pages, starting_body_page=2 + toc_pages)
+
+
 def render_cro_audit_book(report: Any) -> str:
     """Renders the CRO audit book HTML from an executive report."""
-    try:
-        from app.reports.adaptive_audit_book import build_adaptive_publication_document
-        from app.reports.publishing_engine import PublicationHtmlRenderer
-        doc = build_adaptive_publication_document(report, report_type="CRO")
-        return PublicationHtmlRenderer.render(doc)
-    except Exception:
-        intel = build_from_executive_report(report)
-        return cro_report_generator.render_html_report(
-            intel,
-            domain=getattr(report, "domain", "") or "",
-            website_url=getattr(report, "website_url", "") or "",
-            generated_at=str(getattr(report, "generated_at", "") or ""),
-            analysis_id=str(getattr(report, "analysis_id", "") or getattr(report, "report_id", "") or ""),
-        )
+    from app.reports.publishing_engine import PublicationHtmlRenderer
+    return PublicationHtmlRenderer.render(build_cro_publication_document(report))
 
 
 __all__ = [
     "CroReportGenerator",
+    "build_cro_publication_document",
+    "compute_cro_status",
     "cro_report_generator",
     "render_cro_audit_book",
 ]

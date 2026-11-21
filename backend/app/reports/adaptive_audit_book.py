@@ -518,11 +518,50 @@ from app.report_finding_registry import (
 # Finding IDs whose full card was already rendered in the current book (reset per build).
 _DETAILED_CARDS_RENDERED: set = set()
 
+_GEO_CANONICAL_CATS = {
+    "AI_VISIBILITY",
+    "CITATION_INTELLIGENCE",
+    "ENTITY_CONSISTENCY",
+    "CONTENT_QUALITY",
+    "TECHNICAL_READINESS",
+    "EXTERNAL_REPUTATION",
+    "COMPETITIVE_INTELLIGENCE",
+    "MARKET_INTENT",
+}
 
-def _format_finding_cards(findings: List[Any], limit: int = 8, detailed: bool = False, dedupe: bool = True) -> str:
+
+def _is_geo_finding(f: Any) -> bool:
+    raw_cat = _finding_value(f, "category", "")
+    cat = str(getattr(raw_cat, "value", raw_cat) or "").upper()
+    return "GEO" in cat or cat in _GEO_CANONICAL_CATS
+
+
+def _all_report_findings(report: Any, manifest: Optional[Dict[str, Any]] = None) -> List[Any]:
+    """Return canonical report findings merged with any tenant-matched Enterprise GEO findings."""
+    base = list(_report_findings(report))
+    extra = list((manifest or {}).get("_enterprise_geo_findings") or [])
+    if not extra:
+        return base
+    seen_ids = {str(_finding_value(f, "finding_id", _finding_value(f, "id", "")) or "").strip().lower() for f in base}
+    seen_titles = {str(_finding_value(f, "title", _finding_value(f, "finding_title", "")) or "").strip().lower() for f in base}
+    for ef in extra:
+        fid = str(_finding_value(ef, "finding_id", _finding_value(ef, "id", "")) or "").strip().lower()
+        title = str(_finding_value(ef, "title", _finding_value(ef, "finding_title", "")) or "").strip().lower()
+        if (fid and fid in seen_ids) or (title and title in seen_titles):
+            continue
+        base.append(ef)
+        if fid:
+            seen_ids.add(fid)
+        if title:
+            seen_titles.add(title)
+    return base
+
+
+def _format_finding_cards(findings: List[Any], limit: Optional[int] = None, detailed: bool = False, dedupe: bool = True) -> str:
     """Use short chapter references; reserve full plain-English narratives for the findings register."""
     cards = []
-    for idx, finding in enumerate(findings[:limit]):
+    target_findings = findings if limit is None else findings[:limit]
+    for idx, finding in enumerate(target_findings):
         if detailed:
             fid = str(_finding_value(finding, "finding_id", _finding_value(finding, "id", "")) or "")
             if dedupe and fid and fid in _DETAILED_CARDS_RENDERED:
@@ -549,9 +588,7 @@ def _format_finding_cards(findings: List[Any], limit: int = 8, detailed: bool = 
         if not urls:
             url = _finding_value(finding, "url", None) or _finding_value(finding, "affected_url", None)
             urls = [url] if url else []
-        url_summary = ", ".join(str(url) for url in urls[:3] if url) or "Affected URL not recorded"
-        if len(urls) > 3:
-            url_summary += f" and {len(urls) - 3} more"
+        url_summary = ", ".join(str(url) for url in urls if url) or "Affected URL not recorded"
         cards.append(
             '<div class="card finding-reference" style="margin:6px 0;padding:9px 12px;break-inside:avoid;">'
             f'<div style="font-size:9pt;font-weight:700;color:#0f172a;">{title}</div>'
@@ -723,7 +760,7 @@ def _build_ch_seo(report: Any, manifest: Dict[str, Any]) -> str:
     robots_title = "Robots: Active" if robots_found is True else ("Robots: Missing (404)" if robots_found is False else "Robots: Inspected")
     sitemap_title = "Sitemap: Valid" if sitemap_found is True else ("Sitemap: Missing" if sitemap_found is False else "Sitemap: Inspected")
 
-    findings = [f for f in _report_findings(report) if "SEO" in str(getattr(f, "category", "")).upper() or "TECH" in str(getattr(f, "category", "")).upper()]
+    findings = [f for f in _report_findings(report) if any(k in str(getattr(f, "category", "")).upper() for k in ("SEO", "TECH", "AUTHORITY", "BACKLINK", "CRAWL", "INDEX"))]
     callout = render_section_business_callout(
         generate_section_explanation("ch_seo", "Technical SEO & Crawl Architecture", report, findings, {"pages_crawled": pages_count})
     )
@@ -749,8 +786,8 @@ def _build_ch_seo(report: Any, manifest: Dict[str, Any]) -> str:
         </div>
     </div>
 
-    <h3 style="font-size: 12pt; margin: 16px 0 8px 0; color: #0f172a;">Technical Discoverability Findings</h3>
-    {_format_finding_cards(findings, limit=6)}
+    <h3 style="font-size: 12pt; margin: 16px 0 8px 0; color: #0f172a;">Technical Discoverability Findings ({len(findings)})</h3>
+    {_format_finding_cards(findings, limit=None)}
     """
 
 
@@ -792,7 +829,7 @@ def _build_ch_geo(report: Any, manifest: Dict[str, Any]) -> str:
     if vis_status == "MEASURED" and getattr(v_card, "citation_rate_pct", None) is not None:
         vis_disp = f"{v_card.citation_rate_pct:.0f}% CITATION RATE"
 
-    findings = [f for f in _report_findings(report) if "GEO" in str(getattr(f, "category", "")).upper()]
+    findings = [f for f in _all_report_findings(report, manifest) if _is_geo_finding(f)]
     callout = render_section_business_callout(
         generate_section_explanation("ch_geo", "Generative Engine Optimization (GEO)", report, findings)
     )
@@ -848,13 +885,13 @@ def _build_ch_geo(report: Any, manifest: Dict[str, Any]) -> str:
     geo_questions = getattr(geo, "questions", []) or []
     question_rows_html = []
     if geo_questions:
-        for q in geo_questions[:6]:
+        for q in geo_questions:
             q_key = _esc(getattr(q, "question_key", "Query").replace("_", " ").title())
             q_text = _esc(getattr(q, "question", "Commercial inquiry"))
             status = str(getattr(q, "status", "SUPPORTED")).upper()
             st_color = "#10b981" if status == "SUPPORTED" else ("#f59e0b" if status == "PARTIAL" else "#ef4444")
             st_badge = f'<span style="font-family:monospace;font-size:7.5pt;font-weight:700;color:{st_color};background:{st_color}10;border:1px solid {st_color}40;padding:2px 6px;border-radius:4px;">{status}</span>'
-            snippet = _esc(str(getattr(q, "answer_snippet", getattr(q, "answer", "Direct definition present in crawlable DOM.")) or "Direct definition present in crawlable DOM.")[:120])
+            snippet = _esc(str(getattr(q, "answer_snippet", getattr(q, "answer", "Direct definition present in crawlable DOM.")) or "Direct definition present in crawlable DOM.")[:220])
             question_rows_html.append(
                 f'<tr style="border-bottom:1px solid #e2e8f0;font-size:8pt;">'
                 f'  <td style="padding:6px 8px;font-weight:600;color:#0f172a;">{q_key}</td>'
@@ -878,10 +915,10 @@ def _build_ch_geo(report: Any, manifest: Dict[str, Any]) -> str:
 
     rewrites_html = []
     if raw_rewrites:
-        for rw in raw_rewrites[:2]:
-            cur = _esc(str(getattr(rw, "current_passage", rw.get("current_passage", "") if isinstance(rw, dict) else ""))[:140])
-            rec = _esc(str(getattr(rw, "recommended_rewrite", rw.get("recommended_rewrite", "") if isinstance(rw, dict) else ""))[:140])
-            why = _esc(str(getattr(rw, "why", rw.get("why", "Direct entity subject naming prevents RAG pronoun confusion.") if isinstance(rw, dict) else ""))[:120])
+        for rw in raw_rewrites:
+            cur = _esc(str(getattr(rw, "current_passage", rw.get("current_passage", "") if isinstance(rw, dict) else ""))[:260])
+            rec = _esc(str(getattr(rw, "recommended_rewrite", rw.get("recommended_rewrite", "") if isinstance(rw, dict) else ""))[:260])
+            why = _esc(str(getattr(rw, "why", rw.get("why", "Direct entity subject naming prevents RAG pronoun confusion.") if isinstance(rw, dict) else ""))[:220])
             rewrites_html.append(
                 f'<div class="card" style="margin-bottom:8px;padding:10px 14px;break-inside:avoid;background:#f8fafc;">'
                 f'  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">'
@@ -1020,12 +1057,13 @@ def _build_ch_geo(report: Any, manifest: Dict[str, Any]) -> str:
     ''' if rewrites_html else ''}
 
     <!-- 6. Findings Register -->
-    <div style="break-inside: avoid; margin-top: 14px;">
+    <div style="margin-top: 14px;">
         <div style="font-family: monospace; font-size: 8.5pt; font-weight: 700; text-transform: uppercase; color: #0f172a; margin-bottom: 6px;">
             2.5 Recorded Generative Engine Optimization Findings ({len(findings)})
         </div>
-        {_format_finding_cards(findings, limit=8, detailed=True)}
+        {_format_finding_cards(findings, limit=None, detailed=True)}
     </div>
+    {manifest.get("_enterprise_geo_html", "")}
     """
 
 
@@ -1058,13 +1096,13 @@ def _build_ch_aeo(report: Any, manifest: Dict[str, Any]) -> str:
         </div>
     </div>
 
-    <h3 style="font-size: 12pt; margin: 16px 0 8px 0; color: #0f172a;">Answer Engine Visibility Findings</h3>
-    {_format_finding_cards(findings, limit=6)}
+    <h3 style="font-size: 12pt; margin: 16px 0 8px 0; color: #0f172a;">Answer Engine Visibility Findings ({len(findings)})</h3>
+    {_format_finding_cards(findings, limit=None)}
     """
 
 
 def _build_ch_competitive(report: Any, manifest: Dict[str, Any]) -> str:
-    findings = [f for f in _report_findings(report) if "COMP" in str(getattr(f, "category", "")).upper()]
+    findings = [f for f in _report_findings(report) if any(k in str(getattr(f, "category", "")).upper() for k in ("COMP", "AUTHORITY", "BACKLINK", "BENCHMARK"))]
     callout = render_section_business_callout(
         generate_section_explanation("ch_competitive", "Competitive Digital Visibility", report, findings)
     )
@@ -1079,8 +1117,8 @@ def _build_ch_competitive(report: Any, manifest: Dict[str, Any]) -> str:
         </p>
     </div>
 
-    <h3 style="font-size: 12pt; margin: 16px 0 8px 0; color: #0f172a;">Competitive Differentiation Findings</h3>
-    {_format_finding_cards(findings, limit=6)}
+    <h3 style="font-size: 12pt; margin: 16px 0 8px 0; color: #0f172a;">Competitive Differentiation Findings ({len(findings)})</h3>
+    {_format_finding_cards(findings, limit=None)}
     """
 
 
@@ -1120,8 +1158,8 @@ def _build_ch_conversion(report: Any, manifest: Dict[str, Any]) -> str:
         </div>
     </div>
 
-    <h3 style="font-size: 12pt; margin: 16px 0 8px 0; color: #0f172a;">Conversion Ergonomics Findings</h3>
-    {_format_finding_cards(findings, limit=6)}
+    <h3 style="font-size: 12pt; margin: 16px 0 8px 0; color: #0f172a;">Conversion Ergonomics Findings ({len(findings)})</h3>
+    {_format_finding_cards(findings, limit=None)}
     """
 
 
@@ -1130,7 +1168,7 @@ def _build_ch_page_by_page(report: Any, manifest: Dict[str, Any]) -> str:
     pages = getattr(manifest_obj, "pages", []) or getattr(report, "page_reports", []) or []
 
     rows = []
-    for p in pages[:15]:
+    for p in pages:
         url = getattr(p, "url", None)
         status = getattr(p, "status_code", None)
         wc = getattr(p, "word_count", None)
@@ -1178,28 +1216,33 @@ def _build_ch_page_by_page(report: Any, manifest: Dict[str, Any]) -> str:
 
 
 def _build_ch_roadmap(report: Any, manifest: Dict[str, Any]) -> str:
-    findings = _report_findings(report)
+    findings = _all_report_findings(report, manifest)
     callout = render_section_business_callout(
         generate_section_explanation("ch_roadmap", "Prioritized Remediation Plan", report, findings)
     )
     rows = []
-    for index, finding in enumerate(findings[:10], start=1):
-        title = getattr(finding, "title", None) or getattr(finding, "name", None) or "Untitled finding"
-        severity = getattr(finding, "severity", None)
+    for index, finding in enumerate(findings, start=1):
+        title = _finding_value(finding, "finding_title") or _finding_value(finding, "title") or _finding_value(finding, "name") or "Untitled finding"
+        severity = _finding_value(finding, "severity")
         severity_text = getattr(severity, "value", severity) or "Not classified"
         recommendation = (
-            getattr(finding, "recommended_fix", None)
-            or getattr(finding, "remediation", None)
-            or getattr(finding, "recommendation", None)
+            _finding_value(finding, "recommended_fix")
+            or _finding_value(finding, "remediation")
+            or _finding_value(finding, "recommended_solution")
+            or _finding_value(finding, "recommendation")
             or "Review the linked evidence and define an acceptance test before implementation."
         )
+        raw_effort = _finding_value(finding, "estimated_effort") or _finding_value(finding, "effort")
+        effort_text = str(raw_effort) if raw_effort not in (None, "") else "Not estimated"
+        raw_owner = _finding_value(finding, "responsible_role") or _finding_value(finding, "department") or _finding_value(finding, "owner")
+        owner_text = str(raw_owner) if raw_owner not in (None, "") else "Unassigned"
         rows.append(
             "<tr>"
             f"<td><strong>{index}</strong></td>"
             f"<td>{_esc(title)}<div style='color:#64748b;font-size:7.5pt;margin-top:3px;'>{_esc(recommendation)}</div></td>"
             f"<td>{_esc(severity_text)}</td>"
-            "<td>Not estimated</td>"
-            "<td>Unassigned</td>"
+            f"<td>{_esc(effort_text)}</td>"
+            f"<td>{_esc(owner_text)}</td>"
             "</tr>"
         )
     table_rows = "".join(rows) or (
@@ -1209,7 +1252,7 @@ def _build_ch_roadmap(report: Any, manifest: Dict[str, Any]) -> str:
     return f"""
     {callout}
     <div class="card" style="margin-bottom:16px;">
-        <div class="card-kicker">REMEDIATION REGISTER // UP TO 10 FINDINGS</div>
+        <div class="card-kicker">REMEDIATION REGISTER // {len(findings)} FINDINGS</div>
         <p style="font-size:8.5pt;color:#334155;margin:4px 0 10px 0;">
             Items follow the finding order supplied by the audit. Effort, ownership, and business impact are not fabricated when unavailable.
         </p>
@@ -1252,7 +1295,7 @@ def _build_ch_methodology(report: Any, manifest: Dict[str, Any]) -> str:
 
 
 def _build_ch_appendix(report: Any, manifest: Dict[str, Any]) -> str:
-    findings = _report_findings(report)
+    findings = _all_report_findings(report, manifest)
     callout = render_section_business_callout(
         generate_section_explanation("ch_appendix", "Findings Register & Evidence", report, findings)
     )
@@ -1265,7 +1308,7 @@ def _build_ch_appendix(report: Any, manifest: Dict[str, Any]) -> str:
         <p style="font-size: 8pt; color: #475569; margin: 4px 0 10px 0;">
             Finding status and evidence coverage depend on the recorded source data; not every finding is necessarily independently verified.
         </p>
-        {_format_finding_cards(findings, limit=100, detailed=True, dedupe=False)}
+        {_format_finding_cards(findings, limit=None, detailed=True, dedupe=False)}
     </div>
     """
 
@@ -1342,7 +1385,7 @@ def _build_ch_aeo_questions(report: Any, manifest: Dict[str, Any]) -> str:
     </div>
 
     <h3 style="font-size: 11pt; margin: 14px 0 8px 0; color: #0f172a;">Question Architecture &amp; Intent Findings ({len(findings)})</h3>
-    {_format_finding_cards(findings, limit=6, detailed=True)}
+    {_format_finding_cards(findings, limit=None, detailed=True)}
     """
 
 
@@ -1414,7 +1457,7 @@ def _build_ch_aeo_definitions(report: Any, manifest: Dict[str, Any]) -> str:
     </div>
 
     <h3 style="font-size: 11pt; margin: 14px 0 8px 0; color: #0f172a;">Passage Extractability &amp; Content Findings ({len(findings)})</h3>
-    {_format_finding_cards(findings, limit=6, detailed=True)}
+    {_format_finding_cards(findings, limit=None, detailed=True)}
     """
 
 
@@ -1488,7 +1531,7 @@ def _build_ch_aeo_schema(report: Any, manifest: Dict[str, Any]) -> str:
     </div>
 
     <h3 style="font-size: 11pt; margin: 14px 0 8px 0; color: #0f172a;">Structured Data &amp; Entity Findings ({len(findings)})</h3>
-    {_format_finding_cards(findings, limit=6, detailed=True)}
+    {_format_finding_cards(findings, limit=None, detailed=True)}
     """
 
 
@@ -1577,7 +1620,7 @@ def _build_ch_aeo_visibility(report: Any, manifest: Dict[str, Any]) -> str:
     </div>
 
     <h3 style="font-size: 11pt; margin: 14px 0 8px 0; color: #0f172a;">AI Engine Visibility Findings ({len(findings)})</h3>
-    {_format_finding_cards(findings, limit=6, detailed=True)}
+    {_format_finding_cards(findings, limit=None, detailed=True)}
     """
 
 
@@ -1594,7 +1637,7 @@ def _build_ch_geo_extractability(report: Any, manifest: Dict[str, Any]) -> str:
     score_disp = f"{float(score_ext):.0f}" if score_ext is not None else "NOT MEASURED"
     grade = grade_for_displayed(float(score_ext)) if score_ext is not None else "N/A"
 
-    findings = [f for f in _report_findings(report) if "GEO" in str(getattr(f, "category", "")).upper()]
+    findings = [f for f in _all_report_findings(report, manifest) if _is_geo_finding(f)]
     callout = render_section_business_callout(
         generate_section_explanation("ch_geo_extractability", "The 8-Dimension Content Extractability Framework", report, findings)
     )
@@ -1666,13 +1709,14 @@ def _build_ch_geo_extractability(report: Any, manifest: Dict[str, Any]) -> str:
     </div>
 
     <h3 style="font-size: 11pt; margin: 14px 0 8px 0; color: #0f172a;">Extractability Framework Findings ({len(findings)})</h3>
-    {_format_finding_cards(findings, limit=6, detailed=True)}
+    {_format_finding_cards(findings, limit=None, detailed=True)}
+    {manifest.get("_enterprise_geo_html", "")}
     """
 
 
 def _build_ch_geo_inquiries(report: Any, manifest: Dict[str, Any]) -> str:
     geo = getattr(report, "geo_readiness", None)
-    findings = [f for f in _report_findings(report) if "GEO" in str(getattr(f, "category", "")).upper() or "QUERY" in str(getattr(f, "category", "")).upper()]
+    findings = [f for f in _all_report_findings(report, manifest) if _is_geo_finding(f) or "QUERY" in str(_finding_value(f, "category", "")).upper()]
     callout = render_section_business_callout(
         generate_section_explanation("ch_geo_inquiries", "Commercial Buyer Query Extraction Battery", report, findings)
     )
@@ -1680,7 +1724,7 @@ def _build_ch_geo_inquiries(report: Any, manifest: Dict[str, Any]) -> str:
     geo_questions = getattr(geo, "questions", []) or []
     question_rows_html = []
     if geo_questions:
-        for q in geo_questions[:6]:
+        for q in geo_questions:
             q_key = _esc(getattr(q, "question_key", "Query").replace("_", " ").title())
             q_text = _esc(getattr(q, "question", "Commercial inquiry"))
             status = str(getattr(q, "status", "SUPPORTED")).upper()
@@ -1720,7 +1764,7 @@ def _build_ch_geo_inquiries(report: Any, manifest: Dict[str, Any]) -> str:
     </div>
 
     <h3 style="font-size: 11pt; margin: 14px 0 8px 0; color: #0f172a;">Commercial Inquiry Coverage Findings ({len(findings)})</h3>
-    {_format_finding_cards(findings, limit=6, detailed=True)}
+    {_format_finding_cards(findings, limit=None, detailed=True)}
     """
 
 
@@ -1803,7 +1847,7 @@ def _build_ch_geo_crawlers(report: Any, manifest: Dict[str, Any]) -> str:
     </div>
 
     <h3 style="font-size: 11pt; margin: 14px 0 8px 0; color: #0f172a;">Crawler &amp; Bot Access Findings ({len(findings)})</h3>
-    {_format_finding_cards(findings, limit=6, detailed=True)}
+    {_format_finding_cards(findings, limit=None, detailed=True)}
     """
 
 
@@ -1816,14 +1860,14 @@ def _build_ch_geo_rewrites(report: Any, manifest: Dict[str, Any]) -> str:
     elif hasattr(passages, "rewrite_recommendations"):
         raw_rewrites = getattr(passages, "rewrite_recommendations", []) or []
 
-    findings = [f for f in _report_findings(report) if "GEO" in str(getattr(f, "category", "")).upper() or "CONTENT" in str(getattr(f, "category", "")).upper()]
+    findings = [f for f in _all_report_findings(report, manifest) if _is_geo_finding(f) or "CONTENT" in str(_finding_value(f, "category", "")).upper()]
     callout = render_section_business_callout(
         generate_section_explanation("ch_geo_rewrites", "Factual Attribution Laboratory & Citable Rewrites", report, findings)
     )
 
     rewrites_html = []
     if raw_rewrites:
-        for rw in raw_rewrites[:2]:
+        for rw in raw_rewrites:
             cur = _esc(str(getattr(rw, "current_passage", rw.get("current_passage", "") if isinstance(rw, dict) else ""))[:140])
             rec = _esc(str(getattr(rw, "recommended_rewrite", rw.get("recommended_rewrite", "") if isinstance(rw, dict) else ""))[:140])
             why = _esc(str(getattr(rw, "why", rw.get("why", "Direct entity subject naming prevents RAG pronoun confusion.") if isinstance(rw, dict) else ""))[:120])
@@ -1879,7 +1923,7 @@ def _build_ch_geo_rewrites(report: Any, manifest: Dict[str, Any]) -> str:
     </div>
 
     <h3 style="font-size: 11pt; margin: 14px 0 8px 0; color: #0f172a;">Attribution &amp; Content Findings ({len(findings)})</h3>
-    {_format_finding_cards(findings, limit=6, detailed=True)}
+    {_format_finding_cards(findings, limit=None, detailed=True)}
     """
 
 
@@ -1970,7 +2014,7 @@ def _build_ch_cro_value_prop(report: Any, manifest: Dict[str, Any]) -> str:
     </div>
 
     <h3 style="font-size: 11pt; margin: 14px 0 8px 0; color: #0f172a;">Value Proposition Findings ({len(findings)})</h3>
-    {_format_finding_cards(findings, limit=6, detailed=True)}
+    {_format_finding_cards(findings, limit=None, detailed=True)}
     """
 
 
@@ -2055,7 +2099,7 @@ def _build_ch_cro_cta(report: Any, manifest: Dict[str, Any]) -> str:
     </div>
 
     <h3 style="font-size: 11pt; margin: 14px 0 8px 0; color: #0f172a;">Call-to-Action Findings ({len(findings)})</h3>
-    {_format_finding_cards(findings, limit=6, detailed=True)}
+    {_format_finding_cards(findings, limit=None, detailed=True)}
     """
 
 
@@ -2134,7 +2178,7 @@ def _build_ch_cro_forms(report: Any, manifest: Dict[str, Any]) -> str:
     </div>
 
     <h3 style="font-size: 11pt; margin: 14px 0 8px 0; color: #0f172a;">Form Ergonomics Findings ({len(findings)})</h3>
-    {_format_finding_cards(findings, limit=6, detailed=True)}
+    {_format_finding_cards(findings, limit=None, detailed=True)}
     """
 
 
@@ -2214,7 +2258,7 @@ def _build_ch_cro_trust(report: Any, manifest: Dict[str, Any]) -> str:
     </div>
 
     <h3 style="font-size: 11pt; margin: 14px 0 8px 0; color: #0f172a;">Trust &amp; Credibility Findings ({len(findings)})</h3>
-    {_format_finding_cards(findings, limit=6, detailed=True)}
+    {_format_finding_cards(findings, limit=None, detailed=True)}
     """
 
 
@@ -2278,7 +2322,7 @@ def _build_ch_cro_visual_hierarchy(report: Any, manifest: Dict[str, Any]) -> str
     </div>
 
     <h3 style="font-size: 11pt; margin: 14px 0 8px 0; color: #0f172a;">Visual Hierarchy Findings ({len(findings)})</h3>
-    {_format_finding_cards(findings, limit=6, detailed=True)}
+    {_format_finding_cards(findings, limit=None, detailed=True)}
     """
 
 
@@ -2320,7 +2364,7 @@ def _build_ch_cro_journey(report: Any, manifest: Dict[str, Any]) -> str:
     </div>
 
     <h3 style="font-size: 11pt; margin: 14px 0 8px 0; color: #0f172a;">Journey Mapping Findings ({len(findings)})</h3>
-    {_format_finding_cards(findings, limit=6, detailed=True)}
+    {_format_finding_cards(findings, limit=None, detailed=True)}
     """
 
 
@@ -2354,7 +2398,7 @@ def _build_ch_cro_mobile(report: Any, manifest: Dict[str, Any]) -> str:
     </div>
 
     <h3 style="font-size: 11pt; margin: 14px 0 8px 0; color: #0f172a;">Mobile UX &amp; Touch Target Findings ({len(findings)})</h3>
-    {_format_finding_cards(findings, limit=6, detailed=True)}
+    {_format_finding_cards(findings, limit=None, detailed=True)}
     """
 
 
@@ -2405,7 +2449,7 @@ def _build_ch_cro_accessibility(report: Any, manifest: Dict[str, Any]) -> str:
     </div>
 
     <h3 style="font-size: 11pt; margin: 14px 0 8px 0; color: #0f172a;">Accessibility Findings ({len(findings)})</h3>
-    {_format_finding_cards(findings, limit=6, detailed=True)}
+    {_format_finding_cards(findings, limit=None, detailed=True)}
     """
 
 
@@ -2439,7 +2483,7 @@ def _build_ch_cro_checkout(report: Any, manifest: Dict[str, Any]) -> str:
     </div>
 
     <h3 style="font-size: 11pt; margin: 14px 0 8px 0; color: #0f172a;">Commercial Funnel Findings ({len(findings)})</h3>
-    {_format_finding_cards(findings, limit=6, detailed=True)}
+    {_format_finding_cards(findings, limit=None, detailed=True)}
     """
 
 
@@ -2493,7 +2537,7 @@ def _build_ch_cro_experiments(report: Any, manifest: Dict[str, Any]) -> str:
     </div>
 
     <h3 style="font-size: 11pt; margin: 14px 0 8px 0; color: #0f172a;">Experimentation Proposals &amp; Verification Plan</h3>
-    {_format_finding_cards(findings, limit=6, detailed=True)}
+    {_format_finding_cards(findings, limit=None, detailed=True)}
     """
 
 
@@ -2569,14 +2613,15 @@ def _build_master_audit_index(report: Any, manifest: Dict[str, Any], page_map: D
         ("V", "Visibility Benchmark & AI Citation Rate", p_aeo_vis),
     ]
 
-    findings = _report_findings(report)
-    for f in findings[:12]:
-        title = getattr(f, "title", None) or getattr(f, "name", None) or ""
-        cat = str(getattr(f, "category", "")).upper()
+    findings = _all_report_findings(report, manifest)
+    for f in findings:
+        title = _finding_value(f, "finding_title") or _finding_value(f, "title") or _finding_value(f, "name") or ""
+        raw_cat = _finding_value(f, "category", "")
+        cat = str(getattr(raw_cat, "value", raw_cat) or "").upper()
         if not title:
             continue
         first_letter = title[0].upper() if title[0].isalpha() else "Z"
-        if "GEO" in cat:
+        if "GEO" in cat or cat in _GEO_CANONICAL_CATS:
             target_page = p_geo
         elif "AEO" in cat or "SEARCH" in cat:
             target_page = p_aeo
@@ -2659,7 +2704,22 @@ def build_adaptive_publication_document(
     pages = getattr(manifest_obj, "pages", []) or getattr(report, "page_reports", []) or []
     pages_count = len(pages) if pages else None
     manifest["pages_crawled"] = pages_count
-    findings = _report_findings(report)
+
+    if family in ("GEO", "COMPLETE", "HYBRID"):
+        try:
+            from app.geo.reporting.builder import (
+                load_latest_enterprise_geo_dataset,
+                render_enterprise_geo_dossier_fragment,
+            )
+            ent_geo = load_latest_enterprise_geo_dataset(report)
+            if ent_geo:
+                manifest["_enterprise_geo"] = ent_geo
+                manifest["_enterprise_geo_findings"] = list(ent_geo.get("findings") or [])
+                manifest["_enterprise_geo_html"] = render_enterprise_geo_dossier_fragment(ent_geo)
+        except Exception:
+            pass
+
+    findings = _all_report_findings(report, manifest)
 
     metadata = PublicationMetadata(
         family=family,
@@ -2675,7 +2735,7 @@ def build_adaptive_publication_document(
         grade=grade_val,
         overall_score=score_val,
         pages_crawled=pages_count,
-        findings_count=len(_report_findings(report)),
+        findings_count=len(findings),
         story_summary=str(getattr(report, "story_summary", None) or ""),
         primary_opportunity=str(getattr(report, "primary_strategic_opportunity", None) or ""),
         consultant_advice_what_to_ignore=str(getattr(report, "consultant_advice_what_to_ignore", None) or ""),
@@ -2793,9 +2853,25 @@ def build_adaptive_publication_document(
     initial_pages = compute_toc_pagination(manifest)
     master_index_html = _build_master_audit_index(report, manifest, initial_pages)
 
+    # Enterprise SEO Intelligence Addendum for SEO / COMPLETE / HYBRID books
+    seo_addendum_html = ""
+    if family in ("SEO", "COMPLETE", "HYBRID"):
+        try:
+            from app.seo.reporting.canonical_seo_pdf_bridge import (
+                collect_unified_seo_pdf_bundle,
+                render_enterprise_seo_addendum_html,
+            )
+            bundle = getattr(report, "_unified_seo_bundle", None) or collect_unified_seo_pdf_bundle(
+                report=report, include_deterministic_gap_checks=False
+            )
+            seo_addendum_html = render_enterprise_seo_addendum_html(bundle)
+        except Exception:
+            seo_addendum_html = ""
+
     # Back matter HTML
     evidence_status = _esc(getattr(report, 'certification_status', None) or 'NOT_ASSESSED')
     back_matter = f"""
+    {seo_addendum_html}
     <div class="chapter-start back-matter-page" style="padding: 0 4mm; border-bottom: 4px solid #0f172a;">
         <div class="running-header">
             <div class="running-brand">DRISTIK // AUDIT INDEX &amp; ASSURANCE</div>

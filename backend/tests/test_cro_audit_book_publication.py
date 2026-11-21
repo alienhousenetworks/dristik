@@ -82,6 +82,7 @@ def test_cro_audit_book_renders_all_10_chapters():
 
     html_out = render_cro_audit_book(report)
     assert len(html_out) > 5000
-    assert "Multi-Device Visual Inspection" in html_out
-    assert "Visual User Journey Graph" in html_out
-    assert "Statistical Experimentation Roadmap" in html_out
+    # render_cro_audit_book now renders from the CRO engine (CroIntelligenceReport) plus evidence registries.
+    assert "Executive summary and scorecard" in html_out
+    assert "CTA evidence registry" in html_out
+    assert "Scope register and appendices" in html_out

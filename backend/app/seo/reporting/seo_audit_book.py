@@ -235,25 +235,67 @@ def _finding_card(finding: Any) -> str:
 
     observed = _public_description(finding)
     recommendation = _public_recommendation(finding)
-    shown_urls = ", ".join(f"<code>{_esc(u)}</code>" for u in urls[:5])
-    if len(urls) > 5:
-        shown_urls += f" (+{len(urls) - 5} more)"
+    shown_urls = ", ".join(f"<code>{_esc(u)}</code>" for u in urls)
     urls_html = shown_urls if urls else "No URL was attached."
 
     optional = []
     for field_name, heading in (
+        ("plain_english_summary", "In simple English"),
         ("why_it_matters", "Why it matters"),
         ("business_impact", "Stored business impact"),
         ("root_cause", "Stored root cause"),
         ("expected_condition", "Stored expected condition"),
+        ("developer_instructions", "Developer instructions"),
+        ("relevant_code_or_configuration_example", "Code / configuration patch"),
+        ("acceptance_criteria", "Acceptance criteria"),
         ("validation_criteria", "Stored validation"),
+        ("verification_command", "Verification command"),
+        ("responsible_role", "Responsible role"),
+        ("estimated_effort", "Estimated effort"),
+        ("limitations", "Limitations"),
     ):
         value = str(_get(finding, field_name, "") or "").strip()
         if value:
-            optional.append(
-                f'<div class="finding-field-block"><span class="field-title">{_esc(heading)}:</span>'
-                f'<p class="field-text">{_esc(value)}</p></div>'
+            if field_name in ("developer_instructions", "relevant_code_or_configuration_example"):
+                optional.append(
+                    f'<div class="finding-field-block"><span class="field-title">{_esc(heading)}:</span>'
+                    f'<pre style="background:#0f172a;color:#e2e8f0;padding:6px 8px;border-radius:4px;font-size:7.5pt;white-space:pre-wrap;"><code>{_esc(value)}</code></pre></div>'
+                )
+            else:
+                optional.append(
+                    f'<div class="finding-field-block"><span class="field-title">{_esc(heading)}:</span>'
+                    f'<p class="field-text">{_esc(value)}</p></div>'
+                )
+    ver_steps = _get(finding, "verification_steps", None) or []
+    if ver_steps:
+        optional.append(
+            '<div class="finding-field-block"><span class="field-title">Verification steps:</span>'
+            '<ol style="margin:2px 0 0 18px;font-size:8pt;">'
+            + "".join(f"<li>{_esc(s)}</li>" for s in ver_steps if s)
+            + "</ol></div>"
+        )
+    ev_ids = list(
+        dict.fromkeys(
+            str(x)
+            for x in (
+                list(_get(finding, "evidence_ids", None) or [])
+                + list(_get(finding, "evidence_refs", None) or [])
+                + list(_get(finding, "evidence_references", None) or [])
             )
+            if x
+        )
+    )
+    if ev_ids:
+        optional.append(
+            f'<div class="finding-field-block"><span class="field-title">Evidence references:</span>'
+            f'<p class="field-text"><code>{_esc(", ".join(ev_ids))}</code></p></div>'
+        )
+    deps = [str(d) for d in (_get(finding, "dependencies", None) or _get(finding, "implementation_dependencies", None) or []) if d]
+    if deps:
+        optional.append(
+            f'<div class="finding-field-block"><span class="field-title">Dependencies:</span>'
+            f'<p class="field-text">{_esc(", ".join(deps))}</p></div>'
+        )
     guess_note = (
         '<div class="finding-row note-flag">This observation was marked guessing and is excluded from defect totals.</div>'
         if _is_guessing(finding)
@@ -2154,6 +2196,8 @@ def render_seo_audit_book(report: Any) -> str:
                 status = "ISSUE_VERIFIED"
                 summary = f"{len(defects)} recorded empirical finding(s) in this chapter. {summary}"
             assigned = _assign(section_findings, section["checks"])
+            assigned_ids = {id(item) for items in assigned.values() for item in items}
+            unassigned_findings = [item for item in section_findings if id(item) not in assigned_ids]
             checks_html = []
             line_codes: List[str] = []
             for check in section["checks"]:
@@ -2171,6 +2215,13 @@ def render_seo_audit_book(report: Any) -> str:
                     f"{''.join(_finding_card(item) for item in cards)}"
                     "</article>"
                 )
+            unassigned_html = (
+                "<div class=\"chapter-additional-findings\">"
+                f"<h5>Additional Recorded Findings in Section {_esc(number)} ({len(unassigned_findings)})</h5>"
+                + "".join(_finding_card(item) for item in unassigned_findings)
+                + "</div>"
+                if unassigned_findings else ""
+            )
 
             agent_card = _chapter_agent_consultation_card(book, number, section, section_findings)
             blocks.append(
@@ -2192,6 +2243,7 @@ def render_seo_audit_book(report: Any) -> str:
                 f'<p class="ledger-desc">Deterministic evaluation of each taxonomy parameter under crawled conditions.</p></div>'
                 '<p class="sources-kicker">Sub-index evidence</p>'
                 f"{''.join(checks_html)}"
+                f"{unassigned_html}"
                 f"<div class=\"running-footer\">"
                 f"  <div>TECHNICAL SEO &amp; ON-PAGE AUDIT // SECTION {_esc(number)}</div>"
                 f"  <div class=\"mono\">p. {page_num}</div>"

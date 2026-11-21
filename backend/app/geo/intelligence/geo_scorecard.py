@@ -80,11 +80,11 @@ class GeoScorecardEngine:
     @classmethod
     def calculate_two_layer_scorecard(
         cls,
-        # Layer 1 Inputs (Crawl Evidence)
-        entity_clarity_score: float = 80.0,
-        content_extractability_score: float = 75.0,
-        crawler_accessibility_score: float = 90.0,
-        factual_grounding_score: float = 70.0,
+        # Layer 1 Inputs (Crawl Evidence — None means unmeasured, never silently defaulted)
+        entity_clarity_score: Optional[float] = None,
+        content_extractability_score: Optional[float] = None,
+        crawler_accessibility_score: Optional[float] = None,
+        factual_grounding_score: Optional[float] = None,
         # Layer 2 Inputs (Live Telemetry - Optional)
         live_connectors_ran: bool = False,
         external_authority_score: Optional[float] = None,
@@ -94,7 +94,7 @@ class GeoScorecardEngine:
     ) -> TwoLayerGeoScorecardReport:
         dim_list: List[GeoScoreDimension] = []
 
-        # 1. Compute Layer 1: GEO Content Readiness
+        # 1. Compute Layer 1: GEO Content Readiness (renormalize strictly over measured dimensions)
         l1_scores = {
             "entity_clarity": entity_clarity_score,
             "content_extractability": content_extractability_score,
@@ -102,57 +102,90 @@ class GeoScorecardEngine:
             "factual_grounding": factual_grounding_score,
         }
 
-        l1_sum = 0.0
+        l1_weighted = 0.0
+        l1_weight_used = 0.0
         for k, meta in cls.LAYER_1_DIMENSIONS.items():
-            sc = l1_scores.get(k, 0.0)
-            l1_sum += sc * meta["weight"]
-            dim_list.append(
-                GeoScoreDimension(
-                    dimension_key=k,
-                    dimension_name=meta["name"],
-                    layer="LAYER_1_READINESS",
-                    weight=meta["weight"],
-                    is_measured=True,
-                    score=round(sc, 1),
-                    grade=cls._grade(sc),
-                    measurement_notes="Computed deterministically from crawl and DOM evidence.",
-                )
-            )
-
-        l1_composite = round(l1_sum, 1)
-
-        # 2. Compute Layer 2: Observed AI Visibility (Guarded)
-        if live_connectors_ran and all(
-            v is not None for v in [external_authority_score, ai_mention_score, citation_score, competitive_score]
-        ):
-            l2_scores = {
-                "external_authority": external_authority_score,
-                "ai_mention_visibility": ai_mention_score,
-                "citation_visibility": citation_score,
-                "competitive_positioning": competitive_score,
-            }
-            l2_sum = 0.0
-            for k, meta in cls.LAYER_2_DIMENSIONS.items():
-                sc = l2_scores.get(k, 0.0)
-                l2_sum += sc * meta["weight"]
+            sc = l1_scores.get(k)
+            if sc is not None:
+                l1_weighted += sc * meta["weight"]
+                l1_weight_used += meta["weight"]
                 dim_list.append(
                     GeoScoreDimension(
                         dimension_key=k,
                         dimension_name=meta["name"],
-                        layer="LAYER_2_VISIBILITY",
+                        layer="LAYER_1_READINESS",
                         weight=meta["weight"],
                         is_measured=True,
                         score=round(sc, 1),
                         grade=cls._grade(sc),
-                        measurement_notes="Verified via live AI search engine benchmarking.",
+                        measurement_notes="Computed deterministically from crawl and DOM evidence.",
+                    )
+                )
+            else:
+                dim_list.append(
+                    GeoScoreDimension(
+                        dimension_key=k,
+                        dimension_name=meta["name"],
+                        layer="LAYER_1_READINESS",
+                        weight=meta["weight"],
+                        is_measured=False,
+                        score=None,
+                        grade="N/A",
+                        measurement_notes="Unmeasured: no crawl evidence supplied for this dimension.",
                     )
                 )
 
-            l2_composite = round(l2_sum, 1)
-            l2_status = "MEASURED"
+        l1_composite = round(l1_weighted / l1_weight_used, 1) if l1_weight_used > 0 else 0.0
+        l1_status = "MEASURED" if l1_weight_used > 0 else "NOT_MEASURED"
+
+        # 2. Compute Layer 2: Observed AI Visibility (Guarded — partial dimensions supported honestly)
+        l2_scores = {
+            "external_authority": external_authority_score,
+            "ai_mention_visibility": ai_mention_score,
+            "citation_visibility": citation_score,
+            "competitive_positioning": competitive_score,
+        }
+        measured_l2 = {k: v for k, v in l2_scores.items() if v is not None}
+        if live_connectors_ran and measured_l2:
+            l2_weighted = 0.0
+            l2_weight_used = 0.0
+            for k, meta in cls.LAYER_2_DIMENSIONS.items():
+                sc = l2_scores.get(k)
+                if sc is not None:
+                    l2_weighted += sc * meta["weight"]
+                    l2_weight_used += meta["weight"]
+                    dim_list.append(
+                        GeoScoreDimension(
+                            dimension_key=k,
+                            dimension_name=meta["name"],
+                            layer="LAYER_2_VISIBILITY",
+                            weight=meta["weight"],
+                            is_measured=True,
+                            score=round(sc, 1),
+                            grade=cls._grade(sc),
+                            measurement_notes="Verified via live AI search engine benchmarking.",
+                        )
+                    )
+                else:
+                    dim_list.append(
+                        GeoScoreDimension(
+                            dimension_key=k,
+                            dimension_name=meta["name"],
+                            layer="LAYER_2_VISIBILITY",
+                            weight=meta["weight"],
+                            is_measured=False,
+                            score=None,
+                            grade="N/A",
+                            measurement_notes="Unmeasured for this run.",
+                        )
+                    )
+
+            l2_composite = round(l2_weighted / l2_weight_used, 1) if l2_weight_used > 0 else None
+            l2_status = "MEASURED" if len(measured_l2) == len(cls.LAYER_2_DIMENSIONS) else "PARTIAL"
             firewall_stmt = (
-                f"Both layers assessed: Layer 1 Content Readiness ({l1_composite}/100) reflects site extractability; "
-                f"Layer 2 Observed AI Visibility ({l2_composite}/100) reflects verified live engine citations."
+                f"Both layers assessed separately: Layer 1 Content Readiness ({l1_composite}/100) reflects site extractability; "
+                f"Layer 2 Observed AI Visibility ({l2_composite}/100, {len(measured_l2)}/{len(cls.LAYER_2_DIMENSIONS)} dims) reflects verified live responses. "
+                "The two layers are never merged into an artificial score."
             )
         else:
             # Firewall triggered: Layer 2 is strictly NOT_MEASURED
@@ -181,12 +214,12 @@ class GeoScorecardEngine:
 
         return TwoLayerGeoScorecardReport(
             layer_1_readiness_score=l1_composite,
-            layer_1_readiness_grade=cls._grade(l1_composite),
-            layer_1_status="MEASURED",
+            layer_1_readiness_grade=cls._grade(l1_composite) if l1_weight_used > 0 else "N/A",
+            layer_1_status=l1_status,
             layer_2_visibility_score=l2_composite,
             layer_2_visibility_grade=cls._grade(l2_composite),
             layer_2_status=l2_status,
-            is_visibility_measured=(l2_status == "MEASURED"),
+            is_visibility_measured=(l2_status in ("MEASURED", "PARTIAL")),
             dimensions=dim_list,
             firewall_disclosure_statement=firewall_stmt,
         )
