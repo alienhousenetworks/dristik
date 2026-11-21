@@ -30,6 +30,46 @@ def test_role_order_prefers_commercial_and_pricing_over_blog():
     assert "/blog/" not in ordered[3]
 
 
+def test_role_order_reserves_one_url_per_role_when_many_commercial_urls_exist():
+    crawler = CrawlerService()
+    urls = ["https://example.com/"] + [f"https://example.com/services/{i}" for i in range(8)] + [
+        "https://example.com/pricing",
+        "https://example.com/about",
+        "https://example.com/contact",
+        "https://example.com/blog/post",
+    ]
+    ordered = crawler._order_for_roles(urls, crawled_pages=[])
+    top = [url.rstrip("/") for url in ordered[:5]]
+    assert top == [
+        "https://example.com",
+        "https://example.com/services/0",
+        "https://example.com/pricing",
+        "https://example.com/services/1",
+        "https://example.com/about",
+    ]
+
+
+def test_role_order_fills_missing_roles_after_a_partial_crawl():
+    crawler = CrawlerService()
+    crawled = [
+        type("Page", (), {"url": "https://example.com/"})(),
+        type("Page", (), {"url": "https://example.com/services/0"})(),
+    ]
+    urls = [
+        "https://example.com/services/1",
+        "https://example.com/services/2",
+        "https://example.com/pricing",
+        "https://example.com/about",
+        "https://example.com/blog/post",
+    ]
+    ordered = crawler._order_for_roles(urls, crawled_pages=crawled)
+    assert [url.rstrip("/") for url in ordered[:3]] == [
+        "https://example.com/pricing",
+        "https://example.com/services/1",
+        "https://example.com/about",
+    ]
+
+
 def test_restaurant_matrix_does_not_invent_a_software_category():
     suite = benchmark_generator.generate_suite(
         domain="example-bistro.com",

@@ -66,6 +66,10 @@ def order_for_roles(urls: List[str], crawled_pages: List[Any]) -> List[str]:
     """
     Fill unfilled roles before spending the remaining budget on the priority queue.
     Homepage, primary commercial, high-intent, a second commercial URL, then proof.
+
+    Each open role reserves one URL. Scoring every commercial URL with the same
+    bonus lets a long product list take the whole budget in one batch and leave
+    pricing, contact, and about unfetched.
     """
     commercial_count = 0
     filled = set()
@@ -79,20 +83,33 @@ def order_for_roles(urls: List[str], crawled_pages: List[Any]) -> List[str]:
         elif role != "other":
             filled.add(role)
 
+    # Slot bonuses are 1000 apart. page_priority is at most 100, so a reserved
+    # role stays ahead of every later role and of the unreserved remainder.
+    open_slots = []
+    if "homepage" not in filled:
+        open_slots.append(("homepage", 5000))
+    if "commercial" not in filled:
+        open_slots.append(("commercial", 4000))
+    if "high_intent" not in filled:
+        open_slots.append(("high_intent", 3000))
+    if "secondary_commercial" not in filled:
+        open_slots.append(("commercial", 2000))
+    if "proof" not in filled:
+        open_slots.append(("proof", 1000))
+
+    remaining = list(urls)
+    slot_bonus = {}
+    for role, bonus in open_slots:
+        candidates = [url for url in remaining if url_role(url) == role]
+        if not candidates:
+            continue
+        # Equal priority keeps the earlier discovered URL.
+        chosen = sorted(candidates, key=page_priority, reverse=True)[0]
+        slot_bonus[chosen] = bonus
+        remaining.remove(chosen)
+
     def rank(url: str) -> int:
-        role = url_role(url)
-        bonus = 0
-        if role == "homepage" and "homepage" not in filled:
-            bonus = 5000
-        elif role == "commercial" and "commercial" not in filled:
-            bonus = 4000
-        elif role == "high_intent" and "high_intent" not in filled:
-            bonus = 3000
-        elif role == "commercial" and "secondary_commercial" not in filled:
-            bonus = 2000
-        elif role == "proof" and "proof" not in filled:
-            bonus = 1000
-        return bonus + page_priority(url)
+        return slot_bonus.get(url, 0) + page_priority(url)
 
     return sorted(urls, key=rank, reverse=True)
 
