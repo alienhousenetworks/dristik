@@ -44,6 +44,7 @@ from app.reports.pdf_generator import router as reports_router
 from app.api.routes.audits.reports_progressive import router as reports_progressive_router
 from app.tenancy.white_label import router as white_label_router
 from app.api.copilot import router as copilot_router
+from app.api.routes.platform.seo_tools import router as seo_tools_router
 
 # Mounted at both /api/v1 and /api.
 # The in-memory SCIM and SAML configure routes stay unmounted until they
@@ -87,6 +88,7 @@ _PREFIXED_ROUTERS = (
     audit_logs_router,
     white_label_router,
     copilot_router,
+    seo_tools_router,
 )
 
 

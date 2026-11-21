@@ -1042,6 +1042,16 @@ async def mcp_json_rpc(request: Request, background_tasks: BackgroundTasks, user
              "inputSchema": {"type": "object", "properties": {"message": {"type": "string"}}}},
             {"name": "dristik_send_message", "description": "Send a two-way message, query, or check-in between external AI client and Dristik.",
              "inputSchema": {"type": "object", "required": ["message"], "properties": {"message": {"type": "string"}, "metadata": {"type": "object"}}}},
+            {"name": "dristik_seo_weekly_checkin", "description": "Your Monday SEO meeting in one question: composite health score, score delta, top blockers, AI crawler readiness, and quick wins.",
+             "inputSchema": {"type": "object", "properties": {"analysis_id": {"type": "string", "description": "Optional specific analysis ID. Defaults to latest completed audit."}}}},
+            {"name": "dristik_ai_crawler_check", "description": "Inspect robots.txt directives for AI search retrieval bots (OAI-SearchBot, PerplexityBot) vs model training bots (GPTBot, ClaudeBot, Google-Extended).",
+             "inputSchema": {"type": "object", "required": ["target"], "properties": {"target": {"type": "string", "description": "Target domain or homepage URL"}, "robots_txt": {"type": "string", "description": "Optional raw robots.txt text to evaluate instead of live fetching"}}}},
+            {"name": "dristik_llmstxt_tool", "description": "Validate or generate an llms.txt standard file for AI answer engines (ChatGPT, Perplexity, Claude).",
+             "inputSchema": {"type": "object", "required": ["action"], "properties": {"action": {"type": "string", "enum": ["validate", "generate"]}, "content": {"type": "string"}, "biz_name": {"type": "string"}, "summary": {"type": "string"}, "canonical_domain": {"type": "string"}}}},
+            {"name": "dristik_grounded_content_draft", "description": "Generate an SEO/GEO article or brief with explicit bracketed citations [1], [2] strictly anchored to verified evidence tokens or URLs.",
+             "inputSchema": {"type": "object", "required": ["topic", "brand_name", "domain"], "properties": {"topic": {"type": "string"}, "brand_name": {"type": "string"}, "domain": {"type": "string"}, "key_points": {"type": "array", "items": {"type": "string"}}, "evidence_tokens": {"type": "array", "items": {"type": "object"}}}}},
+            {"name": "dristik_ai_visibility_gap", "description": "Analyze AI search visibility and break down which third-party domains (Reddit, G2, competitor sites) AI engines cited instead of your brand.",
+             "inputSchema": {"type": "object", "required": ["domain", "brand_name", "query_evaluations"], "properties": {"domain": {"type": "string"}, "brand_name": {"type": "string"}, "query_evaluations": {"type": "array", "items": {"type": "object"}}}}},
         ]}
         scope_for_tool = {
             "dristik_capabilities_list": "capabilities.list",
@@ -1082,6 +1092,11 @@ async def mcp_json_rpc(request: Request, background_tasks: BackgroundTasks, user
             "dristik_connector_status": "connector.read",
             "dristik_ping": "capabilities.list",
             "dristik_send_message": "tasks.message",
+            "dristik_seo_weekly_checkin": "report.read",
+            "dristik_ai_crawler_check": "capabilities.list",
+            "dristik_llmstxt_tool": "capabilities.list",
+            "dristik_grounded_content_draft": "report.read",
+            "dristik_ai_visibility_gap": "citations.track",
         }
         result["tools"] = [tool for tool in result["tools"]
                            if _mcp_authorized(user, scope_for_tool[tool["name"]])]
@@ -1638,6 +1653,80 @@ async def mcp_json_rpc(request: Request, background_tasks: BackgroundTasks, user
                 "org_id": user.org_id,
                 "ack": "Message acknowledged by Dristik Brain controller.",
             }
+            result = {"content": [{"type": "text", "text": _json(payload)}], "structuredContent": payload}
+        elif name == "dristik_seo_weekly_checkin":
+            if not _mcp_authorized(user, "report.read", "mission:read"):
+                raise HTTPException(status_code=403, detail="Connection grant does not permit report access.")
+            from app.seo.seo_tools import generate_weekly_seo_checkin
+            from app.identity.access import require_analysis
+            analysis_id = args.get("analysis_id")
+            run = None
+            if analysis_id and isinstance(analysis_id, str):
+                run = require_analysis(analysis_id, user)
+            else:
+                try:
+                    with _db() as conn:
+                        row = conn.execute(
+                            "SELECT id FROM analyses WHERE org_id=? ORDER BY created_at DESC LIMIT 1",
+                            (user.org_id,),
+                        ).fetchone()
+                        if row:
+                            run = require_analysis(row[0], user)
+                except Exception:
+                    run = None
+            payload = generate_weekly_seo_checkin(run)
+            result = {"content": [{"type": "text", "text": _json(payload)}], "structuredContent": payload}
+        elif name == "dristik_ai_crawler_check":
+            if not _mcp_authorized(user, "capabilities.list", "mission:read"):
+                raise HTTPException(status_code=403, detail="Connection grant does not permit crawler check.")
+            target = args.get("target")
+            if not target or not isinstance(target, str):
+                raise HTTPException(status_code=400, detail="target is required.")
+            from app.seo.seo_tools import check_ai_crawlers_for_target
+            payload = await check_ai_crawlers_for_target(target, robots_txt=args.get("robots_txt"))
+            result = {"content": [{"type": "text", "text": _json(payload)}], "structuredContent": payload}
+        elif name == "dristik_llmstxt_tool":
+            if not _mcp_authorized(user, "capabilities.list", "mission:read"):
+                raise HTTPException(status_code=403, detail="Connection grant does not permit llms.txt tooling.")
+            from app.seo.seo_tools import validate_llms_txt, generate_llms_txt
+            action = str(args.get("action") or "validate").lower()
+            if action == "generate":
+                gen_text = generate_llms_txt(
+                    biz_name=args.get("biz_name") or "Platform",
+                    summary=args.get("summary") or "AI and search engine intelligence",
+                    canonical_domain=args.get("canonical_domain") or "https://example.com",
+                )
+                payload = {"llms_txt": gen_text, "action": "generate", "length": len(gen_text)}
+            else:
+                payload = validate_llms_txt(args.get("content") or "")
+            result = {"content": [{"type": "text", "text": _json(payload)}], "structuredContent": payload}
+        elif name == "dristik_grounded_content_draft":
+            if not _mcp_authorized(user, "report.read", "mission:read"):
+                raise HTTPException(status_code=403, detail="Connection grant does not permit content draft access.")
+            topic = args.get("topic")
+            brand_name = args.get("brand_name")
+            domain = args.get("domain")
+            if not topic or not brand_name or not domain:
+                raise HTTPException(status_code=400, detail="topic, brand_name, and domain are required.")
+            from app.seo.seo_tools import draft_grounded_content_with_citations
+            payload = draft_grounded_content_with_citations(
+                topic=topic,
+                brand_name=brand_name,
+                domain=domain,
+                key_points=args.get("key_points"),
+                evidence_tokens=args.get("evidence_tokens"),
+            )
+            result = {"content": [{"type": "text", "text": _json(payload)}], "structuredContent": payload}
+        elif name == "dristik_ai_visibility_gap":
+            if not _mcp_authorized(user, "citations.track", "mission:read"):
+                raise HTTPException(status_code=403, detail="Connection grant does not permit citation tracking.")
+            domain = args.get("domain")
+            brand_name = args.get("brand_name")
+            q_evals = args.get("query_evaluations") or []
+            if not domain or not brand_name:
+                raise HTTPException(status_code=400, detail="domain and brand_name are required.")
+            from app.seo.seo_tools import analyze_ai_visibility_gap
+            payload = analyze_ai_visibility_gap(domain, brand_name, q_evals)
             result = {"content": [{"type": "text", "text": _json(payload)}], "structuredContent": payload}
         else:
             return {"jsonrpc": "2.0", "id": request_id, "error": {"code": -32601, "message": "Unknown tool."}}
