@@ -1066,15 +1066,24 @@ class ValidationGate:
         }
 
         # Gate 02: Evidence Reference Integrity
-        ledger_keys = set(report.evidence_ledger.keys()) if isinstance(report.evidence_ledger, dict) else set()
+        ledger = report.evidence_ledger if isinstance(report.evidence_ledger, dict) else {}
+        ledger_keys = set(ledger.keys())
         unresolvable_refs = []
         cross_run_refs = []
         for f in (report.findings or []):
+            embedded_ids = set()
+            for evidence in (getattr(f, "evidence", None) or []):
+                evidence_id = evidence.get("evidence_id") if isinstance(evidence, dict) else getattr(evidence, "evidence_id", None)
+                if evidence_id:
+                    embedded_ids.add(str(evidence_id))
             for ref in (getattr(f, "evidence_ids", None) or getattr(f, "evidence_refs", None) or []):
-                if ledger_keys and ref not in ledger_keys:
+                ref = str(ref)
+                # Evidence attached to the finding is the observation. It resolves
+                # even when an analyzer did not copy that ID into the ledger.
+                if ledger_keys and ref not in ledger_keys and ref not in embedded_ids:
                     unresolvable_refs.append(ref)
                 if hasattr(report, "analysis_id") and report.analysis_id:
-                    ev_item = report.evidence_ledger.get(ref) if isinstance(report.evidence_ledger, dict) else None
+                    ev_item = ledger.get(ref)
                     if isinstance(ev_item, dict) and ev_item.get("audit_run_id") and ev_item.get("audit_run_id") != report.analysis_id:
                         cross_run_refs.append(ref)
         ev_ref_ok = len(unresolvable_refs) == 0 and len(cross_run_refs) == 0

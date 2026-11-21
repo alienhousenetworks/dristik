@@ -2190,6 +2190,9 @@ class AnalysisOrchestrator:
             except Exception as ch_synth_err:
                 logger.info("Chapter narratives pre-synthesis note: %s", ch_synth_err)
 
+            from app.reports.evidence_ledger import merge_finding_evidence
+            merge_finding_evidence(evidence_ledger_map, final_findings)
+
             report = ExecutiveReport(
                 chapter_narratives=chapter_narratives_map,
                 report_id=report_uuid,
