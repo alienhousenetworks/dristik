@@ -770,6 +770,14 @@ class AnalysisOrchestrator:
 
         counts = await asyncio.gather(*[_review_batch(i, b) for i, b in enumerate(batches)])
         reviewed_total = sum(counts)
+
+        # Single targeted retry pass for deterministic findings omitted by Pass 1
+        missed_det = [f for f in det_findings if f.finding_id not in verifications_map]
+        if missed_det and reviewed_total > 0:
+            retry_batches = [missed_det[i:i + batch_size] for i in range(0, len(missed_det), batch_size)]
+            retry_counts = await asyncio.gather(*[_review_batch(len(batches) + i, b) for i, b in enumerate(retry_batches)])
+            reviewed_total += sum(retry_counts)
+
         verdict_vals = [v.get("verdict") for v in verifications_map.values()]
         status = (
             "completed"
@@ -2528,6 +2536,57 @@ class AnalysisOrchestrator:
                     for competitor in getattr(competitor_seo_parity_rep, "competitors", []) or []:
                         if not getattr(competitor, "is_target", False) and getattr(competitor, "domain", None):
                             competitor_domains.append(competitor.domain)
+
+                # Safe-mode Playwright CRO browser & journey execution (bounded, non-destructive, fail-open)
+                cro_browser_summary: Optional[Dict[str, Any]] = None
+                should_run_cro_browser = (
+                    (effective_pillars is None or "cro" in effective_pillars)
+                    and bool(eval_pages)
+                    and (not os.environ.get("PYTEST_CURRENT_TEST") or os.environ.get("DRISTIK_CRO_BROWSER_IN_TESTS") == "1")
+                )
+                if should_run_cro_browser:
+                    try:
+                        from app.cro.browser_testing import CROBrowserTestingEngine
+                        from app.cro.models import CROPage
+
+                        bt_engine = CROBrowserTestingEngine()
+                        raw_map = getattr(blackboard, "raw_html_map", None) or {}
+                        rendered_ok = 0
+                        interactions_ok = 0
+                        for idx_p, pg in enumerate(eval_pages[:3]):
+                            pg_url = getattr(pg, "url", None) or ""
+                            if not pg_url:
+                                continue
+                            cro_pg = CROPage(
+                                audit_id=analysis_id,
+                                tenant_id=str(getattr(run, "org_id", None) or "default"),
+                                url=pg_url,
+                                page_type="homepage" if idx_p == 0 else "landing",
+                            )
+                            snaps, _elems, inters = await asyncio.wait_for(
+                                bt_engine.audit_page(
+                                    tenant_id=str(getattr(run, "org_id", None) or "default"),
+                                    audit_id=analysis_id,
+                                    page=cro_pg,
+                                    raw_html=raw_map.get(pg_url),
+                                    viewports=("desktop", "mobile"),
+                                    safe_mode=True,
+                                    use_live_browser=True,
+                                ),
+                                timeout=20.0,
+                            )
+                            if any(getattr(s, "execution_mode", "") == "live_browser" for s in (snaps or [])):
+                                rendered_ok += 1
+                            interactions_ok += len([it for it in (inters or []) if getattr(it, "status", "") in ("passed", "failed", "blocked_by_safe_mode")])
+                        if rendered_ok > 0 or interactions_ok > 0:
+                            cro_browser_summary = {
+                                "rendered_pages": rendered_ok,
+                                "interaction_tests_executed": interactions_ok,
+                                "journey_execution_status": "EXECUTED_SAFE_MODE" if interactions_ok > 0 else "RENDERED_ONLY",
+                            }
+                    except Exception as cro_bt_err:
+                        logger.info("CRO safe-mode browser execution note (fail-open): %s", cro_bt_err)
+
                 rebuilt_cro_intel = build_cro_intelligence(
                     pages=eval_pages,
                     raw_html_map=getattr(blackboard, "raw_html_map", None),
@@ -2537,6 +2596,7 @@ class AnalysisOrchestrator:
                     wcag=wcag_audit_rep,
                     competitor_domains=competitor_domains,
                     discovered_urls=getattr(manifest, "total_pages_discovered", None) if manifest else None,
+                    browser_tests=cro_browser_summary,
                 ).model_dump()
                 journey_eval = evaluate_conversion_journey(eval_pages, blackboard.business_profile)
                 rebuilt_cro_intel["conversion_journey"] = journey_eval

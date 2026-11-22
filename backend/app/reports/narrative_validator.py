@@ -29,10 +29,13 @@ _RAW_DIGIT_RE = re.compile(
     r"(?:[\$₹€£¥]\s*\d|\b\d+(?:[.,]\d+)?\s*(?:%|x\b|times\b|hours?\b|days?\b|weeks?\b|months?\b|years?\b)?|\d)",
     re.IGNORECASE,
 )
-# Allowlist of non-metric domain tokens that legitimately contain digits (never scores/metrics)
+# Allowlist of non-metric domain tokens that legitimately contain digits (never fabricated business metrics)
 _ALLOWED_DOMAIN_TOKENS = re.compile(
     r"\b(?:h[1-6]|http/[123]|https?|wcag\s*2(?:\.[012])?|ga4|b2b|b2c|d2c|b2g|iso\s*27001|soc\s*2|"
-    r"sha-?256|utf-?8|html5|css3|tls\s*1\.[23]|aes-?256|json-ld|p[0-3]|7/30/90|30/60/90|404|301|302|500|200)\b",
+    r"sha-?256|utf-?8|html5|css3|tls\s*1\.[23]|aes-?256|json-ld|p[0-3]|7/30/90|30/60/90|"
+    r"404|301|302|307|308|403|410|500|502|503|200|"
+    r"580px|44px|40-60|5-second|6-question|8-dimension|10-step|"
+    r"find_\d+|finding-[a-z]+-\d+|acc_wcag_[0-9_a-z]+|root_rc_[0-9_a-z]+|cro-\d+)\b",
     re.IGNORECASE,
 )
 _SENTENCE_SPLIT_RE = re.compile(r"(?<=[.!?])\s+|\n+")

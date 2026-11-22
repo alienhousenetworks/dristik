@@ -621,6 +621,19 @@ def _build_ch_brief(report: Any, manifest: Dict[str, Any]) -> str:
     cro_s = snap.score_for_section("cro")
     comp_s = snap.score_for_section("competitors")
     provenance_bar = render_snapshot_provenance_bar(snap)
+    from app.reports.publication_status import render_verification_standard_banner
+    from app.reports.pdf_evidence_blocks import render_page_evidence_table
+    verification_banner = render_verification_standard_banner(
+        _all_report_findings(report, manifest),
+        narrative_mode=getattr(report, "narrative_mode", None),
+    )
+    crawl_manifest_obj = getattr(report, "crawl_manifest", None)
+    sampled_pages = list(getattr(crawl_manifest_obj, "pages", None) or getattr(report, "page_reports", None) or [])
+    evidence_table_html = render_page_evidence_table(
+        sampled_pages,
+        title="Observed First-Party Crawl & DOM Evidence Ledger",
+        max_rows=10,
+    )
 
     callout = render_section_business_callout(
         generate_section_explanation("ch_brief", "Executive Diagnostic Briefing", report, _report_findings(report))
@@ -646,6 +659,8 @@ def _build_ch_brief(report: Any, manifest: Dict[str, Any]) -> str:
 
     return f"""
     {provenance_bar}
+    {verification_banner}
+    {evidence_table_html}
     {callout}
 
     <div class="card" style="margin-bottom: 16px; padding: 18px; border-left: 3.5px solid #0284c7;">
@@ -799,6 +814,81 @@ def _build_ch_seo(report: Any, manifest: Dict[str, Any]) -> str:
     """
 
 
+_GEO_CANONICAL_DIMS = [
+    (("citation_readiness", "passage_density"), "01. Passage Density", "Self-contained 40-60 word definition passages at start of core sections."),
+    (("structured_data_quality", "structured_data", "schema_graph"), "02. Schema Knowledge Graph", "Structured Organization, Product, and FAQPage JSON-LD nodes."),
+    (("entity_clarity",), "03. Entity Identity & Disambiguation", "Unambiguous corporate identity linking domain to corporate records."),
+    (("factual_grounding", "factual_consistency"), "04. Factual Grounding", "Verifiable claims with specific dates, methodologies, and metrics."),
+    (("answerability", "question_coverage"), "05. Commercial Inquiries", "Coverage of high-intent buyer questions: identity, pricing, capabilities."),
+    (("retrieval_accessibility", "ai_crawler_accessibility", "crawler_directives"), "06. AI Bot Permissions", "Explicit robots.txt crawler directives and /llms.txt discovery endpoints."),
+    (("content_extractability", "format_adaptability"), "07. Structured Formats & Extractability", "Semantic headings, comparison tables, FAQs, and machine-readable blocks."),
+    (("ai_engine_visibility", "live_ai_citations", "external_authority", "hallucination_defense"), "08. Live AI Engine Visibility", "Direct citation verification across live AI search engines."),
+]
+
+
+def _render_geo_dimension_cards(geo: Any, *, compact: bool = False) -> str:
+    """Render the 8 GEO extractability dimension cards using canonical GeoDimensionKey lookups."""
+    dimension_scores = getattr(geo, "dimension_scores", {}) or {}
+    dimensions_list = getattr(geo, "dimensions", []) or []
+    dim_cards_html: List[str] = []
+
+    for candidate_keys, label, fallback_desc in _GEO_CANONICAL_DIMS:
+        d_obj = None
+        for k in candidate_keys:
+            if k in dimension_scores and dimension_scores[k] is not None:
+                d_obj = dimension_scores[k]
+                break
+
+        if d_obj is None:
+            for d in dimensions_list:
+                dk = str(getattr(d, "key", "") or "").strip().lower()
+                if dk in candidate_keys:
+                    d_obj = d
+                    break
+
+        if d_obj is not None:
+            is_measured = getattr(d_obj, "is_measured", True) if not isinstance(d_obj, dict) else d_obj.get("is_measured", True)
+            raw_band = getattr(d_obj, "band", None) if not isinstance(d_obj, dict) else d_obj.get("band")
+            raw_score = getattr(d_obj, "score", None) if not isinstance(d_obj, dict) else d_obj.get("score")
+            raw_summary = getattr(d_obj, "summary", None) if not isinstance(d_obj, dict) else d_obj.get("summary")
+            if is_measured is False or str(raw_band or "").lower() == "unmeasured":
+                band = "NOT MEASURED"
+                score_num = None
+                summary = str(raw_summary or "Requires live connector or external measurement.")
+            else:
+                band = str(raw_band or "MODERATE").upper()
+                score_num = float(raw_score) if isinstance(raw_score, (int, float)) else None
+                summary = str(raw_summary or fallback_desc)
+        else:
+            band = "NOT MEASURED"
+            score_num = None
+            summary = "Dimension not individually scored in this run; the aggregate score is not used to infer a per-dimension result."
+
+        band_color = (
+            "#15803d" if band in ("HIGH", "PASS")
+            else ("#b45309" if band in ("PARTIAL", "MODERATE", "MEDIUM")
+                  else ("#64748b" if band == "NOT MEASURED" else "#b91c1c"))
+        )
+        badge_text = f"{score_num:.0f}/100 · {band}" if score_num is not None else band
+        font_sz = "7.5pt" if compact else "8pt"
+        radius = "2px" if compact else "4px"
+        score_badge = (
+            f'<span style="font-family:monospace;font-size:{font_sz};font-weight:700;color:{band_color};'
+            f'border:1px solid {band_color}40;padding:2px 6px;border-radius:{radius};background:{band_color}10;">'
+            f'{_esc(badge_text)}</span>'
+        )
+        dim_cards_html.append(
+            f'<div class="card" style="padding:10px 12px;break-inside:avoid;">'
+            f'  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">'
+            f'    <span style="font-size:{"8pt" if compact else "8.5pt"};font-weight:700;color:#0f172a;">{_esc(label)}</span>'
+            f'    {score_badge}'
+            f'  </div>'
+            f'  <p style="font-size:7.5pt;color:#475569;margin:0;line-height:1.4;">{_esc(summary)}</p>'
+            f'</div>'
+        )
+    return "".join(dim_cards_html)
+
+
 def _build_ch_geo(report: Any, manifest: Dict[str, Any]) -> str:
     geo = getattr(report, "geo_readiness", None)
     score_ext = getattr(geo, "extractability_score", None)
@@ -843,51 +933,7 @@ def _build_ch_geo(report: Any, manifest: Dict[str, Any]) -> str:
     )
 
     # 1. 8-Dimension Extractability Grid
-    dim_items = []
-    dimension_scores = getattr(geo, "dimension_scores", {}) or {}
-    dimensions_list = getattr(geo, "dimensions", []) or []
-
-    STANDARD_DIMS = [
-        ("passage_density", "01. Passage Density", "Self-contained 40-60 word definition passages at start of core sections."),
-        ("schema_graph", "02. Schema Knowledge Graph", "Structured Organization, Product, and FAQPage JSON-LD nodes."),
-        ("entity_clarity", "03. Entity Identity & Disambiguation", "Unambiguous corporate identity linking domain to corporate records."),
-        ("factual_grounding", "04. Factual Grounding", "Verifiable claims with specific dates, methodologies, and metrics."),
-        ("question_coverage", "05. Commercial Inquiries", "Coverage of high-intent buyer questions: identity, pricing, capabilities."),
-        ("crawler_directives", "06. AI Bot Permissions", "Explicit robots.txt crawler directives and /llms.txt discovery endpoints."),
-        ("hallucination_defense", "07. Brand Protection", "Absence of cross-page contradictions and speculative superlatives."),
-        ("format_adaptability", "08. Structured Formats", "Semantic comparison tables, modular FAQs, and bulleted specifications."),
-    ]
-
-    dim_cards_html = []
-    for key, label, fallback_desc in STANDARD_DIMS:
-        d_obj = dimension_scores.get(key)
-        if d_obj:
-            band = str(getattr(d_obj, "band", "MODERATE") if hasattr(d_obj, "band") else d_obj.get("band", "MODERATE")).upper()
-            summary = str(getattr(d_obj, "summary", fallback_desc) if hasattr(d_obj, "summary") else d_obj.get("summary", fallback_desc))
-            score_num = getattr(d_obj, "score", None) if hasattr(d_obj, "score") else d_obj.get("score")
-        else:
-            found_dim = next((d for d in dimensions_list if getattr(d, "key", "") == key or getattr(d, "label", "").lower() in label.lower()), None)
-            if found_dim:
-                band = str(getattr(found_dim, "band", "MODERATE")).upper()
-                summary = str(getattr(found_dim, "summary", fallback_desc))
-                score_num = getattr(found_dim, "score", None)
-            else:
-                band = "NOT MEASURED"
-                summary = "Dimension not individually scored in this run; the aggregate score is not used to infer a per-dimension result."
-                score_num = score_ext
-
-        band_color = "#10b981" if band in ("HIGH", "PASS") else ("#f59e0b" if band in ("PARTIAL", "MODERATE") else ("#64748b" if band == "NOT MEASURED" else "#ef4444"))
-        score_badge = f'<span style="font-family:monospace;font-size:8pt;font-weight:700;color:{band_color};border:1px solid {band_color}40;padding:2px 6px;border-radius:4px;background:{band_color}10;">{band}</span>'
-
-        dim_cards_html.append(
-            f'<div class="card" style="padding:10px 12px;break-inside:avoid;">'
-            f'  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">'
-            f'    <span style="font-size:8.5pt;font-weight:700;color:#0f172a;">{_esc(label)}</span>'
-            f'    {score_badge}'
-            f'  </div>'
-            f'  <p style="font-size:7.5pt;color:#475569;margin:0;line-height:1.4;">{_esc(summary)}</p>'
-            f'</div>'
-        )
+    dim_cards_html = [_render_geo_dimension_cards(geo, compact=False)]
 
     # 2. Commercial Question Battery Rows
     geo_questions = getattr(geo, "questions", []) or []
@@ -1078,19 +1124,33 @@ def _build_ch_geo(report: Any, manifest: Dict[str, Any]) -> str:
 def _build_ch_aeo(report: Any, manifest: Dict[str, Any]) -> str:
     card = getattr(report, "ai_visibility_scorecard", None)
     runs = getattr(card, "successful_runs", 0) if card else 0
+    not_measured_reason = str(getattr(card, "not_measured_reason", "") or "").strip() if card else ""
+    runs_note = (
+        f"Successful runs recorded for this audit ({runs} live responses)."
+        if runs > 0
+        else (
+            f"Not measured: {not_measured_reason}"
+            if not_measured_reason
+            else "No live AI engine test runs were recorded for this audit. Configure live AI search engine credentials to measure citations."
+        )
+    )
     findings = [f for f in _report_findings(report) if "AEO" in str(getattr(f, "category", "")).upper() or "SEARCH" in str(getattr(f, "category", "")).upper()]
     callout = render_section_business_callout(
         generate_section_explanation("ch_aeo", "Answer Engine Optimization (AEO) & AI Citations", report, findings)
     )
+    from app.reports.pdf_evidence_blocks import render_page_evidence_table
+    aeo_pages = list(getattr(getattr(report, "crawl_manifest", None), "pages", None) or getattr(report, "page_reports", None) or [])
+    aeo_ev_table = render_page_evidence_table(aeo_pages, title="Observed Answer-Engine Crawled Page Evidence", max_rows=8)
 
     return f"""
     {callout}
+    {aeo_ev_table}
 
     <div class="grid-3" style="margin-bottom: 16px;">
         <div class="card">
             <div class="card-kicker">AI TEST RUNS</div>
             <div class="card-title">{runs if runs > 0 else 'NOT RECORDED'}</div>
-            <p style="font-size: 8pt; color: #475569;">Successful runs recorded for this audit. A missing count is not treated as a completed test.</p>
+            <p style="font-size: 8pt; color: #475569;">{_esc(runs_note)}</p>
         </div>
         <div class="card">
             <div class="card-kicker">CITATION OBSERVATIONS</div>
@@ -1650,50 +1710,14 @@ def _build_ch_geo_extractability(report: Any, manifest: Dict[str, Any]) -> str:
         generate_section_explanation("ch_geo_extractability", "The 8-Dimension Content Extractability Framework", report, findings)
     )
 
-    dimension_scores = getattr(geo, "dimension_scores", {}) or {}
-    dimensions_list = getattr(geo, "dimensions", []) or []
-
-    STANDARD_DIMS = [
-        ("passage_density", "01. Passage Density", "Self-contained 40-60 word definition passages at start of core sections."),
-        ("schema_graph", "02. Schema Knowledge Graph", "Structured Organization, Product, and FAQPage JSON-LD nodes."),
-        ("entity_clarity", "03. Entity Identity & Disambiguation", "Unambiguous corporate identity linking domain to corporate records."),
-        ("factual_grounding", "04. Factual Grounding", "Verifiable claims with specific dates, methodologies, and metrics."),
-        ("question_coverage", "05. Commercial Inquiries", "Coverage of high-intent buyer questions: identity, pricing, capabilities."),
-        ("crawler_directives", "06. AI Bot Permissions", "Explicit robots.txt crawler directives and /llms.txt discovery endpoints."),
-        ("hallucination_defense", "07. Brand Protection", "Absence of cross-page contradictions and speculative superlatives."),
-        ("format_adaptability", "08. Structured Formats", "Semantic comparison tables, modular FAQs, and bulleted specifications."),
-    ]
-
-    dim_cards_html = []
-    for key, label, fallback_desc in STANDARD_DIMS:
-        d_obj = dimension_scores.get(key)
-        if d_obj:
-            band = str(getattr(d_obj, "band", "MODERATE") if hasattr(d_obj, "band") else d_obj.get("band", "MODERATE")).upper()
-            summary = str(getattr(d_obj, "summary", fallback_desc) if hasattr(d_obj, "summary") else d_obj.get("summary", fallback_desc))
-        else:
-            found_dim = next((d for d in dimensions_list if getattr(d, "key", "") == key or getattr(d, "label", "").lower() in label.lower()), None)
-            if found_dim:
-                band = str(getattr(found_dim, "band", "MODERATE")).upper()
-                summary = str(getattr(found_dim, "summary", fallback_desc))
-            else:
-                band = "NOT MEASURED"
-                summary = "Dimension not individually scored in this run; the aggregate score is not used to infer a per-dimension result."
-
-        band_color = "#15803d" if band in ("HIGH", "PASS") else ("#b45309" if band in ("PARTIAL", "MODERATE") else ("#64748b" if band == "NOT MEASURED" else "#b91c1c"))
-        score_badge = f'<span style="font-family:monospace;font-size:7.5pt;font-weight:700;color:{band_color};border:1px solid {band_color}40;padding:2px 6px;border-radius:2px;background:{band_color}10;">{band}</span>'
-
-        dim_cards_html.append(
-            f'<div class="card" style="padding:10px 12px;break-inside:avoid;">'
-            f'  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">'
-            f'    <span style="font-size:8pt;font-weight:700;color:#0f172a;">{_esc(label)}</span>'
-            f'    {score_badge}'
-            f'  </div>'
-            f'  <p style="font-size:7.5pt;color:#475569;margin:0;line-height:1.4;">{_esc(summary)}</p>'
-            f'</div>'
-        )
+    dim_cards_html = [_render_geo_dimension_cards(geo, compact=True)]
+    from app.reports.pdf_evidence_blocks import render_page_evidence_table
+    geo_pages = list(getattr(getattr(report, "crawl_manifest", None), "pages", None) or getattr(report, "page_reports", None) or [])
+    geo_ev_table = render_page_evidence_table(geo_pages, title="Observed Page-Level Extractability & Schema Evidence", max_rows=8)
 
     return f"""
     {callout}
+    {geo_ev_table}
 
     <div class="grid-2" style="margin-bottom: 14px;">
         <div class="card">
@@ -3018,34 +3042,13 @@ def build_adaptive_publication_document(
         builder_fn = builders.get(ch_id, lambda r, m: f"<p>{_esc(ch_meta['desc'])}</p>")
         ch_html = builder_fn(report, manifest)
 
-        # Inject validated, placeholder-hydrated AI chapter narrative (prose only; code owns layout/tables/charts)
+        # Inject validated AI / evidence chapter analysis block (prose only; code owns layout/tables/charts)
         matched_ai = _match_ai_chapter(ch_id, ch_meta["title"], ch_idx)
-        if matched_ai and bundle_mode in ("ai_full", "reduced"):
-            cited_pills = " ".join(
-                f'<span class="finding-ref-pill" style="display:inline-block;padding:1px 6px;margin-right:4px;'
-                f'background:#e2e8f0;border-radius:3px;font-size:10px;font-family:monospace;">{_esc(fid)}</span>'
-                for fid in (matched_ai.get("cited_finding_ids") or [])[:8]
-            )
-            takeaway_html = (
-                f'<p style="font-weight:600;color:#0f172a;margin:0 0 6px 0;">{_esc(matched_ai.get("executive_takeaway", ""))}</p>'
-                if matched_ai.get("executive_takeaway") else ""
-            )
-            body_html = (
-                f'<p style="margin:0 0 8px 0;line-height:1.55;">{_esc(matched_ai.get("body_md", ""))}</p>'
-                if matched_ai.get("body_md") else ""
-            )
-            why_html = (
-                f'<p style="margin:0 0 6px 0;font-style:italic;color:#334155;"><strong>Why this matters:</strong> {_esc(matched_ai.get("why_it_matters", ""))}</p>'
-                if matched_ai.get("why_it_matters") else ""
-            )
-            ai_block = (
-                '<div class="ai-chapter-narrative" style="background:#f8fafc;border-left:3px solid #0284c7;'
-                'padding:12px 14px;margin:0 0 14px 0;border-radius:4px;">'
-                f'{takeaway_html}{body_html}{why_html}'
-                f'<div style="margin-top:6px;font-size:10px;color:#475569;">Verified Citations: {cited_pills or "None"}</div>'
-                '</div>'
-            )
-            ch_html = ai_block + ch_html
+        if matched_ai:
+            from app.reports.pdf_evidence_blocks import render_ai_analysis_card
+            ai_block = render_ai_analysis_card(matched_ai, narrative_mode=bundle_mode)
+            if ai_block:
+                ch_html = ai_block + ch_html
 
         parts_dict[part_name].chapters.append(
             ChapterSpec(

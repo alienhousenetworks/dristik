@@ -208,16 +208,71 @@ def _filter_findings_for_doc(doc_type: str, findings: List[Any]) -> List[Any]:
 def _serialize_findings_brief(findings: List[Any]) -> List[Dict[str, Any]]:
     rows = []
     for f in findings[:20]:
+        ev_snippet = (
+            getattr(f, "evidence_snippet", None)
+            or getattr(f, "evidence", None)
+            or getattr(f, "raw_evidence", None)
+            or getattr(f, "verification_notes", None)
+            or ""
+        )
+        if isinstance(ev_snippet, (dict, list)):
+            ev_snippet = json.dumps(ev_snippet, ensure_ascii=False)[:220]
         rows.append({
             "finding_id": f.finding_id,
             "category": f.category.value if hasattr(f.category, "value") else str(f.category),
             "severity": f.severity.value if hasattr(f.severity, "value") else str(f.severity),
             "title": (getattr(f, "title", "") or getattr(f, "finding", "") or "")[:180],
+            "root_cause": (getattr(f, "reasoning", "") or getattr(f, "root_cause", "") or "")[:200],
+            "observed_evidence": str(ev_snippet)[:220],
             "why_it_matters": (getattr(f, "why_it_matters", "") or getattr(f, "business_impact", "") or getattr(f, "description", "") or "")[:240],
             "recommendation": (getattr(f, "recommendation", "") or "")[:220],
-            "affected_urls": (getattr(f, "affected_urls", None) or [])[:3],
+            "affected_urls": (getattr(f, "affected_urls", None) or [])[:4],
         })
     return rows
+
+
+def _serialize_evidence_context(report: Any, doc_type: DocType) -> Dict[str, Any]:
+    """Extract compact, concrete first-party crawl/DOM evidence so AI narratives stay grounded and specific."""
+    manifest = getattr(report, "crawl_manifest", None)
+    pages = list(getattr(manifest, "pages", None) or getattr(report, "page_reports", None) or [])[:6]
+    page_facts = []
+    for p in pages:
+        h1_raw = getattr(p, "h1", None) or getattr(p, "h1_tags", None) or []
+        h1_first = h1_raw[0] if isinstance(h1_raw, (list, tuple)) and h1_raw else (h1_raw or "")
+        page_facts.append({
+            "url": getattr(p, "url", ""),
+            "title": (getattr(p, "title", "") or "")[:90],
+            "h1": str(h1_first)[:90],
+            "schema_types": list(getattr(p, "schema_types", None) or [])[:6],
+        })
+
+    ctx: Dict[str, Any] = {
+        "domain": getattr(report, "domain", ""),
+        "sampled_pages": page_facts,
+    }
+    if doc_type in ("geo", "aeo", "executive"):
+        geo = getattr(report, "geo_readiness", None)
+        if geo is not None:
+            ctx["geo_dimensions"] = {
+                k: getattr(v, "band", None)
+                for k, v in (getattr(geo, "dimension_scores", None) or {}).items()
+                if getattr(v, "is_measured", False)
+            }
+            ctx["buyer_questions"] = [
+                {"key": getattr(q, "question_key", ""), "status": getattr(q, "status", ""), "url": getattr(q, "evidence_url", None)}
+                for q in (getattr(geo, "questions", None) or [])[:6]
+            ]
+    if doc_type in ("cro", "executive"):
+        cro = getattr(report, "cro_audit", None)
+        intel = getattr(cro, "intelligence", None) if cro else None
+        if isinstance(intel, dict):
+            ctx["cro_business_model"] = intel.get("business_model")
+            ctx["cro_top_defects"] = [
+                {"id": f.get("finding_id"), "finding": str(f.get("finding", ""))[:140], "scope": f.get("observed_scope")}
+                for f in (intel.get("findings") or [])[:6]
+                if isinstance(f, dict)
+            ]
+    return ctx
 
 
 def _deterministic_fallback_bundle(
@@ -248,21 +303,21 @@ def _deterministic_fallback_bundle(
         for idx, (ch_id, ch_title, ch_aud) in enumerate(_DOC_CHAPTER_BLUEPRINTS.get(doc_type, [])[:max_ch]):
             chunk = findings[idx : idx + 3] or findings[:2]
             cids = [f.finding_id for f in chunk]
-            body = (
-                " ".join(
-                    f"{(f.title or f.finding or f.finding_id).strip()}."
-                    for f in chunk
-                )
-                or f"No verified defects were recorded for {ch_title}."
-            )
+            ev_lines = []
+            for f in chunk:
+                f_title = (getattr(f, "title", None) or getattr(f, "finding", None) or f.finding_id).strip()
+                urls = list(getattr(f, "affected_urls", None) or [])[:2]
+                url_part = f" [Observed on: {', '.join(urls)}]" if urls else ""
+                ev_lines.append(f"{f_title}{url_part}.")
+            body = " ".join(ev_lines) or f"No verified defects were recorded for {ch_title}."
             chapters.append(
                 NarrativeChapter(
                     chapter_id=ch_id,
                     title=ch_title,
                     audience=ch_aud,
-                    executive_takeaway=f"Deterministic rollup for {ch_title}.",
+                    executive_takeaway=f"Evidence-backed diagnostic summary for {ch_title}.",
                     body_md=body,
-                    why_it_matters="Grounded strictly in verified audit findings without LLM prose.",
+                    why_it_matters="Grounded strictly in verified audit findings and observed crawl URLs.",
                     cited_finding_ids=cids,
                 )
             )
@@ -437,6 +492,7 @@ async def narrate_document(
     source_pdf_bundle: Optional[NarrativeBundle] = None,
     run_critic: bool = True,
     all_verified_finding_ids: Optional[Set[str]] = None,
+    evidence_context: Optional[Dict[str, Any]] = None,
 ) -> NarrativeBundle:
     """
     Generate, validate, critic-verify, and hydrate a single PDF or PPTX NarrativeBundle.
@@ -484,12 +540,20 @@ async def narrate_document(
             '"why_it_matters":"string (business impact for this audience)","cited_finding_ids":["find_001"],'
             '"epistemic_labels":["UNKNOWN (Requires GA4)"]}]}'
         )
+        ev_ctx_block = (
+            f"OBSERVED SITE & DOM EVIDENCE:\n{json.dumps(evidence_context, ensure_ascii=False)[:2200]}\n\n"
+            if evidence_context
+            else ""
+        )
         base_contract = (
             f"DOCUMENT: {doc_type.upper()} Audit Book PDF (Tier: {tier}, Target length: {sizing['target_pages']} pages)\n"
             f"PRIMARY AUDIENCE: {audience.upper()}\n"
             f"CHAPTER PLAN: {json.dumps([{'chapter_id': c[0], 'title': c[1], 'audience': c[2]} for c in chapter_plan])}\n\n"
+            f"{ev_ctx_block}"
             f"VERIFIED FINDINGS (Post-Critic Only):\n{json.dumps(findings_brief, ensure_ascii=False)}\n\n"
             f"ROADMAP CONTEXT:\n{json.dumps(roadmap_summary, ensure_ascii=False)[:1500]}\n\n"
+            "EVIDENCE DISCIPLINE: Reference concrete observed URLs, DOM elements, and verified finding IDs in every chapter. "
+            "Avoid broad generic advice.\n"
             f"{strict_rules}"
         )
     else:
@@ -742,6 +806,7 @@ async def narrate_all_documents(
             source_pdf_bundle=source_pdf,
             run_critic=run_critic,
             all_verified_finding_ids=all_verified_ids,
+            evidence_context=_serialize_evidence_context(report, doc_type),
         )
 
     # Priority 1: Executive PDF -> Executive PPT FIRST (buyer-facing priority)
@@ -818,24 +883,45 @@ def sync_seo_chapter_narratives_map(
     any chapter ID or numeric key expected by SeoAuditBookRenderer (`CORE_CHAPTERS`).
     """
     merged = dict(existing_map or {})
-    if not isinstance(seo_pdf_bundle, dict) or seo_pdf_bundle.get("narrative_mode") != "ai_full":
+    if not isinstance(seo_pdf_bundle, dict) or seo_pdf_bundle.get("narrative_mode") not in ("ai_full", "reduced"):
         return merged
 
     ai_chapters = seo_pdf_bundle.get("chapters") or []
     if not ai_chapters:
         return merged
 
-    # Match AI chapters by keyword overlap against CORE_CHAPTERS while preserving every existing chapter key
+    _SEO_ID_ALIASES: Dict[str, Tuple[str, ...]] = {
+        "ch_seo_crawl": ("crawl", "index", "robots", "sitemap", "http"),
+        "ch_seo_arch": ("arch", "canonical", "link", "redirect", "url"),
+        "ch_seo_onpage": ("onpage", "on-page", "meta", "title", "heading", "h1"),
+        "ch_seo_content": ("content", "topical", "copy", "keyword", "intent"),
+        "ch_seo_schema": ("schema", "structured", "json-ld", "rich"),
+        "ch_seo_perf": ("perf", "cwv", "vital", "speed", "security", "ttfb"),
+        "ch_seo_remediation": ("remediation", "fix", "patch", "action"),
+        "ch_seo_roadmap": ("roadmap", "sprint", "priority", "plan"),
+        "ch_seo_media": ("media", "image", "alt", "accessibility", "wcag"),
+        "ch_seo_local_intl": ("local", "intl", "international", "serp", "ecommerce"),
+        "ch_seo_competitive": ("competit", "authority", "backlink", "offpage"),
+        "ch_seo_governance": ("governance", "measurement", "analytics", "scope"),
+    }
+
+    narr_mode = str(seo_pdf_bundle.get("narrative_mode") or "ai_full")
+    # Match AI chapters by explicit alias map or keyword overlap against CORE_CHAPTERS
     for ch_idx, ch in enumerate(core_chapters):
         ch_id = ch["id"]
         ch_num = f"{ch_idx + 3:02d}"
-        ch_title_low = (ch.get("title") or "").lower()
+        ch_hay = f"{ch_id} {ch.get('title', '')}".lower()
         base = dict(merged.get(ch_id) or merged.get(ch_num) or {})
         matched = None
         for ai_ch in ai_chapters:
-            ai_t = (ai_ch.get("title") or "").lower()
             ai_id = (ai_ch.get("chapter_id") or "").lower()
-            if ch_id.lower() in ai_id or any(w in ai_t for w in ch_title_low.split() if len(w) >= 4):
+            ai_t = (ai_ch.get("title") or "").lower()
+            aliases = _SEO_ID_ALIASES.get(ai_id, ())
+            if (
+                ch_id.lower() in ai_id
+                or any(tok in ch_hay for tok in aliases)
+                or any(w in ai_t for w in (ch.get("title") or "").lower().split() if len(w) >= 4)
+            ):
                 matched = ai_ch
                 break
         if matched:
@@ -843,7 +929,7 @@ def sync_seo_chapter_narratives_map(
             base["why_reader_should_care"] = matched.get("why_it_matters") or base.get("why_reader_should_care", "")
             base["ai_body_md"] = matched.get("body_md") or ""
             base["cited_finding_ids"] = matched.get("cited_finding_ids") or []
-            base["narrative_mode"] = "ai_full"
+            base["narrative_mode"] = narr_mode
             merged[ch_id] = base
             merged[ch_num] = base
     return merged

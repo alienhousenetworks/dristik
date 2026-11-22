@@ -3247,21 +3247,33 @@ def build_cro_intelligence(
     wcag: Any = None,
     competitor_domains: Optional[Sequence[str]] = None,
     discovered_urls: Optional[int] = None,
+    browser_tests: Optional[Dict[str, Any]] = None,
 ) -> CroIntelligenceReport:
     """Build the CRO audit from a page sample and optional measured analytics."""
     source_pages = list(pages or [])
-    rendered_page_count = sum(
-        1
-        for page in source_pages
-        if _get(page, "rendered") is True
-        and bool(_get(page, "rendered_dom") or _get(page, "html"))
+    bt = browser_tests if isinstance(browser_tests, dict) else {}
+    bt_rendered_pages = int(bt.get("rendered_pages") or 0)
+    rendered_page_count = max(
+        bt_rendered_pages,
+        sum(
+            1
+            for page in source_pages
+            if _get(page, "rendered") is True
+            and bool(_get(page, "rendered_dom") or _get(page, "html"))
+        ),
     )
     rendered_dom_status = (
         "RENDERED_DOM_VERIFIED_FOR_SAMPLE"
-        if source_pages and rendered_page_count == len(source_pages)
+        if source_pages and rendered_page_count >= len(source_pages)
         else "PARTIAL_RENDERED_DOM_SAMPLE"
         if rendered_page_count > 0
         else "NOT_VERIFIED_BY_CRO_ENGINE"
+    )
+    bt_interactions = int(bt.get("interaction_tests_executed") or 0)
+    journey_execution_status = (
+        str(bt.get("journey_execution_status") or "EXECUTED_SAFE_MODE")
+        if bt_interactions > 0
+        else "NOT_EXECUTED"
     )
     obs = _observe(
         source_pages,
@@ -3331,7 +3343,8 @@ def build_cro_intelligence(
             ),
             "rendered_dom_status": rendered_dom_status,
             "rendered_pages": rendered_page_count,
-            "journey_execution_status": "NOT_EXECUTED",
+            "journey_execution_status": journey_execution_status,
+            "interaction_tests_executed": bt_interactions,
             "note": (
                 "The percentage compares inspected pages with the supplied discovery total only. "
                 "It does not prove every URL was discovered, that JavaScript-rendered DOM was inspected, "

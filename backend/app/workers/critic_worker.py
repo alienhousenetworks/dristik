@@ -32,10 +32,10 @@ class CognitiveCriticWorker(BaseCognitiveWorker):
                 "integrity_audit_summary": "No claims submitted for verification."
             }
 
-        # 1. Batch claims in groups of 20 so large 50–200 page audits never overflow context
+        # 1. Batch claims in groups of 10 so judge models do not truncate structured output
         #    or leave claims silently stuck in PENDING_VERIFICATION.
         import asyncio
-        batch_size = 20
+        batch_size = 10
         ev_by_id = {ev.id: ev for ev in blackboard.evidence_store.get_all()}
         fallback_ev = blackboard.evidence_store.get_all()[:5]
 
@@ -93,27 +93,45 @@ class CognitiveCriticWorker(BaseCognitiveWorker):
 
         batch_outputs = await asyncio.gather(*[_audit_batch(b) for b in batches]) if batches else []
         results_list = [r for sub in batch_outputs for r in sub]
+
+        def _norm_cid(val: Any) -> str:
+            return str(val or "").strip().lower()
+
+        decision_map: Dict[str, Dict[str, Any]] = {}
+        for r in results_list:
+            if isinstance(r, dict):
+                cid = _norm_cid(r.get("claim_id"))
+                if cid:
+                    decision_map[cid] = r
+
+        # Single targeted retry pass for any auditable claims omitted from Pass 1
+        missed_claims = [c for c in auditable_claims if _norm_cid(c.id) not in decision_map]
+        if missed_claims:
+            retry_batches = [missed_claims[i:i + batch_size] for i in range(0, len(missed_claims), batch_size)]
+            retry_outputs = await asyncio.gather(*[_audit_batch(b) for b in retry_batches])
+            for sub in retry_outputs:
+                for r in sub:
+                    if isinstance(r, dict):
+                        cid = _norm_cid(r.get("claim_id"))
+                        if cid and cid not in decision_map:
+                            decision_map[cid] = r
+
         verified_ids = []
         rejected_claims = []
         deflated_claims = []
         contradictions = []
-
-        decision_map = {}
-        for r in results_list:
-            if isinstance(r, dict):
-                cid = r.get("claim_id")
-                if cid:
-                    decision_map[cid] = r
+        pending_claims_count = 0
 
         for claim in all_claims:
             # Never overturn a claim already rejected by an upstream integrity gate.
             if claim.verification_status == VerificationStatus.REJECTED:
                 continue
-            audit = decision_map.get(claim.id)
+            audit = decision_map.get(_norm_cid(claim.id))
             if not audit:
                 # If not explicitly audited by critic, remain PENDING_VERIFICATION (do not assume VERIFIED)
                 claim.verification_status = VerificationStatus.PENDING_VERIFICATION
                 claim.verification_notes = "Not evaluated in critic pass; remains pending verification."
+                pending_claims_count += 1
                 continue
 
             decision = str(audit.get("decision") or "").strip().lower()
@@ -166,6 +184,9 @@ class CognitiveCriticWorker(BaseCognitiveWorker):
         verified_count = len(verified_ids)
         confidence_calibration_score = round(verified_count / max(1, total_eval), 2)
 
+        evaluated_count = len(auditable_claims) - pending_claims_count
+        critic_coverage_pct = round(100.0 * evaluated_count / max(1, len(auditable_claims)), 1)
+
         output_summary = {
             "verified_claims": verified_ids,
             "rejected_claims": rejected_claims,
@@ -173,8 +194,14 @@ class CognitiveCriticWorker(BaseCognitiveWorker):
             "contradictions": contradictions,
             "batches_executed": len(batches),
             "total_audited": len(auditable_claims),
+            "pending_claims_count": pending_claims_count,
+            "critic_coverage_pct": critic_coverage_pct,
             "confidence_calibration_score": confidence_calibration_score,
-            "integrity_audit_summary": f"Audited {total_eval} claims across {len(batches)} batch(es): {verified_count} verified, {len(rejected_claims)} rejected, {len(deflated_claims)} severity deflated."
+            "integrity_audit_summary": (
+                f"Audited {total_eval} claims across {len(batches)} batch(es) ({critic_coverage_pct}% critic coverage): "
+                f"{verified_count} verified, {len(rejected_claims)} rejected, {len(deflated_claims)} severity deflated, "
+                f"{pending_claims_count} pending."
+            ),
         }
 
         blackboard.log_step("Adversarial Critic Falsification Completed (70B Blind)", self.worker_id, {

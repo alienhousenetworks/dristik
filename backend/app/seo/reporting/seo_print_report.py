@@ -1564,8 +1564,15 @@ class SeoPrintReportRenderer:
     # --------------------------------------------------------------------------
     def _render_sec_01(self, report: ExecutiveReport) -> str:
         from app.domain.scoring.displayed_score import displayed_composite
+        from app.reports.snapshot_provenance import format_audit_execution_metadata
+        snap = format_audit_execution_metadata(report)
+        seo_pillar_score = snap.score_for_section("seo")
         comp_score = displayed_composite(report)
-        score_val = comp_score if comp_score is not None else (getattr(report.scores, "overall_score", None) if getattr(report, "scores", None) else None)
+        score_val = (
+            seo_pillar_score
+            if seo_pillar_score is not None
+            else (comp_score if comp_score is not None else (getattr(report.scores, "overall_score", None) if getattr(report, "scores", None) else None))
+        )
         score_gauge_svg = render_svg_score_gauge(score_val, size=130)
 
         findings_count = len(report.findings)

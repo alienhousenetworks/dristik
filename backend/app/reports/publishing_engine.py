@@ -1309,32 +1309,52 @@ class PdfPaginationResolver:
                     clean_title[:30] if len(clean_title) >= 15 else clean_title,
                 ]
 
-            # Scan each physical page
-            for page_idx in range(total_pages):
+            # Scan body pages only (skip Cover + TOC so TOC entries never self-match as chapter starts)
+            start_idx = max(0, min(starting_body_page - 1, total_pages - 1)) if total_pages > 0 else 0
+            page_texts_lower: List[Tuple[int, str]] = []
+            for page_idx in range(start_idx, total_pages):
                 phys_page_num = page_idx + 1  # 1-based physical page
                 try:
                     page_text = reader.pages[page_idx].extract_text() or ""
-                    page_text_lower = page_text.lower()
+                    page_texts_lower.append((phys_page_num, page_text.lower()))
                 except Exception:
                     continue
 
+            # Pass 1: exact invisible chapter markers (most reliable)
+            for phys_page_num, page_text_lower in page_texts_lower:
                 for ch in chapters:
                     if ch.id in resolved:
-                        continue  # First physical appearance is the chapter start
-                    for pat in patterns[ch.id]:
-                        if pat in page_text_lower:
-                            resolved[ch.id] = phys_page_num
-                            break
+                        continue
+                    marker_pats = patterns[ch.id][:2]
+                    if any(pat in page_text_lower for pat in marker_pats):
+                        resolved[ch.id] = phys_page_num
+
+            # Pass 2: heading fallback for chapters unmatched in Pass 1 (monotonic from last matched page)
+            min_page_for_next = starting_body_page
+            for ch in chapters:
+                if ch.id in resolved:
+                    min_page_for_next = max(min_page_for_next, resolved[ch.id])
+                    continue
+                fallback_pats = patterns[ch.id][2:]
+                for phys_page_num, page_text_lower in page_texts_lower:
+                    if phys_page_num < min_page_for_next:
+                        continue
+                    if any(pat in page_text_lower for pat in fallback_pats):
+                        resolved[ch.id] = phys_page_num
+                        min_page_for_next = phys_page_num
+                        break
 
             # Fill any unmatched chapters with monotonic content-aware fallback
             last_known = starting_body_page - 1
             for ch in chapters:
                 if ch.id in resolved:
+                    if resolved[ch.id] < last_known:
+                        resolved[ch.id] = last_known
                     last_known = resolved[ch.id]
                 else:
                     length = len(ch.html_content or "")
                     span = max(1, math.ceil(length / 2400)) if length > 0 else 1
-                    last_known += span
+                    last_known = min(total_pages, last_known + span) if total_pages > 0 else last_known + span
                     resolved[ch.id] = last_known
 
         except Exception as e:
@@ -1522,11 +1542,17 @@ class PdfQualityAssurance:
                 failed.append("check_all_chapters_present")
                 details["missing_chapters"] = missing_chapters
 
-            # Check 5: TOC Page References Accuracy
+            # Check 5: TOC Page References Accuracy (must land on body pages and not collapse onto TOC)
             inaccurate_refs = []
+            page_buckets: Dict[int, List[str]] = {}
+            min_body_page = max(1, int(getattr(doc, "starting_body_page", 3) or 3))
             for ch_id, reported_page in resolved_pages.items():
-                if reported_page < 1 or reported_page > total_pages:
+                if reported_page < min_body_page or reported_page > total_pages:
                     inaccurate_refs.append((ch_id, reported_page, total_pages))
+                page_buckets.setdefault(reported_page, []).append(ch_id)
+            for pg, ch_ids in page_buckets.items():
+                if len(ch_ids) >= 3 and total_pages > min_body_page + 2:
+                    inaccurate_refs.append(("duplicate_page_collision", pg, len(ch_ids)))
 
             if not inaccurate_refs:
                 passed.append("check_toc_page_numbers_accurate")
@@ -1589,8 +1615,8 @@ class PublicationHtmlRenderer:
             ch_html_list = []
             for ch in part.chapters:
                 ch_page = (resolved_pages or {}).get(ch.id, ch.page_number)
-                # Invisible text marker for pypdf physical pagination detection
-                ch_marker = f'<div class="chapter-marker" style="display:inline; font-size: 0pt; color: transparent; line-height: 0;">[[chapter_ref:{ch.id.lower()}:ch_{ch.num}]]</div>'
+                # Invisible text marker preserved in Chromium PDF text layer (1pt near-transparent; 0pt is dropped)
+                ch_marker = f'<span class="chapter-marker" style="position:absolute;font-size:1pt;line-height:1pt;color:rgba(255,255,255,0.01);pointer-events:none;user-select:none;">[[chapter_ref:{ch.id.lower()}:ch_{ch.num}]]</span>'
 
                 ch_html_list.append(f"""
                 <section class="chapter-start" id="{_esc(ch.id)}">

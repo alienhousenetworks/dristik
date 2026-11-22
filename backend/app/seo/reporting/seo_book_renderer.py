@@ -2332,8 +2332,13 @@ def _build_chapter_analysis(
         "pages": pages,
         "business_profile": _get_val(report, "business_profile"),
     }
-    # Consume pre-synthesized agent narrative if available, else derive from specialist synthesis
-    pre_narratives = getattr(report, "chapter_narratives", {}) or {}
+    # Consume pre-synthesized agent narrative (merging document_narratives['seo_pdf'] if present), else derive
+    pre_narratives = dict(getattr(report, "chapter_narratives", {}) or {})
+    doc_narrs = getattr(report, "document_narratives", None) or {}
+    seo_bundle = doc_narrs.get("seo_pdf") if isinstance(doc_narrs, dict) else None
+    if isinstance(seo_bundle, dict) and seo_bundle.get("chapters"):
+        from app.reports.ai_report_narrator import sync_seo_chapter_narratives_map
+        pre_narratives = sync_seo_chapter_narratives_map(seo_bundle, pre_narratives, CORE_CHAPTERS)
     pre_narrative = pre_narratives.get(ch["id"]) or pre_narratives.get(ch_num)
     if pre_narrative and isinstance(pre_narrative, dict) and pre_narrative.get("executive_summary"):
         narrative = pre_narrative

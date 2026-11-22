@@ -365,8 +365,42 @@ def build_cro_publication_document(report: Any, intel: Optional[CroIntelligenceR
         f"<span style='color:#475569;'>{_esc(f.recommended_action[:120])}</span></li>"
         for f in intel.findings[:15]
     ) or "<li>No finding met the evidence bar.</li>"
+    from app.reports.pdf_evidence_blocks import (
+        render_ai_analysis_card,
+        render_page_evidence_table,
+        render_unmeasured_scope_summary,
+    )
+    doc_narr_map = getattr(report, "document_narratives", None) or {}
+    cro_bundle = doc_narr_map.get("cro_pdf") if isinstance(doc_narr_map, dict) else None
+    cro_narr_mode = str(
+        cro_bundle.get("narrative_mode")
+        if isinstance(cro_bundle, dict)
+        else getattr(report, "narrative_mode", "deterministic_fallback")
+    )
+    cro_ai_chapters = list((cro_bundle.get("chapters") or []) if isinstance(cro_bundle, dict) else [])
+    cro_exec_ai_html = (
+        render_ai_analysis_card(
+            {
+                "executive_takeaway": cro_bundle.get("executive_summary", ""),
+                "cited_finding_ids": [f.finding_id for f in intel.findings[:6]],
+            },
+            narrative_mode=cro_narr_mode,
+            title_prefix="CRO AI Executive Diagnosis",
+        )
+        if isinstance(cro_bundle, dict) and cro_bundle.get("executive_summary")
+        else ""
+    )
+    cro_pages = list(getattr(getattr(report, "crawl_manifest", None), "pages", None) or getattr(report, "page_reports", None) or [])
+    cro_evidence_table = render_page_evidence_table(
+        cro_pages,
+        title="Observed Landing & Conversion Page Evidence",
+        max_rows=10,
+    )
+
     exec_html = (
         f'{cro_provenance_bar}'
+        f'{cro_exec_ai_html}'
+        f'{cro_evidence_table}'
         f'<p style="font-size:9pt;">{_esc(intel.scope_note)} Business model: <strong>{_esc(intel.business_model)}</strong> ({_esc(intel.model_basis)}).</p>'
         f'<div class="card"><div class="card-kicker">COVERAGE</div><p>{_esc(cov.get("inspected_pages"))} page(s) inspected of '
         f'{_esc(cov.get("discovered_urls") if cov.get("discovered_urls") is not None else "unknown")} discovered ({_esc(cov.get("status"))}). '
@@ -388,14 +422,35 @@ def build_cro_publication_document(report: Any, intel: Optional[CroIntelligenceR
                     desc="Coverage, scores, metrics and top findings.", html_content=exec_html)]))
     n = 2
     excluded: list = []
-    for part in intel.parts:
+    collapsed_unmeasured: list = []
+    for part_idx, part in enumerate(intel.parts):
         owned = [s for s in intel.sections if s.part == part["id"]]
         applicable = [s for s in owned if s.status != "NOT_APPLICABLE"]
         excluded += [s for s in owned if s.status == "NOT_APPLICABLE"]
         if not applicable:
             continue
+        # Only emit full section blocks for sections with observed findings or measured pass/fail checks;
+        # collapse 100%-unmeasured sections into the compact Scope Register to eliminate boilerplate bloat.
+        active_sections = []
+        for s in applicable:
+            sec_findings = by_section.get(int(s.number), [])
+            has_measured_check = any(c.outcome in ("pass", "fail", "partial") for c in (s.checks or []))
+            if sec_findings or has_measured_check:
+                active_sections.append(s)
+            else:
+                collapsed_unmeasured.append((f"{s.number}. {s.title}", s.status, f"All checks unmeasured/untested ({s.specialist})."))
+        if not active_sections:
+            continue
         ppid = f"cro_part_{part['id']}"
-        body = "".join(_section_html(s, by_section.get(int(s.number), [])) for s in applicable)
+        part_ai_html = ""
+        if cro_ai_chapters:
+            p_words = [w for w in str(part["title"]).lower().split() if len(w) >= 4]
+            matched_ai = next(
+                (c for c in cro_ai_chapters if any(w in str(c.get("title", "")).lower() for w in p_words)),
+                cro_ai_chapters[part_idx] if part_idx < len(cro_ai_chapters) else None,
+            )
+            part_ai_html = render_ai_analysis_card(matched_ai, narrative_mode=cro_narr_mode, title_prefix=f"CRO AI Analysis — {part['title']}")
+        body = part_ai_html + "".join(_section_html(s, by_section.get(int(s.number), [])) for s in active_sections)
         parts.append(PartSpec(id=ppid, num=part["id"], title=f"PART {part['id']} — {part['title'].upper()}", chapters=[
             ChapterSpec(id=f"cro_{part['id'].lower()}", num=f"{n:02d}", part_id=ppid, part_title=f"PART {part['id']}",
                         title=part["title"], desc=f"Sections {part.get('sections', '')}", html_content=body)]))
@@ -469,7 +524,8 @@ def build_cro_publication_document(report: Any, intel: Optional[CroIntelligenceR
             ),
         ),
         ChapterSpec(id="cro_scope", num=f"{n + 1:02d}", part_id=tail_id, part_title="REMEDIATION AND REGISTERS", title="Scope register and appendices",
-                    desc="Excluded sections and appendices.", html_content=f"<h3>Excluded sections</h3><ul>{scope}</ul>{apps}"),
+                    desc="Excluded sections, collapsed unmeasured sections, and appendices.",
+                    html_content=f"{render_unmeasured_scope_summary(collapsed_unmeasured, heading='Collapsed Unmeasured CRO Sections')}<h3>Excluded sections</h3><ul>{scope}</ul>{apps}"),
     ]))
     # Per-record CTA, form and trust registries come from the report's cro_audit data (spec appendices D/E).
     reg_id = "cro_registries"

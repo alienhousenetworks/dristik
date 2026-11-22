@@ -409,7 +409,11 @@ def render_snapshot_provenance_bar(
     if section_key:
         sec_label_disp = section_label or section_key.upper()
         sec_count = section_findings_count if section_findings_count is not None else meta.findings_for_section(section_key)
-        findings_line = f"{sec_count} in {sec_label_disp} ({meta.total_findings_count} total execution findings)"
+        canonical_sec_count = meta.findings_for_section(section_key)
+        if section_findings_count is not None and (sec_count > meta.total_findings_count or sec_count != canonical_sec_count):
+            findings_line = f"{sec_count} {sec_label_disp} specialist findings · {meta.total_findings_count} unified executive findings"
+        else:
+            findings_line = f"{sec_count} in {sec_label_disp} ({meta.total_findings_count} total execution findings)"
         sec_val = section_score if section_score is not None else meta.score_for_section(section_key)
         sec_score_line = f"{sec_val:.1f} / 100" if sec_val is not None else "NOT MEASURED"
         extra_cell = (

@@ -2082,25 +2082,6 @@ def render_seo_audit_book(report: Any) -> str:
 
     page_numbers = calculate_seo_book_page_numbers(payload, grouped)
 
-    scores = _get(report, "scores")
-    categories = _get(scores, "category_scores") or {}
-    technical = categories.get("TECHNICAL_SEO") if isinstance(categories, dict) else None
-    technical_score = _num(_get(technical, "score"))
-    technical_status = str(_get(technical, "status", "") or "").upper()
-    base_score = _num(_get(scores, "overall_score")) if scores else None
-    if technical_score is not None and technical_status not in {"NOT_MEASURED", "NOT_TESTED"}:
-        score_label = "TECHNICAL SEO CATEGORY SCORE"
-        score_disp = str(int(round(technical_score)))
-        score_note = "Sealed category score. Not a grade of every chapter."
-    elif base_score is not None:
-        score_label = "SEALED OVERALL SCORE"
-        score_disp = str(int(round(base_score)))
-        score_note = "Sealed report score. Not a grade of every chapter."
-    else:
-        score_label = "SEO SCORE"
-        score_disp = "—"
-        score_note = "No sealed score was stored."
-
     from app.reports.snapshot_provenance import (
         format_audit_execution_metadata,
         render_snapshot_provenance_bar,
@@ -2113,11 +2094,30 @@ def render_seo_audit_book(report: Any) -> str:
     analysis_id = snap.run_id
     report_ref = snap.report_ref
     seo_snap_score = snap.score_for_section("seo")
+
+    scores = _get(report, "scores")
+    categories = _get(scores, "category_scores") or {}
+    technical = categories.get("TECHNICAL_SEO") if isinstance(categories, dict) else None
+    technical_score = _num(_get(technical, "score"))
+    technical_status = str(_get(technical, "status", "") or "").upper()
+    resolved_seo_score = seo_snap_score if seo_snap_score is not None else (
+        technical_score if technical_score is not None and technical_status not in {"NOT_MEASURED", "NOT_TESTED"} else None
+    )
+    if resolved_seo_score is not None:
+        score_label = "SEO PILLAR SCORE"
+        score_disp = f"{resolved_seo_score:.1f}"
+        comp_ref = f" Overall Audit Composite: {snap.composite_score_display}." if snap.composite_score is not None else ""
+        score_note = f"Canonical SEO pillar score aligned with the integrated audit book.{comp_ref}"
+    else:
+        score_label = "SEO PILLAR SCORE"
+        score_disp = "—"
+        score_note = "No sealed SEO score was stored."
+
     provenance_bar = render_snapshot_provenance_bar(
         snap,
         section_key="seo",
         section_label="SEO",
-        section_score=seo_snap_score if seo_snap_score is not None else technical_score,
+        section_score=resolved_seo_score,
         section_findings_count=snap.findings_for_section("seo"),
     )
 
