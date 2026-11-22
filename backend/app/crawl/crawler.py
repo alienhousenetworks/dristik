@@ -295,7 +295,11 @@ class CrawlerService:
                 else:
                     if not (loc.lower().split("?", 1)[0].endswith(".xml") or "sitemap" in loc.lower()):
                         add_page(loc)
-            if discovered_urls:
+            if at_cap():
+                return True, found_sitemap_url, discovered_urls[:max_sitemap_urls], truncated
+            # Continue reading all declared sitemaps from robots.txt; only stop probing
+            # default fallback paths once URLs have already been discovered.
+            if discovered_urls and sitemap_url not in declared_sitemaps:
                 return True, found_sitemap_url, discovered_urls[:max_sitemap_urls], truncated
 
         return found_sitemap_url is not None, found_sitemap_url, discovered_urls[:max_sitemap_urls], truncated
@@ -386,10 +390,18 @@ class CrawlerService:
                         if payload_bytes > max_response_bytes:
                             return None, None, 0, 0.0, {}, 0, "rendered_response_too_large", None
                         wall_clock_ms = round((time.time() - start_time) * 1000, 1)
+                        fc_meta = data.get("metadata") if isinstance(data.get("metadata"), dict) else {}
+                        raw_fc_status = fc_meta.get("statusCode") or fc_meta.get("status_code")
+                        try:
+                            fc_status = int(raw_fc_status) if raw_fc_status is not None else 200
+                        except (TypeError, ValueError):
+                            fc_status = 200
+                        if fc_status >= 400:
+                            return None, None, fc_status, 0.0, {"x-crawler": "firecrawl-js"}, 0, f"HTTP {fc_status}", None
                         return (
                             payload,
                             markdown,
-                            200,
+                            fc_status,
                             0.0,
                             {"x-crawler": "firecrawl-js"},
                             payload_bytes,
@@ -698,7 +710,12 @@ class CrawlerService:
                                 timing_data["ttfb_ms"] = ttfb_ms
                                 timing_data["origin_http_ttfb_ms"] = origin_http_ttfb_ms
                                 timing_data["instrumentation_overhead_ms"] = instrumentation_overhead_ms
-                            resp_headers = js_headers or resp_headers
+                            # Preserve static origin HTTP headers (HSTS, CSP, X-Frame-Options,
+                            # X-Robots-Tag) while merging JS crawler metadata headers on top.
+                            merged_headers = {str(k).lower(): str(v) for k, v in (resp_headers or {}).items()}
+                            for k, v in (js_headers or {}).items():
+                                merged_headers[str(k).lower()] = str(v)
+                            resp_headers = merged_headers
                             content_bytes = js_bytes or content_bytes
                             markdown = js_md or markdown
                             soup = BeautifulSoup(html_content, "lxml")
@@ -794,11 +811,12 @@ class CrawlerService:
                     is_idx = "noindex" not in robots_str
 
                     raw_can = meta_res.get("canonical_url")
+                    effective_url = (final_url or page_url).rstrip("/")
                     if not raw_can:
                         can_stat = "missing"
                     elif not raw_can.startswith(("http://", "https://")):
                         can_stat = "relative"
-                    elif raw_can.rstrip("/") == page_url.rstrip("/"):
+                    elif raw_can.rstrip("/") in (effective_url, page_url.rstrip("/")):
                         can_stat = "self"
                     else:
                         can_stat = "canonicalized"
@@ -807,7 +825,7 @@ class CrawlerService:
                     t_px, t_status = evaluate_title_pixel_status(meta_res.get("title") or "")
                     m_px, m_status = evaluate_meta_pixel_status(meta_res.get("meta_description") or "")
                     w_cnt = html_res.get("word_count", 0)
-                    is_thin = False
+                    is_thin = bool(is_idx and 200 <= status_code < 300 and w_cnt < 250)
 
                     return PageEvidence(
                         url=page_url,
@@ -850,6 +868,9 @@ class CrawlerService:
                         rendering_discrepancy=rendering_disparity_data,
                         observed_at=datetime.now(timezone.utc).isoformat(),
                         image_assets=dom_res.get("image_assets", []),
+                        image_assets_truncated=bool(dom_res.get("image_assets_truncated")),
+                        unique_image_urls=int(dom_res.get("unique_image_urls") or 0),
+                        video_assets=dom_res.get("video_assets", []),
                         x_robots_tag=meta_res.get("x_robots_tag"),
                         status_code_class=sc_class,
                         is_indexable=is_idx,
@@ -958,8 +979,8 @@ class CrawlerService:
             discovered_urls=list(discovered_urls_pool),
         )
 
-        # Step D: Index page chunks into VectorStore using E5-Large
-        try:
+        # Step D: Index page chunks into VectorStore without blocking the async event loop
+        def _index_page_vectors() -> None:
             from app.crawl.vector_store import vector_store
             from app.crawl.embeddings import embedding_service
             for page in crawled_pages:
@@ -974,6 +995,9 @@ class CrawlerService:
                         vectors=vectors,
                         analysis_id=getattr(evidence_store, "run_id", None),
                     )
+
+        try:
+            await asyncio.to_thread(_index_page_vectors)
         except Exception as exc:
             logger.warning("[Crawler] VectorStore indexing error (non-fatal): %s", exc)
 

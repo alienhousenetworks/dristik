@@ -1,8 +1,9 @@
 import React from 'react';
 import { describe, expect, it } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { cleanup, render, screen, fireEvent } from '@testing-library/react';
 import { SeoExecutiveDashboard } from './SeoExecutiveDashboard';
 import { CrawlExplorerView } from './CrawlExplorerView';
+import { UrlInspectionDrawer } from './UrlInspectionDrawer';
 import { SeoFindingsWorkspace } from './SeoFindingsWorkspace';
 import { SeoIntelligenceWorkspace } from './SeoIntelligenceWorkspace';
 import { ExecutiveReport, Finding } from '../../../types';
@@ -117,6 +118,35 @@ describe('CrawlExplorerView', () => {
     expect(screen.getByText('Crawl Explorer')).toBeDefined();
     expect(screen.getByText('https://example.com/')).toBeDefined();
     expect(screen.getByText('Example Homepage')).toBeDefined();
+  });
+
+  it('shows stored image and video URLs on the images tab', () => {
+    cleanup();
+    render(
+      <UrlInspectionDrawer
+        page={{
+          url: 'https://example.com/',
+          status_code: 200,
+          total_images: 2,
+          h1: ['Welcome to Example'],
+          h2: [],
+          schema_types: [],
+          image_assets: [
+            { url: 'https://cdn.example.com/hero.webp', has_alt: true, alt_text: 'Hero', is_empty_alt: false },
+          ],
+          video_assets: [
+            { url: 'https://www.youtube.com/embed/abc', kind: 'iframe', has_source: true },
+          ],
+        }}
+        report={mockReport}
+        onClose={() => {}}
+      />
+    );
+    fireEvent.click(screen.getByRole('button', { name: /Images/ }));
+    expect(screen.getByText('https://cdn.example.com/hero.webp')).toBeDefined();
+    expect(screen.getByText('https://www.youtube.com/embed/abc')).toBeDefined();
+    expect(screen.getByText('Has ALT')).toBeDefined();
+    expect(screen.queryByText('No image asset records stored for this URL.')).toBeNull();
   });
 });
 

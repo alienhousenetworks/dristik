@@ -360,9 +360,18 @@ class MathematicalScoreEngine:
                     title_counts[t] = title_counts.get(t, 0) + 1
             duplicate_titles = sum(1 for c in title_counts.values() if c > 1)
 
-            has_intent_or_path = sum(
+            # Content intent alignment requires explicit intent metadata or aligned title + H1 structure
+            # (never an unconditional free pass on p.get("url")).
+            has_intent_alignment = sum(
                 1 for p in pages
-                if bool(p.get("intent") or p.get("search_intent") or p.get("url"))
+                if bool(p.get("intent") or p.get("search_intent"))
+                or (
+                    bool(str(p.get("title") or "").strip())
+                    and (
+                        (isinstance(p.get("h1"), list) and len(p.get("h1")) > 0)
+                        or (isinstance(p.get("h1"), str) and bool(p.get("h1").strip()))
+                    )
+                )
             )
             has_heading_structure = sum(
                 1 for p in pages
@@ -387,7 +396,7 @@ class MathematicalScoreEngine:
             ])
             checks_by_dim["content_quality_intent"].extend([
                 MetricCheck(check_id="content.non_thin_depth", weight=2.0, passed=(good_content / total >= 0.75)),
-                MetricCheck(check_id="content.intent_alignment", weight=1.5, passed=(has_intent_or_path / total >= 0.75)),
+                MetricCheck(check_id="content.intent_alignment", weight=1.5, passed=(has_intent_alignment / total >= 0.75)),
                 MetricCheck(check_id="content.cannibalization_freedom", weight=1.5, passed=(duplicate_titles == 0)),
                 MetricCheck(check_id="content.semantic_structure", weight=1.0, passed=(has_heading_structure / total >= 0.75)),
             ])
@@ -395,7 +404,7 @@ class MathematicalScoreEngine:
                 MetricCheck(check_id="links.outbound_connectivity", weight=1.5, passed=(has_links / total >= 0.85)),
             ])
             checks_by_dim["structured_data_entities"].extend([
-                MetricCheck(check_id="schema.jsonld_present", weight=1.5, passed=(has_schema > 0)),
+                MetricCheck(check_id="schema.jsonld_present", weight=1.5, passed=(has_schema / total >= 0.50)),
             ])
 
             # Performance & Mobile checks only if actual TTFB/CWV/viewport signals exist
@@ -415,7 +424,29 @@ class MathematicalScoreEngine:
                     MetricCheck(check_id="mobile.viewport_meta", weight=1.5, passed=vp_ok)
                 )
 
-        # Incorporate confirmed findings as weighted failed checks mapped to their dimension
+        # Incorporate confirmed findings as weighted failed checks mapped to their dimension,
+        # avoiding double-charging defects already penalized by a failed baseline check.
+        _BASELINE_EQUIVALENTS = {
+            "seo.title.missing": "onpage.title_present",
+            "seo.meta_description.missing": "onpage.meta_desc_present",
+            "seo.h1.missing": "onpage.single_h1",
+            "seo.images.missing_alt": "onpage.image_alt_coverage",
+            "seo.canonical.missing": "idx.canonical_present",
+            "seo.indexability.noindex": "idx.indexable_pages",
+            "seo.http.error_status": "tech.http_2xx_ratio",
+            "seo.trust.non_https": "tech.https_enforcement",
+            "seo.content.thin": "content.non_thin_depth",
+            "seo.content.duplicate_title": "content.cannibalization_freedom",
+            "seo.schema.missing": "schema.jsonld_present",
+            "seo.performance.slow_ttfb": "perf.ttfb_threshold",
+            "seo.mobile.missing_viewport": "mobile.viewport_meta",
+        }
+        failed_baseline_ids = {
+            c.check_id
+            for dim_checks in checks_by_dim.values()
+            for c in dim_checks
+            if c.is_executed and not c.passed
+        }
         sev_weight = {"CRITICAL": 3.0, "HIGH": 2.0, "MEDIUM": 1.25, "LOW": 0.75, "INFO": 0.0}
         seen_dim_rules: Set[Tuple[str, str]] = set()
         for f in findings:
@@ -427,6 +458,8 @@ class MathematicalScoreEngine:
             if weight <= 0.0:
                 continue
             rule_id = str(f.get("rule_id") or f.get("finding_id") or "finding").lower()
+            if _BASELINE_EQUIVALENTS.get(rule_id) in failed_baseline_ids:
+                continue
             cat = str(f.get("category") or "").upper()
             rc_id = f.get("root_cause_id")
             dim_id = self._map_finding_to_dimension(rule_id, cat)
@@ -446,15 +479,12 @@ class MathematicalScoreEngine:
                 )
             )
 
-        # Conditional applicability for specialist_applicability (5%)
+        # Conditional applicability for specialist_applicability (5%):
+        # Never inject synthetic passed=True checks when no specialist checks actually ran.
         spec_flags = specialist_applicable or {}
         is_spec_applicable = any(bool(v) for v in spec_flags.values())
-        if is_spec_applicable and not checks_by_dim["specialist_applicability"]:
-            checks_by_dim["specialist_applicability"].append(
-                MetricCheck(check_id="specialist.baseline_observed", weight=1.0, passed=True)
-            )
 
-        # Trust & Authority (5%): only measured when backlink connector is connected OR observable E-E-A-T/trust checks ran
+        # Trust & Authority (5%): only measured when explicit trust/authority checks actually ran.
         connectors = connector_statuses or []
         connected_ids = {
             str(c.get("provider_id") or c.get("connector_type") or "")
@@ -462,10 +492,6 @@ class MathematicalScoreEngine:
             if str(c.get("status") or "").upper() == "CONNECTED"
         }
         has_backlink_conn = "backlink_provider" in connected_ids
-        if has_backlink_conn and not checks_by_dim["trust_authority_signals"]:
-            checks_by_dim["trust_authority_signals"].append(
-                MetricCheck(check_id="authority.backlink_provider_synced", weight=1.0, passed=True)
-            )
 
         dimension_results: List[DimensionResult] = []
         for dim_id in self.DIMENSION_WEIGHTS:
@@ -473,7 +499,6 @@ class MathematicalScoreEngine:
             if dim_id == "specialist_applicability":
                 applicable = is_spec_applicable
             checks = checks_by_dim[dim_id]
-            # Without backlink connector or explicit trust findings, authority stays unmeasured
             if dim_id == "trust_authority_signals" and not has_backlink_conn and not checks:
                 checks = []
             dimension_results.append(self.calculate_dimension_score(dim_id, checks, is_applicable=applicable))

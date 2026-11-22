@@ -276,7 +276,16 @@ def run_department_e(ctx: CROAuditContext) -> CROAgentOutput:
         )
 
     # Dimension checks for Forms & CTA Effectiveness
-    cta_func_score = 0.0 if (ctas and len(broken_ctas) == len(ctas)) else (max(0.2, 1.0 - (len(broken_ctas) * 0.45)) if ctas else 0.4)
+    conversion_ctas = [c for c in ctas if c.cta_hierarchy in ("primary", "secondary")]
+    if not ctas:
+        cta_func_score = 0.0
+    elif len(broken_ctas) == len(ctas):
+        cta_func_score = 0.0
+    elif not conversion_ctas:
+        # Only generic/navigation links present; no primary or secondary conversion CTA.
+        cta_func_score = max(0.15, 0.35 - (len(broken_ctas) * 0.15))
+    else:
+        cta_func_score = max(0.2, 1.0 - (len(broken_ctas) * 0.45))
     form_qual_score = 1.0
     if slow_or_error_forms:
         form_qual_score -= 0.45

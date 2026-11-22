@@ -69,12 +69,20 @@ export function SeoMarketIntelligence({ report }: SeoMarketIntelligenceProps) {
               </span>
               <div className="flex items-baseline justify-between">
                 <span className="text-2xl font-bold font-mono text-ink">
-                  {localSeo ? `${localSeo.nap_consistency_score}%` : '100%'}
+                  {localSeo?.nap_consistency_score != null ? `${localSeo.nap_consistency_score}%` : '—'}
                 </span>
                 <span className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded ${
-                  (localSeo?.nap_consistency_score ?? 100) >= 80 ? 'bg-good/10 text-good' : 'bg-bad/10 text-bad'
+                  localSeo?.nap_consistency_score == null
+                    ? 'bg-paper-200 text-ink-500'
+                    : localSeo.nap_consistency_score >= 80
+                      ? 'bg-good/10 text-good'
+                      : 'bg-bad/10 text-bad'
                 }`}>
-                  {(localSeo?.nap_consistency_score ?? 100) >= 80 ? 'Consistent' : 'Conflicts'}
+                  {localSeo?.nap_consistency_score == null
+                    ? 'Not Measured'
+                    : localSeo.nap_consistency_score >= 80
+                      ? 'Consistent'
+                      : 'Conflicts'}
                 </span>
               </div>
               <span className="text-[11px] text-ink-500 block">Name, Address, Phone alignment</span>

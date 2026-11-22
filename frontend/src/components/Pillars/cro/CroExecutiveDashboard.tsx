@@ -218,7 +218,9 @@ export function CroExecutiveDashboard({
           <p className="text-sm font-mono font-bold uppercase text-ink mt-2">
             {(audit.qa_status || 'pending').replace(/_/g, ' ')}
           </p>
-          <p className="text-[11px] text-ink-500">Evidence coverage {scorecard.evidence_coverage_pct ?? 100}%</p>
+          <p className="text-[11px] text-ink-500">
+            Evidence coverage {scorecard.evidence_coverage_pct != null ? `${scorecard.evidence_coverage_pct}%` : 'Not measured'}
+          </p>
         </Card>
       </div>
 

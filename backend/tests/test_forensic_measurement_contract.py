@@ -57,6 +57,51 @@ def test_every_runtime_agent_declares_a_measurement_or_an_unmeasured_reason():
                 assert (evidence.text or "").strip() != claim["statement"].strip(), agent_id
 
 
+def test_accessibility_counts_missing_alt_not_empty_alt():
+    page = PageEvidence(
+        url="https://example.com/",
+        title="Home",
+        h1=["Home"],
+        image_assets=[
+            {"url": "https://example.com/a.webp", "has_alt": True, "alt_text": "Hero", "is_empty_alt": False},
+            {"url": "https://example.com/b.png", "has_alt": False, "alt_text": None, "is_empty_alt": True},
+            {"url": "https://example.com/c.png", "has_alt": False, "alt_text": None, "is_empty_alt": False},
+        ],
+    )
+    board = _board([page])
+    definition = SPECIALIST_AGENTS_V3["seo.specialized.accessibility.v3"]
+    result = SpecialistAgent(definition, model_router=None)._deterministic_audit(board, [])
+    assert result["observations"]["images_missing_alt"] == 1
+    assert result["claims"]
+    assert "empty alt" not in result["claims"][0]["statement"]
+
+
+def test_video_specialist_measures_an_empty_page_without_a_claim():
+    page = PageEvidence(url="https://example.com/", title="Home", h1=["Home"])
+    board = _board([page])
+    definition = SPECIALIST_AGENTS_V3["seo.specialized.video.v3"]
+    result = SpecialistAgent(definition, model_router=None)._deterministic_audit(board, [])
+    assert result["status"] == "completed"
+    assert result["observations"]["measurement_state"] == "measured"
+    assert result["observations"]["video_count"] == 0
+    assert result["claims"] == []
+
+
+def test_video_without_a_source_is_a_claim():
+    page = PageEvidence(
+        url="https://example.com/",
+        title="Home",
+        h1=["Home"],
+        video_assets=[{"url": None, "has_source": False, "kind": "video"}],
+    )
+    board = _board([page])
+    definition = SPECIALIST_AGENTS_V3["seo.specialized.video.v3"]
+    result = SpecialistAgent(definition, model_router=None)._deterministic_audit(board, [])
+    assert result["observations"]["video_count"] == 1
+    assert result["claims"]
+    assert "resolvable source URL" in result["claims"][0]["statement"]
+
+
 def test_claim_evidence_is_not_the_claim_sentence():
     page = PageEvidence(url="https://example.com/missing", title="", h1=[], meta_description="")
     board = _board([page])

@@ -1346,12 +1346,12 @@ export function LiveExecutionConsole({ run, onRefreshRun }: LiveExecutionConsole
 
             <div className="flex items-center gap-2 text-xs font-mono">
               <span className="px-2.5 py-1 rounded-md bg-paper-200 text-ink-700 border border-line">
-                Total Agents: <strong className="text-ink">{workforceData.length || 50}</strong>
+                Total Agents: <strong className="text-ink">{workforceData.length}</strong>
               </span>
               <span className="px-2.5 py-1 rounded-md bg-good/10 text-good border border-good/30">
                 Completed:{' '}
                 <strong className="text-good">
-                  {workforceData.filter((a) => a.status === 'completed').length || (isCompleted ? 50 : 0)}
+                  {workforceData.filter((a) => a.status === 'completed').length}
                 </strong>
               </span>
               <span className="px-2.5 py-1 rounded-md bg-paper-200 text-ink-700 border border-line">

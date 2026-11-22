@@ -108,9 +108,9 @@ class CausalReasoningEngine:
                 expected_mechanism="Provides dense, citation-ready definitional passages that answer buyer questions directly with structured entity grounding.",
                 verification_step="Targeted re-crawl verifies buyer questions are answered with >85% semantic answerability in rendered HTML.",
                 external_verification="Re-test Perplexity and ChatGPT answer engine queries post-indexing to confirm brand citation.",
-                projected_outcome="AI answer engine citation rate improves from initial baseline to >40% across commercial buyer queries.",
+                projected_outcome="Outcome requires post-remediation live citation verification across configured answer engines (no static percentage assumed).",
                 severity=Severity.HIGH,
-                confidence=0.94,
+                confidence=round(min(0.85, 0.55 + 0.06 * len(entity_finding_ids[:5])), 2),
                 contributing_finding_ids=entity_finding_ids[:6]
             ))
 
@@ -135,9 +135,9 @@ class CausalReasoningEngine:
                 expected_mechanism="Caches rendered HTML at the edge, slashing time-to-first-byte to <600ms globally and freeing crawl budget.",
                 verification_step="Live HTTP benchmark verifies TTFB < 800ms across all audited routes.",
                 external_verification="Google CruX and field Core Web Vitals report 'Good' classification.",
-                projected_outcome="Crawl indexing efficiency triples; first-fold bounce rate decreases 15-25%.",
+                projected_outcome="Reduced TTFB improves crawl efficiency and page responsiveness; bounce-rate delta requires connected analytics.",
                 severity=Severity.HIGH if ttfb > 2500 else Severity.MEDIUM,
-                confidence=0.92,
+                confidence=round(min(0.90, 0.65 + 0.06 * len(perf_finding_ids[:4])), 2),
                 contributing_finding_ids=perf_finding_ids[:4]
             ))
 
@@ -185,9 +185,9 @@ class CausalReasoningEngine:
                 expected_mechanism="Eliminates decision paralysis and enables rapid buyer self-qualification.",
                 verification_step="DOM inspection verifies prominent high-contrast CTA within top 500px viewport and single-step form submission.",
                 external_verification="Web analytics records a measurable increase in goal completion rate.",
-                projected_outcome="15% to 30% increase in visitor-to-lead conversion rate.",
+                projected_outcome="Conversion lift must be measured via controlled A/B testing or connected GA4 funnel telemetry (no fixed lift assumed).",
                 severity=Severity.MEDIUM,
-                confidence=0.88,
+                confidence=round(min(0.85, 0.55 + 0.06 * len(cro_finding_ids[:5])), 2),
                 contributing_finding_ids=cro_finding_ids[:5]
             ))
 
@@ -219,9 +219,9 @@ class CausalReasoningEngine:
                 expected_mechanism="Supplies LLMs with high-affinity comparative facts and explicit feature diffs, overturning competitor citation dominance.",
                 verification_step="In-situ re-crawl verifies comparison tables and schema markup achieve 100% attribute resolution.",
                 external_verification="Re-probe commercial buyer questions across Perplexity and ChatGPT after search indexation.",
-                projected_outcome="Citation share on competitive buyer inquiries increases from 0% to >35%.",
+                projected_outcome="Competitive citation share change requires post-indexing re-probe across configured AI engines.",
                 severity=Severity.HIGH if len(comp_losses) >= 2 else Severity.MEDIUM,
-                confidence=0.91,
+                confidence=round(min(0.85, 0.55 + 0.06 * len(comp_finding_ids[:5])), 2),
                 contributing_finding_ids=comp_finding_ids[:5]
             ))
 

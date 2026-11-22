@@ -661,7 +661,10 @@ export function buildGeoBundleFromExecutiveReport(report: ExecutiveReport, analy
       methodology_disclosure:
         'Observed GEO Performance and GEO Readiness & Optimization are strictly separated. Missing provider credentials remain unmeasured (never 0%).',
       observed_performance_score: measured ? (vCard?.mention_rate_pct ?? null) : null,
-      observed_performance_grade: measured ? 'B' : 'Unmeasured',
+      observed_performance_grade:
+        measured && typeof vCard?.mention_rate_pct === 'number'
+          ? (vCard.mention_rate_pct >= 93 ? 'A+' : vCard.mention_rate_pct >= 85 ? 'A' : vCard.mention_rate_pct >= 75 ? 'B' : vCard.mention_rate_pct >= 65 ? 'C' : vCard.mention_rate_pct >= 50 ? 'D' : 'F')
+          : 'Unmeasured',
       observed_performance_status: measured ? 'OBSERVED' : 'NOT_CONFIGURED',
       observed_metrics: {
         brand_mention_rate_pct: measured ? vCard?.mention_rate_pct ?? null : null,
@@ -670,7 +673,10 @@ export function buildGeoBundleFromExecutiveReport(report: ExecutiveReport, analy
         total_citations_observed: 0,
       },
       readiness_score: readinessVal != null ? Math.round(readinessVal * 10) / 10 : null,
-      readiness_grade: readinessVal != null ? (readinessVal >= 85 ? 'A' : readinessVal >= 70 ? 'B' : 'C') : 'Unmeasured',
+      readiness_grade:
+        readinessVal != null
+          ? (readinessVal >= 93 ? 'A+' : readinessVal >= 85 ? 'A' : readinessVal >= 75 ? 'B' : readinessVal >= 65 ? 'C' : readinessVal >= 50 ? 'D' : 'F')
+          : 'Unmeasured',
       readiness_status: readinessVal != null ? 'OBSERVED' : 'NOT_TESTED',
       readiness_metrics: { pages_analyzed: pages.length },
       methodology_composite_score: null,

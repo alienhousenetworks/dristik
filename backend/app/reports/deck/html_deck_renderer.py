@@ -519,16 +519,21 @@ class HtmlVectorDeckRenderer:
         svg_elements = []
         for idx, (cat, val) in enumerate(zip(cats, values)):
             y = 20 + idx * (bar_h + gap)
-            v_num = float(val) if isinstance(val, (int, float)) else 50.0
-            # Scale to 250px max width
-            bar_w = max(10, int((v_num / 100.0) * 260))
-            color = "#38bdf8" if v_num >= 75 else ("#f59e0b" if v_num >= 60 else "#ef4444")
-
-            cat_clean = html.escape(cat[:18])
+            cat_clean = html.escape(cat[:22])
+            if not isinstance(val, (int, float)) or isinstance(val, bool):
+                svg_elements.append(f"""
+                <text x="10" y="{y + 14}" fill="#94a3b8" font-size="11" font-family="monospace">{cat_clean}</text>
+                <rect x="165" y="{y}" width="36" height="{bar_h}" rx="3" fill="#475569" opacity="0.55" />
+                <text x="208" y="{y + 14}" fill="#94a3b8" font-size="10" font-family="monospace">Unmeasured</text>
+                """)
+                continue
+            v_num = max(0.0, min(100.0, float(val)))
+            bar_w = max(10, int((v_num / 100.0) * 250))
+            color = "#38bdf8" if v_num >= 75 else ("#f59e0b" if v_num >= 65 else "#ef4444")
             svg_elements.append(f"""
             <text x="10" y="{y + 14}" fill="#94a3b8" font-size="11" font-family="monospace">{cat_clean}</text>
-            <rect x="150" y="{y}" width="{bar_w}" height="{bar_h}" rx="3" fill="{color}" opacity="0.85" />
-            <text x="{155 + bar_w}" y="{y + 14}" fill="#ffffff" font-size="11" font-weight="bold" font-family="monospace">{int(v_num)}</text>
+            <rect x="165" y="{y}" width="{bar_w}" height="{bar_h}" rx="3" fill="{color}" opacity="0.85" />
+            <text x="{170 + bar_w}" y="{y + 14}" fill="#ffffff" font-size="11" font-weight="bold" font-family="monospace">{int(round(v_num))}</text>
             """)
 
         inner_svg = "".join(svg_elements)

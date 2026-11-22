@@ -176,6 +176,53 @@ def test_dom_image_asset_extraction_and_cls_risk():
     assert assets[2]["format"] == "avif"
     assert assets[2]["has_dimensions"] is False
     assert assets[2]["cls_risk"] is True
+    assert assets[0]["url"] == "https://example.com/assets/hero.webp"
+    assert res["video_assets"] == []
+    assert res["unique_image_urls"] == 3
+    assert res["image_assets_truncated"] is False
+
+
+def test_dom_extracts_lazy_images_picture_sources_and_videos():
+    html = """
+    <html>
+        <body>
+            <img src="//cdn.example.com/hero.webp" alt="Hero">
+            <img srcset="/lazy/a.png 400w, /lazy/b.png 800w">
+            <picture>
+                <source srcset="/pic/banner.avif 1x">
+                <img alt="Banner">
+            </picture>
+            <img src="/assets/hero.webp" alt="Hero">
+            <img src="/assets/hero.webp" alt="Hero again">
+            <video poster="/poster.jpg">
+                <source src="/media/demo.mp4" type="video/mp4">
+            </video>
+            <video></video>
+            <iframe src="https://www.youtube.com/embed/abc123"></iframe>
+            <iframe src="https://example.com/not-a-video"></iframe>
+        </body>
+    </html>
+    """
+    soup = BeautifulSoup(html, "lxml")
+    res = analyze_dom_structure(soup, "https://example.com/page", EvidenceStore("test_media"))
+    urls = [asset["url"] for asset in res["image_assets"]]
+    assert urls == [
+        "https://cdn.example.com/hero.webp",
+        "https://example.com/lazy/a.png",
+        "https://example.com/pic/banner.avif",
+        "https://example.com/assets/hero.webp",
+    ]
+    assert res["total_images"] == 5
+    assert res["unique_image_urls"] == 4
+    videos = res["video_assets"]
+    assert videos[0]["url"] == "https://example.com/media/demo.mp4"
+    assert videos[0]["poster"] == "https://example.com/poster.jpg"
+    assert videos[0]["has_source"] is True
+    assert videos[1]["url"] is None
+    assert videos[1]["has_source"] is False
+    assert videos[2]["url"] == "https://www.youtube.com/embed/abc123"
+    assert videos[2]["kind"] == "iframe"
+    assert len(videos) == 3
 
 
 def test_crawl_budget_accounting_and_orphan_detection():

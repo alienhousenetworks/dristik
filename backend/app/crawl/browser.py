@@ -88,233 +88,259 @@ class BrowserRenderService:
         context = None
         page = None
         blocked_unsafe_request = False
-        try:
-            context = await browser.new_context(
-                user_agent=settings.USER_AGENT,
-                viewport={"width": 1440, "height": 900},
-                ignore_https_errors=True
-            )
-            page = await context.new_page()
+        async with cls._render_semaphore:
+            try:
+                context = await browser.new_context(
+                    user_agent=settings.USER_AGENT,
+                    viewport={"width": 1440, "height": 900},
+                    ignore_https_errors=True
+                )
+                page = await context.new_page()
 
-            # Enterprise Optimization: Block heavy media and tracking assets
-            async def filter_route(route):
-                nonlocal blocked_unsafe_request
-                req = route.request
-                rtype = req.resource_type
-                # Abort intentionally excluded resources before DNS validation; they
-                # will not be fetched and therefore do not need an egress lookup.
-                if rtype in ["image", "media", "font"]:
-                    await route.abort()
-                    return
-                if any(t in req.url.lower() for t in ["google-analytics", "googletagmanager", "hotjar", "facebook.net", "clarity.ms"]):
-                    await route.abort()
-                    return
-                if settings.SSRF_PROTECTION_ENABLED:
-                    # Validate every request that will actually be sent, including
-                    # top-level navigations, redirects, scripts, and XHR/fetch calls.
+                # Enterprise Optimization: Block heavy media and tracking assets
+                async def filter_route(route):
+                    nonlocal blocked_unsafe_request
+                    req = route.request
+                    rtype = req.resource_type
+                    # Abort intentionally excluded resources before DNS validation; they
+                    # will not be fetched and therefore do not need an egress lookup.
+                    if rtype in ["image", "media", "font"]:
+                        await route.abort()
+                        return
+                    if any(t in req.url.lower() for t in ["google-analytics", "googletagmanager", "hotjar", "facebook.net", "clarity.ms"]):
+                        await route.abort()
+                        return
+                    if settings.SSRF_PROTECTION_ENABLED:
+                        # Validate every request that will actually be sent, including
+                        # top-level navigations, redirects, scripts, and XHR/fetch calls.
+                        try:
+                            safe, reason = await asyncio.wait_for(
+                                asyncio.to_thread(is_safe_url, req.url),
+                                timeout=3.0,
+                            )
+                        except asyncio.TimeoutError:
+                            blocked_unsafe_request = True
+                            logger.warning("Blocked browser request after SSRF validation timeout: %s", req.url)
+                            await route.abort("blockedbyclient")
+                            return
+                        if not safe:
+                            blocked_unsafe_request = True
+                            logger.warning("Blocked unsafe browser request %s: %s", req.url, reason)
+                            await route.abort("blockedbyclient")
+                            return
+                    await route.continue_()
+
+                await page.route("**/*", filter_route)
+
+                # networkidle hangs on long-polling/WebGL sites; DOM + a short hydrate wait is enough
+                response = await page.goto(url, wait_until="domcontentloaded", timeout=timeout)
+                if blocked_unsafe_request:
+                    return None, 0, 0.0, {}, "ssrf_blocked_browser_request", None, None
+                status_code = response.status if response is not None else 0
+                raw_resp_headers: Dict[str, str] = {}
+                if response is not None:
                     try:
-                        safe, reason = await asyncio.wait_for(
-                            asyncio.to_thread(is_safe_url, req.url),
-                            timeout=3.0,
-                        )
-                    except asyncio.TimeoutError:
-                        blocked_unsafe_request = True
-                        logger.warning("Blocked browser request after SSRF validation timeout: %s", req.url)
-                        await route.abort("blockedbyclient")
-                        return
-                    if not safe:
-                        blocked_unsafe_request = True
-                        logger.warning("Blocked unsafe browser request %s: %s", req.url, reason)
-                        await route.abort("blockedbyclient")
-                        return
-                await route.continue_()
-
-            await page.route("**/*", filter_route)
-
-            # networkidle hangs on long-polling/WebGL sites; DOM + a short hydrate wait is enough
-            response = await page.goto(url, wait_until="domcontentloaded", timeout=timeout)
-            status_code = response.status if response else 200
-            ttfb_ms = 0.0
-
-            try:
-                await page.wait_for_selector("main, article, h1, [role='main'], body", timeout=4000)
-            except Exception:
-                pass
-
-            # Dismiss cookie / protocol gates that hide the real page after hydration
-            for selector in [
-                "button:has-text('Accept')",
-                "button:has-text('Accept Protocol')",
-                "button:has-text('I agree')",
-                "button:has-text('Allow')",
-                "#cookie-banner button",
-                "[id*='cookie'] button",
-            ]:
-                try:
-                    btn = page.locator(selector).first
-                    if await btn.count() and await btn.is_visible():
-                        await btn.click(timeout=800)
-                        break
-                except Exception:
-                    continue
-
-            try:
-                await page.wait_for_timeout(600)
-            except Exception:
-                pass
-
-            html_content = await page.content()
-            inner_text = None
-            try:
-                inner_text = await page.evaluate(
-                    """() => {
-                        const main = document.querySelector('main, [role=main], article, #content, #main');
-                        const root = main || document.body;
-                        return root ? (root.innerText || root.textContent || '') : '';
-                    }"""
-                )
-            except Exception:
-                inner_text = None
-
-            # Extract Navigation Timing Level 2 and Resource Timings for true TTFB and Lab CWV
-            perf_data = None
-            try:
-                perf_data = await page.evaluate(
-                    """() => {
-                        try {
-                            const nav = performance.getEntriesByType('navigation')[0] || {};
-                            const paint = performance.getEntriesByType('paint') || [];
-                            const resources = performance.getEntriesByType('resource') || [];
-
-                            const fp = paint.find(p => p.name === 'first-paint');
-                            const fcp = paint.find(p => p.name === 'first-contentful-paint');
-                            const lcpEntries = performance.getEntriesByType('largest-contentful-paint') || [];
-                            const lastLcp = lcpEntries.length > 0 ? lcpEntries[lcpEntries.length - 1] : null;
-                            const lcpVal = lastLcp ? (lastLcp.startTime || lastLcp.renderTime || lastLcp.loadTime || null) : null;
-
-                            const clsEntries = performance.getEntriesByType('layout-shift') || [];
-                            let clsVal = 0;
-                            let hasCls = false;
-                            clsEntries.forEach(entry => {
-                                if (!entry.hadRecentInput && typeof entry.value === 'number') {
-                                    clsVal += entry.value;
-                                    hasCls = true;
-                                }
-                            });
-
-                            let ttfb = 0;
-                            if (nav.responseStart && nav.requestStart) {
-                                ttfb = Math.max(0, nav.responseStart - nav.requestStart);
-                            } else if (nav.responseStart) {
-                                ttfb = Math.max(0, nav.responseStart);
-                            }
-
-                            const dns = (nav.domainLookupEnd && nav.domainLookupStart) ? Math.max(0, nav.domainLookupEnd - nav.domainLookupStart) : 0;
-                            const tcp = (nav.connectEnd && nav.connectStart) ? Math.max(0, nav.connectEnd - nav.connectStart) : 0;
-                            const tls = (nav.secureConnectionStart && nav.connectEnd) ? Math.max(0, nav.connectEnd - nav.secureConnectionStart) : 0;
-                            const download = (nav.responseEnd && nav.responseStart) ? Math.max(0, nav.responseEnd - nav.responseStart) : 0;
-                            const dom_content_loaded = nav.domContentLoadedEventEnd || 0;
-                            const load_event = nav.loadEventEnd || 0;
-
-                            let js_bytes = 0, css_bytes = 0, img_bytes = 0, font_bytes = 0, total_bytes = 0;
-                            const counts = { document: 1, script: 0, stylesheet: 0, image: 0, font: 0, other: 0 };
-                            const render_blocking = [];
-                            const third_party_scripts = [];
-                            const pageHost = window.location.hostname;
-
-                            resources.forEach(r => {
-                                const transfer = r.transferSize || r.encodedBodySize || 0;
-                                total_bytes += transfer;
-                                const itype = (r.initiatorType || 'other').toLowerCase();
-                                if (itype === 'script') {
-                                    js_bytes += transfer;
-                                    counts.script = (counts.script || 0) + 1;
-                                } else if (itype === 'css' || itype === 'link') {
-                                    css_bytes += transfer;
-                                    counts.stylesheet = (counts.stylesheet || 0) + 1;
-                                } else if (itype === 'img' || itype === 'image') {
-                                    img_bytes += transfer;
-                                    counts.image = (counts.image || 0) + 1;
-                                } else if (itype === 'font') {
-                                    font_bytes += transfer;
-                                    counts.font = (counts.font || 0) + 1;
-                                } else {
-                                    counts.other = (counts.other || 0) + 1;
-                                }
-
-                                if (r.renderBlockingStatus === 'blocking') {
-                                    render_blocking.push({ url: r.name, initiator: itype, duration_ms: Math.round(r.duration || 0) });
-                                }
-
-                                try {
-                                    const u = new URL(r.name);
-                                    if (u.hostname !== pageHost && !u.hostname.endsWith('.' + pageHost)) {
-                                        if (itype === 'script') {
-                                            third_party_scripts.push({ url: r.name, hostname: u.hostname, transfer_bytes: transfer });
-                                        }
-                                    }
-                                } catch(e) {}
-                            });
-
-                            return {
-                                ttfb_ms: Math.round(ttfb * 10) / 10,
-                                dns_ms: Math.round(dns * 10) / 10,
-                                tcp_ms: Math.round(tcp * 10) / 10,
-                                tls_ms: Math.round(tls * 10) / 10,
-                                download_ms: Math.round(download * 10) / 10,
-                                dom_content_loaded_ms: Math.round(dom_content_loaded * 10) / 10,
-                                load_event_ms: Math.round(load_event * 10) / 10,
-                                fcp_ms: fcp ? Math.round(fcp.startTime * 10) / 10 : null,
-                                lcp_ms: lcpVal !== null ? Math.round(lcpVal * 10) / 10 : null,
-                                cls_score: hasCls ? Math.round(clsVal * 1000) / 1000 : null,
-                                total_transferred_bytes: total_bytes,
-                                js_bytes: js_bytes,
-                                css_bytes: css_bytes,
-                                img_bytes: img_bytes,
-                                font_bytes: font_bytes,
-                                request_counts: counts,
-                                total_requests: resources.length + 1,
-                                render_blocking: render_blocking,
-                                third_party_scripts: third_party_scripts
-                            };
-                        } catch(err) {
-                            return null;
-                        }
-                    }"""
-                )
-            except Exception:
-                perf_data = None
-
-            wall_clock_render_ms = round((time.time() - render_start_time) * 1000, 1)
-            if isinstance(perf_data, dict):
-                perf_data["wall_clock_render_ms"] = wall_clock_render_ms
-                if perf_data.get("ttfb_ms") and perf_data["ttfb_ms"] > 0:
-                    ttfb_ms = float(perf_data["ttfb_ms"])
-                else:
-                    ttfb_ms = 0.0
-            else:
-                perf_data = {"wall_clock_render_ms": wall_clock_render_ms, "ttfb_ms": 0.0}
+                        hdrs = await response.all_headers()
+                        if isinstance(hdrs, dict):
+                            raw_resp_headers = {str(k).lower(): str(v) for k, v in hdrs.items()}
+                    except Exception:
+                        try:
+                            hdrs = getattr(response, "headers", None)
+                            if isinstance(hdrs, dict):
+                                raw_resp_headers = {str(k).lower(): str(v) for k, v in hdrs.items()}
+                        except Exception:
+                            raw_resp_headers = {}
                 ttfb_ms = 0.0
 
-            resp_headers = {"x-crawler": "playwright-local-js"}
-
-            return html_content, status_code, ttfb_ms, resp_headers, None, inner_text, perf_data
-
-        except Exception as e:
-            wall_clock_render_ms = round((time.time() - render_start_time) * 1000, 1)
-            return None, 0, 0.0, {}, str(e), None, {"wall_clock_render_ms": wall_clock_render_ms}
-
-        finally:
-            if page:
                 try:
-                    await page.close()
+                    await page.wait_for_selector("main, article, h1, [role='main'], body", timeout=4000)
                 except Exception:
                     pass
-            if context:
+
+                # Dismiss cookie / protocol gates that hide the real page after hydration
+                for selector in [
+                    "button:has-text('Accept')",
+                    "button:has-text('Accept Protocol')",
+                    "button:has-text('I agree')",
+                    "button:has-text('Allow')",
+                    "#cookie-banner button",
+                    "[id*='cookie'] button",
+                ]:
+                    try:
+                        btn = page.locator(selector).first
+                        if await btn.count() and await btn.is_visible():
+                            await btn.click(timeout=800)
+                            break
+                    except Exception:
+                        continue
+
                 try:
-                    await context.close()
+                    await page.wait_for_timeout(600)
                 except Exception:
                     pass
+
+                if blocked_unsafe_request:
+                    return None, 0, 0.0, {}, "ssrf_blocked_browser_request", None, None
+
+                html_content = await page.content()
+                inner_text = None
+                try:
+                    inner_text = await page.evaluate(
+                        """() => {
+                            const main = document.querySelector('main, [role=main], article, #content, #main');
+                            const root = main || document.body;
+                            return root ? (root.innerText || root.textContent || '') : '';
+                        }"""
+                    )
+                except Exception:
+                    inner_text = None
+
+                # Extract Navigation Timing Level 2 and Resource Timings for true TTFB and Lab CWV
+                perf_data = None
+                try:
+                    perf_data = await page.evaluate(
+                        """() => {
+                            try {
+                                const nav = performance.getEntriesByType('navigation')[0] || {};
+                                const paint = performance.getEntriesByType('paint') || [];
+                                const resources = performance.getEntriesByType('resource') || [];
+
+                                const fp = paint.find(p => p.name === 'first-paint');
+                                const fcp = paint.find(p => p.name === 'first-contentful-paint');
+                                const lcpEntries = performance.getEntriesByType('largest-contentful-paint') || [];
+                                const lastLcp = lcpEntries.length > 0 ? lcpEntries[lcpEntries.length - 1] : null;
+                                const lcpVal = lastLcp ? (lastLcp.startTime || lastLcp.renderTime || lastLcp.loadTime || null) : null;
+
+                                const clsEntries = performance.getEntriesByType('layout-shift') || [];
+                                let clsVal = 0;
+                                let hasCls = false;
+                                clsEntries.forEach(entry => {
+                                    if (!entry.hadRecentInput && typeof entry.value === 'number') {
+                                        clsVal += entry.value;
+                                        hasCls = true;
+                                    }
+                                });
+
+                                let ttfb = 0;
+                                if (nav.responseStart && nav.requestStart) {
+                                    ttfb = Math.max(0, nav.responseStart - nav.requestStart);
+                                } else if (nav.responseStart) {
+                                    ttfb = Math.max(0, nav.responseStart);
+                                }
+
+                                const dns = (nav.domainLookupEnd && nav.domainLookupStart) ? Math.max(0, nav.domainLookupEnd - nav.domainLookupStart) : 0;
+                                const tcp = (nav.connectEnd && nav.connectStart) ? Math.max(0, nav.connectEnd - nav.connectStart) : 0;
+                                const tls = (nav.secureConnectionStart && nav.connectEnd) ? Math.max(0, nav.connectEnd - nav.secureConnectionStart) : 0;
+                                const download = (nav.responseEnd && nav.responseStart) ? Math.max(0, nav.responseEnd - nav.responseStart) : 0;
+                                const dom_content_loaded = nav.domContentLoadedEventEnd || 0;
+                                const load_event = nav.loadEventEnd || 0;
+
+                                let js_bytes = 0, css_bytes = 0, img_bytes = 0, font_bytes = 0, total_bytes = 0;
+                                const counts = { document: 1, script: 0, stylesheet: 0, image: 0, font: 0, other: 0 };
+                                const render_blocking = [];
+                                const third_party_scripts = [];
+                                const pageHost = window.location.hostname;
+
+                                resources.forEach(r => {
+                                    const transfer = r.transferSize || r.encodedBodySize || 0;
+                                    total_bytes += transfer;
+                                    const itype = (r.initiatorType || 'other').toLowerCase();
+                                    if (itype === 'script') {
+                                        js_bytes += transfer;
+                                        counts.script = (counts.script || 0) + 1;
+                                    } else if (itype === 'css' || itype === 'link') {
+                                        css_bytes += transfer;
+                                        counts.stylesheet = (counts.stylesheet || 0) + 1;
+                                    } else if (itype === 'img' || itype === 'image') {
+                                        img_bytes += transfer;
+                                        counts.image = (counts.image || 0) + 1;
+                                    } else if (itype === 'font') {
+                                        font_bytes += transfer;
+                                        counts.font = (counts.font || 0) + 1;
+                                    } else {
+                                        counts.other = (counts.other || 0) + 1;
+                                    }
+
+                                    if (r.renderBlockingStatus === 'blocking') {
+                                        render_blocking.push({ url: r.name, initiator: itype, duration_ms: Math.round(r.duration || 0) });
+                                    }
+
+                                    try {
+                                        const u = new URL(r.name);
+                                        if (u.hostname !== pageHost && !u.hostname.endsWith('.' + pageHost)) {
+                                            if (itype === 'script') {
+                                                third_party_scripts.push({ url: r.name, hostname: u.hostname, transfer_bytes: transfer });
+                                            }
+                                        }
+                                    } catch(e) {}
+                                });
+
+                                return {
+                                    ttfb_ms: Math.round(ttfb * 10) / 10,
+                                    dns_ms: Math.round(dns * 10) / 10,
+                                    tcp_ms: Math.round(tcp * 10) / 10,
+                                    tls_ms: Math.round(tls * 10) / 10,
+                                    download_ms: Math.round(download * 10) / 10,
+                                    dom_content_loaded_ms: Math.round(dom_content_loaded * 10) / 10,
+                                    load_event_ms: Math.round(load_event * 10) / 10,
+                                    fcp_ms: fcp ? Math.round(fcp.startTime * 10) / 10 : null,
+                                    lcp_ms: lcpVal !== null ? Math.round(lcpVal * 10) / 10 : null,
+                                    cls_score: hasCls ? Math.round(clsVal * 1000) / 1000 : null,
+                                    total_transferred_bytes: total_bytes,
+                                    js_bytes: js_bytes,
+                                    css_bytes: css_bytes,
+                                    img_bytes: img_bytes,
+                                    font_bytes: font_bytes,
+                                    request_counts: counts,
+                                    total_requests: resources.length + 1,
+                                    render_blocking: render_blocking,
+                                    third_party_scripts: third_party_scripts
+                                };
+                            } catch(err) {
+                                return null;
+                            }
+                        }"""
+                    )
+                except Exception:
+                    perf_data = None
+
+                wall_clock_render_ms = round((time.time() - render_start_time) * 1000, 1)
+                if isinstance(perf_data, dict):
+                    perf_data["wall_clock_render_ms"] = wall_clock_render_ms
+                    # Images, media, and fonts were aborted in filter_route for crawl speed;
+                    # do not report artificial LCP/CLS values distorted by blocked visual assets.
+                    perf_data["assets_blocked"] = True
+                    perf_data["lcp_ms"] = None
+                    perf_data["cls_score"] = None
+                    if perf_data.get("ttfb_ms") and perf_data["ttfb_ms"] > 0:
+                        ttfb_ms = float(perf_data["ttfb_ms"])
+                    else:
+                        ttfb_ms = 0.0
+                else:
+                    perf_data = {"wall_clock_render_ms": wall_clock_render_ms, "ttfb_ms": 0.0, "assets_blocked": True}
+                    ttfb_ms = 0.0
+
+                resp_headers = {**raw_resp_headers, "x-crawler": "playwright-local-js"}
+
+                return html_content, status_code, ttfb_ms, resp_headers, None, inner_text, perf_data
+
+            except Exception as e:
+                if blocked_unsafe_request:
+                    return None, 0, 0.0, {}, "ssrf_blocked_browser_request", None, None
+                wall_clock_render_ms = round((time.time() - render_start_time) * 1000, 1)
+                return None, 0, 0.0, {}, str(e), None, {"wall_clock_render_ms": wall_clock_render_ms}
+
+            finally:
+                if page:
+                    try:
+                        await page.close()
+                    except Exception:
+                        pass
+                if context:
+                    try:
+                        await context.close()
+                    except Exception:
+                        pass
 
     @classmethod
     def _kill_process_tree(cls, pid: int) -> None:

@@ -234,34 +234,40 @@ class SpecialistAgent(BaseAgent):
             self._store(blackboard, result)
             return result
 
-        has_llm_model = any(m in ("reasoning_model", "fast_slm", "judge_model") for m in (self.definition.allowed_models or []))
-        if has_llm_model:
-            # Agentic-first policy: execute AI specialist reasoning over empirical evidence
-            llm_res = await self._llm_audit(blackboard, evidence_slice)
-            if llm_res.get("status") == "completed":
-                if "deterministic" in (self.definition.allowed_models or []):
-                    det = self._deterministic_audit(blackboard, evidence_slice)
+        allowed = self.definition.allowed_models or []
+        has_det = "deterministic" in allowed
+        has_llm_model = any(m in ("reasoning_model", "fast_slm", "judge_model") for m in allowed)
+
+        # Deterministic-first policy for hybrid agents: run deterministic telemetry first.
+        # Objective technical/structured-data/GEO/AEO checks do not spend LLM tokens when
+        # deterministic evaluation already completed or determined not_applicable.
+        _DETERMINISTIC_FIRST_DOMAINS = {"TECHNICAL_SEO", "STRUCTURED_DATA", "GEO", "AEO"}
+        if has_det:
+            det = self._deterministic_audit(blackboard, evidence_slice)
+            det_state = (det.get("observations") or {}).get("measurement_state")
+            det_reason = det.get("unavailable_reason") or (det.get("observations") or {}).get("unmeasured_reason")
+            if det_state == "not_applicable":
+                self._store(blackboard, det)
+                return det
+            if det_reason != "no_deterministic_check":
+                if self.definition.domain in _DETERMINISTIC_FIRST_DOMAINS or not has_llm_model:
+                    self._store(blackboard, det)
+                    return det
+                # Semantic/qualitative hybrid domain: augment deterministic facts with LLM reasoning if available
+                llm_res = await self._llm_audit(blackboard, evidence_slice)
+                if llm_res.get("status") == "completed":
                     result = self._merge(det, llm_res)
                     self._store(blackboard, result)
                     return result
-                self._store(blackboard, llm_res)
-                return llm_res
-            # Offline/fallback: if LLM unavailable, fall back to deterministic telemetry
-            if llm_res.get("status") == "unavailable" and "deterministic" in (self.definition.allowed_models or []):
-                det = self._deterministic_audit(blackboard, evidence_slice)
-                state = (det.get("observations") or {}).get("measurement_state")
-                if det.get("claims") or state == "measured":
-                    det["mode"] = "DETERMINISTIC"
-                    if det.get("status") != "unmeasured":
-                        det["status"] = "completed"
-                    self._store(blackboard, det)
-                    return det
                 self._store(blackboard, det)
                 return det
+
+        if has_llm_model:
+            llm_res = await self._llm_audit(blackboard, evidence_slice)
             self._store(blackboard, llm_res)
             return llm_res
 
-        # Pure deterministic capability
+        # Pure deterministic fallback
         det = self._deterministic_audit(blackboard, evidence_slice)
         self._store(blackboard, det)
         return det
@@ -628,7 +634,10 @@ class SpecialistAgent(BaseAgent):
         aid = self.agent_id
         ch = (manifest.crawl_health if manifest else {}) or {}
 
-        if aid == "seo.crawl.v3" and manifest:
+        if aid == "seo.crawl.v3" and not manifest:
+            observations["measurement_state"] = "unmeasured"
+            observations["unmeasured_reason"] = "crawl_manifest_missing"
+        elif aid == "seo.crawl.v3" and manifest:
             observations["pages_crawled"] = len(pages)
             observations["sitemap_found"] = bool(manifest.sitemap_found)
             observations["robots_txt_found"] = bool(manifest.robots_txt_found)
@@ -1368,17 +1377,32 @@ class SpecialistAgent(BaseAgent):
             observations["pages_inspected"] = len(pages)
             observations["specialized_domain"] = aid
             if aid == "seo.specialized.accessibility.v3":
-                missing_alt = sum(
-                    len([img for img in (getattr(p, "image_assets", None) or []) if isinstance(img, dict) and not img.get("alt")])
-                    for p in pages
-                )
+                missing_alt = 0
+                for page in pages:
+                    for img in (getattr(page, "image_assets", None) or []):
+                        if isinstance(img, dict) and img.get("has_alt") is False and not img.get("is_empty_alt"):
+                            missing_alt += 1
                 observations["images_missing_alt"] = missing_alt
                 observations["measurement_state"] = "measured"
                 if missing_alt:
                     add(
-                        f"{missing_alt} image asset(s) have an empty alt attribute.",
+                        f"{missing_alt} image asset(s) have no alt attribute.",
                         Severity.MEDIUM,
                         "Write alt text for images that convey information.",
+                    )
+            elif aid == "seo.specialized.video.v3":
+                videos = []
+                for page in pages:
+                    videos.extend(v for v in (getattr(page, "video_assets", None) or []) if isinstance(v, dict))
+                unsourced = [v for v in videos if not (v.get("url") or v.get("has_source"))]
+                observations["video_count"] = len(videos)
+                observations["videos_without_source"] = len(unsourced)
+                observations["measurement_state"] = "measured"
+                if unsourced:
+                    add(
+                        f"{len(unsourced)} video element(s) have no resolvable source URL.",
+                        Severity.MEDIUM,
+                        "Give each video element a src or a source child with a media URL.",
                     )
             elif aid == "seo.specialized.international.v3":
                 observations["html_langs"] = sorted({getattr(p, "html_lang", None) for p in pages if getattr(p, "html_lang", None)})
@@ -1457,6 +1481,136 @@ class SpecialistAgent(BaseAgent):
                 observations["unmeasured_reason"] = "fewer_than_two_claims"
             else:
                 observations["measurement_state"] = "measured"
+
+        elif aid == "aeo.technical_eligibility.v3":
+            if not pages:
+                observations["measurement_state"] = "unmeasured"
+                observations["unmeasured_reason"] = "no_crawled_pages"
+            else:
+                indexable = [p for p in pages if getattr(p, "is_indexable", True) and 200 <= int(getattr(p, "status_code", 0) or 0) < 400]
+                with_schema = [p for p in pages if getattr(p, "schema_types", None)]
+                observations["pages_checked"] = len(pages)
+                observations["indexable_pages"] = len(indexable)
+                observations["pages_with_schema"] = len(with_schema)
+                observations["measurement_state"] = "measured"
+                if len(indexable) < len(pages):
+                    add(
+                        f"{len(pages) - len(indexable)} of {len(pages)} crawled page(s) are not technically eligible for answer engine indexing.",
+                        Severity.HIGH,
+                        "Ensure answer-target pages return HTTP 200 and remove unintended noindex directives.",
+                    )
+                if not with_schema:
+                    add(
+                        "No structured JSON-LD schema detected on crawled pages to anchor answer engine entity extraction.",
+                        Severity.MEDIUM,
+                        "Add valid Organization, WebPage, and FAQPage/Article JSON-LD markup grounded in visible content.",
+                    )
+
+        elif aid in (
+            "aeo.question_discovery.v3",
+            "aeo.intent_classification.v3",
+            "aeo.question_clustering.v3",
+            "aeo.answer_quality.v3",
+            "aeo.passage_analysis.v3",
+            "aeo.source_attribution.v3",
+            "aeo.factual_verification.v3",
+            "aeo.brand_accuracy.v3",
+            "aeo.remediation_planner.v3",
+        ):
+            if not pages:
+                observations["measurement_state"] = "unmeasured"
+                observations["unmeasured_reason"] = "no_crawled_pages"
+            else:
+                interrogatives = ("what ", "how ", "why ", "where ", "when ", "can ", "is ", "which ", "does ")
+                q_headings = []
+                faq_pages = 0
+                concise_answer_pages = 0
+                for p in pages:
+                    headings = list(getattr(p, "h2", None) or []) + list(getattr(p, "h3", None) or [])
+                    for h in headings:
+                        hl = str(h).strip().lower()
+                        if hl.endswith("?") or hl.startswith(interrogatives):
+                            q_headings.append(str(h).strip())
+                    if any("faq" in str(s).lower() or "qa" in str(s).lower() for s in (getattr(p, "schema_types", None) or [])):
+                        faq_pages += 1
+                    if int(getattr(p, "word_count", 0) or 0) >= 250 and headings:
+                        concise_answer_pages += 1
+                observations["pages_checked"] = len(pages)
+                observations["question_headings_found"] = len(q_headings)
+                observations["faq_schema_pages"] = faq_pages
+                observations["structured_answer_pages"] = concise_answer_pages
+                observations["measurement_state"] = "measured"
+                if aid in ("aeo.question_discovery.v3", "aeo.answer_quality.v3") and not q_headings and faq_pages == 0:
+                    add(
+                        "Audited pages contain no question-formatted headings or FAQ/QAPage schema blocks for direct answer extraction.",
+                        Severity.MEDIUM,
+                        "Add clear question-led H2/H3 sections with concise 40–60 word direct answers and matching FAQPage schema.",
+                    )
+
+        elif aid in (
+            "aeo.live_benchmark.v3",
+            "aeo.citation_analysis.v3",
+            "aeo.competitive_intelligence.v3",
+            "aeo.business_attribution.v3",
+            "geo.benchmark_orchestrator.v3",
+            "geo.prompt_discovery.v3",
+            "geo.brand_mention.v3",
+            "geo.recommendation_intelligence.v3",
+            "geo.citation_intelligence.v3",
+            "geo.citation_gap.v3",
+            "geo.brand_hallucination.v3",
+            "geo.offsite_evidence.v3",
+            "geo.competitive_analyst.v3",
+            "geo.measurement_analyst.v3",
+            "geo.referral_analyst.v3",
+            "geo.remediation_planner.v3",
+            "geo.verification_engine.v3",
+        ):
+            live_evals = getattr(blackboard, "commercial_evaluations", None) or []
+            vis_card = getattr(blackboard, "ai_visibility_scorecard", None)
+            engines_measured = int(getattr(vis_card, "engines_measured", 0) or 0) if vis_card else 0
+            if aid in ("aeo.business_attribution.v3", "geo.referral_analyst.v3"):
+                observations["measurement_state"] = "unmeasured"
+                observations["unmeasured_reason"] = "analytics_connector_not_configured"
+            elif engines_measured > 0 or live_evals:
+                observations["measurement_state"] = "measured"
+                observations["engines_measured"] = engines_measured
+                observations["evaluations_count"] = len(live_evals)
+            else:
+                observations["measurement_state"] = "unmeasured"
+                observations["unmeasured_reason"] = "live_ai_citation_providers_not_configured"
+
+        elif aid in ("geo.technical_auditor.v3", "geo.crawler_diagnostics.v3", "geo.entity_consistency.v3"):
+            if not pages:
+                observations["measurement_state"] = "unmeasured"
+                observations["unmeasured_reason"] = "no_crawled_pages"
+            else:
+                manifest_obj = getattr(blackboard, "crawl_manifest", None)
+                robots_txt = str(getattr(manifest_obj, "robots_txt_content", "") or "")
+                blocked_ai_bots = [
+                    bot for bot in ("GPTBot", "ClaudeBot", "PerplexityBot", "OAI-SearchBot", "Google-Extended")
+                    if f"user-agent: {bot.lower()}" in robots_txt.lower() and "disallow: /" in robots_txt.lower()
+                ]
+                has_org_schema = any(
+                    any("organization" in str(s).lower() or "corporation" in str(s).lower() for s in (getattr(p, "schema_types", None) or []))
+                    for p in pages
+                )
+                observations["pages_checked"] = len(pages)
+                observations["blocked_ai_bots"] = blocked_ai_bots
+                observations["organization_schema_present"] = has_org_schema
+                observations["measurement_state"] = "measured"
+                if aid in ("geo.technical_auditor.v3", "geo.crawler_diagnostics.v3") and blocked_ai_bots:
+                    add(
+                        f"robots.txt appears to restrict AI crawler access for: {', '.join(blocked_ai_bots)}.",
+                        Severity.HIGH,
+                        "Review robots.txt User-agent directives for AI search bots if generative citation visibility is desired.",
+                    )
+                if aid == "geo.entity_consistency.v3" and not has_org_schema:
+                    add(
+                        "No Organization JSON-LD entity graph found across crawled pages to disambiguate brand identity for generative engines.",
+                        Severity.MEDIUM,
+                        "Publish canonical Organization JSON-LD with legal name, URL, logo, and verified sameAs profiles.",
+                    )
 
         else:
             observations["measurement_state"] = "unmeasured"

@@ -79,12 +79,12 @@ def topological_waves(definitions: Dict[str, AgentDefinition]) -> List[List[str]
     return waves
 
 PILLAR_DOMAINS: Dict[str, Set[str]] = {
-    "seo": {"TECHNICAL_SEO", "STRUCTURED_DATA", "CONTENT"},
+    "seo": {"TECHNICAL_SEO", "STRUCTURED_DATA", "CONTENT", "COPYWRITING"},
     "geo": {"GEO"},
     "aeo": {"AI_SEARCH", "AEO"},
-    "cro": {"EXPERIENCE", "UX_CONVERSION"},
+    "cro": {"EXPERIENCE", "UX_CONVERSION", "COPYWRITING"},
 }
-CORE_ALWAYS_DOMAINS: Set[str] = {"BUSINESS", "VERIFICATION", "COMPETITOR"}
+CORE_ALWAYS_DOMAINS: Set[str] = {"BUSINESS", "VERIFICATION", "COMPETITOR", "PRESENTATION"}
 
 
 class AgentPool:

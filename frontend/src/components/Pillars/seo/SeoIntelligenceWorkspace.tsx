@@ -220,7 +220,7 @@ ${extractedH2s.length > 0 ? extractedH2s.map((h) => `  - H2 (Observed): ${h}`).j
           <div className="space-y-1">
             <div className="flex flex-wrap items-center gap-2">
               <span className="text-xs font-bold text-ink">Content Quality &amp; Search Intent Audit Score</span>
-              <Badge tone={contentDim.score != null && contentDim.score >= 70 ? 'good' : contentDim.score != null && contentDim.score >= 50 ? 'warn' : 'critical'}>
+              <Badge tone={contentDim.score != null && contentDim.score >= 75 ? 'good' : contentDim.score != null && contentDim.score >= 50 ? 'warn' : contentDim.score != null ? 'bad' : 'neutral'}>
                 {contentDim.score != null ? `${Math.round(contentDim.score)}/100` : 'Unmeasured'}
               </Badge>
               <span className="text-[11px] font-mono text-ink-500">

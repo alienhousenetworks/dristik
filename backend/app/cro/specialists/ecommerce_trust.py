@@ -249,7 +249,7 @@ def run_department_g(ctx: CROAuditContext) -> CROAgentOutput:
     has_about = "about" in urls_l or bool(soup and soup.find("a", href=re.compile(r"about", re.I)))
     has_security = bool(re.search(r"(soc\s?2|iso\s?27001|gdpr|hipaa|pci[- ]dss|ssl|encrypted)", all_text_l))
 
-    testimonials = soup.find_all(["blockquote"]) + (soup.find_all(class_=re.compile(r"testimonial|review|quote", re.I)) if soup else [])
+    testimonials = (soup.find_all(["blockquote"]) + soup.find_all(class_=re.compile(r"testimonial|review|quote", re.I))) if soup else []
     attributable_testimonials = sum(
         1 for t in testimonials if re.search(r"(—|-|,\s*(?:ceo|cto|vp|head|director|founder|manager)|verified)", t.get_text(" ", strip=True), re.I)
     )

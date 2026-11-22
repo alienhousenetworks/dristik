@@ -165,41 +165,79 @@ class DeckDataAnalystAgent:
                     ]
 
             # -----------------------------------------------------------------
-            # Slide 8-10: Tri-Perspective Deep-Dives
+            # Slide 8-10: Tri-Perspective Deep-Dives (Grounded strictly in sealed scores)
             # -----------------------------------------------------------------
             elif s_id == "slide_08_human_perspective":
-                p_text = report.three_way_comparison.human_visitor_perspective if report.three_way_comparison else "Enterprise visitors require sharper above-the-fold value propositions to convert effectively."
+                from app.domain.scoring.displayed_score import rating_for_displayed
+                honest = getattr(report, "honest_scores", None)
+                human_val = getattr(honest, "human_score", None) if honest else None
+                human_grade, human_label = rating_for_displayed(human_val)
+                human_metric = f"Grade {human_grade} ({human_val:.0f}/100)" if isinstance(human_val, (int, float)) else "Unmeasured"
+                cro_findings = [f for f in (report.findings or []) if str(getattr(getattr(f, "category", ""), "value", getattr(f, "category", ""))).upper() in ("UX_CONVERSION", "TRUST_AUTHORITY")]
+                p_text = (
+                    report.three_way_comparison.human_visitor_perspective
+                    if report.three_way_comparison and report.three_way_comparison.human_visitor_perspective
+                    else f"Observed {len(cro_findings)} UX/conversion & trust finding(s) across audited pages."
+                )
                 s.cards = [
-                    CardSpec(kicker="CRO ERGONOMICS", title="Buyer Attention & Hook", description=p_text, metric_value="Grade B", badge="CRO AUDIT", badge_color="sky"),
-                    CardSpec(kicker="CTA FRICTION", title="Action Triggers", description="Primary call-to-action buttons use generic prompts rather than high-intent active outcome verbs.", badge="FRICTION", badge_color="amber"),
-                    CardSpec(kicker="TRUST DENSITY", title="Social Proof Signals", description="Case studies and verified customer proof points are pushed below the primary fold.", badge="IMPROVEMENT", badge_color="sky")
+                    CardSpec(kicker="CRO ERGONOMICS", title="Buyer Attention & Hook", description=p_text, metric_value=human_metric, badge=human_label.upper(), badge_color="sky"),
+                    CardSpec(kicker="UX & CONVERSION FINDINGS", title="Verified Friction Signals", description=(cro_findings[0].title if cro_findings else "No UX/CTA defects verified in the sampled crawl."), metric_value=str(len(cro_findings)), badge="MEASURED" if isinstance(human_val, (int, float)) else "UNMEASURED", badge_color="amber" if cro_findings else "emerald"),
+                    CardSpec(kicker="TRUST & CREDIBILITY", title="Secondary Friction Signal", description=(cro_findings[1].title if len(cro_findings) > 1 else "Additional conversion validation requires connected GA4 funnel telemetry."), badge="OBSERVED" if len(cro_findings) > 1 else "SCOPE NOTE", badge_color="sky")
                 ]
 
             elif s_id == "slide_09_search_perspective":
-                s_text = report.three_way_comparison.search_engine_perspective if report.three_way_comparison else "Deterministic crawler routing is healthy. XML sitemaps and status codes operate normally."
+                from app.domain.scoring.displayed_score import rating_for_displayed
+                honest = getattr(report, "honest_scores", None)
+                google_val = getattr(honest, "google_score", None) if honest else None
+                google_grade, google_label = rating_for_displayed(google_val)
+                google_metric = f"Grade {google_grade} ({google_val:.0f}/100)" if isinstance(google_val, (int, float)) else "Unmeasured"
+                seo_findings = [f for f in (report.findings or []) if str(getattr(getattr(f, "category", ""), "value", getattr(f, "category", ""))).upper() in ("TECHNICAL_SEO", "ON_PAGE_SEO", "SCHEMA")]
+                s_text = (
+                    report.three_way_comparison.search_engine_perspective
+                    if report.three_way_comparison and report.three_way_comparison.search_engine_perspective
+                    else f"Observed {len(seo_findings)} technical, on-page, and schema SEO finding(s)."
+                )
                 s.cards = [
-                    CardSpec(kicker="INDEXATION POSTURE", title="Search Spider Crawl", description=s_text, metric_value="Grade A-", badge="SEO HEALTH", badge_color="emerald"),
-                    CardSpec(kicker="CANONICAL HYGIENE", title="Routing Integrity", description="Canonical URLs match declared host protocols with minimal redirect overhead.", badge="COMPLIANT", badge_color="emerald"),
-                    CardSpec(kicker="SITEMAP STATUS", title="Index Coverage", description="Sitemap XML paths provide clear discovery routes for main navigation targets.", badge="HEALTHY", badge_color="emerald")
+                    CardSpec(kicker="INDEXATION POSTURE", title="Search Spider Crawl", description=s_text, metric_value=google_metric, badge=google_label.upper(), badge_color="emerald" if (isinstance(google_val, (int, float)) and google_val >= 75) else "amber"),
+                    CardSpec(kicker="TOP SEO FINDING", title="Primary Technical Signal", description=(seo_findings[0].title if seo_findings else "No critical crawl or indexation defects flagged in sample."), metric_value=str(len(seo_findings)), badge="SEO FINDINGS", badge_color="amber" if seo_findings else "emerald"),
+                    CardSpec(kicker="SECONDARY SEO SIGNAL", title="Metadata & Routing", description=(seo_findings[1].title if len(seo_findings) > 1 else "Verify full-site coverage via connected Google Search Console."), badge="OBSERVED" if len(seo_findings) > 1 else "SCOPE NOTE", badge_color="sky")
                 ]
 
             elif s_id == "slide_10_ai_perspective":
-                ai_text = report.three_way_comparison.ai_answer_engine_perspective if report.three_way_comparison else "Answer engines experience high extraction ambiguity due to marketing-dense prose."
+                from app.domain.scoring.displayed_score import rating_for_displayed
+                honest = getattr(report, "honest_scores", None)
+                ai_val = getattr(honest, "ai_readiness_score", None) if honest else None
+                ai_grade, ai_label = rating_for_displayed(ai_val)
+                ai_metric = f"Grade {ai_grade} ({ai_val:.0f}/100)" if isinstance(ai_val, (int, float)) else "Unmeasured"
+                ai_findings = [f for f in (report.findings or []) if str(getattr(getattr(f, "category", ""), "value", getattr(f, "category", ""))).upper() in ("GEO", "AI_SEARCH", "SCHEMA")]
+                ai_text = (
+                    report.three_way_comparison.ai_answer_engine_perspective
+                    if report.three_way_comparison and report.three_way_comparison.ai_answer_engine_perspective
+                    else f"Observed {len(ai_findings)} GEO/AEO extractability and entity finding(s)."
+                )
                 s.cards = [
-                    CardSpec(kicker="LLM EXTRACTABILITY", title="Generative Answer Extraction", description=ai_text, metric_value="Grade C", badge="AEO BOTTLENECK", badge_color="rose"),
-                    CardSpec(kicker="ENTITY SCHEMA", title="Knowledge Graph Gaps", description="Missing structured Organization and Product Schema.org nodes prevents confident LLM grounding.", badge="DEFICIT", badge_color="rose"),
-                    CardSpec(kicker="PASSAGE STRUCTURE", title="Definition Blocks", description="Text lacks 40-60 word citable definitions, forcing LLMs to guess or cite competitors.", badge="GAP", badge_color="amber")
+                    CardSpec(kicker="LLM EXTRACTABILITY", title="Generative Answer Extraction", description=ai_text, metric_value=ai_metric, badge=ai_label.upper(), badge_color="emerald" if (isinstance(ai_val, (int, float)) and ai_val >= 75) else "rose"),
+                    CardSpec(kicker="TOP AI READINESS SIGNAL", title="Entity & Schema Grounding", description=(ai_findings[0].title if ai_findings else "No on-page AI extractability blockers detected in sample."), metric_value=str(len(ai_findings)), badge="AI FINDINGS", badge_color="rose" if ai_findings else "emerald"),
+                    CardSpec(kicker="LIVE CITATION STATUS", title="External Answer Engines", description=(f"Live AI visibility: {getattr(honest, 'ai_visibility_score', None)}/100" if (honest and getattr(honest, "ai_visibility_score", None) is not None) else "Live AI citation probes are NOT_CONFIGURED unless provider keys are enabled in .env."), badge="MEASURED" if (honest and getattr(honest, "ai_visibility_score", None) is not None) else "UNMEASURED", badge_color="amber")
                 ]
 
             # -----------------------------------------------------------------
-            # Slide 11: Divergence Matrix Table
+            # Slide 11: Divergence Matrix Table (Computed from sealed scores)
             # -----------------------------------------------------------------
             elif s_id == "slide_11_divergence_gap":
+                from app.domain.scoring.displayed_score import rating_for_displayed
+                honest = getattr(report, "honest_scores", None)
+                def _row(consumer: str, req: str, val: Optional[float]) -> List[str]:
+                    if not isinstance(val, (int, float)):
+                        return [consumer, req, "Not measured in this run", "UNMEASURED"]
+                    g, lbl = rating_for_displayed(val)
+                    sev = "LOW" if val >= 80 else ("MEDIUM" if val >= 65 else ("HIGH" if val >= 50 else "CRITICAL"))
+                    return [consumer, req, f"{val:.1f}/100 (Grade {g} · {lbl})", sev]
                 s.table_headers = ["Consumer Class", "Primary Requirement", "Observed State", "Deficit Severity"]
                 s.table_rows = [
-                    ["Human Buyer", "3-Second Value Clarity & Trust", "Moderate clarity; weak CTA microcopy", "MEDIUM"],
-                    ["Search Spider", "Clean Canonical Routing & Sitemaps", "Compliant response codes & valid routes", "LOW"],
-                    ["AI Answer Engine", "Extractable Factual Entity Passages", "Marketing-dense prose; ambiguous facts", "CRITICAL"]
+                    _row("Human Buyer", "Value Clarity, UX & Trust", getattr(honest, "human_score", None) if honest else None),
+                    _row("Search Spider", "Crawlability, Canonicals & Schema", getattr(honest, "google_score", None) if honest else None),
+                    _row("AI Answer Engine", "Extractable Factual Entity Passages", getattr(honest, "ai_readiness_score", None) if honest else None),
                 ]
 
             # -----------------------------------------------------------------

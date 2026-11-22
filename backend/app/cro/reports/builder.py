@@ -22,16 +22,24 @@ from app.cro.reports.section_registry import (
 from app.db.cro_schema import CROStore, get_cro_store
 
 
+def _fmt_enum(val: Any) -> str:
+    raw = getattr(val, "value", val)
+    text = str(raw or "unknown").strip()
+    if "." in text:
+        text = text.split(".")[-1]
+    return text.replace("_", " ").title()
+
+
 def _esc(val: Any) -> str:
     return html.escape("" if val is None else str(val), quote=True)
 
 
 def render_weighted_scorecard_svg(dimensions: List[Dict[str, Any]]) -> str:
     """Vector SVG bar chart for the 10 weighted CRO Experience Dimensions."""
-    width = 740
+    width = 820
     row_h = 30
-    label_w = 245
-    bar_max = 340
+    label_w = 310
+    bar_max = 320
     height = 44 + (row_h * max(1, len(dimensions)))
     parts = [
         f'<svg viewBox="0 0 {width} {height}" width="100%" height="auto" xmlns="http://www.w3.org/2000/svg">',
@@ -40,7 +48,7 @@ def render_weighted_scorecard_svg(dimensions: List[Dict[str, Any]]) -> str:
     ]
     for i, d in enumerate(dimensions):
         y = 40 + i * row_h
-        name = str(d.get("name", ""))[:34]
+        name = str(d.get("name", ""))
         w = d.get("configured_weight_pct", 0)
         sc = d.get("score")
         if sc is None:
@@ -65,7 +73,7 @@ def render_funnel_svg(funnels: List[Dict[str, Any]]) -> str:
     steps = (funnels[0].get("steps") or []) if funnels else []
     if not steps:
         return ""
-    width = 740
+    width = 820
     row_h = 32
     height = 44 + row_h * len(steps)
     max_cnt = max([int(s.get("eligible_count") or s.get("progressing_count") or 0) for s in steps] + [1])
@@ -76,21 +84,21 @@ def render_funnel_svg(funnels: List[Dict[str, Any]]) -> str:
     ]
     for i, st in enumerate(steps):
         y = 40 + i * row_h
-        name = str(st.get("step_name", f"Step {i+1}"))[:28]
+        name = str(st.get("step_name", f"Step {i+1}"))
         measured = st.get("measurement_status") == "measured"
         prog = st.get("progressing_count")
         conv = st.get("step_conversion_rate")
         aband = st.get("step_abandonment_rate")
         if measured and isinstance(prog, int):
-            bw = max(12.0, (prog / max_cnt) * 320.0)
+            bw = max(12.0, (prog / max_cnt) * 300.0)
             col = "#b91c1c" if (aband or 0) >= 50 else "#1d4ed8"
             lbl = f"{prog:,} users · {conv:.1f}% conv · {aband:.1f}% drop"
         else:
             bw, col, lbl = 56.0, "#cbd5e1", "DATA UNAVAILABLE (not connected)"
         parts.append(
             f'<text x="16" y="{y+16}" font-family="system-ui, sans-serif" font-size="10.5" fill="#1f2937">{i+1}. {_esc(name)}</text>'
-            f'<rect x="235" y="{y+4}" width="{bw:.1f}" height="17" fill="{col}" rx="3"/>'
-            f'<text x="{235 + bw + 8:.1f}" y="{y+16}" font-family="ui-monospace, monospace" font-size="9.5" fill="#334155">{_esc(lbl)}</text>'
+            f'<rect x="310" y="{y+4}" width="{bw:.1f}" height="17" fill="{col}" rx="3"/>'
+            f'<text x="{310 + bw + 8:.1f}" y="{y+16}" font-family="ui-monospace, monospace" font-size="9.5" fill="#334155">{_esc(lbl)}</text>'
         )
     parts.append("</svg>")
     return "".join(parts)
@@ -356,14 +364,14 @@ a {{ color: #1d4ed8; text-decoration: none; }}
     <p class="mono" style="color:#38bdf8;">DRISTIK ENTERPRISE CRO INTELLIGENCE · {_esc(payload["methodology_version"])}</p>
     <h1>{_esc(payload["title"])}</h1>
     <p class="sub">Target: {_esc(audit.get("domain"))} ({_esc(audit.get("target_url"))}) · Audience: {_esc(payload["audience"])}</p>
-    <p class="mono" style="color:#cbd5e1;margin-top:24px;">Audit ID: {_esc(audit_id)} · Business Model: {_esc(bp.get("business_type", "unknown"))} · Generated: {_esc(payload["generated_at"])}</p>
+    <p class="mono" style="color:#cbd5e1;margin-top:24px;">Audit ID: {_esc(audit_id)} · Business Model: {_esc(_fmt_enum(bp.get("business_type", "unknown")))} · Generated: {_esc(payload["generated_at"])}</p>
   </div>
 
   <h2>Three Separate CRO Scorecards</h2>
   <div class="kpi-grid">
-    <div class="kpi"><div class="lbl">1. CRO Experience Score</div><div class="val">{_esc(sc.get("experience_score") if sc.get("experience_score") is not None else "Unmeasured")}</div><div class="muted">Grade: {_esc(sc.get("experience_grade", "Unmeasured"))} · Weight evaluated: {_esc(sc.get("experience_active_weight_pct", 0))}%</div></div>
+    <div class="kpi"><div class="lbl">1. CRO Experience Score</div><div class="val">{_esc(sc.get("experience_score") if sc.get("experience_score") is not None else "Unmeasured")}</div><div class="muted">Grade: {_esc(sc.get("experience_grade", "Unmeasured"))} · Weight evaluated: {_esc(sc.get("experience_active_weight_pct", 0))}% · Confidence: {_esc(sc.get("confidence"))}</div></div>
     <div class="kpi"><div class="lbl">2. Conversion Measurement Score</div><div class="val">{_esc(sc.get("measurement_score") if sc.get("measurement_score") is not None else "Unmeasured")}</div><div class="muted">Status: {_esc(sc.get("measurement_status", "unmeasured"))}</div></div>
-    <div class="kpi"><div class="lbl">3. Measured Business Performance</div><div class="val" style="font-size:14pt;">{_esc(str(sc.get("business_performance_status", "data_unavailable")).upper())}</div><div class="muted">Scope coverage: {_esc(sc.get("scope_coverage_pct"))}% · Confidence: {_esc(sc.get("confidence"))}</div></div>
+    <div class="kpi"><div class="lbl">3. Measured Business Performance</div><div class="val" style="font-size:14pt;">{_esc(str(sc.get("business_performance_status", "data_unavailable")).upper())}</div><div class="muted">Analytics completeness: {_esc(sc.get("analytics_completeness_pct", 0.0))}% · Scope coverage: {_esc(sc.get("scope_coverage_pct"))}%</div></div>
   </div>
   {scorecard_svg}
   <div style="margin-top:14px;">{funnel_svg}</div>

@@ -474,7 +474,8 @@ class ModelRouter:
         ev_text = " ".join([f"{ev.text or ''} {str(ev.value or '')}" for ev in evidence_list])
         if site_facts:
             ev_text += " " + str(site_facts)
-        ev_text += " " + analysis_prose
+        # Never merge unverified Pass-1 LLM prose into ev_text before number grounding;
+        # numbers must trace to crawled evidence or deterministic site facts only.
 
         try:
             resp = await self._generate_chat_completion(

@@ -45,7 +45,9 @@ class AuditRepository:
     def _init_sqlite(self) -> None:
         os.makedirs(os.path.dirname(os.path.abspath(self.db_path)), exist_ok=True)
         with self._lock:
-            with sqlite3.connect(self.db_path, check_same_thread=False) as conn:
+            with sqlite3.connect(self.db_path, check_same_thread=False, timeout=5.0) as conn:
+                conn.execute("PRAGMA journal_mode=WAL")
+                conn.execute("PRAGMA busy_timeout=5000")
                 conn.executescript(SQLITE_SCHEMA)
                 self._migrate_sqlite(conn)
                 conn.commit()
@@ -78,7 +80,8 @@ class AuditRepository:
 
 
     def _get_conn(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(self.db_path, check_same_thread=False)
+        conn = sqlite3.connect(self.db_path, check_same_thread=False, timeout=5.0)
+        conn.execute("PRAGMA busy_timeout=5000")
         conn.row_factory = sqlite3.Row
         return conn
 

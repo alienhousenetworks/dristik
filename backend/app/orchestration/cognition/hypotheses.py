@@ -57,7 +57,10 @@ class HypothesisEngine:
             supporting = []
             contradicting = []
 
+            from app.domain.enums import VerificationStatus
             for claim in claims:
+                if getattr(claim, "verification_status", None) == VerificationStatus.REJECTED:
+                    continue
                 stmt = claim.statement.lower()
                 # Check alignment with hypothesis
                 if hyp.domain == "AI_SEARCH" and ("schema" in stmt or "json-ld" in stmt or "ai" in stmt):

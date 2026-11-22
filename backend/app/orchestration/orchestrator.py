@@ -1114,7 +1114,11 @@ class AnalysisOrchestrator:
 
             # ── Progressive Reporting: Phase 4 — Copywriting & Page Intelligence ─
             try:
-                page_intel_reports = getattr(blackboard, "page_intelligence_reports", {}) or {}
+                page_intel_reports = (
+                    getattr(blackboard, "page_reports", None)
+                    or getattr(blackboard, "page_intelligence_reports", None)
+                    or {}
+                )
                 copy_status = ExecutionStatus.COMPLETED if (effective_pillars is None or "seo" in effective_pillars) else ExecutionStatus.NOT_CONFIGURED
                 copy_conf = ConfidenceLevel.VERIFIED if page_intel_reports else ConfidenceLevel.UNMEASURED
 
@@ -1162,7 +1166,26 @@ class AnalysisOrchestrator:
                 "Adversarial and contradiction specialists recorded on the blackboard.",
             )
 
-            # Zero-Fake Evidence Integrity Gate
+            # Mandatory Stage 6 Gate A: Independent Adversarial Critic Worker runs BEFORE
+            # the authoritative Zero-Fake Evidence Integrity Gate so critic cannot overturn
+            # integrity-rejected claims.
+            try:
+                critic_res = await team_orchestrator.worker_critic.execute_task("34_adversarial_verification", blackboard)
+                blackboard.blackboard_state["critic_gate"] = {
+                    "status": "completed",
+                    "verified_count": len(critic_res.get("verified_claims") or []),
+                    "rejected_count": len(critic_res.get("rejected_claims") or []),
+                    "deflated_count": len(critic_res.get("deflated_claims") or []),
+                    "contradictions_count": len(critic_res.get("contradictions") or []),
+                }
+            except Exception as critic_err:
+                logger.error("Mandatory CognitiveCriticWorker gate failed for %s: %s", analysis_id, critic_err)
+                blackboard.blackboard_state["critic_gate"] = {
+                    "status": "failed",
+                    "error": str(critic_err),
+                }
+
+            # Zero-Fake Evidence Integrity Gate (authoritative final claim gate)
             if await _check_pause():
                 return
             controller.mark_node_status("node_integrity_gate", GraphNodeStatus.RUNNING)
@@ -1197,33 +1220,17 @@ class AnalysisOrchestrator:
                         f"Escalated {len(held_guesses)} GUESSING+CRITICAL claim(s) to verification.adversarial.v3 before executive use.",
                     )
 
-            # Mandatory Stage 6 Gate A: Independent Adversarial Critic Worker
-            try:
-                critic_res = await team_orchestrator.worker_critic.execute_task("34_adversarial_verification", blackboard)
-                blackboard.blackboard_state["critic_gate"] = {
-                    "status": "completed",
-                    "verified_count": len(critic_res.get("verified_claims") or []),
-                    "rejected_count": len(critic_res.get("rejected_claims") or []),
-                    "deflated_count": len(critic_res.get("deflated_claims") or []),
-                    "contradictions_count": len(critic_res.get("contradictions") or []),
-                }
-            except Exception as critic_err:
-                logger.error("Mandatory CognitiveCriticWorker gate failed for %s: %s", analysis_id, critic_err)
-                blackboard.blackboard_state["critic_gate"] = {
-                    "status": "failed",
-                    "error": str(critic_err),
-                }
-
             # Mandatory Stage 6 Gate B: Contradiction Engine
             try:
                 from app.orchestration.cognition.contradiction_engine import ContradictionEngine
                 contra_engine = ContradictionEngine()
                 claim_contradictions = contra_engine.detect_contradictions(
                     blackboard.claim_registry.get_all()
-                ) if hasattr(contra_engine, "detect_contradictions") else []
+                )
                 blackboard.blackboard_state["contradiction_report"] = {
                     "status": "completed",
                     "conflicts_detected": len(claim_contradictions or []),
+                    "conflicts": claim_contradictions[:20],
                 }
             except Exception as ce_err:
                 logger.warning("ContradictionEngine gate note for %s: %s", analysis_id, ce_err)
@@ -1854,11 +1861,16 @@ class AnalysisOrchestrator:
             )
             blackboard.character_safe_copy = character_copy
 
+            _root_causes = blackboard.blackboard_state.get("root_causes") or []
+            _top_bottleneck = (
+                blackboard.blackboard_state.get("causal_root_cause", {}).get("bottleneck", "")
+                or (_root_causes[0].get("title", "") if _root_causes and isinstance(_root_causes[0], dict) else "")
+            )
             wa_summary = generate_whatsapp_summary(
                 domain=domain,
                 honest_scores=honest_scores,
                 what_to_ignore=narrative_data.get("consultant_advice_what_to_ignore", ""),
-                top_bottleneck=blackboard.blackboard_state.get("causal_root_cause", {}).get("bottleneck", ""),
+                top_bottleneck=_top_bottleneck,
                 top_actions=[r.title for r in (blackboard.roadmap_7_days or [])[:3]] if getattr(blackboard, "roadmap_7_days", None) else [f.title for f in final_findings[:3]],
                 report_url=website_url
             )
@@ -2410,7 +2422,7 @@ class AnalysisOrchestrator:
                 report.roadmap_7_days = r7
                 report.roadmap_30_days = r30
                 report.roadmap_90_days = r90
-                report.top_10_plan = self.roadmap_builder.build_top_10_actions(
+                report.top_10_actions = self.roadmap_builder.build_top_10_actions(
                     report.findings,
                     blackboard.business_profile,
                     honest_scores if honest_scores is not None else overall_scores,
@@ -2442,6 +2454,11 @@ class AnalysisOrchestrator:
                 logger.error(f"VALIDATION GATE FAILED for run {analysis_id}:\n{gate_result.summary()}")
                 run.status = AnalysisStage.FAILED
                 run.current_step = f"Report validation gate failure: {', '.join(gate_result.failed_checks)}"
+                run.error = "; ".join(gate_result.failure_reasons[:5]) if getattr(gate_result, "failure_reasons", None) else "VALIDATION_GATE_FAILED"
+                try:
+                    self.repository.save_run(run)
+                except Exception:
+                    logger.exception("Failed to persist validation gate failure for %s", analysis_id)
                 await self._emit_event(
                     analysis_id,
                     "failed",
@@ -2599,6 +2616,7 @@ class AnalysisOrchestrator:
 
             run.is_sealed = True
             run.status = AnalysisStage.COMPLETED
+            run.completed_at = datetime.now(timezone.utc)
             run.current_step = "Completed"
             try:
                 self.repository.save_run(run)
@@ -3050,13 +3068,16 @@ class AnalysisOrchestrator:
 
         run = self.runs.get(analysis_id)
         if not run:
-            run = self.create_run(
-                website_url=url,
+            run = AnalysisRun(
+                analysis_id=analysis_id,
                 org_id=stored["org_id"],
                 workspace_id=stored.get("workspace_id"),
+                website_url=url,
+                status=AnalysisStage.INGESTING,
+                progress_percentage=int(stored.get("progress") or 0),
             )
-            run.analysis_id = analysis_id
             self.runs[analysis_id] = run
+            self.event_queues.setdefault(analysis_id, asyncio.Queue())
         run.status = AnalysisStage.INGESTING
         run.current_step = f"Resuming analysis for {url}..."
 

@@ -30,6 +30,10 @@ class SeoPillar:
                 res = await agent.run(blackboard)
                 if isinstance(res, list):
                     findings.extend(res)
+                elif isinstance(res, dict):
+                    items = res.get("findings") or res.get("claims") or []
+                    if isinstance(items, list):
+                        findings.extend(items)
         return findings
 
     def calculate_pillar_score(
@@ -37,18 +41,38 @@ class SeoPillar:
         findings: List[Finding],
         blackboard: Optional[CognitiveBlackboard] = None,
     ) -> PillarScoreResult:
+        from app.domain.scoring.displayed_score import rating_for_displayed
+
         seo_findings = [
             finding for finding in findings
             if getattr(finding, "pillar", None) == "seo" or getattr(finding, "category", "") in self.domains
         ]
         count = len(seo_findings)
-        score = max(0.0, 100.0 - (count * 4.0))
-        grade = "A" if score >= 85 else "B" if score >= 70 else "C" if score >= 50 else "D"
+        severity_penalties = {"CRITICAL": 12.0, "HIGH": 7.0, "MEDIUM": 3.5, "LOW": 1.5, "INFO": 0.0}
+        pages = getattr(blackboard, "pages", None) if blackboard is not None else None
+        if pages is not None and len(pages) == 0 and count == 0:
+            return PillarScoreResult(
+                pillar_id=self.pillar_id,
+                score=None,
+                grade="—",
+                confidence=0.0,
+                measured_findings_count=0,
+                metrics={"findings_count": 0},
+            )
+        penalty = sum(
+            severity_penalties.get(
+                str(getattr(getattr(f, "severity", None), "value", getattr(f, "severity", "MEDIUM"))).upper(),
+                3.5,
+            )
+            for f in seo_findings
+        )
+        score = round(max(0.0, 100.0 - min(95.0, penalty)), 1)
+        grade, _ = rating_for_displayed(score)
         return PillarScoreResult(
             pillar_id=self.pillar_id,
-            score=round(score, 1),
+            score=score,
             grade=grade,
-            confidence=1.0,
+            confidence=0.85 if (pages or count > 0) else 0.5,
             measured_findings_count=count,
             metrics={"findings_count": count},
         )

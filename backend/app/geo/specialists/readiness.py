@@ -216,13 +216,15 @@ def run_department_d(ctx: GEOAuditContext) -> Tuple[GEOAgentOutput, Dict[str, An
         if has_date:
             missing_freshness = False
 
-        clarity = round(min(100.0, (45.0 if has_def else 20.0) + (25.0 if brand_low in low else 0.0) + (20.0 if words >= 180 else 10.0) - min(20.0, has_fluff * 5.0)), 1)
-        completeness = round(min(100.0, (30.0 if words >= 300 else 15.0) + (20.0 if has_faq else 0.0) + (20.0 if has_pricing else 0.0) + (15.0 if has_table else 0.0) + (15.0 if has_evidence else 0.0)), 1)
-        specificity = round(min(100.0, (45.0 if has_evidence else 20.0) + (25.0 if has_table else 0.0) + (20.0 if any(pr.lower() in low for pr in (ctx.scope.products or ctx.scope.services or [])) else 10.0)), 1)
-        structure = round(min(100.0, (35.0 if (p.h1 or []) else 10.0) + (25.0 if (p.h2 or []) else 10.0) + (20.0 if has_table or has_faq else 10.0) + (20.0 if (p.meta_description or "").strip() else 0.0)), 1)
+        # Compute readiness subscores strictly from observed signals (no artificial non-zero floors).
+        clarity = round(max(0.0, min(100.0, (50.0 if has_def else 0.0) + (25.0 if brand_low and brand_low in low else 0.0) + (25.0 if words >= 180 else (10.0 if words >= 80 else 0.0)) - min(20.0, has_fluff * 5.0))), 1)
+        completeness = round(min(100.0, (30.0 if words >= 300 else (10.0 if words >= 120 else 0.0)) + (20.0 if has_faq else 0.0) + (20.0 if has_pricing else 0.0) + (15.0 if has_table else 0.0) + (15.0 if has_evidence else 0.0)), 1)
+        specificity = round(min(100.0, (50.0 if has_evidence else 0.0) + (25.0 if has_table else 0.0) + (25.0 if any(pr.lower() in low for pr in (ctx.scope.products or ctx.scope.services or [])) else 0.0)), 1)
+        structure = round(min(100.0, (35.0 if (p.h1 or []) else 0.0) + (25.0 if (p.h2 or []) else 0.0) + (20.0 if (has_table or has_faq) else 0.0) + (20.0 if (p.meta_description or "").strip() else 0.0)), 1)
         extractability = round((clarity * 0.35 + structure * 0.35 + specificity * 0.30), 1)
-        freshness = 85.0 if has_date else 40.0
-        trust = round(min(100.0, (35.0 if has_author else 15.0) + (35.0 if has_evidence else 15.0) + (30.0 if (p.schema_types or []) else 10.0)), 1)
+        freshness = 85.0 if has_date else 0.0
+        trust = round(min(100.0, (35.0 if has_author else 0.0) + (35.0 if has_evidence else 0.0) + (30.0 if (p.schema_types or []) else 0.0)), 1)
+        differentiation = round(min(100.0, (45.0 if has_evidence else 0.0) + (35.0 if has_comp else 0.0) + (20.0 if has_table else 0.0)), 1)
         overall = round((clarity + completeness + specificity + structure + extractability + freshness + trust) / 7.0, 1)
 
         issues: List[str] = []
@@ -259,10 +261,10 @@ def run_department_d(ctx: GEOAuditContext) -> Tuple[GEOAgentOutput, Dict[str, An
                 clarity_score=clarity,
                 completeness_score=completeness,
                 specificity_score=specificity,
-                accuracy_score=trust,
+                accuracy_score=None,
                 structure_score=structure,
                 extractability_score=extractability,
-                differentiation_score=specificity,
+                differentiation_score=differentiation,
                 freshness_score=freshness,
                 trust_score=trust,
                 consistency_score=ctx.entity_summary.get("consistency_score"),

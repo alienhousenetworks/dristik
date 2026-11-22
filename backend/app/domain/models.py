@@ -2012,6 +2012,9 @@ class PageEvidence(BaseModel):
     snapshot_path: Optional[str] = None
     observed_at: Optional[str] = None
     image_assets: List[Dict[str, Any]] = Field(default_factory=list)
+    image_assets_truncated: bool = False
+    unique_image_urls: int = 0
+    video_assets: List[Dict[str, Any]] = Field(default_factory=list)
     x_robots_tag: Optional[str] = None
     status_code_class: str = "2xx"
     is_indexable: bool = True

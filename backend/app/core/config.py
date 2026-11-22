@@ -287,6 +287,7 @@ class Settings(BaseSettings):
     ALLOWED_SCHEMES: List[str] = ["http", "https"]
     AUTH_SECRET: str = Field(default="dristik-dev-secret-change-me", description="Secret used to bind session tokens")
     AUTH_DATABASE_PATH: str = Field(default="data/dristik.db")
+    AUDIT_DATABASE_PATH: str = Field(default="data/dristik_audits.db")
     # Database & Persistence Configuration
     DATABASE_URL: str = Field(
         default="sqlite:///data/dristik.db",

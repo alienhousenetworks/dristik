@@ -97,10 +97,17 @@ def run_department_b(ctx: CROAuditContext) -> CROAgentOutput:
         if re.search(r"outline\s*:\s*(?:none|0)", html, re.I):
             inaccessible_controls.append(f"{pg.url} (outline:none focus suppression)")
 
-    # UX & Usability dimension checks
-    ux_nav_score = 0.55 if nav_excess_urls else 1.0
-    ux_read_score = 0.65 if dense_paragraph_urls else 1.0
-    ux_cog_score = 0.65 if popup_urls else 1.0
+    # UX & Usability dimension checks — require positive structural UX signals rather than
+    # awarding 100/100 on bare placeholder pages simply because no defect fired.
+    has_nav_landmark = any(
+        bool(BeautifulSoup(ctx.raw_html_map.get(pg.url) or "", "html.parser").find(["nav", "header"]))
+        for pg in ctx.pages
+        if ctx.raw_html_map.get(pg.url)
+    )
+    has_substantive_copy = any(int(pg.word_count or 0) >= 80 for pg in ctx.pages)
+    ux_nav_score = 0.55 if nav_excess_urls else (1.0 if has_nav_landmark else 0.40)
+    ux_read_score = 0.65 if dense_paragraph_urls else (1.0 if has_substantive_copy else 0.45)
+    ux_cog_score = 0.65 if popup_urls else (1.0 if (has_nav_landmark or has_substantive_copy) else 0.50)
 
     ctx.dimension_checks.extend(
         [
@@ -349,14 +356,21 @@ def run_department_c(ctx: CROAuditContext) -> CROAgentOutput:
     if len(btn_class_variants) > 6:
         inconsistent_button_styles = True
 
-    # UI Dimension checks
-    hierarchy_score = 1.0
+    # UI Dimension checks: require positive interactive UI structure (not bare 1-paragraph pages)
+    has_any_button_or_primary_cta = bool(btn_class_variants) or any(
+        e.element_category == "cta" and e.cta_hierarchy in ("primary", "secondary")
+        for e in ctx.elements
+    )
+    hierarchy_score = 1.0 if has_any_button_or_primary_cta else 0.50
     if competing_cta_urls:
         hierarchy_score -= 0.35
     if missing_above_fold_cta_urls:
         hierarchy_score -= 0.35
     if heading_hierarchy_issues:
         hierarchy_score -= 0.2
+    design_consistency_score = (
+        0.65 if inconsistent_button_styles else (1.0 if has_any_button_or_primary_cta else 0.50)
+    )
     ctx.dimension_checks.extend(
         [
             CRODimensionCheck(
@@ -373,7 +387,7 @@ def run_department_c(ctx: CROAuditContext) -> CROAgentOutput:
                 dimension_id="ui_visual_hierarchy",
                 label="Consistent button styles and heading scale",
                 weight=1.0,
-                result=0.65 if inconsistent_button_styles else 1.0,
+                result=design_consistency_score,
                 source_type=EvidenceSourceType.HEURISTIC_OBSERVATION,
                 evidence_ids=evidence_ids,
             ),

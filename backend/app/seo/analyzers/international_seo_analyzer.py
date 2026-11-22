@@ -137,7 +137,12 @@ def analyze_international_seo(
         # never point canonical back to root English unless deliberately consolidating duplicates.
         if p.canonical_url and tags:
             can_clean = p.canonical_url.rstrip("/")
-            if can_clean != p_clean and can_clean in [e.href.rstrip("/") for e in entries if e.hreflang not in ("x-default", clean_code if 'clean_code' in locals() else "")]:
+            self_langs = {e.hreflang for e in entries if e.href.rstrip("/") == p_clean}
+            other_locale_urls = {
+                e.href.rstrip("/") for e in entries
+                if e.hreflang not in ("x-default", *self_langs)
+            }
+            if can_clean != p_clean and can_clean in other_locale_urls:
                 # Localized page points its canonical to a different language version!
                 issues.append(
                     HreflangValidationIssue(

@@ -837,12 +837,18 @@ def collect_unified_seo_pdf_bundle(
     }
 
     # Mathematical Scorecard (9 dimensions + 5 confidence vectors)
+    # Never silently recompute a conflicting MathematicalScoreEngine score over an
+    # ExecutiveReport that already carries sealed canonical domain scores.
+    has_sealed_canonical_scores = bool(
+        isinstance(rep_dict.get("scores"), dict)
+        and (rep_dict["scores"].get("overall_score") is not None or rep_dict["scores"].get("category_scores"))
+    )
     scorecard = (
         assess_dict.get("mathematical_scorecard")
         or rep_dict.get("mathematical_scorecard")
         or orch_data.get("scorecard")
     )
-    if not scorecard and (pages or merged_findings):
+    if not scorecard and not has_sealed_canonical_scores and (pages or merged_findings):
         try:
             scorecard = MathematicalScoreEngine().build_scorecard_from_observations(
                 pages=pages,
@@ -857,7 +863,7 @@ def collect_unified_seo_pdf_bundle(
                     "international": bool(rep_dict.get("international_seo")),
                     "ecommerce": bool(rep_dict.get("ecommerce_seo")) or any("Product" in (p.get("schema_types") or []) for p in pages),
                 },
-            ).model_dump()
+            ).model_dump(mode="json")
         except Exception:
             scorecard = {}
 
@@ -1068,7 +1074,9 @@ def render_enterprise_seo_addendum_html(bundle: Dict[str, Any]) -> str:
         return ""
 
     overall_score = sc.get("overall_health_score")
-    score_str = f"{overall_score}/100 ({sc.get('overall_interpretation', 'Measured')})" if overall_score is not None else "Not measured"
+    overall_interp_raw = sc.get("overall_interpretation", "Measured")
+    overall_interp = getattr(overall_interp_raw, "value", overall_interp_raw)
+    score_str = f"{overall_score}/100 ({overall_interp})" if overall_score is not None else "Not measured"
 
     # 1. 9-Dimension Scorecard table
     dim_rows = "".join(
@@ -1078,7 +1086,7 @@ def render_enterprise_seo_addendum_html(bundle: Dict[str, Any]) -> str:
         f"<td>{(str(round(float(d['effective_weight']) * 100, 1)) + '%') if d.get('effective_weight') is not None else 'Excluded'}</td>"
         f"<td>{_esc(d.get('score') if d.get('score') is not None else ('Not Applicable' if not d.get('is_applicable', True) else 'Unmeasured'))}</td>"
         f"<td>{int(d.get('passed_checks_count') or 0)} / {int(d.get('executed_checks_count') or 0)}</td>"
-        f"<td>{_esc(d.get('interpretation') or 'Unmeasured')}</td>"
+        f"<td>{_esc(getattr(d.get('interpretation'), 'value', d.get('interpretation')) or 'Unmeasured')}</td>"
         f"</tr>"
         for d in dims
     )

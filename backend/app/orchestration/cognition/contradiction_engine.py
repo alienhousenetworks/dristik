@@ -350,6 +350,39 @@ class ContradictionEngine:
 
         return reconciled, actions_taken
 
+    def detect_contradictions(self, claims: List[Any]) -> List[Dict[str, Any]]:
+        """Detect mutually exclusive claim statements using canonical negation pairs."""
+        active = [
+            c for c in (claims or [])
+            if str(getattr(getattr(c, "verification_status", None), "value", getattr(c, "verification_status", ""))).upper() != "REJECTED"
+        ]
+        conflicts: List[Dict[str, Any]] = []
+        seen_pairs: set = set()
+        for a, b in itertools.combinations(active, 2):
+            id_a = str(getattr(a, "id", None) or getattr(a, "claim_id", "") or id(a))
+            id_b = str(getattr(b, "id", None) or getattr(b, "claim_id", "") or id(b))
+            pair_key = tuple(sorted((id_a, id_b)))
+            if pair_key in seen_pairs:
+                continue
+            text_a = str(getattr(a, "statement", None) or getattr(a, "title", "") or "")
+            text_b = str(getattr(b, "statement", None) or getattr(b, "title", "") or "")
+            if not text_a or not text_b:
+                continue
+            for pat_a, pat_b in _NEGATION_PAIRS:
+                if (_title_matches(text_a, pat_a) and _title_matches(text_b, pat_b)) or (
+                    _title_matches(text_a, pat_b) and _title_matches(text_b, pat_a)
+                ):
+                    seen_pairs.add(pair_key)
+                    conflicts.append({
+                        "claim_a_id": id_a,
+                        "claim_b_id": id_b,
+                        "claim_a": text_a[:240],
+                        "claim_b": text_b[:240],
+                        "pattern": f"{pat_a} <-> {pat_b}",
+                    })
+                    break
+        return conflicts
+
 
 # Singleton
 contradiction_engine = ContradictionEngine()

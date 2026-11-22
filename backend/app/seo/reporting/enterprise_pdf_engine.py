@@ -397,14 +397,15 @@ class EnterprisePdfEngine:
             limitations = f"Entire chapter is unmeasured until {req_conn} is connected. Excluded from scoring denominator without penalty."
         else:
             dim_score = dim_data.get("score")
-            is_measured = bool(dim_data.get("is_measured")) if dim_data else (crawled > 0)
+            # Do not claim NO_ISSUE_IN_SAMPLE for chapters whose backing dimension was never measured.
+            is_measured = bool(dim_data.get("is_measured")) if dim_data else False
             is_applicable = bool(dim_data.get("is_applicable", True)) if dim_data else True
             if ch.is_conditional and not is_applicable and not ch_findings:
                 status_label = "NOT_APPLICABLE"
-            elif not is_measured and not ch_findings and crawled == 0:
-                status_label = "NOT TESTED"
             elif ch_findings:
                 status_label = "ISSUE_VERIFIED"
+            elif not is_measured or crawled == 0:
+                status_label = "NOT_TESTED"
             else:
                 status_label = "NO_ISSUE_IN_SAMPLE"
 
@@ -968,7 +969,8 @@ class EnterprisePdfEngine:
         cov = ctx["coverage"]
         sc = ctx["scorecard"] or {}
         overall_score = sc.get("overall_health_score")
-        score_label = sc.get("overall_interpretation") or ("Not measured" if overall_score is None else "Measured")
+        raw_interp = sc.get("overall_interpretation")
+        score_label = getattr(raw_interp, "value", raw_interp) or ("Not measured" if overall_score is None else "Measured")
         score_display = f"{overall_score}/100" if overall_score is not None else "Not measured"
         conf = sc.get("confidence_vectors") or {}
         has_crawl_cov = cov["urls_discovered"] > 0 or cov["urls_crawled"] > 0
@@ -983,7 +985,7 @@ class EnterprisePdfEngine:
             f"<td>{round(float(d.get('configured_weight', 0))*100, 1)}%</td>"
             f"<td>{d.get('score') if d.get('score') is not None else 'Unmeasured'}</td>"
             f"<td>{d.get('passed_checks_count', 0)}/{d.get('executed_checks_count', 0)}</td>"
-            f"<td>{_esc(d.get('interpretation') or 'Unmeasured')}</td></tr>"
+            f"<td>{_esc(getattr(d.get('interpretation'), 'value', d.get('interpretation')) or 'Unmeasured')}</td></tr>"
             for d in (sc.get("dimensions") or [])
         )
 

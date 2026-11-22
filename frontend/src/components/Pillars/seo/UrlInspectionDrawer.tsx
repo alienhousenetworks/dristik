@@ -52,7 +52,14 @@ export function UrlInspectionDrawer({
   const wordCount = Number(page.word_count ?? 0);
   const outlinks = Array.isArray(page.internal_links) ? page.internal_links : [];
   const externalLinks = Array.isArray(page.external_links) ? page.external_links : [];
-  const images = Array.isArray(page.images) ? page.images : [];
+  const images = Array.isArray(page.image_assets)
+    ? page.image_assets
+    : Array.isArray(page.images)
+      ? page.images
+      : [];
+  const videos = Array.isArray(page.video_assets) ? page.video_assets : [];
+  const imageElements = Number(page.total_images ?? 0);
+  const uniqueImageUrls = Number(page.unique_image_urls ?? images.length);
   const inlinks = Array.isArray(page.inbound_links) ? page.inbound_links : [];
   const ttfbMs = typeof page.ttfb_ms === 'number' ? page.ttfb_ms : typeof page.ux?.ttfb_ms === 'number' ? page.ux.ttfb_ms : null;
   const lcpMs = typeof page.ux?.lcp_ms === 'number' ? page.ux.lcp_ms : typeof page.lcp_ms === 'number' ? page.lcp_ms : null;
@@ -85,7 +92,7 @@ export function UrlInspectionDrawer({
     { id: 'content', label: 'Content' },
     { id: 'headings', label: 'Headings', count: h1s.length + h2s.length },
     { id: 'links', label: 'Links', count: outlinks.length },
-    { id: 'images', label: 'Images', count: images.length },
+    { id: 'images', label: 'Images', count: images.length + videos.length },
     { id: 'schema', label: 'Schema JSON-LD', count: schemas.length },
     { id: 'performance', label: 'Performance' },
     { id: 'evidence', label: 'Evidence & DOM' },
@@ -314,18 +321,50 @@ export function UrlInspectionDrawer({
           )}
 
           {activeTab === 'images' && (
-            <div className="space-y-3">
-              <span className="text-xs font-bold text-ink">Observed Page Images ({images.length})</span>
-              {images.length > 0 ? (
-                images.map((img: any, i: number) => (
-                  <div key={i} className="p-2.5 rounded bg-paper-subtle border border-line text-xs flex items-center justify-between gap-2">
-                    <span className="font-mono text-ink truncate">{img.src || img.url || 'image'}</span>
-                    <Badge tone={img.alt ? 'good' : 'bad'}>{img.alt ? 'Has ALT' : 'Missing ALT'}</Badge>
-                  </div>
-                ))
-              ) : (
-                <p className="text-xs text-ink-500">No image asset records stored for this URL.</p>
-              )}
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <span className="text-xs font-bold text-ink">Observed Page Images ({images.length})</span>
+                {(imageElements > images.length || page.image_assets_truncated) && (
+                  <p className="text-xs text-ink-500">
+                    {imageElements} image elements on the page.
+                    {page.image_assets_truncated
+                      ? ` Showing ${images.length} of ${uniqueImageUrls} unique URLs.`
+                      : ` ${images.length} unique URL${images.length === 1 ? '' : 's'} stored.`}
+                  </p>
+                )}
+                {images.length > 0 ? (
+                  images.map((img: any, i: number) => {
+                    const label = img.url || img.src || 'image';
+                    const emptyAlt = img.is_empty_alt === true || img.alt === '';
+                    const hasAlt = !emptyAlt && (img.has_alt === true || Boolean(String(img.alt_text || img.alt || '').trim()));
+                    return (
+                      <div key={i} className="p-2.5 rounded bg-paper-subtle border border-line text-xs flex items-center justify-between gap-2">
+                        <span className="font-mono text-ink truncate">{label}</span>
+                        <Badge tone={hasAlt ? 'good' : emptyAlt ? 'warn' : 'bad'}>
+                          {hasAlt ? 'Has ALT' : emptyAlt ? 'Empty ALT' : 'Missing ALT'}
+                        </Badge>
+                      </div>
+                    );
+                  })
+                ) : imageElements > 0 ? (
+                  <p className="text-xs text-ink-500">The crawl counted {imageElements} image elements, but no image URL was stored for this URL.</p>
+                ) : (
+                  <p className="text-xs text-ink-500">No image asset records stored for this URL.</p>
+                )}
+              </div>
+              <div className="space-y-2">
+                <span className="text-xs font-bold text-ink">Observed Page Videos ({videos.length})</span>
+                {videos.length > 0 ? (
+                  videos.map((video: any, i: number) => (
+                    <div key={i} className="p-2.5 rounded bg-paper-subtle border border-line text-xs flex items-center justify-between gap-2">
+                      <span className="font-mono text-ink truncate">{video.url || 'No source URL'}</span>
+                      <Badge tone={video.url || video.has_source ? 'good' : 'bad'}>{video.kind || 'video'}</Badge>
+                    </div>
+                  ))
+                ) : (
+                  <p className="text-xs text-ink-500">No video element or known video embed was stored for this URL.</p>
+                )}
+              </div>
             </div>
           )}
 

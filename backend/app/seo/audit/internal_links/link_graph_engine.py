@@ -129,16 +129,11 @@ def build_internal_link_graph(
             clean_url += f"?{parsed.query}"
         page_map[clean_url] = p
 
-    # Ensure homepage exists
+    # Use actual root/homepage if crawled; never fabricate a synthetic 500-word homepage.
     if homepage_url not in page_map and f"https://{clean_domain}" in page_map:
         homepage_url = f"https://{clean_domain}"
-    elif homepage_url not in page_map:
-        page_map[homepage_url] = {
-            "url": homepage_url,
-            "title": f"{clean_domain} Official Site",
-            "status_code": 200,
-            "word_count": 500,
-        }
+    elif homepage_url not in page_map and page_map:
+        homepage_url = next(iter(page_map.keys()))
 
     all_node_urls = list(page_map.keys())
 
@@ -172,12 +167,12 @@ def build_internal_link_graph(
                 continue
             seen_targets.add(target_clean)
 
-            # Check target status
+            # Check target status honestly: uncrawled targets have unknown status (None), not 200.
             target_data = page_map.get(target_clean)
-            target_status = target_data.get("status_code", 200) if target_data else 200
-            is_broken = target_status >= 400
+            target_status = target_data.get("status_code") if target_data else None
+            is_broken = isinstance(target_status, int) and target_status >= 400
 
-            anchor_text = anchor_map.get(target_clean) or pdata.get("title") or "Explore Page"
+            anchor_text = anchor_map.get(target_clean) or ""
             edge_id = f"{src_url}->{target_clean}"
 
             edge_obj = {
@@ -240,9 +235,8 @@ def build_internal_link_graph(
 
         in_deg = len(incoming_edges.get(url, []))
         out_deg = len(outgoing_edges.get(url, []))
-        click_depth = depths.get(url, 999)
-        if click_depth == 999:
-            click_depth = 4  # Unconnected / Orphan
+        raw_depth = depths.get(url, 999)
+        click_depth: Optional[int] = None if raw_depth == 999 else raw_depth
 
         equity = page_ranks.get(url, 10.0)
 
@@ -250,7 +244,7 @@ def build_internal_link_graph(
         if in_deg == 0 and url != homepage_url:
             status = "orphan"
             orphan_count += 1
-        elif click_depth >= 4:
+        elif click_depth is not None and click_depth >= 4:
             status = "deep"
             deep_count += 1
         elif in_deg <= 2 and url != homepage_url:
@@ -273,8 +267,8 @@ def build_internal_link_graph(
             "equity_score": equity,
             "status": status,
             "has_broken_outlinks": has_broken_out,
-            "word_count": int(pdata.get("word_count") or 450),
-            "http_status": int(pdata.get("status_code") or 200),
+            "word_count": int(pdata["word_count"]) if pdata.get("word_count") is not None else None,
+            "http_status": int(pdata["status_code"]) if pdata.get("status_code") is not None else None,
         })
 
     # 6. Generate Intra-Cluster Link Suggestions
@@ -327,7 +321,7 @@ def build_internal_link_graph(
             "deep_count": deep_count,
             "weak_count": weak_count,
             "broken_count": len(broken_links),
-            "max_click_depth": max((n["click_depth"] for n in nodes_list if n["click_depth"] < 900), default=0),
+            "max_click_depth": max((n["click_depth"] for n in nodes_list if n["click_depth"] is not None and n["click_depth"] < 900), default=0),
             "avg_inlinks_per_page": avg_inlinks,
         }
     }

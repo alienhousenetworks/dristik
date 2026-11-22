@@ -146,10 +146,13 @@ def analyze_topical_authority(
     avg_ig = round(total_info_gain / n_pages, 1)
     evidence_density = round(float(total_data_points) / float(n_pages), 1)
 
-    # Topical Coverage Score (combining entities, outline, and information gain)
+    # Topical Coverage Score (combining entities, outline, and information gain — no artificial 30-pt floor)
     unique_entities = set(e.lower() for pa in page_authorities for e in pa.topical_entities)
     outline_depth = sum(len(p.h2 or []) for p in pages)
-    coverage_score = min(100.0, 30.0 + len(unique_entities) * 3.5 + min(30.0, outline_depth * 2.0))
+    if not unique_entities and outline_depth == 0:
+        coverage_score = 0.0
+    else:
+        coverage_score = min(100.0, len(unique_entities) * 5.0 + min(35.0, outline_depth * 2.5) + min(25.0, avg_ig * 0.25))
     coverage_score = round(coverage_score, 1)
 
     # Status Determination

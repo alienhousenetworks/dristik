@@ -139,10 +139,19 @@ class OpenAISearchAdapter(BaseGeoEngineAdapter):
             p_tok = int(usage.get("prompt_tokens") or 0)
             c_tok = int(usage.get("completion_tokens") or 0)
             reported_model = str(data.get("model") or used_model)
+            search_actually_enabled = "web_search_options" in payload
             actual_mode = (
                 GEOTestingMode.API_WITH_SEARCH
-                if (native_citations or ann_urls or testing_mode == GEOTestingMode.API_WITH_SEARCH)
+                if (native_citations or ann_urls or search_actually_enabled)
                 else GEOTestingMode.API_MODEL_ONLY
+            )
+            # Only treat structured native/annotation citations (or search-grounded responses)
+            # as verified citations; never present regex-scraped prose URLs from an ungrounded
+            # chat completion as verified live web-search citations.
+            verified_citations = (
+                list(dict.fromkeys(native_citations + ann_urls + inline_citations))
+                if actual_mode == GEOTestingMode.API_WITH_SEARCH
+                else list(dict.fromkeys(native_citations + ann_urls))
             )
             return EngineRawResponse(
                 engine_id=self.engine_id,
@@ -150,8 +159,8 @@ class OpenAISearchAdapter(BaseGeoEngineAdapter):
                 model_version=reported_model,
                 requested_model=self.model,
                 raw_content=content,
-                citations=citations,
-                sources=[{"url": u, "origin": "annotation" if u in ann_urls else "inline"} for u in citations],
+                citations=verified_citations,
+                sources=[{"url": u, "origin": "annotation" if u in ann_urls else ("native" if u in native_citations else "inline")} for u in verified_citations],
                 status_code=200,
                 is_live=True,
                 latency_ms=latency,
@@ -161,7 +170,11 @@ class OpenAISearchAdapter(BaseGeoEngineAdapter):
                 prompt_tokens=p_tok,
                 completion_tokens=c_tok,
                 estimated_cost_usd=self.estimate_cost_usd(p_tok, c_tok),
-                tool_use_metadata={"annotations_count": len(ann_urls), "search_enabled": actual_mode == GEOTestingMode.API_WITH_SEARCH},
+                tool_use_metadata={
+                    "annotations_count": len(ann_urls),
+                    "search_enabled": actual_mode == GEOTestingMode.API_WITH_SEARCH,
+                    "ungrounded_inline_urls_excluded": len(inline_citations) if actual_mode != GEOTestingMode.API_WITH_SEARCH else 0,
+                },
             )
 
         async def _call(c: httpx.AsyncClient) -> EngineRawResponse:

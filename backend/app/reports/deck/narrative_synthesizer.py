@@ -89,11 +89,13 @@ class ExecutiveNarrativeSynthesizer:
                 cause_clause = "caused by absence of machine-readable schema entity definitions in primary landing pages."
             return f"Read: Target domain extraction score is {geo_pct}%, {cause_clause}"
         elif topic == "remediation_waterfall":
-            return f"Read: Executing the 3 highest-impact code patches unlocks +{metrics.remediation_potential_gain} points of score recovery, closing the gap to Grade A ({metrics.projected_post_remediation_score}/100)."
+            if metrics.remediation_potential_gain <= 0:
+                return "Read: No quantified score-recovery gain was computed for the current finding set."
+            return f"Read: Executing the highest-impact verified fixes targets up to +{metrics.remediation_potential_gain} modeled score points (estimated post-fix score: {metrics.projected_post_remediation_score}/100; actual gains require post-deploy re-crawl)."
         elif topic == "critical_bottlenecks":
             crit = metrics.findings_severity_counts.get("CRITICAL", 0)
             high = metrics.findings_severity_counts.get("HIGH", 0)
-            return f"Read: {crit + high} prioritized findings account for over 70% of total score deductions and require immediate sprint allocation."
+            return f"Read: {crit + high} critical/high findings represent the top engineering priorities for immediate sprint allocation."
         elif finding:
             return f"Read: Resolving '{finding.title}' ({finding.severity}) directly recaptures up to {finding.impact_score} impact points."
         else:

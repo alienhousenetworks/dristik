@@ -91,13 +91,18 @@ class TeamOrchestrator:
             # Deterministic execution
             if self.capability_router.is_deterministic(cap_id):
                 det_results = self.capability_router.execute_deterministic_capability(cap_id, manifest, blackboard)
+                fallback_ev_ids = [ev.id for ev in blackboard.evidence_store.get_all()[:3] if getattr(ev, "id", None)]
                 for r in det_results:
+                    ev_refs = list(r.get("evidence_refs") or [])
+                    if not ev_refs and fallback_ev_ids:
+                        ev_refs = list(fallback_ev_ids[:1])
                     blackboard.claim_registry.register_claim(
                         agent_id=f"deterministic_{cap_id}",
                         statement=r["statement"],
                         category=r["category"],
                         severity=r["severity"],
                         confidence=r["confidence"],
+                        evidence_refs=ev_refs,
                         recommendation=r["recommendation"]
                     )
                 results[cap_id] = {"type": "deterministic", "claims_count": len(det_results)}

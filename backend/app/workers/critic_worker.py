@@ -101,6 +101,9 @@ class CognitiveCriticWorker(BaseCognitiveWorker):
                     decision_map[cid] = r
 
         for claim in all_claims:
+            # Never overturn a claim already rejected by an upstream integrity gate.
+            if claim.verification_status == VerificationStatus.REJECTED:
+                continue
             audit = decision_map.get(claim.id)
             if not audit:
                 # If not explicitly audited by critic, remain PENDING_VERIFICATION (do not assume VERIFIED)
@@ -108,7 +111,7 @@ class CognitiveCriticWorker(BaseCognitiveWorker):
                 claim.verification_notes = "Not evaluated in critic pass; remains pending verification."
                 continue
 
-            decision = audit.get("decision", "supported")
+            decision = str(audit.get("decision") or "").strip().lower()
             rationale = audit.get("rationale", "")
 
             if decision == "supported":
@@ -123,6 +126,9 @@ class CognitiveCriticWorker(BaseCognitiveWorker):
                     "reason": rationale,
                     "decision": decision
                 })
+            elif not decision:
+                claim.verification_status = VerificationStatus.PENDING_VERIFICATION
+                claim.verification_notes = rationale or "Critic omitted explicit decision; remains pending verification."
             elif decision == "severity_inflated":
                 claim.verification_status = VerificationStatus.VERIFIED
                 old_sev = claim.severity.value

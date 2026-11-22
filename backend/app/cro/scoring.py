@@ -60,17 +60,9 @@ ENTERPRISE_CRO_DIMENSIONS: Tuple[Tuple[str, str, float], ...] = (
 def _grade_for_score(score: Optional[float]) -> str:
     if score is None:
         return "Unmeasured"
-    if score >= 90.0:
-        return "A+"
-    if score >= 85.0:
-        return "A"
-    if score >= 75.0:
-        return "B"
-    if score >= 60.0:
-        return "C"
-    if score >= 45.0:
-        return "D"
-    return "F"
+    from app.domain.scoring.displayed_score import rating_for_displayed
+    grade, _ = rating_for_displayed(score)
+    return grade
 
 
 class EnterpriseCroScoringEngine:
@@ -181,17 +173,24 @@ class EnterpriseCroScoringEngine:
             measurement_score = None
             measurement_status = "unmeasured"
         else:
-            pts = sum(
-                1.0 if m.get("status") == "passed" else (0.5 if m.get("status") == "warning" else 0.0)
-                for m in evaluated_meas
-            )
-            measurement_score = round((pts / len(evaluated_meas)) * 100.0, 1)
-            if not analytics_connected:
-                measurement_status = "partial"
-            elif measurement_score >= 80.0:
-                measurement_status = "verified"
+            # Never inflate missing analytics to 50.0 via warning credits when no analytics
+            # is connected and zero measurement checks passed.
+            passed_meas = sum(1 for m in evaluated_meas if m.get("status") == "passed")
+            if not analytics_connected and passed_meas == 0:
+                measurement_score = 0.0
+                measurement_status = "unmeasured"
             else:
-                measurement_status = "unhealthy"
+                pts = sum(
+                    1.0 if m.get("status") == "passed" else (0.25 if (m.get("status") == "warning" and analytics_connected) else 0.0)
+                    for m in evaluated_meas
+                )
+                measurement_score = round((pts / len(evaluated_meas)) * 100.0, 1)
+                if not analytics_connected:
+                    measurement_status = "partial"
+                elif measurement_score >= 80.0:
+                    measurement_status = "verified"
+                else:
+                    measurement_status = "unhealthy"
 
         # Scorecard 3: Measured Business Performance (strictly unblended raw KPIs)
         biz_list = list(business_metrics)
@@ -211,10 +210,11 @@ class EnterpriseCroScoringEngine:
         total_applicable_checks = sum(1 for c in checks if c.applicable)
         total_executed_checks = sum(1 for c in checks if c.applicable and c.executed and c.result is not None)
         test_cov = round((total_executed_checks / max(1, total_applicable_checks)) * 100.0, 1) if total_applicable_checks else 0.0
-        ev_cov = round((findings_with_evidence_ratio * 100.0), 1) if findings_with_evidence_ratio is not None else 100.0
+        ev_cov = round((findings_with_evidence_ratio * 100.0), 1) if findings_with_evidence_ratio is not None else 0.0
         analytics_comp = round((measured_biz_cnt / max(1, len(biz_list))) * 100.0, 1) if biz_list else 0.0
+        sample_factor = min(1.0, pages_audited / 5.0) if pages_audited > 0 else 0.0
         confidence = round(
-            min(1.0, (0.45 * (active_weight / 100.0)) + (0.35 * (test_cov / 100.0)) + (0.20 * (1.0 if analytics_connected else 0.45))),
+            min(1.0, (0.40 * (active_weight / 100.0)) + (0.25 * (test_cov / 100.0)) + (0.15 * sample_factor) + (0.20 * (1.0 if analytics_connected else 0.0))),
             2,
         )
 
@@ -375,7 +375,7 @@ class CroScoringEngine:
             else:
                 unmeasured_cnt += 1
 
-        overall = round((weighted_sum / (measured_weight / 100.0)), 1) if measured_weight > 0 else 75.0
+        overall = round((weighted_sum / (measured_weight / 100.0)), 1) if measured_weight > 0 else 0.0
         grade = "A" if overall >= 85 else ("B" if overall >= 75 else ("C" if overall >= 60 else "D"))
         return TenDimensionCroScoreResult(
             overall_cro_score=overall,

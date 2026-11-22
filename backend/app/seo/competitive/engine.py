@@ -136,25 +136,15 @@ class CompetitiveIntelligenceEngine:
         )
         target_dims["geo"] = target_geo_score
 
-        # Target Search baseline
+        # Target Search baseline: never fabricate Search Visibility from technical_score or 70
+        # when SERP ranking measurements are absent.
         target_search_score, _ = search_metrics_calculator.compute_search_score(
             competitor_id="target",
             target_queries=intent_universe.discovery_seed_queries,
             competitor_ranking_queries=None,  # baseline
             audit_id=audit_id,
         )
-        # Give target an active score if pages exist
-        if target_pages:
-            target_dims["search"] = DimensionScore(
-                dimension="search",
-                score=target_tech_score.score or 70,
-                confidence=EvidenceConfidence.MEDIUM,
-                status="AVAILABLE",
-                evidence_count=len(target_pages),
-                key_metrics={"target_indexed_pages": len(target_pages)},
-            )
-        else:
-            target_dims["search"] = target_search_score
+        target_dims["search"] = target_search_score
 
         # 4. Evaluate each competitor across dimensions
         competitor_profiles: List[CompetitorProfile] = []

@@ -930,6 +930,10 @@ export interface PageEvidence {
   external_links: string[];
   images_without_alt: number;
   total_images: number;
+  image_assets?: Array<Record<string, unknown>>;
+  image_assets_truncated?: boolean;
+  unique_image_urls?: number;
+  video_assets?: Array<Record<string, unknown>>;
   ttfb_ms: number;
   dom_elements_count: number;
   scripts_count: number;

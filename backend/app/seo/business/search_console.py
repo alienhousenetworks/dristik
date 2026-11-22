@@ -214,6 +214,14 @@ class SearchConsoleEngine:
             total_clicks += clicks
             total_impressions += impressions
             pos_sum += position
+            matched_bottleneck = None
+            if findings and page:
+                norm_page = str(page).rstrip("/").lower()
+                for f in findings:
+                    aff = [str(u).rstrip("/").lower() for u in (getattr(f, "affected_urls", None) or [])]
+                    if norm_page in aff:
+                        matched_bottleneck = f.title
+                        break
             keywords.append(KeywordRankingItem(
                 query=query,
                 current_position=round(position, 1),
@@ -222,7 +230,7 @@ class SearchConsoleEngine:
                 ctr_percentage=round(ctr, 2),
                 intent="",
                 target_page=page,
-                associated_technical_bottleneck=findings[0].title if findings else None,
+                associated_technical_bottleneck=matched_bottleneck,
             ))
         count = max(1, len(keywords))
         property_url = str(payload.get("_property") or target_domain)

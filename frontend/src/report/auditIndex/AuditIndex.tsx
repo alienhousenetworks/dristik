@@ -259,7 +259,7 @@ export function AuditIndex({
     (index.counts['DATA_UNAVAILABLE'] || 0) +
     (index.counts['NOT_TESTED'] || 0) +
     (index.counts['NOT_APPLICABLE'] || 0);
-  const totalChapters = index.sections.length || 70;
+  const totalChapters = index.sections.length;
 
   // Crawled pages count
   const pagesCount = report.crawl_manifest?.pages?.length || 0;

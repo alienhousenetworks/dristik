@@ -2569,6 +2569,7 @@ def render_aeo_audit_book(report: Any) -> str:
     <div class="exec-summary-dossier">
         <div class="dossier-meta-bar">
             <span>AUDITED DOMAIN: <strong>{_esc(snap.domain)}</strong></span>
+            <span>AUDIT STANDARD: <strong>2026 AEO MASTER TAXONOMY</strong></span>
             <span>RUN ID: <strong>{_esc(snap.report_ref)}</strong></span>
             <span>EXECUTION: <strong>{_esc(snap.execution_timestamp)}</strong></span>
             <span>SCOPE: <strong>{_esc(snap.crawl_scope_summary)}</strong></span>

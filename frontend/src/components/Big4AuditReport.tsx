@@ -930,10 +930,14 @@ export function Big4AuditReport({
 
           {/* Interactive Scorecard Rubric & Finding Deductions Deep-Dive */}
           {(() => {
-            const activeKey = inspectedScoreDimension || categories.reduce((minKey, [k, c]) => {
-              const currentScore = shownCategoryScore(minKey, scores.category_scores?.[minKey]?.score ?? 100);
-              return shownCategoryScore(k, c.score) < currentScore ? k : minKey;
-            }, categories[0]?.[0] || 'TECHNICAL_SEO');
+            const measuredCategories = categories.filter(([, c]) => typeof c?.score === 'number');
+            const activeKey = inspectedScoreDimension || (measuredCategories.length > 0
+              ? measuredCategories.reduce((minKey, [k, c]) => {
+                  const minScore = scores.category_scores?.[minKey]?.score;
+                  const currentScore = typeof minScore === 'number' ? shownCategoryScore(minKey, minScore) : Infinity;
+                  return shownCategoryScore(k, c.score) < currentScore ? k : minKey;
+                }, measuredCategories[0][0])
+              : (categories[0]?.[0] || 'TECHNICAL_SEO'));
 
             const activeCat = scores.category_scores?.[activeKey];
             if (!activeCat) return null;

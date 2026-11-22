@@ -101,10 +101,15 @@ class EntityConsensusAgent(BaseAgent):
             schemas = getattr(p, "schema_types", []) or []
             if any("organization" in s.lower() or "corporation" in s.lower() for s in schemas):
                 has_org_schema = True
+            raw_schemas = getattr(p, "raw_schema", []) or []
+            ext_links = getattr(p, "external_links", []) or []
+            blob = f"{raw_schemas} {ext_links}".lower()
+            if "wikidata.org/wiki/q" in blob or "wikidata.org/entity/q" in blob:
+                has_wikidata_link = True
 
         observations = {
-            "entity_recognition_confidence": 0.85 if has_org_schema else None,
-            "wikidata_reconciliation_status": "MATCHED" if has_wikidata_link else "NOT_CONNECTED",
+            "entity_recognition_confidence": (0.90 if has_wikidata_link else 0.70) if has_org_schema else None,
+            "wikidata_reconciliation_status": "LINKED_IN_DOM" if has_wikidata_link else "NOT_DETECTED",
             "organization_schema_present": has_org_schema,
         }
 

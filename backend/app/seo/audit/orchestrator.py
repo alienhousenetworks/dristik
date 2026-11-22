@@ -484,7 +484,7 @@ class SEOAuditOrchestrator:
                         "total_pages_crawled": len(pages),
                         "discovered_urls": disc_urls,
                         "pages": pages,
-                        "robots_txt_found": True,
+                        "robots_txt_found": bool(self._crawl_manifest.get("robots_txt_found")),
                         "sitemap_found": bool(self._crawl_manifest.get("sitemap_urls")),
                         "sampling_status": "SAMPLED_AUDIT" if len(disc_urls) > len(pages) else "FULL_CRAWL",
                     }
@@ -736,7 +736,35 @@ class SEOAuditOrchestrator:
                     recommendation="Add an absolute self-referencing canonical link element in the shared document head.",
                     affected_urls=urls, evidence_ids=[ev_id], agent_id="agent_technical_canonical",
                 ))
-            return {"missing_canonical_count": len(missing), "findings": findings}
+            # Check relative or cross-domain canonical conflicts
+            bad_canon = []
+            for p in self._pages:
+                can = str(p.get("canonical_url") or "").strip()
+                if not can:
+                    continue
+                if not can.startswith(("http://", "https://")):
+                    bad_canon.append((str(p.get("url")), can, "relative canonical"))
+                else:
+                    can_host = urlparse(can).netloc.lower().replace("www.", "")
+                    url_host = urlparse(str(p.get("final_url") or p.get("url") or "")).netloc.lower().replace("www.", "")
+                    if can_host and url_host and can_host != url_host:
+                        bad_canon.append((str(p.get("url")), can, f"cross-domain canonical ({can_host} != {url_host})"))
+            if bad_canon:
+                urls = [u for u, _, _ in bad_canon]
+                ev_id = self._add_evidence(
+                    url=urls[0], check_id="seo.canonical.conflict", source_type="rendered_dom",
+                    source_location="head.link[rel=canonical]", observed_value=bad_canon[0][1],
+                    expected_value="Absolute same-domain canonical URL",
+                    result="failed", agent_id="agent_technical_canonical",
+                )
+                findings.append(self._add_finding(
+                    rule_id="seo.canonical.conflict", category="TECHNICAL_SEO", severity="HIGH",
+                    title="Invalid or Cross-Domain Canonical URL Detected",
+                    description=f"{len(urls)} URL(s) declare relative or cross-domain canonical targets ({bad_canon[0][2]}).",
+                    recommendation="Use absolute same-host canonical URLs matching the final 200 OK destination.",
+                    affected_urls=urls, evidence_ids=[ev_id], agent_id="agent_technical_canonical",
+                ))
+            return {"missing_canonical_count": len(missing), "conflict_canonical_count": len(bad_canon), "findings": findings}
 
         async def run_technical_rendering(ctx: Dict[str, Any]) -> Dict[str, Any]:
             from app.seo.analyzers.rendering_disparity import analyze_rendering_disparity
@@ -974,17 +1002,16 @@ class SEOAuditOrchestrator:
                     title_groups.setdefault(t, []).append(str(p.get("url")))
             cannibal_groups = {t: urls for t, urls in title_groups.items() if len(urls) > 1}
             findings = []
-            if cannibal_groups:
-                first_title, urls = next(iter(cannibal_groups.items()))
+            for dup_title, urls in cannibal_groups.items():
                 ev_id = self._add_evidence(
                     url=urls[0], check_id="seo.content.cannibalization_title_overlap", source_type="rendered_dom",
-                    source_location="head.title", observed_value=first_title, expected_value="Distinct primary topic per URL",
+                    source_location="head.title", observed_value=dup_title, expected_value="Distinct primary topic per URL",
                     result="failed", agent_id="agent_content_topical_authority",
                 )
                 findings.append(self._add_finding(
                     rule_id="seo.content.cannibalization_title_overlap", category="CONTENT", severity="MEDIUM",
-                    title="Duplicate Title / Potential Keyword Cannibalization",
-                    description=f"Multiple URLs share identical title '{first_title}'.",
+                    title=f"Duplicate Title / Potential Keyword Cannibalization ({dup_title[:60]})",
+                    description=f"{len(urls)} URLs share identical title '{dup_title}'.",
                     recommendation="Differentiate target search intent and titles or consolidate overlapping pages.",
                     affected_urls=urls, evidence_ids=[ev_id], agent_id="agent_content_topical_authority",
                 ))
@@ -999,6 +1026,8 @@ class SEOAuditOrchestrator:
             return {"detected_schema_types": detected_types, "pages_with_schema": sum(1 for p in self._pages if p.get("schema_types")), "findings": []}
 
         async def run_schema_validator(ctx: Dict[str, Any]) -> Dict[str, Any]:
+            from app.seo.analyzers.schema_validator import analyze_schema_rich_results
+            from app.domain.models import PageEvidence
             findings = []
             no_schema = [p for p in self._pages if not (p.get("schema_types") or [])]
             if no_schema and len(no_schema) == len(self._pages):
@@ -1016,7 +1045,42 @@ class SEOAuditOrchestrator:
                     recommendation="Implement valid Schema.org JSON-LD (Organization, WebSite, BreadcrumbList, and page-type schema).",
                     affected_urls=urls, evidence_ids=[ev_id], agent_id="agent_schema_validator",
                 ))
-            return {"schema_validity_status": "MISSING" if no_schema else "VALID", "findings": findings}
+            else:
+                schema_pages = [p for p in self._pages if p.get("raw_schema")]
+                if schema_pages:
+                    pe_list = [
+                        PageEvidence(
+                            url=str(p.get("url") or self.config.target_url),
+                            status_code=int(p.get("status_code") or 200),
+                            title=p.get("title"),
+                            schema_types=list(p.get("schema_types") or []),
+                            raw_schema=list(p.get("raw_schema") or []),
+                        )
+                        for p in schema_pages
+                    ]
+                    val_rep = analyze_schema_rich_results(pe_list)
+                    invalid_issues = [
+                        iss for iss in (getattr(val_rep, "issues", None) or [])
+                        if str(getattr(iss, "severity", "")).upper() in ("ERROR", "CRITICAL", "HIGH")
+                    ]
+                    if invalid_issues:
+                        affected = sorted({str(getattr(iss, "url", self.config.target_url)) for iss in invalid_issues})
+                        ev_id = self._add_evidence(
+                            url=affected[0], check_id="seo.schema.validation_errors", source_type="rendered_dom",
+                            source_location="script[type='application/ld+json']",
+                            observed_value=getattr(invalid_issues[0], "message", "Schema validation error"),
+                            expected_value="Schema.org compliant JSON-LD with required fields",
+                            result="failed", agent_id="agent_schema_validator",
+                        )
+                        findings.append(self._add_finding(
+                            rule_id="seo.schema.validation_errors", category="STRUCTURED_DATA", severity="MEDIUM",
+                            title=f"Structured Data Validation Errors ({len(invalid_issues)} issue(s))",
+                            description=f"Schema validator found {len(invalid_issues)} error(s): {getattr(invalid_issues[0], 'message', '')}",
+                            recommendation="Fix missing required Schema.org properties and deprecated types in JSON-LD blocks.",
+                            affected_urls=affected, evidence_ids=[ev_id], agent_id="agent_schema_validator",
+                        ))
+            status_str = "MISSING" if (no_schema and len(no_schema) == len(self._pages)) else ("ERRORS" if findings else "VALID")
+            return {"schema_validity_status": status_str, "findings": findings}
 
         async def run_entity_graph(ctx: Dict[str, Any]) -> Dict[str, Any]:
             types = sorted({str(s) for p in self._pages for s in (p.get("schema_types") or [])})
@@ -1474,7 +1538,7 @@ class SEOAuditOrchestrator:
         result_dict["evidence"] = self._evidence_records
         result_dict["canonical_findings"] = self._deduped_findings
         result_dict["canonical_evidence"] = self._evidence_records
-        result_dict["mathematical_scorecard"] = self.scorecard.model_dump() if self.scorecard else None
+        result_dict["mathematical_scorecard"] = self.scorecard.model_dump(mode="json") if self.scorecard else None
         result_dict["remediation_tasks"] = [t.model_dump() for t in self.remediation_tasks]
         result_dict["qa_certification"] = self.qa_report.model_dump() if self.qa_report else None
         result_dict["internal_link_graph"] = self.link_graph

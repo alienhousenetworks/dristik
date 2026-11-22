@@ -72,16 +72,20 @@ class CalibratedConfidenceEngine:
         )
         contra_penalty = min(0.35, (contradictions_count + contested) * 0.08)
 
-        # 4. Deterministic Verification Boost
-        deterministic_claims = sum(1 for c in claims if "deterministic" in c.agent_id.lower())
+        # 4. Deterministic Verification Boost (weighted 20% in the composite below)
+        deterministic_claims = sum(
+            1 for c in claims
+            if "deterministic" in (getattr(c, "agent_id", "") or "").lower()
+            or getattr(c, "evidence_refs", None)
+        )
         det_ratio = deterministic_claims / max(1, total_claims)
         deterministic_boost = det_ratio * 0.20
 
-        # Raw multi-signal formula grounded in real evidence
+        # Raw multi-signal formula grounded in real evidence (weights: 0.50 + 0.30 + 0.20 = 1.00)
         raw_confidence = (
             (0.50 * grounding_ratio) +
             (0.30 * coverage_score) +
-            (0.20 * deterministic_boost) -
+            deterministic_boost -
             contra_penalty
         )
         final_score = max(0.0, min(0.99, raw_confidence))
