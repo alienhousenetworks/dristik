@@ -22,6 +22,8 @@ async def run_audit_task(payload: Dict[str, Any]) -> Any:
     target_pillars = payload.get("target_pillars")
     org_id = str(payload.get("org_id") or "")
     model_provider_id = payload.get("model_provider_id")
+    audit_tier = str(payload.get("audit_tier") or "premium")
+    credits_charged = int(payload.get("credits_charged") or 0)
 
     if model_provider_id and org_id:
         with use_provider_override(str(model_provider_id), org_id):
@@ -34,6 +36,8 @@ async def run_audit_task(payload: Dict[str, Any]) -> Any:
                 country,
                 language,
                 target_pillars,
+                audit_tier=audit_tier,
+                credits_charged=credits_charged,
             )
 
     with use_tenant_context(org_id or "__global__"):
@@ -46,6 +50,8 @@ async def run_audit_task(payload: Dict[str, Any]) -> Any:
             country,
             language,
             target_pillars,
+            audit_tier=audit_tier,
+            credits_charged=credits_charged,
         )
 
 

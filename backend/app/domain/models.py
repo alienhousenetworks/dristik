@@ -3399,6 +3399,7 @@ class AnalysisRequest(BaseModel):
     competitors: List[str] = Field(default_factory=list)
     firecrawl_api_key: Optional[str] = None
     max_crawl_pages: Optional[int] = None
+    audit_tier: str = Field(default="basic", description="Selected audit tier: basic | starter | growth | premium | enterprise")
     voucher_code: Optional[str] = None
     data_residency: DataResidency = DataResidency.GLOBAL
     target_pillars: Optional[List[str]] = Field(default=None, description="Selected pillars to audit: 'seo', 'geo', 'aeo', 'cro'. If omitted, audits all pillars.")
@@ -3447,6 +3448,8 @@ class AnalysisRun(BaseModel):
     manifest_id: Optional[str] = None
     report_id: Optional[str] = None
     target_pillars: Optional[List[str]] = None
+    audit_tier: str = "basic"
+    credits_charged: int = 0
 
     @field_validator("org_id")
     @classmethod

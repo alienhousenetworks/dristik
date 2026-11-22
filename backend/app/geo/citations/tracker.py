@@ -176,7 +176,7 @@ def main_citation_gateway() -> Optional[Tuple[str, str]]:
         chosen = env_llm or settings_llm
     if chosen in ("", "auto"):
         chosen = (settings.get_active_provider() or "").lower().strip()
-    if chosen not in ("openrouter", "together", "nvidia", "nvidiaapi", "nim"):
+    if chosen not in ("openrouter", "together"):
         citation = (
             os.environ.get("AI_CITATION_PROVIDER")
             or getattr(settings, "AI_CITATION_PROVIDER", "")
@@ -185,14 +185,12 @@ def main_citation_gateway() -> Optional[Tuple[str, str]]:
         cross = os.environ.get("AI_CITATION_CROSS_PROVIDER")
         if cross is None and getattr(settings, "AI_CITATION_CROSS_PROVIDER", False):
             cross = str(settings.AI_CITATION_CROSS_PROVIDER)
-        if citation in ("openrouter", "together", "nvidia", "nvidiaapi", "nim") and _parse_bool(cross, default=False):
+        if citation in ("openrouter", "together") and _parse_bool(cross, default=False):
             chosen = citation
         else:
             return None
     if chosen == "openrouter":
         key = settings.OPENROUTER_API_KEY or os.environ.get("OPENROUTER_API_KEY") or ""
-    elif chosen in ("nvidia", "nvidiaapi", "nim"):
-        key = settings.NVIDIA_API_KEY or os.environ.get("NVIDIA_API_KEY") or ""
     else:
         key = settings.TOGETHER_API_KEY or os.environ.get("TOGETHER_API_KEY") or ""
     key = str(key or "").strip()
@@ -416,10 +414,10 @@ def get_configured_ai_engines() -> List[Dict[str, Any]]:
         kimi_key = kimi_explicit_key or kimi_native
     kimi_active = _engine_active("AI_CITATION_KIMI_ACTIVE", bool(kimi_key))
     kimi_model = os.environ.get("AI_CITATION_KIMI_MODEL") or (
-        "moonshotai/moonshot-v1-8k" if kimi_provider == "openrouter" else "moonshot-v1-8k"
+        "moonshotai/kimi-k2" if kimi_provider == "openrouter" else "moonshot-v1-8k"
     )
-    if kimi_provider == "openrouter" and kimi_model == "moonshot-v1-8k":
-        kimi_model = "moonshotai/moonshot-v1-8k"
+    if kimi_provider == "openrouter" and kimi_model in ("moonshot-v1-8k", "moonshotai/moonshot-v1-8k"):
+        kimi_model = "moonshotai/kimi-k2"
 
     # 8. xAI Grok
     grok_explicit_key = os.environ.get("AI_CITATION_GROK_API_KEY")
@@ -435,10 +433,10 @@ def get_configured_ai_engines() -> List[Dict[str, Any]]:
         grok_key = grok_explicit_key or grok_native
     grok_active = _engine_active("AI_CITATION_GROK_ACTIVE", bool(grok_key))
     grok_model = os.environ.get("AI_CITATION_GROK_MODEL") or (
-        "x-ai/grok-2-1212" if grok_provider == "openrouter" else "grok-2-latest"
+        "x-ai/grok-3-mini" if grok_provider == "openrouter" else "grok-2-latest"
     )
-    if grok_provider == "openrouter" and grok_model == "grok-2-latest":
-        grok_model = "x-ai/grok-2-1212"
+    if grok_provider == "openrouter" and grok_model in ("grok-2-latest", "x-ai/grok-2-1212"):
+        grok_model = "x-ai/grok-3-mini"
 
     # 9. Meta Llama — Dedicated Groq / Together or OpenRouter / NVIDIA
     llama_explicit_key = os.environ.get("AI_CITATION_LLAMA_API_KEY")

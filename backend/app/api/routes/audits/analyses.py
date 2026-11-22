@@ -261,7 +261,9 @@ async def start_analysis(
         if provider_row["status"] != "healthy":
             raise HTTPException(status_code=409, detail="Test the selected model provider successfully before using it for an audit.")
 
-    if not settings.has_active_llm_key and not model_provider_id:
+    from app.domain.commercial.tiers import normalize_tier_id as _norm_tier_pre
+    _pre_tier = _norm_tier_pre(request.audit_tier, default="basic")
+    if _pre_tier != "basic" and not settings.has_active_llm_key and not model_provider_id:
         active_prov = settings.get_active_provider()
         raise HTTPException(
             status_code=400,
@@ -271,11 +273,35 @@ async def start_analysis(
             )
         )
 
-    requested_pages = request.max_crawl_pages or 1
-    allowed_pages = 1
+    from app.domain.commercial.tiers import (
+        estimate_audit_quote,
+        get_tier_spec,
+        normalize_tier_id,
+        recommend_pack_for_shortfall,
+    )
 
-    # Commercial Entitlement Check:
-    # 1. If voucher provided, it MUST be valid, bound to this exact target domain, and have sufficient page capacity
+    tier_id = normalize_tier_id(request.audit_tier, default="basic")
+    tier_spec = get_tier_spec(tier_id)
+    requested_pages = max(1, int(request.max_crawl_pages or 1))
+    if requested_pages > tier_spec.features.max_pages:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                f"TIER_PAGE_LIMIT_EXCEEDED: Tier '{tier_spec.name}' supports up to "
+                f"{tier_spec.features.max_pages} pages, but {requested_pages} were requested. "
+                "Select a higher tier or lower the page count."
+            ),
+        )
+
+    allowed_pages = requested_pages
+    credits_charged = 0
+    quote = estimate_audit_quote(tier_id, requested_pages)
+    required_credits = int(quote["required_credits"])
+    role = getattr(getattr(user, "role", None), "value", getattr(user, "role", None))
+    is_admin = role == "system_admin" or bool(getattr(user, "is_system", False))
+
+    # Commercial Entitlement & Credit Check:
+    # 1. Legacy voucher path (still supported for direct one-off vouchers)
     if request.voucher_code and request.voucher_code.strip():
         store = get_payment_store()
         is_valid, reason, v_pages = store.validate_entitlement(request.voucher_code.strip(), url, requested_pages)
@@ -285,39 +311,67 @@ async def start_analysis(
                 detail=f"ENTITLEMENT_VIOLATION: Voucher '{request.voucher_code}' is invalid for this target domain: {reason}"
             )
         allowed_pages = min(requested_pages, v_pages)
-    elif requested_pages > 1:
-        # 2. Check if organization has an active paid subscription covering multi-page depth
-        org = get_store().get_organization(user.org_id)
-        org_dict = dict(org) if org else {}
-        org_plan = (org_dict.get("plan") or "free_scan").lower()
-        tier_limits = {
-            "free_scan": 1,
-            "starter": 3,
-            "professional": 10,
-            "diagnostic": 15,
-            "business": 35,
-            "enterprise": 100,
-        }
-        plan_max = tier_limits.get(org_plan, 1)
-        if plan_max >= requested_pages:
-            allowed_pages = requested_pages
-        elif plan_max > 1:
-            allowed_pages = min(requested_pages, plan_max)
-        else:
+    elif settings.ENFORCE_CREDITS and not is_admin:
+        # 2. Credit Wallet Pre-Flight Check & Atomic Debit
+        id_store = get_store()
+        available = id_store.get_credit_balance(user.org_id)
+        if available < required_credits:
+            shortfall = required_credits - available
+            rec_pack = recommend_pack_for_shortfall(shortfall)
             raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail=(
-                    f"ENTITLEMENT_REQUIRED: Auditing {requested_pages} pages requires a verified voucher or paid plan. "
-                    f"Your current plan ('{org_plan}') is limited to 1 page. Please provide a valid voucher code or upgrade your plan."
-                )
+                status_code=status.HTTP_402_PAYMENT_REQUIRED,
+                detail={
+                    "code": "INSUFFICIENT_CREDITS",
+                    "message": (
+                        f"Insufficient credits for {tier_spec.name} ({requested_pages} pages): "
+                        f"requires {required_credits} credits, available {available} credits."
+                    ),
+                    "tier_id": tier_id,
+                    "tier_name": tier_spec.name,
+                    "pages": requested_pages,
+                    "required_credits": required_credits,
+                    "available_credits": available,
+                    "shortfall_credits": shortfall,
+                    "recommended_pack": rec_pack,
+                },
             )
+        # Debit atomically using a provisional reference; run_id is linked immediately below
+        credits_charged = required_credits
 
     run = orchestrator.create_run(
         url,
         org_id=user.org_id,
         created_by=user.user_id,
         target_pillars=request.target_pillars,
+        audit_tier=tier_id,
+        credits_charged=credits_charged,
     )
+    if credits_charged > 0:
+        ok, _bal = get_store().debit_credits(
+            user.org_id,
+            credits_charged,
+            reference_id=run.analysis_id,
+            audit_tier=tier_id,
+            pages_count=allowed_pages,
+            note=f"{tier_spec.name} audit ({allowed_pages} pages) — {url}",
+        )
+        if not ok:
+            orchestrator.runs.pop(run.analysis_id, None)
+            available = get_store().get_credit_balance(user.org_id)
+            shortfall = max(1, credits_charged - available)
+            raise HTTPException(
+                status_code=status.HTTP_402_PAYMENT_REQUIRED,
+                detail={
+                    "code": "INSUFFICIENT_CREDITS",
+                    "message": f"Insufficient credits: requires {credits_charged}, available {available}.",
+                    "tier_id": tier_id,
+                    "required_credits": credits_charged,
+                    "available_credits": available,
+                    "shortfall_credits": shortfall,
+                    "recommended_pack": recommend_pack_for_shortfall(shortfall),
+                },
+            )
+
     max_pages = allowed_pages
     get_store().record_audit(
         analysis_id=run.analysis_id,
@@ -345,6 +399,8 @@ async def start_analysis(
         "target_pillars": request.target_pillars,
         "org_id": user.org_id,
         "model_provider_id": model_provider_id,
+        "audit_tier": tier_id,
+        "credits_charged": credits_charged,
     }
     task_queue.enqueue_job(
         "audit.execute",
@@ -453,7 +509,16 @@ async def get_analysis_timeline(analysis_id: str, user: UserIdentity = Depends(g
 @router.get("/{analysis_id}/patch-pack/zip")
 async def download_patch_pack_zip(analysis_id: str, user: UserIdentity = Depends(get_current_user)):
     """Downloads a developer-ready ZIP containing schema.jsonld, metadata.html, faq.html, llms.txt, robots.txt."""
+    from app.domain.commercial.tiers import is_feature_enabled
     run = _get_org_run(analysis_id, user)
+    if not is_feature_enabled(getattr(run, "audit_tier", "premium"), "enable_patch_pack_download"):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=(
+                f"TIER_FEATURE_LOCKED: Developer Patch Pack ZIP is not included in tier '{getattr(run, 'audit_tier', 'basic')}'. "
+                "Re-run this audit on Premium or Enterprise tier to unlock."
+            ),
+        )
     if not run.report:
         raise HTTPException(status_code=404, detail="Analysis report not ready yet.")
     

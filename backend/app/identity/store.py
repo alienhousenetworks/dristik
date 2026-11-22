@@ -79,6 +79,21 @@ CREATE TABLE IF NOT EXISTS audits (
     created_at REAL NOT NULL,
     updated_at REAL NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS credit_ledger (
+    entry_id TEXT PRIMARY KEY,
+    org_id TEXT NOT NULL,
+    delta_credits INTEGER NOT NULL,
+    balance_after INTEGER NOT NULL,
+    entry_type TEXT NOT NULL,
+    reference_id TEXT,
+    audit_tier TEXT,
+    pages_count INTEGER,
+    note TEXT,
+    created_at REAL NOT NULL,
+    FOREIGN KEY (org_id) REFERENCES organizations(org_id)
+);
+CREATE INDEX IF NOT EXISTS idx_credit_ledger_org_created ON credit_ledger(org_id, created_at DESC);
 """
 
 PLANS = ("starter", "professional", "business", "enterprise")
@@ -110,6 +125,10 @@ class IdentityStore:
             self._execute("ALTER TABLE users ADD COLUMN oauth_id TEXT")
         if "avatar_url" not in user_cols:
             self._execute("ALTER TABLE users ADD COLUMN avatar_url TEXT")
+        org_cols = {row["name"] for row in self._query("PRAGMA table_info(organizations)")}
+        if "credit_balance" not in org_cols:
+            default_credits = int(getattr(settings, "DEFAULT_NEW_ORG_CREDITS", 20))
+            self._execute(f"ALTER TABLE organizations ADD COLUMN credit_balance INTEGER NOT NULL DEFAULT {default_credits}")
 
     def close(self) -> None:
         with self._lock:
@@ -177,11 +196,137 @@ class IdentityStore:
 
     def create_organization(self, name: str, slug: str, plan: str = "professional") -> Dict[str, Any]:
         org_id = f"org_{uuid.uuid4().hex[:10]}"
-        self._execute(
-            "INSERT INTO organizations (org_id, name, slug, plan, is_system, is_active, created_at) VALUES (?, ?, ?, ?, 0, 1, ?)",
-            (org_id, name.strip(), slug, plan, _now()),
+        now = _now()
+        starter_credits = int(getattr(settings, "DEFAULT_NEW_ORG_CREDITS", 20))
+        with self._lock:
+            self._conn.execute(
+                "INSERT INTO organizations (org_id, name, slug, plan, is_system, is_active, created_at, credit_balance) VALUES (?, ?, ?, ?, 0, 1, ?, ?)",
+                (org_id, name.strip(), slug, plan, now, starter_credits),
+            )
+            if starter_credits > 0:
+                self._conn.execute(
+                    """INSERT INTO credit_ledger (entry_id, org_id, delta_credits, balance_after, entry_type, reference_id, note, created_at)
+                       VALUES (?, ?, ?, ?, 'SIGNUP_BONUS', ?, ?, ?)""",
+                    (f"crd_{uuid.uuid4().hex[:12]}", org_id, starter_credits, starter_credits, org_id, "New organization starter credits", now),
+                )
+            self._conn.commit()
+        return {"org_id": org_id, "name": name.strip(), "slug": slug, "plan": plan, "credit_balance": starter_credits}
+
+    def get_credit_balance(self, org_id: str) -> int:
+        row = self._one("SELECT credit_balance FROM organizations WHERE org_id = ?", (org_id,))
+        if not row:
+            return 0
+        return int(row["credit_balance"] or 0)
+
+    def list_credit_ledger(self, org_id: str, limit: int = 50) -> List[Dict[str, Any]]:
+        rows = self._query(
+            """SELECT entry_id, org_id, delta_credits, balance_after, entry_type, reference_id, audit_tier, pages_count, note, created_at
+               FROM credit_ledger WHERE org_id = ? ORDER BY created_at DESC LIMIT ?""",
+            (org_id, max(1, min(int(limit or 50), 200))),
         )
-        return {"org_id": org_id, "name": name.strip(), "slug": slug, "plan": plan}
+        return [dict(r) for r in rows]
+
+    def debit_credits(
+        self,
+        org_id: str,
+        amount: int,
+        *,
+        reference_id: str,
+        audit_tier: str,
+        pages_count: int,
+        note: str = "",
+    ) -> tuple[bool, int]:
+        """Atomically deduct credits if balance >= amount. Returns (success, balance_after)."""
+        req = int(amount or 0)
+        if req <= 0:
+            return True, self.get_credit_balance(org_id)
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT credit_balance FROM organizations WHERE org_id = ?",
+                (org_id,),
+            ).fetchone()
+            if not row:
+                return False, 0
+            current = int(row["credit_balance"] or 0)
+            if current < req:
+                return False, current
+            new_bal = current - req
+            self._conn.execute(
+                "UPDATE organizations SET credit_balance = ? WHERE org_id = ?",
+                (new_bal, org_id),
+            )
+            self._conn.execute(
+                """INSERT INTO credit_ledger
+                   (entry_id, org_id, delta_credits, balance_after, entry_type, reference_id, audit_tier, pages_count, note, created_at)
+                   VALUES (?, ?, ?, ?, 'AUDIT_DEBIT', ?, ?, ?, ?, ?)""",
+                (
+                    f"crd_{uuid.uuid4().hex[:12]}",
+                    org_id,
+                    -req,
+                    new_bal,
+                    reference_id,
+                    audit_tier,
+                    int(pages_count or 1),
+                    note or f"{audit_tier} audit ({pages_count} pages)",
+                    _now(),
+                ),
+            )
+            self._conn.commit()
+            return True, new_bal
+
+    def add_credits(
+        self,
+        org_id: str,
+        amount: int,
+        *,
+        entry_type: str = "PURCHASE",
+        reference_id: Optional[str] = None,
+        note: str = "",
+    ) -> int:
+        """Atomically credit an org wallet. Idempotent on (org_id, entry_type, reference_id) for PURCHASE/AUDIT_REFUND."""
+        delta = int(amount or 0)
+        if delta <= 0:
+            return self.get_credit_balance(org_id)
+        with self._lock:
+            if reference_id and entry_type in ("PURCHASE", "AUDIT_REFUND"):
+                dup = self._conn.execute(
+                    "SELECT balance_after FROM credit_ledger WHERE org_id = ? AND entry_type = ? AND reference_id = ?",
+                    (org_id, entry_type, reference_id),
+                ).fetchone()
+                if dup:
+                    row = self._conn.execute(
+                        "SELECT credit_balance FROM organizations WHERE org_id = ?",
+                        (org_id,),
+                    ).fetchone()
+                    return int(row["credit_balance"] or 0) if row else int(dup["balance_after"] or 0)
+            row = self._conn.execute(
+                "SELECT credit_balance FROM organizations WHERE org_id = ?",
+                (org_id,),
+            ).fetchone()
+            if not row:
+                return 0
+            new_bal = int(row["credit_balance"] or 0) + delta
+            self._conn.execute(
+                "UPDATE organizations SET credit_balance = ? WHERE org_id = ?",
+                (new_bal, org_id),
+            )
+            self._conn.execute(
+                """INSERT INTO credit_ledger
+                   (entry_id, org_id, delta_credits, balance_after, entry_type, reference_id, note, created_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    f"crd_{uuid.uuid4().hex[:12]}",
+                    org_id,
+                    delta,
+                    new_bal,
+                    entry_type,
+                    reference_id,
+                    note or entry_type,
+                    _now(),
+                ),
+            )
+            self._conn.commit()
+            return new_bal
 
     def slug_taken(self, slug: str) -> bool:
         return self._one("SELECT org_id FROM organizations WHERE slug = ?", (slug,)) is not None

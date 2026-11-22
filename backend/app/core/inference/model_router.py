@@ -191,9 +191,14 @@ class ModelRouter:
         "cross_analyst",
     })
 
-    def apply_page_budget(self, pages_count: int, depth_mode: Optional[str] = None):
-        """Scale audit budget and call limits dynamically from crawled page count (~₹20–₹30/page)."""
-        plan = BudgetManager.compute_audit_budget(pages_count, depth_mode=depth_mode)
+    def apply_page_budget(
+        self,
+        pages_count: int,
+        depth_mode: Optional[str] = None,
+        tier_id: Optional[str] = None,
+    ):
+        """Scale audit budget and call limits dynamically from crawled page count and selected tier."""
+        plan = BudgetManager.compute_audit_budget(pages_count, depth_mode=depth_mode, tier_id=tier_id)
         if not self._explicit_budget_override:
             self.budget_manager.max_budget_usd = plan.max_budget_usd
             self.max_model_calls = plan.max_model_calls

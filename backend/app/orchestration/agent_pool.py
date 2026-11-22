@@ -125,6 +125,7 @@ class AgentPool:
         base_progress: int = 40,
         end_progress: int = 88,
         active_pillars: Optional[Set[str]] = None,
+        audit_tier: Optional[str] = None,
     ) -> Dict[str, Any]:
         blackboard.blackboard_state["pipeline_orchestrated"] = True
         total = max(len(self.agents), 1)
@@ -137,6 +138,7 @@ class AgentPool:
             "unavailable": 0,
             "unmeasured": 0,
             "skipped": 0,
+            "locked_by_tier": 0,
             "errors": 0,
             "waves": len(self.waves),
             "results": {},
@@ -150,11 +152,25 @@ class AgentPool:
             for p in normalized_pillars:
                 allowed_domains.update(PILLAR_DOMAINS.get(p, set()))
 
+        tier_id = (audit_tier or "").strip().lower() or None
+        ordered_agent_ids = list(self.agents.keys())
+        agent_index_map = {aid: idx for idx, aid in enumerate(ordered_agent_ids)}
+
         # Limit parallel agent tasks per wave to prevent scheduling bursts
         pool_concurrency = max(2, getattr(settings, "LLM_MAX_CONCURRENCY", 2) * 2)
         sem = asyncio.Semaphore(pool_concurrency)
 
         async def _bounded_run(aid: str) -> Dict[str, Any]:
+            if tier_id:
+                from app.domain.commercial.tiers import specialist_allowed_for_tier
+                if not specialist_allowed_for_tier(tier_id, aid, agent_index_map.get(aid, 0)):
+                    return {
+                        "agent_id": aid,
+                        "status": "skipped",
+                        "unavailable_reason": f"Locked by audit tier '{tier_id}'. Upgrade tier to unlock this specialist.",
+                        "locked_by_tier": True,
+                        "claims": [],
+                    }
             if allowed_domains is not None:
                 defn = SPECIALIST_AGENTS_V3.get(aid)
                 dom = defn.domain if defn else "UNKNOWN"
@@ -251,9 +267,9 @@ class AgentPool:
             from app.core.config import settings
             active_prov = settings.get_active_provider()
 
-        # Under Groq free tier, 429 backoffs can be up to 30s. Provide a generous outer buffer.
-        # Non-Groq providers maintain their standard fast timeout.
-        if (active_prov or "").lower() == "groq":
+        # Under Groq free tier (429 backoffs) or NVIDIA NIM (120B reasoning queued behind semaphore),
+        # provide a generous outer buffer so agents do not time out while waiting for a slot.
+        if (active_prov or "").lower() in ("groq", "nvidia", "nvidiaapi", "nim"):
             timeout_sec = max(60.0, float(getattr(agent.definition, "timeout_sec", 60) or 60) + 35.0)
         else:
             timeout_sec = float(getattr(agent.definition, "timeout_sec", 60) or 60) + 15.0

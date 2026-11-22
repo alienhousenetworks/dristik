@@ -1,4 +1,12 @@
-import { AnalysisRun, AnalysisSummary, PlansCatalog, PipelineGraphState } from '../types';
+import {
+  AnalysisRun,
+  AnalysisSummary,
+  AuditQuote,
+  AuditTiersResponse,
+  CreditBalanceResponse,
+  PlansCatalog,
+  PipelineGraphState,
+} from '../types';
 import { api, readError } from './http';
 
 export { readError };
@@ -16,7 +24,8 @@ export async function startAnalysis(
   maxCrawlPages: number,
   siteType?: string,
   declaredNotes?: string,
-  targetPillars?: string[]
+  targetPillars?: string[],
+  auditTier: string = 'basic'
 ): Promise<AnalysisRun> {
   return api<AnalysisRun>(
     '/api/v1/analyses',
@@ -25,6 +34,7 @@ export async function startAnalysis(
       body: JSON.stringify({
         website_url: websiteUrl,
         max_crawl_pages: maxCrawlPages,
+        audit_tier: auditTier,
         site_type: siteType || undefined,
         industry: siteType || undefined,
         declared_site_type_notes: declaredNotes || undefined,
@@ -97,6 +107,22 @@ export async function getAnalysis(analysisId: string): Promise<AnalysisRun> {
 
 export async function getPlans(): Promise<PlansCatalog> {
   return api<PlansCatalog>('/api/v1/payments/plans', {}, 'Could not load plans');
+}
+
+export async function getAuditTiers(): Promise<AuditTiersResponse> {
+  return api<AuditTiersResponse>('/api/v1/payments/tiers', {}, 'Could not load audit tiers');
+}
+
+export async function getCreditBalance(): Promise<CreditBalanceResponse> {
+  return api<CreditBalanceResponse>('/api/v1/payments/credits/balance', {}, 'Could not load credit balance');
+}
+
+export async function getAuditQuote(tierId: string, pages: number): Promise<AuditQuote> {
+  return api<AuditQuote>(
+    `/api/v1/payments/quote?tier_id=${encodeURIComponent(tierId)}&pages=${encodeURIComponent(String(pages))}`,
+    {},
+    'Could not calculate audit quote',
+  );
 }
 
 export function openAnalysisStream(analysisId: string): EventSource {

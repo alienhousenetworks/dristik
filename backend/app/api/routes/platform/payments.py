@@ -6,10 +6,21 @@ import time
 import uuid
 import httpx
 from typing import Optional, List, Dict, Any
-from fastapi import APIRouter, HTTPException, status, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, status, Request
 from pydantic import BaseModel, Field
 
 from app.core.config import settings
+from app.domain.commercial.tiers import (
+    CREDIT_LIST_PRICE_INR,
+    CREDIT_LIST_PRICE_USD,
+    CREDIT_PACKS,
+    estimate_audit_quote,
+    get_credit_pack,
+    list_serialized_tiers,
+)
+from app.identity.authorizer import UserIdentity
+from app.identity.deps import get_current_user
+from app.identity.store import get_store
 from app.payments.gst_billing import GST_RATE, gst_amount_inr
 from app.payments.razorpay import payment_signature
 
@@ -354,13 +365,14 @@ MONITORING_PLANS = [
 # ============================================================================
 
 class CreateOrderRequest(BaseModel):
-    plan_id: str = Field(..., description="ID of the plan selected (e.g. professional, business)")
-    target_url: str = Field(..., description="Target website URL to audit")
+    plan_id: str = Field(..., description="ID of the plan or credit pack selected (e.g. pack_150, professional)")
+    target_url: str = Field(default="https://dristik.ai", description="Target website URL to audit (optional for credit packs)")
     customer_name: Optional[str] = Field(default="Dristik Client")
     customer_email: Optional[str] = Field(default="client@example.com")
     customer_phone: Optional[str] = Field(default=None)
     company_name: Optional[str] = Field(default=None)
     gstin: Optional[str] = Field(default=None)
+    org_id: Optional[str] = Field(default=None, description="Organization ID to credit on pack purchase")
 
 class OrderResponse(BaseModel):
     order_id: str
@@ -410,8 +422,14 @@ class VerifyPaymentRequest(BaseModel):
     razorpay_payment_id: str
     razorpay_signature: str
     plan_id: str
-    target_url: str
+    target_url: str = "https://dristik.ai"
     customer_email: Optional[str] = None
+    org_id: Optional[str] = None
+
+class AdminCreditGrantRequest(BaseModel):
+    org_id: str
+    credits: int = Field(..., gt=0, le=100000)
+    note: str = "Admin credit grant"
 
 class VoucherResponse(BaseModel):
     success: bool
@@ -422,6 +440,8 @@ class VoucherResponse(BaseModel):
     payment_id: str
     timestamp: float
     message: str
+    credits_added: int = 0
+    new_credit_balance: Optional[int] = None
 
 from app.payments.store import get_payment_store, OrderRecord
 
@@ -442,17 +462,83 @@ async def get_payment_config():
         "brand_theme_color": "#06b6d4"
     }
 
+@router.get("/tiers")
+async def get_audit_tiers():
+    """Returns the 5 user-selectable audit tiers, credit pricing formula, and Razorpay credit top-up packs."""
+    return {
+        "tiers": list_serialized_tiers(),
+        "credit_packs": CREDIT_PACKS,
+        "credit_list_price_inr": CREDIT_LIST_PRICE_INR,
+        "credit_list_price_usd": CREDIT_LIST_PRICE_USD,
+        "formula": "required_credits = base_credits + (pages * credits_per_page)",
+        "enforce_credits": bool(settings.ENFORCE_CREDITS),
+        "currency": "INR",
+    }
+
+
+@router.get("/quote")
+async def get_audit_quote(
+    tier_id: str = Query(default="basic", description="Audit tier: basic | starter | growth | premium | enterprise"),
+    pages: int = Query(default=10, ge=1, le=500, description="Number of pages to inspect"),
+):
+    """Returns live credit cost, INR/USD estimate, all-in COGS breakdown, and feature matrix for a tier + page count."""
+    return estimate_audit_quote(tier_id, pages)
+
+
+@router.get("/credits/balance")
+async def get_org_credit_balance(
+    limit: int = Query(default=25, ge=1, le=200),
+    user: UserIdentity = Depends(get_current_user),
+):
+    """Returns the authenticated organization's current credit balance and recent ledger entries."""
+    id_store = get_store()
+    role = getattr(getattr(user, "role", None), "value", getattr(user, "role", None))
+    is_admin = role == "system_admin" or bool(getattr(user, "is_system", False))
+    return {
+        "org_id": user.org_id,
+        "credit_balance": id_store.get_credit_balance(user.org_id),
+        "enforce_credits": bool(settings.ENFORCE_CREDITS),
+        "admin_bypass": is_admin,
+        "ledger": id_store.list_credit_ledger(user.org_id, limit=limit),
+        "credit_packs": CREDIT_PACKS,
+    }
+
+
+@router.post("/credits/admin-grant")
+async def admin_grant_credits(
+    req: AdminCreditGrantRequest,
+    user: UserIdentity = Depends(get_current_user),
+):
+    """System-admin endpoint to grant credits to an organization for testing or enterprise invoicing."""
+    role = getattr(getattr(user, "role", None), "value", getattr(user, "role", None))
+    if role != "system_admin" and not getattr(user, "is_system", False):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only system_admin can grant credits.")
+    id_store = get_store()
+    if not id_store.get_organization(req.org_id):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Organization '{req.org_id}' not found.")
+    new_bal = id_store.add_credits(
+        req.org_id,
+        req.credits,
+        entry_type="ADMIN_ADJUST",
+        reference_id=f"admin_{uuid.uuid4().hex[:10]}",
+        note=req.note,
+    )
+    return {"org_id": req.org_id, "credits_added": req.credits, "new_credit_balance": new_bal}
+
+
 @router.get("/plans")
 async def get_plans():
-    """Returns the full catalog of Dristik audit and continuous monitoring tiers."""
+    """Returns the full catalog of Dristik audit tiers, credit packs, and continuous monitoring plans."""
     from app.commercial.plans import PLANNING_NOTE, SUBSCRIPTION_HYPOTHESES
 
     return {
+        "audit_tiers": list_serialized_tiers(),
+        "credit_packs": CREDIT_PACKS,
         "one_time_audits": AUDIT_PLANS,
         "continuous_monitoring": MONITORING_PLANS,
         "subscription_hypotheses": SUBSCRIPTION_HYPOTHESES,
         "subscription_hypotheses_note": PLANNING_NOTE,
-        "default_flagship": "diagnostic",
+        "default_flagship": "premium",
         "currency": "INR",
         "gst_rate": GST_RATE,
         "value_proposition": "Investigates your website like a dedicated cross-functional team of technical, SEO, GEO, AI-search, and business analysts—with verified evidence for every conclusion."
@@ -465,13 +551,13 @@ async def create_order(req: CreateOrderRequest):
     Communicates directly with the live Razorpay Orders API.
     Fails closed if payment gateway is not configured or if the gateway returns an error.
     """
-    # Find matching plan
-    all_plans = AUDIT_PLANS + MONITORING_PLANS
+    # Find matching plan or credit pack
+    all_plans = AUDIT_PLANS + MONITORING_PLANS + CREDIT_PACKS
     plan = next((p for p in all_plans if p["id"] == req.plan_id), None)
     if not plan:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Plan '{req.plan_id}' not found in catalog."
+            detail=f"Plan or credit pack '{req.plan_id}' not found in catalog."
         )
 
     base_price = plan["price_inr"]
@@ -612,12 +698,12 @@ async def verify_payment(req: VerifyPaymentRequest):
                 detail="PAYMENT_VERIFICATION_FAILED: Order ID does not match any active persisted order."
             )
 
-    all_plans = AUDIT_PLANS + MONITORING_PLANS
+    all_plans = AUDIT_PLANS + MONITORING_PLANS + CREDIT_PACKS
     plan = next((p for p in all_plans if p["id"] == req.plan_id), None)
     if not plan:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Plan '{req.plan_id}' not found in catalog."
+            detail=f"Plan or credit pack '{req.plan_id}' not found in catalog."
         )
 
     if persisted_order and persisted_order.plan_id != req.plan_id:
@@ -666,6 +752,19 @@ async def verify_payment(req: VerifyPaymentRequest):
         max_pages=max_pages
     )
 
+    credits_added = 0
+    new_balance: Optional[int] = None
+    pack = get_credit_pack(req.plan_id)
+    if pack and req.org_id:
+        credits_added = int(pack["credits"])
+        new_balance = get_store().add_credits(
+            req.org_id,
+            credits_added,
+            entry_type="PURCHASE",
+            reference_id=req.razorpay_payment_id,
+            note=f"Razorpay purchase: {pack['name']} ({credits_added} credits)",
+        )
+
     return VoucherResponse(
         success=True,
         voucher_code=voucher.voucher_code,
@@ -674,7 +773,13 @@ async def verify_payment(req: VerifyPaymentRequest):
         target_url=req.target_url,
         payment_id=req.razorpay_payment_id,
         timestamp=voucher.created_at,
-        message="Payment verified successfully. Dristik Intelligence Audit unlocked!"
+        message=(
+            f"Payment verified! {credits_added} credits added to your workspace."
+            if credits_added > 0
+            else "Payment verified successfully. Dristik Intelligence Audit unlocked!"
+        ),
+        credits_added=credits_added,
+        new_credit_balance=new_balance,
     )
 
 @router.post("/invoice", response_model=GstInvoiceResponse)

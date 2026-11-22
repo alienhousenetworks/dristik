@@ -73,8 +73,8 @@ def test_get_configured_ai_engines_env_overrides():
     }, clear=False):
         engines = get_configured_ai_engines()
         engines_by_id = {e["id"]: e for e in engines}
-        assert engines_by_id["kimi"]["model"] == "moonshotai/moonshot-v1-8k"
-        assert engines_by_id["grok"]["model"] == "x-ai/grok-2-1212"
+        assert engines_by_id["kimi"]["model"] == "moonshotai/kimi-k2"
+        assert engines_by_id["grok"]["model"] == "x-ai/grok-3-mini"
 
 
 

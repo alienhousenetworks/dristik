@@ -1339,7 +1339,7 @@ async def generate_section_explanation_ai(
                 max_tokens=500,
                 response_format="DEFAULT",
             )
-            raw_text = resp.get("text", "") if isinstance(resp, dict) else str(resp)
+            raw_text = (resp.get("content") or resp.get("text") or "") if isinstance(resp, dict) else str(resp)
         elif hasattr(client, "complete"):
             raw_text = await client.complete(prompt=f"{system_prompt}\n\n{user_prompt}", max_tokens=500)
         else:

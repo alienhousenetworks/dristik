@@ -338,7 +338,7 @@ class GeoBenchmarkRunner:
                         resp = disabled_engines[ad.engine_id]
                     else:
                         resp = await ad.execute_query(q.query_text, locale=locale, client=client)
-                        if resp.status_code in (400, 401, 403, 404):
+                        if resp.status_code in (400, 401, 402, 403, 404, 410):
                             logger.warning(
                                 f"[GEO Benchmark] Engine '{ad.engine_id}' failed with HTTP {resp.status_code} ({resp.error}). "
                                 f"Short-circuiting remaining queries for this engine to avoid repeated errors."

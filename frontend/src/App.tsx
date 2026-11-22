@@ -1,6 +1,15 @@
 import React, { Suspense, lazy, useEffect, useRef, useState } from 'react';
 import { AnalysisRun, AnalysisSummary, AppView, AuthUser, ConnectorType, Finding, TabId } from './types';
-import { deleteAnalysis, getAnalysis, listAnalyses, openAnalysisStream, startAnalysis } from './services/api';
+import {
+  deleteAnalysis,
+  getAnalysis,
+  getAuditTiers,
+  getCreditBalance,
+  listAnalyses,
+  openAnalysisStream,
+  startAnalysis,
+} from './services/api';
+import type { AuditTierId, AuditTierSpec } from './types';
 import { can, fetchMe, logout } from './services/auth';
 import { AuditForm } from './components/AuditForm';
 import { DeltaAnalyticsDashboard } from './components/DeltaAnalyticsDashboard';
@@ -54,6 +63,11 @@ export function App() {
   const initial = parseNavigation();
   const [url, setUrl] = useState('');
   const [maxPages, setMaxPages] = useState(5);
+  const [auditTier, setAuditTier] = useState<AuditTierId>('basic');
+  const [auditTiers, setAuditTiers] = useState<AuditTierSpec[] | undefined>(undefined);
+  const [creditBalance, setCreditBalance] = useState<number | null>(null);
+  const [enforceCredits, setEnforceCredits] = useState<boolean>(true);
+  const [adminBypass, setAdminBypass] = useState<boolean>(false);
   const [siteType, setSiteType] = useState<string>('');
   const [declaredNotes, setDeclaredNotes] = useState<string>('');
   const [targetPillars, setTargetPillars] = useState<string[]>(['seo', 'geo', 'aeo', 'cro']);
@@ -166,6 +180,30 @@ export function App() {
     setFinding(null);
     setTab('overview');
   };
+
+  useEffect(() => {
+    getAuditTiers()
+      .then((res) => {
+        if (res?.tiers?.length) setAuditTiers(res.tiers);
+        if (typeof res?.enforce_credits === 'boolean') setEnforceCredits(res.enforce_credits);
+      })
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    if (!user) {
+      setCreditBalance(null);
+      setAdminBypass(false);
+      return;
+    }
+    getCreditBalance()
+      .then((res) => {
+        setCreditBalance(res.credit_balance);
+        setEnforceCredits(res.enforce_credits);
+        setAdminBypass(res.admin_bypass);
+      })
+      .catch(() => {});
+  }, [user]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -302,9 +340,17 @@ export function App() {
     setTab('overview');
 
     try {
-      const created = await startAnalysis(target, maxPages, siteType, declaredNotes, targetPillars);
+      const created = await startAnalysis(target, maxPages, siteType, declaredNotes, targetPillars, auditTier);
       setRun(created);
       syncActiveAnalysisId(created.analysis_id);
+      // Refresh org credit balance after successful debit
+      getCreditBalance()
+        .then((res) => {
+          setCreditBalance(res.credit_balance);
+          setEnforceCredits(res.enforce_credits);
+          setAdminBypass(res.admin_bypass);
+        })
+        .catch(() => {});
 
       const stream = openAnalysisStream(created.analysis_id);
       stream.onmessage = (event) => {
@@ -364,6 +410,13 @@ export function App() {
     <AuditForm
       url={url}
       maxPages={maxPages}
+      auditTier={auditTier}
+      tiers={auditTiers}
+      creditBalance={creditBalance}
+      enforceCredits={enforceCredits}
+      adminBypass={adminBypass}
+      onAuditTierChange={setAuditTier}
+      onBuyCredits={() => setPlansOpen(true)}
       siteType={siteType}
       declaredNotes={declaredNotes}
       targetPillars={targetPillars}

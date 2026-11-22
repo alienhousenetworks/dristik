@@ -349,6 +349,8 @@ class Settings(BaseSettings):
     
     # Budget & Cost Limits (Phase 2 dynamic ₹20–₹30/page Frontier AI budget scaling)
     ENFORCE_HARD_BUDGET_CAP: bool = Field(default=True, description="Toggle hard USD/call-count enforcement in ModelRouter")
+    ENFORCE_CREDITS: bool = Field(default=True, description="Require sufficient org credit balance before launching audits")
+    DEFAULT_NEW_ORG_CREDITS: int = Field(default=20, ge=0, description="Starter credits granted to newly created organizations")
     AI_DEPTH_MODE: str = Field(default="tiered_frontier", description="tiered_frontier (default) | frontier_all")
     AI_SLICE_MAX_CHARS: int = Field(default=1200, ge=200, le=8000, description="Max chars per evidence slice sent to LLM")
     AI_EVIDENCE_MAX_TOKENS: int = Field(default=12000, ge=1600, le=64000, description="Evidence token budget for non-Groq frontier providers")

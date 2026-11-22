@@ -54,37 +54,71 @@ class BudgetManager:
     def compute_audit_budget(
         pages_count: int,
         depth_mode: Optional[str] = None,
+        tier_id: Optional[str] = None,
     ) -> AuditBudgetPlan:
         """
-        Computes a dynamic per-audit USD/INR budget & call envelope using a base + tiered
-        per-page curve (~₹20–₹30/page):
-          - Base site overhead covers Business Understanding, 100-Q AEO RAG, Critic, Remediation, Roadmap.
-          - Pages 1..20   -> AUDIT_PER_PAGE_USD_TIER1 (~$0.30/pg ≈ ₹25.5/pg)
-          - Pages 21..50  -> AUDIT_PER_PAGE_USD_TIER2 (~$0.24/pg ≈ ₹20.4/pg)
-          - Pages 51+     -> AUDIT_PER_PAGE_USD_TIER3 (~$0.18/pg ≈ ₹15.3/pg volume taper)
+        Computes a dynamic per-audit USD/INR budget & call envelope scaled from pages_crawled
+        and the selected 5-tier audit depth:
+          - basic      -> $0.00, 0 model calls (deterministic-only)
+          - starter    -> fast-tier budget (~₹5/pg), max(25, 15 + n) calls
+          - growth     -> mid-tier budget (~₹13/pg), max(70, 45 + 2n) calls
+          - premium    -> full ₹20–₹30/page frontier budget, max(140, 85 + 3n) calls
+          - enterprise -> frontier_all budget (~₹35/pg), max(180, 110 + 4n) calls
         """
         from app.core.config import settings
         n = max(1, int(pages_count or 1))
+        fx = float(getattr(settings, "USD_TO_INR_RATE", 85.0))
+        norm_tier = (tier_id or "").strip().lower()
+
+        if norm_tier == "basic":
+            return AuditBudgetPlan(
+                pages_count=n,
+                depth_mode="deterministic_only",
+                max_budget_usd=0.0,
+                max_budget_inr=0.0,
+                effective_per_page_usd=0.0,
+                effective_per_page_inr=0.0,
+                max_model_calls=0,
+                frontier_copy_page_cap=0,
+                per_page_token_cap=0,
+            )
+
         mode = (depth_mode or getattr(settings, "AI_DEPTH_MODE", "tiered_frontier") or "tiered_frontier").strip().lower()
+        if norm_tier == "enterprise" and not depth_mode:
+            mode = "frontier_all"
+        elif norm_tier == "starter" and not depth_mode:
+            mode = "fast_tier"
+
         base_usd = float(getattr(settings, "AUDIT_BASE_BUDGET_USD", 0.45))
         r1 = float(getattr(settings, "AUDIT_PER_PAGE_USD_TIER1", 0.30))
         r2 = float(getattr(settings, "AUDIT_PER_PAGE_USD_TIER2", 0.24))
         r3 = float(getattr(settings, "AUDIT_PER_PAGE_USD_TIER3", 0.18))
-        fx = float(getattr(settings, "USD_TO_INR_RATE", 85.0))
 
         t1 = min(n, 20)
         t2 = min(max(n - 20, 0), 30)
         t3 = max(n - 50, 0)
         total_usd = base_usd + (t1 * r1) + (t2 * r2) + (t3 * r3)
-        if mode == "frontier_all":
-            total_usd *= 1.45
 
-        total_usd = round(total_usd, 4)
+        if norm_tier == "starter":
+            total_usd = round(0.18 + (n * 0.05), 4)
+            max_calls = max(25, min(120, 15 + n))
+            frontier_copy_cap = 0
+        elif norm_tier == "growth":
+            total_usd = round(0.35 + (n * 0.15), 4)
+            max_calls = max(70, min(260, 45 + (n * 2)))
+            frontier_copy_cap = min(n, 5)
+        elif norm_tier == "enterprise" or mode == "frontier_all":
+            total_usd = round(total_usd * 1.45, 4)
+            max_calls = max(180, min(700, 110 + (n * 4)))
+            frontier_copy_cap = n
+        else:
+            # Default / premium tiered_frontier (₹20–₹30/page target, with full 35-agent + AEO + reporting call headroom)
+            total_usd = round(total_usd, 4)
+            base_floor = int(getattr(settings, "ANALYSIS_MAX_MODEL_CALLS", 150) or 150)
+            max_calls = max(base_floor, min(600, 140 + (n * 4)))
+            frontier_copy_cap = min(n, 40)
+
         per_page_usd = round(total_usd / n, 4)
-
-        # Call cap scales cleanly: ~60 site-level specialist/AEO/critic/remediation calls + ~2 calls per page
-        max_calls = max(80, min(600, 65 + (n * 2)))
-        frontier_copy_cap = n if mode == "frontier_all" else min(n, 40)
         per_page_tokens = 12000 if n <= 20 else (8000 if n <= 50 else 5000)
 
         return AuditBudgetPlan(

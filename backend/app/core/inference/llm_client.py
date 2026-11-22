@@ -258,9 +258,14 @@ async def close_pooled_http_clients() -> None:
 _RESPONSE_CACHE: Dict[str, Tuple[float, Dict[str, Any]]] = {}
 _RESPONSE_CACHE_MAX_ENTRIES = 1000
 
+# Short cooldown for fallback providers that return 401/403 (bad key or exhausted quota)
+_FALLBACK_AUTH_COOLDOWN_SECONDS = 300.0
+_FALLBACK_PROVIDER_COOLDOWN: Dict[str, float] = {}
+
 
 def clear_response_cache() -> None:
     _RESPONSE_CACHE.clear()
+    _FALLBACK_PROVIDER_COOLDOWN.clear()
 
 
 def _get_cached_response(key: str) -> Optional[Dict[str, Any]]:
@@ -302,6 +307,7 @@ class LLMClient:
         self.provider = creds.get("provider", "together")
         self.api_key = api_key or creds.get("api_key")
         self.base_url = (base_url or creds.get("base_url", "https://api.together.xyz/v1")).rstrip("/")
+        self.model = creds.get("model_fast") or creds.get("model_reasoning") or ""
         self.timeout = timeout or settings.LLM_TIMEOUT_SECONDS
         self.extra_headers = creds.get("extra_headers", {})
 
@@ -640,6 +646,11 @@ class LLMClient:
         last_error: Optional[Exception] = None
 
         for current_prov in cascade_chain:
+            if current_prov != primary_prov:
+                cooldown_until = _FALLBACK_PROVIDER_COOLDOWN.get(current_prov, 0.0)
+                if cooldown_until > time.time():
+                    continue
+
             # Resolve credentials for current provider in cascade
             if current_prov == self.provider:
                 curr_api_key = self.api_key
@@ -778,6 +789,8 @@ class LLMClient:
                         logger.warning("[LLMClient][%s] Exhausted %d retries on rate limits. Cascading.", current_prov, max_retries)
                 except NonRetryableLLMError as nre:
                     last_error = nre
+                    if current_prov != primary_prov and nre.status_code in (401, 403):
+                        _FALLBACK_PROVIDER_COOLDOWN[current_prov] = time.time() + _FALLBACK_AUTH_COOLDOWN_SECONDS
                     logger.error(
                         "[LLMClient][%s] Non-retryable error (status=%s): %s. Cascading to next provider.",
                         current_prov, nre.status_code, nre

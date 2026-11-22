@@ -2944,3 +2944,106 @@ export interface GeoAttributionReport {
   net_improvement_pct: number;
   executive_roi_summary: string;
 }
+
+
+export type AuditTierId = 'basic' | 'starter' | 'growth' | 'premium' | 'enterprise';
+
+export interface TierFeatureFlags {
+  max_pages: number;
+  enable_ai_verifier: boolean;
+  specialist_limit: number;
+  aeo_question_count: number;
+  enable_live_geo_probes: boolean;
+  enable_ga4_gsc: boolean;
+  enable_psi_crux: boolean;
+  copywriting_page_cap: number;
+  remediation_mode: string;
+  critic_mode: string;
+  enable_competitor_bakeoff: boolean;
+  report_documents_mode: string;
+  report_sizing_mode: string;
+  white_label_enabled: boolean;
+  ai_depth_mode: string;
+  enable_patch_pack_download: boolean;
+  enable_pptx_download: boolean;
+}
+
+export interface AuditTierSpec {
+  id: AuditTierId;
+  rank: number;
+  name: string;
+  tagline: string;
+  badge: string;
+  popular: boolean;
+  base_credits: number;
+  credits_per_page: number;
+  sample_10_pages_credits: number;
+  sample_10_pages_inr: number;
+  sample_10_pages_usd: number;
+  features: TierFeatureFlags;
+  included_highlights: string[];
+  locked_highlights: string[];
+}
+
+export interface CreditPack {
+  id: string;
+  name: string;
+  credits: number;
+  price_inr: number;
+  price_display: string;
+  price_usd: number;
+  effective_inr_per_credit: number;
+  discount_pct: number;
+  badge: string;
+  popular: boolean;
+}
+
+export interface AuditTiersResponse {
+  tiers: AuditTierSpec[];
+  credit_packs: CreditPack[];
+  credit_list_price_inr: number;
+  credit_list_price_usd: number;
+  formula: string;
+  enforce_credits: boolean;
+  currency: string;
+}
+
+export interface CreditLedgerEntry {
+  entry_id: string;
+  org_id: string;
+  delta_credits: number;
+  balance_after: number;
+  entry_type: string;
+  reference_id?: string | null;
+  audit_tier?: string | null;
+  pages_count?: number | null;
+  note?: string | null;
+  created_at: number;
+}
+
+export interface CreditBalanceResponse {
+  org_id: string;
+  credit_balance: number;
+  enforce_credits: boolean;
+  admin_bypass: boolean;
+  ledger: CreditLedgerEntry[];
+  credit_packs: CreditPack[];
+}
+
+export interface AuditQuote {
+  tier_id: AuditTierId;
+  tier_name: string;
+  pages: number;
+  max_pages_allowed: number;
+  exceeds_max_pages: boolean;
+  base_credits: number;
+  credits_per_page: number;
+  required_credits: number;
+  price_inr_est: number;
+  price_usd_est: number;
+  cogs_breakdown_inr: Record<string, number>;
+  estimated_gross_margin_pct: number;
+  features: TierFeatureFlags;
+  included_highlights: string[];
+  locked_highlights: string[];
+}

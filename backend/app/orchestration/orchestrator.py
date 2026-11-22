@@ -177,6 +177,8 @@ class AnalysisOrchestrator:
         created_by: Optional[str] = None,
         target_pillars: Optional[List[str]] = None,
         workspace_id: Optional[str] = None,
+        audit_tier: str = "basic",
+        credits_charged: int = 0,
     ) -> AnalysisRun:
         if not org_id or not isinstance(org_id, str) or not org_id.strip():
             raise ValueError("Tenant org_id is required and cannot be empty.")
@@ -209,6 +211,8 @@ class AnalysisOrchestrator:
             created_at=now_str,
             updated_at=now_str,
             target_pillars=norm_pillars,
+            audit_tier=audit_tier,
+            credits_charged=int(credits_charged or 0),
         )
         self.runs[analysis_id] = run
         self.event_queues[analysis_id] = asyncio.Queue()
@@ -385,6 +389,8 @@ class AnalysisOrchestrator:
         country: Optional[str] = None,
         language: Optional[str] = None,
         target_pillars: Optional[List[str]] = None,
+        audit_tier: Optional[str] = None,
+        credits_charged: int = 0,
     ):
         """
         Cognitive OS mission execution across all 4 cognitive levels.
@@ -399,6 +405,8 @@ class AnalysisOrchestrator:
         if not run or not clean_org or clean_org.lower() in FORBIDDEN_TENANT_IDENTIFIERS:
             raise ValueError(f"Cannot execute pipeline for analysis {analysis_id}: valid tenant org_id required, 'org_default' rejected.")
 
+        resolved_tier = audit_tier or getattr(run, "audit_tier", None) or "premium"
+        resolved_credits = int(credits_charged or getattr(run, "credits_charged", 0) or 0)
         from app.core.inference.llm_client import use_tenant_context
         with use_tenant_context(clean_org):
             return await self._execute_analysis_pipeline_scoped(
@@ -411,6 +419,8 @@ class AnalysisOrchestrator:
                 country=country,
                 language=language,
                 target_pillars=target_pillars,
+                audit_tier=resolved_tier,
+                credits_charged=resolved_credits,
             )
 
     async def _run_deterministic_analyzers(
@@ -791,7 +801,14 @@ class AnalysisOrchestrator:
         country: Optional[str] = None,
         language: Optional[str] = None,
         target_pillars: Optional[List[str]] = None,
+        audit_tier: str = "premium",
+        credits_charged: int = 0,
     ):
+        from app.domain.commercial.tiers import get_tier_spec, normalize_tier_id
+        tier_id = normalize_tier_id(audit_tier, default="premium")
+        tier_spec = get_tier_spec(tier_id)
+        tier_features = tier_spec.features
+        crawl_completed = False
 
 
         if target_pillars is None and run and run.target_pillars:
@@ -894,12 +911,20 @@ class AnalysisOrchestrator:
                 controller.mark_node_status("node_crawl", GraphNodeStatus.COMPLETED, evidence_count=len(manifest.pages), output_summary=f"{len(manifest.pages)} pages")
                 controller.log_activity("node_crawl", "success", "crawl.success", f"Crawled {len(manifest.pages)} pages from {website_url}")
 
-            # Apply dynamic page-tiered Frontier AI budget (₹20–₹30/page target) now that crawl count is known
+            # Apply dynamic page-tiered Frontier AI budget scoped to the selected 5-tier depth
+            crawl_completed = True
             from dataclasses import asdict as _asdict
-            budget_plan = model_router.apply_page_budget(len(manifest.pages))
+            budget_plan = model_router.apply_page_budget(
+                len(manifest.pages),
+                depth_mode=tier_features.ai_depth_mode,
+                tier_id=tier_id,
+            )
             blackboard.blackboard_state["budget_plan"] = _asdict(budget_plan)
+            blackboard.blackboard_state["audit_tier"] = tier_id
+            blackboard.blackboard_state["tier_features"] = _asdict(tier_features)
             logger.info(
-                "Applied dynamic audit budget for %d page(s): $%.2f (~₹%.0f, %d calls, mode=%s)",
+                "Applied %s-tier audit budget for %d page(s): $%.2f (~₹%.0f, %d calls, mode=%s)",
+                tier_id,
                 budget_plan.pages_count,
                 budget_plan.max_budget_usd,
                 budget_plan.max_budget_inr,
@@ -1261,44 +1286,60 @@ class AnalysisOrchestrator:
                 logger.warning(f"Progressive reporting error for Phase 2: {rep2_err}", exc_info=True)
 
             # Stage 1b: Frontier AI verification of Stage-1 deterministic Python findings against Business Context
-            try:
-                model_router.set_active_stage("deterministic_verification", "Frontier AI Finding Verification")
-                model_router.set_active_sub_stage("finding_verification", "AI Review of Deterministic Findings")
-                ver_ledger = await self._verify_deterministic_findings_with_ai(
-                    model_router=model_router,
-                    blackboard=blackboard,
-                )
+            if tier_features.enable_ai_verifier:
+                try:
+                    model_router.set_active_stage("deterministic_verification", "Frontier AI Finding Verification")
+                    model_router.set_active_sub_stage("finding_verification", "AI Review of Deterministic Findings")
+                    ver_ledger = await self._verify_deterministic_findings_with_ai(
+                        model_router=model_router,
+                        blackboard=blackboard,
+                    )
+                    controller.log_activity(
+                        "node_specialist_wave_1",
+                        "info",
+                        "deterministic.ai_verified",
+                        (
+                            f"AI reviewed {ver_ledger.get('deterministic_findings_ai_reviewed', 0)}/"
+                            f"{ver_ledger.get('deterministic_findings_total', 0)} deterministic findings "
+                            f"({ver_ledger.get('confirmed_count', 0)} confirmed, "
+                            f"{ver_ledger.get('false_positive_count', 0)} false positives, "
+                            f"{ver_ledger.get('downgraded_count', 0)} downgraded)."
+                        ),
+                    )
+                except Exception as ver_err:
+                    logger.warning("Stage 1b deterministic finding AI verification note: %s", ver_err)
+            else:
                 controller.log_activity(
                     "node_specialist_wave_1",
                     "info",
-                    "deterministic.ai_verified",
-                    (
-                        f"AI reviewed {ver_ledger.get('deterministic_findings_ai_reviewed', 0)}/"
-                        f"{ver_ledger.get('deterministic_findings_total', 0)} deterministic findings "
-                        f"({ver_ledger.get('confirmed_count', 0)} confirmed, "
-                        f"{ver_ledger.get('false_positive_count', 0)} false positives, "
-                        f"{ver_ledger.get('downgraded_count', 0)} downgraded)."
-                    ),
+                    "deterministic.ai_verifier_locked",
+                    f"Stage 1b AI finding verification skipped (locked by tier '{tier_id}').",
                 )
-            except Exception as ver_err:
-                logger.warning("Stage 1b deterministic finding AI verification note: %s", ver_err)
 
             if await _check_pause():
                 return
 
-            # Search Console and SERP rows, when a provider already measured them.
-            # Query-level advice stays skipped when this payload is NOT_CONNECTED.
-            try:
-                from app.seo.search_demand import attach_search_demand
-                demand = attach_search_demand(blackboard, domain)
+            # Search Console and SERP rows, when a provider already measured them and tier unlocks GA4/GSC.
+            if tier_features.enable_ga4_gsc:
+                try:
+                    from app.seo.search_demand import attach_search_demand
+                    demand = attach_search_demand(blackboard, domain)
+                    controller.log_activity(
+                        "node_specialist_wave_1",
+                        "info",
+                        "search_demand",
+                        demand.get("note") or "Search demand was not measured.",
+                    )
+                except Exception as exc:
+                    logger.info("Search demand was not attached: %s", exc)
+            else:
+                blackboard.blackboard_state["search_demand_status"] = "LOCKED_BY_TIER"
                 controller.log_activity(
                     "node_specialist_wave_1",
                     "info",
-                    "search_demand",
-                    demand.get("note") or "Search demand was not measured.",
+                    "search_demand.locked",
+                    f"GA4/GSC connector enrichment locked by tier '{tier_id}'.",
                 )
-            except Exception as exc:
-                logger.info("Search demand was not attached: %s", exc)
 
             # 7. Full specialist DAG (dependency waves, no canned fallbacks)
             agent_pool = AgentPool(model_router)
@@ -1377,6 +1418,7 @@ class AnalysisOrchestrator:
                 base_progress=46,
                 end_progress=78,
                 active_pillars=effective_pillars,
+                audit_tier=tier_id,
             )
             pool_elapsed_ms = max(50, int((time.perf_counter() - t_pool_start) * 1000))
             pillar_dur_ms = max(10, int(pool_elapsed_ms / 4))
@@ -1798,10 +1840,10 @@ class AnalysisOrchestrator:
                 logger.info("external authority attachment skipped: %s", type(exc).__name__)
                 external_authority_payload["error"] = type(exc).__name__
 
-            # 3C. 100 Dynamic Sandbox Questions & KIE Knowledge Graph (runs BEFORE PageIntelligenceAgent copywriting)
+            # 3C. Dynamic Sandbox Questions & KIE Knowledge Graph (tier-gated: 0 / 25 / 100 Q)
             kie_summary = None
             five_dim_visibility = None
-            if effective_pillars is None or "aeo" in effective_pillars:
+            if (effective_pillars is None or "aeo" in effective_pillars) and tier_features.aeo_question_count > 0:
                 try:
                     from app.geo.dynamic_sandbox import DynamicQuestionSandboxEngine
                     from app.crawl.knowledge.website_knowledge_graph import WebsiteKnowledgeGraph
@@ -1865,9 +1907,9 @@ class AnalysisOrchestrator:
 
             # -----------------------------------------------------------------
             # Stage 4: Per-Page, Per-Section SEO & Copywriting Intelligence
-            # (Runs AFTER all 4 pillars + 100-Q AEO + GEO Readiness)
+            # (Runs AFTER all 4 pillars + AEO + GEO Readiness; tier-gated by copywriting_page_cap)
             # -----------------------------------------------------------------
-            if effective_pillars is None or "seo" in effective_pillars:
+            if (effective_pillars is None or "seo" in effective_pillars) and tier_features.copywriting_page_cap != 0:
                 controller.mark_node_status("node_seo_page_intelligence", GraphNodeStatus.RUNNING)
                 controller.mark_node_status("node_page_intelligence", GraphNodeStatus.RUNNING)
                 controller.log_activity("node_seo_page_intelligence", "running", "page.rewrites", f"Writing detailed SEO and copy reports for {len(manifest.pages)} crawled page(s)...")
@@ -1952,22 +1994,30 @@ class AnalysisOrchestrator:
                 "Adversarial critic cross-examining all specialist, AEO, and copywriting claims...",
             )
 
-            try:
-                critic_res = await team_orchestrator.worker_critic.execute_task("34_adversarial_verification", blackboard)
+            if tier_features.critic_mode != "none":
+                try:
+                    critic_res = await team_orchestrator.worker_critic.execute_task("34_adversarial_verification", blackboard)
+                    blackboard.blackboard_state["critic_gate"] = {
+                        "status": "completed",
+                        "mode": tier_features.critic_mode,
+                        "verified_count": len(critic_res.get("verified_claims") or []),
+                        "rejected_count": len(critic_res.get("rejected_claims") or []),
+                        "deflated_count": len(critic_res.get("deflated_claims") or []),
+                        "contradictions_count": len(critic_res.get("contradictions") or []),
+                        "batches_executed": critic_res.get("batches_executed", 1),
+                        "total_audited": critic_res.get("total_audited", 0),
+                    }
+                except Exception as critic_err:
+                    logger.error("Mandatory CognitiveCriticWorker gate failed for %s: %s", analysis_id, critic_err)
+                    blackboard.blackboard_state["critic_gate"] = {
+                        "status": "failed",
+                        "error": str(critic_err),
+                    }
+            else:
                 blackboard.blackboard_state["critic_gate"] = {
-                    "status": "completed",
-                    "verified_count": len(critic_res.get("verified_claims") or []),
-                    "rejected_count": len(critic_res.get("rejected_claims") or []),
-                    "deflated_count": len(critic_res.get("deflated_claims") or []),
-                    "contradictions_count": len(critic_res.get("contradictions") or []),
-                    "batches_executed": critic_res.get("batches_executed", 1),
-                    "total_audited": critic_res.get("total_audited", 0),
-                }
-            except Exception as critic_err:
-                logger.error("Mandatory CognitiveCriticWorker gate failed for %s: %s", analysis_id, critic_err)
-                blackboard.blackboard_state["critic_gate"] = {
-                    "status": "failed",
-                    "error": str(critic_err),
+                    "status": "locked_by_tier",
+                    "mode": "none",
+                    "note": f"Adversarial AI critic is not included in tier '{tier_id}'.",
                 }
 
             # Zero-Fake Evidence Integrity Gate (authoritative final claim gate)
@@ -2843,31 +2893,36 @@ class AnalysisOrchestrator:
             # -------------------------------------------------------------
             # Stage 7b: AI Report & Deck Narrative Synthesis (5 PDFs + 5 PPTXs)
             # Runs strictly AFTER Critic (Stage 5), Synthesizer (Stage 6) & Remediation (Stage 7)
+            # Gated by tier_features.report_documents_mode
             # -------------------------------------------------------------
-            try:
-                from app.reports.ai_report_narrator import (
-                    narrate_all_documents,
-                    sync_seo_chapter_narratives_map,
-                )
-                from app.seo.reporting.seo_book_renderer import CORE_CHAPTERS as _SEO_CORE_CHAPTERS
+            if tier_features.report_documents_mode in ("exec_pair_ai", "full_5_5_standard", "full_5_5_deep"):
+                try:
+                    from app.reports.ai_report_narrator import (
+                        narrate_all_documents,
+                        sync_seo_chapter_narratives_map,
+                    )
+                    from app.seo.reporting.seo_book_renderer import CORE_CHAPTERS as _SEO_CORE_CHAPTERS
 
-                doc_narrs, overall_narr_mode, narr_tier = await narrate_all_documents(
-                    report=report,
-                    model_router=model_router,
-                    active_pillars=effective_pillars,
-                    audit_budget_usd=getattr(budget_plan, "max_budget_usd", None) if "budget_plan" in locals() else None,
-                )
-                report.document_narratives = doc_narrs
-                report.narrative_mode = overall_narr_mode
-                report.narrative_tier = narr_tier
-                report.chapter_narratives = sync_seo_chapter_narratives_map(
-                    doc_narrs.get("seo_pdf"),
-                    report.chapter_narratives,
-                    _SEO_CORE_CHAPTERS,
-                )
-                report.telemetry = telemetry_tracker.get_data()
-            except Exception as narr7b_err:
-                logger.warning("Stage 7b AI report narrative synthesis note: %s", narr7b_err)
+                    doc_narrs, overall_narr_mode, narr_tier = await narrate_all_documents(
+                        report=report,
+                        model_router=model_router,
+                        active_pillars=effective_pillars,
+                        audit_budget_usd=getattr(budget_plan, "max_budget_usd", None) if "budget_plan" in locals() else None,
+                    )
+                    report.document_narratives = doc_narrs
+                    report.narrative_mode = overall_narr_mode
+                    report.narrative_tier = narr_tier
+                    report.chapter_narratives = sync_seo_chapter_narratives_map(
+                        doc_narrs.get("seo_pdf"),
+                        report.chapter_narratives,
+                        _SEO_CORE_CHAPTERS,
+                    )
+                    report.telemetry = telemetry_tracker.get_data()
+                except Exception as narr7b_err:
+                    logger.warning("Stage 7b AI report narrative synthesis note: %s", narr7b_err)
+            else:
+                report.narrative_mode = "deterministic_fallback"
+                report.narrative_tier = tier_id
 
             # -------------------------------------------------------------
             # Enforce VALIDATION GATE with Certified Zero-Fake Check
@@ -3406,6 +3461,21 @@ class AnalysisOrchestrator:
             traceback.print_exc()
             run.status = AnalysisStage.FAILED
             run.error = str(e)
+
+            # Automatic credit refund if fatal failure occurred before crawl/Stage 1 completed
+            if credits_charged > 0 and not crawl_completed:
+                try:
+                    from app.identity.store import get_store as _get_id_store
+                    _get_id_store().add_credits(
+                        run.org_id,
+                        credits_charged,
+                        entry_type="AUDIT_REFUND",
+                        reference_id=analysis_id,
+                        note=f"Automatic refund: audit failed before crawl completed ({type(e).__name__})",
+                    )
+                    logger.info("Auto-refunded %d credits to org %s for failed run %s", credits_charged, run.org_id, analysis_id)
+                except Exception as ref_err:
+                    logger.warning("Credit auto-refund failed for %s: %s", analysis_id, ref_err)
 
             failed_node = "node_final_report_assembly"
             for nid in NODES_REGISTRY:

@@ -448,7 +448,7 @@ async def calibrate_and_explain_finding_ai(
                 max_tokens=600,
                 response_format="DEFAULT",
             )
-            raw_text = response.get("text", "") if isinstance(response, dict) else str(response)
+            raw_text = (response.get("content") or response.get("text") or "") if isinstance(response, dict) else str(response)
         elif hasattr(client, "complete"):
             raw_text = await client.complete(prompt=f"{system_prompt}\n\n{user_prompt}", max_tokens=600)
         else:
