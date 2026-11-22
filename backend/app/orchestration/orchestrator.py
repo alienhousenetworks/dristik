@@ -7,7 +7,7 @@ import asyncio
 import logging
 import time
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from urllib.parse import urlparse
 from typing import Dict, Any, Optional, AsyncGenerator, List
 
