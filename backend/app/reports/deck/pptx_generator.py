@@ -31,17 +31,18 @@ class DeckPptxBuilderAgent:
     """
     AGENT_ID = "deck.pptx_builder.v1"
 
-    # Executive Dark Color Palette
-    COLOR_BG = RGBColor(11, 15, 25)           # #0B0F19 (Deep Charcoal)
-    COLOR_CARD = RGBColor(17, 24, 39)         # #111827 (Slate Dark)
-    COLOR_CARD_BORDER = RGBColor(51, 65, 85)  # #334155 (Slate Border)
-    COLOR_TEXT_PRIMARY = RGBColor(255, 255, 255) # White
-    COLOR_TEXT_SECONDARY = RGBColor(148, 163, 184) # #94A3B8 (Light Slate)
-    COLOR_TEXT_MUTED = RGBColor(100, 116, 139) # #64748B (Muted)
-    COLOR_ACCENT_CYAN = RGBColor(56, 189, 248) # #38BDF8 (Sky Cyan)
-    COLOR_ACCENT_EMERALD = RGBColor(16, 185, 129) # #10B981 (Emerald)
-    COLOR_ACCENT_AMBER = RGBColor(245, 158, 11) # #F59E0B (Amber)
-    COLOR_ACCENT_ROSE = RGBColor(239, 68, 68) # #EF4444 (Rose)
+    # Executive Boardroom Color Palette (Dark Navy Cover + Crisp Light Content Slides)
+    COLOR_COVER_BG = RGBColor(15, 23, 42)          # #0F172A (Deep Executive Navy)
+    COLOR_BG = RGBColor(255, 255, 255)             # #FFFFFF (Crisp Light Content Slide)
+    COLOR_CARD = RGBColor(248, 250, 252)           # #F8FAFC (Soft Slate Card)
+    COLOR_CARD_BORDER = RGBColor(203, 213, 225)    # #CBD5E1 (Clean Slate Border)
+    COLOR_TEXT_PRIMARY = RGBColor(15, 23, 42)      # #0F172A (Ink Navy)
+    COLOR_TEXT_SECONDARY = RGBColor(51, 65, 85)    # #334155 (Body Slate)
+    COLOR_TEXT_MUTED = RGBColor(100, 116, 139)     # #64748B (Muted Slate)
+    COLOR_ACCENT_CYAN = RGBColor(2, 132, 199)      # #0284C7 (Executive Blue)
+    COLOR_ACCENT_EMERALD = RGBColor(15, 118, 110)  # #0F766E (Deep Teal)
+    COLOR_ACCENT_AMBER = RGBColor(180, 83, 9)      # #B45309 (Warm Amber)
+    COLOR_ACCENT_ROSE = RGBColor(185, 28, 28)      # #B91C1C (Crimson Alert)
 
     def compile_pptx(self, blueprint: DeckBlueprint) -> bytes:
         """
@@ -57,8 +58,9 @@ class DeckPptxBuilderAgent:
 
         for slide_bp in blueprint.slides:
             slide = prs.slides.add_slide(blank_layout)
-            self._apply_background(slide)
-            self._render_header(slide, slide_bp)
+            is_dark_slide = slide_bp.layout in (SlideLayoutType.COVER, SlideLayoutType.GOVERNANCE_SEAL)
+            self._apply_background(slide, dark=is_dark_slide)
+            self._render_header(slide, slide_bp, dark=is_dark_slide)
             self._render_footer(slide, slide_bp, total)
 
             # Route to layout renderer
@@ -95,14 +97,14 @@ class DeckPptxBuilderAgent:
         out.seek(0)
         return out.getvalue()
 
-    def _apply_background(self, slide):
-        """Draw full-slide background rectangle."""
-        bg = slide.shapes.add_shape(1, 0, 0, Inches(13.333), Inches(7.5)) # 1 = MSO_SHAPE.RECTANGLE
+    def _apply_background(self, slide, *, dark: bool = False):
+        """Draw full-slide background rectangle (Dark Navy for cover/seal; Crisp White for content)."""
+        bg = slide.shapes.add_shape(1, 0, 0, Inches(13.333), Inches(7.5))  # 1 = MSO_SHAPE.RECTANGLE
         bg.fill.solid()
-        bg.fill.fore_color.rgb = self.COLOR_BG
+        bg.fill.fore_color.rgb = self.COLOR_COVER_BG if dark else self.COLOR_BG
         bg.line.fill.background()
 
-    def _render_header(self, slide, bp: SlideBlueprint):
+    def _render_header(self, slide, bp: SlideBlueprint, *, dark: bool = False):
         """Draw top banner with brand, module kicker, title, and subtitle."""
         # Top rule / kicker bar
         top_box = slide.shapes.add_textbox(Inches(0.8), Inches(0.4), Inches(11.733), Inches(0.4))
@@ -113,7 +115,7 @@ class DeckPptxBuilderAgent:
         p.text = f"DRISTIK // {bp.module_title}  ·  {bp.kicker}"
         p.font.size = Pt(10)
         p.font.bold = True
-        p.font.color.rgb = self.COLOR_ACCENT_CYAN
+        p.font.color.rgb = RGBColor(56, 189, 248) if dark else self.COLOR_ACCENT_CYAN
 
         # Title box
         title_box = slide.shapes.add_textbox(Inches(0.8), Inches(0.75), Inches(11.733), Inches(0.75))
@@ -122,16 +124,16 @@ class DeckPptxBuilderAgent:
         tf.margin_top = tf.margin_bottom = tf.margin_left = tf.margin_right = 0
         p = tf.paragraphs[0]
         p.text = bp.title
-        p.font.size = Pt(21)
+        p.font.size = Pt(22)
         p.font.bold = True
-        p.font.color.rgb = self.COLOR_TEXT_PRIMARY
+        p.font.color.rgb = RGBColor(255, 255, 255) if dark else self.COLOR_TEXT_PRIMARY
 
         # Subtitle
         if bp.subtitle:
             sub = tf.add_paragraph()
             sub.text = bp.subtitle
-            sub.font.size = Pt(11)
-            sub.font.color.rgb = self.COLOR_TEXT_SECONDARY
+            sub.font.size = Pt(11.5)
+            sub.font.color.rgb = RGBColor(203, 213, 225) if dark else self.COLOR_TEXT_SECONDARY
 
     def _render_footer(self, slide, bp: SlideBlueprint, total: int):
         """Draw slide footer with classification and page counter."""
@@ -156,12 +158,12 @@ class DeckPptxBuilderAgent:
         p.text = bp.title
         p.font.size = Pt(36)
         p.font.bold = True
-        p.font.color.rgb = self.COLOR_TEXT_PRIMARY
+        p.font.color.rgb = RGBColor(255, 255, 255)
 
         p2 = tf.add_paragraph()
         p2.text = bp.subtitle
         p2.font.size = Pt(16)
-        p2.font.color.rgb = self.COLOR_ACCENT_CYAN
+        p2.font.color.rgb = RGBColor(56, 189, 248)
 
         # Bottom stat cards
         if bp.cards:

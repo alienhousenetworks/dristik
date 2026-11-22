@@ -493,20 +493,40 @@ class SpecialistAgent(BaseAgent):
                 "mode": raw.get("mode"),
             }
 
-        valid_ids = {ev.id for ev in evidence_slice}
-        valid_ids.update(ev.id for ev in blackboard.evidence_store.get_external())
+        # Case-insensitive lookup across slice, full evidence store, and tool-fetched evidence
+        # so mixed-case IDs (e.g. EV_001 vs ev_001) resolve to canonical IDs instead of dropping claims.
+        valid_id_map: Dict[str, str] = {}
+        for ev in blackboard.evidence_store.get_all():
+            if getattr(ev, "id", None):
+                valid_id_map[str(ev.id).strip().lower()] = str(ev.id)
+        for ev in evidence_slice:
+            if getattr(ev, "id", None):
+                valid_id_map[str(ev.id).strip().lower()] = str(ev.id)
+        for ev in blackboard.evidence_store.get_external():
+            if getattr(ev, "id", None):
+                valid_id_map[str(ev.id).strip().lower()] = str(ev.id)
         if extra_evidence_ids:
-            valid_ids.update(extra_evidence_ids)
+            for eid in extra_evidence_ids:
+                if eid:
+                    valid_id_map[str(eid).strip().lower()] = str(eid)
+
         registered = []
+        dropped_no_refs = 0
         max_claims = int(getattr(self.definition, "max_claims", 0) or 8)
         for item in (raw.get("claims") or [])[:max_claims]:
             if not isinstance(item, dict):
                 continue
             if str(item.get("evidence_status") or "").lower() == "not_in_evidence":
                 continue
-            refs = [r for r in (item.get("evidence_refs") or []) if r in valid_ids]
+            refs = []
+            for r in (item.get("evidence_refs") or []):
+                canon = valid_id_map.get(str(r or "").strip().lower())
+                if canon and canon not in refs:
+                    refs.append(canon)
             statement = (item.get("statement") or "").strip()
             if not statement or not refs:
+                if statement:
+                    dropped_no_refs += 1
                 continue
             rubric_val = None
             raw_rubric = str(item.get("confidence_rubric") or "").upper()
@@ -558,6 +578,14 @@ class SpecialistAgent(BaseAgent):
                 "evidence_refs": refs,
                 "severity": str(item.get("severity") or "MEDIUM"),
             })
+
+        if dropped_no_refs:
+            logger.info(
+                "[Specialist][%s] Dropped %d LLM claim(s) lacking resolvable evidence_refs (registered=%d)",
+                self.agent_id,
+                dropped_no_refs,
+                len(registered),
+            )
 
         observations = raw.get("observations") if isinstance(raw.get("observations"), dict) else {}
         self._apply_side_effects(blackboard, observations, raw)

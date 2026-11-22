@@ -2492,45 +2492,11 @@ def build_seo_book_context(report: Any, page_numbers: Optional[Dict[str, int]] =
                     nf["title"] = f"Isolated High TTFB Outlier on {ttfb_diag_all['outlier_url']} ({int(round(ttfb_diag_all['max_ms'])):,} ms)"
                     nf["finding_title"] = nf["title"]
 
-    # Scores: Use composite SEO score when other SEO pillars are measured (not TECHNICAL_SEO alone)
-    scores = _get_val(report, "scores") or {}
-    categories = _get_val(scores, "category_scores") or {}
-    tech_score_obj = categories.get("TECHNICAL_SEO") if isinstance(categories, dict) else None
-    tech_score = _get_val(tech_score_obj, "score")
-    overall_score = _get_val(scores, "overall_score")
-
-    seo_pillar_keys = ("TECHNICAL_SEO", "ON_PAGE_SEO", "CONTENT", "SCHEMA", "EXTERNAL_AUTHORITY", "TRUST_AUTHORITY")
-    default_seo_weights = {
-        "TECHNICAL_SEO": 0.35,
-        "ON_PAGE_SEO": 0.25,
-        "CONTENT": 0.20,
-        "SCHEMA": 0.20,
-        "EXTERNAL_AUTHORITY": 0.15,
-        "TRUST_AUTHORITY": 0.15,
-    }
-    measured_seo_pillars: List[Tuple[float, float]] = []
-    if isinstance(categories, dict):
-        for pk in seo_pillar_keys:
-            p_obj = categories.get(pk)
-            if p_obj is None:
-                continue
-            p_status = str(_get_val(p_obj, "status") or "MEASURED").upper()
-            p_score = _get_val(p_obj, "score")
-            if p_status != "NOT_MEASURED" and isinstance(p_score, (int, float)) and not isinstance(p_score, bool):
-                p_wt = _get_val(p_obj, "weight")
-                wt_val = float(p_wt) if (isinstance(p_wt, (int, float)) and float(p_wt) > 0) else default_seo_weights.get(pk, 0.20)
-                measured_seo_pillars.append((wt_val, float(p_score)))
-
-    if len(measured_seo_pillars) > 1:
-        tot_w = sum(w for w, _ in measured_seo_pillars)
-        composite_seo = sum(w * s for w, s in measured_seo_pillars) / max(tot_w, 1e-6)
-        display_score = int(round(composite_seo))
-    elif overall_score is not None:
-        display_score = int(round(float(overall_score)))
-    elif tech_score is not None:
-        display_score = int(round(float(tech_score)))
-    else:
-        display_score = None
+    # Scores: Use single canonical SEO pillar score from snapshot_provenance so Standalone SEO == Complete Audit
+    from app.reports.snapshot_provenance import format_audit_execution_metadata
+    snap_meta = format_audit_execution_metadata(report)
+    canonical_seo = snap_meta.score_for_section("seo")
+    display_score = int(round(float(canonical_seo))) if canonical_seo is not None else None
 
     # Connector states
     perf = _get_val(report, "google_performance") or {}
@@ -2565,7 +2531,8 @@ def build_seo_book_context(report: Any, page_numbers: Optional[Dict[str, int]] =
     primary_opp = _get_val(report, "primary_strategic_opportunity") or (
         "Resolve high-priority technical, metadata, and structured data gaps across commercial landing pages to strengthen search eligibility and click-through rates."
     )
-    story_summary = _get_val(report, "story_summary") or (
+    from app.reports.pdf_evidence_blocks import sanitize_presentation_text
+    story_summary = sanitize_presentation_text(_get_val(report, "story_summary")) or (
         f"Sampled audit of {pages_crawled} crawled page(s) out of {discovered_total} discovered URLs "
         f"(Discovery Coverage: {discovery_coverage_display}; Sample Coverage: {sample_coverage_display}). "
         "Evaluated technical crawlability, indexation directives, on-page heading/metadata hierarchy, structured data, and UX conversion signals."

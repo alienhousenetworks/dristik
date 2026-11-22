@@ -964,18 +964,51 @@ class PlainEnglishEngine:
             else:
                 priority_rationale = "Low Priority: Best-practice hygiene optimization with minimal immediate crawl risk."
 
-        # Concrete Verification Command
+        # Concrete Typed Verification Command + Expected Pass Criteria
         verification_cmd = _get_val(finding, "verification_command")
         if not verification_cmd:
             primary_url = affected_urls[0] if affected_urls else None
+            cat_l = str(category or "").lower()
+            title_l = str(title or "").lower()
             if primary_url:
-                verification_cmd = f"curl -sI -L '{primary_url}'"
+                if any(k in title_l or k in cat_l for k in ("cta", "button", "form", "checkout", "mobile", "touch", "wcag", "accessibility", "contrast", "rendered", "ux", "conversion")):
+                    verification_cmd = (
+                        f"Playwright DOM check on '{primary_url}': verify target interactive element/attribute is present, "
+                        f"visible, and meets WCAG/UX pass criteria on desktop (1440x900) and mobile (390x844)."
+                    )
+                elif any(k in title_l or k in cat_l for k in ("schema", "json-ld", "structured", "rich result", "entity")):
+                    verification_cmd = (
+                        f"curl -sL '{primary_url}' | grep -i 'application/ld+json' "
+                        f"# Pass criteria: valid JSON-LD block containing all required Schema.org properties (verify via Rich Results Test)."
+                    )
+                elif any(k in title_l or k in cat_l for k in ("title", "h1", "h2", "heading", "meta", "alt", "canonical", "content", "copy", "duplicate", "passage")):
+                    verification_cmd = (
+                        f"curl -sL '{primary_url}' | grep -iE '<title>|<h1|rel=\"canonical\"|name=\"description\"' "
+                        f"# Pass criteria: single compliant tag matching expected specification."
+                    )
+                else:
+                    verification_cmd = (
+                        f"curl -sI -L '{primary_url}' "
+                        f"# Pass criteria: HTTP 200 final status with expected response headers and redirect chain."
+                    )
             else:
-                verification_cmd = f"Automated inspection and retest for '{title}'."
+                verification_cmd = f"Automated DOM/HTTP inspection and retest for '{title}' verifying expected pass criteria."
 
         root_cause_val = cls._clean_internal_text(_get_val(finding, "root_cause") or _get_val(finding, "causal_mechanism"))
         if not root_cause_val:
-            root_cause_val = f"Template markup or HTTP configuration omission on {len(affected_urls) or 1} audited route(s)."
+            cat_l = str(category or "").lower()
+            title_l = str(title or "").lower()
+            n_routes = len(affected_urls) or 1
+            if any(k in title_l or k in cat_l for k in ("cta", "button", "value prop", "copy", "conversion", "ux")):
+                root_cause_val = f"Root-cause hypothesis (requires copy/UX review): conversion microcopy or page layout on {n_routes} audited route(s) lacks explicit high-intent framing."
+            elif any(k in title_l or k in cat_l for k in ("schema", "json-ld", "structured")):
+                root_cause_val = f"Root-cause hypothesis (requires template review): JSON-LD serializer on {n_routes} audited route(s) omits required Schema.org properties."
+            elif any(k in title_l or k in cat_l for k in ("title", "meta", "h1", "heading")):
+                root_cause_val = f"Root-cause hypothesis (requires CMS/template review): page metadata or heading template on {n_routes} audited route(s) exceeds recommended length or hierarchy rules."
+            elif any(k in title_l or k in cat_l for k in ("wcag", "alt", "accessibility", "aria", "contrast", "duplicate id")):
+                root_cause_val = f"Root-cause hypothesis (requires frontend markup review): component markup on {n_routes} audited route(s) omits required WCAG accessibility attributes or emits duplicate DOM IDs."
+            else:
+                root_cause_val = f"Root-cause hypothesis (requires engineering verification): observed technical defect across {n_routes} audited route(s)."
         code_val = cls._clean_internal_text(_get_val(finding, "relevant_code_or_configuration_example"))
         code_patch_obj = _get_val(finding, "code_patch")
         if not code_val and code_patch_obj:
@@ -1189,7 +1222,18 @@ def generate_section_explanation(
     })
 
     section_findings = list(findings or [])
-    pages_crawled = int(_get_val(report, "pages_crawled") or ctx.get("pages_crawled") or 1)
+    manifest_obj = _get_val(report, "crawl_manifest")
+    manifest_pages = _get_val(manifest_obj, "pages") or _get_val(report, "page_reports") or []
+    fetched_pages = [
+        p for p in manifest_pages
+        if (_get_val(p, "status_code") is None or (isinstance(_get_val(p, "status_code"), int) and _get_val(p, "status_code") > 0))
+    ]
+    pages_crawled = int(
+        _get_val(report, "pages_crawled")
+        or ctx.get("pages_crawled")
+        or len(fetched_pages)
+        or 0
+    )
 
     # Check connector / data availability
     is_tested = ctx.get("is_tested", True)
@@ -1214,7 +1258,13 @@ def generate_section_explanation(
 
     # If defects were found
     if section_findings:
-        crit_count = sum(1 for f in section_findings if str(_get_val(f, "severity", "")).upper() in ("CRITICAL", "HIGH"))
+        def _norm_sev(item: Any) -> str:
+            raw = _get_val(item, "severity", "")
+            val = getattr(raw, "value", raw)
+            txt = str(val or "").strip().upper()
+            return txt.rsplit(".", 1)[-1] if "." in txt else txt
+
+        crit_count = sum(1 for f in section_findings if _norm_sev(f) in ("CRITICAL", "HIGH"))
         top_finding = section_findings[0]
         top_title = _get_val(top_finding, "title") or _get_val(top_finding, "finding_title") or "Technical defect"
 

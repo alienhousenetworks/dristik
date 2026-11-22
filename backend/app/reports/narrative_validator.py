@@ -88,7 +88,9 @@ def build_scorecard_vars(report: Any) -> Dict[str, str]:
         except Exception:
             return "NOT_MEASURED"
 
-    overall_val = comp if comp is not None else getattr(scores, "overall_score", None)
+    from app.reports.snapshot_provenance import format_audit_execution_metadata
+    snap = format_audit_execution_metadata(report)
+    overall_val = snap.composite_score if snap.composite_score is not None else (comp if comp is not None else getattr(scores, "overall_score", None))
     grade_str, health_label = rating_for_displayed(overall_val)
 
     cat_scores = getattr(scores, "category_scores", None) or {}
@@ -144,11 +146,11 @@ def build_scorecard_vars(report: Any) -> Dict[str, str]:
         "score.overall": _fmt_score(overall_val),
         "score.grade": grade_str,
         "score.health_label": health_label,
-        "score.seo": _fmt_score(_cat_score(("TECHNICAL_SEO", "ON_PAGE_SEO", "SEO")) or getattr(honest, "google_score", None)),
-        "score.geo": _fmt_score(getattr(geo, "extractability_score", None) or _cat_score(("GEO",))),
-        "score.geo_readiness": _fmt_score(getattr(geo, "extractability_score", None)),
-        "score.aeo": _fmt_score(_cat_score(("AI_SEARCH", "AEO")) or getattr(honest, "ai_readiness_score", None)),
-        "score.cro": _fmt_score(_cat_score(("UX_CONVERSION", "CRO")) or getattr(honest, "human_score", None)),
+        "score.seo": _fmt_score(snap.score_for_section("seo")),
+        "score.geo": _fmt_score(snap.score_for_section("geo")),
+        "score.geo_readiness": _fmt_score(getattr(geo, "extractability_score", None) or snap.score_for_section("geo")),
+        "score.aeo": _fmt_score(snap.score_for_section("aeo")),
+        "score.cro": _fmt_score(snap.score_for_section("cro")),
         "score.human": _fmt_score(getattr(honest, "human_score", None)),
         "score.google": _fmt_score(getattr(honest, "google_score", None)),
         "score.ai_readiness": _fmt_score(getattr(honest, "ai_readiness_score", None)),

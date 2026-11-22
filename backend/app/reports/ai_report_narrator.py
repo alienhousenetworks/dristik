@@ -215,8 +215,23 @@ def _serialize_findings_brief(findings: List[Any]) -> List[Dict[str, Any]]:
             or getattr(f, "verification_notes", None)
             or ""
         )
-        if isinstance(ev_snippet, (dict, list)):
-            ev_snippet = json.dumps(ev_snippet, ensure_ascii=False)[:220]
+        if isinstance(ev_snippet, list):
+            compact_ev = []
+            for item in ev_snippet[:3]:
+                if hasattr(item, "model_dump"):
+                    d = item.model_dump(exclude_none=True)
+                    compact_ev.append({
+                        k: d[k]
+                        for k in ("evidence_id", "url", "selector", "element", "value", "snippet")
+                        if k in d and d[k] not in (None, "")
+                    })
+                else:
+                    compact_ev.append(item)
+            ev_snippet = json.dumps(compact_ev, ensure_ascii=False, default=str)[:220]
+        elif isinstance(ev_snippet, dict):
+            ev_snippet = json.dumps(ev_snippet, ensure_ascii=False, default=str)[:220]
+        elif hasattr(ev_snippet, "model_dump"):
+            ev_snippet = json.dumps(ev_snippet.model_dump(exclude_none=True), ensure_ascii=False, default=str)[:220]
         rows.append({
             "finding_id": f.finding_id,
             "category": f.category.value if hasattr(f.category, "value") else str(f.category),
@@ -334,15 +349,28 @@ def _deterministic_fallback_bundle(
     slides: List[NarrativeSlide] = []
     max_sl = int(DOCUMENT_SIZING_TABLE[tier][f"{doc_type}_ppt"]["max_slides"])
     for idx, f in enumerate(findings[: max(1, min(max_sl, 8))], start=1):
-        title_clean = (f.title or f.finding or f.finding_id).strip()[:100]
-        rec_clean = (f.recommendation or "Apply verified technical fix.").strip()
+        title_clean = (getattr(f, "title", None) or getattr(f, "finding", None) or f.finding_id).strip()[:100]
+        rec_clean = (getattr(f, "recommendation", None) or "Apply verified technical fix.").strip()[:110]
+        sev_raw = getattr(f, "severity", None)
+        sev_lbl = str(getattr(sev_raw, "value", sev_raw) or "RECORDED").upper().rsplit(".", 1)[-1]
+        urls = list(getattr(f, "affected_urls", None) or [])[:2]
+        url_bullet = f"Observed on: {', '.join(urls)}" if urls else "Observed across sampled audit routes"
+        why_bullet = (getattr(f, "why_it_matters", None) or getattr(f, "business_impact", None) or "Impacts search eligibility or buyer conversion.").strip()[:110]
         slides.append(
             NarrativeSlide(
                 slide_id=f"{doc_type}_sl_{idx:02d}",
                 title=title_clean,
-                kicker=f"{doc_type.upper()} // VERIFIED FINDING",
-                bullets=[rec_clean[:100]],
-                speaker_notes=f"Discuss verified finding {f.finding_id}: {title_clean}.",
+                kicker=f"{doc_type.upper()} // EVIDENCE SUMMARY ({sev_lbl})",
+                bullets=[
+                    f"Severity: {sev_lbl} ({f.finding_id})",
+                    url_bullet[:110],
+                    f"Action: {rec_clean}",
+                    f"Impact: {why_bullet}",
+                ],
+                speaker_notes=(
+                    f"[Deterministic Evidence Summary — not AI-generated] Finding {f.finding_id} ({sev_lbl}): "
+                    f"{title_clean}. {url_bullet}. Recommended fix: {rec_clean}."
+                ),
                 cited_finding_ids=[f.finding_id],
             )
         )

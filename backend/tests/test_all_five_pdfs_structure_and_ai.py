@@ -215,3 +215,103 @@ def test_seo_pdf_merges_seo_pdf_ai_narrative_across_chapter_ids():
         has_failed_metrics=False,
     )
     assert "AI SEO Schema Takeaway" in interp["executive_interpretation"]
+
+
+def test_p0_unified_scores_severity_counts_pages_claim_sanitization_and_retests():
+    from app.reports.narrative_validator import build_scorecard_vars
+    from app.reports.pdf_evidence_blocks import sanitize_presentation_text
+    from app.reports.plain_english_engine import PlainEnglishEngine, generate_section_explanation
+    from app.reports.snapshot_provenance import format_audit_execution_metadata
+
+    rep = _sample_report()
+    rep.scores.seo_score = None
+    rep.scores.category_scores = {
+        "TECHNICAL_SEO": SimpleNamespace(score=76.6, status="PARTIAL", weight=0.35),
+        "ON_PAGE_SEO": SimpleNamespace(score=62.0, status="PARTIAL", weight=0.25),
+        "CONTENT": SimpleNamespace(score=2.7, status="PARTIAL", weight=0.20),
+        "SCHEMA": SimpleNamespace(score=0.0, status="PARTIAL", weight=0.20),
+        "TRUST_AUTHORITY": SimpleNamespace(score=None, status="NOT_MEASURED", weight=0.15),
+    }
+    rep.story_summary = "Duplicate H1 tags hurt relevance (claim_019, claim_020, claim_027) across key pages."
+
+    # P0-1: Single canonical SEO score across snapshot_provenance AND narrative_validator (PDF + PPT)
+    snap = format_audit_execution_metadata(rep, use_cache=False)
+    vars_map = build_scorecard_vars(rep)
+    assert snap.score_for_section("seo") is not None
+    assert vars_map["score.seo"] == f"{int(round(snap.score_for_section('seo')))}/100"
+    assert snap.score_for_section("seo") < 50.0  # Weighted across all 4 measured SEO categories, not 76.6 alone
+
+    # P0-2 & P0-3: Severity enum HIGH counted accurately & pages_crawled derived from crawl_manifest (not 1)
+    exp = generate_section_explanation("ch_brief", "Executive Brief", rep, rep.findings)
+    assert "(1 high/critical priority)" in exp.key_result
+    assert exp.sample_size == 2
+
+    # P0-4: Internal claim_NNN tokens stripped cleanly from presentation text
+    clean_story = sanitize_presentation_text(rep.story_summary)
+    assert "claim_019" not in clean_story
+    assert "Duplicate H1 tags hurt relevance across key pages." == clean_story
+
+    # P0-5 & P0-6: Typed retest command & evidence-bounded hypothesis root cause (never curl -I for CTA)
+    cta_finding = SimpleNamespace(
+        finding_id="CRO_CTA_01",
+        category="UX_CONVERSION",
+        severity=Severity.HIGH,
+        title="Generic CTA label 'Learn More' on homepage",
+        description="Hero CTA uses passive copy.",
+        affected_urls=["https://perforacare.com/"],
+    )
+    enriched = PlainEnglishEngine.enrich_finding(cta_finding, 1)
+    assert "Playwright DOM check" in enriched["verification_command"]
+    assert "curl -sI" not in enriched["verification_command"]
+    assert "Root-cause hypothesis" in enriched["root_cause"]
+    assert "HTTP configuration omission" not in enriched["root_cause"]
+
+
+def test_p2_and_p4_compact_manifest_and_boardroom_pptx_compile():
+    from app.reports.adaptive_audit_book import build_publication_manifest
+    from app.reports.deck.models import DeckBlueprint, SlideBlueprint, SlideLayoutType
+    from app.reports.deck.pptx_generator import DeckPptxBuilderAgent
+
+    rep = _sample_report()
+    complete_man = build_publication_manifest(rep, "COMPLETE")
+    assert "ch_competitive" not in [c["id"] for c in complete_man["chapters"]]
+
+    geo_man = build_publication_manifest(rep, "GEO")
+    assert "ch_geo_rewrites" not in [c["id"] for c in geo_man["chapters"]]
+
+    bp = DeckBlueprint(
+        domain="perforacare.com",
+        generated_at="2026-11-22",
+        total_slides=2,
+        modules=[],
+        dedup_verification_token="tok_test",
+        slides=[
+            SlideBlueprint(
+                slide_id="sl_cover",
+                slide_number=1,
+                module_id="exec",
+                module_title="EXECUTIVE",
+                kicker="AUDIT BRIEF",
+                title="Perfora Digital Audit",
+                subtitle="Evidence-first assessment",
+                thematic_focus="cover",
+                layout=SlideLayoutType.COVER,
+            ),
+            SlideBlueprint(
+                slide_id="sl_find",
+                slide_number=2,
+                module_id="seo",
+                module_title="SEO",
+                kicker="EVIDENCE SUMMARY",
+                title="Incomplete Product JSON-LD on product pages",
+                subtitle="Grounded in verified crawl evidence",
+                thematic_focus="schema",
+                layout=SlideLayoutType.FINDINGS_LEDGER,
+                bullets=["Severity: HIGH (FINDING-ECOM-001)", "Observed on: https://perforacare.com/products/toothbrush"],
+                speaker_notes="Deterministic evidence summary.",
+            ),
+        ],
+    )
+    pptx_bytes = DeckPptxBuilderAgent().compile_pptx(bp)
+    assert pptx_bytes[:2] == b"PK" and len(pptx_bytes) > 5000
+

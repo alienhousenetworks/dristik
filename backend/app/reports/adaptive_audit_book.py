@@ -264,13 +264,20 @@ def build_publication_manifest(
             "title": "AI Crawler Directives & /llms.txt Health",
             "desc": "Robots.txt access rules for GPTBot, PerplexityBot, ClaudeBot, and agentic documentation manifests.",
         })
-        chapters.append({
-            "id": "ch_geo_rewrites",
-            "num": "04",
-            "part": "PART II: CONTENT EXTRACTABILITY",
-            "title": "Factual Attribution Laboratory & Citable Rewrites",
-            "desc": "Attribution rewrites transforming ambiguous text into directly citable entity statements.",
-        })
+        geo_passages = getattr(getattr(report, "geo_readiness", None), "citation_passages", None) or {}
+        geo_rewrites = (
+            geo_passages.get("rewrite_recommendations", [])
+            if isinstance(geo_passages, dict)
+            else getattr(geo_passages, "rewrite_recommendations", [])
+        ) or []
+        if geo_rewrites:
+            chapters.append({
+                "id": "ch_geo_rewrites",
+                "num": "04",
+                "part": "PART II: CONTENT EXTRACTABILITY",
+                "title": "Factual Attribution Laboratory & Citable Rewrites",
+                "desc": "Attribution rewrites transforming ambiguous text into directly citable entity statements.",
+            })
     elif family == "CRO":
         chapters.append({
             "id": "ch_cro_value_prop",
@@ -369,7 +376,14 @@ def build_publication_manifest(
                 "desc": "Question coverage and answer-engine observations where measured; platform coverage and sampling limitations are disclosed.",
             })
 
-        if family in ("COMPLETE", "COMPETITOR"):
+        has_comp_data = bool(
+            getattr(report, "competitor_bakeoff", None)
+            or any(
+                any(k in str(getattr(f, "category", "")).upper() for k in ("COMP", "AUTHORITY", "BACKLINK", "BENCHMARK"))
+                for f in (getattr(report, "findings", None) or [])
+            )
+        )
+        if family == "COMPETITOR" or (family == "COMPLETE" and has_comp_data):
             chapters.append({
                 "id": "ch_competitive",
                 "num": "04" if family == "COMPLETE" else "01",
@@ -604,9 +618,10 @@ def _format_finding_cards(findings: List[Any], limit: Optional[int] = None, deta
 
 
 def _build_ch_brief(report: Any, manifest: Dict[str, Any]) -> str:
-    story = _esc(getattr(report, "story_summary", None) or "No executive summary was recorded for this audit run.")
-    primary_opp = _esc(getattr(report, "primary_strategic_opportunity", None) or "No primary opportunity was recorded; review evidence-backed findings to select the next action.")
-    ignore_advice = _esc(getattr(report, "consultant_advice_what_to_ignore", None) or "No exclusion advice was recorded for this audit run.")
+    from app.reports.pdf_evidence_blocks import sanitize_presentation_text
+    story = _esc(sanitize_presentation_text(getattr(report, "story_summary", None)) or "No executive summary was recorded for this audit run.")
+    primary_opp = _esc(sanitize_presentation_text(getattr(report, "primary_strategic_opportunity", None)) or "No primary opportunity was recorded; review evidence-backed findings to select the next action.")
+    ignore_advice = _esc(sanitize_presentation_text(getattr(report, "consultant_advice_what_to_ignore", None)) or "No exclusion advice was recorded for this audit run.")
 
     p = getattr(report, "three_way_comparison", None) or getattr(report, "perspective", None)
     human_p = _esc(getattr(p, "human_visitor_perspective", None) or "No evidence-backed visitor perspective was recorded for this run.")
@@ -651,7 +666,7 @@ def _build_ch_brief(report: Any, manifest: Dict[str, Any]) -> str:
                 {radar_svg or '<p class="small">Insufficient category scores for radar chart.</p>'}
             </div>
             <div class="card">
-                <div class="card-kicker">VERIFIED FINDING SEVERITY DISTRIBUTION</div>
+                <div class="card-kicker">RECORDED FINDING SEVERITY DISTRIBUTION</div>
                 <div style="margin-top:12px;">{sev_svg}</div>
             </div>
         </div>

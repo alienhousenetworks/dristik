@@ -4,7 +4,9 @@ Coordinates the 4-level cognitive architecture, dynamic cognitive teams, Evidenc
 hypothesis formulation, causal bottleneck discovery, AI search simulation, and validated remediation.
 """
 import asyncio
+import json
 import logging
+import os
 import time
 import uuid
 from datetime import datetime, timezone
@@ -422,6 +424,163 @@ class AnalysisOrchestrator:
                 audit_tier=resolved_tier,
                 credits_charged=resolved_credits,
             )
+
+    async def _enrich_findings_with_ai(
+        self,
+        *,
+        findings: List[Any],
+        model_router: Any,
+        business_profile: Any,
+        site_facts: Dict[str, Any],
+        website_url: str,
+        batch_size: int = 10,
+    ) -> int:
+        """
+        Ensures every final finding (including Stage-1 deterministic findings and
+        ROOT_RC_* deduplicated clusters) receives grounded, site-specific AI diagnosis,
+        business-impact framing, recommendation, and validation criteria.
+        Preserves finding_id, severity, evidence_refs, affected_urls, and scores.
+        """
+        if not findings or not model_router or not hasattr(model_router, "generate_structured"):
+            return 0
+
+        _GENERIC_REC = "implement recommended architectural fix based on evidence."
+
+        def _needs_ai_analysis(f: Any) -> bool:
+            if getattr(f, "held_from_executive", False):
+                return False
+            fid = str(getattr(f, "finding_id", "") or "")
+            why = str(getattr(f, "why_it_matters", "") or "").strip()
+            rec = str(getattr(f, "recommendation", "") or "").strip()
+            desc = str(getattr(f, "description", "") or "").strip()
+            title = str(getattr(f, "title", "") or "").strip()
+            if fid.startswith("ROOT_RC_") or not getattr(f, "agent_id", None):
+                return True
+            if not why or why.startswith("This canonical defect consolidates") or why == title or why == desc:
+                return True
+            if not rec or rec.lower() == _GENERIC_REC:
+                return True
+            return False
+
+        candidates = [f for f in findings if _needs_ai_analysis(f)]
+        if not candidates:
+            return 0
+
+        biz_name = getattr(business_profile, "business_name", None) or website_url
+        industry = getattr(business_profile, "industry", None) or "Unknown"
+        value_prop = getattr(business_profile, "value_proposition", None) or ""
+        schema_desc = (
+            '{"analyses":[{"finding_id":"string (MUST match an input finding_id)",'
+            '"detailed_diagnosis":"string (2-3 concrete sentences citing observed URLs/elements from evidence)",'
+            '"why_it_matters":"string (business, conversion, or organic visibility impact for this specific brand)",'
+            '"recommendation":"string (concrete, actionable engineering/content fix for this site)",'
+            '"validation_criteria":"string (present-tense checkable acceptance test)"}]}'
+        )
+
+        enriched_count = 0
+        by_id = {f.finding_id: f for f in candidates}
+
+        for start in range(0, len(candidates), batch_size):
+            batch = candidates[start:start + batch_size]
+            payload = []
+            for f in batch:
+                ev_items = []
+                for ev in (f.evidence or [])[:4]:
+                    ev_items.append({
+                        "evidence_id": getattr(ev, "evidence_id", None),
+                        "url": getattr(ev, "url", None),
+                        "selector": getattr(ev, "selector", None) or getattr(ev, "element", None),
+                        "snippet": str(getattr(ev, "snippet", None) or getattr(ev, "value", "") or "")[:160],
+                    })
+                sub_obs = [
+                    {
+                        "title": getattr(o, "title", ""),
+                        "url": getattr(o, "url", None),
+                        "selector": getattr(o, "selector", None),
+                    }
+                    for o in (getattr(f, "detailed_observations", None) or [])[:5]
+                ]
+                payload.append({
+                    "finding_id": f.finding_id,
+                    "category": f.category.value if hasattr(f.category, "value") else str(f.category),
+                    "severity": f.severity.value if hasattr(f.severity, "value") else str(f.severity),
+                    "title": (f.title or "")[:180],
+                    "current_description": (f.description or "")[:240],
+                    "affected_urls": (f.affected_urls or [website_url])[:5],
+                    "evidence": ev_items,
+                    "sub_observations": sub_obs,
+                })
+
+            contract = (
+                f"WEBSITE: {website_url}\n"
+                f"BRAND: {biz_name} | INDUSTRY: {industry}\n"
+                f"VALUE PROPOSITION: {value_prop[:200]}\n"
+                f"FINDINGS TO ANALYZE:\n{json.dumps(payload, ensure_ascii=False, indent=2)}\n\n"
+                "INSTRUCTIONS:\n"
+                "1. Analyze every input finding using ONLY the supplied evidence, sub_observations, affected_urls, and brand context.\n"
+                "2. Write a site-specific `detailed_diagnosis`, brand-specific `why_it_matters`, concrete `recommendation`, "
+                "and checkable `validation_criteria` for each `finding_id`.\n"
+                "3. ZERO FABRICATION: Never invent URLs, metrics, percentages, or claims not present in the input evidence."
+            )
+            try:
+                raw = await model_router.generate_structured(
+                    capability="finding_analysis",
+                    agent_role="Principal SEO/GEO/CRO Diagnostic Analyst",
+                    task_contract=contract,
+                    evidence_list=[],
+                    output_schema_desc=schema_desc,
+                    site_facts=site_facts,
+                    max_claims=0,
+                    allow_fallback=False,
+                    model_tier="fast_slm",
+                    max_tokens=3000,
+                )
+            except Exception as exc:
+                logger.warning("[FindingAI] Batch enrichment failed: %s", exc)
+                continue
+
+            if not isinstance(raw, dict) or str(raw.get("status") or "").lower() in ("unavailable", "budget_exceeded"):
+                logger.info("[FindingAI] Skipped batch enrichment (status=%s)", raw.get("status") if isinstance(raw, dict) else "invalid")
+                continue
+
+            for item in (raw.get("analyses") or []):
+                if not isinstance(item, dict):
+                    continue
+                fid = str(item.get("finding_id") or "").strip()
+                target = by_id.get(fid)
+                if target is None:
+                    continue
+                diag = str(item.get("detailed_diagnosis") or "").strip()
+                why = str(item.get("why_it_matters") or "").strip()
+                rec = str(item.get("recommendation") or "").strip()
+                val = str(item.get("validation_criteria") or "").strip()
+                updated = False
+                if diag:
+                    target.description = diag
+                    target.detailed_diagnosis = diag
+                    target.diagnosis = diag
+                    target.concise_summary = diag[:280]
+                    updated = True
+                if why:
+                    target.why_it_matters = why
+                    target.business_context = why
+                    target.business_impact = why
+                    updated = True
+                if rec:
+                    target.recommendation = rec
+                    target.recommended_solution = rec
+                    updated = True
+                if val:
+                    target.validation_criteria = val
+                    target.acceptance_criteria = val
+                    updated = True
+                if updated:
+                    if not target.agent_id:
+                        target.agent_id = "ai.finding_analyst"
+                    enriched_count += 1
+
+        logger.info("[FindingAI] Enriched %d/%d findings via AI (total=%d)", enriched_count, len(candidates), len(findings))
+        return enriched_count
 
     async def _run_deterministic_analyzers(
         self,
@@ -2137,6 +2296,14 @@ class AnalysisOrchestrator:
                     raw_findings.append(ext_f)
 
             final_findings = FindingDeduplicator.deduplicate(raw_findings)
+            if getattr(tier_features, "ai_depth_mode", None) != "deterministic_only":
+                await self._enrich_findings_with_ai(
+                    findings=final_findings,
+                    model_router=model_router,
+                    business_profile=blackboard.business_profile,
+                    site_facts=getattr(blackboard, "site_facts", None) or {},
+                    website_url=website_url,
+                )
             from app.domain.evidence.taxonomy import assign_evidence_scope
             for f in final_findings:
                 assign_evidence_scope(f, sample_size=len(eval_pages))

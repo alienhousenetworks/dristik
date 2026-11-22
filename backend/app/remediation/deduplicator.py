@@ -377,6 +377,27 @@ class FindingDeduplicator:
                     ref for ref in dict.fromkeys(ref for f in group for ref in (f.evidence_refs or []))
                     if ref not in dropped_ev_ids
                 ]
+                # Preserve richer member AI analysis when available instead of discarding it for canned boilerplate
+                _generic_rec = "implement recommended architectural fix based on evidence."
+                member_whys = [
+                    (f.why_it_matters or "").strip()
+                    for f in group
+                    if (f.why_it_matters or "").strip()
+                    and not (f.why_it_matters or "").strip().startswith("This canonical defect consolidates")
+                    and (f.why_it_matters or "").strip() != (f.title or "").strip()
+                ]
+                member_recs = [
+                    (f.recommendation or "").strip()
+                    for f in group
+                    if (f.recommendation or "").strip()
+                    and (f.recommendation or "").strip().lower() != _generic_rec
+                ]
+                merged_why = (
+                    member_whys[0]
+                    if member_whys
+                    else f"This canonical defect consolidates {len(group)} related symptoms that collectively impair user experience, trust, and organic discoverability."
+                )
+                merged_rec = member_recs[0] if member_recs else cluster_def["unified_recommendation"]
                 canonical_finding = Finding(
                     finding_id=f"ROOT_{c_id}",
                     category=cluster_def["category"],
@@ -391,14 +412,14 @@ class FindingDeduplicator:
                     surfaces_affected=surfaces,
                     title=cluster_def["title"],
                     description=cluster_def["unified_description"],
-                    recommendation=cluster_def["unified_recommendation"],
+                    recommendation=merged_rec,
                     evidence=capped_evidence,
                     evidence_refs=merged_refs,
                     evidence_ids=merged_refs,
                     confidence=max((f.confidence for f in group), default=0.90),
                     impact=best_impact,
                     priority=best_priority,
-                    why_it_matters=f"This canonical defect consolidates {len(group)} related symptoms that collectively impair user experience, trust, and organic discoverability.",
+                    why_it_matters=merged_why,
                     validation_criteria=f"Resolve all {len(group)} underlying observations and verify compliance.",
                     calibrated_impact=FindingCalibratedImpact(
                         technical_severity=max_sev,

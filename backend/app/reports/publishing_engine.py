@@ -404,7 +404,7 @@ def get_publishing_css() -> str:
     return """
     @page {
         size: A4 portrait;
-        margin: 16mm 16mm 18mm 16mm;
+        margin: 18mm 16mm 18mm 16mm;
     }
 
     @page :first {

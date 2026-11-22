@@ -9,7 +9,21 @@ Reused across Complete, SEO, GEO, AEO, and CRO audit books so every PDF has:
 from __future__ import annotations
 
 import html
+import re
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
+
+_CLAIM_PARENS_RE = re.compile(r"\s*\((?:\s*claim_\d+\s*,?\s*)+\)", re.IGNORECASE)
+_CLAIM_BARE_RE = re.compile(r"\bclaim_\d+\b", re.IGNORECASE)
+
+
+def sanitize_presentation_text(text: Any) -> str:
+    """Strip leaked internal claim_NNN tokens from client-facing prose while keeping finding IDs."""
+    raw = "" if text is None else str(text)
+    cleaned = _CLAIM_PARENS_RE.sub("", raw)
+    cleaned = _CLAIM_BARE_RE.sub("", cleaned)
+    cleaned = re.sub(r"\s{2,}", " ", cleaned).strip()
+    cleaned = re.sub(r"\s+([.,;:])", r"\1", cleaned)
+    return cleaned
 
 
 def _esc(val: Any) -> str:
@@ -55,20 +69,20 @@ def render_ai_analysis_card(
 
     parts = [
         f'<div class="ai-chapter-narrative" style="background:#f8fafc;border:1px solid #cbd5e1;'
-        f'border-left:3.5px solid {border_col};padding:11px 14px;margin:0 0 14px 0;border-radius:5px;break-inside:avoid;">',
-        f'  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">',
-        f'    <span style="font-size:7.5pt;font-weight:800;letter-spacing:0.06em;color:#0f172a;text-transform:uppercase;">{_esc(title_prefix)}</span>',
-        f'    <span style="font-family:ui-monospace,monospace;font-size:6.8pt;font-weight:700;padding:2px 6px;border-radius:3px;background:{badge_bg};color:{badge_fg};">{badge_txt}</span>',
+        f'border-left:4px solid {border_col};padding:13px 16px;margin:0 0 16px 0;border-radius:6px;break-inside:avoid;">',
+        f'  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:7px;">',
+        f'    <span style="font-size:8.5pt;font-weight:800;letter-spacing:0.05em;color:#0f172a;text-transform:uppercase;">{_esc(title_prefix)}</span>',
+        f'    <span style="font-family:ui-monospace,monospace;font-size:7.5pt;font-weight:700;padding:2px 7px;border-radius:3px;background:{badge_bg};color:{badge_fg};">{badge_txt}</span>',
         f'  </div>',
     ]
     if takeaway:
-        parts.append(f'  <p style="font-weight:700;font-size:9pt;color:#0f172a;margin:0 0 6px 0;line-height:1.45;">{_esc(takeaway)}</p>')
+        parts.append(f'  <p style="font-weight:700;font-size:9.8pt;color:#0f172a;margin:0 0 7px 0;line-height:1.45;">{_esc(sanitize_presentation_text(takeaway))}</p>')
     if body:
-        parts.append(f'  <p style="font-size:8.3pt;color:#1e293b;margin:0 0 6px 0;line-height:1.5;">{_esc(body)}</p>')
+        parts.append(f'  <p style="font-size:9pt;color:#1e293b;margin:0 0 7px 0;line-height:1.55;">{_esc(sanitize_presentation_text(body))}</p>')
     if why:
-        parts.append(f'  <p style="font-size:8pt;color:#334155;margin:0 0 6px 0;line-height:1.45;"><strong>Business Impact:</strong> {_esc(why)}</p>')
+        parts.append(f'  <p style="font-size:8.8pt;color:#334155;margin:0 0 7px 0;line-height:1.5;"><strong>Business Impact:</strong> {_esc(sanitize_presentation_text(why))}</p>')
     if cited_pills:
-        parts.append(f'  <div style="margin-top:6px;font-size:7pt;color:#475569;"><strong>Cited Findings:</strong> {cited_pills}</div>')
+        parts.append(f'  <div style="margin-top:7px;font-size:8pt;color:#475569;"><strong>Cited Findings:</strong> {cited_pills}</div>')
     parts.append('</div>')
     return "\n".join(parts)
 

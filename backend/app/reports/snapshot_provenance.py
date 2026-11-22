@@ -152,6 +152,51 @@ def _matches_section(finding: Any, section_key: str) -> bool:
     return False
 
 
+def _compute_weighted_seo_score(cat_scores: Dict[str, Any]) -> Optional[float]:
+    """Single canonical weighted SEO pillar score across measured SEO sub-categories only.
+
+    Denominator policy: unmeasured / unavailable / not-applicable categories are excluded
+    from both numerator and denominator so missing connectors never become 0 or pass.
+    """
+    if not isinstance(cat_scores, dict):
+        return None
+    default_weights = {
+        "TECHNICAL_SEO": 0.35,
+        "ON_PAGE_SEO": 0.25,
+        "CONTENT": 0.20,
+        "SCHEMA": 0.20,
+        "EXTERNAL_AUTHORITY": 0.15,
+        "TRUST_AUTHORITY": 0.15,
+    }
+    measured: List[Tuple[float, float]] = []
+    for key, default_w in default_weights.items():
+        obj = cat_scores.get(key) or cat_scores.get(key.lower())
+        if obj is None:
+            continue
+        score_val = _extract_numeric_score(obj)
+        if score_val is None:
+            continue
+        raw_w = _get(obj, "weight")
+        wt = float(raw_w) if isinstance(raw_w, (int, float)) and not isinstance(raw_w, bool) and float(raw_w) > 0 else default_w
+        measured.append((wt, score_val))
+    if not measured:
+        return None
+    if len(measured) == 1:
+        return round(measured[0][1], 1)
+    tot_w = sum(w for w, _ in measured)
+    return round(sum(w * s for w, s in measured) / max(tot_w, 1e-6), 1)
+
+
+def _normalize_severity_label(raw: Any) -> str:
+    if raw is None:
+        return "UNKNOWN"
+    val = getattr(raw, "value", raw)
+    text = str(val or "").strip().upper()
+    if "." in text:
+        text = text.rsplit(".", 1)[-1]
+    return text or "UNKNOWN"
+
+
 def _resolve_section_scores(report: Any) -> Dict[str, Optional[float]]:
     scores = _get(report, "scores")
     honest = _get(report, "honest_scores")
@@ -159,9 +204,10 @@ def _resolve_section_scores(report: Any) -> Dict[str, Optional[float]]:
     geo_readiness = _get(report, "geo_readiness")
     cro_audit = _get(report, "cro_audit")
 
-    # SEO
+    # SEO: canonical weighted SEO composite across measured SEO categories (single source of truth)
     seo = (
         validate_score(_get(scores, "seo_score"))
+        or _compute_weighted_seo_score(cat_scores)
         or _resolve_category_score(cat_scores, "TECHNICAL_SEO", "ON_PAGE_SEO")
         or validate_score(_get(honest, "google_score"))
         or validate_score(_get(honest, "honest_google_search"))
@@ -254,6 +300,8 @@ class AuditSnapshotMetadata:
     total_findings_count: int
     section_findings_counts: Dict[str, int]
     report_version: str = REPORT_VERSION_DEFAULT
+    severity_counts: Dict[str, int] = None  # type: ignore[assignment]
+    pages_rendered: Optional[int] = None
 
     def score_for_section(self, section_key: str) -> Optional[float]:
         return self.section_scores.get((section_key or "").lower().strip())
@@ -336,6 +384,17 @@ def format_audit_execution_metadata(report: Any, *, use_cache: bool = True) -> A
         key: sum(1 for f in all_findings if _matches_section(f, key))
         for key in ("crawl", "seo", "geo", "aeo", "cro", "competitors")
     }
+    severity_counts: Dict[str, int] = {"CRITICAL": 0, "HIGH": 0, "MEDIUM": 0, "LOW": 0, "INFO": 0}
+    for f in all_findings:
+        sev_key = _normalize_severity_label(_get(f, "severity"))
+        if sev_key in severity_counts:
+            severity_counts[sev_key] += 1
+
+    pages_rendered: Optional[int] = (
+        sum(1 for p in pages if _get(p, "rendered") is True)
+        if pages
+        else None
+    )
 
     digest_payload = (
         f"{run_id}|{execution_timestamp}|{domain}|{pages_inspected}|{urls_discovered}|"
@@ -369,6 +428,8 @@ def format_audit_execution_metadata(report: Any, *, use_cache: bool = True) -> A
         total_findings_count=total_findings_count,
         section_findings_counts=section_findings_counts,
         report_version=REPORT_VERSION_DEFAULT,
+        severity_counts=severity_counts,
+        pages_rendered=pages_rendered,
     )
 
     if use_cache and report is not None and not isinstance(report, dict):
