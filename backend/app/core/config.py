@@ -194,6 +194,13 @@ class Settings(BaseSettings):
     TOGETHER_MODEL_REASONING: str = "meta-llama/Llama-3.3-70B-Instruct-Turbo"
     TOGETHER_MODEL_CRITIC: str = "meta-llama/Llama-3.3-70B-Instruct-Turbo"
     TOGETHER_MODEL_SYNTHESIS: str = "meta-llama/Llama-3.3-70B-Instruct-Turbo"
+
+    # Local Self-Hosted LLM (Ollama / LM Studio / llama.cpp OpenAI-compatible endpoint)
+    LOCAL_LLM_BASE_URL: str = Field(default="http://127.0.0.1:11434/v1", description="OpenAI-compatible base URL for local Ollama / LM Studio / llama.cpp server")
+    LOCAL_LLM_MODEL: Optional[str] = Field(default=None, description="Local model name when LLM_PROVIDER=local (e.g. qwen2.5:1.5b-instruct, qwen2.5:3b-instruct)")
+    LOCAL_LLM_MODEL_FAST: Optional[str] = Field(default=None, description="Optional fast local model override")
+    LOCAL_LLM_MODEL_REASONING: Optional[str] = Field(default=None, description="Optional reasoning local model override")
+    LOCAL_LLM_API_KEY: str = Field(default="local", description="Local bearer token (Ollama accepts any non-empty string)")
     
     # Inference Parameters
     LLM_TEMPERATURE: float = 0.2
@@ -688,9 +695,11 @@ class Settings(BaseSettings):
             prov = "nvidia"
 
         if prov != "auto" and prov != "":
+            if prov in ("local", "ollama", "lmstudio", "llamacpp"):
+                return "local"
             return prov
             
-        # Auto-selection priority: anthropic -> openai -> gemini -> groq -> openrouter -> together -> nvidia -> custom
+        # Auto-selection priority: anthropic -> openai -> gemini -> groq -> openrouter -> together -> nvidia -> local -> custom
         if self.ANTHROPIC_API_KEY or self.CLAUDE_API_KEY:
             return "anthropic"
         if self.OPENAI_API_KEY:
@@ -705,6 +714,8 @@ class Settings(BaseSettings):
             return "together"
         if self.NVIDIA_API_KEY:
             return "nvidia"
+        if self.LOCAL_LLM_MODEL or self.LOCAL_LLM_MODEL_FAST or self.LOCAL_LLM_MODEL_REASONING:
+            return "local"
         if self.LLM_API_KEY:
             return "custom"
         return "none"
@@ -835,6 +846,23 @@ class Settings(BaseSettings):
             return {
                 "provider": "nvidia",
                 "display_name": "NVIDIA NIM",
+                "api_key": api_key,
+                "base_url": base_url,
+                "model_fast": fast_model,
+                "model_reasoning": reasoning_model,
+                "extra_headers": {}
+            }
+
+        # 4b. Local Self-Hosted LLM (Ollama / LM Studio / llama.cpp)
+        elif provider in ("local", "ollama", "lmstudio", "llamacpp"):
+            api_key = self.LOCAL_LLM_API_KEY or self.LLM_API_KEY or "local"
+            base_url = self.LOCAL_LLM_BASE_URL or self.LLM_BASE_URL or "http://127.0.0.1:11434/v1"
+            model_override = self.LOCAL_LLM_MODEL or self.LLM_MODEL
+            fast_model = self.LOCAL_LLM_MODEL_FAST or model_override or self.LLM_MODEL_FAST or "qwen2.5:1.5b-instruct"
+            reasoning_model = self.LOCAL_LLM_MODEL_REASONING or model_override or self.LLM_MODEL_REASONING or fast_model
+            return {
+                "provider": "local",
+                "display_name": "Local LLM (Ollama / OpenAI-Compatible)",
                 "api_key": api_key,
                 "base_url": base_url,
                 "model_fast": fast_model,

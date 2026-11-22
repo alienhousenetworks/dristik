@@ -323,6 +323,9 @@ def price_call(
         return PriceQuote(cost_usd=round(billed, 8), basis="provider_billed", is_actual=True)
 
     provider_name = canonical_provider(provider)
+    if provider_name in ("local", "ollama", "lmstudio", "llamacpp"):
+        return PriceQuote(cost_usd=0.0, basis="local_self_hosted", is_actual=True)
+
     model_name = (model or "").strip()
     table = operator_rates or {}
     specific = table.get((provider_name, model_name)) or table.get(("", model_name))

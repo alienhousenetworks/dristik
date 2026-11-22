@@ -360,9 +360,10 @@ class ModelRouter:
         tier = (model_tier or "").strip()
         is_reasoning = (model == creds.get("model_reasoning")) or tier in ("reasoning_model", "judge_model", "reasoning", "frontier")
 
-        # Evidence token budget: 2400 cap for Groq's 8k TPM free tier, full AI_EVIDENCE_MAX_TOKENS (12k) for Frontier providers
+        # Evidence token budget: 2400 cap for Groq's 8k TPM & small local models, full AI_EVIDENCE_MAX_TOKENS (12k) for Frontier cloud providers
         active_prov = (provider_override or getattr(self.client, "provider", "") or settings.get_active_provider()).lower()
-        default_ev_budget = 2400 if active_prov == "groq" else int(getattr(settings, "AI_EVIDENCE_MAX_TOKENS", 12000) or 12000)
+        configured_ev_budget = int(getattr(settings, "AI_EVIDENCE_MAX_TOKENS", 12000) or 12000)
+        default_ev_budget = min(configured_ev_budget, 2400) if active_prov in ("groq", "local", "ollama", "lmstudio", "llamacpp") else configured_ev_budget
         evidence_budget = int(evidence_max_tokens) if evidence_max_tokens is not None else default_ev_budget
 
         # 1. Compile structured prompt with 70B envelope

@@ -602,7 +602,9 @@ class LLMClient:
 
         cascade_chain: List[str] = [primary_prov]
 
-        allow_cascade = bool(getattr(settings, "ENABLE_CROSS_PROVIDER_CASCADE", False))
+        allow_cascade = bool(getattr(settings, "ENABLE_CROSS_PROVIDER_CASCADE", False)) and primary_prov not in (
+            "local", "ollama", "lmstudio", "llamacpp"
+        )
         if allow_cascade:
             if primary_prov == "groq":
                 if (settings.ANTHROPIC_API_KEY or settings.CLAUDE_API_KEY) and "anthropic" not in cascade_chain:
@@ -679,6 +681,11 @@ class LLMClient:
                 curr_base_url = getattr(settings, "GROQ_BASE_URL", None) or "https://api.groq.com/openai/v1"
                 curr_headers = {}
                 curr_model = settings.GROQ_MODEL_FAST or "openai/gpt-oss-20b"
+            elif current_prov in ("local", "ollama", "lmstudio", "llamacpp"):
+                curr_api_key = settings.LOCAL_LLM_API_KEY or "local"
+                curr_base_url = (settings.LOCAL_LLM_BASE_URL or "http://127.0.0.1:11434/v1").rstrip("/")
+                curr_headers = {}
+                curr_model = model or settings.LOCAL_LLM_MODEL or "qwen2.5:1.5b-instruct"
             else:
                 curr_api_key = self.api_key
                 curr_base_url = self.base_url
