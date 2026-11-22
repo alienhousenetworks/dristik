@@ -601,21 +601,37 @@ def render_geo_audit_book(report: Any) -> str:
         grouped.setdefault(_section_for_finding(finding), []).append(finding)
     part_titles = {part["id"]: part["title"] for part in payload["parts"]}
 
+    from app.reports.snapshot_provenance import (
+        format_audit_execution_metadata,
+        render_snapshot_provenance_bar,
+    )
+
+    snap = format_audit_execution_metadata(report)
     score_val = geo_cover_figure(report)
+    if score_val is None and snap.score_for_section("geo") is not None:
+        score_val = int(round(snap.score_for_section("geo")))
     score_disp = f"{score_val}" if score_val is not None else "—"
     story = _esc(_get(report, "story_summary", "") or "Comprehensive Generative Engine Optimization audit.")
     rights = _esc(_get(report, "what_site_gets_right", "") or "No strengths recorded in executive summary.")
     holding = _esc(_get(report, "what_is_holding_it_back", "") or "Direct passage extraction gaps and competitor comparison presence.")
     opp = _esc(_get(report, "primary_strategic_opportunity", "") or "Deploy concise modular definition passages and structured comparison hubs.")
+    geo_provenance_bar = render_snapshot_provenance_bar(
+        snap,
+        section_key="geo",
+        section_label="GEO",
+        section_score=float(score_val) if score_val is not None else snap.score_for_section("geo"),
+        section_findings_count=snap.findings_for_section("geo"),
+    )
 
     exec_block = f"""
     <div class="exec-summary-dossier">
         <div class="dossier-meta-bar">
-            <span>AUDITED DOMAIN: <strong>{_esc(facts.domain)}</strong></span>
-            <span>AUDIT STANDARD: <strong>2026 ENTERPRISE GEO MASTER STANDARD</strong></span>
-            <span>PROVENANCE: <strong>EMPIRICAL CRAWL AST // DETERMINISTIC HAR</strong></span>
-            <span>SCOPE: <strong>{_esc(facts.sample)}</strong></span>
+            <span>AUDITED DOMAIN: <strong>{_esc(snap.domain)}</strong></span>
+            <span>RUN ID: <strong>{_esc(snap.report_ref)}</strong></span>
+            <span>EXECUTION: <strong>{_esc(snap.execution_timestamp)}</strong></span>
+            <span>SCOPE: <strong>{_esc(snap.crawl_scope_summary)}</strong></span>
         </div>
+        {geo_provenance_bar}
         <div class="exec-scorecard-grid">
             <div class="kpi-score-card">
                 <span class="kpi-label">STORED EXTRACTABILITY SCORE</span>

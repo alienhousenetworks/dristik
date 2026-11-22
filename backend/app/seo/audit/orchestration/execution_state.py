@@ -82,6 +82,7 @@ class AuditConfiguration(BaseModel):
     budget: Optional[Dict[str, Any]] = None
     live_crawl: bool = False  # Opt-in live network crawl when no seed_pages/source_report provided
     idempotency_key: Optional[str] = None
+    defer_remediation: bool = False  # Defer remediation when part of multi-pillar unified pipeline
 
 
 AuditConfig = AuditConfiguration

@@ -130,7 +130,19 @@ def _panel(sources: Sequence[str], charts: Sequence[str], gap: str = "") -> str:
 
 
 def _pages(book: Any) -> List[Any]:
-    return list(getattr(book, "pages", None) or [])
+    direct = getattr(book, "pages", None)
+    if isinstance(direct, list) and direct:
+        return direct
+    manifest = getattr(book, "crawl_manifest", None)
+    if manifest:
+        mpages = manifest.get("pages") if isinstance(manifest, dict) else getattr(manifest, "pages", None)
+        if isinstance(mpages, list) and mpages:
+            return mpages
+    rep = getattr(book, "report", book)
+    rep_pages = getattr(rep, "page_reports", None) or getattr(rep, "pages", None)
+    if isinstance(rep_pages, list) and rep_pages:
+        return rep_pages
+    return []
 
 
 def _http_bars(book: Any) -> List[Tuple[str, float]]:
@@ -602,15 +614,28 @@ def _crawl_source(book: Any) -> str:
     return _source(state, "Crawl sample", sample)
 
 
+def _is_55_book(book: Any) -> bool:
+    """True only if the caller is the legacy 55/63-section audit book."""
+    if getattr(book, "__class__", None).__name__ == "_Book":
+        return True
+    sections = getattr(book, "sections", None)
+    if isinstance(sections, list) and len(sections) > 25:
+        return True
+    return False
+
+
 def _connector_source(book: Any, number: str) -> List[str]:
     rows = [_crawl_source(book)]
-    if number in {"01", "02", "04", "06", "22", "34", "48", "J"}:
+    is_55 = _is_55_book(book)
+    gsc_trigger = {"01", "02", "04", "06", "22", "34", "48", "J"} if is_55 else {"01", "02", "07", "15"}
+    if number in gsc_trigger:
         state = str(getattr(book, "gsc_state", "") or "NOT_CONNECTED")
         rows.append(_source("Measured" if state == "MEASURED" else "Data unavailable", "Google Search Console", state))
     if number in {"49", "50", "51"}:
         state = str(getattr(book, "ga4_state", "") or "NOT_CONNECTED")
         rows.append(_source("Measured" if state == "MEASURED" else "Data unavailable", "Google Analytics 4", state + ". Key events are not revenue."))
-    if number in {"16", "I"}:
+    cwv_trigger = {"16", "I"} if is_55 else {"10"}
+    if number in cwv_trigger:
         if _field_rows(book):
             rows.append(_source("Measured", "Field Core Web Vitals", "CrUX-style field records with has_field_data."))
         elif _lab_rows(book):
@@ -618,14 +643,16 @@ def _connector_source(book: Any, number: str) -> List[str]:
         else:
             rows.append(_source("Not tested", "Core Web Vitals", "No field record and no versioned Lighthouse run."))
         rows.append(_source("Not applicable", "Crawl TTFB as LCP", "Response time is kept in the HTTP chapter and is not a Core Web Vital."))
-    if number in {"45", "46", "47", "K"}:
+    ai_trigger = {"45", "46", "47", "K"} if is_55 else {"18"}
+    if number in ai_trigger:
         card = _get(getattr(book, "report", None), "ai_visibility_scorecard")
         runs = _num(_get(card, "successful_runs")) or 0
         if runs > 0:
             rows.append(_source("Measured", "Live model APIs", f"{int(runs)} successful response(s). Not consumer AI Overviews unless named."))
         else:
             rows.append(_source("Not tested", "Live AI answers", "No successful engine response on this run."))
-    if number in {"31", "G"}:
+    backlink_trigger = {"31", "G"} if is_55 else {"16"}
+    if number in backlink_trigger:
         rows.append(_source("Data unavailable", "Backlink provider", "A missing provider is not a zero and not a toxicity score."))
     if number == "52":
         rows.append(_source("Not produced", "Forecast model", "No traffic, ranking, or revenue forecast is produced."))
@@ -637,6 +664,106 @@ def _connector_source(book: Any, number: str) -> List[str]:
 def _topic_charts(book: Any, number: str) -> Tuple[List[str], str]:
     charts: List[str] = []
     gap = ""
+    is_55 = _is_55_book(book)
+
+    # --------------------------------------------------------------------------
+    # 20-Section Master SEO Standard (sec-01 to sec-20)
+    # --------------------------------------------------------------------------
+    if not is_55:
+        if number == "01":
+            scores = _score_bars(book)
+            if scores:
+                charts.append(_svg("Sealed scores that were stored", "Overall and category scores present on the report.", scores))
+            severities = _severity_bars(book)
+            if severities:
+                charts.append(_svg("Recorded findings by severity", "Findings stored on this audit run.", severities))
+        elif number == "03":
+            http = _http_bars(book)
+            if http:
+                charts.append(_svg("HTTP status in the crawled sample", "Status codes stored on fetched URLs. A code that did not occur is omitted.", http))
+            redirs = _redirect_bars(book)
+            if redirs:
+                charts.append(_svg("Redirect & HTTP response distribution", "Proportion of clean 200 OK responses vs 3xx redirects and 4xx errors.", redirs))
+            canons = _canonical_bars(book)
+            if canons:
+                charts.append(_svg("Canonical signals in the sample", "Counted from stored canonical URLs across crawled pages.", canons))
+        elif number == "04":
+            depths = _click_depth_bars(book)
+            if depths:
+                charts.append(_svg("Internal click depth from root", "Click depth distance from the homepage across crawled site topology.", depths))
+        elif number == "05":
+            titles = _title_bars(book)
+            metas = _meta_bars(book)
+            h1s = _h1_bars(book)
+            images = _image_bars(book)
+            if titles:
+                charts.append(_svg("Title length in the sample", "Character counts of stored titles. A long title is a truncation risk.", titles))
+            if metas:
+                charts.append(_svg("Meta description length in the sample", "Character counts of stored meta descriptions.", metas))
+            if h1s:
+                charts.append(_svg("H1 counts in the sample", "Heading counts from stored HTML. This is not a content-quality grade.", h1s))
+            if images:
+                charts.append(_svg("Image alt text in the sample", "Counts from stored image totals. Decorative handling was not separately judged.", images))
+        elif number == "06":
+            words = _word_bars(book)
+            if words:
+                charts.append(_svg("Extracted word counts", "Word counts across crawled pages. Missing counts are omitted, not treated as thin.", words))
+        elif number == "07":
+            intents = _intent_bars(book)
+            if intents:
+                charts.append(_svg("Search intent classification in sample", "Classified commercial, informational, and transactional query intents.", intents))
+        elif number == "08":
+            schemas = _schema_bars(book)
+            if schemas:
+                charts.append(_svg("Schema types on crawled pages", "Types found in stored structured data. Valid markup is not a promise of a rich result.", schemas))
+            elif _pages(book) and not gap:
+                gap = "No schema type was stored on the crawled pages. That absence is not a rich-result eligibility score."
+        elif number == "09":
+            viewports = _viewport_bars(book)
+            if viewports:
+                charts.append(_svg("Viewport tags in the sample", "Presence of a viewport tag across crawled URLs.", viewports))
+        elif number == "10":
+            cwv, cwv_gap = _cwv_charts(book)
+            charts.extend(cwv)
+            timing = _ttfb_bars(book)
+            if timing:
+                charts.append(_svg("Crawl response time (ms)", "Time to first byte on the crawl response. Not Lighthouse and not a Core Web Vital.", timing))
+            gap = gap or cwv_gap
+        elif number == "11":
+            sec = _security_header_bars(book)
+            if sec:
+                charts.append(_svg("Security headers enforcement in sample", "Evaluated presence of HSTS, CSP, and framing protection directives.", sec))
+        elif number == "14":
+            http = _http_bars(book)
+            if http:
+                charts.append(_svg("E-commerce response code distribution", "HTTP status on catalog and transactional URLs.", http))
+        elif number == "17":
+            bakeoff = _get(getattr(book, "report", None), "competitor_bakeoff")
+            if bakeoff is not None and _get(bakeoff, "competitor_domain"):
+                bars = []
+                for key, label in (("target_wins", "Target wins"), ("competitor_wins", "Competitor wins"), ("ties", "Ties")):
+                    value = _num(_get(bakeoff, key))
+                    if value is not None:
+                        bars.append((label, value))
+                if bars:
+                    charts.append(_svg(f"Stored comparison with {_get(bakeoff, 'competitor_domain')}", "The stored bake-off only. Not a keyword-gap index.", bars))
+        elif number == "18":
+            ai, ai_gap = _ai_charts(book)
+            charts.extend(ai)
+            gap = gap or ai_gap
+        elif number == "19":
+            bars = _remediation_velocity_bars(book)
+            if bars:
+                charts.append(_svg("Remediation backlog velocity by SLA", "Count of prioritized remediation items grouped by engineering resolution window.", bars))
+        elif number == "20":
+            bars = _remediation_velocity_bars(book)
+            if bars:
+                charts.append(_svg("Post-fix regression test backlog", "Verified issues undergoing regression gate verification.", bars))
+        return charts, gap
+
+    # --------------------------------------------------------------------------
+    # Legacy 55/63-Section Audit Book Specifications
+    # --------------------------------------------------------------------------
     if number in {"07", "08", "11", "14", "C"}:
         http = _http_bars(book)
         if http:

@@ -481,27 +481,34 @@ class CROAuditOrchestrator:
                     )
                     self.store.save_recommendation(rec)
 
-                remediation_pack = CRORemediationCenter.generate_pack(
-                    tenant_id=self.tenant_id,
-                    audit_id=self.audit_id,
-                    profile=ctx.profile,
-                    findings=validated_findings,
-                    scorecard=scorecard,
-                    artifacts=ctx.artifacts,
-                    experiments=experiments,
-                )
-                self.store.save_remediation_pack(remediation_pack)
-                self.events.emit(
-                    "cro.remediation.generated",
-                    {
-                        "pack_id": remediation_pack.pack_id,
-                        "tasks_count": len(remediation_pack.tasks),
-                        "root_cause_groups_count": len(remediation_pack.root_cause_groups),
-                    },
-                )
+                if getattr(self, "defer_remediation", False) or getattr(getattr(self, "config", None), "defer_remediation", False):
+                    self.events.emit(
+                        "cro.remediation.deferred",
+                        {"message": "CRO remediation deferred to Unified Cross-Pillar Remediation Pack"}
+                    )
+                else:
+                    remediation_pack = CRORemediationCenter.generate_pack(
+                        tenant_id=self.tenant_id,
+                        audit_id=self.audit_id,
+                        profile=ctx.profile,
+                        findings=validated_findings,
+                        scorecard=scorecard,
+                        artifacts=ctx.artifacts,
+                        experiments=experiments,
+                    )
+                    self.store.save_remediation_pack(remediation_pack)
+                    self.events.emit(
+                        "cro.remediation.generated",
+                        {
+                            "pack_id": remediation_pack.pack_id,
+                            "tasks_count": len(remediation_pack.tasks),
+                            "root_cause_groups_count": len(remediation_pack.root_cause_groups),
+                        },
+                    )
 
             await self._run_stage("remediation_and_experiments", stage_remediation_and_experiments)
-            assert remediation_pack is not None
+            if not (getattr(self, "defer_remediation", False) or getattr(getattr(self, "config", None), "defer_remediation", False)):
+                assert remediation_pack is not None
 
             # Stage 10: Independent CRO QA Gate
             qa_report = None

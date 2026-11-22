@@ -5,7 +5,9 @@ import { ArrowRight, Check, Copy, Plug } from 'lucide-react';
 
 interface SeoIntelligenceWorkspaceProps {
   report: ExecutiveReport;
+  scorecard?: any;
   onOpenConnectors?: (tabId?: string) => void;
+  onNavigateTab?: (tabId: string) => void;
 }
 
 interface KeywordRecord {
@@ -30,10 +32,17 @@ function classifyIntent(text: string, url: string): KeywordRecord['intent'] {
 
 export function SeoIntelligenceWorkspace({
   report,
+  scorecard,
   onOpenConnectors,
+  onNavigateTab,
 }: SeoIntelligenceWorkspaceProps) {
   const [activeTab, setActiveTab] = useState<'keywords' | 'intent' | 'gaps' | 'cannibalization' | 'brief'>('keywords');
   const [copiedBrief, setCopiedBrief] = useState(false);
+
+  const contentDim = useMemo(() => {
+    const dims = scorecard?.dimensions || (report as any)?.mathematical_scorecard?.dimensions || [];
+    return dims.find((d: any) => d.dimension_id === 'content_quality_intent') || null;
+  }, [scorecard, report]);
 
   const pages = useMemo(
     () => ((report.crawl_manifest?.pages || report.page_reports || []) as Array<Record<string, any>>),
@@ -205,6 +214,30 @@ ${extractedH2s.length > 0 ? extractedH2s.map((h) => `  - H2 (Observed): ${h}`).j
           ))}
         </div>
       </div>
+
+      {contentDim && (
+        <div className="rounded-xl border border-line bg-paper-subtle p-4 flex flex-wrap items-center justify-between gap-4">
+          <div className="space-y-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-xs font-bold text-ink">Content Quality &amp; Search Intent Audit Score</span>
+              <Badge tone={contentDim.score != null && contentDim.score >= 70 ? 'good' : contentDim.score != null && contentDim.score >= 50 ? 'warn' : 'critical'}>
+                {contentDim.score != null ? `${Math.round(contentDim.score)}/100` : 'Unmeasured'}
+              </Badge>
+              <span className="text-[11px] font-mono text-ink-500">
+                Weight: {Math.round(contentDim.configured_weight * 100)}% · Eff: {contentDim.effective_weight != null ? `${Math.round(contentDim.effective_weight * 100)}%` : 'Excluded'}
+              </span>
+            </div>
+            <p className="text-xs text-ink-500">
+              {contentDim.passed_checks_count} passed · {contentDim.failed_checks_count ?? Math.max(0, contentDim.executed_checks_count - contentDim.passed_checks_count)} failed of {contentDim.executed_checks_count} executed checks.
+            </p>
+          </div>
+          {onNavigateTab && (
+            <Button size="sm" variant="secondary" onClick={() => onNavigateTab('issues')} className="text-xs">
+              View All Content Issues <ArrowRight className="w-3.5 h-3.5 ml-1" />
+            </Button>
+          )}
+        </div>
+      )}
 
       {!hasConnectedDemandProvider && (
         <div className="p-3.5 rounded-xl border border-amber-300/60 bg-amber-50/40 dark:bg-amber-950/20 flex flex-wrap items-center justify-between gap-3 text-xs">

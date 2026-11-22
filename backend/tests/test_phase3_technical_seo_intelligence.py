@@ -431,8 +431,9 @@ def test_phase3_11_versioned_9_dimension_scorecard():
     assert card.assessment_status == "PARTIAL_ASSESSMENT"
     assert card.coverage_percentage == 95.0
     assert "External Authority" in card.unmeasured_dimensions
-    assert card.overall_score > 0
-    assert "not silently redistributed" in card.limitations_disclosure
+    assert card.overall_score is None
+    assert card.measured_subset_score > 0
+    assert "health grade is withheld" in card.limitations_disclosure
 
 
 # ============================================================================

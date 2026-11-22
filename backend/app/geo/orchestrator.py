@@ -790,22 +790,25 @@ class GEOAuditOrchestrator:
                 },
             )
 
-            # Stage 8: Single Consolidated Remediation Pack (generated AFTER all analysis completes)
-            pack = GEORemediationCenter.build_consolidated_pack(
-                tenant_id=self.tenant_id,
-                audit_id=self.audit_id,
-                scope=self.scope,
-                findings=consolidated_findings,
-                recommendations=recommendations,
-                root_cause_groups=root_cause_groups,
-                scorecard=scorecard,
-                pages=page_readiness,
-                prompts=prompts,
-                external_sources=external_sources,
-                dept_artifacts=dept_artifacts,
-            )
-            self.store.save_remediation_pack(pack)
-            self.events.emit("geo.remediation.generated", {"pack_id": pack.pack_id, "tasks_count": len(pack.tasks)})
+            # Stage 8: Single Consolidated Remediation Pack (deferred when running in unified pipeline)
+            if getattr(self, "defer_remediation", False) or getattr(self.scope, "defer_remediation", False):
+                self.events.emit("geo.remediation.deferred", {"message": "GEO remediation deferred to Unified Cross-Pillar Remediation Pack"})
+            else:
+                pack = GEORemediationCenter.build_consolidated_pack(
+                    tenant_id=self.tenant_id,
+                    audit_id=self.audit_id,
+                    scope=self.scope,
+                    findings=consolidated_findings,
+                    recommendations=recommendations,
+                    root_cause_groups=root_cause_groups,
+                    scorecard=scorecard,
+                    pages=page_readiness,
+                    prompts=prompts,
+                    external_sources=external_sources,
+                    dept_artifacts=dept_artifacts,
+                )
+                self.store.save_remediation_pack(pack)
+                self.events.emit("geo.remediation.generated", {"pack_id": pack.pack_id, "tasks_count": len(pack.tasks)})
 
             # Stage 9: Independent Publication QA Gate & Monitoring Delta Alerts
             qa_report = GEOQualityAssuranceEngine.validate_audit(

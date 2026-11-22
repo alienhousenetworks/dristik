@@ -54,6 +54,11 @@ class PublicationMetadata:
     primary_opportunity: str = ""
     consultant_advice_what_to_ignore: str = ""
     perspectives: Dict[str, str] = field(default_factory=dict)
+    execution_timestamp: str = ""
+    snapshot_id: str = ""
+    configuration_summary: str = ""
+    crawl_scope_summary: str = ""
+    composite_score_reference: str = ""
 
 
 @dataclass
@@ -229,14 +234,20 @@ class CoverGenerator:
         score_text = f"{float(score_value):.1f}" if score_is_valid else "NOT MEASURED"
         grade_text = (m.grade if m.grade and m.grade not in {"—", "-", "N/A"} else "NOT GRADED") if score_is_valid else "NOT GRADED"
         crawl_sample_text = (
-            f"{m.pages_crawled} URLs recorded" if isinstance(m.pages_crawled, int) and m.pages_crawled >= 0
-            else "Crawl coverage not recorded"
+            m.crawl_scope_summary
+            if m.crawl_scope_summary
+            else (
+                f"{m.pages_crawled} URLs recorded" if isinstance(m.pages_crawled, int) and m.pages_crawled >= 0
+                else "Crawl coverage not recorded"
+            )
         )
         finding_count_text = (
             f"{m.findings_count} findings recorded" if isinstance(m.findings_count, int) and m.findings_count >= 0
             else "Finding count not recorded"
         )
         score_display_label = f"{score_text} / 100 · GRADE {grade_text}" if score_is_valid else f"{score_text} · {grade_text}"
+        execution_display = m.execution_timestamp or m.audit_date
+        config_display = m.configuration_summary or "See scope, sources and limitations in this report."
 
         return f"""
         <div class="book-cover cover-page" style="background: {palette['bg_gradient']};">
@@ -282,7 +293,7 @@ class CoverGenerator:
                     </div>
                     <div class="cover-meta-cell">
                         <span class="meta-label">AUDIT EXECUTION</span>
-                        <span class="meta-val">{_esc(m.audit_date)}</span>
+                        <span class="meta-val">{_esc(execution_display)}</span>
                     </div>
                     <div class="cover-meta-cell">
                         <span class="meta-label">REPORT REFERENCE</span>
@@ -299,8 +310,8 @@ class CoverGenerator:
                         <span class="meta-val">{_esc(crawl_sample_text)} · {_esc(finding_count_text)}</span>
                     </div>
                     <div class="cover-meta-cell">
-                        <span class="meta-label">EVIDENCE STATUS</span>
-                        <span class="meta-val">See scope, sources and limitations in this report.</span>
+                        <span class="meta-label">CONFIGURATION &amp; SNAPSHOT</span>
+                        <span class="meta-val">{_esc(config_display)}</span>
                     </div>
                 </div>
 

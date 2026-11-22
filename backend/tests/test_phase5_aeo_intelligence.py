@@ -356,8 +356,11 @@ def test_phase5_9_aeo_scorecard_decoupled():
     assert card_untested.assessment_status == "PARTIAL_ASSESSMENT"
     assert card_untested.coverage_percentage == 75.0
     assert card_untested.is_live_tested is False
+    assert card_untested.overall_score is None
+    assert card_untested.track_a_readiness_score is not None
     assert card_untested.track_b_live_score is None
     assert "Track B Live Answer Outcomes are NOT_TESTED" in card_untested.firewall_disclosure_statement
+    assert "overall grade is withheld" in card_untested.firewall_disclosure_statement
 
     # Test 2: Both Track A and Track B measured
     scores_full = dict(scores)

@@ -2542,22 +2542,38 @@ def render_aeo_audit_book(report: Any) -> str:
         grouped.setdefault(_section_for_finding(finding), []).append(finding)
     part_titles = {part["id"]: part["title"] for part in payload["parts"]}
 
+    from app.reports.snapshot_provenance import (
+        format_audit_execution_metadata,
+        render_snapshot_provenance_bar,
+    )
+
+    snap = format_audit_execution_metadata(report)
     # Executive Intelligence Dossier
     extractability_val = aeo_cover_figure(report)
+    if extractability_val is None and snap.score_for_section("aeo") is not None:
+        extractability_val = int(round(snap.score_for_section("aeo")))
     extractability_disp = f"{extractability_val}" if extractability_val is not None else "—"
     story = _esc(_get(report, "story_summary", "") or "Comprehensive answer engine optimization and extraction audit.")
     rights = _esc(_get(report, "what_site_gets_right", "") or "No strengths recorded in executive summary.")
     holding = _esc(_get(report, "what_is_holding_it_back", "") or "Direct answer passage gaps and entity disambiguation opportunities.")
     opp = _esc(_get(report, "primary_strategic_opportunity", "") or "Publish concise declarative answer blocks under key question headings.")
+    aeo_provenance_bar = render_snapshot_provenance_bar(
+        snap,
+        section_key="aeo",
+        section_label="AEO",
+        section_score=float(extractability_val) if extractability_val is not None else snap.score_for_section("aeo"),
+        section_findings_count=snap.findings_for_section("aeo"),
+    )
 
     exec_block = f"""
     <div class="exec-summary-dossier">
         <div class="dossier-meta-bar">
-            <span>AUDITED DOMAIN: <strong>{_esc(facts.domain)}</strong></span>
-            <span>AUDIT STANDARD: <strong>2026 AEO MASTER TAXONOMY</strong></span>
-            <span>PROVENANCE: <strong>STORED DOM AST // DETERMINISTIC PROVENANCE</strong></span>
-            <span>SCOPE: <strong>REPRESENTATIVE SAMPLE ({facts.crawled} PAGES)</strong></span>
+            <span>AUDITED DOMAIN: <strong>{_esc(snap.domain)}</strong></span>
+            <span>RUN ID: <strong>{_esc(snap.report_ref)}</strong></span>
+            <span>EXECUTION: <strong>{_esc(snap.execution_timestamp)}</strong></span>
+            <span>SCOPE: <strong>{_esc(snap.crawl_scope_summary)}</strong></span>
         </div>
+        {aeo_provenance_bar}
         <div class="exec-scorecard-grid">
             <div class="kpi-score-card">
                 <span class="kpi-label">STORED EXTRACTABILITY SCORE</span>

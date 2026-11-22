@@ -1,5 +1,5 @@
 """
-Dristik Specialist Agent — unified runtime class for all 105 registry agents across 12 domains.
+Dristik Specialist Agent — one runtime class for SPECIALIST_AGENTS_V3.
 
 Deterministic specialists inspect crawl evidence only.
 LLM specialists call the model with allow_fallback=False so a missing key
@@ -249,12 +249,15 @@ class SpecialistAgent(BaseAgent):
             # Offline/fallback: if LLM unavailable, fall back to deterministic telemetry
             if llm_res.get("status") == "unavailable" and "deterministic" in (self.definition.allowed_models or []):
                 det = self._deterministic_audit(blackboard, evidence_slice)
-                if det.get("observations"):
-                    det["status"] = "completed"
-                    det["mode"] = "MEASURED_AWAITING_AGENT"
-                    det["claims"] = []
+                state = (det.get("observations") or {}).get("measurement_state")
+                if det.get("claims") or state == "measured":
+                    det["mode"] = "DETERMINISTIC"
+                    if det.get("status") != "unmeasured":
+                        det["status"] = "completed"
                     self._store(blackboard, det)
                     return det
+                self._store(blackboard, det)
+                return det
             self._store(blackboard, llm_res)
             return llm_res
 
@@ -539,13 +542,27 @@ class SpecialistAgent(BaseAgent):
             if not bound and getattr(blackboard, "evidence_store", None) is not None and (pages or manifest):
                 source_type, selector = _preferred_binding(statement)
                 page_url = pages[0].url if pages else getattr(blackboard, "website_url", None)
+                payload = {
+                    "pages_inspected": len(pages),
+                    "selector": selector,
+                    "source_type": source_type,
+                }
+                observation_text = " ".join(f"{key}={payload[key]}" for key in ("pages_inspected", "selector", "source_type"))
+                if observation_text.strip() == statement.strip() or statement.strip() in observation_text:
+                    observations.setdefault("unsupported_facts", []).append({
+                        "fact": statement,
+                        "reason": "EVIDENCE_TEXT_WAS_THE_CLAIM",
+                        "severity": severity.value if hasattr(severity, "value") else str(severity),
+                        "recommendation": recommendation,
+                    })
+                    return
                 created = blackboard.evidence_store.add_evidence(
                     source_type=source_type,
                     analyzer=self.agent_id,
                     url=page_url,
                     selector=selector,
-                    text=statement,
-                    value={"measured_by": self.agent_id, "selector": selector, "pages_inspected": len(pages)},
+                    text=observation_text,
+                    value=payload,
                 )
                 if created and getattr(created, "id", None):
                     bound = [created.id]
@@ -573,11 +590,10 @@ class SpecialistAgent(BaseAgent):
                     else Materiality.MAJOR if sev_val in ("HIGH", "MEDIUM")
                     else Materiality.MINOR
                 )
-                rubric = RubricConfidence.CERTAIN if len(bound) >= 2 or len(pages) > 0 else RubricConfidence.LIKELY
-                basis = f"Deterministic inspection of {len(pages)} crawled page(s) and manifest bound to {', '.join(bound[:3])}."
-                why_text = (why_it_matters or "").strip() or (
-                    f"{statement.rstrip('.')} — directly affects crawlability, user trust, or machine extractability on audited URLs."
-                )
+                preexisting = _supporting_evidence_ids(statement, evidence_slice)
+                rubric = RubricConfidence.CERTAIN if len(preexisting) >= 2 else RubricConfidence.LIKELY
+                basis = f"Deterministic inspection of {len(pages)} crawled page(s) bound to {', '.join(bound[:3])}."
+                why_text = (why_it_matters or "").strip() or statement
                 val_text = (validation_criteria or "").strip() or (
                     f"Re-crawl affected URLs and verify: {recommendation.rstrip('.') or statement.rstrip('.')}."
                 )
@@ -800,46 +816,55 @@ class SpecialistAgent(BaseAgent):
 
         elif aid == "content.depth.v3":
             # Evaluates Information Gain, original data points, and first-party evidence rather than raw word count
-            total_data_points = sum((p.content_authority or {}).get("original_data_points", 0) for p in pages)
-            total_tables = sum((p.content_authority or {}).get("data_tables_count", 0) for p in pages)
+            authority_pages = [p for p in pages if isinstance(getattr(p, "content_authority", None), dict)]
+            total_data_points = sum(int((p.content_authority or {}).get("original_data_points") or 0) for p in authority_pages)
+            total_tables = sum(int((p.content_authority or {}).get("data_tables_count") or 0) for p in authority_pages)
             gain_scores = [
                 value
                 for value in (
-                    (p.content_authority or {}).get("information_gain_score") for p in pages
+                    (p.content_authority or {}).get("information_gain_score") for p in authority_pages
                 )
                 if isinstance(value, (int, float))
             ]
             avg_ig = (sum(gain_scores) / len(gain_scores)) if gain_scores else None
             observations["avg_information_gain"] = round(avg_ig, 1) if avg_ig is not None else None
-            observations["total_original_data_points"] = total_data_points
-            observations["total_data_tables"] = total_tables
+            observations["total_original_data_points"] = total_data_points if authority_pages else None
+            observations["total_data_tables"] = total_tables if authority_pages else None
 
-            if total_data_points == 0 and pages:
+            if pages and not authority_pages:
+                observations["measurement_state"] = "unmeasured"
+                observations["unmeasured_reason"] = "content_authority_not_extracted"
+            elif authority_pages and total_data_points == 0:
                 add(
-                    "Content contains zero original empirical data points or verified statistics.",
+                    "Extracted content_authority.original_data_points is 0 on crawled pages.",
                     Severity.MEDIUM,
-                    "Enrich key landing pages with primary research data, customer metrics, and data tables.",
+                    "Add primary figures only where the page already states them. Do not invent statistics.",
                 )
 
         elif aid == "content.quality.v3":
             # Evaluates unbacked superlative claims and expert author attribution
-            unbacked_total = sum(len((p.content_authority or {}).get("unbacked_claims", [])) for p in pages)
-            has_experts = any(bool((p.content_authority or {}).get("expert_signals")) for p in pages)
-            observations["unbacked_claims_count"] = unbacked_total
-            observations["has_expert_signals"] = has_experts
+            authority_pages = [p for p in pages if isinstance(getattr(p, "content_authority", None), dict)]
+            unbacked_total = sum(len((p.content_authority or {}).get("unbacked_claims") or []) for p in authority_pages)
+            has_experts = any(bool((p.content_authority or {}).get("expert_signals")) for p in authority_pages)
+            observations["unbacked_claims_count"] = unbacked_total if authority_pages else None
+            observations["has_expert_signals"] = has_experts if authority_pages else None
 
-            if unbacked_total > 0:
-                add(
-                    f"Detected {unbacked_total} unsupported superlative marketing claims without proximal data proof.",
-                    Severity.HIGH if unbacked_total > 3 else Severity.MEDIUM,
-                    "Substantiate superlative statements with specific performance metrics or customer testimonials.",
-                )
-            if pages and not has_experts:
-                add(
-                    "Editorial and service content lacks expert author bylines or verifiable professional credentials.",
-                    Severity.LOW,
-                    "Add author bylines with professional credentials or organizational reviewer attribution.",
-                )
+            if pages and not authority_pages:
+                observations["measurement_state"] = "unmeasured"
+                observations["unmeasured_reason"] = "content_authority_not_extracted"
+            else:
+                if unbacked_total > 0:
+                    add(
+                        f"Detected {unbacked_total} unsupported superlative marketing claims without proximal data proof.",
+                        Severity.HIGH if unbacked_total > 3 else Severity.MEDIUM,
+                        "Substantiate superlative statements with specific performance metrics or customer testimonials.",
+                    )
+                if authority_pages and not has_experts:
+                    add(
+                        "Extracted content_authority records do not include expert author signals.",
+                        Severity.LOW,
+                        "Add author bylines with professional credentials or organizational reviewer attribution.",
+                    )
 
         elif aid == "content.topic_coverage.v3":
             # Evaluates heading hierarchy depth and semantic concept coverage
@@ -937,15 +962,8 @@ class SpecialistAgent(BaseAgent):
                 )
 
         elif aid == "business.icp.v3":
-            # Audits Ideal Customer Profile clarity and buyer type alignment
-            has_b2b_signals = any("enterprise" in (p.title or "").lower() or "b2b" in (p.title or "").lower() or "pricing" in (p.url or "").lower() for p in pages)
-            observations["b2b_signals_detected"] = has_b2b_signals
-            if not has_b2b_signals and len(pages) > 0:
-                add(
-                    "Target audience personas and buyer pain-point qualifications are not prominently segmented on the homepage.",
-                    Severity.LOW,
-                    "Incorporate explicit 'Who It Is For' customer profile callouts and role-based use case pages."
-                )
+            observations["measurement_state"] = "unmeasured"
+            observations["unmeasured_reason"] = "icp_requires_explicit_audience_extraction"
 
         elif aid == "business.intent.v3":
             # Analyzes query intent coverage across commercial, transactional, and informational funnels
@@ -972,14 +990,20 @@ class SpecialistAgent(BaseAgent):
                 )
 
         elif aid == "business.commercial.v3":
-            # Evaluates pricing model transparency and commercial friction
-            has_pricing = any("pricing" in (p.url or "").lower() or "plans" in (p.url or "").lower() for p in pages)
-            observations["has_pricing_page"] = has_pricing
-            if not has_pricing:
+            hrefs = []
+            for p in pages:
+                hrefs.extend(getattr(p, "internal_links", None) or [])
+            blob = " ".join(str(href) for href in hrefs).lower()
+            has_pricing = any(token in blob for token in ("/pricing", "pricing", "/plans", "/demo"))
+            observations["pricing_href_present"] = has_pricing if hrefs else None
+            if not hrefs:
+                observations["measurement_state"] = "unmeasured"
+                observations["unmeasured_reason"] = "links_not_extracted"
+            elif not has_pricing:
                 add(
-                    "Public pricing tiers or commercial terms of engagement are not transparently visible to visitors.",
+                    "Crawled internal hrefs do not include a pricing, plans, or demo target.",
                     Severity.MEDIUM,
-                    "Publish a transparent pricing table or clear commercial inquiry path to reduce sales qualification friction."
+                    "Link the pricing or demo URL from a crawled page if that URL exists.",
                 )
 
         elif aid == "business.semantic_strategist.v3":
@@ -1022,17 +1046,25 @@ class SpecialistAgent(BaseAgent):
                 )
 
         elif aid == "seo.ecommerce.v3":
-            # Audits Product, Service, or SoftwareApplication structured data
+            intent = ""
+            if getattr(blackboard, "business_profile", None) is not None:
+                intent = str(getattr(blackboard.business_profile, "primary_intent", "") or "")
+            page_types = {str(getattr(p, "page_type", "") or "").lower() for p in pages}
+            commercial = intent.lower() in {"ecommerce", "e-commerce", "saas"} or bool(page_types & {"product", "ecommerce", "saas"})
             has_product_schema = any(
                 any(st.lower() in ("product", "service", "softwareapplication", "webapplication") for st in (p.schema_types or []))
                 for p in pages
             )
             observations["has_product_schema"] = has_product_schema
-            if not has_product_schema and len(pages) > 0:
+            observations["commercial_site"] = commercial
+            if not commercial:
+                observations["measurement_state"] = "not_applicable"
+                observations["unmeasured_reason"] = "site_type_not_commercial"
+            elif not has_product_schema and pages:
                 add(
-                    "Missing Product or Service Schema.org structured data on commercial offering pages.",
+                    "Commercial pages have no Product, Service, or SoftwareApplication schema type.",
                     Severity.MEDIUM,
-                    "Add Product / Service JSON-LD schema with offers, name, and capability attributes to enable rich SERP snippets."
+                    "Add Product or Service JSON-LD only for offers the page actually sells.",
                 )
 
         elif aid == "geo.source_freshness.v3":
@@ -1077,13 +1109,11 @@ class SpecialistAgent(BaseAgent):
 
         elif aid == "ai_search.discoverability.v3":
             # Evaluates coverage of commercial buyer comparison queries
-            observations["evaluated_buyer_queries_count"] = len(getattr(blackboard, "commercial_evaluations", []) or [])
-            if not getattr(blackboard, "commercial_evaluations", None):
-                add(
-                    "Website content lacks direct comparison and alternative matrices required for high-intent AI search recommendations.",
-                    Severity.MEDIUM,
-                    "Publish dedicated 'Alternative to' or 'Why Choose Us' comparison tables with verified objective feature specifications."
-                )
+            evaluations = getattr(blackboard, "commercial_evaluations", None)
+            observations["evaluated_buyer_queries_count"] = len(evaluations or [])
+            if not evaluations:
+                observations["measurement_state"] = "unmeasured"
+                observations["unmeasured_reason"] = "buyer_query_set_not_measured"
 
         elif aid == "ai_search.cross_engine.v3":
             # Evaluates presence in generative answer engine citation pools from real telemetry
@@ -1099,75 +1129,135 @@ class SpecialistAgent(BaseAgent):
                     )
             else:
                 observations["ai_citation_telemetry_status"] = "UNMEASURED"
+                observations["measurement_state"] = "unmeasured"
+                observations["unmeasured_reason"] = "live_engine_responses_missing"
 
         elif aid == "geo.citation_readiness.v3":
-            # Evaluates citable quotation markers and statistical data points
-            has_stats = any(bool(getattr(p, "content_authority", {}).get("original_data_points", 0)) for p in pages)
-            observations["citable_data_points_present"] = has_stats
-            if not has_stats:
+            known = [
+                p for p in pages
+                if isinstance(getattr(p, "content_authority", None), dict)
+                and "original_data_points" in (p.content_authority or {})
+            ]
+            has_stats = any(int((p.content_authority or {}).get("original_data_points") or 0) > 0 for p in known)
+            observations["citable_data_points_present"] = has_stats if known else None
+            if not known:
+                observations["measurement_state"] = "unmeasured"
+                observations["unmeasured_reason"] = "original_data_points_not_extracted"
+            elif not has_stats:
                 add(
-                    "Prose lacks citable statistics and quantifiable metrics that AI engines prioritize for source attribution.",
+                    "Extracted content_authority.original_data_points is 0 on crawled pages.",
                     Severity.MEDIUM,
-                    "Highlight empirical ROI statistics, customer volume, and benchmark metrics in clean semantic blockquotes."
+                    "Publish the figures the business already has. Do not add statistics that were not measured.",
                 )
 
         elif aid == "trust.authority.v3":
-            # Audits trust signals (privacy policy, terms, contact, security headers)
-            has_legal = any("privacy" in (p.url or "").lower() or "terms" in (p.url or "").lower() for p in pages)
-            observations["legal_trust_links_detected"] = has_legal
-            if not has_legal:
+            hrefs: List[str] = []
+            for p in pages:
+                hrefs.extend(getattr(p, "internal_links", None) or [])
+                hrefs.extend(getattr(p, "external_links", None) or [])
+            blob = " ".join(str(href) for href in hrefs).lower()
+            has_privacy = "privacy" in blob
+            has_terms = "terms" in blob
+            observations["legal_hrefs_inspected"] = len(hrefs)
+            observations["privacy_href_present"] = has_privacy if hrefs else None
+            observations["terms_href_present"] = has_terms if hrefs else None
+            if not hrefs:
+                observations["measurement_state"] = "unmeasured"
+                observations["unmeasured_reason"] = "links_not_extracted"
+            elif not has_privacy or not has_terms:
+                missing = []
+                if not has_privacy:
+                    missing.append("privacy")
+                if not has_terms:
+                    missing.append("terms")
                 add(
-                    "Footer lacks conspicuous links to Privacy Policy and Terms of Service.",
+                    f"Crawled link hrefs do not include a {' or '.join(missing)} target.",
                     Severity.MEDIUM,
-                    "Add transparent Privacy Policy and Terms of Service links in the global footer to satisfy buyer trust requirements."
+                    "Link the privacy policy and terms from the pages that were crawled.",
                 )
 
         elif aid == "cro.form_friction.v3":
-            # Form & Input Abandonment Specialist: checks input field bloat, autocomplete, and required inputs
-            inputs_count = sum(len(getattr(p, "form_inputs", []) or []) for p in pages)
-            observations["form_inputs_detected"] = inputs_count
-            if inputs_count > 6:
+            per_form: List[int] = []
+            forms_seen = 0
+            for p in pages:
+                for form in (getattr(p, "forms", None) or []):
+                    forms_seen += 1
+                    if isinstance(form, dict):
+                        fields = form.get("fields") or form.get("inputs") or form.get("controls") or []
+                        per_form.append(len(fields) if isinstance(fields, list) else int(form.get("field_count") or 0))
+                    else:
+                        per_form.append(0)
+            observations["forms_seen"] = forms_seen
+            observations["max_fields_on_one_form"] = max(per_form) if per_form else None
+            if forms_seen == 0:
+                observations["measurement_state"] = "unmeasured"
+                observations["unmeasured_reason"] = "forms_not_extracted"
+            elif max(per_form) > 6:
                 add(
-                    f"Lead capture forms contain {inputs_count} input fields across pages; high field counts correlate with conversion drop-off.",
+                    f"One crawled form exposes {max(per_form)} fields.",
                     Severity.MEDIUM,
-                    "Audit form fields: designate clear labels, enable browser autocomplete, and remove non-essential fields."
+                    "Remove fields that the submission does not use, and label the fields that remain.",
                 )
 
         elif aid == "cro.pricing_psychology.v3":
-            # Pricing Architecture & Packaging Specialist
-            has_pricing = any("pricing" in (p.url or "").lower() or "plans" in (p.url or "").lower() for p in pages)
-            observations["has_pricing_page"] = has_pricing
-            if not has_pricing:
+            hrefs = []
+            for p in pages:
+                hrefs.extend(getattr(p, "internal_links", None) or [])
+            blob = " ".join(str(href) for href in hrefs).lower()
+            has_pricing = any(token in blob for token in ("/pricing", "pricing", "/plans", "/demo"))
+            observations["pricing_href_present"] = has_pricing if hrefs else None
+            if not hrefs:
+                observations["measurement_state"] = "unmeasured"
+                observations["unmeasured_reason"] = "links_not_extracted"
+            elif not has_pricing:
                 add(
-                    "Public pricing or commercial packaging is not easily discoverable from main navigation.",
+                    "Crawled internal hrefs do not include a pricing, plans, or demo target.",
                     Severity.MEDIUM,
-                    "Introduce a dedicated pricing or packages overview page to resolve buyer cost ambiguity early in the journey."
+                    "Add a crawled link to the pricing or demo URL if one exists.",
                 )
 
         elif aid == "cro.three_second_hook.v3":
-            # Hero Hook & Cognitive Value Specialist: audits above-the-fold value proposition
-            hero_h1 = (pages[0].h1[0] if (pages and pages[0].h1) else "") or (pages[0].title if pages else "")
-            observations["primary_hero_headline"] = hero_h1
-            has_cta = bool(pages and getattr(pages[0], "ctas", None))
-            observations["hero_has_cta"] = has_cta
-            if not has_cta:
-                add(
-                    "Above-the-fold hero section lacks an immediate, high-contrast primary call-to-action.",
-                    Severity.HIGH,
-                    "Position an action-oriented primary button (e.g. 'Get Started Free' or 'Book a Demo') in direct proximity to the main headline."
-                )
+            if not pages:
+                observations["measurement_state"] = "unmeasured"
+                observations["unmeasured_reason"] = "no_pages"
             else:
-                observations["hero_clarity"] = "PRESENT"
+                hero_h1 = (pages[0].h1[0] if pages[0].h1 else "") or (pages[0].title or "")
+                ctas = list(getattr(pages[0], "ctas", None) or []) + list(getattr(pages[0], "call_to_actions", None) or [])
+                observations["primary_hero_headline"] = hero_h1
+                observations["homepage_cta_count"] = len(ctas)
+                observations["above_the_fold_position"] = "not_observed"
+                if not ctas:
+                    add(
+                        "The first crawled page has no extracted call-to-action string.",
+                        Severity.MEDIUM,
+                        "Add a primary action on that page. This check does not measure above-the-fold position.",
+                    )
 
         elif aid == "cro.social_proof_depth.v3":
-            # Social Proof & Case Study Depth Specialist
-            has_proof_signals = any("case-studies" in (p.url or "").lower() or "testimonials" in (p.url or "").lower() or "customers" in (p.url or "").lower() for p in pages)
-            observations["social_proof_routes_detected"] = has_proof_signals
-            if not has_proof_signals:
+            inspected = False
+            has_review_schema = False
+            has_proof_copy = False
+            for p in pages:
+                types = [str(item).lower() for item in (getattr(p, "schema_types", None) or [])]
+                body = " ".join([
+                    getattr(p, "body_text", None) or "",
+                    getattr(p, "text_content", None) or "",
+                ]).lower()
+                if types or body.strip():
+                    inspected = True
+                if any(token in types for token in ("review", "aggregaterating")):
+                    has_review_schema = True
+                if any(token in body for token in ("testimonial", "case study", "case-study")):
+                    has_proof_copy = True
+            observations["social_proof_copy_or_schema"] = (has_review_schema or has_proof_copy) if inspected else None
+            if not inspected:
+                observations["measurement_state"] = "unmeasured"
+                observations["unmeasured_reason"] = "body_and_schema_not_extracted"
+            elif not has_review_schema and not has_proof_copy:
                 add(
-                    "Homepage and key commercial pages show limited verifiable customer proof or quantified ROI metrics.",
-                    Severity.MEDIUM,
-                    "Incorporate recognizable client logos, customer testimonials with named roles, and quantified case study outcomes (e.g. '+40% lift')."
+                    "Crawled page text and schema types do not include a review, testimonial, or case study.",
+                    Severity.LOW,
+                    "Add a named customer proof block only where the proof already exists.",
                 )
 
         elif aid == "competitor.head_to_head_parity.v3":
@@ -1221,10 +1311,24 @@ class SpecialistAgent(BaseAgent):
                 observations["competitor_citation_gap_status"] = "UNMEASURED"
 
         elif aid == "aeo.direct_answer_box.v3":
-            # Featured Snippet & Direct Answer Specialist
-            has_faqs = any(getattr(p, "faq_count", 0) > 0 for p in pages)
-            observations["pages_with_structured_qa"] = has_faqs
-            observations["answer_block_judgment"] = "not_written"
+            faq_schema = any("faq" in str(item).lower() for p in pages for item in (getattr(p, "schema_types", None) or []))
+            question_headings = [
+                heading
+                for p in pages
+                for heading in list(getattr(p, "h2", None) or []) + list(getattr(p, "h3", None) or [])
+                if "?" in str(heading)
+            ]
+            observations["faq_schema_present"] = faq_schema
+            observations["question_heading_count"] = len(question_headings)
+            if not pages:
+                observations["measurement_state"] = "unmeasured"
+                observations["unmeasured_reason"] = "no_pages"
+            elif not faq_schema and not question_headings:
+                add(
+                    "Crawled pages have no FAQ schema type and no question headings.",
+                    Severity.LOW,
+                    "Add a question heading only for a question the page already answers.",
+                )
 
         elif aid == "aeo.entity_consensus.v3":
             # Universal Entity Authority & Consensus Specialist
@@ -1244,6 +1348,8 @@ class SpecialistAgent(BaseAgent):
             # Specialized telemetry agents: require external live feeds or model runs; unmeasured offline
             observations["execution_status"] = "UNMEASURED"
             observations["mode"] = "REQUIRE_LIVE_MEASUREMENT"
+            observations["measurement_state"] = "unmeasured"
+            observations["unmeasured_reason"] = "live_measurement_required"
 
         elif aid in (
             "seo.drift.v3",
@@ -1259,23 +1365,35 @@ class SpecialistAgent(BaseAgent):
             "seo.specialized.programmatic.v3",
             "seo.specialized.video.v3",
         ):
-            # Deterministic baseline telemetry for specialized SEO agents
             observations["pages_inspected"] = len(pages)
             observations["specialized_domain"] = aid
             if aid == "seo.specialized.accessibility.v3":
                 missing_alt = sum(
-                    len([img for img in (getattr(p, "image_assets", None) or []) if not img.get("alt")])
+                    len([img for img in (getattr(p, "image_assets", None) or []) if isinstance(img, dict) and not img.get("alt")])
                     for p in pages
                 )
                 observations["images_missing_alt"] = missing_alt
+                observations["measurement_state"] = "measured"
+                if missing_alt:
+                    add(
+                        f"{missing_alt} image asset(s) have an empty alt attribute.",
+                        Severity.MEDIUM,
+                        "Write alt text for images that convey information.",
+                    )
             elif aid == "seo.specialized.international.v3":
                 observations["html_langs"] = sorted({getattr(p, "html_lang", None) for p in pages if getattr(p, "html_lang", None)})
-            elif aid == "seo.specialized.ecommerce.v3":
-                observations["product_schema_pages"] = sum(
-                    1 for p in pages if any(st.lower() in ("product", "offer") for st in (p.schema_types or []))
-                )
+                observations["measurement_state"] = "measured" if pages else "unmeasured"
+                if not pages:
+                    observations["unmeasured_reason"] = "no_pages"
             elif aid == "seo.drift.v3":
-                observations["baseline_snapshot_present"] = bool(getattr(blackboard, "baseline_snapshot", None))
+                present = bool(getattr(blackboard, "baseline_snapshot", None))
+                observations["baseline_snapshot_present"] = present
+                observations["measurement_state"] = "measured" if present else "unmeasured"
+                if not present:
+                    observations["unmeasured_reason"] = "baseline_snapshot_missing"
+            else:
+                observations["measurement_state"] = "not_applicable"
+                observations["unmeasured_reason"] = "site_type_not_classified"
 
         elif aid == "crawl.rendering_hydration.v3":
             # JS Rendering & Hydration Risk Specialist
@@ -1323,18 +1441,42 @@ class SpecialistAgent(BaseAgent):
                 )
 
         elif aid == "verification.adversarial.v3":
-            # Adversarial critic cross-examines findings against ground truth DOM evidence
-            observations["adversarial_verification_mode"] = "GROUND_TRUTH_VALIDATION"
-            observations["verified_claims_count"] = len(claims_spec)
+            examined = blackboard.claim_registry.get_all() if getattr(blackboard, "claim_registry", None) else []
+            observations["claims_examined"] = len(examined)
+            if not examined:
+                observations["measurement_state"] = "unmeasured"
+                observations["unmeasured_reason"] = "no_claims_to_audit"
+            else:
+                observations["measurement_state"] = "measured"
 
         elif aid == "verification.contradiction.v3":
-            # Checks for conflicting claims across specialists
-            observations["contradiction_crosscheck_completed"] = True
+            examined = blackboard.claim_registry.get_all() if getattr(blackboard, "claim_registry", None) else []
+            observations["claims_compared"] = len(examined)
+            if len(examined) < 2:
+                observations["measurement_state"] = "unmeasured"
+                observations["unmeasured_reason"] = "fewer_than_two_claims"
+            else:
+                observations["measurement_state"] = "measured"
+
+        else:
+            observations["measurement_state"] = "unmeasured"
+            observations["unmeasured_reason"] = "no_deterministic_check"
+
+        state = observations.get("measurement_state")
+        if state == "unmeasured":
+            return {
+                "agent_id": self.agent_id,
+                "status": "unmeasured",
+                "mode": "UNMEASURED",
+                "unavailable_reason": observations.get("unmeasured_reason") or "unmeasured",
+                "claims": [],
+                "observations": observations,
+            }
 
         return {
             "agent_id": self.agent_id,
             "status": "completed",
-            "mode": observations.get("mode") or "DETERMINISTIC",
+            "mode": "NOT_APPLICABLE" if state == "not_applicable" else (observations.get("mode") or "DETERMINISTIC"),
             "claims": claims_spec,
             "observations": observations,
         }

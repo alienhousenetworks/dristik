@@ -479,6 +479,14 @@ class CrossChapterConsistencyEngine:
                     unique_findings[key] = f
 
             report.findings = list(unique_findings.values())
+            if report.scores and getattr(report.scores, "category_scores", None):
+                valid_fids = {f.finding_id for f in report.findings if getattr(f, "finding_id", None)}
+                for cat_key, c_score in report.scores.category_scores.items():
+                    if c_score and getattr(c_score, "deductions", None):
+                        c_score.deductions = [
+                            d for d in c_score.deductions
+                            if d.get("finding_id") in valid_fids or str(d.get("finding_id", "")).startswith("chk_")
+                        ]
             if duplicates_found > 0:
                 contradictions.append({
                     "dimension": "finding_deduplication",

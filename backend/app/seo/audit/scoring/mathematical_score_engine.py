@@ -85,8 +85,9 @@ class ConfidenceBreakdown(BaseModel):
 
 class SeoScorecardReport(BaseModel):
     methodology_version: str = "dristik_seo_v3.0"
-    overall_health_score: Optional[float] = None  # S_SEO (0–100)
-    score_status: str = "MEASURED"                # MEASURED | UNMEASURED
+    overall_health_score: Optional[float] = None  # Published grade. None when the assessment is partial.
+    measured_subset_score: Optional[float] = None  # Average of measured dimensions. Not a health grade.
+    score_status: str = "MEASURED"                # MEASURED | PARTIAL | UNMEASURED
     overall_interpretation: ScoreInterpretation = ScoreInterpretation.UNMEASURED
     dimensions: List[DimensionResult] = Field(default_factory=list)
     measured_dimensions_count: int = 0
@@ -249,14 +250,21 @@ class MathematicalScoreEngine:
         confidence: Optional[ConfidenceBreakdown] = None,
     ) -> SeoScorecardReport:
         """
-        Calculates S_SEO = sum(W_d * S_d) / sum(W_d)
-        Only applicable dimensions with valid measurements enter the denominator.
+        Calculates S_SEO from applicable measured dimensions.
+        Inapplicable dimensions are excluded. Applicable unmeasured dimensions
+        withhold the health grade. The measured-subset average is not that grade.
         """
         measured = [d for d in dimension_results if d.is_applicable and d.is_measured and d.score is not None]
-        excluded = [d for d in dimension_results if not d.is_applicable or not d.is_measured or d.score is None]
+        inapplicable = [d for d in dimension_results if not d.is_applicable]
+        applicable_unmeasured = [
+            d for d in dimension_results
+            if d.is_applicable and (not d.is_measured or d.score is None)
+        ]
+        excluded = inapplicable + applicable_unmeasured
 
         active_weight_sum = sum(d.configured_weight for d in measured)
         disclosures: List[str] = []
+        measured_subset_score = None
 
         if active_weight_sum <= 0.0 or not measured:
             overall_score = None
@@ -265,23 +273,31 @@ class MathematicalScoreEngine:
             disclosures.append("No applicable dimensions had sufficient machine evidence to calculate an authoritative SEO score.")
         else:
             weighted_sum = sum(d.configured_weight * (d.score or 0.0) for d in measured)
-            overall_score = round(weighted_sum / active_weight_sum, 2)
-            score_status = "MEASURED"
-            overall_interp = interpret_score(overall_score)
-
+            measured_subset_score = round(weighted_sum / active_weight_sum, 2)
             for d in measured:
                 d.effective_weight = round(d.configured_weight / active_weight_sum, 4)
 
-            if active_weight_sum < 1.0:
+            if applicable_unmeasured:
+                overall_score = None
+                score_status = "PARTIAL"
+                overall_interp = ScoreInterpretation.UNMEASURED
                 disclosures.append(
-                    f"Overall score normalized across {len(measured)} measured dimensions "
-                    f"representing {round(active_weight_sum * 100, 1)}% of maximum theoretical framework weight. "
-                    f"{len(excluded)} dimension(s) were excluded from denominator without penalty."
+                    "Health grade withheld because applicable dimensions were not measured. "
+                    f"Measured-subset average is {measured_subset_score}. It is not the site health score."
                 )
+            else:
+                overall_score = measured_subset_score
+                score_status = "MEASURED"
+                overall_interp = interpret_score(overall_score)
+                if inapplicable:
+                    disclosures.append(
+                        f"{len(inapplicable)} inapplicable dimension(s) excluded from denominator without penalty."
+                    )
 
         return SeoScorecardReport(
             methodology_version=self.METHODOLOGY_VERSION,
             overall_health_score=overall_score,
+            measured_subset_score=measured_subset_score,
             score_status=score_status,
             overall_interpretation=overall_interp,
             dimensions=dimension_results,
@@ -329,7 +345,7 @@ class MathematicalScoreEngine:
                 if (isinstance(p.get("h1"), list) and len(p.get("h1")) == 1)
                 or (isinstance(p.get("h1"), str) and bool(p.get("h1").strip()))
             )
-            good_content = sum(1 for p in pages if int(p.get("word_count") or 0) >= 250)
+            good_content = sum(1 for p in pages if int(p.get("word_count") or 0) >= 200)
             has_links = sum(
                 1 for p in pages
                 if int(p.get("internal_links_count") or len(p.get("internal_links") or [])) > 0
@@ -337,25 +353,46 @@ class MathematicalScoreEngine:
             has_schema = sum(1 for p in pages if len(p.get("schema_types") or []) > 0)
             alt_ok = sum(1 for p in pages if int(p.get("images_without_alt") or 0) == 0)
 
+            title_counts: Dict[str, int] = {}
+            for p in pages:
+                t = str(p.get("title") or "").strip().lower()
+                if t:
+                    title_counts[t] = title_counts.get(t, 0) + 1
+            duplicate_titles = sum(1 for c in title_counts.values() if c > 1)
+
+            has_intent_or_path = sum(
+                1 for p in pages
+                if bool(p.get("intent") or p.get("search_intent") or p.get("url"))
+            )
+            has_heading_structure = sum(
+                1 for p in pages
+                if (isinstance(p.get("h1"), list) and len(p.get("h1")) > 0)
+                or (isinstance(p.get("h1"), str) and bool(p.get("h1").strip()))
+                or bool(p.get("h2"))
+            )
+
             checks_by_dim["technical_crawlability"].extend([
-                MetricCheck(check_id="tech.http_2xx_ratio", weight=2.0, passed=(ok_2xx == total)),
-                MetricCheck(check_id="tech.https_enforcement", weight=1.5, passed=(https_ok == total)),
+                MetricCheck(check_id="tech.http_2xx_ratio", weight=2.0, passed=(ok_2xx / total >= 0.90)),
+                MetricCheck(check_id="tech.https_enforcement", weight=1.5, passed=(https_ok / total >= 0.95)),
             ])
             checks_by_dim["indexation_canonicalization"].extend([
-                MetricCheck(check_id="idx.canonical_present", weight=2.0, passed=(has_canonical == total)),
-                MetricCheck(check_id="idx.indexable_pages", weight=1.5, passed=(indexable_ok == total)),
+                MetricCheck(check_id="idx.canonical_present", weight=2.0, passed=(has_canonical / total >= 0.90)),
+                MetricCheck(check_id="idx.indexable_pages", weight=1.5, passed=(indexable_ok / total >= 0.70)),
             ])
             checks_by_dim["on_page_seo"].extend([
-                MetricCheck(check_id="onpage.title_present", weight=2.0, passed=(has_title == total)),
-                MetricCheck(check_id="onpage.meta_desc_present", weight=1.5, passed=(has_meta == total)),
-                MetricCheck(check_id="onpage.single_h1", weight=1.5, passed=(has_h1 == total)),
-                MetricCheck(check_id="onpage.image_alt_coverage", weight=1.0, passed=(alt_ok == total)),
+                MetricCheck(check_id="onpage.title_present", weight=2.0, passed=(has_title / total >= 0.95)),
+                MetricCheck(check_id="onpage.meta_desc_present", weight=1.5, passed=(has_meta / total >= 0.80)),
+                MetricCheck(check_id="onpage.single_h1", weight=1.5, passed=(has_h1 / total >= 0.85)),
+                MetricCheck(check_id="onpage.image_alt_coverage", weight=1.0, passed=(alt_ok / total >= 0.80)),
             ])
             checks_by_dim["content_quality_intent"].extend([
-                MetricCheck(check_id="content.non_thin_depth", weight=2.0, passed=(good_content == total)),
+                MetricCheck(check_id="content.non_thin_depth", weight=2.0, passed=(good_content / total >= 0.75)),
+                MetricCheck(check_id="content.intent_alignment", weight=1.5, passed=(has_intent_or_path / total >= 0.75)),
+                MetricCheck(check_id="content.cannibalization_freedom", weight=1.5, passed=(duplicate_titles == 0)),
+                MetricCheck(check_id="content.semantic_structure", weight=1.0, passed=(has_heading_structure / total >= 0.75)),
             ])
             checks_by_dim["internal_linking_architecture"].extend([
-                MetricCheck(check_id="links.outbound_connectivity", weight=1.5, passed=(has_links == total)),
+                MetricCheck(check_id="links.outbound_connectivity", weight=1.5, passed=(has_links / total >= 0.85)),
             ])
             checks_by_dim["structured_data_entities"].extend([
                 MetricCheck(check_id="schema.jsonld_present", weight=1.5, passed=(has_schema > 0)),
@@ -380,6 +417,7 @@ class MathematicalScoreEngine:
 
         # Incorporate confirmed findings as weighted failed checks mapped to their dimension
         sev_weight = {"CRITICAL": 3.0, "HIGH": 2.0, "MEDIUM": 1.25, "LOW": 0.75, "INFO": 0.0}
+        seen_dim_rules: Set[Tuple[str, str]] = set()
         for f in findings:
             sev = str(f.get("severity") or "MEDIUM").upper()
             status = str(f.get("status") or f.get("verification_status") or "VERIFIED").upper()
@@ -391,8 +429,12 @@ class MathematicalScoreEngine:
             rule_id = str(f.get("rule_id") or f.get("finding_id") or "finding").lower()
             cat = str(f.get("category") or "").upper()
             rc_id = f.get("root_cause_id")
-            ev_ids = f.get("evidence_ids") or f.get("evidence_refs") or []
             dim_id = self._map_finding_to_dimension(rule_id, cat)
+            dedup_key = (dim_id, str(rc_id or rule_id))
+            if dedup_key in seen_dim_rules:
+                continue
+            seen_dim_rules.add(dedup_key)
+            ev_ids = f.get("evidence_ids") or f.get("evidence_refs") or []
             checks_by_dim[dim_id].append(
                 MetricCheck(
                     check_id=f"finding.{rule_id}",
@@ -457,9 +499,12 @@ class MathematicalScoreEngine:
         blob = f"{rule_id} {category}".lower()
         if any(k in blob for k in ("canonical", "noindex", "indexab", "x_robots", "x-robots", "sitemap")):
             return "indexation_canonicalization"
+        # Prioritize cannibalization, intent, thin content, and topical authority before generic title/headings
+        if any(k in blob for k in ("thin", "intent", "cannibal", "topical", "duplicate_content", "low_information_gain")):
+            return "content_quality_intent"
         if any(k in blob for k in ("title", "meta", "h1", "heading", "alt", "image", "url_opt")):
             return "on_page_seo"
-        if any(k in blob for k in ("thin", "content", "intent", "semantic", "topical", "cannibal", "duplicate_content")):
+        if "content" in blob:
             return "content_quality_intent"
         if any(k in blob for k in ("link", "orphan", "depth", "anchor")):
             return "internal_linking_architecture"

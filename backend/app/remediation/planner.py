@@ -35,8 +35,11 @@ class RemediationPlanner:
         business_profile: BusinessProfile,
         target_url: str,
         pages: Optional[List[PageEvidence]] = None,
+        competitor_context: Optional[Dict[str, Any]] = None,
     ) -> RemediationPlan:
-        raw_patches = self.patcher.generate_patches(findings, business_profile, target_url, pages=pages)
+        raw_patches = self.patcher.generate_patches(
+            findings, business_profile, target_url, pages=pages, competitor_context=competitor_context
+        )
         validated_patches: List[CodePatch] = []
         val_results: Dict[str, PatchValidationResult] = {}
         all_ok = True

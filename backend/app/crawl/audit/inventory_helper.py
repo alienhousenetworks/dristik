@@ -21,6 +21,20 @@ def _normalize_registry_url(url: str) -> str:
     return cleaned
 
 
+def _safe_int(val: Any, default: int = 0) -> int:
+    """Safely extracts integer count, filtering out None, bool, strings, or test mocks."""
+    if val is None or isinstance(val, bool) or hasattr(val, "_mock_return_value"):
+        return default
+    try:
+        if isinstance(val, (int, float)):
+            return int(val)
+        if isinstance(val, str) and val.strip().isdigit():
+            return int(val.strip())
+    except (ValueError, TypeError):
+        pass
+    return default
+
+
 def get_canonical_crawl_inventory(
     manifest: Optional[Any] = None,
     report: Optional[Any] = None
@@ -76,7 +90,7 @@ def get_canonical_crawl_inventory(
         disc_urls_count,
         pages_crawled,
     ]
-    disc_total = max([int(x) for x in disc_candidates if isinstance(x, (int, float)) and not hasattr(x, "_mock_return_value")] or [pages_crawled or 1])
+    disc_total = max([_safe_int(x, -1) for x in disc_candidates if _safe_int(x, -1) >= 0] or [pages_crawled])
 
     # Tested pages
     tested_candidates = [
@@ -87,24 +101,25 @@ def get_canonical_crawl_inventory(
         _mget(manifest, "total_pages_crawled"),
         pages_crawled,
     ]
-    tested_pages = max([int(x) for x in tested_candidates if isinstance(x, (int, float)) and not hasattr(x, "_mock_return_value")] or [pages_crawled])
+    tested_pages = max([_safe_int(x, -1) for x in tested_candidates if _safe_int(x, -1) >= 0] or [pages_crawled])
 
     # Ensure discovered is at least tested
     if tested_pages > disc_total:
         disc_total = tested_pages
 
     raw_excluded = crawl_inv_dict.get("excluded_total", getattr(manifest, "excluded_total", 0) if manifest else 0)
-    excluded_total = int(raw_excluded) if isinstance(raw_excluded, (int, float)) and not hasattr(raw_excluded, "_mock_return_value") else 0
+    excluded_total = _safe_int(raw_excluded)
 
     raw_eligible = crawl_inv_dict.get("eligible_total")
-    if isinstance(raw_eligible, (int, float)) and not hasattr(raw_eligible, "_mock_return_value") and int(raw_eligible) > 0:
-        eligible_total = max(tested_pages, int(raw_eligible))
+    eligible_candidate = _safe_int(raw_eligible)
+    if eligible_candidate > 0:
+        eligible_total = max(tested_pages, eligible_candidate)
     else:
         eligible_total = max(tested_pages, disc_total - excluded_total)
 
     untested_pages = max(0, eligible_total - tested_pages)
     raw_failed = crawl_inv_dict.get("failed_total", crawl_inv_dict.get("failed_pages", crawl_inv_dict.get("total_errors", 0)))
-    failed_pages = int(raw_failed) if isinstance(raw_failed, (int, float)) and not hasattr(raw_failed, "_mock_return_value") else 0
+    failed_pages = _safe_int(raw_failed)
 
     # Coverage: sample_coverage_pct and discovery_coverage_pct computed separately
     from app.seo.audit.discovery.coverage import calculate_crawl_coverage
@@ -145,13 +160,13 @@ def get_canonical_crawl_inventory(
         sampling_status = "FULL_CRAWL"
 
     rendered_cand = crawl_inv_dict.get("rendered_pages", crawl_inv_dict.get("total_rendered", tested_pages))
-    rendered_pages = int(rendered_cand) if isinstance(rendered_cand, (int, float)) and not hasattr(rendered_cand, "_mock_return_value") else tested_pages
+    rendered_pages = _safe_int(rendered_cand, tested_pages)
 
     raw_sitemap = crawl_inv_dict.get("discovered_via_sitemap", crawl_inv_dict.get("discovered_via_sitemap_count"))
     if isinstance(raw_sitemap, list):
         discovered_sitemap = len(raw_sitemap)
-    elif isinstance(raw_sitemap, (int, float)) and not hasattr(raw_sitemap, "_mock_return_value"):
-        discovered_sitemap = int(raw_sitemap)
+    elif _safe_int(raw_sitemap, -1) >= 0:
+        discovered_sitemap = _safe_int(raw_sitemap)
     else:
         raw_sm_urls = getattr(manifest, "sitemap_urls", None) if manifest else None
         discovered_sitemap = len(raw_sm_urls) if isinstance(raw_sm_urls, (list, set, tuple)) else 0
@@ -159,16 +174,16 @@ def get_canonical_crawl_inventory(
     raw_links = crawl_inv_dict.get("discovered_via_links")
     if isinstance(raw_links, list):
         discovered_links = len(raw_links)
-    elif isinstance(raw_links, (int, float)) and not hasattr(raw_links, "_mock_return_value"):
-        discovered_links = int(raw_links)
+    elif _safe_int(raw_links, -1) >= 0:
+        discovered_links = _safe_int(raw_links)
     else:
         discovered_links = max(0, disc_total - discovered_sitemap)
 
     raw_seed = crawl_inv_dict.get("seed_urls_count", 1)
-    seed_urls_count = int(raw_seed) if isinstance(raw_seed, (int, float)) and not hasattr(raw_seed, "_mock_return_value") else 1
+    seed_urls_count = _safe_int(raw_seed, 1)
 
     deeply_inspected_cand = crawl_inv_dict.get("urls_deeply_inspected", pages_crawled)
-    urls_deeply_inspected = int(deeply_inspected_cand) if isinstance(deeply_inspected_cand, (int, float)) and not hasattr(deeply_inspected_cand, "_mock_return_value") else pages_crawled
+    urls_deeply_inspected = _safe_int(deeply_inspected_cand, pages_crawled)
 
     findings_list = list(getattr(report, "findings", None) or []) if report else []
     verified_urls = set()

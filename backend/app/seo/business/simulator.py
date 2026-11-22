@@ -20,6 +20,7 @@ class StrategySimulator:
         critical_count = sum(1 for f in findings if f.severity == "CRITICAL")
         high_count = sum(1 for f in findings if f.severity == "HIGH")
 
+        # shortcut: static heuristic gain projections ((crit*5)+(high*2)), upgrade when dynamic Bayesian causal graph is loaded
         # 1. Conservative: Fix only Critical technical & schema issues
         conservative_gain = min(12.0, (critical_count * 5.0) + (high_count * 2.0))
         conservative_score = min(98.0, round(current_score + conservative_gain, 1))

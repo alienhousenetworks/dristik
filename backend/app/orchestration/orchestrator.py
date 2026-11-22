@@ -1792,50 +1792,9 @@ class AnalysisOrchestrator:
                 return
 
             # -----------------------------------------------------------------
-            # Step 16: Validated Remediation & Roadmaps (built on COMPLETE findings)
+            # Step 16: Digital Twin, Timeline & Preliminary Narrative Synthesis
+            # (Unified Remediation Pack is deferred to Step 25b post-4-pillars & post-competitor analysis)
             # -----------------------------------------------------------------
-            controller.mark_node_status("node_code_patch_pack", GraphNodeStatus.RUNNING)
-            controller.log_activity("node_code_patch_pack", "running", "patches.start", "Generating autonomous code patch pack...")
-
-            remediation_plan = self.remediation_planner.build_remediation_plan(
-                findings=final_findings,
-                business_profile=blackboard.business_profile,
-                target_url=website_url,
-                pages=eval_pages,
-            )
-            blackboard.code_patches = remediation_plan.patches
-
-            remediation_patches = patch_engine.generate_patches(
-                findings=final_findings,
-                business_profile=blackboard.business_profile,
-                website_url=website_url,
-                commercial_evals=getattr(blackboard, "commercial_evaluations", None),
-                pages=eval_pages,
-                resolved_entity=blackboard.resolved_entity,
-            )
-            blackboard.remediation_patches = remediation_patches
-
-            controller.mark_node_status("node_code_patch_pack", GraphNodeStatus.COMPLETED)
-            controller.log_activity("node_code_patch_pack", "success", "patches.complete", f"Generated {len(remediation_plan.patches)} code patches and {len(remediation_patches)} universal remediation patches")
-
-            if await _check_pause():
-                return
-
-            controller.mark_node_status("node_final_report_assembly", GraphNodeStatus.RUNNING)
-            controller.log_activity("node_final_report_assembly", "running", "report.assemble", "Assembling executive report and enforcing Validation Gate...")
-
-            r7, r30, r90 = self.roadmap_builder.build_roadmap(final_findings, blackboard.executive_narrative)
-            top_10_plan = self.roadmap_builder.build_top_10_actions(
-                final_findings,
-                blackboard.business_profile,
-                overall_scores,
-                blackboard.executive_narrative,
-                crawl_summary=manifest.crawl_health if manifest else None,
-            )
-            blackboard.roadmap_7_days = r7
-            blackboard.roadmap_30_days = r30
-            blackboard.roadmap_90_days = r90
-
             # Digital Twin & Temporal Timeline Update
             if domain not in self.digital_twins:
                 self.digital_twins[domain] = WebsiteDigitalTwin(
@@ -1851,13 +1810,6 @@ class AnalysisOrchestrator:
                     domain,
                     analysis_id,
                 )
-            twin.update_from_mission(
-                blackboard.business_profile,
-                blackboard.pages,
-                overall_scores,
-                final_findings,
-                remediation_plan.patches
-            )
 
             if domain not in self.timelines:
                 self.timelines[domain] = WebsiteIntelligenceTimeline(domain)
@@ -1907,7 +1859,7 @@ class AnalysisOrchestrator:
                 honest_scores=honest_scores,
                 what_to_ignore=narrative_data.get("consultant_advice_what_to_ignore", ""),
                 top_bottleneck=blackboard.blackboard_state.get("causal_root_cause", {}).get("bottleneck", ""),
-                top_actions=[r.title for r in r7[:3]],
+                top_actions=[r.title for r in (blackboard.roadmap_7_days or [])[:3]] if getattr(blackboard, "roadmap_7_days", None) else [f.title for f in final_findings[:3]],
                 report_url=website_url
             )
 
@@ -2193,6 +2145,82 @@ class AnalysisOrchestrator:
             from app.reports.evidence_ledger import merge_finding_evidence
             merge_finding_evidence(evidence_ledger_map, final_findings)
 
+            # -----------------------------------------------------------------
+            # Step 25b: Unified Remediation Pack & Multi-Pillar Action Roadmap
+            # (Generated strictly AFTER SEO, GEO, AEO, CRO and Competitors are understood by AI)
+            # -----------------------------------------------------------------
+            controller.mark_node_status("node_code_patch_pack", GraphNodeStatus.RUNNING)
+            controller.log_activity(
+                "node_code_patch_pack",
+                "running",
+                "patches.start",
+                "Synthesizing unified remediation pack across SEO, GEO, AEO, CRO, and Competitor insights..."
+            )
+
+            all_strategic_findings = list(final_findings)
+            if hasattr(blackboard, "competitor_findings") and blackboard.competitor_findings:
+                for cf in blackboard.competitor_findings:
+                    if cf not in all_strategic_findings:
+                        all_strategic_findings.append(cf)
+
+            competitor_ctx = {
+                "parity_matrix": competitor_seo_parity_rep if "competitor_seo_parity_rep" in locals() else None,
+                "bakeoff": getattr(blackboard, "competitor_bakeoff", None),
+                "domains": competitor_domains if "competitor_domains" in locals() else [],
+            }
+
+            remediation_plan = self.remediation_planner.build_remediation_plan(
+                findings=all_strategic_findings,
+                business_profile=blackboard.business_profile,
+                target_url=website_url,
+                pages=eval_pages,
+                competitor_context=competitor_ctx,
+            )
+            blackboard.code_patches = remediation_plan.patches
+
+            remediation_patches = patch_engine.generate_patches(
+                findings=all_strategic_findings,
+                business_profile=blackboard.business_profile,
+                website_url=website_url,
+                commercial_evals=getattr(blackboard, "commercial_evaluations", None),
+                pages=eval_pages,
+                resolved_entity=blackboard.resolved_entity,
+                competitor_context=competitor_ctx,
+            )
+            blackboard.remediation_patches = remediation_patches
+
+            controller.mark_node_status("node_code_patch_pack", GraphNodeStatus.COMPLETED)
+            controller.log_activity(
+                "node_code_patch_pack",
+                "success",
+                "patches.complete",
+                f"Generated {len(remediation_plan.patches)} code patches and {len(remediation_patches)} universal remediation patches"
+            )
+
+            r7, r30, r90 = self.roadmap_builder.build_roadmap(all_strategic_findings, blackboard.executive_narrative)
+            top_10_plan = self.roadmap_builder.build_top_10_actions(
+                all_strategic_findings,
+                blackboard.business_profile,
+                honest_scores if honest_scores is not None else overall_scores,
+                blackboard.executive_narrative,
+                crawl_summary=manifest.crawl_health if manifest else None,
+            )
+            blackboard.roadmap_7_days = r7
+            blackboard.roadmap_30_days = r30
+            blackboard.roadmap_90_days = r90
+
+            if "twin" in locals() and twin is not None:
+                twin.update_from_mission(
+                    blackboard.business_profile,
+                    blackboard.pages,
+                    overall_scores,
+                    all_strategic_findings,
+                    remediation_plan.patches,
+                )
+
+            controller.mark_node_status("node_final_report_assembly", GraphNodeStatus.RUNNING)
+            controller.log_activity("node_final_report_assembly", "running", "report.assemble", "Assembling executive report and enforcing Validation Gate...")
+
             report = ExecutiveReport(
                 chapter_narratives=chapter_narratives_map,
                 report_id=report_uuid,
@@ -2353,6 +2381,57 @@ class AnalysisOrchestrator:
                 report.consistency_report = consistency_rep
             except Exception as conc_err:
                 logger.warning("CrossChapterConsistencyEngine reconciliation error: %s", conc_err)
+
+            # Re-sync unified remediation plan, code patches, and roadmaps with post-reconciliation findings
+            try:
+                competitor_ctx = {
+                    "parity_matrix": competitor_seo_parity_rep if "competitor_seo_parity_rep" in locals() else None,
+                    "bakeoff": getattr(blackboard, "competitor_bakeoff", None),
+                    "domains": competitor_domains if "competitor_domains" in locals() else [],
+                }
+                remediation_plan = self.remediation_planner.build_remediation_plan(
+                    findings=report.findings,
+                    business_profile=blackboard.business_profile,
+                    target_url=website_url,
+                    pages=eval_pages,
+                    competitor_context=competitor_ctx,
+                )
+                report.code_patches = remediation_plan.patches
+                report.remediation_patches = patch_engine.generate_patches(
+                    findings=report.findings,
+                    business_profile=blackboard.business_profile,
+                    website_url=website_url,
+                    commercial_evals=getattr(blackboard, "commercial_evaluations", None),
+                    pages=eval_pages,
+                    resolved_entity=blackboard.resolved_entity,
+                    competitor_context=competitor_ctx,
+                )
+                r7, r30, r90 = self.roadmap_builder.build_roadmap(report.findings, blackboard.executive_narrative)
+                report.roadmap_7_days = r7
+                report.roadmap_30_days = r30
+                report.roadmap_90_days = r90
+                report.top_10_plan = self.roadmap_builder.build_top_10_actions(
+                    report.findings,
+                    blackboard.business_profile,
+                    honest_scores if honest_scores is not None else overall_scores,
+                    blackboard.executive_narrative,
+                    crawl_summary=manifest.crawl_health if manifest else None,
+                )
+            except Exception as resync_err:
+                logger.warning("Remediation roadmap post-reconciliation re-sync note: %s", resync_err)
+
+            # Synchronize story narrative score claim with the dossier composite
+            try:
+                from app.domain.scoring.displayed_score import displayed_composite, align_story_score
+                comp_score = displayed_composite(report)
+                if comp_score is not None and getattr(report, "story_summary", None):
+                    report.story_summary = align_story_score(
+                        report.story_summary,
+                        getattr(report.scores, "overall_score", None),
+                        comp_score
+                    )
+            except Exception as story_sync_err:
+                logger.warning("Story summary score alignment note: %s", story_sync_err)
 
             # -------------------------------------------------------------
             # Enforce VALIDATION GATE with Certified Zero-Fake Check

@@ -2101,14 +2101,25 @@ def render_seo_audit_book(report: Any) -> str:
         score_disp = "—"
         score_note = "No sealed score was stored."
 
-    raw_domain = _get(report, "domain", "") or "Target domain"
-    clean_domain = str(raw_domain).replace("https://", "").replace("http://", "").split("/")[0]
-    domain = _esc(clean_domain)
-    brand_name = _esc(getattr(_get(report, "business_profile", None), "business_name", None) or clean_domain)
-    generated_at = str(_get(report, "generated_at", None) or "Measured on audit execution")
-    audit_date = generated_at[:10] if len(generated_at) >= 10 else generated_at
-    analysis_id = str(_get(report, "analysis_id", None) or _get(report, "report_id", "DST-SEO"))
-    report_ref = analysis_id[:12].upper()
+    from app.reports.snapshot_provenance import (
+        format_audit_execution_metadata,
+        render_snapshot_provenance_bar,
+    )
+
+    snap = format_audit_execution_metadata(report)
+    domain = _esc(snap.domain)
+    brand_name = _esc(snap.brand_name)
+    audit_date = snap.execution_timestamp
+    analysis_id = snap.run_id
+    report_ref = snap.report_ref
+    seo_snap_score = snap.score_for_section("seo")
+    provenance_bar = render_snapshot_provenance_bar(
+        snap,
+        section_key="seo",
+        section_label="SEO",
+        section_score=seo_snap_score if seo_snap_score is not None else technical_score,
+        section_findings_count=snap.findings_for_section("seo"),
+    )
 
     toolbar = _render_screen_toolbar(domain, analysis_id)
     cover = _render_seo_cover(
@@ -2144,9 +2155,11 @@ def render_seo_audit_book(report: Any) -> str:
         </div>
         <div class="dossier-meta-bar">
             <span>AUDITED DOMAIN: <strong>{domain}</strong></span>
-            <span>SAMPLE: <strong>REPRESENTATIVE</strong></span>
-            <span>PROVENANCE: <strong>STORED EVIDENCE</strong></span>
+            <span>RUN ID: <strong>{_esc(report_ref)}</strong></span>
+            <span>EXECUTION: <strong>{_esc(audit_date)}</strong></span>
+            <span>SCOPE: <strong>{_esc(snap.crawl_scope_summary)}</strong></span>
         </div>
+        {provenance_bar}
         <div class="exec-scorecard-grid">
             <div class="kpi-score-card">
                 <span class="kpi-label">{score_label}</span>

@@ -1132,6 +1132,11 @@ class SEOAuditOrchestrator:
             return {"overall_score": self.scorecard.overall_health_score, "score_status": self.scorecard.score_status}
 
         async def run_remediation_planner(ctx: Dict[str, Any]) -> Dict[str, Any]:
+            if ctx.get("is_unified_pipeline", False) or getattr(self.config, "defer_remediation", False):
+                self.remediation_tasks = []
+                self.events.emit("remediation.deferred", {"message": "SEO remediation deferred to Unified Cross-Pillar Remediation Pack"})
+                return {"tasks_count": 0, "status": "DEFERRED_TO_UNIFIED_PACK"}
+
             remed_engine = PostAuditRemediationEngine()
             self.remediation_tasks = remed_engine.synthesize_remediation_plan(
                 self._deduped_findings,

@@ -10,7 +10,7 @@ from typing import Any
 
 
 VALID_AGENT_STATUSES = {
-    "completed", "success", "partial", "unavailable", "skipped", "error", "failed"
+    "completed", "success", "partial", "unavailable", "unmeasured", "skipped", "error", "failed"
 }
 
 
@@ -56,7 +56,7 @@ def validate_agent_result(expected_agent_id: str, payload: Any) -> dict[str, Any
         }
 
     normalized_status = status.strip().lower()
-    if normalized_status in {"unavailable", "skipped", "error", "failed"} and claims:
+    if normalized_status in {"unavailable", "unmeasured", "skipped", "error", "failed"} and claims:
         return {
             "agent_id": expected_agent_id,
             "status": "error",

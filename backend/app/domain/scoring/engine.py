@@ -436,18 +436,25 @@ class ScoringEngine:
                                 unmatched_findings.remove(mf)
 
             # If any primary findings for this category didn't match any check keywords,
-            # attach them to the first graded or primary check in this category
+            # attach them to a suitable graded coverage check in this category rather than
+            # overriding specific binary checks like robots.txt or sitemaps.
             if unmatched_findings:
                 fallback_cid = None
                 for s_def in cat_def.subsections.values():
                     for c_def in s_def.checks:
-                        if c_def.check_type == "graded":
+                        if c_def.check_type == "graded" and c_def.check_id not in ("robots_txt_rfc9309", "sitemap_urls_valid_200"):
                             fallback_cid = c_def.check_id
                             break
-                        if fallback_cid is None:
-                            fallback_cid = c_def.check_id
                     if fallback_cid:
                         break
+                if not fallback_cid:
+                    for s_def in cat_def.subsections.values():
+                        for c_def in s_def.checks:
+                            if c_def.check_id not in ("robots_txt_rfc9309", "sitemap_urls_valid_200"):
+                                fallback_cid = c_def.check_id
+                                break
+                        if fallback_cid:
+                            break
                 if fallback_cid:
                     matched_findings_by_check.setdefault(fallback_cid, []).extend(unmatched_findings)
 
@@ -499,12 +506,16 @@ class ScoringEngine:
                         failed = 0
                     elif cid == "robots_txt_rfc9309":
                         robots_found = getattr(manifest, "robots_txt_found", None) if manifest is not None else None
+                        has_robot_defect = any(
+                            any(k in (f.title or "").lower() or k in (f.finding or f.description or "").lower() for k in ("robot", "disallow"))
+                            for f in check_findings
+                        )
                         if robots_found is False:
                             _record({
                                 "s": 0.0, "passed": 0, "failed": 1, "sample_size": 1,
                                 "evidence": [{"url": "robots.txt", "status": "FAIL", "detail": "robots.txt was not detected at the domain root."}],
                             })
-                        elif check_findings:
+                        elif check_findings and has_robot_defect:
                             _record(_finding_observation(check_findings))
                         elif robots_found is True:
                             _record({
@@ -513,6 +524,10 @@ class ScoringEngine:
                             })
                     elif cid == "sitemap_urls_valid_200":
                         sitemap_found = getattr(manifest, "sitemap_found", None) if manifest is not None else None
+                        has_sitemap_defect = any(
+                            any(k in (f.title or "").lower() or k in (f.finding or f.description or "").lower() for k in ("sitemap", "xml"))
+                            for f in check_findings
+                        )
                         if sitemap_found is False:
                             site_size = len(getattr(manifest, "pages", None) or pages_list)
                             if site_size <= 25:
@@ -525,7 +540,7 @@ class ScoringEngine:
                                     "s": 0.0, "passed": 0, "failed": 1, "sample_size": 1,
                                     "evidence": [{"url": "sitemap.xml", "status": "FAIL", "detail": "XML sitemap is missing or unreferenced."}],
                                 })
-                        elif check_findings:
+                        elif check_findings and has_sitemap_defect:
                             _record(_finding_observation(check_findings))
                         elif sitemap_found is True:
                             _record({

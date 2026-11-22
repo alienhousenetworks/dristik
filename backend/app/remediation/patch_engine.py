@@ -68,6 +68,7 @@ class UniversalPatchEngine:
         commercial_evals: Optional[List[CommercialQueryEvaluation]] = None,
         pages: Optional[List[Any]] = None,
         resolved_entity: Optional[Any] = None,
+        competitor_context: Optional[Dict[str, Any]] = None,
     ) -> List[RemediationPatch]:
         patches: List[RemediationPatch] = []
         pages_list = list(pages or [])

@@ -28,7 +28,8 @@ class GeoScoreDimension(BaseModel):
 
 class TwoLayerGeoScorecardReport(BaseModel):
     # Layer 1: Content Readiness
-    layer_1_readiness_score: float
+    layer_1_readiness_score: Optional[float] = None
+    layer_1_measured_subset_score: Optional[float] = None
     layer_1_readiness_grade: str
     layer_1_status: str = "MEASURED"
     
@@ -135,8 +136,17 @@ class GeoScorecardEngine:
                     )
                 )
 
-        l1_composite = round(l1_weighted / l1_weight_used, 1) if l1_weight_used > 0 else 0.0
-        l1_status = "MEASURED" if l1_weight_used > 0 else "NOT_MEASURED"
+        l1_subset = round(l1_weighted / l1_weight_used, 1) if l1_weight_used > 0 else None
+        l1_complete = abs(l1_weight_used - 1.0) < 1e-9
+        if l1_complete:
+            l1_composite = l1_subset
+            l1_status = "MEASURED"
+        elif l1_weight_used > 0:
+            l1_composite = None
+            l1_status = "PARTIAL"
+        else:
+            l1_composite = None
+            l1_status = "NOT_MEASURED"
 
         # 2. Compute Layer 2: Observed AI Visibility (Guarded — partial dimensions supported honestly)
         l2_scores = {
@@ -180,11 +190,14 @@ class GeoScorecardEngine:
                         )
                     )
 
-            l2_composite = round(l2_weighted / l2_weight_used, 1) if l2_weight_used > 0 else None
-            l2_status = "MEASURED" if len(measured_l2) == len(cls.LAYER_2_DIMENSIONS) else "PARTIAL"
+            l2_complete = len(measured_l2) == len(cls.LAYER_2_DIMENSIONS)
+            l2_composite = round(l2_weighted / l2_weight_used, 1) if l2_complete and l2_weight_used > 0 else None
+            l2_status = "MEASURED" if l2_complete else "PARTIAL"
+            l1_text = f"{l1_composite}/100" if l1_composite is not None else "withheld"
+            l2_text = f"{l2_composite}/100" if l2_composite is not None else "withheld"
             firewall_stmt = (
-                f"Both layers assessed separately: Layer 1 Content Readiness ({l1_composite}/100) reflects site extractability; "
-                f"Layer 2 Observed AI Visibility ({l2_composite}/100, {len(measured_l2)}/{len(cls.LAYER_2_DIMENSIONS)} dims) reflects verified live responses. "
+                f"Both layers assessed separately: Layer 1 Content Readiness ({l1_text}) reflects site extractability; "
+                f"Layer 2 Observed AI Visibility ({l2_text}, {len(measured_l2)}/{len(cls.LAYER_2_DIMENSIONS)} dims) reflects verified live responses. "
                 "The two layers are never merged into an artificial score."
             )
         else:
@@ -205,16 +218,18 @@ class GeoScorecardEngine:
 
             l2_composite = None
             l2_status = "NOT_MEASURED"
+            l1_text = f"{l1_composite}/100" if l1_composite is not None else "withheld"
             firewall_stmt = (
                 "Layer 1 Content Readiness is measured at "
-                f"{l1_composite}/100 based on crawled first-party architecture. "
+                f"{l1_text} based on crawled first-party architecture. "
                 "Layer 2 Observed AI Visibility is NOT_MEASURED because live answer probing was not executed. "
                 "The two layers are never merged into an artificial score."
             )
 
         return TwoLayerGeoScorecardReport(
             layer_1_readiness_score=l1_composite,
-            layer_1_readiness_grade=cls._grade(l1_composite) if l1_weight_used > 0 else "N/A",
+            layer_1_measured_subset_score=l1_subset,
+            layer_1_readiness_grade=cls._grade(l1_composite) if l1_complete else "N/A",
             layer_1_status=l1_status,
             layer_2_visibility_score=l2_composite,
             layer_2_visibility_grade=cls._grade(l2_composite),

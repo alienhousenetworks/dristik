@@ -273,7 +273,12 @@ export function SeoWorkspaceView({
       {activeTab === 'architecture' && <SeoCrawlArchitecture report={report} />}
       {activeTab === 'onpage' && <SeoOnPageExperience report={report} />}
       {activeTab === 'intelligence' && (
-        <SeoIntelligenceWorkspace report={report} onOpenConnectors={() => setActiveTab('integrations')} />
+        <SeoIntelligenceWorkspace
+          report={report}
+          scorecard={scorecard}
+          onOpenConnectors={() => setActiveTab('integrations')}
+          onNavigateTab={handleTabChange}
+        />
       )}
       {activeTab === 'market' && <SeoMarketIntelligence report={report} />}
       {activeTab === 'gsc' && (

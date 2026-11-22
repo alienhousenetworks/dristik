@@ -952,6 +952,15 @@ def enrich_report_for_pdf(
     if getattr(report, "_seo_pdf_enriched", False):
         return report
 
+    # Capture the immutable parent execution snapshot metadata before cloning/enrichment
+    # so standalone SEO reports keep the exact Run ID, timestamp, configuration, and scores.
+    parent_snapshot_meta = None
+    try:
+        from app.reports.snapshot_provenance import format_audit_execution_metadata
+        parent_snapshot_meta = format_audit_execution_metadata(report)
+    except Exception:
+        parent_snapshot_meta = None
+
     bundle = collect_unified_seo_pdf_bundle(
         report=report,
         org_id=org_id,
@@ -1026,6 +1035,8 @@ def enrich_report_for_pdf(
     try:
         object.__setattr__(target, "_unified_seo_bundle", bundle)
         object.__setattr__(target, "_seo_pdf_enriched", True)
+        if parent_snapshot_meta is not None:
+            object.__setattr__(target, "_execution_snapshot_meta", parent_snapshot_meta)
     except Exception:
         pass
 

@@ -310,16 +310,42 @@ def build_cro_publication_document(report: Any, intel: Optional[CroIntelligenceR
     )
     from app.reports.publishing_engine import ChapterSpec, PartSpec, PublicationDocument, PublicationMetadata
 
+    from app.reports.snapshot_provenance import (
+        format_audit_execution_metadata,
+        render_snapshot_provenance_bar,
+    )
+
     intel = intel or build_from_executive_report(report)
+    snap = format_audit_execution_metadata(report)
     man = build_publication_manifest(report, "CRO")
     status = compute_cro_status(intel)
     exp = next((d for d in intel.dimensions if d.id == "experience"), None)
-    score = exp.score if exp else None
+    score = snap.score_for_section("cro")
+    if score is None and exp is not None:
+        score = exp.score
+    comp_ref = (
+        f"{snap.composite_score_display} · GRADE {snap.composite_grade}"
+        if snap.composite_score is not None and snap.composite_grade != "NOT GRADED"
+        else snap.composite_score_display
+    )
     meta = PublicationMetadata(
         family="CRO", title=man["title"], subtitle=man["subtitle"], domain=man["domain"], brand_name=man["brand_name"],
-        audit_date=man["audit_date"], report_ref=man["report_ref"], classification=man["classification"], purpose=man["purpose"],
+        audit_date=snap.execution_date, report_ref=snap.report_ref, classification=man["classification"], purpose=man["purpose"],
         score_display=f"{score:.1f}" if score is not None else "NOT MEASURED", grade="NOT GRADED", overall_score=score,
-        pages_crawled=intel.sample_size, findings_count=len(intel.findings),
+        pages_crawled=snap.pages_inspected if snap.pages_inspected is not None else intel.sample_size,
+        findings_count=len(intel.findings),
+        execution_timestamp=snap.execution_timestamp,
+        snapshot_id=snap.snapshot_id,
+        configuration_summary=snap.configuration_summary,
+        crawl_scope_summary=snap.crawl_scope_summary,
+        composite_score_reference=comp_ref,
+    )
+    cro_provenance_bar = render_snapshot_provenance_bar(
+        snap,
+        section_key="cro",
+        section_label="CRO",
+        section_score=score,
+        section_findings_count=len(intel.findings),
     )
 
     cov = intel.coverage or {}
@@ -340,6 +366,7 @@ def build_cro_publication_document(report: Any, intel: Optional[CroIntelligenceR
         for f in intel.findings[:15]
     ) or "<li>No finding met the evidence bar.</li>"
     exec_html = (
+        f'{cro_provenance_bar}'
         f'<p style="font-size:9pt;">{_esc(intel.scope_note)} Business model: <strong>{_esc(intel.business_model)}</strong> ({_esc(intel.model_basis)}).</p>'
         f'<div class="card"><div class="card-kicker">COVERAGE</div><p>{_esc(cov.get("inspected_pages"))} page(s) inspected of '
         f'{_esc(cov.get("discovered_urls") if cov.get("discovered_urls") is not None else "unknown")} discovered ({_esc(cov.get("status"))}). '

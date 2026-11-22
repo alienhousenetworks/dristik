@@ -39,11 +39,12 @@ class AeoDimensionResult(BaseModel):
 
 
 class AeoScorecardReport(BaseModel):
-    overall_score: float  # Weighted score across measured dimensions
+    overall_score: Optional[float] = None
+    measured_subset_score: Optional[float] = None
     overall_grade: str
     assessment_status: str  # "FULL_ASSESSMENT", "PARTIAL_ASSESSMENT"
     coverage_percentage: float  # e.g. 75.0% or 100.0%
-    track_a_readiness_score: float
+    track_a_readiness_score: Optional[float] = None
     track_b_live_score: Optional[float] = None
     is_live_tested: bool
     dimension_breakdown: List[AeoDimensionResult] = Field(default_factory=list)
@@ -147,28 +148,35 @@ class AeoScorecardEngine:
                     )
                 )
 
-        composite_score = round(weighted_sum / max(measured_weight, 0.001), 1)
-        track_a_score = round(track_a_sum / max(track_a_weight, 0.001), 1)
-        track_b_score = round(track_b_sum / max(track_b_weight, 0.001), 1) if track_b_weight > 0 else None
+        track_a_expected = sum(spec["weight"] for spec in cls.DIMENSION_SPECS.values() if spec["track"] == "TRACK_A_CONTENT_READINESS")
+        track_b_expected = sum(spec["weight"] for spec in cls.DIMENSION_SPECS.values() if spec["track"] == "TRACK_B_LIVE_OUTCOMES")
+        track_a_complete = abs(track_a_weight - track_a_expected) < 1e-9 and track_a_expected > 0
+        track_b_complete = live_testing_ran and abs(track_b_weight - track_b_expected) < 1e-9 and track_b_expected > 0
+        track_a_score = round(track_a_sum / track_a_weight, 1) if track_a_complete else None
+        track_b_score = round(track_b_sum / track_b_weight, 1) if track_b_complete else None
+        measured_subset_score = round(weighted_sum / measured_weight, 1) if measured_weight > 0 else None
 
         coverage_pct = round(measured_weight * 100, 1)
         is_full = len(unmeasured) == 0
+        published_score = round(weighted_sum, 1) if is_full else None
 
         if is_full:
             status = "FULL_ASSESSMENT"
-            stmt = "Full 100% assessment completed across both Content Readiness and Live Answer Outcomes."
+            stmt = "Full assessment completed across both Content Readiness and Live Answer Outcomes."
         else:
             status = "PARTIAL_ASSESSMENT"
+            track_a_text = f"{track_a_score}/100" if track_a_score is not None else "incomplete"
             stmt = (
                 f"Partial assessment: {coverage_pct}% of weighting evaluated. "
-                "Track A Content Readiness is measured at "
-                f"{track_a_score}/100. Track B Live Answer Outcomes are NOT_TESTED. "
-                "Weights were not silently redistributed."
+                f"Track A Content Readiness is {track_a_text}. "
+                "Track B Live Answer Outcomes are NOT_TESTED. "
+                "The overall grade is withheld."
             )
 
         return AeoScorecardReport(
-            overall_score=composite_score,
-            overall_grade=cls._grade(composite_score),
+            overall_score=published_score,
+            measured_subset_score=measured_subset_score,
+            overall_grade=cls._grade(published_score),
             assessment_status=status,
             coverage_percentage=coverage_pct,
             track_a_readiness_score=track_a_score,

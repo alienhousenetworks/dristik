@@ -48,43 +48,44 @@ SECTIONS_SPEC = [
 def map_finding_to_chapter(f: Finding) -> str:
     """Deterministically routes an audit finding to its relevant master diagnostic chapter."""
     cat = str(f.category.value if hasattr(f.category, "value") else f.category).lower()
-    subcat = str(f.subcategory or "").lower()
-    title = str(f.finding_title or f.title or "").lower()
-    desc = str(f.description or "").lower()
-    combined = f"{cat} {subcat} {title} {desc}"
+    subcat = str(getattr(f, "subcategory", "") or "").lower()
+    rule_id = str(getattr(f, "rule_id", "") or "").lower()
+    title = str(getattr(f, "finding_title", None) or getattr(f, "title", "") or "").lower()
+    desc = str(getattr(f, "description", "") or "").lower()
+    combined = f"{cat} {subcat} {rule_id} {title} {desc}"
 
     # Ch 03: Indexability, Crawlability, Canonicalization, Robots, Sitemaps, Redirects, 404
-    if any(k in combined for k in ["canonical", "indexab", "noindex", "robots.txt", "sitemap", "redirect", "404", "status code", "crawl trap", "soft 404"]):
+    if any(k in combined for k in ["canonical", "indexab", "noindex", "robots.txt", "sitemap", "redirect", "404", "status code", "crawl trap", "soft 404", "crawlability", "http status", "5xx", "dns"]):
         return "03"
     # Ch 04: Site Architecture, Click Depth, Internal Linking, Orphans, Anchor Text
-    if any(k in combined for k in ["click depth", "internal link", "orphan", "anchor text", "link equity", "site architecture", "breadcrumb"]):
+    if any(k in combined for k in ["click depth", "internal link", "orphan", "anchor text", "link equity", "site architecture", "breadcrumb", "linking"]):
         return "04"
-    # Ch 05: On-Page, Metadata, Headings, Alt attributes
-    if any(k in combined for k in ["title tag", "meta desc", "heading", "h1", "h2", "h3", "alt attribute", "alt text", "image alt", "missing alt", "meta rollup"]):
-        return "05"
-    # Ch 06: Content Quality, Thin Content, Topical Authority, Copywriting, Fluff/Jargon
-    if any(k in combined for k in ["thin copy", "thin content", "word count", "copywriting", "topical authority", "cannibaliz", "jargon", "value proposition", "content depth"]):
-        return "06"
-    # Ch 07: Search Intent, Commercial Alignment, CTAs, Conversion
-    if any(k in combined for k in ["search intent", "commercial intent", "buyer journey", "conversion", "cta", "call to action"]):
-        return "07"
-    # Ch 08: Structured Data, Schema, JSON-LD, Microdata
-    if any(k in combined for k in ["schema", "json-ld", "structured data", "rich result", "microdata"]):
+    # Ch 08: Structured Data, Schema, JSON-LD, Microdata (match before onpage to avoid title/heading collisions)
+    if any(k in combined for k in ["schema", "json-ld", "structured data", "rich result", "microdata", "schema.org"]):
         return "08"
+    # Ch 10: Performance, Core Web Vitals, TTFB, LCP, CLS, Asset Dimensions
+    if any(k in combined for k in ["ttfb", "core web vital", "cwv", "lcp", "cls", "fid", "inp", "latency", "page speed", "missing dimension", "modern format", "webp", "avif", "compression", "render-blocking"]):
+        return "10"
+    # Ch 11: Security, HTTPS, HSTS, CSP, Headers, Protocol
+    if any(k in combined for k in ["security", "https", "hsts", "csp", "ssl", "tls", "x-frame", "x-content-type", "mixed content", "certificate", "transport-security"]):
+        return "11"
     # Ch 09: Mobile Usability, Viewport, Tap Target, Responsive
     if any(k in combined for k in ["viewport", "mobile", "tap target", "touch target", "responsive layout", "horizontal overflow"]):
         return "09"
-    # Ch 10: Performance, Core Web Vitals, TTFB, LCP, CLS, Asset Dimensions
-    if any(k in combined for k in ["ttfb", "core web vital", "lcp", "cls", "fid", "inp", "latency", "page speed", "missing dimension", "modern format", "webp", "avif"]):
-        return "10"
-    # Ch 11: Security, HTTPS, HSTS, CSP, Headers, Protocol
-    if any(k in combined for k in ["security", "https", "hsts", "csp", "ssl", "x-frame", "x-content-type", "mixed content", "certificate"]):
-        return "11"
+    # Ch 05: On-Page, Metadata, Headings, Alt attributes
+    if any(k in combined for k in ["title tag", "meta desc", "heading", "h1", "h2", "h3", "alt attribute", "alt text", "image alt", "missing alt", "meta rollup", "title missing", "duplicate title", "meta description"]):
+        return "05"
+    # Ch 06: Content Quality, Thin Content, Topical Authority, Copywriting, Fluff/Jargon
+    if any(k in combined for k in ["thin copy", "thin content", "word count", "copywriting", "topical authority", "cannibaliz", "jargon", "value proposition", "content depth", "low_information_gain", "content_quality"]):
+        return "06"
+    # Ch 07: Search Intent, Commercial Alignment, CTAs, Conversion
+    if any(k in combined for k in ["search intent", "commercial intent", "buyer journey", "conversion", "cta", "call to action", "pricing psychology", "form friction", "ux"]):
+        return "07"
     # Ch 12: International SEO, Hreflang
     if any(k in combined for k in ["hreflang", "international", "multilingual", "geotarget"]):
         return "12"
     # Ch 13: Local SEO, GBP, NAP
-    if any(k in combined for k in ["local seo", "google business profile", "gbp", "nap consistency", "map embed"]):
+    if any(k in combined for k in ["local seo", "google business profile", "gbp", "nap consistency", "map embed", "local citation"]):
         return "13"
     # Ch 14: E-commerce / Hydration Parity / JavaScript SEO
     if any(k in combined for k in ["ecommerce", "e-commerce", "product schema", "cart", "faceted", "hydration", "empty raw shell", "rendered dom", "client-injected"]):
@@ -93,13 +94,41 @@ def map_finding_to_chapter(f: Finding) -> str:
     if any(k in combined for k in ["serp", "snippet preview"]):
         return "15"
     # Ch 16: External Authority, Backlinks
-    if any(k in combined for k in ["backlink", "referring domain", "domain authority", "external authority"]):
+    if any(k in combined for k in ["backlink", "referring domain", "domain authority", "external authority", "trust flow", "citation flow"]):
         return "16"
     # Ch 17: Competitive Landscape
-    if any(k in combined for k in ["competitor", "parity matrix", "benchmark"]):
+    if any(k in combined for k in ["competitor", "parity matrix", "benchmark", "bakeoff"]):
         return "17"
-    # Ch 18: AI Search Engine Optimization (GEO)
-    if any(k in combined for k in ["geo", "generative engine", "answer engine", "chatgpt", "perplexity", "extractability"]):
+    # Ch 18: AI Search Engine Optimization (GEO & AEO)
+    if any(k in combined for k in ["geo", "aeo", "generative engine", "answer engine", "chatgpt", "perplexity", "extractability", "citability", "ai search", "llm"]):
+        return "18"
+    # Ch 19: Remediation Roadmap
+    if any(k in combined for k in ["roadmap", "remediation", "patch", "action plan"]):
+        return "19"
+    # Ch 20: Verification Protocol
+    if any(k in combined for k in ["verification", "regression", "quality gate", "qa"]):
+        return "20"
+
+    # Category-based fallback routing (prevents dumping everything into Ch 05)
+    if any(c in cat for c in ("schema", "structured")):
+        return "08"
+    if any(c in cat for c in ("technical", "crawl", "index")):
+        return "03"
+    if any(c in cat for c in ("link", "architecture")):
+        return "04"
+    if any(c in cat for c in ("content", "editorial")):
+        return "06"
+    if any(c in cat for c in ("ux", "experience", "conversion", "cro")):
+        return "07"
+    if any(c in cat for c in ("mobile", "responsive")):
+        return "09"
+    if any(c in cat for c in ("security",)):
+        return "11"
+    if any(c in cat for c in ("authority", "trust", "backlink")):
+        return "16"
+    if any(c in cat for c in ("competitor",)):
+        return "17"
+    if any(c in cat for c in ("geo", "aeo", "ai_search", "ai")):
         return "18"
 
     return "05"

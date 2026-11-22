@@ -15,6 +15,7 @@ from app.evidence_integrity import validate_score
 from app.aeo.reporting import aeo_cover_figure, render_aeo_audit_book
 from app.geo.reporting import geo_cover_figure, render_geo_audit_book
 from app.seo.reporting import render_seo_audit_book
+from app.cro.reporting import render_cro_audit_book
 from app.reports.plain_english_engine import (
     PlainEnglishEngine,
     generate_section_explanation,
@@ -551,8 +552,14 @@ class SectionReportGenerator:
     """
 
     def render_section_html(self, report: ExecutiveReport, section_key: str) -> str:
-        domain = report.domain or (report.website_url.replace("https://", "").replace("http://", "").split("/")[0])
-        date_str = report.generated_at or "Measured on audit execution"
+        from app.reports.snapshot_provenance import (
+            format_audit_execution_metadata,
+            render_snapshot_provenance_bar,
+        )
+
+        snap = format_audit_execution_metadata(report)
+        domain = snap.domain
+        date_str = snap.execution_timestamp
         section_key = (section_key or "seo").lower().strip()
 
         TITLES = {
@@ -566,27 +573,44 @@ class SectionReportGenerator:
         title, subtitle = TITLES.get(section_key, (f"{section_key.upper()} AUDIT DOSSIER", "Empirical Evidence & Remediation Blueprint"))
 
         # Section-specific metrics and findings
-        findings = [f for f in (report.findings or []) if self._matches_section(f, section_key)]
+        section_findings = [f for f in (report.findings or []) if self._matches_section(f, section_key)]
+        findings = list(section_findings)
 
         pages = report.crawl_manifest.pages if (report.crawl_manifest and report.crawl_manifest.pages) else (report.page_reports or [])
         is_seo = section_key == "seo"
         is_aeo = section_key == "aeo"
         is_geo = section_key == "geo"
+        is_cro = section_key == "cro"
         if is_aeo:
             score_val = aeo_cover_figure(report)
+            if score_val is None:
+                score_val = snap.score_for_section("aeo")
         elif is_geo:
             score_val = geo_cover_figure(report)
+            if score_val is None:
+                score_val = snap.score_for_section("geo")
         else:
-            score_val = self._get_section_score(report, section_key)
+            score_val = snap.score_for_section(section_key)
+            if score_val is None:
+                score_val = self._get_section_score(report, section_key)
         score_val = validate_score(score_val)
-        if is_seo or is_aeo or is_geo:
+        provenance_bar_html = render_snapshot_provenance_bar(
+            snap,
+            section_key=section_key,
+            section_label=section_key.upper(),
+            section_score=score_val,
+            section_findings_count=len(section_findings),
+        )
+        if is_seo or is_aeo or is_geo or is_cro:
             findings = list(report.findings or [])
             if is_seo:
                 book_html = render_seo_audit_book(report)
             elif is_aeo:
                 book_html = render_aeo_audit_book(report)
-            else:
+            elif is_geo:
                 book_html = render_geo_audit_book(report)
+            else:
+                book_html = render_cro_audit_book(report)
             findings_html = ""
             extra_html = ""
             badge = "EVIDENCE-GROUNDED // REPRESENTATIVE SAMPLE"
@@ -611,6 +635,13 @@ class SectionReportGenerator:
                     "An unmeasured chapter or platform is NOT_TESTED, not a zero.</div>"
                 )
                 footer_mark = "FULL GEO INDEX // SECTIONS 01–50 AND APPENDICES A–O"
+            elif is_cro:
+                score_label = "CRO EXPERIENCE SCORE"
+                score_note = (
+                    "<div class=\"score-note\">The score reflects measured conversion ergonomics, CTA hierarchy, "
+                    "form friction, and multi-device UX. Unmeasured dimensions are disclosed honestly.</div>"
+                )
+                footer_mark = "FULL CRO INDEX // 10 PILLARS & INSTITUTIONAL REGISTERS"
             else:
                 score_label = "SECTION HEALTH SCORE"
                 score_note = (
@@ -1447,7 +1478,7 @@ class SectionReportGenerator:
     </style>
 </head>
 <body>
-    {self._render_body_layout(report, section_key, is_seo, title, domain, subtitle, date_str, badge, score_label, score_html, score_note, pages, findings, assurance_label, assurance_value, standard_label, standard_value, findings_html, extra_html, book_html, footer_mark, business_callout_html)}
+    {self._render_body_layout(report, section_key, is_seo, title, domain, subtitle, date_str, badge, score_label, score_html, score_note, pages, findings, assurance_label, assurance_value, standard_label, standard_value, findings_html, extra_html, book_html, footer_mark, business_callout_html, provenance_bar_html, snap)}
 </body>
 </html>"""
 
@@ -1475,6 +1506,8 @@ class SectionReportGenerator:
         book_html: str,
         footer_mark: str,
         business_callout_html: str = "",
+        provenance_bar_html: str = "",
+        snap: Any = None,
     ) -> str:
         if is_seo or (book_html and book_html.strip()):
             return f"""
@@ -1484,15 +1517,21 @@ class SectionReportGenerator:
     <footer class="document-footer-meta" style="display:none;" data-footer-mark="{footer_mark}">{footer_mark}</footer>
     """
 
+        run_badge = f"{badge} · {snap.report_ref}" if snap is not None else badge
+        footer_run = f" · RUN REF: {snap.report_ref} · {snap.execution_date}" if snap is not None else ""
+        total_exec_findings = snap.total_findings_count if snap is not None else len(findings)
+
         return f"""
     <div class="header">
         <div class="brand">DRISTIK AI // SECTION DOSSIER</div>
-        <div class="badge">{badge}</div>
+        <div class="badge">{run_badge}</div>
     </div>
 
     <div class="kicker">{title}</div>
     <h1>{domain}</h1>
     <div class="subtitle">{subtitle} — Assessed on {date_str}</div>
+
+    {provenance_bar_html}
 
     <div class="score-card">
         <div>
@@ -1515,7 +1554,7 @@ class SectionReportGenerator:
         </div>
         <div class="stat-box">
             <div class="stat-label">EVIDENCE FINDINGS</div>
-            <div class="stat-val">{len(findings)}</div>
+            <div class="stat-val">{len(findings)} <span style="font-size:11px;font-weight:500;color:#64748b;">of {total_exec_findings}</span></div>
         </div>
         <div class="stat-box">
             <div class="stat-label">{assurance_label}</div>
@@ -1536,7 +1575,7 @@ class SectionReportGenerator:
     {book_html}
 
     <div class="footer">
-        <div>DRISTIK AUTONOMOUS INTELLIGENCE SYSTEMS // {domain}</div>
+        <div>DRISTIK AUTONOMOUS INTELLIGENCE SYSTEMS // {domain}{footer_run}</div>
         <div>{footer_mark}</div>
     </div>
     """

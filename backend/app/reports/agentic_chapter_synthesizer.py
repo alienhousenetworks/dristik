@@ -471,15 +471,14 @@ class AgenticChapterSynthesizer:
 
         profile = _get(book, "business_profile", None)
         biz_name = domain
-        if profile and not hasattr(profile, "_mock_return_value") and not str(type(profile)).startswith("<class 'unittest.mock"):
-            raw_biz = _get(profile, "business_name", None)
-            if raw_biz and isinstance(raw_biz, str) and not raw_biz.startswith("<MagicMock"):
-                biz_name = raw_biz
+        raw_biz = _get(profile, "business_name", None)
+        if isinstance(raw_biz, str) and not raw_biz.startswith("<MagicMock") and raw_biz.strip():
+            biz_name = raw_biz.strip()
+
         audience = "target customers"
-        if profile and not hasattr(profile, "_mock_return_value") and not str(type(profile)).startswith("<class 'unittest.mock"):
-            raw_aud = _get(profile, "target_audience", None)
-            if raw_aud and isinstance(raw_aud, str) and not raw_aud.startswith("<MagicMock"):
-                audience = raw_aud
+        raw_aud = _get(profile, "target_audience", None)
+        if isinstance(raw_aud, str) and not raw_aud.startswith("<MagicMock") and raw_aud.strip():
+            audience = raw_aud.strip()
 
         # Filter real defects vs notes
         defects = [

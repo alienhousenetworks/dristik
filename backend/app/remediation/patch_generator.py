@@ -77,6 +77,7 @@ class RemediationPatcher:
         business_profile: Optional[BusinessProfile],
         website_url: str,
         pages: Optional[List[PageEvidence]] = None,
+        competitor_context: Optional[Dict[str, Any]] = None,
     ) -> List[CodePatch]:
         patches: List[CodePatch] = []
         p_idx = 0

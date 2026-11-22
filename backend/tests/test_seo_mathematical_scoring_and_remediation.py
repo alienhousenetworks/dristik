@@ -86,10 +86,14 @@ def test_unmeasured_dimension_exclusion():
         dim_results.append(res)
 
     scorecard = engine.calculate_scorecard(dim_results)
-    # Authority was 0.05. Active weight = 0.95. Score must remain 100.0, NOT 95.0.
-    assert scorecard.overall_health_score == 100.0
+    # Authority is applicable but unmeasured. It is not scored as 0 and it is not dropped
+    # so the remaining 100 can be published as the health grade.
+    assert scorecard.overall_health_score is None
+    assert scorecard.score_status == "PARTIAL"
+    assert scorecard.measured_subset_score == 100.0
     assert scorecard.measured_dimensions_count == 8
     assert scorecard.excluded_dimensions_count == 1
+    assert any("Health grade withheld" in d for d in scorecard.disclosures)
 
 
 def test_independent_confidence_vectors():
@@ -177,7 +181,12 @@ async def test_orchestrator_post_audit_synthesis(tmp_path):
     assert "mathematical_scorecard" in assessment
     scorecard = assessment["mathematical_scorecard"]
     assert scorecard["methodology_version"] == "dristik_seo_v3.0"
-    assert scorecard["overall_health_score"] is not None
+    assert scorecard["score_status"] in {"MEASURED", "PARTIAL", "UNMEASURED"}
+    if scorecard["score_status"] == "MEASURED":
+        assert scorecard["overall_health_score"] is not None
+    else:
+        assert scorecard["overall_health_score"] is None
+        assert scorecard["measured_subset_score"] is not None or scorecard["score_status"] == "UNMEASURED"
     assert len(scorecard["dimensions"]) == 9
 
     # Verify post-audit remediation tasks exist
@@ -212,3 +221,39 @@ async def test_orchestrator_post_audit_synthesis(tmp_path):
     assert len(next_tasks) >= 1
     assert next_tasks[0]["implementation"]["platform"] == "NEXTJS_REACT"
     assert next_tasks[0]["implementation"]["stack_confidence"] == "DETECTED"
+
+
+def test_content_quality_baseline_and_finding_mapping():
+    """Verifies content_quality_intent baseline checks and cannibalization finding mapping."""
+    engine = MathematicalScoreEngine()
+
+    # 1. Verify cannibalization finding mapping
+    assert engine._map_finding_to_dimension("seo.content.cannibalization_title_overlap", "CONTENT") == "content_quality_intent"
+    assert engine._map_finding_to_dimension("content_low_information_gain", "CONTENT") == "content_quality_intent"
+    assert engine._map_finding_to_dimension("onpage.title_missing", "ON_PAGE_SEO") == "on_page_seo"
+
+    # 2. 5 pages: 4 have substantive content (>200 words), 1 is a brief contact page (120 words).
+    # Baseline non-thin threshold (80% >= 200 words) should pass rather than collapsing to 0.
+    sample_pages = [
+        {"url": "https://example.com/", "status_code": 200, "word_count": 800, "title": "Home", "h1": ["Home"], "internal_links_count": 5},
+        {"url": "https://example.com/about", "status_code": 200, "word_count": 500, "title": "About", "h1": ["About"], "internal_links_count": 3},
+        {"url": "https://example.com/pricing", "status_code": 200, "word_count": 450, "title": "Pricing", "h1": ["Pricing"], "internal_links_count": 4},
+        {"url": "https://example.com/blog/guide", "status_code": 200, "word_count": 1200, "title": "Guide", "h1": ["Guide"], "internal_links_count": 2},
+        {"url": "https://example.com/contact", "status_code": 200, "word_count": 120, "title": "Contact", "h1": ["Contact"], "internal_links_count": 1},
+    ]
+
+    scorecard = engine.build_scorecard_from_observations(
+        pages=sample_pages,
+        findings=[],
+        evidence_records=[],
+        discovered_count=5,
+        crawled_count=5,
+        sampling_status="FULL_CRAWL",
+    )
+
+    content_dim = next(d for d in scorecard.dimensions if d.dimension_id == "content_quality_intent")
+    assert content_dim.is_measured is True
+    assert content_dim.executed_checks_count == 4
+    assert content_dim.passed_checks_count == 4
+    assert content_dim.score == 100.0
+

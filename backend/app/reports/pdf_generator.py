@@ -1161,6 +1161,9 @@ async def get_section_pdf_report(
             detail="Report publication blocked by Publication Quality Gate failures. Evidence integrity checks must pass before release."
         )
 
+    from app.reports.snapshot_provenance import format_audit_execution_metadata
+    snap = format_audit_execution_metadata(report)
+
     if section_key.lower() == "seo":
         from app.seo.reporting.canonical_seo_pdf_bridge import enrich_report_for_pdf
         report = enrich_report_for_pdf(
@@ -1174,20 +1177,13 @@ async def get_section_pdf_report(
     if format.lower() == "html":
         return Response(content=html_content, media_type="text/html")
 
-    domain_clean = (report.domain or "website").replace("https://", "").replace("http://", "").split("/")[0]
+    domain_clean = snap.domain
     disposition = "attachment" if download else "inline"
-    geo_version_tag = ""
-    if section_key.lower() == "geo":
-        try:
-            from app.db.geo_schema import get_geo_store
-            tenant_id = str(getattr(report, "org_id", None) or getattr(user, "org_id", None) or "default")
-            latest = get_geo_store().list_audits(tenant_id, domain=domain_clean, limit=1)
-            if latest:
-                geo_version_tag = f":{latest[0].audit_id}:{latest[0].updated_at}"
-        except Exception:
-            geo_version_tag = ""
-    cache_key = f"{analysis_id}:{section_key.lower()}:{len(getattr(report, 'findings', []) or [])}{geo_version_tag}"
-    filename = f"{domain_clean}_{section_key.lower()}_audit_book.pdf" if section_key.lower() == "seo" else f"{domain_clean}_{section_key.lower()}_audit.pdf"
+    cache_key = (
+        f"{analysis_id}:{snap.report_ref}:{snap.snapshot_digest}:"
+        f"{snap.execution_timestamp}:{section_key.lower()}:{snap.total_findings_count}"
+    )
+    filename = f"{domain_clean}_{section_key.lower()}_audit_book.pdf" if section_key.lower() in ("seo", "cro", "geo", "aeo") else f"{domain_clean}_{section_key.lower()}_audit.pdf"
 
     if cache_key in _SECTION_PDF_CACHE:
         return Response(
@@ -1214,6 +1210,41 @@ async def get_section_pdf_report(
             media_type="application/pdf",
             headers={"Content-Disposition": f'{disposition}; filename="{filename}"'},
         )
+
+    if section_key.lower() == "cro":
+        from app.cro.reporting import build_cro_publication_document
+        from app.reports.publishing_engine import PdfPublishingPipeline
+        from app.cro import build_from_executive_report
+
+        intel = build_from_executive_report(report)
+        doc = build_cro_publication_document(report, intel)
+        pdf_bytes, _qa = await PdfPublishingPipeline.render_publication_pdf(doc)
+        if not pdf_bytes:
+            from app.reports.adaptive_audit_book import render_adaptive_audit_book_pdf
+            pdf_bytes, _qa = await render_adaptive_audit_book_pdf(report, report_type="CRO")
+        if not pdf_bytes:
+            raise HTTPException(
+                status_code=503,
+                detail="PDF rendering engine is currently unavailable or timed out. "
+                       "You can open the report with ?format=print and select 'Print / Save as PDF' in your browser.",
+            )
+        _SECTION_PDF_CACHE[cache_key] = pdf_bytes
+        return Response(
+            content=pdf_bytes,
+            media_type="application/pdf",
+            headers={"Content-Disposition": f'{disposition}; filename="{filename}"'},
+        )
+
+    if section_key.lower() in ("geo", "aeo"):
+        from app.reports.adaptive_audit_book import render_adaptive_audit_book_pdf
+        pdf_bytes, _qa = await render_adaptive_audit_book_pdf(report, report_type=section_key.upper())
+        if pdf_bytes:
+            _SECTION_PDF_CACHE[cache_key] = pdf_bytes
+            return Response(
+                content=pdf_bytes,
+                media_type="application/pdf",
+                headers={"Content-Disposition": f'{disposition}; filename="{filename}"'},
+            )
 
     resp = await _html_to_pdf_response(html_content, filename, disposition=disposition)
     if resp.body:

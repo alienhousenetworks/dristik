@@ -35,7 +35,8 @@ class DimensionScore(BaseModel):
 
 
 class SeoScorecardReport(BaseModel):
-    overall_score: float  # Weighted score across measured dimensions
+    overall_score: Optional[float] = None  # None unless every dimension was measured
+    measured_subset_score: Optional[float] = None
     overall_grade: str
     assessment_status: str  # "FULL_ASSESSMENT", "PARTIAL_ASSESSMENT"
     coverage_percentage: float  # e.g. 95.0%
@@ -120,26 +121,29 @@ class SeoScorecardEngine:
                     )
                 )
 
-        if measured_weight > 0:
-            normalized_score = round(weighted_sum / measured_weight, 1)
-        else:
-            normalized_score = 0.0
-
+        measured_subset_score = round(weighted_sum / measured_weight, 1) if measured_weight > 0 else None
         coverage_pct = round(measured_weight * 100, 1)
         is_full = len(unmeasured) == 0
         status = "FULL_ASSESSMENT" if is_full else "PARTIAL_ASSESSMENT"
 
         if is_full:
-            disclosure = "Full 100% technical assessment completed across all 9 canonical SEO dimensions."
+            disclosure = "Full assessment completed across all 9 canonical SEO dimensions."
+            published_score = round(weighted_sum, 1)
+        elif measured_subset_score is None:
+            disclosure = "No SEO dimension was measured. No health grade is published."
+            published_score = None
         else:
             disclosure = (
                 f"Partial assessment: {coverage_pct}% of weighting evaluated. "
-                f"Unmeasured dimension(s): {', '.join(unmeasured)}. Weights were not silently redistributed."
+                f"Unmeasured dimension(s): {', '.join(unmeasured)}. "
+                f"Measured-subset average is {measured_subset_score}. The health grade is withheld."
             )
+            published_score = None
 
         return SeoScorecardReport(
-            overall_score=normalized_score,
-            overall_grade=cls._grade_for_score(normalized_score),
+            overall_score=published_score,
+            measured_subset_score=measured_subset_score,
+            overall_grade=cls._grade_for_score(published_score),
             assessment_status=status,
             coverage_percentage=coverage_pct,
             dimension_breakdown=breakdown,

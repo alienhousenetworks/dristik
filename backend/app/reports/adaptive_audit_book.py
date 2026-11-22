@@ -21,6 +21,10 @@ import re
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from app.evidence_integrity import validate_score
+from app.reports.snapshot_provenance import (
+    format_audit_execution_metadata,
+    render_snapshot_provenance_bar,
+)
 from app.reports.svg_charts import SvgChartRenderer
 
 from app.reports.publishing_engine import (
@@ -132,15 +136,11 @@ def build_publication_manifest(
     """
     Constructs the publication manifest including chapter descriptors and metadata.
     """
-    domain = getattr(report, "domain", None) or getattr(report, "website_url", None) or "Target domain not recorded"
-    domain_clean = str(domain).replace("https://", "").replace("http://", "").split("/")[0]
-    profile = getattr(report, "business_profile", None)
-    brand_name = getattr(profile, "business_name", None) or domain_clean
-
-    generated_at = str(getattr(report, "generated_at", None) or "Timestamp unavailable")
-    date_clean = generated_at[:10] if generated_at != "Timestamp unavailable" and len(generated_at) >= 10 else generated_at
-    analysis_id = str(getattr(report, "analysis_id", None) or getattr(report, "report_id", None) or "Report reference unavailable")
-    report_ref = analysis_id[:12].upper() if analysis_id != "Report reference unavailable" else "REFERENCE UNAVAILABLE"
+    snap = format_audit_execution_metadata(report)
+    domain_clean = snap.domain
+    brand_name = snap.brand_name
+    date_clean = snap.execution_date
+    report_ref = snap.report_ref
 
     TITLES: Dict[str, Dict[str, str]] = {
         "COMPLETE": {
@@ -442,7 +442,12 @@ def build_publication_manifest(
         "domain": domain_clean,
         "brand_name": brand_name,
         "audit_date": date_clean,
+        "execution_timestamp": snap.execution_timestamp,
         "report_ref": report_ref,
+        "snapshot_id": snap.snapshot_id,
+        "snapshot_digest": snap.snapshot_digest,
+        "configuration_summary": snap.configuration_summary,
+        "crawl_scope_summary": snap.crawl_scope_summary,
         "chapters": chapters,
     }
 
@@ -608,12 +613,14 @@ def _build_ch_brief(report: Any, manifest: Dict[str, Any]) -> str:
     search_p = _esc(getattr(p, "search_engine_perspective", None) or "No evidence-backed search-engine perspective was recorded for this run.")
     ai_p = _esc(getattr(p, "ai_answer_engine_perspective", None) or "No live answer-engine observation was recorded for this run.")
 
+    snap = format_audit_execution_metadata(report)
     scores = getattr(report, "scores", None)
-    seo_s = validate_score(getattr(scores, "seo_score", None))
-    geo_s = validate_score(getattr(scores, "geo_score", None))
-    aeo_s = validate_score(getattr(scores, "aeo_score", None))
-    cro_s = validate_score(getattr(scores, "cro_score", None))
-    comp_s = validate_score(getattr(scores, "competitor_score", None))
+    seo_s = snap.score_for_section("seo")
+    geo_s = snap.score_for_section("geo")
+    aeo_s = snap.score_for_section("aeo")
+    cro_s = snap.score_for_section("cro")
+    comp_s = snap.score_for_section("competitors")
+    provenance_bar = render_snapshot_provenance_bar(snap)
 
     callout = render_section_business_callout(
         generate_section_explanation("ch_brief", "Executive Diagnostic Briefing", report, _report_findings(report))
@@ -638,6 +645,7 @@ def _build_ch_brief(report: Any, manifest: Dict[str, Any]) -> str:
         """
 
     return f"""
+    {provenance_bar}
     {callout}
 
     <div class="card" style="margin-bottom: 16px; padding: 18px; border-left: 3.5px solid #0284c7;">
@@ -2739,6 +2747,10 @@ def build_adaptive_publication_document(
         story_summary=str(getattr(report, "story_summary", None) or ""),
         primary_opportunity=str(getattr(report, "primary_strategic_opportunity", None) or ""),
         consultant_advice_what_to_ignore=str(getattr(report, "consultant_advice_what_to_ignore", None) or ""),
+        execution_timestamp=manifest.get("execution_timestamp", manifest["audit_date"]),
+        snapshot_id=manifest.get("snapshot_id", ""),
+        configuration_summary=manifest.get("configuration_summary", ""),
+        crawl_scope_summary=manifest.get("crawl_scope_summary", ""),
     )
 
     # Front matter HTML

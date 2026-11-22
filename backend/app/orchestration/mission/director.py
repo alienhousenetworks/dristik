@@ -101,7 +101,7 @@ class MissionDirector:
         ]
 
         # 35-capability routing taxonomy for deterministic $0 pre-pass and legacy routing.
-        # Active workforce executes 105 specialist agents across 12 domains via AGENT_REGISTRY.
+        # Active workforce is SPECIALIST_AGENTS_V3. Registry aliases are not extra agents.
         all_ids = list(CAPABILITY_REGISTRY.keys())
         tier_2_business = [c for c in all_ids if c.startswith("1") and c.split("_")[0] in {"12", "13", "14", "15", "16"}]
         tier_3_specialists = [

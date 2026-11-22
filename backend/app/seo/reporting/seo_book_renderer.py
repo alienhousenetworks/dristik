@@ -2428,11 +2428,12 @@ def build_seo_book_context(report: Any, page_numbers: Optional[Dict[str, int]] =
     Compiles verified audit records into the full Jinja2 context for seo_audit_book.html.
     Zero-fabrication: unmeasured fields are reported explicitly as unmeasured.
     """
-    domain_raw = _get_val(report, "domain") or "Target Website"
-    domain = str(domain_raw).replace("https://", "").replace("http://", "").split("/")[0]
-    run_id = str(_get_val(report, "analysis_id") or _get_val(report, "report_id") or "DST-SEO")
-    generated_at = str(_get_val(report, "generated_at") or "Measured on audit execution")
-    audit_date = generated_at[:10] if len(generated_at) >= 10 else generated_at
+    from app.reports.snapshot_provenance import format_audit_execution_metadata
+
+    snap = format_audit_execution_metadata(report)
+    domain = snap.domain
+    run_id = snap.report_ref
+    audit_date = snap.execution_timestamp
 
     # Crawl metrics (Sample Coverage & Discovery Coverage, never 0% when pages_crawled > 0)
     manifest = _get_val(report, "crawl_manifest") or {}

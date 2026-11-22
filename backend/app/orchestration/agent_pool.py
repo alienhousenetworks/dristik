@@ -1,5 +1,5 @@
 """
-50-agent workforce pool and dependency DAG executor.
+Specialist workforce pool and dependency DAG executor.
 
 Instantiates every specialist in SPECIALIST_AGENTS_V3 and runs them in
 topological waves. Independent agents in a wave run concurrently.
@@ -88,7 +88,7 @@ CORE_ALWAYS_DOMAINS: Set[str] = {"BUSINESS", "VERIFICATION", "COMPETITOR"}
 
 
 class AgentPool:
-    """Creates and runs the full 50-agent specialist workforce."""
+    """Creates and runs every specialist registered in SPECIALIST_AGENTS_V3."""
 
     def __init__(self, model_router):
         self.model_router = model_router
@@ -135,6 +135,7 @@ class AgentPool:
             "completed": 0,
             "partial": 0,
             "unavailable": 0,
+            "unmeasured": 0,
             "skipped": 0,
             "errors": 0,
             "waves": len(self.waves),
@@ -189,6 +190,8 @@ class AgentPool:
                     summary["agents_ran"] += 1
                     if status == "unavailable":
                         summary["unavailable"] += 1
+                    elif status == "unmeasured":
+                        summary["unmeasured"] += 1
                     elif status == "skipped":
                         summary["skipped"] += 1
                     elif status in {"error", "failed"}:
@@ -215,7 +218,7 @@ class AgentPool:
                     )
 
         blackboard.blackboard_state["agent_pool_summary"] = {
-            k: summary[k] for k in ("agents_declared", "agents_ran", "completed", "partial", "unavailable", "skipped", "errors", "waves")
+            k: summary[k] for k in ("agents_declared", "agents_ran", "completed", "partial", "unavailable", "unmeasured", "skipped", "errors", "waves")
         }
         skipped_reasons = {
             aid: res.get("unavailable_reason") or "skipped"
@@ -230,6 +233,7 @@ class AgentPool:
             "executed_agents": summary["agents_ran"] - summary["skipped"],
             "completed_agents": summary["completed"],
             "unavailable_agents": summary["unavailable"],
+            "unmeasured_agents": summary["unmeasured"],
             "failed_agents": summary["errors"],
             "skipped_agents": summary["skipped"],
             "skipped_reasons": skipped_reasons,

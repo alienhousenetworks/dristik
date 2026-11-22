@@ -130,21 +130,43 @@ def load_latest_enterprise_geo_dataset(report: Any, store: Optional[GEOStore] = 
     """
     if report is None:
         return None
+    pinned = _fget(report, "_enterprise_geo_dataset")
+    if isinstance(pinned, dict):
+        return pinned
     target_dom = _norm_domain(_fget(report, "domain") or _fget(report, "website_url"))
     if not target_dom:
         return None
     tenant_id = str(_fget(report, "org_id") or "default")
+    run_id = str(_fget(report, "analysis_id") or _fget(report, "report_id") or "").strip()
+    strict_isolation = bool(_fget(report, "_strict_snapshot_isolation", False))
     try:
         geo_store = store or get_geo_store()
         audits = geo_store.list_audits(tenant_id, limit=50)
-        matched = next(
-            (a for a in audits if _norm_domain(a.domain or a.website_url) == target_dom),
-            None,
-        )
+        matched = None
+        if run_id:
+            matched = next(
+                (
+                    a for a in audits
+                    if str(getattr(a, "audit_id", "") or "").strip() == run_id
+                    or str(getattr(a, "parent_run_id", "") or "").strip() == run_id
+                ),
+                None,
+            )
+        if matched is None and not strict_isolation:
+            matched = next(
+                (a for a in audits if _norm_domain(a.domain or a.website_url) == target_dom),
+                None,
+            )
         if not matched:
             return None
         builder = GEOReportBuilder(store=geo_store)
-        return builder.build_canonical_dataset(tenant_id, matched.audit_id, include_legacy=False)
+        dataset = builder.build_canonical_dataset(tenant_id, matched.audit_id, include_legacy=False)
+        if not isinstance(report, dict) and dataset is not None:
+            try:
+                object.__setattr__(report, "_enterprise_geo_dataset", dataset)
+            except Exception:
+                pass
+        return dataset
     except Exception:
         return None
 

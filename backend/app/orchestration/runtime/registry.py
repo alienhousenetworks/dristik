@@ -1,7 +1,8 @@
 """
 Dristik AI Specialist Agent Registry v3
 Maintains typed agent contracts, capabilities, allowed models, token budgets, risk levels,
-and worker pool mappings across the 105 specialist agents in 12 domains.
+and worker pool mappings. Runtime execution is SPECIALIST_AGENTS_V3.
+AGENT_REGISTRY also holds aliases and specialists that the pool does not instantiate.
 """
 from typing import Dict, Any, List, Optional
 from pydantic import BaseModel, Field
@@ -22,7 +23,7 @@ class AgentDefinition(BaseModel):
     required_evidence: List[str] = Field(default_factory=list)
     forbidden_operations: List[str] = Field(default_factory=list)
 
-# Canonical Specialist Agent Workforce (105 agents across 12 domains: SEO, GEO, AEO, CRO, Technical, Content, etc.)
+# Canonical runtime workforce. Count is len(SPECIALIST_AGENTS_V3), not a marketing total.
 SPECIALIST_AGENTS_V3: Dict[str, AgentDefinition] = {
     # DOMAIN 1: BUSINESS INTELLIGENCE
     "business.discovery.v3": AgentDefinition(
@@ -1755,7 +1756,7 @@ DOMAIN_CATEGORY: Dict[str, str] = {
     "STRUCTURED_DATA": "SCHEMA",
     "CONTENT": "CONTENT",
     "GEO": "GEO",
-    "AEO": "GEO",
+    "AEO": "AI_SEARCH",
     "AI_SEARCH": "AI_SEARCH",
     "EXPERIENCE": "UX_CONVERSION",
     "COMPETITOR": "COMPETITIVE",
@@ -1788,7 +1789,7 @@ WORKFORCE_CLASSIFICATION: Dict[str, str] = {
 }
 
 def list_all_specialists() -> List[AgentDefinition]:
-    """List all canonical runtime specialist agents (68 in SPECIALIST_AGENTS_V3)."""
+    """List the canonical runtime specialists in SPECIALIST_AGENTS_V3."""
     return list(SPECIALIST_AGENTS_V3.values())
 
 def list_copywriting_specialists() -> List[AgentDefinition]:
