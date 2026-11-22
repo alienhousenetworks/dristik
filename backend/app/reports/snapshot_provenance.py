@@ -367,7 +367,9 @@ def format_audit_execution_metadata(report: Any, *, use_cache: bool = True) -> A
     configuration_summary = f"{policy_pack} · Pillars: {pillars_str} · {budget_str} · {REPORT_VERSION_DEFAULT}"
 
     scores = _get(report, "scores")
-    composite_score = validate_score(_get(scores, "overall_score"))
+    from app.domain.scoring.displayed_score import displayed_composite
+    comp_score = displayed_composite(report)
+    composite_score = comp_score if comp_score is not None else validate_score(_get(scores, "overall_score"))
     if composite_score is not None:
         composite_score_display = f"{composite_score:.1f} / 100"
         raw_grade = _get(scores, "overall_grade") or _get(scores, "grade")

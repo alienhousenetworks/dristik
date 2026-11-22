@@ -89,12 +89,18 @@ def _parse_operation(raw: Any) -> PatchOperation:
     return PatchOperation.REPLACE
 
 
+_RISK_ALIASES = {
+    "REVIEW_REQUIRED": PatchRiskLevel.HUMAN_APPROVAL,
+    "HIGH_RISK": PatchRiskLevel.DEVELOPER_REQUIRED,
+}
+
+
 def _parse_risk(raw: Any) -> PatchRiskLevel:
-    val = str(raw or "REVIEW_REQUIRED").strip().upper()
+    val = str(raw or "HUMAN_APPROVAL").strip().upper()
     for r in PatchRiskLevel:
         if r.value.upper() == val or r.name.upper() == val:
             return r
-    return PatchRiskLevel.REVIEW_REQUIRED
+    return _RISK_ALIASES.get(val, PatchRiskLevel.HUMAN_APPROVAL)
 
 
 def _is_fabricated_snippet(snippet: str, observed_urls: set) -> bool:

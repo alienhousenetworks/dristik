@@ -164,12 +164,14 @@ class BrowserRenderService:
                                 timeout=3.0,
                             )
                         except asyncio.TimeoutError:
-                            blocked_unsafe_request = True
+                            if req.is_navigation_request():
+                                blocked_unsafe_request = True
                             logger.warning("Blocked browser request after SSRF validation timeout: %s", req.url)
                             await route.abort("blockedbyclient")
                             return
                         if not safe:
-                            blocked_unsafe_request = True
+                            if req.is_navigation_request():
+                                blocked_unsafe_request = True
                             logger.warning("Blocked unsafe browser request %s: %s", req.url, reason)
                             await route.abort("blockedbyclient")
                             return

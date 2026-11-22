@@ -3450,6 +3450,7 @@ class AnalysisRun(BaseModel):
     target_pillars: Optional[List[str]] = None
     audit_tier: str = "basic"
     credits_charged: int = 0
+    completed_at: Optional[datetime] = None
 
     @field_validator("org_id")
     @classmethod

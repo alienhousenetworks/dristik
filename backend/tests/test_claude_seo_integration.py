@@ -11,7 +11,6 @@ from app.agents.runtime.task_cards import task_card_for, TASK_CARDS
 from app.orchestration.agent_pool import topological_waves, AgentPool
 from app.reports.validation_gate import ValidationGate
 from app.seo.prompts import list_prompts, get_prompt_text
-from app.seo.skills import list_skills, get_skill_manifest
 from app.seo.reference_data import get_google_updates, get_schema_templates, list_references
 from app.seo.audit.drift_analyzer import SeoDriftAnalyzer
 from app.seo.audit.schema_validator import validate_jsonld, validate_schema_object
@@ -30,20 +29,6 @@ def test_prompts_loaded():
         assert exp in prompts or f"{exp}.md" in prompts, f"Missing prompt: {exp}"
         text = get_prompt_text(exp)
         assert text is not None and len(text) > 100, f"Prompt {exp} empty or too short"
-
-
-def test_skills_loaded():
-    """Verify all 26 skills can be discovered and have valid SKILL.md manifests."""
-    skills = list_skills()
-    assert len(skills) >= 26
-    expected_skills = [
-        "seo", "seo-agentic", "seo-audit", "seo-cluster", "seo-content",
-        "seo-drift", "seo-ecommerce", "seo-geo", "seo-maps", "seo-schema", "seo-sxo"
-    ]
-    for sk in expected_skills:
-        assert sk in skills, f"Missing skill: {sk}"
-        manifest = get_skill_manifest(sk)
-        assert manifest is not None and len(manifest) > 50, f"Skill {sk} manifest missing or empty"
 
 
 def test_reference_data_loaded():

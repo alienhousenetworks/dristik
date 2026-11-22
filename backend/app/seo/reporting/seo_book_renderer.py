@@ -2621,6 +2621,9 @@ def build_seo_book_context(report: Any, page_numbers: Optional[Dict[str, int]] =
     }
 
     # Pillars
+    scores_obj = _get_val(report, "scores") or {}
+    categories = _get_val(scores_obj, "category_scores") or {}
+    tech_score = _get_val(categories.get("TECHNICAL_SEO", {}), "score") if isinstance(categories, dict) else None
     onpage_score = _get_val(categories.get("ON_PAGE_SEO", {}), "score") if isinstance(categories, dict) else None
     content_score = _get_val(categories.get("CONTENT", {}), "score") if isinstance(categories, dict) else None
     schema_score = _get_val(categories.get("SCHEMA", {}), "score") if isinstance(categories, dict) else None
