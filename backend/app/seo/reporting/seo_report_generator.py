@@ -51,9 +51,11 @@ class CompleteSeoReportGenerator:
     ]
 
     def render_json_report(self, report: ExecutiveReport) -> Dict[str, Any]:
-        """Returns structured JSON covering all 20 sections."""
+        """Returns structured JSON covering all 20 sections using the canonical composite score."""
+        from app.domain.scoring.displayed_score import displayed_composite
         analysis_id = report.analysis_id or report.report_id
-        score_val = getattr(report.scores, "overall_score", None) if getattr(report, "scores", None) else None
+        comp_score = displayed_composite(report)
+        score_val = comp_score if comp_score is not None else (getattr(report.scores, "overall_score", None) if getattr(report, "scores", None) else None)
         
         # Categorize roadmap items
         p0_findings = [f for f in report.findings if f.priority >= 9 or f.severity.value == "CRITICAL"]
@@ -251,7 +253,9 @@ class CompleteSeoReportGenerator:
         website_url = html.escape(report.website_url or f"https://{domain}")
         generated_at = html.escape(report.generated_at or "Live Audit")
         
-        score_val = getattr(report.scores, "overall_score", None) if getattr(report, "scores", None) else None
+        from app.domain.scoring.displayed_score import displayed_composite
+        comp_score = displayed_composite(report)
+        score_val = comp_score if comp_score is not None else (getattr(report.scores, "overall_score", None) if getattr(report, "scores", None) else None)
         score_display = f"{int(round(score_val))}" if score_val is not None else "N/A"
         
         score_color = "#64748b" if score_val is None else ("#10b981" if score_val >= 75 else ("#f59e0b" if score_val >= 50 else "#ef4444"))

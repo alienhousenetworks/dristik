@@ -214,10 +214,30 @@ _TEMPLATE_SECTION_NAMES = {
 }
 
 
-def _observed_sections(page: PageEvidence) -> List[Dict[str, str]]:
-    """Headings crawled on this URL. The names are the page's, not a template."""
-    found: List[Dict[str, str]] = []
+def _observed_sections(page: PageEvidence) -> List[Dict[str, Any]]:
+    """Structured DOM sections crawled on this URL (falling back to headings when sections absent)."""
+    found: List[Dict[str, Any]] = []
     seen = set()
+    for sec in (getattr(page, "sections", None) or []):
+        raw_name = (getattr(sec, "heading_text", None) or getattr(sec, "section_role", None) or "").strip()
+        name = re.sub(r"\s+", " ", raw_name)
+        if not name:
+            continue
+        key = name.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        found.append({
+            "section_id": getattr(sec, "section_id", "") or "",
+            "role": getattr(sec, "section_role", "") or "content",
+            "name": name,
+            "level": getattr(sec, "heading_level", "") or "h2",
+            "current_excerpt": (getattr(sec, "body_text", "") or "")[:450],
+            "ctas": (getattr(sec, "ctas", None) or [])[:4],
+        })
+    if found:
+        return found[:18]
+
     for level, headings in (("h1", page.h1 or []), ("h2", page.h2 or []), ("h3", page.h3 or [])):
         for heading in headings:
             name = re.sub(r"\s+", " ", (heading or "").strip())
@@ -226,7 +246,7 @@ def _observed_sections(page: PageEvidence) -> List[Dict[str, str]]:
                 continue
             seen.add(key)
             found.append({"name": name, "level": level})
-    return found
+    return found[:18]
 
 
 def _heading_blob(page: PageEvidence) -> str:
@@ -754,7 +774,7 @@ def _parse_copy_result(raw: Dict[str, Any], fallback: PageCopyAudit, brand_name:
 
 def _fail_copy_audit(copy: PageCopyAudit, seo: PageSeoAudit, reason: str, code: str) -> PageCopyAudit:
     """Fallback if LLM times out or errors: preserve grounded copy audit with verified issues."""
-    copy.llm_status = "ok"
+    copy.llm_status = "failed"
     copy.llm_failure_reason = reason
     copy.llm_failure_code = code
     return copy
@@ -765,28 +785,78 @@ class PageIntelligenceAgent(BaseAgent):
         super().__init__(agent_id="agent_page_intelligence", capability="content_intelligence", model_router=model_router)
 
     async def run(self, blackboard: CognitiveBlackboard) -> Dict[str, Any]:
+        from app.core.config import settings
         pages = blackboard.pages or []
         profile = blackboard.business_profile or BusinessProfile()
         reports: List[PageReport] = []
-        semaphore = asyncio.Semaphore(3)
+        semaphore = asyncio.Semaphore(4)
 
-        # Identify top strategic pages for deep LLM copywriting
-        # Priority: Homepage first (0), then pricing (1), product/services (2), about/contact (3), other (4)
+        # Priority: Homepage (0), Pricing (1), Product/Services (2), About/Contact/FAQ (3), Other (4)
         def _page_priority(p: PageEvidence) -> int:
             u = (p.url or "").lower()
             if u.rstrip("/").count("/") <= 2 or p.page_type == "homepage":
                 return 0
             if any(k in u for k in ("pricing", "plans", "tier", "price")):
                 return 1
-            if any(k in u for k in ("product", "features", "solutions", "services")):
+            if any(k in u for k in ("product", "features", "solutions", "services", "shop", "collection")):
                 return 2
-        async def one(page: PageEvidence) -> PageReport:
+            if any(k in u for k in ("about", "contact", "faq", "demo", "book", "case-stud")):
+                return 3
+            return 4
+
+        budget_plan = (blackboard.blackboard_state or {}).get("budget_plan") or {}
+        depth_mode = (getattr(settings, "AI_DEPTH_MODE", "tiered_frontier") or "tiered_frontier").strip().lower()
+        frontier_cap = int(budget_plan.get("frontier_copy_page_cap") or (len(pages) if depth_mode == "frontier_all" else 20))
+
+        indexed_pages = list(enumerate(pages))
+        prioritized = sorted(indexed_pages, key=lambda pair: (_page_priority(pair[1]), pair[0]))
+        frontier_indices = {orig_idx for orig_idx, _ in prioritized[:frontier_cap]}
+
+        # Optional template-cluster deduplication ONLY on large (>20 page) sites when explicitly enabled
+        dedup_templates = bool(getattr(settings, "AI_DEDUPLICATE_TEMPLATES", False)) and len(pages) > 20
+        cluster_counts: Dict[tuple, int] = {}
+        inherited_cluster_of: Dict[int, tuple] = {}
+        if dedup_templates:
+            for orig_idx, p in prioritized:
+                sec_sig = tuple(getattr(s, "section_role", "c") for s in (getattr(p, "sections", None) or [])[:6])
+                sig = (p.page_type or "general", sec_sig)
+                cnt = cluster_counts.get(sig, 0)
+                if orig_idx not in frontier_indices and cnt >= 3 and len(sec_sig) >= 2:
+                    inherited_cluster_of[orig_idx] = sig
+                else:
+                    cluster_counts[sig] = cnt + 1
+
+        async def one(orig_idx: int, page: PageEvidence) -> PageReport:
+            tier = "reasoning_model" if (depth_mode == "frontier_all" or orig_idx in frontier_indices) else "fast_slm"
             async with semaphore:
-                return await self._analyze_page(page, profile, blackboard, enable_llm_copy=True)
+                return await self._analyze_page(
+                    page,
+                    profile,
+                    blackboard,
+                    enable_llm_copy=(orig_idx not in inherited_cluster_of),
+                    model_tier=tier,
+                )
 
         if pages:
-            reports = await asyncio.gather(*[one(p) for p in pages])
-            reports = list(reports)
+            reports = list(await asyncio.gather(*[one(i, p) for i, p in enumerate(pages)]))
+            if inherited_cluster_of:
+                # Attach representative template notes transparently (never pretending an LLM call ran)
+                rep_by_sig: Dict[tuple, PageReport] = {}
+                for i, p in enumerate(pages):
+                    if i in inherited_cluster_of:
+                        continue
+                    sec_sig = tuple(getattr(s, "section_role", "c") for s in (getattr(p, "sections", None) or [])[:6])
+                    sig = (p.page_type or "general", sec_sig)
+                    if sig not in rep_by_sig and reports[i].copywriting.llm_status == "ok":
+                        rep_by_sig[sig] = reports[i]
+                for i, sig in inherited_cluster_of.items():
+                    rep = rep_by_sig.get(sig)
+                    if rep:
+                        reports[i].copywriting.llm_status = "template_cluster_inherited"
+                        if reports[i].copywriting.suggested:
+                            reports[i].copywriting.suggested.notes = (
+                                f"template_cluster_inherited from representative page {rep.url}."
+                            )
 
         blackboard.page_reports = reports
 
@@ -886,13 +956,14 @@ class PageIntelligenceAgent(BaseAgent):
         profile: BusinessProfile,
         blackboard: Optional[CognitiveBlackboard] = None,
         enable_llm_copy: bool = True,
+        model_tier: str = "reasoning_model",
     ) -> PageReport:
         seo = audit_page_seo(page)
         ux = audit_page_ux(page)
         copy = fallback_copy_audit(page, profile, seo)
         if enable_llm_copy:
             try:
-                copy = await self._llm_copy(page, profile, copy, blackboard)
+                copy = await self._llm_copy(page, profile, copy, blackboard, model_tier=model_tier)
             except Exception as exc:
                 logger.warning("LLM page copy failed for %s: %s", page.url, exc)
                 copy = _fail_copy_audit(copy, seo, str(exc), "llm_exception")
@@ -915,20 +986,41 @@ class PageIntelligenceAgent(BaseAgent):
         profile: BusinessProfile,
         fallback: PageCopyAudit,
         blackboard: Optional[CognitiveBlackboard] = None,
+        model_tier: str = "reasoning_model",
     ) -> PageCopyAudit:
         intent = profile.primary_intent.value if hasattr(profile.primary_intent, "value") else str(profile.primary_intent)
+        clean_page_url = (page.url or "").rstrip("/").lower()
+        is_homepage = clean_page_url.count("/") <= 2 or page.page_type == "homepage"
 
-        # Cross-pillar audit gaps from SEO, GEO, CRO, and AEO
+        # Cross-pillar verified audit gaps from SEO, GEO, CRO, and AEO (excluding held false positives)
         pillar_gaps = []
         if blackboard and getattr(blackboard, "findings", None):
             for f in blackboard.findings:
-                f_urls = [str(u).rstrip("/") for u in (getattr(f, "affected_urls", []) or [])]
-                if page.url and (page.url.rstrip("/") in f_urls or not f_urls):
+                if getattr(f, "held_from_executive", False):
+                    continue
+                f_urls = [str(u).rstrip("/").lower() for u in (getattr(f, "affected_urls", []) or [])]
+                if clean_page_url and (clean_page_url in f_urls or (is_homepage and not f_urls)):
                     c_name = getattr(getattr(f, "category", None), "value", str(getattr(f, "category", "AUDIT")))
                     t_name = getattr(f, "title", None) or getattr(f, "finding_title", "")
                     why_txt = getattr(f, "why_it_matters", "") or getattr(f, "description", "")
-                    pillar_gaps.append(f"[{c_name}] {t_name}: {why_txt[:120]}")
+                    pillar_gaps.append(f"[{c_name}] {t_name}: {why_txt[:150]}")
 
+        # URL-mapped AEO 100-question gaps so copy rewrites directly close unanswered AI search queries
+        aeo_gaps = []
+        if blackboard and getattr(blackboard, "dynamic_sandbox_evaluations", None):
+            for q_ev in blackboard.dynamic_sandbox_evaluations:
+                status = str(getattr(q_ev, "answerability_status", "") or "").upper()
+                if getattr(q_ev, "is_answerable", False) and status == "ANSWERABLE":
+                    continue
+                tgt = str(getattr(q_ev, "target_update_page", "") or "").rstrip("/").lower()
+                src = str(getattr(q_ev, "source_url", "") or "").rstrip("/").lower()
+                if clean_page_url and (tgt == clean_page_url or src == clean_page_url or (is_homepage and not tgt)):
+                    q_txt = str(getattr(q_ev, "generated_question", "") or "")
+                    gap_txt = str(getattr(q_ev, "gap_analysis", "") or "")[:120]
+                    if q_txt:
+                        aeo_gaps.append(f"Q: {q_txt} | Gap: {gap_txt}")
+
+        observed = _observed_sections(page)
         context = {
             "url": page.url,
             "page_type": page.page_type,
@@ -937,20 +1029,20 @@ class PageIntelligenceAgent(BaseAgent):
             "h1": page.h1,
             "h2": page.h2[:12],
             "h3": (page.h3 or [])[:12],
-            "observed_sections": _observed_sections(page),
+            "observed_sections": observed,
             "ctas": page.ctas,
             "word_count": page.word_count,
             "readability": page.readability_score,
-            "body": (page.body_text or "")[:12000],
+            "body": (page.body_text or "")[:10000],
             "business_name": profile.business_name,
             "audience": profile.target_audience,
             "value_proposition": profile.value_proposition,
             "intent": intent,
-            "pillar_audit_gaps": pillar_gaps[:8],
+            "pillar_audit_gaps": pillar_gaps[:10],
+            "aeo_unanswered_questions": aeo_gaps[:8],
         }
         evidence_list = self._page_to_evidence(page, blackboard)
         page_prompt = load_prompt("page_intel")
-        observed = _observed_sections(page)
         observed_names = ", ".join(item["name"] for item in observed) or "no headings were stored"
         result = await self.model_router.generate_structured(
             capability="content_intelligence",
@@ -960,6 +1052,8 @@ class PageIntelligenceAgent(BaseAgent):
             ) + (
                 "Write copy for THIS URL only. Use <evidence> and <site_facts>.\n"
                 f"Observed sections on this page: {observed_names}.\n"
+                "Address the verified `pillar_audit_gaps` and `aeo_unanswered_questions` mapped to this URL "
+                "ONLY using facts already observed on the site (never invent pricing, certifications, or features).\n"
                 "Every company has a different page structure. Do not reuse a hero, problem, solution, "
                 "features, FAQ, or closing-banner outline unless that block is one of the observed sections.\n"
                 "For each observed section that needs new wording, add one sections[] item. "
@@ -977,6 +1071,7 @@ class PageIntelligenceAgent(BaseAgent):
             evidence_list=evidence_list,
             site_facts=context,
             allow_fallback=False,
+            model_tier=model_tier,
             rubric=(
                 "Judge only this URL. Name sections the way this page names them.\n"
                 "Write replacement copy only for a section that needs it.\n"
@@ -1037,7 +1132,6 @@ class PageIntelligenceAgent(BaseAgent):
                 '  }\n'
                 "}"
             ),
-            additional_context=json.dumps(context, ensure_ascii=False),
         )
         if not isinstance(result, dict):
             return _fail_copy_audit(fallback, PageSeoAudit(score=fallback.seo_score), "LLM returned no copy", "no_suggested")

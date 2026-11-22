@@ -32,6 +32,7 @@ class GeminiAdapter(BaseGeoEngineAdapter):
     rate_limit_rpm = 300
     cost_per_1k_input_usd = 0.00010
     cost_per_1k_output_usd = 0.00040
+    cost_per_search_use_usd = 0.035  # Google Search Grounding: $35 per 1,000 grounded requests
     unsupported_features = [
         "Google AI Overviews SERP surface is distinct from Gemini API.",
     ]
@@ -109,24 +110,29 @@ class GeminiAdapter(BaseGeoEngineAdapter):
                         usage = data.get("usageMetadata") or {}
                         p_tok = int(usage.get("promptTokenCount") or 0)
                         c_tok = int(usage.get("candidatesTokenCount") or 0)
+                        search_used = bool(grounding_urls or (gm.get("webSearchQueries") or []))
+                        actual_mode = GEOTestingMode.API_WITH_SEARCH if search_used else GEOTestingMode.API_MODEL_ONLY
                         return EngineRawResponse(
                             engine_id=self.engine_id,
                             engine_name=self.display_name,
                             model_version=str(data.get("modelVersion") or self.model),
                             requested_model=self.model,
                             raw_content=content,
-                            citations=citations,
+                            citations=citations if search_used else [],
                             sources=[{"url": u, "origin": "google_search_grounding"} for u in grounding_urls],
                             status_code=200,
                             is_live=True,
                             latency_ms=latency,
-                            testing_mode=GEOTestingMode.API_WITH_SEARCH,
+                            testing_mode=actual_mode,
                             prompt_tokens=p_tok,
                             completion_tokens=c_tok,
-                            estimated_cost_usd=self.estimate_cost_usd(p_tok, c_tok),
+                            estimated_cost_usd=self.estimate_cost_usd(
+                                p_tok, c_tok, search_uses=1 if search_used else 0
+                            ),
                             tool_use_metadata={
                                 "web_search_queries": gm.get("webSearchQueries") or [],
                                 "grounding_chunks_count": len(grounding_urls),
+                                "search_executed": search_used,
                             },
                         )
                     return EngineRawResponse(
@@ -162,7 +168,6 @@ class GeminiAdapter(BaseGeoEngineAdapter):
                     data = res.json()
                     choices = data.get("choices", [])
                     content = choices[0].get("message", {}).get("content", "") if choices else ""
-                    citations = re.findall(r"https?://[^\s\)\],>'\"]+", content)
                     usage = data.get("usage") or {}
                     p_tok = int(usage.get("prompt_tokens") or 0)
                     c_tok = int(usage.get("completion_tokens") or 0)
@@ -172,14 +177,14 @@ class GeminiAdapter(BaseGeoEngineAdapter):
                         model_version=str(data.get("model") or self.model),
                         requested_model=self.model,
                         raw_content=content,
-                        citations=citations,
+                        citations=[],
                         status_code=200,
                         is_live=True,
                         latency_ms=latency,
                         testing_mode=GEOTestingMode.API_MODEL_ONLY,
                         prompt_tokens=p_tok,
                         completion_tokens=c_tok,
-                        estimated_cost_usd=self.estimate_cost_usd(p_tok, c_tok),
+                        estimated_cost_usd=self.estimate_cost_usd(p_tok, c_tok, search_uses=0),
                     )
                 return EngineRawResponse(
                     engine_id=self.engine_id,

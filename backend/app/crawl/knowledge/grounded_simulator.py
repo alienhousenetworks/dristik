@@ -227,9 +227,25 @@ class GroundedAnswerSimulator:
 
     SIMULATION_DISCLAIMER = SIMULATION_DISCLAIMER
 
-    def __init__(self, graph: WebsiteKnowledgeGraph, model_router=None):
+    def __init__(
+        self,
+        graph: WebsiteKnowledgeGraph,
+        model_router=None,
+        vector_store=None,
+        embedding_service=None,
+        domain: Optional[str] = None,
+        analysis_id: Optional[str] = None,
+        pages: Optional[List[Any]] = None,
+    ):
         self.graph = graph
-        self.retriever = HybridRetriever(graph)
+        self.retriever = HybridRetriever(
+            graph,
+            vector_store=vector_store,
+            embedding_service=embedding_service,
+            domain=domain,
+            analysis_id=analysis_id,
+            pages=pages,
+        )
         self.model_router = model_router  # Optional: plug in LLM for richer synthesis
 
     def simulate(
@@ -303,21 +319,35 @@ class GroundedAnswerSimulator:
         else:
             source_page_title = f"{self.graph.brand} Official Website"
 
-        # Determine target update page and section based on intent
-        target_map = {
-            QueryIntent.COMMERCIAL: ("/pricing", "## Published Pricing Tiers & Billing Structure", "Publish a dedicated pricing tier card specifying starting rates, billing intervals, and usage limits."),
-            QueryIntent.COMPLIANCE: ("/security", "## Security Accreditations & Data Governance", "Publish formal security certifications (SOC 2, ISO 27001, GDPR) and encryption standards."),
-            QueryIntent.TECHNICAL: ("/documentation", "## Developer APIs & Technical Architecture", "Provide clear API endpoints, integration SDKs, webhooks, and technical deployment guides."),
-            QueryIntent.ONBOARDING: ("/support", "## Implementation SLAs & Customer Onboarding", "Document onboarding kickoff milestones, implementation timelines, and ticket SLA response guarantees."),
-            QueryIntent.PROOF: ("/case-studies", "## Quantified Customer Outcomes & ROI Studies", "Add customer proof, quantified metrics, and enterprise case studies."),
-            QueryIntent.ICP: ("/about", "## Target Audience & Disqualification Criteria", "Declare explicit target buyer personas, company scale criteria, and disqualifying use cases."),
-            QueryIntent.COMPETITIVE: ("/product", "## Key Differentiators & Competitive Moat", "Articulate defensible advantages and direct feature comparisons against legacy alternatives."),
-            QueryIntent.PURCHASE: ("/demo", "## Direct Procurement & Demo Conversion Path", "Ensure high-intent self-serve sign up or transparent demo scheduling workflows."),
+        # Resolve target update page strictly from actual crawled URLs (never fabricate /security or /documentation)
+        intent_guidance = {
+            QueryIntent.COMMERCIAL: ("## Pricing, Plans & Billing Clarity", "Publish clear pricing tiers, billing intervals, or transparent quote criteria grounded in verified offers."),
+            QueryIntent.COMPLIANCE: ("## Trust, Safety & Data Governance", "Publish verified compliance, safety, or privacy standards applicable to this business."),
+            QueryIntent.TECHNICAL: ("## Product Specifications & Integration Details", "Provide clear technical specifications, integrations, or setup requirements."),
+            QueryIntent.ONBOARDING: ("## Support, Onboarding & Delivery Expectations", "Document support channels, turnaround times, and customer onboarding steps."),
+            QueryIntent.PROOF: ("## Verified Customer Outcomes & Reviews", "Add real customer proof, verified outcomes, or case studies."),
+            QueryIntent.ICP: ("## Who This Is Built For", "Clarify ideal customer profiles, use cases, and suitability boundaries."),
+            QueryIntent.COMPETITIVE: ("## Key Differentiators & Comparisons", "Articulate concrete differentiators backed by observable capabilities."),
+            QueryIntent.PURCHASE: ("## Next Steps & Direct Conversion Path", "Clarify the exact sign-up, checkout, booking, or inquiry workflow."),
         }
-        target_update_page, target_update_section, section_rec_base = target_map.get(
+        target_update_section, section_rec_base = intent_guidance.get(
             plan.intent,
-            ("/", "## Core Solutions & Value Proposition", "Expand authoritative on-page documentation addressing this inquiry.")
+            ("## Core Offerings & Direct Answers", "Expand authoritative on-page documentation addressing this inquiry."),
         )
+
+        # Pick the best matching crawled URL by priority PageRole, then source_url, then homepage
+        target_update_page = source_url or ""
+        if not target_update_page and self.graph.page_classifications:
+            for desired_role in plan.priority_page_roles:
+                matched_pc = next((pc for pc in self.graph.page_classifications if getattr(pc, "page_role", None) == desired_role and pc.url), None)
+                if matched_pc:
+                    target_update_page = matched_pc.url
+                    break
+            if not target_update_page:
+                home_pc = next((pc for pc in self.graph.page_classifications if pc.url), None)
+                target_update_page = home_pc.url if home_pc else "/"
+        if not target_update_page:
+            target_update_page = "/"
         if assessment.status == "SUFFICIENT" and grounding_ratio >= 0.70:
             section_update_recommendation = (
                 "The retrieved passages already answer this question. No new fact is required."

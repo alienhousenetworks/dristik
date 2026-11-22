@@ -16,6 +16,20 @@ logger = logging.getLogger(__name__)
 
 
 @dataclass
+class AuditBudgetPlan:
+    """Dynamic per-audit budget and token envelope scaled from pages_crawled (₹20–₹30/page target)."""
+    pages_count: int
+    depth_mode: str
+    max_budget_usd: float
+    max_budget_inr: float
+    effective_per_page_usd: float
+    effective_per_page_inr: float
+    max_model_calls: int
+    frontier_copy_page_cap: int
+    per_page_token_cap: int
+
+
+@dataclass
 class BudgetStatus:
     max_budget_usd: float
     current_spent_usd: float
@@ -35,6 +49,55 @@ class BudgetManager:
     def __init__(self, max_budget_usd: float = 2.50, warning_threshold_pct: float = 85.0):
         self.max_budget_usd = max_budget_usd
         self.warning_threshold_pct = warning_threshold_pct
+
+    @staticmethod
+    def compute_audit_budget(
+        pages_count: int,
+        depth_mode: Optional[str] = None,
+    ) -> AuditBudgetPlan:
+        """
+        Computes a dynamic per-audit USD/INR budget & call envelope using a base + tiered
+        per-page curve (~₹20–₹30/page):
+          - Base site overhead covers Business Understanding, 100-Q AEO RAG, Critic, Remediation, Roadmap.
+          - Pages 1..20   -> AUDIT_PER_PAGE_USD_TIER1 (~$0.30/pg ≈ ₹25.5/pg)
+          - Pages 21..50  -> AUDIT_PER_PAGE_USD_TIER2 (~$0.24/pg ≈ ₹20.4/pg)
+          - Pages 51+     -> AUDIT_PER_PAGE_USD_TIER3 (~$0.18/pg ≈ ₹15.3/pg volume taper)
+        """
+        from app.core.config import settings
+        n = max(1, int(pages_count or 1))
+        mode = (depth_mode or getattr(settings, "AI_DEPTH_MODE", "tiered_frontier") or "tiered_frontier").strip().lower()
+        base_usd = float(getattr(settings, "AUDIT_BASE_BUDGET_USD", 0.45))
+        r1 = float(getattr(settings, "AUDIT_PER_PAGE_USD_TIER1", 0.30))
+        r2 = float(getattr(settings, "AUDIT_PER_PAGE_USD_TIER2", 0.24))
+        r3 = float(getattr(settings, "AUDIT_PER_PAGE_USD_TIER3", 0.18))
+        fx = float(getattr(settings, "USD_TO_INR_RATE", 85.0))
+
+        t1 = min(n, 20)
+        t2 = min(max(n - 20, 0), 30)
+        t3 = max(n - 50, 0)
+        total_usd = base_usd + (t1 * r1) + (t2 * r2) + (t3 * r3)
+        if mode == "frontier_all":
+            total_usd *= 1.45
+
+        total_usd = round(total_usd, 4)
+        per_page_usd = round(total_usd / n, 4)
+
+        # Call cap scales cleanly: ~60 site-level specialist/AEO/critic/remediation calls + ~2 calls per page
+        max_calls = max(80, min(600, 65 + (n * 2)))
+        frontier_copy_cap = n if mode == "frontier_all" else min(n, 40)
+        per_page_tokens = 12000 if n <= 20 else (8000 if n <= 50 else 5000)
+
+        return AuditBudgetPlan(
+            pages_count=n,
+            depth_mode=mode,
+            max_budget_usd=total_usd,
+            max_budget_inr=round(total_usd * fx, 2),
+            effective_per_page_usd=per_page_usd,
+            effective_per_page_inr=round(per_page_usd * fx, 2),
+            max_model_calls=max_calls,
+            frontier_copy_page_cap=frontier_copy_cap,
+            per_page_token_cap=per_page_tokens,
+        )
 
     def check_budget(self, telemetry: TelemetryData) -> BudgetStatus:
         spent = telemetry.estimated_cost_usd or 0.0
@@ -120,9 +183,12 @@ class BudgetManager:
                 "sub_steps": sub_step_list,
             })
 
+        from app.core.config import settings
+        fx = float(getattr(settings, "USD_TO_INR_RATE", 85.0))
         return {
             "summary": {
                 "total_cost_usd": total_cost,
+                "total_cost_inr_est": round(total_cost * fx, 2),
                 "actual_cost_usd": actual_cost,
                 "calculated_cost_usd": calc_cost,
                 "has_actual_costs": telemetry.has_actual_costs,

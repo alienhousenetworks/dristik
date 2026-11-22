@@ -204,6 +204,86 @@ class CROAuditOrchestrator:
             logger.warning("HTTP seed fetch failed for %s: %s", self.target_url, exc)
             return [{"url": self.target_url, "status_code": 0, "raw_html": "", "title": self.domain}]
 
+    def _hydrate_connected_analytics(self) -> Optional[Dict[str, Any]]:
+        """Auto-load measured GA4 telemetry from ExternalAuthorityService when connected.
+
+        Fail-closed: returns None when GA4 is not connected or has no measured snapshot.
+        """
+        if self.analytics_payload is not None:
+            return self.analytics_payload
+        try:
+            from app.connectors.authority.service import get_service
+
+            svc = get_service()
+            snap = svc.store.latest_snapshot(self.tenant_id, "google_analytics_4", self.domain, 28)
+            if not snap or snap.get("data_state") not in {"MEASURED", "PARTIALLY_MEASURED"}:
+                return None
+            records = svc.store.records_for_snapshot(snap["snapshot_id"])
+            if not records:
+                return None
+
+            totals: Dict[str, Any] = {}
+            landing_pages: List[Dict[str, Any]] = []
+            for rec in records:
+                meta = rec.get("metadata") or {}
+                if meta.get("comparison", "current") != "current":
+                    continue
+                metric = str(rec.get("metric") or "")
+                val = rec.get("value")
+                if rec.get("url"):
+                    landing_pages.append({
+                        "url": rec["url"],
+                        "metric": metric,
+                        "value": val,
+                    })
+                elif metric and val is not None and metric not in totals:
+                    totals[metric] = val
+
+            if not totals and not landing_pages:
+                return None
+
+            conversions = totals.get("conversions") or totals.get("organic_conversions")
+            users = totals.get("total_users") or totals.get("organic_users") or totals.get("users")
+            sessions = totals.get("organic_sessions") or totals.get("sessions")
+            revenue = totals.get("revenue") or totals.get("total_revenue")
+            events: List[Dict[str, Any]] = []
+            if conversions is not None:
+                events.append({
+                    "event_name": "conversion",
+                    "event_count": int(conversions),
+                    "unique_users": int(users) if users is not None else None,
+                    "revenue": float(revenue) if revenue is not None else None,
+                    "currency": "USD" if revenue is not None else None,
+                    "parameters": ["value", "currency"] if revenue is not None else [],
+                })
+
+            payload: Dict[str, Any] = {
+                "state": snap.get("data_state", "MEASURED"),
+                "connected": True,
+                "provider": "ga4",
+                "source": "google_analytics_4",
+                "snapshot_id": snap.get("snapshot_id"),
+                "date_range": f"{snap.get('period_start', '')}..{snap.get('period_end', '')}".strip("."),
+                "metrics": {
+                    "sessions": sessions,
+                    "unique_users": users,
+                    "engagement_rate": totals.get("engagement_rate") or totals.get("organic_engagement_rate"),
+                    "conversions": conversions,
+                    "revenue": revenue,
+                },
+                "events": events,
+                "landing_pages": landing_pages,
+            }
+            self.analytics_payload = payload
+            self.audit.analytics_connected = True
+            if "ga4" not in [p.lower() for p in self.connected_providers]:
+                self.connected_providers.append("ga4")
+            self.store.save_audit(self.audit)
+            return payload
+        except Exception as exc:
+            logger.debug("GA4 auto-hydration skipped for %s/%s: %s", self.tenant_id, self.domain, exc)
+            return None
+
     async def run(self) -> Dict[str, Any]:
         """Execute the full 11-stage CRO DAG and persist canonical results."""
         started = time.monotonic()
@@ -223,6 +303,7 @@ class CROAuditOrchestrator:
             # Stage 1 & 2: Business Profile + Conversion Goal Configuration
             async def stage_profile_and_goals():
                 nonlocal raw_pages, raw_html_map
+                self._hydrate_connected_analytics()
                 raw_pages = await self._fetch_seed_pages()
                 for rp in raw_pages:
                     if rp.get("url") and rp.get("raw_html"):

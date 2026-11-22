@@ -327,21 +327,33 @@ async def start_analysis(
         status=run.status.value if hasattr(run.status, "value") else str(run.status),
         page_count=max_pages,
     )
-    # Launch the same canonical orchestration pipeline. A selected provider is
-    # applied only to this background task through a ContextVar, avoiding
-    # cross-tenant/provider leakage when audits run concurrently.
+    # Enqueue onto the durable background job queue so server restarts recover in-flight audits.
+    # When the background worker loop is not running (e.g., isolated unit TestClient without lifespan),
+    # process the queued job via FastAPI BackgroundTasks so existing API tests execute seamlessly.
+    import app.workers.audit_tasks  # ensure 'audit.execute' handler is registered
+    from app.workers.queue import task_queue
+
     site_type = request.site_type or request.industry
-    pipeline_args = (
-        run.analysis_id, url, max_pages, site_type,
-        request.declared_site_type_notes, request.country,
-        request.language, request.target_pillars,
+    job_payload = {
+        "analysis_id": run.analysis_id,
+        "website_url": url,
+        "max_pages": max_pages,
+        "site_type": site_type,
+        "declared_site_type_notes": request.declared_site_type_notes,
+        "country": request.country,
+        "language": request.language,
+        "target_pillars": request.target_pillars,
+        "org_id": user.org_id,
+        "model_provider_id": model_provider_id,
+    }
+    task_queue.enqueue_job(
+        "audit.execute",
+        job_payload,
+        org_id=user.org_id,
+        analysis_id=run.analysis_id,
     )
-    if model_provider_id:
-        background_tasks.add_task(
-            _execute_analysis_with_provider, model_provider_id, user.org_id, *pipeline_args
-        )
-    else:
-        background_tasks.add_task(orchestrator.execute_analysis_pipeline, *pipeline_args)
+    if not task_queue.is_running:
+        background_tasks.add_task(task_queue.process_one)
     return run
 
 

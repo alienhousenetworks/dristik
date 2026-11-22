@@ -399,6 +399,400 @@ class AnalysisOrchestrator:
         if not run or not clean_org or clean_org.lower() in FORBIDDEN_TENANT_IDENTIFIERS:
             raise ValueError(f"Cannot execute pipeline for analysis {analysis_id}: valid tenant org_id required, 'org_default' rejected.")
 
+        from app.core.inference.llm_client import use_tenant_context
+        with use_tenant_context(clean_org):
+            return await self._execute_analysis_pipeline_scoped(
+                run=run,
+                analysis_id=analysis_id,
+                website_url=website_url,
+                max_pages=max_pages,
+                site_type=site_type,
+                declared_site_type_notes=declared_site_type_notes,
+                country=country,
+                language=language,
+                target_pillars=target_pillars,
+            )
+
+    async def _run_deterministic_analyzers(
+        self,
+        *,
+        eval_pages: List[Any],
+        manifest: Optional[CrawlManifest],
+        blackboard: CognitiveBlackboard,
+        domain: str,
+        website_url: str,
+    ) -> Dict[str, Any]:
+        """Stage 1 ($0.00): Execute all 18 deterministic Python analyzers before AI specialists."""
+        from app.cro.visual_ux_tester import visual_ux_tester
+        from app.seo.analyzers.canonical_auditor import analyze_canonicals
+        from app.seo.analyzers.http_status_auditor import analyze_http_statuses
+        from app.seo.analyzers.heading_analyzer import HeadingAnalyzer, analyze_heading_hierarchy
+        from app.seo.analyzers.media_asset_analyzer import MediaAssetAnalyzer, analyze_media_assets
+        from app.seo.analyzers.link_depth import LinkDepthAnalyzer, analyze_link_depth_and_orphans
+        from app.seo.analyzers.meta_rollup import analyze_meta_rollup
+        from app.cro.form_analyzer import analyze_forms
+        from app.cro import analyze_cro
+        from app.crawl.analyzers.security_analyzer import analyze_security_headers
+        from app.seo.analyzers.schema_validator import analyze_schema_rich_results
+        from app.seo.analyzers.local_seo_analyzer import analyze_local_seo
+        from app.seo.analyzers.international_seo_analyzer import analyze_international_seo
+        from app.seo.analyzers.topical_authority_analyzer import analyze_topical_authority
+        from app.seo.analyzers.ecommerce_seo import analyze_ecommerce_seo
+        from app.seo.analyzers.serp_appearance import analyze_serp_appearance
+        from app.cro.accessibility.wcag_auditor import DeepWcagAuditor
+        from app.crawl.indexation.classifier import indexation_classifier
+        from app.seo.competitive.benchmark import build_competitor_seo_parity_matrix
+        from app.seo.analyzers.host_and_redirects import probe_host_and_redirects
+
+        cro_finding = visual_ux_tester.generate_grounded_cro_finding(
+            domain=domain,
+            website_url=website_url,
+            pages=eval_pages or getattr(blackboard, "pages", None),
+        )
+        canonical_audit_rep, can_findings = analyze_canonicals(eval_pages)
+        broken_raw = manifest.crawl_health.get("broken_links") if manifest and manifest.crawl_health else []
+        http_status_rep, http_findings = analyze_http_statuses(eval_pages, broken_links_raw=broken_raw)
+
+        heading_hierarchy_rep = analyze_heading_hierarchy(eval_pages)
+        heading_findings = HeadingAnalyzer.generate_findings(heading_hierarchy_rep)
+
+        media_assets_rep = analyze_media_assets(eval_pages)
+        media_findings = MediaAssetAnalyzer.generate_findings(media_assets_rep)
+
+        sitemap_urls_sample = [manifest.sitemap_url] if (manifest and manifest.sitemap_url) else []
+        click_depth_rep, orphan_pages_rep, anchor_text_audit_rep = analyze_link_depth_and_orphans(
+            eval_pages, sitemap_urls=sitemap_urls_sample, homepage_url=website_url
+        )
+        link_findings = LinkDepthAnalyzer.generate_findings(click_depth_rep, orphan_pages_rep, anchor_text_audit_rep)
+
+        meta_rollup_rep = analyze_meta_rollup(eval_pages)
+        form_audit_rep = analyze_forms(eval_pages)
+        cro_audit_rep, cro_findings = analyze_cro(
+            eval_pages,
+            raw_html_map=getattr(blackboard, "raw_html_map", None),
+            business_profile=blackboard.business_profile,
+        )
+        schema_validation_rep = analyze_schema_rich_results(eval_pages)
+        wcag_audit_rep, wcag_findings = DeepWcagAuditor.audit_pages(eval_pages)
+
+        local_seo_rep, local_findings = analyze_local_seo(eval_pages, target_domain=domain)
+        intl_seo_rep, intl_findings = analyze_international_seo(eval_pages, target_domain=domain)
+        topical_auth_rep, topical_findings = analyze_topical_authority(eval_pages, target_domain=domain)
+        ecom_seo_rep, ecom_findings = analyze_ecommerce_seo(eval_pages, target_domain=domain)
+        serp_app_rep, serp_findings = analyze_serp_appearance(eval_pages, target_domain=domain)
+
+        indexation_rollup_rep, indexation_findings = indexation_classifier.audit(
+            manifest=manifest,
+            pages=eval_pages,
+        )
+        if manifest:
+            manifest.indexation_rollup = indexation_rollup_rep
+
+        competitor_seo_parity_rep = build_competitor_seo_parity_matrix(
+            target_pages=eval_pages,
+            target_domain=domain,
+            manifest=manifest,
+        )
+
+        first_page_headers = {}
+        if eval_pages and getattr(eval_pages[0], "response_headers", None):
+            first_page_headers = eval_pages[0].response_headers
+        security_audit_rep = analyze_security_headers(
+            url=website_url,
+            response_headers=first_page_headers,
+        )
+
+        try:
+            host_and_redirects_rep = await probe_host_and_redirects(domain_or_url=website_url, canonical_target=website_url)
+        except Exception:
+            from app.domain.models import RedirectAuditReport
+            host_and_redirects_rep = RedirectAuditReport(
+                target_domain=domain,
+                canonical_destination=website_url,
+                summary="Host variant probe did not complete. www, apex, and protocol variants were not measured.",
+            )
+
+        analyzer_finding_groups = [
+            [cro_finding] if cro_finding is not None else [],
+            can_findings,
+            http_findings,
+            heading_findings,
+            media_findings,
+            link_findings,
+            cro_findings,
+            wcag_findings,
+            local_findings,
+            intl_findings,
+            topical_findings,
+            ecom_findings,
+            serp_findings,
+            indexation_findings,
+        ]
+        store = blackboard.evidence_store if hasattr(blackboard, "evidence_store") else None
+        all_stored = store.get_all() if store is not None else []
+        deterministic_findings: List[Any] = []
+        seen_ids: set = set()
+        for group in analyzer_finding_groups:
+            for f in (group or []):
+                if not f or not getattr(f, "finding_id", None) or f.finding_id in seen_ids:
+                    continue
+                ev_refs = []
+                for ev in (getattr(f, "evidence", []) or []):
+                    ev_id = getattr(ev, "evidence_id", None) or (ev.get("evidence_id") if isinstance(ev, dict) else None)
+                    stored = store.get(ev_id) if store is not None and ev_id else None
+                    if _stored_evidence_is_linkable(stored):
+                        ev_refs.append(str(ev_id))
+                if not ev_refs and all_stored:
+                    page_target = (getattr(f, "affected_urls", []) or [None])[0]
+                    if page_target:
+                        for existing in all_stored:
+                            if _stored_evidence_is_linkable(existing) and existing.url and page_target in existing.url:
+                                ev_refs.append(existing.id)
+                                break
+                # Leave evidence_refs empty when nothing stored has a real hash.
+                f.evidence_refs = list(dict.fromkeys((f.evidence_refs or []) + ev_refs))
+                deterministic_findings.append(f)
+                seen_ids.add(f.finding_id)
+
+        bundle = {
+            "cro_finding": cro_finding,
+            "canonical_audit_rep": canonical_audit_rep,
+            "http_status_rep": http_status_rep,
+            "heading_hierarchy_rep": heading_hierarchy_rep,
+            "media_assets_rep": media_assets_rep,
+            "click_depth_rep": click_depth_rep,
+            "orphan_pages_rep": orphan_pages_rep,
+            "anchor_text_audit_rep": anchor_text_audit_rep,
+            "meta_rollup_rep": meta_rollup_rep,
+            "form_audit_rep": form_audit_rep,
+            "cro_audit_rep": cro_audit_rep,
+            "schema_validation_rep": schema_validation_rep,
+            "wcag_audit_rep": wcag_audit_rep,
+            "local_seo_rep": local_seo_rep,
+            "intl_seo_rep": intl_seo_rep,
+            "topical_auth_rep": topical_auth_rep,
+            "ecom_seo_rep": ecom_seo_rep,
+            "serp_app_rep": serp_app_rep,
+            "indexation_rollup_rep": indexation_rollup_rep,
+            "competitor_seo_parity_rep": competitor_seo_parity_rep,
+            "security_audit_rep": security_audit_rep,
+            "host_and_redirects_rep": host_and_redirects_rep,
+            "deterministic_findings": deterministic_findings,
+        }
+        blackboard.blackboard_state["deterministic_findings"] = deterministic_findings
+        blackboard.blackboard_state["deterministic_reports"] = {
+            k: v for k, v in bundle.items() if k != "deterministic_findings"
+        }
+        return bundle
+
+    async def _verify_deterministic_findings_with_ai(
+        self,
+        *,
+        model_router: ModelRouter,
+        blackboard: CognitiveBlackboard,
+    ) -> Dict[str, Any]:
+        """Stage 1b: Frontier AI reviews deterministic Python findings against business context & page sections."""
+        import json as _json
+        from typing import Literal
+        from pydantic import BaseModel, Field
+
+        det_findings = list(blackboard.blackboard_state.get("deterministic_findings") or [])
+        if not det_findings:
+            ledger = {
+                "deterministic_findings_total": 0,
+                "deterministic_findings_ai_reviewed": 0,
+                "confirmed_count": 0,
+                "false_positive_count": 0,
+                "downgraded_count": 0,
+                "needs_context_count": 0,
+                "ai_review_status": "completed",
+            }
+            blackboard.blackboard_state["coverage_ledger"] = ledger
+            return ledger
+
+        class _FindingVerificationItem(BaseModel):
+            finding_id: str
+            verdict: Literal["CONFIRMED", "FALSE_POSITIVE", "DOWNGRADED", "NEEDS_CONTEXT"]
+            adjusted_severity: Optional[Literal["CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"]] = None
+            business_impact_rationale: str = Field(..., min_length=5)
+            root_cause_note: str = ""
+
+        class _FindingVerificationBatch(BaseModel):
+            verifications: List[_FindingVerificationItem] = Field(default_factory=list)
+
+        bp = blackboard.business_profile
+        biz_summary = (
+            f"Business: {getattr(bp, 'business_name', None) or blackboard.website_url} | "
+            f"Industry: {getattr(bp, 'industry', None) or 'Unknown'} | "
+            f"Model: {getattr(bp, 'business_model', None) or 'Unknown'} | "
+            f"ICP: {getattr(bp, 'target_audience', None) or 'Unknown'}"
+        )
+        page_index = {p.url: p for p in (blackboard.pages or []) if getattr(p, "url", None)}
+        store = blackboard.evidence_store
+
+        batch_size = 15
+        batches = [det_findings[i : i + batch_size] for i in range(0, len(det_findings), batch_size)]
+        sem = asyncio.Semaphore(3)
+        verifications_map: Dict[str, Dict[str, Any]] = {}
+        finding_by_id = {f.finding_id: f for f in det_findings}
+        sev_order = {
+            Severity.CRITICAL: 5,
+            Severity.HIGH: 4,
+            Severity.MEDIUM: 3,
+            Severity.LOW: 2,
+            Severity.INFO: 1,
+        }
+        sev_lookup = {s.value.upper(): s for s in Severity}
+
+        async def _review_batch(batch_idx: int, batch: List[Any]) -> int:
+            async with sem:
+                items_payload = []
+                batch_ev = []
+                seen_ev_ids = set()
+                relevant_page_snippets = []
+                seen_urls = set()
+
+                for f in batch:
+                    items_payload.append({
+                        "finding_id": f.finding_id,
+                        "category": f.category.value if hasattr(f.category, "value") else str(f.category),
+                        "severity": f.severity.value if hasattr(f.severity, "value") else str(f.severity),
+                        "title": (f.title or f.finding or "")[:240],
+                        "description": (f.description or "")[:360],
+                        "affected_urls": (f.affected_urls or [])[:5],
+                        "recommendation": (f.recommendation or "")[:240],
+                    })
+                    for ref in (f.evidence_refs or [])[:3]:
+                        if ref not in seen_ev_ids and store:
+                            ev = store.get(ref)
+                            if ev is not None:
+                                batch_ev.append(ev)
+                                seen_ev_ids.add(ref)
+                    for u in (f.affected_urls or [])[:2]:
+                        if u in page_index and u not in seen_urls:
+                            seen_urls.add(u)
+                            p = page_index[u]
+                            sec_heads = [
+                                getattr(s, "heading_text", None) or getattr(s, "heading", None)
+                                for s in (getattr(p, "sections", None) or [])[:6]
+                                if getattr(s, "heading_text", None) or getattr(s, "heading", None)
+                            ]
+                            relevant_page_snippets.append({
+                                "url": u,
+                                "title": p.title or "",
+                                "status_code": p.status_code,
+                                "word_count": p.word_count,
+                                "sections": sec_heads,
+                            })
+
+                task_contract = (
+                    f"{biz_summary}\n\n"
+                    f"AFFECTED PAGES CONTEXT:\n{_json.dumps(relevant_page_snippets[:10], indent=2)}\n\n"
+                    f"DETERMINISTIC PYTHON FINDINGS (Batch {batch_idx + 1}/{len(batches)}):\n"
+                    f"{_json.dumps(items_payload, indent=2)}\n\n"
+                    "Evaluate EVERY finding_id above. Mark FALSE_POSITIVE only when the site's business model, page type, "
+                    "or observed page structure proves the deterministic rule does not apply (e.g., ecommerce check on a pure "
+                    "B2B SaaS page, or local address check on a global online-only tool). Mark DOWNGRADED if real but minor. "
+                    "Explain the concrete business impact for every finding. Never invent metrics or URLs."
+                )
+                try:
+                    res = await model_router.generate_structured(
+                        capability="seo_verification",
+                        agent_role="Principal SEO/CRO/GEO Verification Auditor",
+                        task_contract=task_contract,
+                        evidence_list=batch_ev[:25],
+                        output_schema_desc=_json.dumps(_FindingVerificationBatch.model_json_schema(), indent=2),
+                        site_facts=getattr(blackboard, "site_facts", None),
+                        max_claims=len(batch),
+                        allow_fallback=False,
+                        model_tier="reasoning_model",
+                    )
+                except Exception as err:
+                    logger.warning("Deterministic finding AI verification batch %d failed: %s", batch_idx + 1, err)
+                    return 0
+
+                if not isinstance(res, dict) or str(res.get("status") or "").lower() in ("unavailable", "budget_exceeded"):
+                    return 0
+
+                raw_items = res.get("verifications") or []
+                if not isinstance(raw_items, list) or not raw_items:
+                    return 0
+
+                reviewed_here = 0
+                for raw_item in raw_items:
+                    try:
+                        item = (
+                            raw_item
+                            if isinstance(raw_item, _FindingVerificationItem)
+                            else _FindingVerificationItem.model_validate(raw_item)
+                        )
+                    except Exception:
+                        continue
+                    target = finding_by_id.get(item.finding_id)
+                    if target is None:
+                        continue
+                    reviewed_here += 1
+                    verdict_dict = item.model_dump()
+                    verifications_map[item.finding_id] = verdict_dict
+                    target.adversarial_reviewed = True
+                    note_prefix = f"[AI Review: {item.verdict}] {item.business_impact_rationale}"
+                    target.verification_notes = (
+                        f"{target.verification_notes}\n{note_prefix}".strip()
+                        if target.verification_notes
+                        else note_prefix
+                    )
+                    if not target.business_impact:
+                        target.business_impact = item.business_impact_rationale
+                    if not target.why_it_matters:
+                        target.why_it_matters = item.business_impact_rationale
+                    if item.root_cause_note and not target.reasoning:
+                        target.reasoning = item.root_cause_note
+
+                    if item.verdict == "FALSE_POSITIVE":
+                        target.severity = Severity.INFO
+                        target.confidence = min(float(target.confidence or 0.5), 0.35)
+                        target.held_from_executive = True
+                    elif item.verdict == "DOWNGRADED" and item.adjusted_severity:
+                        adj = sev_lookup.get(item.adjusted_severity.upper())
+                        if adj and sev_order.get(adj, 0) < sev_order.get(target.severity, 0):
+                            target.severity = adj
+                return reviewed_here
+
+        counts = await asyncio.gather(*[_review_batch(i, b) for i, b in enumerate(batches)])
+        reviewed_total = sum(counts)
+        verdict_vals = [v.get("verdict") for v in verifications_map.values()]
+        status = (
+            "completed"
+            if reviewed_total >= len(det_findings)
+            else ("partial" if reviewed_total > 0 else "unavailable")
+        )
+        ledger = {
+            "deterministic_findings_total": len(det_findings),
+            "deterministic_findings_ai_reviewed": reviewed_total,
+            "confirmed_count": verdict_vals.count("CONFIRMED"),
+            "false_positive_count": verdict_vals.count("FALSE_POSITIVE"),
+            "downgraded_count": verdict_vals.count("DOWNGRADED"),
+            "needs_context_count": verdict_vals.count("NEEDS_CONTEXT"),
+            "ai_review_status": status,
+        }
+        blackboard.blackboard_state["deterministic_verifications"] = verifications_map
+        blackboard.blackboard_state["coverage_ledger"] = ledger
+        return ledger
+
+    async def _execute_analysis_pipeline_scoped(
+        self,
+        *,
+        run: AnalysisRun,
+        analysis_id: str,
+        website_url: str,
+        max_pages: Optional[int] = None,
+        site_type: Optional[str] = None,
+        declared_site_type_notes: Optional[str] = None,
+        country: Optional[str] = None,
+        language: Optional[str] = None,
+        target_pillars: Optional[List[str]] = None,
+    ):
+
 
         if target_pillars is None and run and run.target_pillars:
             target_pillars = run.target_pillars
@@ -499,6 +893,19 @@ class AnalysisOrchestrator:
                 domain = manifest.domain
                 controller.mark_node_status("node_crawl", GraphNodeStatus.COMPLETED, evidence_count=len(manifest.pages), output_summary=f"{len(manifest.pages)} pages")
                 controller.log_activity("node_crawl", "success", "crawl.success", f"Crawled {len(manifest.pages)} pages from {website_url}")
+
+            # Apply dynamic page-tiered Frontier AI budget (₹20–₹30/page target) now that crawl count is known
+            from dataclasses import asdict as _asdict
+            budget_plan = model_router.apply_page_budget(len(manifest.pages))
+            blackboard.blackboard_state["budget_plan"] = _asdict(budget_plan)
+            logger.info(
+                "Applied dynamic audit budget for %d page(s): $%.2f (~₹%.0f, %d calls, mode=%s)",
+                budget_plan.pages_count,
+                budget_plan.max_budget_usd,
+                budget_plan.max_budget_inr,
+                budget_plan.max_model_calls,
+                budget_plan.depth_mode,
+            )
 
             if await _check_pause():
                 return
@@ -734,6 +1141,22 @@ class AnalysisOrchestrator:
             controller.mark_node_status("node_schema_ld_json", GraphNodeStatus.COMPLETED)
             controller.log_activity("node_schema_ld_json", "success", "schema.complete", "Deterministic technical & schema capabilities completed ($0 inference)")
 
+            # Stage 1: Execute all 18 deterministic Python analyzers ($0.00) BEFORE Business Understanding & Specialist DAG
+            eval_pages = (manifest.pages if manifest else None) or blackboard.pages or []
+            det_bundle = await self._run_deterministic_analyzers(
+                eval_pages=eval_pages,
+                manifest=manifest,
+                blackboard=blackboard,
+                domain=domain,
+                website_url=website_url,
+            )
+            controller.log_activity(
+                "node_schema_ld_json",
+                "success",
+                "deterministic.analyzers.complete",
+                f"Stage-1 deterministic analyzers completed ({len(det_bundle['deterministic_findings'])} raw findings ready for AI review)",
+            )
+
             if await _check_pause():
                 return
 
@@ -836,6 +1259,29 @@ class AnalysisOrchestrator:
                 await self._consolidate_progressive_phase(analysis_id, "phase_02_business", "phase_02_consolidated")
             except Exception as rep2_err:
                 logger.warning(f"Progressive reporting error for Phase 2: {rep2_err}", exc_info=True)
+
+            # Stage 1b: Frontier AI verification of Stage-1 deterministic Python findings against Business Context
+            try:
+                model_router.set_active_stage("deterministic_verification", "Frontier AI Finding Verification")
+                model_router.set_active_sub_stage("finding_verification", "AI Review of Deterministic Findings")
+                ver_ledger = await self._verify_deterministic_findings_with_ai(
+                    model_router=model_router,
+                    blackboard=blackboard,
+                )
+                controller.log_activity(
+                    "node_specialist_wave_1",
+                    "info",
+                    "deterministic.ai_verified",
+                    (
+                        f"AI reviewed {ver_ledger.get('deterministic_findings_ai_reviewed', 0)}/"
+                        f"{ver_ledger.get('deterministic_findings_total', 0)} deterministic findings "
+                        f"({ver_ledger.get('confirmed_count', 0)} confirmed, "
+                        f"{ver_ledger.get('false_positive_count', 0)} false positives, "
+                        f"{ver_ledger.get('downgraded_count', 0)} downgraded)."
+                    ),
+                )
+            except Exception as ver_err:
+                logger.warning("Stage 1b deterministic finding AI verification note: %s", ver_err)
 
             if await _check_pause():
                 return
@@ -1083,204 +1529,46 @@ class AnalysisOrchestrator:
             if await _check_pause():
                 return
 
-            # 7b. Per-page SEO, copywriting, and suggested copy
-            if effective_pillars is None or "seo" in effective_pillars:
-                controller.mark_node_status("node_seo_page_intelligence", GraphNodeStatus.RUNNING)
-                controller.mark_node_status("node_page_intelligence", GraphNodeStatus.RUNNING)
-                controller.log_activity("node_seo_page_intelligence", "running", "page.rewrites", f"Writing detailed SEO and copy reports for {len(manifest.pages)} crawled page(s)...")
-
-                model_router.set_active_stage("page_intelligence", "Page-Level SEO & Copywriting")
-                model_router.set_active_sub_stage("page_copy_and_hero", "Page-by-Page SEO & Copywriting Rewrites")
-                await self._emit_event(
-                    analysis_id,
-                    "specialist_execution",
-                    80,
-                    f"Writing detailed SEO and copy reports for {len(manifest.pages)} crawled page(s)...",
+            # -----------------------------------------------------------------
+            # Stage 3: Commercial AI Query Simulation, Entity Graph, Live AI Visibility,
+            # GEO Readiness, Competitive Intelligence, External Authority & 100-Q AEO Sandbox
+            # (Runs BEFORE PageIntelligenceAgent copywriting & Adversarial Critic so
+            #  copywriting sees all 4-pillar gaps + 100-Q AEO gaps, and Critic audits all claims)
+            # -----------------------------------------------------------------
+            eval_pages = (manifest.pages if manifest else None) or blackboard.pages or []
+            if not det_bundle:
+                det_bundle = await self._run_deterministic_analyzers(
+                    eval_pages=eval_pages,
+                    manifest=manifest,
+                    blackboard=blackboard,
+                    domain=domain,
+                    website_url=website_url,
                 )
-                t_page_start = time.perf_counter()
-                page_agent = PageIntelligenceAgent(model_router)
-                await page_agent.run(blackboard)
-                page_elapsed_ms = max(50, int((time.perf_counter() - t_page_start) * 1000))
-                copy_dur_ms = max(10, int(page_elapsed_ms / 6))
-                controller.mark_node_status("node_seo_page_intelligence", GraphNodeStatus.COMPLETED)
-                controller.mark_node_status("node_page_intelligence", GraphNodeStatus.COMPLETED)
-                controller.log_activity("node_seo_page_intelligence", "success", "page.complete", f"Completed page-level intelligence for {len(manifest.pages)} page(s)")
-            else:
-                page_elapsed_ms = 0
-                copy_dur_ms = 0
-                controller.mark_node_status("node_seo_page_intelligence", GraphNodeStatus.SKIPPED)
-                controller.mark_node_status("node_page_intelligence", GraphNodeStatus.SKIPPED)
-                controller.log_activity("node_seo_page_intelligence", "info", "page.skipped", "SEO page intelligence skipped by selective execution")
+            cro_finding = det_bundle["cro_finding"]
+            canonical_audit_rep = det_bundle["canonical_audit_rep"]
+            http_status_rep = det_bundle["http_status_rep"]
+            heading_hierarchy_rep = det_bundle["heading_hierarchy_rep"]
+            media_assets_rep = det_bundle["media_assets_rep"]
+            click_depth_rep = det_bundle["click_depth_rep"]
+            orphan_pages_rep = det_bundle["orphan_pages_rep"]
+            anchor_text_audit_rep = det_bundle["anchor_text_audit_rep"]
+            meta_rollup_rep = det_bundle["meta_rollup_rep"]
+            form_audit_rep = det_bundle["form_audit_rep"]
+            cro_audit_rep = det_bundle["cro_audit_rep"]
+            schema_validation_rep = det_bundle["schema_validation_rep"]
+            wcag_audit_rep = det_bundle["wcag_audit_rep"]
+            local_seo_rep = det_bundle["local_seo_rep"]
+            intl_seo_rep = det_bundle["intl_seo_rep"]
+            topical_auth_rep = det_bundle["topical_auth_rep"]
+            ecom_seo_rep = det_bundle["ecom_seo_rep"]
+            serp_app_rep = det_bundle["serp_app_rep"]
+            indexation_rollup_rep = det_bundle["indexation_rollup_rep"]
+            competitor_seo_parity_rep = det_bundle["competitor_seo_parity_rep"]
+            security_audit_rep = det_bundle["security_audit_rep"]
+            host_and_redirects_rep = det_bundle["host_and_redirects_rep"]
+            deterministic_findings = list(det_bundle.get("deterministic_findings") or [])
 
-            # ── Progressive Reporting: Phase 4 — Copywriting & Page Intelligence ─
-            try:
-                page_intel_reports = (
-                    getattr(blackboard, "page_reports", None)
-                    or getattr(blackboard, "page_intelligence_reports", None)
-                    or {}
-                )
-                copy_status = ExecutionStatus.COMPLETED if (effective_pillars is None or "seo" in effective_pillars) else ExecutionStatus.NOT_CONFIGURED
-                copy_conf = ConfidenceLevel.VERIFIED if page_intel_reports else ConfidenceLevel.UNMEASURED
-
-                # 4.1 Consolidated Page Intelligence (single truthful subphase matching actual PageIntelligenceAgent run)
-                p4_1 = SubPhaseReportBuilder.build_generic(
-                    run_id=analysis_id,
-                    phase_id="phase_04_copywriting",
-                    phase_name="4. Copywriting & Page Intelligence",
-                    subphase_id="4.1",
-                    subphase_title="Page Intelligence & Copywriting Synthesis",
-                    objective="Compile URL-by-URL SEO/GEO/CRO audits, title upgrades, and character-safe hero copy rewrites.",
-                    agent_id="agent.page_intelligence",
-                    agent_model="hybrid_pipeline",
-                    execution_mode="hybrid",
-                    duration_ms=page_elapsed_ms,
-                    status=copy_status,
-                    input_summary={"pages_analyzed": len(manifest.pages)},
-                    processing_steps=["Compile per-page SEO & copy audits", "Assemble character-safe rewrite payload"],
-                    structured_output={"pages_analyzed": len(manifest.pages), "reports_count": len(page_intel_reports)},
-                    evidence_tokens=[],
-                    findings=[],
-                    confidence=copy_conf,
-                )
-                await self._record_progressive_subphase(p4_1, "page_intelligence_consolidated")
-
-                # Phase 4 Consolidated
-                await self._consolidate_progressive_phase(analysis_id, "phase_04_copywriting", "phase_04_consolidated")
-            except Exception as rep4_err:
-                logger.warning(f"Progressive reporting error for Phase 4: {rep4_err}", exc_info=True)
-
-            if await _check_pause():
-                return
-
-            # 8. Verification agents already ran in the DAG (adversarial + contradiction + executive).
-            controller.mark_node_status("node_adversarial_critic", GraphNodeStatus.RUNNING)
-            controller.log_activity("node_adversarial_critic", "running", "critic.audit", "Adversarial critic testing claims against ground truth...")
-
-            model_router.set_active_stage("adversarial_verification", "Adversarial Verification & Integrity Gate")
-            model_router.set_active_sub_stage("critic_verification", "Adversarial Critic & Ground Truth Gate")
-            run.status = AnalysisStage.ADVERSARIAL_VERIFICATION
-            await self._emit_event(
-                analysis_id,
-                "adversarial_verification",
-                82,
-                "Adversarial and contradiction specialists recorded on the blackboard.",
-            )
-
-            # Mandatory Stage 6 Gate A: Independent Adversarial Critic Worker runs BEFORE
-            # the authoritative Zero-Fake Evidence Integrity Gate so critic cannot overturn
-            # integrity-rejected claims.
-            try:
-                critic_res = await team_orchestrator.worker_critic.execute_task("34_adversarial_verification", blackboard)
-                blackboard.blackboard_state["critic_gate"] = {
-                    "status": "completed",
-                    "verified_count": len(critic_res.get("verified_claims") or []),
-                    "rejected_count": len(critic_res.get("rejected_claims") or []),
-                    "deflated_count": len(critic_res.get("deflated_claims") or []),
-                    "contradictions_count": len(critic_res.get("contradictions") or []),
-                }
-            except Exception as critic_err:
-                logger.error("Mandatory CognitiveCriticWorker gate failed for %s: %s", analysis_id, critic_err)
-                blackboard.blackboard_state["critic_gate"] = {
-                    "status": "failed",
-                    "error": str(critic_err),
-                }
-
-            # Zero-Fake Evidence Integrity Gate (authoritative final claim gate)
-            if await _check_pause():
-                return
-            controller.mark_node_status("node_integrity_gate", GraphNodeStatus.RUNNING)
-            controller.log_activity("node_integrity_gate", "running", "integrity.gate", "Enforcing Zero-Fake Evidence cryptographic provenance...")
-
-            current_claims = blackboard.claim_registry.get_all()
-            gate_res = integrity_gate.validate_claims_and_evidence(
-                current_claims, blackboard.evidence_store, blackboard.claim_registry
-            )
-            blackboard.blackboard_state["integrity_gate"] = gate_res.model_dump()
-            controller.mark_node_status("node_integrity_gate", GraphNodeStatus.COMPLETED)
-            controller.log_activity("node_integrity_gate", "success", "integrity.complete", "Zero-Fake Evidence integrity gate passed")
-
-            from app.domain.enums import Materiality, RubricConfidence
-            from app.orchestration.cognition.finding_rubric import apply_rubric_to_claim
-            for _claim in current_claims:
-                apply_rubric_to_claim(_claim, blackboard.evidence_store)
-            held_guesses = [
-                c for c in current_claims
-                if c.confidence_rubric == RubricConfidence.GUESSING
-                and c.materiality == Materiality.CRITICAL
-                and not c.adversarial_reviewed
-            ]
-            if held_guesses:
-                adv = agent_pool.get("verification.adversarial.v3")
-                if adv:
-                    await adv.run(blackboard)
-                    await self._emit_event(
-                        analysis_id,
-                        "adversarial_verification",
-                        83,
-                        f"Escalated {len(held_guesses)} GUESSING+CRITICAL claim(s) to verification.adversarial.v3 before executive use.",
-                    )
-
-            # Mandatory Stage 6 Gate B: Contradiction Engine
-            try:
-                from app.orchestration.cognition.contradiction_engine import ContradictionEngine
-                contra_engine = ContradictionEngine()
-                claim_contradictions = contra_engine.detect_contradictions(
-                    blackboard.claim_registry.get_all()
-                )
-                blackboard.blackboard_state["contradiction_report"] = {
-                    "status": "completed",
-                    "conflicts_detected": len(claim_contradictions or []),
-                    "conflicts": claim_contradictions[:20],
-                }
-            except Exception as ce_err:
-                logger.warning("ContradictionEngine gate note for %s: %s", analysis_id, ce_err)
-                blackboard.blackboard_state["contradiction_report"] = {
-                    "status": "error",
-                    "error": str(ce_err),
-                }
-
-            controller.mark_node_status("node_adversarial_critic", GraphNodeStatus.COMPLETED)
-            controller.log_activity("node_adversarial_critic", "success", "critic.complete", "Adversarial cross-examination complete")
-
-            # Detect uncorroborated marketing claims (Evidence Gaps)
-            evidence_gaps = self.gap_detector.detect_gaps(current_claims, blackboard.evidence_store, blackboard.pages)
-            blackboard.blackboard_state["evidence_gaps"] = [g.model_dump() for g in evidence_gaps]
-
-            if await _check_pause():
-                return
-
-            # 9. Level 3: Causal Reasoning & Root-Cause Bottleneck Discovery
-            controller.mark_node_status("node_causal_bottlenecks", GraphNodeStatus.RUNNING)
-            controller.log_activity("node_causal_bottlenecks", "running", "causal.roots", "Causal Reasoning Engine isolating primary root-cause growth bottlenecks...")
-
-            model_router.set_active_stage("causal_reasoning", "Causal Reasoning & Bottlenecks")
-            model_router.set_active_sub_stage("causal_bottlenecks", "Causal Graph & Bottleneck Isolation")
-            await self._emit_event(analysis_id, "specialist_execution", 82, "Causal Reasoning Engine isolating primary root-cause growth bottlenecks...")
-            bottlenecks = self.causal_engine.analyze_root_causes(
-                claims=current_claims,
-                business_profile=blackboard.business_profile,
-                crawl_summary=manifest.crawl_health if manifest else None,
-            )
-            blackboard.blackboard_state["root_causes"] = [b.model_dump() for b in bottlenecks]
-            controller.mark_node_status("node_causal_bottlenecks", GraphNodeStatus.COMPLETED)
-            controller.log_activity("node_causal_bottlenecks", "success", "causal.complete", f"Isolated {len(bottlenecks)} primary growth bottlenecks")
-
-            # Update Hypotheses with accumulated evidence
-            evaluated_hypotheses = self.hypothesis_engine.evaluate_hypotheses_against_evidence(
-                initial_hypotheses, current_claims, blackboard.evidence_store
-            )
-            mission_state.hypotheses = evaluated_hypotheses
-
-            # Detect Positive Growth Opportunities
-            opportunities = self.opportunity_detector.detect_opportunities(
-                blackboard.business_profile, blackboard.pages, current_claims
-            )
-            blackboard.blackboard_state["opportunities"] = [o.model_dump() for o in opportunities]
-
-            if await _check_pause():
-                return
-
-            # 10. AI Answer Engine Discoverability & Commercial Query Simulation
+            # 3A. AI Answer Engine Discoverability & Commercial Query Simulation
             if effective_pillars is None or "aeo" in effective_pillars:
                 controller.mark_node_status("node_aeo_search_simulation", GraphNodeStatus.RUNNING)
                 controller.mark_node_status("node_ai_search_simulation", GraphNodeStatus.RUNNING)
@@ -1291,7 +1579,7 @@ class AnalysisOrchestrator:
                 await self._emit_event(
                     analysis_id,
                     "specialist_execution",
-                    85,
+                    79,
                     "Simulating AI Answer Engine evaluations across 6 Canonical Commercial Inquiries (ChatGPT, Perplexity, Gemini, Claude)...",
                     {"evaluating_queries": 6}
                 )
@@ -1313,164 +1601,7 @@ class AnalysisOrchestrator:
             if await _check_pause():
                 return
 
-            # 11. Executive Strategy Narrative Synthesis
-            controller.mark_node_status("node_executive_narrative", GraphNodeStatus.RUNNING)
-            controller.log_activity("node_executive_narrative", "running", "narrative.compile", "Synthesizer compiling C-Suite narrative from verified specialist claims...")
-
-            model_router.set_active_stage("executive_synthesis", "Executive Strategy Narrative Synthesis")
-            model_router.set_active_sub_stage("narrative_synthesis", "C-Suite Strategic Narrative Compilation")
-            run.status = AnalysisStage.EXECUTIVE_SYNTHESIS
-            await self._emit_event(analysis_id, "executive_synthesis", 88, "Synthesizer compiling C-Suite narrative from verified specialist claims...")
-            if not blackboard.executive_narrative.get("story_summary"):
-                await team_orchestrator.worker_synthesizer.execute_task("synthesis", blackboard)
-            controller.mark_node_status("node_executive_narrative", GraphNodeStatus.COMPLETED)
-            controller.log_activity("node_executive_narrative", "success", "narrative.complete", "Executive narrative synthesis completed")
-
-            if await _check_pause():
-                return
-
-            # Post-DAG Diagnostic & Specialized Wave Execution
-            model_router.set_active_stage("specialist_execution", "Post-DAG Diagnostic Analyzers")
-            model_router.set_active_sub_stage("analyzers", "Executing deep diagnostic analyzers across canonicals, headings, links, and schemas")
-            await self._emit_event(analysis_id, "specialist_execution", 90, "Executing post-DAG diagnostic analyzers and audit verifications...")
-
-            eval_pages = (manifest.pages if manifest else None) or blackboard.pages or []
-            from app.cro.visual_ux_tester import visual_ux_tester
-            from app.seo.analyzers.canonical_auditor import analyze_canonicals
-            from app.seo.analyzers.http_status_auditor import analyze_http_statuses
-            from app.seo.analyzers.heading_analyzer import HeadingAnalyzer, analyze_heading_hierarchy
-            from app.seo.analyzers.media_asset_analyzer import MediaAssetAnalyzer, analyze_media_assets
-            from app.seo.analyzers.link_depth import LinkDepthAnalyzer, analyze_link_depth_and_orphans
-            from app.seo.analyzers.meta_rollup import analyze_meta_rollup
-            from app.cro.form_analyzer import analyze_forms
-            from app.crawl.analyzers.security_analyzer import analyze_security_headers
-            from app.seo.analyzers.schema_validator import analyze_schema_rich_results
-            from app.seo.analyzers.local_seo_analyzer import analyze_local_seo
-            from app.seo.analyzers.international_seo_analyzer import analyze_international_seo
-            from app.seo.analyzers.topical_authority_analyzer import analyze_topical_authority
-            from app.seo.analyzers.ecommerce_seo import analyze_ecommerce_seo
-            from app.seo.analyzers.serp_appearance import analyze_serp_appearance
-            from app.cro.accessibility.wcag_auditor import DeepWcagAuditor
-            from app.crawl.indexation.classifier import indexation_classifier
-            from app.seo.competitive.benchmark import build_competitor_seo_parity_matrix
-            from app.seo.analyzers.host_and_redirects import probe_host_and_redirects
-            from app.remediation.deduplicator import FindingDeduplicator
-            from app.remediation.patch_engine import patch_engine
-
-            cro_finding = visual_ux_tester.generate_grounded_cro_finding(
-                domain=domain,
-                website_url=website_url,
-                pages=getattr(blackboard, "pages", None),
-            )
-            canonical_audit_rep, can_findings = analyze_canonicals(eval_pages)
-            broken_raw = manifest.crawl_health.get("broken_links") if manifest and manifest.crawl_health else []
-            http_status_rep, http_findings = analyze_http_statuses(eval_pages, broken_links_raw=broken_raw)
-
-            heading_hierarchy_rep = analyze_heading_hierarchy(eval_pages)
-            heading_findings = HeadingAnalyzer.generate_findings(heading_hierarchy_rep)
-
-            media_assets_rep = analyze_media_assets(eval_pages)
-            media_findings = MediaAssetAnalyzer.generate_findings(media_assets_rep)
-
-            sitemap_urls_sample = [manifest.sitemap_url] if (manifest and manifest.sitemap_url) else []
-            click_depth_rep, orphan_pages_rep, anchor_text_audit_rep = analyze_link_depth_and_orphans(
-                eval_pages, sitemap_urls=sitemap_urls_sample, homepage_url=website_url
-            )
-            link_findings = LinkDepthAnalyzer.generate_findings(click_depth_rep, orphan_pages_rep, anchor_text_audit_rep)
-
-            meta_rollup_rep = analyze_meta_rollup(eval_pages)
-            form_audit_rep = analyze_forms(eval_pages)
-            from app.cro import analyze_cro
-            cro_audit_rep, cro_findings = analyze_cro(
-                eval_pages,
-                raw_html_map=getattr(blackboard, "raw_html_map", None),
-                business_profile=blackboard.business_profile,
-            )
-            schema_validation_rep = analyze_schema_rich_results(eval_pages)
-            wcag_audit_rep, wcag_findings = DeepWcagAuditor.audit_pages(eval_pages)
-
-            local_seo_rep, local_findings = analyze_local_seo(eval_pages, target_domain=domain)
-            intl_seo_rep, intl_findings = analyze_international_seo(eval_pages, target_domain=domain)
-            topical_auth_rep, topical_findings = analyze_topical_authority(eval_pages, target_domain=domain)
-            ecom_seo_rep, ecom_findings = analyze_ecommerce_seo(eval_pages, target_domain=domain)
-            serp_app_rep, serp_findings = analyze_serp_appearance(eval_pages, target_domain=domain)
-
-            indexation_rollup_rep, indexation_findings = indexation_classifier.audit(
-                manifest=manifest,
-                pages=eval_pages,
-            )
-            if manifest:
-                manifest.indexation_rollup = indexation_rollup_rep
-
-            competitor_seo_parity_rep = build_competitor_seo_parity_matrix(
-                target_pages=eval_pages,
-                target_domain=domain,
-                manifest=manifest,
-            )
-
-            first_page_headers = {}
-            if eval_pages and getattr(eval_pages[0], "response_headers", None):
-                first_page_headers = eval_pages[0].response_headers
-            security_audit_rep = analyze_security_headers(
-                url=website_url,
-                response_headers=first_page_headers
-            )
-
-            try:
-                host_and_redirects_rep = await probe_host_and_redirects(domain_or_url=website_url, canonical_target=website_url)
-            except Exception:
-                from app.domain.models import RedirectAuditReport
-                host_and_redirects_rep = RedirectAuditReport(
-                    target_domain=domain,
-                    canonical_destination=website_url,
-                    summary="Host variant probe did not complete. www, apex, and protocol variants were not measured.",
-                )
-
-            raw_findings = self.decision_engine.synthesize_findings(current_claims, blackboard.evidence_store)
-            if cro_finding is not None:
-                raw_findings = [f for f in raw_findings if f.finding_id != "find_cro_001"]
-                raw_findings.append(cro_finding)
-
-            # Link analyzer findings only to evidence already stored with a real hash.
-            analyzer_finding_groups = [
-                can_findings,
-                http_findings,
-                heading_findings,
-                media_findings,
-                link_findings,
-                cro_findings,
-                wcag_findings,
-                local_findings,
-                intl_findings,
-                topical_findings,
-                ecom_findings,
-                serp_findings,
-                indexation_findings,
-            ]
-            store = blackboard.evidence_store if hasattr(blackboard, "evidence_store") else None
-            for group in analyzer_finding_groups:
-                for f in (group or []):
-                    if not f or not getattr(f, "finding_id", None):
-                        continue
-                    ev_refs = []
-                    for ev in (getattr(f, "evidence", []) or []):
-                        ev_id = getattr(ev, "evidence_id", None) or (ev.get("evidence_id") if isinstance(ev, dict) else None)
-                        stored = store.get(ev_id) if store is not None and ev_id else None
-                        if _stored_evidence_is_linkable(stored):
-                            ev_refs.append(str(ev_id))
-                    if not ev_refs and store is not None:
-                        page_target = (getattr(f, "affected_urls", []) or [None])[0]
-                        if page_target:
-                            for existing in store.get_all():
-                                if _stored_evidence_is_linkable(existing) and existing.url and page_target in existing.url:
-                                    ev_refs.append(existing.id)
-                                    break
-                    # Leave evidence_refs empty when nothing stored has a real hash.
-                    # A minted ev_det_ id is not a fetched body.
-                    f.evidence_refs = list(dict.fromkeys((f.evidence_refs or []) + ev_refs))
-                    if not any(x.finding_id == f.finding_id for x in raw_findings):
-                        raw_findings.append(f)
-
+            # 3B. Entity Graph, Live AI Visibility, GEO Readiness, Agent Readiness, Competitive & External Authority
             from app.geo.entity_graph import evaluate_entity_graph
             profile_name = ""
             if blackboard.business_profile and blackboard.business_profile.business_name:
@@ -1482,12 +1613,7 @@ class AnalysisOrchestrator:
             if entity_graph_contradictions:
                 blackboard.identity_contradictions.extend(entity_graph_contradictions)
 
-            # -----------------------------------------------------------------
-            # Step 13: Live AI Visibility, Competitive Intelligence & External Authority
-            # (Collected BEFORE final deduplication, scoring, and roadmaps)
-            # -----------------------------------------------------------------
             model_router.set_active_stage("ai_visibility_monitor", "Live AI Citation & Search Visibility")
-
             from app.geo.readiness import evaluate_geo_readiness
             visibility_measured = False
             visibility_detail = None
@@ -1623,6 +1749,7 @@ class AnalysisOrchestrator:
                 "findings": [],
                 "notes": ["External authority was not attached. The crawl audit is unchanged."],
             }
+            external_authority_findings: List[Any] = []
             has_external_authority_connected = False
             try:
                 from app.connectors.authority.audit_bridge import build_audit_attachment
@@ -1635,7 +1762,6 @@ class AnalysisOrchestrator:
 
                 clean_tenant = tenant_project_id.strip().lower() if isinstance(tenant_project_id, str) else ""
                 if clean_tenant and clean_tenant not in FORBIDDEN_TENANT_IDENTIFIERS:
-
                     attachment = build_audit_attachment(
                         project_id=tenant_project_id,
                         domain=domain,
@@ -1643,9 +1769,7 @@ class AnalysisOrchestrator:
                         evidence_store=getattr(blackboard, "evidence_store", None),
                     )
                     external_authority_payload = attachment.get("report", external_authority_payload)
-                    for f in attachment.get("domain_findings", []):
-                        if not any(x.finding_id == f.finding_id for x in raw_findings):
-                            raw_findings.append(f)
+                    external_authority_findings = list(attachment.get("domain_findings", []) or [])
 
                     cov_items = external_authority_payload.get("coverage", [])
                     for c in cov_items:
@@ -1665,7 +1789,7 @@ class AnalysisOrchestrator:
                     if not has_external_authority_connected:
                         if external_authority_payload.get("data_state") in ("MEASURED", "PARTIALLY_MEASURED", "OK", "FRESH", "STALE") or external_authority_payload.get("status") in ("CONNECTED", "PARTIALLY_MEASURED"):
                             has_external_authority_connected = True
-                        elif len(attachment.get("domain_findings", [])) > 0:
+                        elif len(external_authority_findings) > 0:
                             has_external_authority_connected = True
                 else:
                     logger.info("External authority attachment skipped: missing tenant org context (refusing 'org_default' fallback)")
@@ -1674,10 +1798,286 @@ class AnalysisOrchestrator:
                 logger.info("external authority attachment skipped: %s", type(exc).__name__)
                 external_authority_payload["error"] = type(exc).__name__
 
+            # 3C. 100 Dynamic Sandbox Questions & KIE Knowledge Graph (runs BEFORE PageIntelligenceAgent copywriting)
+            kie_summary = None
+            five_dim_visibility = None
+            if effective_pillars is None or "aeo" in effective_pillars:
+                try:
+                    from app.geo.dynamic_sandbox import DynamicQuestionSandboxEngine
+                    from app.crawl.knowledge.website_knowledge_graph import WebsiteKnowledgeGraph
+                    from app.crawl.knowledge.grounded_simulator import AiVisibilityIndexCalculator
+                    from app.crawl.knowledge.primitives import GroundedAnswerSimulation, KieAnswerRisk
+
+                    model_router.set_active_stage("aeo_sandbox", "100-Question Dynamic AEO Sandbox & Hybrid RAG")
+                    eval_pages_for_kg = eval_pages or blackboard.pages or []
+                    if not getattr(blackboard, "dynamic_sandbox_evaluations", None):
+                        sandbox_engine = DynamicQuestionSandboxEngine(model_router=model_router)
+                        blackboard.dynamic_sandbox_evaluations = await sandbox_engine.generate_and_evaluate_100_questions(
+                            pages=eval_pages_for_kg,
+                            website_url=website_url,
+                            resolved_entity=blackboard.resolved_entity,
+                            profile=blackboard.business_profile,
+                        )
+
+                    brand_for_kg = blackboard.resolved_entity.name if blackboard.resolved_entity else domain
+                    kg = WebsiteKnowledgeGraph(brand=brand_for_kg, domain=domain)
+                    kg.build_from_pages(eval_pages_for_kg)
+                    kie_summary = kg.summary()
+
+                    sim_list = []
+                    for ev in (blackboard.dynamic_sandbox_evaluations or []):
+                        grounding = ev.grounding_ratio or 0.0
+                        risk = ev.answer_risk or "LOW"
+                        if isinstance(risk, str):
+                            try:
+                                risk = KieAnswerRisk(risk)
+                            except Exception:
+                                risk = KieAnswerRisk.LOW
+                        sim_obj = GroundedAnswerSimulation(
+                            question_id=ev.question_id,
+                            candidate_answer=ev.crawled_answer or "",
+                            grounding_ratio=grounding,
+                            retrieval_evidence_count=ev.retrieval_evidence_count or 0,
+                            answer_risk=risk,
+                        )
+                        sim_list.append(sim_obj)
+
+                    dims = AiVisibilityIndexCalculator().compute(kg, sim_list)
+                    five_dim_visibility = dims.model_dump()
+                except Exception as kie_err:
+                    logger.info("KIE Graph / Sandbox assembly note: %s", kie_err)
+
+            # Populate preliminary blackboard.findings BEFORE PageIntelligenceAgent so per-page
+            # copywriting sees verified SEO/GEO/AEO/CRO findings & AEO 100-Q gaps.
+            from app.remediation.deduplicator import FindingDeduplicator
+            prelim_claims = blackboard.claim_registry.get_all()
+            prelim_raw_findings = self.decision_engine.synthesize_findings(prelim_claims, blackboard.evidence_store)
+            for det_f in deterministic_findings:
+                if not any(x.finding_id == det_f.finding_id for x in prelim_raw_findings):
+                    prelim_raw_findings.append(det_f)
+            for ext_f in external_authority_findings:
+                if not any(x.finding_id == ext_f.finding_id for x in prelim_raw_findings):
+                    prelim_raw_findings.append(ext_f)
+            blackboard.findings = FindingDeduplicator.deduplicate(prelim_raw_findings)
+
+            if await _check_pause():
+                return
+
             # -----------------------------------------------------------------
-            # Step 14: Authoritative Finding Deduplication & Scope Classification
-            # (Every finding is scoped PAGE_VERIFIED, SAMPLE_VERIFIED, or SITE_INFERRED)
+            # Stage 4: Per-Page, Per-Section SEO & Copywriting Intelligence
+            # (Runs AFTER all 4 pillars + 100-Q AEO + GEO Readiness)
             # -----------------------------------------------------------------
+            if effective_pillars is None or "seo" in effective_pillars:
+                controller.mark_node_status("node_seo_page_intelligence", GraphNodeStatus.RUNNING)
+                controller.mark_node_status("node_page_intelligence", GraphNodeStatus.RUNNING)
+                controller.log_activity("node_seo_page_intelligence", "running", "page.rewrites", f"Writing detailed SEO and copy reports for {len(manifest.pages)} crawled page(s)...")
+
+                model_router.set_active_stage("page_intelligence", "Page-Level SEO & Copywriting")
+                model_router.set_active_sub_stage("page_copy_and_hero", "Page-by-Page SEO & Copywriting Rewrites")
+                await self._emit_event(
+                    analysis_id,
+                    "specialist_execution",
+                    82,
+                    f"Writing detailed SEO and copy reports for {len(manifest.pages)} crawled page(s)...",
+                )
+                t_page_start = time.perf_counter()
+                page_agent = PageIntelligenceAgent(model_router)
+                await page_agent.run(blackboard)
+                page_elapsed_ms = max(50, int((time.perf_counter() - t_page_start) * 1000))
+                copy_dur_ms = max(10, int(page_elapsed_ms / 6))
+                controller.mark_node_status("node_seo_page_intelligence", GraphNodeStatus.COMPLETED)
+                controller.mark_node_status("node_page_intelligence", GraphNodeStatus.COMPLETED)
+                controller.log_activity("node_seo_page_intelligence", "success", "page.complete", f"Completed page-level intelligence for {len(manifest.pages)} page(s)")
+            else:
+                page_elapsed_ms = 0
+                copy_dur_ms = 0
+                controller.mark_node_status("node_seo_page_intelligence", GraphNodeStatus.SKIPPED)
+                controller.mark_node_status("node_page_intelligence", GraphNodeStatus.SKIPPED)
+                controller.log_activity("node_seo_page_intelligence", "info", "page.skipped", "SEO page intelligence skipped by selective execution")
+
+            # ── Progressive Reporting: Phase 4 — Copywriting & Page Intelligence ─
+            try:
+                page_intel_reports = (
+                    getattr(blackboard, "page_reports", None)
+                    or getattr(blackboard, "page_intelligence_reports", None)
+                    or {}
+                )
+                copy_status = ExecutionStatus.COMPLETED if (effective_pillars is None or "seo" in effective_pillars) else ExecutionStatus.NOT_CONFIGURED
+                copy_conf = ConfidenceLevel.VERIFIED if page_intel_reports else ConfidenceLevel.UNMEASURED
+
+                p4_1 = SubPhaseReportBuilder.build_generic(
+                    run_id=analysis_id,
+                    phase_id="phase_04_copywriting",
+                    phase_name="4. Copywriting & Page Intelligence",
+                    subphase_id="4.1",
+                    subphase_title="Page Intelligence & Copywriting Synthesis",
+                    objective="Compile URL-by-URL SEO/GEO/CRO audits, title upgrades, and character-safe hero copy rewrites.",
+                    agent_id="agent.page_intelligence",
+                    agent_model="hybrid_pipeline",
+                    execution_mode="hybrid",
+                    duration_ms=page_elapsed_ms,
+                    status=copy_status,
+                    input_summary={"pages_analyzed": len(manifest.pages)},
+                    processing_steps=["Compile per-page SEO & copy audits", "Assemble character-safe rewrite payload"],
+                    structured_output={"pages_analyzed": len(manifest.pages), "reports_count": len(page_intel_reports)},
+                    evidence_tokens=[],
+                    findings=[],
+                    confidence=copy_conf,
+                )
+                await self._record_progressive_subphase(p4_1, "page_intelligence_consolidated")
+
+                # Phase 4 Consolidated
+                await self._consolidate_progressive_phase(analysis_id, "phase_04_copywriting", "phase_04_consolidated")
+            except Exception as rep4_err:
+                logger.warning(f"Progressive reporting error for Phase 4: {rep4_err}", exc_info=True)
+
+            if await _check_pause():
+                return
+
+            # -----------------------------------------------------------------
+            # Stage 5: Adversarial Critic (Batched 100% Claim Audit) + Zero-Fake
+            # Integrity Gate + Contradiction Engine + Causal Bottlenecks
+            # (Runs AFTER Specialists, AEO 100-Q, and Copywriting)
+            # -----------------------------------------------------------------
+            controller.mark_node_status("node_adversarial_critic", GraphNodeStatus.RUNNING)
+            controller.log_activity("node_adversarial_critic", "running", "critic.audit", "Adversarial critic testing 100% of claims against ground truth...")
+
+            model_router.set_active_stage("adversarial_verification", "Adversarial Verification & Integrity Gate")
+            model_router.set_active_sub_stage("critic_verification", "Adversarial Critic & Ground Truth Gate")
+            run.status = AnalysisStage.ADVERSARIAL_VERIFICATION
+            await self._emit_event(
+                analysis_id,
+                "adversarial_verification",
+                85,
+                "Adversarial critic cross-examining all specialist, AEO, and copywriting claims...",
+            )
+
+            try:
+                critic_res = await team_orchestrator.worker_critic.execute_task("34_adversarial_verification", blackboard)
+                blackboard.blackboard_state["critic_gate"] = {
+                    "status": "completed",
+                    "verified_count": len(critic_res.get("verified_claims") or []),
+                    "rejected_count": len(critic_res.get("rejected_claims") or []),
+                    "deflated_count": len(critic_res.get("deflated_claims") or []),
+                    "contradictions_count": len(critic_res.get("contradictions") or []),
+                    "batches_executed": critic_res.get("batches_executed", 1),
+                    "total_audited": critic_res.get("total_audited", 0),
+                }
+            except Exception as critic_err:
+                logger.error("Mandatory CognitiveCriticWorker gate failed for %s: %s", analysis_id, critic_err)
+                blackboard.blackboard_state["critic_gate"] = {
+                    "status": "failed",
+                    "error": str(critic_err),
+                }
+
+            # Zero-Fake Evidence Integrity Gate (authoritative final claim gate)
+            if await _check_pause():
+                return
+            controller.mark_node_status("node_integrity_gate", GraphNodeStatus.RUNNING)
+            controller.log_activity("node_integrity_gate", "running", "integrity.gate", "Enforcing Zero-Fake Evidence cryptographic provenance...")
+
+            current_claims = blackboard.claim_registry.get_all()
+            gate_res = integrity_gate.validate_claims_and_evidence(
+                current_claims, blackboard.evidence_store, blackboard.claim_registry
+            )
+            blackboard.blackboard_state["integrity_gate"] = gate_res.model_dump()
+            controller.mark_node_status("node_integrity_gate", GraphNodeStatus.COMPLETED)
+            controller.log_activity("node_integrity_gate", "success", "integrity.complete", "Zero-Fake Evidence integrity gate passed")
+
+            from app.domain.enums import Materiality, RubricConfidence
+            from app.orchestration.cognition.finding_rubric import apply_rubric_to_claim
+            for _claim in current_claims:
+                apply_rubric_to_claim(_claim, blackboard.evidence_store)
+            held_guesses = [
+                c for c in current_claims
+                if c.confidence_rubric == RubricConfidence.GUESSING
+                and c.materiality == Materiality.CRITICAL
+                and not c.adversarial_reviewed
+            ]
+            if held_guesses:
+                adv = agent_pool.get("verification.adversarial.v3")
+                if adv:
+                    await adv.run(blackboard)
+                    await self._emit_event(
+                        analysis_id,
+                        "adversarial_verification",
+                        86,
+                        f"Escalated {len(held_guesses)} GUESSING+CRITICAL claim(s) to verification.adversarial.v3 before executive use.",
+                    )
+
+            # Mandatory Contradiction Engine Gate
+            try:
+                from app.orchestration.cognition.contradiction_engine import ContradictionEngine
+                contra_engine = ContradictionEngine()
+                claim_contradictions = contra_engine.detect_contradictions(
+                    blackboard.claim_registry.get_all()
+                )
+                blackboard.blackboard_state["contradiction_report"] = {
+                    "status": "completed",
+                    "conflicts_detected": len(claim_contradictions or []),
+                    "conflicts": claim_contradictions[:20],
+                }
+            except Exception as ce_err:
+                logger.warning("ContradictionEngine gate note for %s: %s", analysis_id, ce_err)
+                blackboard.blackboard_state["contradiction_report"] = {
+                    "status": "error",
+                    "error": str(ce_err),
+                }
+
+            controller.mark_node_status("node_adversarial_critic", GraphNodeStatus.COMPLETED)
+            controller.log_activity("node_adversarial_critic", "success", "critic.complete", "Adversarial cross-examination complete")
+
+            # Detect uncorroborated marketing claims (Evidence Gaps)
+            evidence_gaps = self.gap_detector.detect_gaps(current_claims, blackboard.evidence_store, blackboard.pages)
+            blackboard.blackboard_state["evidence_gaps"] = [g.model_dump() for g in evidence_gaps]
+
+            if await _check_pause():
+                return
+
+            # Causal Reasoning & Root-Cause Bottleneck Discovery
+            controller.mark_node_status("node_causal_bottlenecks", GraphNodeStatus.RUNNING)
+            controller.log_activity("node_causal_bottlenecks", "running", "causal.roots", "Causal Reasoning Engine isolating primary root-cause growth bottlenecks...")
+
+            model_router.set_active_stage("causal_reasoning", "Causal Reasoning & Bottlenecks")
+            model_router.set_active_sub_stage("causal_bottlenecks", "Causal Graph & Bottleneck Isolation")
+            await self._emit_event(analysis_id, "specialist_execution", 88, "Causal Reasoning Engine isolating primary root-cause growth bottlenecks...")
+            bottlenecks = self.causal_engine.analyze_root_causes(
+                claims=current_claims,
+                business_profile=blackboard.business_profile,
+                crawl_summary=manifest.crawl_health if manifest else None,
+            )
+            blackboard.blackboard_state["root_causes"] = [b.model_dump() for b in bottlenecks]
+            controller.mark_node_status("node_causal_bottlenecks", GraphNodeStatus.COMPLETED)
+            controller.log_activity("node_causal_bottlenecks", "success", "causal.complete", f"Isolated {len(bottlenecks)} primary growth bottlenecks")
+
+            # Update Hypotheses & Opportunities with accumulated evidence
+            evaluated_hypotheses = self.hypothesis_engine.evaluate_hypotheses_against_evidence(
+                initial_hypotheses, current_claims, blackboard.evidence_store
+            )
+            mission_state.hypotheses = evaluated_hypotheses
+
+            opportunities = self.opportunity_detector.detect_opportunities(
+                blackboard.business_profile, blackboard.pages, current_claims
+            )
+            blackboard.blackboard_state["opportunities"] = [o.model_dump() for o in opportunities]
+
+            if await _check_pause():
+                return
+
+            # -----------------------------------------------------------------
+            # Stage 6: Authoritative Finding Deduplication & Executive Narrative
+            # -----------------------------------------------------------------
+            raw_findings = self.decision_engine.synthesize_findings(current_claims, blackboard.evidence_store)
+            if cro_finding is not None:
+                raw_findings = [f for f in raw_findings if f.finding_id != "find_cro_001"]
+                raw_findings.append(cro_finding)
+            for det_f in deterministic_findings:
+                if not any(x.finding_id == det_f.finding_id for x in raw_findings):
+                    raw_findings.append(det_f)
+            for ext_f in external_authority_findings:
+                if not any(x.finding_id == ext_f.finding_id for x in raw_findings):
+                    raw_findings.append(ext_f)
+
             final_findings = FindingDeduplicator.deduplicate(raw_findings)
             from app.domain.evidence.taxonomy import assign_evidence_scope
             for f in final_findings:
@@ -1695,6 +2095,22 @@ class AnalysisOrchestrator:
                 observatory_records=(ai_visibility_scorecard.observatory_records if ai_visibility_scorecard else []),
                 competitive_graph=comp_graph_res,
             )
+
+            # Executive Strategy Narrative Synthesis (runs AFTER Critic, Integrity Gate & Final Findings)
+            controller.mark_node_status("node_executive_narrative", GraphNodeStatus.RUNNING)
+            controller.log_activity("node_executive_narrative", "running", "narrative.compile", "Synthesizer compiling C-Suite narrative from verified specialist claims...")
+
+            model_router.set_active_stage("executive_synthesis", "Executive Strategy Narrative Synthesis")
+            model_router.set_active_sub_stage("narrative_synthesis", "C-Suite Strategic Narrative Compilation")
+            run.status = AnalysisStage.EXECUTIVE_SYNTHESIS
+            await self._emit_event(analysis_id, "executive_synthesis", 90, "Synthesizer compiling C-Suite narrative from verified specialist claims...")
+            if not blackboard.executive_narrative.get("story_summary"):
+                await team_orchestrator.worker_synthesizer.execute_task("synthesis", blackboard)
+            controller.mark_node_status("node_executive_narrative", GraphNodeStatus.COMPLETED)
+            controller.log_activity("node_executive_narrative", "success", "narrative.complete", "Executive narrative synthesis completed")
+
+            if await _check_pause():
+                return
 
             # -----------------------------------------------------------------
             # Step 15: Scoring Engine (Single Source of Truth over complete findings)
@@ -2033,52 +2449,8 @@ class AnalysisOrchestrator:
             derived_engine = DerivedIntelligenceEngine()
             derived_intel_metrics = derived_engine.compute_all(blackboard.evidence_store, manifest)
 
-            # Ensure 100 Dynamic Sandbox Questions & KIE Knowledge Graph are assembled
-            kie_summary = None
-            five_dim_visibility = None
-            try:
-                from app.geo.dynamic_sandbox import DynamicQuestionSandboxEngine
-                from app.crawl.knowledge.website_knowledge_graph import WebsiteKnowledgeGraph
-                from app.crawl.knowledge.grounded_simulator import AiVisibilityIndexCalculator
-                from app.crawl.knowledge.primitives import GroundedAnswerSimulation, KieAnswerRisk
-
-                eval_pages_for_kg = eval_pages or blackboard.pages or []
-                if not getattr(blackboard, "dynamic_sandbox_evaluations", None):
-                    sandbox_engine = DynamicQuestionSandboxEngine(model_router=model_router)
-                    blackboard.dynamic_sandbox_evaluations = await sandbox_engine.generate_and_evaluate_100_questions(
-                        pages=eval_pages_for_kg,
-                        website_url=website_url,
-                        resolved_entity=blackboard.resolved_entity,
-                        profile=blackboard.business_profile,
-                    )
-
-                brand_for_kg = blackboard.resolved_entity.name if blackboard.resolved_entity else domain
-                kg = WebsiteKnowledgeGraph(brand=brand_for_kg, domain=domain)
-                kg.build_from_pages(eval_pages_for_kg)
-                kie_summary = kg.summary()
-
-                sim_list = []
-                for ev in (blackboard.dynamic_sandbox_evaluations or []):
-                    grounding = ev.grounding_ratio or 0.0
-                    risk = ev.answer_risk or "LOW"
-                    if isinstance(risk, str):
-                        try:
-                            risk = KieAnswerRisk(risk)
-                        except Exception:
-                            risk = KieAnswerRisk.LOW
-                    sim_obj = GroundedAnswerSimulation(
-                        question_id=ev.question_id,
-                        candidate_answer=ev.crawled_answer or "",
-                        grounding_ratio=grounding,
-                        retrieval_evidence_count=ev.retrieval_evidence_count or 0,
-                        answer_risk=risk,
-                    )
-                    sim_list.append(sim_obj)
-
-                dims = AiVisibilityIndexCalculator().compute(kg, sim_list)
-                five_dim_visibility = dims.model_dump()
-            except Exception as kie_err:
-                logger.info("KIE Graph / Sandbox assembly note: %s", kie_err)
+            # 100 Dynamic Sandbox Questions & KIE Knowledge Graph already executed in Stage 3
+            # (before PageIntelligenceAgent copywriting & Adversarial Critic).
 
             try:
                 from app.connectors.google.google_report import collect_google_performance
@@ -2135,21 +2507,29 @@ class AnalysisOrchestrator:
                     "pages": eval_pages,
                     "business_profile": blackboard.business_profile,
                 }
-                for ch_idx, ch in enumerate(CORE_CHAPTERS):
+                ch_sem = asyncio.Semaphore(4)
+
+                async def _synth_ch(ch_idx: int, ch: Dict[str, Any]):
                     ch_num = f"{ch_idx + 3:02d}"
                     ch_agent_ids = {aid for aid, cid in AGENT_ROUTING_MAP.items() if cid == ch["id"]}
                     ch_findings = [
                         f for f in final_findings
                         if (getattr(f, "agent_id", None) in ch_agent_ids) or (getattr(f, "routed_to", None) == ch["id"])
                     ]
-                    narr = AgenticChapterSynthesizer.synthesize_narrative(
-                        book=synth_book,
-                        number=ch_num,
-                        section=ch,
-                        findings=ch_findings,
-                        is_geo=False,
-                    )
-                    chapter_narratives_map[ch["id"]] = narr
+                    async with ch_sem:
+                        narr = await AgenticChapterSynthesizer.synthesize_chapter_narrative_ai(
+                            book=synth_book,
+                            number=ch_num,
+                            section=ch,
+                            findings=ch_findings,
+                            is_geo=False,
+                            client=getattr(model_router, "client", None),
+                        )
+                    return ch["id"], ch_num, narr
+
+                ch_results = await asyncio.gather(*[_synth_ch(i, ch) for i, ch in enumerate(CORE_CHAPTERS)])
+                for ch_id, ch_num, narr in ch_results:
+                    chapter_narratives_map[ch_id] = narr
                     chapter_narratives_map[ch_num] = narr
             except Exception as ch_synth_err:
                 logger.info("Chapter narratives pre-synthesis note: %s", ch_synth_err)
@@ -2181,6 +2561,19 @@ class AnalysisOrchestrator:
                 "domains": competitor_domains if "competitor_domains" in locals() else [],
             }
 
+            from app.remediation.ai_remediation_synthesizer import AiRemediationSynthesizer
+            from app.remediation.patch_engine import patch_engine
+
+            ai_remediator = AiRemediationSynthesizer(model_router)
+            ai_code_patches, ai_rem_patches = await ai_remediator.synthesize_patches(
+                findings=all_strategic_findings,
+                business_profile=blackboard.business_profile,
+                website_url=website_url,
+                pages=eval_pages,
+                page_reports=getattr(blackboard, "page_reports", None),
+                competitor_context=competitor_ctx,
+            )
+
             remediation_plan = self.remediation_planner.build_remediation_plan(
                 findings=all_strategic_findings,
                 business_profile=blackboard.business_profile,
@@ -2188,9 +2581,15 @@ class AnalysisOrchestrator:
                 pages=eval_pages,
                 competitor_context=competitor_ctx,
             )
-            blackboard.code_patches = remediation_plan.patches
+            # AI-synthesized tech-stack-aware patches take priority; append deterministic fallback patches for uncovered targets
+            seen_cp_titles = {p.title.strip().lower() for p in ai_code_patches}
+            merged_code_patches = list(ai_code_patches) + [
+                p for p in remediation_plan.patches if p.title.strip().lower() not in seen_cp_titles
+            ]
+            remediation_plan.patches = merged_code_patches
+            blackboard.code_patches = merged_code_patches
 
-            remediation_patches = patch_engine.generate_patches(
+            det_remediation_patches = patch_engine.generate_patches(
                 findings=all_strategic_findings,
                 business_profile=blackboard.business_profile,
                 website_url=website_url,
@@ -2199,6 +2598,10 @@ class AnalysisOrchestrator:
                 resolved_entity=blackboard.resolved_entity,
                 competitor_context=competitor_ctx,
             )
+            seen_rp_fids = {(p.finding_id, p.target_file) for p in ai_rem_patches}
+            remediation_patches = list(ai_rem_patches) + [
+                p for p in det_remediation_patches if (p.finding_id, p.target_file) not in seen_rp_fids
+            ]
             blackboard.remediation_patches = remediation_patches
 
             controller.mark_node_status("node_code_patch_pack", GraphNodeStatus.COMPLETED)
@@ -2206,17 +2609,26 @@ class AnalysisOrchestrator:
                 "node_code_patch_pack",
                 "success",
                 "patches.complete",
-                f"Generated {len(remediation_plan.patches)} code patches and {len(remediation_patches)} universal remediation patches"
+                f"Generated {len(merged_code_patches)} code patches ({len(ai_code_patches)} AI) and {len(remediation_patches)} remediation patches"
             )
 
-            r7, r30, r90 = self.roadmap_builder.build_roadmap(all_strategic_findings, blackboard.executive_narrative)
-            top_10_plan = self.roadmap_builder.build_top_10_actions(
-                all_strategic_findings,
-                blackboard.business_profile,
-                honest_scores if honest_scores is not None else overall_scores,
-                blackboard.executive_narrative,
-                crawl_summary=manifest.crawl_health if manifest else None,
+            ai_roadmap_res = await ai_remediator.synthesize_roadmap(
+                findings=all_strategic_findings,
+                business_profile=blackboard.business_profile,
+                website_url=website_url,
+                narrative=blackboard.executive_narrative,
             )
+            if ai_roadmap_res is not None:
+                r7, r30, r90, top_10_plan = ai_roadmap_res
+            else:
+                r7, r30, r90 = self.roadmap_builder.build_roadmap(all_strategic_findings, blackboard.executive_narrative)
+                top_10_plan = self.roadmap_builder.build_top_10_actions(
+                    all_strategic_findings,
+                    blackboard.business_profile,
+                    honest_scores if honest_scores is not None else overall_scores,
+                    blackboard.executive_narrative,
+                    crawl_summary=manifest.crawl_health if manifest else None,
+                )
             blackboard.roadmap_7_days = r7
             blackboard.roadmap_30_days = r30
             blackboard.roadmap_90_days = r90
@@ -2394,43 +2806,26 @@ class AnalysisOrchestrator:
             except Exception as conc_err:
                 logger.warning("CrossChapterConsistencyEngine reconciliation error: %s", conc_err)
 
-            # Re-sync unified remediation plan, code patches, and roadmaps with post-reconciliation findings
+            # Prune remediation patches & roadmap items strictly to post-reconciliation finding IDs
+            # (single-pass synthesis — never overwrites Frontier AI patches/roadmaps with deterministic templates).
             try:
-                competitor_ctx = {
-                    "parity_matrix": competitor_seo_parity_rep if "competitor_seo_parity_rep" in locals() else None,
-                    "bakeoff": getattr(blackboard, "competitor_bakeoff", None),
-                    "domains": competitor_domains if "competitor_domains" in locals() else [],
-                }
-                remediation_plan = self.remediation_planner.build_remediation_plan(
-                    findings=report.findings,
-                    business_profile=blackboard.business_profile,
-                    target_url=website_url,
-                    pages=eval_pages,
-                    competitor_context=competitor_ctx,
-                )
-                report.code_patches = remediation_plan.patches
-                report.remediation_patches = patch_engine.generate_patches(
-                    findings=report.findings,
-                    business_profile=blackboard.business_profile,
-                    website_url=website_url,
-                    commercial_evals=getattr(blackboard, "commercial_evaluations", None),
-                    pages=eval_pages,
-                    resolved_entity=blackboard.resolved_entity,
-                    competitor_context=competitor_ctx,
-                )
-                r7, r30, r90 = self.roadmap_builder.build_roadmap(report.findings, blackboard.executive_narrative)
-                report.roadmap_7_days = r7
-                report.roadmap_30_days = r30
-                report.roadmap_90_days = r90
-                report.top_10_actions = self.roadmap_builder.build_top_10_actions(
-                    report.findings,
-                    blackboard.business_profile,
-                    honest_scores if honest_scores is not None else overall_scores,
-                    blackboard.executive_narrative,
-                    crawl_summary=manifest.crawl_health if manifest else None,
-                )
+                reconciled_fids = {f.finding_id for f in (report.findings or []) if getattr(f, "finding_id", None)}
+                if reconciled_fids:
+                    report.remediation_patches = [
+                        p for p in (report.remediation_patches or [])
+                        if not getattr(p, "finding_id", None) or p.finding_id in reconciled_fids
+                    ]
+                    if report.top_10_actions and getattr(report.top_10_actions, "actions", None):
+                        kept_actions = [
+                            a for a in report.top_10_actions.actions
+                            if not getattr(a, "related_finding_id", None) or a.related_finding_id in reconciled_fids
+                        ]
+                        for idx_a, act in enumerate(kept_actions, start=1):
+                            act.rank = idx_a
+                        report.top_10_actions.actions = kept_actions
+                        report.top_10_actions.total_engineer_hours = sum(a.estimated_engineer_hours for a in kept_actions)
             except Exception as resync_err:
-                logger.warning("Remediation roadmap post-reconciliation re-sync note: %s", resync_err)
+                logger.warning("Remediation roadmap post-reconciliation sync note: %s", resync_err)
 
             # Synchronize story narrative score claim with the dossier composite
             try:

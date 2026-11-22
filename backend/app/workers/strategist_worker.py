@@ -34,9 +34,14 @@ class CognitiveStrategistWorker(BaseCognitiveWorker):
         biz_name = bp.business_name if bp and bp.business_name not in ["Unknown", "Unknown Business", "Identified Platform"] else "the target enterprise"
         niche_str = bp.niche if bp else "Digital Solutions"
 
+        sev_order = {"CRITICAL": 0, "HIGH": 1, "MEDIUM": 2, "LOW": 3, "INFO": 4}
+        prioritized_claims = sorted(
+            verified_claims,
+            key=lambda c: (sev_order.get(c.severity.value, 3), -float(getattr(c, "impact", 5) or 5)),
+        )
         claims_summary = "\n".join([
             f"[{c.id}] ({c.category.value} | {c.severity.value}): {c.statement}"
-            for c in verified_claims[:15]
+            for c in prioritized_claims[:60]
         ])
 
         strat_prompt = load_prompt("strategist")
@@ -56,8 +61,8 @@ class CognitiveStrategistWorker(BaseCognitiveWorker):
 
         focused_evidence = [
             ev for ev in blackboard.evidence_store.get_all()
-            if any(ev.id in c.evidence_refs for c in verified_claims)
-        ][:15]
+            if any(ev.id in c.evidence_refs for c in prioritized_claims[:60])
+        ][:45]
 
         result = await self.model_router.generate_structured(
             capability="synthesizer",

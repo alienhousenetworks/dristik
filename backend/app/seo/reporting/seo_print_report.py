@@ -1563,7 +1563,9 @@ class SeoPrintReportRenderer:
     # Chapter 01: Executive Summary & Health Score
     # --------------------------------------------------------------------------
     def _render_sec_01(self, report: ExecutiveReport) -> str:
-        score_val = getattr(report.scores, "overall_score", None) if getattr(report, "scores", None) else None
+        from app.domain.scoring.displayed_score import displayed_composite
+        comp_score = displayed_composite(report)
+        score_val = comp_score if comp_score is not None else (getattr(report.scores, "overall_score", None) if getattr(report, "scores", None) else None)
         score_gauge_svg = render_svg_score_gauge(score_val, size=130)
 
         findings_count = len(report.findings)

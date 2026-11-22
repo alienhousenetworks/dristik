@@ -40,6 +40,8 @@ class AgentToolBus:
             "3. compare_raw_vs_rendered(url: str) -> Check raw HTML vs JS-rendered DOM differences for a URL.\n"
             "4. validate_json_ld(json_ld_str: str) -> Validate JSON-LD syntax and Schema.org required fields.\n"
             "5. get_business_context() -> Retrieve verified BusinessProfile, ICP, tech stack, and prior agent findings.\n"
+            "6. search_site_sections(query: str = '', role: str = None, limit: int = 12) -> Inspect structured PageSections across all crawled pages.\n"
+            "7. get_deterministic_findings(pillar: str = None, limit: int = 30) -> Read Stage-1 Python analyzer findings for AI verification.\n"
         )
 
     def execute(self, tool_name: str, args: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
@@ -51,6 +53,8 @@ class AgentToolBus:
             "validate_json_ld": self.validate_json_ld,
             "get_business_context": self.get_business_context,
             "detect_tech_stack": self.detect_tech_stack,
+            "search_site_sections": self.search_site_sections,
+            "get_deterministic_findings": self.get_deterministic_findings,
         }
         fn = dispatch.get(tool_name)
         if fn is None:
@@ -140,11 +144,11 @@ class AgentToolBus:
             "word_count": getattr(target, "word_count", None),
             "ttfb_ms": getattr(target, "ttfb_ms", None),
             "schema_types": getattr(target, "schema_types", []) or [],
-            "json_ld_count": len(getattr(target, "json_ld", []) or []),
+            "json_ld_count": len(getattr(target, "raw_schema", []) or []),
             "internal_links_count": len(getattr(target, "internal_links", []) or []),
             "external_links_count": len(getattr(target, "external_links", []) or []),
-            "images_missing_alt": getattr(target, "images_missing_alt", None),
-            "visible_text_excerpt": str(getattr(target, "visible_text", "") or "")[:600],
+            "images_missing_alt": getattr(target, "images_without_alt", None),
+            "visible_text_excerpt": str(getattr(target, "body_text", "") or "")[:600],
         }
 
     def compare_raw_vs_rendered(self, url: str = "") -> Dict[str, Any]:
@@ -280,5 +284,88 @@ class AgentToolBus:
             "primary_framework": primary_stack,
             "frameworks_detected": frameworks,
             "infrastructure": infra,
+        }
+
+    def search_site_sections(
+        self,
+        query: str = "",
+        role: Optional[str] = None,
+        limit: int = 12,
+    ) -> Dict[str, Any]:
+        """Search structured PageSections across ALL crawled pages."""
+        tokens = [t.lower() for t in re.split(r"\W+", query or "") if len(t) >= 2]
+        cap = max(1, min(int(limit or 12), 40))
+        role_low = (role or "").strip().lower()
+        scored: List[tuple] = []
+        total_sections = 0
+
+        for p in list(getattr(self.bb, "pages", None) or []):
+            for sec in (getattr(p, "sections", None) or []):
+                total_sections += 1
+                if role_low and (getattr(sec, "section_role", "") or "").lower() != role_low:
+                    continue
+                blob = f"{p.url} {sec.section_id} {sec.section_role} {sec.heading_text} {sec.body_text}".lower()
+                score = sum(1 for t in tokens if t in blob) if tokens else 1
+                if tokens and score == 0:
+                    continue
+                scored.append((score, p.url, sec.section_id, {
+                    "url": p.url,
+                    "page_type": p.page_type,
+                    "section_id": sec.section_id,
+                    "section_role": sec.section_role,
+                    "heading_text": sec.heading_text,
+                    "body_excerpt": (sec.body_text or "")[:1000],
+                    "ctas": (sec.ctas or [])[:6],
+                    "forms_count": len(sec.forms or []),
+                    "word_count": sec.word_count,
+                    "selector": sec.selector,
+                }))
+
+        scored.sort(key=lambda x: (-x[0], x[1], x[2]))
+        return {
+            "total_sections_indexed": total_sections,
+            "matched_count": len(scored),
+            "results": [item for _, _, _, item in scored[:cap]],
+        }
+
+    def get_deterministic_findings(
+        self,
+        pillar: Optional[str] = None,
+        limit: int = 30,
+    ) -> Dict[str, Any]:
+        """Returns Stage-1 deterministic Python analyzer findings stored on the blackboard."""
+        cap = max(1, min(int(limit or 30), 100))
+        state = getattr(self.bb, "blackboard_state", {}) or {}
+        det_findings = list(state.get("deterministic_findings") or [])
+        pillar_low = (pillar or "").strip().lower()
+
+        pillar_cat_hints = {
+            "seo": ("technical", "on_page", "schema", "content", "seo", "link", "crawl", "index"),
+            "geo": ("geo", "ai_search", "entity", "schema"),
+            "aeo": ("aeo", "ai_search", "faq", "answer"),
+            "cro": ("ux", "conversion", "cro", "trust", "form", "accessibility", "experience"),
+        }
+        hints = pillar_cat_hints.get(pillar_low)
+        out: List[Dict[str, Any]] = []
+        for f in det_findings:
+            cat_val = getattr(getattr(f, "category", None), "value", str(getattr(f, "category", "")))
+            sev_val = getattr(getattr(f, "severity", None), "value", str(getattr(f, "severity", "")))
+            if hints and not any(h in cat_val.lower() for h in hints):
+                continue
+            out.append({
+                "finding_id": getattr(f, "finding_id", None),
+                "title": getattr(f, "title", ""),
+                "category": cat_val,
+                "severity": sev_val,
+                "description": str(getattr(f, "description", "") or getattr(f, "finding", ""))[:350],
+                "affected_urls": list(getattr(f, "affected_urls", None) or [])[:5],
+                "evidence_refs": list(getattr(f, "evidence_refs", None) or [])[:5],
+            })
+            if len(out) >= cap:
+                break
+        return {
+            "total_deterministic_findings": len(det_findings),
+            "returned_count": len(out),
+            "results": out,
         }
 

@@ -477,8 +477,24 @@ class DynamicQuestionSandboxEngine:
         except Exception:
             pass  # Graph build failure is non-fatal; falls back to legacy evaluator
 
-        # ── Phase 3: Query Planner + Grounded Simulator ─────────────────────
-        simulator = GroundedAnswerSimulator(graph=kg, model_router=self.model_router)
+        # ── Phase 3: Query Planner + True Hybrid RAG Grounded Simulator ─────
+        vector_store = None
+        embedding_service = None
+        try:
+            from app.crawl.vector_store import VectorStore
+            from app.crawl.embeddings import embedding_service as _emb_svc
+            vector_store = VectorStore()
+            embedding_service = _emb_svc
+        except Exception:
+            pass
+        simulator = GroundedAnswerSimulator(
+            graph=kg,
+            model_router=self.model_router,
+            vector_store=vector_store,
+            embedding_service=embedding_service,
+            domain=domain,
+            pages=pages,
+        )
 
         # Legacy corpus for fallback question builder only
         corpus_pages = []
@@ -667,35 +683,60 @@ class DynamicQuestionSandboxEngine:
         is_consumer = is_consumer_or_non_enterprise_business(profile, pages)
         target_total = budget.question_count()
         raw_question_specs: List[Dict[str, str]] = []
+        synthesis_mode = "deterministic_fallback"
 
-        if is_consumer:
-            raw_question_specs = generate_11_category_business_questions(
+        use_llm_synth = bool(getattr(settings, "USE_LLM_SANDBOX_SYNTHESIS", True))
+        if use_llm_synth and self.model_router and hasattr(self.model_router, "generate_structured"):
+            ai_questions = await self._synthesize_questions_frontier_ai(
                 brand=brand,
-                business_profile=profile,
+                niche=niche,
+                val_prop=val_prop,
+                is_consumer=is_consumer,
+                target_total=target_total,
                 pages=pages,
-                target_count=target_total,
+                corpus_pages=corpus_pages,
+                profile=profile,
             )
-        else:
-            questions_per_facet = budget.questions_per_facet()
-            for facet in SANDBOX_FACETS:
-                facet_id = facet["id"]
-                facet_title = facet["title"]
-                facet_questions = await self._synthesize_facet_questions(
-                    facet_id=facet_id,
+            if ai_questions:
+                raw_question_specs = ai_questions
+                synthesis_mode = "frontier_ai"
+
+        if len(raw_question_specs) < target_total:
+            if is_consumer:
+                fallback_specs = generate_11_category_business_questions(
                     brand=brand,
-                    niche=niche,
-                    val_prop=val_prop,
-                    corpus_pages=corpus_pages,
-                    site_context=site_context,
-                    profile=profile,
+                    business_profile=profile,
+                    pages=pages,
+                    target_count=target_total,
                 )
-                for item in facet_questions[:questions_per_facet]:
-                    raw_question_specs.append({
-                        "category_id": facet_id,
-                        "facet": facet_title,
-                        "question": item["question"],
-                        "intent": item["intent"],
-                    })
+            else:
+                fallback_specs = []
+                questions_per_facet = budget.questions_per_facet()
+                for facet in SANDBOX_FACETS:
+                    facet_id = facet["id"]
+                    facet_title = facet["title"]
+                    facet_questions = await self._synthesize_facet_questions(
+                        facet_id=facet_id,
+                        brand=brand,
+                        niche=niche,
+                        val_prop=val_prop,
+                        corpus_pages=corpus_pages,
+                        site_context=site_context,
+                        profile=profile,
+                    )
+                    for item in facet_questions[:questions_per_facet]:
+                        fallback_specs.append({
+                            "category_id": facet_id,
+                            "facet": facet_title,
+                            "question": item["question"],
+                            "intent": item["intent"],
+                        })
+            seen_q = {q.get("question", "").strip().lower() for q in raw_question_specs}
+            for fb in fallback_specs:
+                key = fb.get("question", "").strip().lower()
+                if key and key not in seen_q and len(raw_question_specs) < target_total:
+                    raw_question_specs.append(fb)
+                    seen_q.add(key)
 
         # Validate questions against business context BEFORE scoring so irrelevant B2B
         # questions never enter a consumer brand's 100-question denominator.
@@ -717,16 +758,290 @@ class DynamicQuestionSandboxEngine:
 
         all_evaluations = list(await asyncio.gather(*tasks))
 
+        # Phase 4: Batched AI RAG Answering & Gap Synthesis (10 batches × 10 questions)
+        rag_ai_batches = 0
+        if use_llm_synth and self.model_router and hasattr(self.model_router, "generate_structured") and all_evaluations:
+            rag_ai_batches = await self._enrich_evaluations_with_ai_rag_batches(
+                evaluations=all_evaluations,
+                brand=brand,
+                pages=pages,
+            )
+
         ans_count = sum(1 for e in all_evaluations if e.is_answerable)
         gap_count = len(all_evaluations) - ans_count
         self.system_execution_log.append({
             "timestamp": "T+FINAL",
             "phase": "EVALUATION_COMPLETE",
             "level": "SUCCESS",
-            "message": f"Synthesized and verified {len(all_evaluations)} bespoke questions: {ans_count} answerable, {gap_count} gaps identified.",
+            "message": (
+                f"Synthesized ({synthesis_mode}) and verified {len(all_evaluations)} bespoke questions "
+                f"(AI RAG batches: {rag_ai_batches}): {ans_count} answerable, {gap_count} gaps identified."
+            ),
         })
 
         return all_evaluations
+
+    def _build_sandbox_evidence_objects(self, pages: List[PageEvidence], corpus_pages: List[Dict[str, Any]], limit: int = 8) -> List[Any]:
+        """Build valid Evidence objects with real SHA-256 content hashes for ModelRouter."""
+        import hashlib
+        from app.domain.evidence.models import Evidence
+
+        ev_list: List[Evidence] = []
+        for idx, p in enumerate(pages[:limit]):
+            sections = getattr(p, "sections", None) or []
+            if sections:
+                sec_summary = " | ".join(
+                    f"[{getattr(s, 'section_role', 'sec')}] {getattr(s, 'heading_text', '')}: {(getattr(s, 'body_text', '') or '')[:220]}"
+                    for s in sections[:5]
+                )
+            else:
+                sec_summary = (p.body_text or "")[:800]
+            text = f"URL: {p.url} | Title: {p.title or ''} | {sec_summary}".strip()[:1200]
+            digest = hashlib.sha256(text.encode("utf-8", errors="ignore")).hexdigest()
+            ev_list.append(
+                Evidence(
+                    id=f"ev_sandbox_{idx:02d}_{digest[:8]}",
+                    source_type="page_section" if sections else "dom",
+                    analyzer="dynamic_sandbox",
+                    url=p.url,
+                    selector="main",
+                    text=text,
+                    content_sha256=digest,
+                    hash=digest,
+                )
+            )
+        if not ev_list and corpus_pages:
+            for idx, cp in enumerate(corpus_pages[:3]):
+                text = (cp.get("text") or "")[:900]
+                digest = hashlib.sha256(text.encode("utf-8", errors="ignore")).hexdigest()
+                ev_list.append(
+                    Evidence(
+                        id=f"ev_sandbox_cp_{idx:02d}_{digest[:8]}",
+                        source_type="dom",
+                        analyzer="dynamic_sandbox",
+                        url=cp.get("url") or "",
+                        selector="body",
+                        text=text,
+                        content_sha256=digest,
+                        hash=digest,
+                    )
+                )
+        return ev_list
+
+    async def _synthesize_questions_frontier_ai(
+        self,
+        *,
+        brand: str,
+        niche: str,
+        val_prop: str,
+        is_consumer: bool,
+        target_total: int,
+        pages: List[PageEvidence],
+        corpus_pages: List[Dict[str, Any]],
+        profile: Optional[BusinessProfile] = None,
+    ) -> List[Dict[str, str]]:
+        """Synthesize up to 100 bespoke buyer questions in 5 concurrent Frontier AI batches of 20."""
+        import json as _json
+
+        facets = (
+            [{"id": c["id"], "title": c["title"], "intent": c["intent"]} for c in BUSINESS_CONTEXT_CATEGORIES_11]
+            if is_consumer
+            else [{"id": f["id"], "title": f["title"], "intent": f.get("description", f["title"])} for f in SANDBOX_FACETS]
+        )
+        # Group facets into up to 5 batches targeting ~20 questions per batch
+        num_batches = min(5, max(1, (target_total + 19) // 20))
+        facet_groups: List[List[Dict[str, str]]] = [[] for _ in range(num_batches)]
+        for i, f in enumerate(facets):
+            facet_groups[i % num_batches].append(f)
+
+        per_batch_target = max(1, (target_total + num_batches - 1) // num_batches)
+        ev_objs = self._build_sandbox_evidence_objects(pages, corpus_pages, limit=10)
+        page_inventory = [
+            {
+                "url": p.url,
+                "title": (p.title or "")[:100],
+                "h1": (p.h1 or [])[:2],
+                "h2": (p.h2 or [])[:4],
+            }
+            for p in pages[:18]
+        ]
+        bp_summary = {
+            "brand": brand,
+            "business_model": getattr(profile, "business_model", None) or ("Consumer/D2C" if is_consumer else "B2B/Service"),
+            "industry": getattr(profile, "industry", None) or niche,
+            "products": (getattr(profile, "products", None) or [])[:10],
+            "services": (getattr(profile, "services", None) or [])[:10],
+            "target_audience": getattr(profile, "target_audience", None) or "",
+            "geography": getattr(profile, "geography", None) or "",
+            "value_proposition": val_prop,
+        }
+        schema_desc = (
+            '{"questions":[{"category_id":"string","facet":"string",'
+            '"question":"string (specific real buyer inquiry for this exact brand)",'
+            '"intent":"string (buyer decision intent)"}]}'
+        )
+        sem = asyncio.Semaphore(5)
+
+        async def _run_batch(batch_idx: int, group: List[Dict[str, str]]) -> List[Dict[str, str]]:
+            if not group:
+                return []
+            contract = (
+                f"Generate exactly {per_batch_target} realistic, specific buyer questions that prospective customers "
+                f"ask ChatGPT, Perplexity, Gemini, or Google AI Overviews when evaluating '{brand}'.\n"
+                f"BUSINESS PROFILE:\n{_json.dumps(bp_summary, ensure_ascii=False)}\n\n"
+                f"CRAWLED SITE MAP:\n{_json.dumps(page_inventory, ensure_ascii=False)[:3000]}\n\n"
+                f"ASSIGNED FACETS (Batch {batch_idx + 1}/{num_batches}):\n{_json.dumps(group, ensure_ascii=False)}\n\n"
+                "STRICT RULES:\n"
+                "1. Every question MUST match this business's actual domain, products/services, and buyer type. "
+                "NEVER ask SaaS/SOC2/API questions for consumer/local businesses, and NEVER ask skincare/shipping questions for SaaS.\n"
+                "2. Distribute questions evenly across the assigned facets and use their exact `category_id` and `facet` title.\n"
+                "3. Zero duplicate or boilerplate questions."
+            )
+            async with sem:
+                try:
+                    res = await self.model_router.generate_structured(
+                        capability="aeo_question_synthesis",
+                        agent_role="Senior AEO Buyer Intent & AI Search Query Researcher",
+                        task_contract=contract,
+                        evidence_list=ev_objs,
+                        output_schema_desc=schema_desc,
+                        max_claims=per_batch_target,
+                        allow_fallback=False,
+                        model_tier="reasoning_model",
+                    )
+                except Exception:
+                    return []
+            if not isinstance(res, dict) or str(res.get("status") or "").lower() in ("unavailable", "budget_exceeded"):
+                return []
+            valid_ids = {g["id"]: g["title"] for g in group}
+            default_id = group[0]["id"]
+            cleaned: List[Dict[str, str]] = []
+            for item in (res.get("questions") or []):
+                if not isinstance(item, dict):
+                    continue
+                q_txt = str(item.get("question") or "").strip()
+                if len(q_txt) < 12:
+                    continue
+                cat_id = str(item.get("category_id") or default_id).strip()
+                if cat_id not in valid_ids:
+                    cat_id = default_id
+                cleaned.append({
+                    "category_id": cat_id,
+                    "facet": valid_ids.get(cat_id, str(item.get("facet") or cat_id)),
+                    "question": q_txt,
+                    "intent": str(item.get("intent") or "Verify buyer answerability in AI search.").strip(),
+                })
+            return cleaned[:per_batch_target]
+
+        batch_lists = await asyncio.gather(*[_run_batch(i, grp) for i, grp in enumerate(facet_groups)])
+        merged: List[Dict[str, str]] = []
+        seen = set()
+        for bl in batch_lists:
+            for q in bl:
+                key = q["question"].lower()
+                if key not in seen:
+                    seen.add(key)
+                    merged.append(q)
+        return merged[:target_total]
+
+    async def _enrich_evaluations_with_ai_rag_batches(
+        self,
+        *,
+        evaluations: List[DynamicSandboxQuestionEvaluation],
+        brand: str,
+        pages: List[PageEvidence],
+    ) -> int:
+        """Refine RAG answers and gap analyses in concurrent batches of 10 using strictly retrieved passages."""
+        import json as _json
+
+        crawled_urls = [p.url for p in pages[:25] if getattr(p, "url", None)]
+        batch_size = 10
+        batches = [evaluations[i : i + batch_size] for i in range(0, len(evaluations), batch_size)]
+        sem = asyncio.Semaphore(4)
+        depth_mode = (getattr(settings, "AI_DEPTH_MODE", "tiered_frontier") or "tiered_frontier").strip().lower()
+        rag_tier = "reasoning_model" if depth_mode == "frontier_all" else "fast_slm"
+        schema_desc = (
+            '{"answers":[{"question_id":"Q-001","rag_answer":"string (grounded ONLY in retrieved_extract; state gap explicitly if ungrounded)",'
+            '"gap_analysis":"string (what is missing or weak for AI engines)",'
+            '"missing_aspects":["string"],'
+            '"target_update_url":"string (MUST be one of crawled_urls)",'
+            '"section_update_recommendation":"string"}]}'
+        )
+        ev_objs = self._build_sandbox_evidence_objects(pages, [], limit=6)
+
+        async def _process_batch(batch: List[DynamicSandboxQuestionEvaluation]) -> bool:
+            items = [
+                {
+                    "question_id": e.question_id,
+                    "question": e.generated_question,
+                    "current_status": e.answerability_status,
+                    "grounding_ratio": e.grounding_ratio,
+                    "source_url": e.source_url,
+                    "retrieved_extract": (e.crawled_answer or "")[:450],
+                    "retrieval_evidence_count": e.retrieval_evidence_count,
+                }
+                for e in batch
+            ]
+            contract = (
+                f"You are an Evidence-Grounded AEO RAG Answer Verifier for '{brand}'.\n"
+                f"CRAWLED URLS (only cite or target these URLs): {_json.dumps(crawled_urls)}\n\n"
+                f"QUESTIONS & RETRIEVED FIRST-PARTY PASSAGES:\n{_json.dumps(items, ensure_ascii=False, indent=2)}\n\n"
+                "STRICT GROUNDING RULES:\n"
+                "1. Answer ONLY from `retrieved_extract`. If `retrieval_evidence_count == 0` or `retrieved_extract` lacks the answer, "
+                "explicitly state that the crawled site does not publish this information — NEVER invent prices, SLAs, certifications, or specs.\n"
+                "2. Provide a concrete `gap_analysis` and `section_update_recommendation` targeting one of the real `crawled_urls`."
+            )
+            async with sem:
+                try:
+                    res = await self.model_router.generate_structured(
+                        capability="aeo_analysis",
+                        agent_role="Evidence-Grounded AEO RAG Verifier",
+                        task_contract=contract,
+                        evidence_list=ev_objs,
+                        output_schema_desc=schema_desc,
+                        max_claims=len(batch),
+                        allow_fallback=False,
+                        model_tier=rag_tier,
+                    )
+                except Exception:
+                    return False
+            if not isinstance(res, dict) or str(res.get("status") or "").lower() in ("unavailable", "budget_exceeded"):
+                return False
+            ans_list = res.get("answers") or []
+            if not isinstance(ans_list, list) or not ans_list:
+                return False
+            by_id = {e.question_id: e for e in batch}
+            valid_url_set = set(crawled_urls)
+            updated = False
+            for row in ans_list:
+                if not isinstance(row, dict):
+                    continue
+                target = by_id.get(str(row.get("question_id") or ""))
+                if target is None:
+                    continue
+                updated = True
+                rag_txt = str(row.get("rag_answer") or "").strip()
+                if rag_txt:
+                    target.rag_answer = rag_txt[:700]
+                    target.recommended_answer = rag_txt[:700]
+                gap_txt = str(row.get("gap_analysis") or "").strip()
+                if gap_txt:
+                    target.gap_analysis = gap_txt[:500]
+                miss = row.get("missing_aspects")
+                if isinstance(miss, list) and miss:
+                    target.missing_aspects = [str(m).strip() for m in miss[:6] if str(m).strip()]
+                tgt_url = str(row.get("target_update_url") or "").strip()
+                if tgt_url and tgt_url in valid_url_set:
+                    target.target_update_page = tgt_url
+                sec_rec = str(row.get("section_update_recommendation") or "").strip()
+                if sec_rec:
+                    target.section_update_recommendation = sec_rec[:500]
+                if isinstance(target.evaluation_trace, dict):
+                    target.evaluation_trace["ai_rag_verified"] = True
+            return updated
+
+        results = await asyncio.gather(*[_process_batch(b) for b in batches])
+        return sum(1 for ok in results if ok)
 
     def _build_gap_analysis(self, sim, brand: str, facet_id: str) -> str:
         unsupported = [r for r in sim.claim_decomposition if r.status == "UNSUPPORTED"]
@@ -858,15 +1173,17 @@ class DynamicQuestionSandboxEngine:
                     f"for company '{brand}' operating in '{niche}'. Primary offering: {site_context['primary_offering']}. "
                     f"Value prop: {val_prop}. Questions must be specific to this exact company and its offerings."
                 )
-                evidence_text = " ".join([cp["text"][:500] for cp in corpus_pages[:3]])
+                ev_objs = self._build_sandbox_evidence_objects([], corpus_pages[:3], limit=3)
                 llm_res = await self.model_router.generate_structured(
-                    capability="ai_search_simulation",
+                    capability="aeo_question_synthesis",
                     agent_role="Commercial Generative Query Researcher",
                     task_contract=contract,
-                    evidence_list=[{"text": evidence_text, "source_type": "dom"}],
+                    evidence_list=ev_objs,
                     rubric="Output exactly 10 high-value buyer inquiries with clear intent. Zero boilerplate.",
                     output_schema_desc=prompt_schema,
-                    additional_context=f"Facet: {facet_id} | Brand: {brand}"
+                    additional_context=f"Facet: {facet_id} | Brand: {brand}",
+                    allow_fallback=False,
+                    model_tier="reasoning_model",
                 )
                 qs = llm_res.get("questions") or []
                 if len(qs) == 10:

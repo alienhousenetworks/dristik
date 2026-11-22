@@ -73,6 +73,7 @@ class BaseGeoEngineAdapter(ABC):
     rate_limit_rpm: Optional[int] = None
     cost_per_1k_input_usd: float = 0.001
     cost_per_1k_output_usd: float = 0.003
+    cost_per_search_use_usd: float = 0.0
     unsupported_features: List[str] = []
 
     def __init__(self, api_key: str = "", model: str = ""):
@@ -82,10 +83,18 @@ class BaseGeoEngineAdapter(ABC):
     def is_configured(self) -> bool:
         return bool(self.api_key and self.api_key.strip())
 
-    def estimate_cost_usd(self, prompt_tokens: int, completion_tokens: int) -> float:
-        cost = (prompt_tokens / 1000.0) * self.cost_per_1k_input_usd + (
-            completion_tokens / 1000.0
-        ) * self.cost_per_1k_output_usd
+    def estimate_cost_usd(
+        self,
+        prompt_tokens: int,
+        completion_tokens: int,
+        *,
+        search_uses: int = 0,
+    ) -> float:
+        cost = (
+            (prompt_tokens / 1000.0) * self.cost_per_1k_input_usd
+            + (completion_tokens / 1000.0) * self.cost_per_1k_output_usd
+            + max(0, int(search_uses)) * self.cost_per_search_use_usd
+        )
         return round(cost, 6)
 
     @abstractmethod

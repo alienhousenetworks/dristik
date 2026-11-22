@@ -27,11 +27,44 @@ except ImportError:
 class BrowserRenderService:
     _playwright: Optional[Any] = None
     _browser: Optional[Any] = None
-    _lock = asyncio.Lock()
-    # One print job at a time. A second download waits instead of piling
-    # onto a Chromium process that is already inside page.pdf().
-    _render_semaphore = asyncio.Semaphore(3)
-    _render_lock = _render_semaphore
+    _browser_loop: Optional[Any] = None
+    # Per-event-loop synchronization primitives so multi-loop TestClient/worker
+    # runs never deadlock on import-time locks bound to a previous loop.
+    _locks_by_loop: Dict[int, asyncio.Lock] = {}
+    _render_semaphores_by_loop: Dict[int, asyncio.Semaphore] = {}
+    _pdf_locks_by_loop: Dict[int, asyncio.Lock] = {}
+
+    @classmethod
+    def _current_loop_id(cls) -> int:
+        return id(asyncio.get_running_loop())
+
+    @classmethod
+    def _get_lock(cls) -> asyncio.Lock:
+        lid = cls._current_loop_id()
+        lock = cls._locks_by_loop.get(lid)
+        if lock is None:
+            lock = asyncio.Lock()
+            cls._locks_by_loop[lid] = lock
+        return lock
+
+    @classmethod
+    def _get_render_semaphore(cls) -> asyncio.Semaphore:
+        lid = cls._current_loop_id()
+        sem = cls._render_semaphores_by_loop.get(lid)
+        if sem is None:
+            sem = asyncio.Semaphore(3)
+            cls._render_semaphores_by_loop[lid] = sem
+        return sem
+
+    @classmethod
+    def _get_pdf_lock(cls) -> asyncio.Lock:
+        """One print job at a time per loop so Chromium never piles concurrent page.pdf() calls."""
+        lid = cls._current_loop_id()
+        lock = cls._pdf_locks_by_loop.get(lid)
+        if lock is None:
+            lock = asyncio.Lock()
+            cls._pdf_locks_by_loop[lid] = lock
+        return lock
 
     @classmethod
     def is_available(cls) -> bool:
@@ -43,7 +76,17 @@ class BrowserRenderService:
         if not cls.is_available():
             return None
 
-        async with cls._lock:
+        running_loop = asyncio.get_running_loop()
+        async with cls._get_lock():
+            loop_changed = cls._browser_loop is not None and cls._browser_loop is not running_loop
+            if loop_changed:
+                # Stale browser created on a previous/closed event loop — discard safely without awaiting on dead loop.
+                if cls._playwright is not None:
+                    cls._kill_playwright_driver(cls._playwright)
+                cls._browser = None
+                cls._playwright = None
+                cls._browser_loop = None
+
             if cls._browser is None or not cls._browser.is_connected():
                 try:
                     cls._playwright = await async_playwright().start()
@@ -57,9 +100,11 @@ class BrowserRenderService:
                             "--disable-extensions",
                         ]
                     )
+                    cls._browser_loop = running_loop
                 except Exception as exc:
                     logger.warning("Failed to launch headless Chromium: %s", exc)
                     cls._browser = None
+                    cls._browser_loop = None
                     return None
             return cls._browser
 
@@ -67,7 +112,8 @@ class BrowserRenderService:
     async def render_page(
         cls,
         url: str,
-        timeout_ms: Optional[int] = None
+        timeout_ms: Optional[int] = None,
+        allow_assets: bool = False,
     ) -> Tuple[Optional[str], int, float, Dict[str, str], Optional[str], Optional[str], Optional[Dict[str, Any]]]:
         """
         Renders a page using headless Chromium, waiting for DOM hydration.
@@ -88,7 +134,7 @@ class BrowserRenderService:
         context = None
         page = None
         blocked_unsafe_request = False
-        async with cls._render_semaphore:
+        async with cls._get_render_semaphore():
             try:
                 context = await browser.new_context(
                     user_agent=settings.USER_AGENT,
@@ -102,9 +148,8 @@ class BrowserRenderService:
                     nonlocal blocked_unsafe_request
                     req = route.request
                     rtype = req.resource_type
-                    # Abort intentionally excluded resources before DNS validation; they
-                    # will not be fetched and therefore do not need an egress lookup.
-                    if rtype in ["image", "media", "font"]:
+                    # Abort heavy media unless performance/visual asset loading is explicitly requested.
+                    if not allow_assets and rtype in ["image", "media", "font"]:
                         await route.abort()
                         return
                     if any(t in req.url.lower() for t in ["google-analytics", "googletagmanager", "hotjar", "facebook.net", "clarity.ms"]):
@@ -344,10 +389,10 @@ class BrowserRenderService:
 
     @classmethod
     def _kill_process_tree(cls, pid: int) -> None:
-        """SIGKILL a process and its children. Used when Chromium ignores cancellation."""
+        """SIGKILL a process and its children (Linux /proc and macOS pgrep). Used when Chromium ignores cancellation."""
+        children: list[int] = []
         if os.path.exists("/proc"):
             try:
-                children: list[int] = []
                 for entry in os.listdir("/proc"):
                     if not entry.isdigit():
                         continue
@@ -358,10 +403,19 @@ class BrowserRenderService:
                         continue
                     if ppid == pid:
                         children.append(int(entry))
-                for child in children:
-                    cls._kill_process_tree(child)
             except Exception:
                 pass
+        else:
+            try:
+                import subprocess
+                res = subprocess.run(["pgrep", "-P", str(pid)], capture_output=True, text=True, timeout=2)
+                for line in (res.stdout or "").splitlines():
+                    if line.strip().isdigit():
+                        children.append(int(line.strip()))
+            except Exception:
+                pass
+        for child in children:
+            cls._kill_process_tree(child)
         try:
             os.kill(pid, signal.SIGKILL)
         except OSError:
@@ -380,11 +434,12 @@ class BrowserRenderService:
     @classmethod
     async def _discard_browser(cls) -> None:
         """Drop a wedged Chromium so the next PDF download can launch a fresh one."""
-        async with cls._lock:
+        async with cls._get_lock():
             browser = cls._browser
             playwright = cls._playwright
             cls._browser = None
             cls._playwright = None
+            cls._browser_loop = None
         if playwright is not None:
             cls._kill_playwright_driver(playwright)
         for closer in (
@@ -410,7 +465,7 @@ class BrowserRenderService:
         print job exceeds timeout_ms. A timed-out job is killed so it cannot
         block later downloads.
         """
-        async with cls._render_lock:
+        async with cls._get_pdf_lock():
             browser = await cls.get_browser()
             if browser is None:
                 return None
@@ -493,7 +548,7 @@ class BrowserRenderService:
     @classmethod
     async def shutdown(cls):
         """Cleanly releases browser and playwright resources."""
-        async with cls._lock:
+        async with cls._get_lock():
             if cls._browser:
                 try:
                     await cls._browser.close()
@@ -506,3 +561,4 @@ class BrowserRenderService:
                 except Exception:
                     pass
                 cls._playwright = None
+            cls._browser_loop = None

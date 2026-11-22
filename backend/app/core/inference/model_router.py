@@ -20,7 +20,13 @@ from app.core.config import (
     GROQ_DEFAULT_REASONING,
 )
 from app.evidence.models import Evidence
-from app.core.inference.llm_client import LLMClient, RateLimitException, _looks_like_json_document
+from app.core.inference.budget_manager import BudgetManager
+from app.core.inference.llm_client import (
+    LLMClient,
+    RateLimitException,
+    _looks_like_json_document,
+    use_tenant_context,
+)
 from app.core.inference.prompt_compiler import PromptCompiler, load_prompt
 from app.core.inference.json_repair import repair_and_parse_json
 from app.core.inference.telemetry import TelemetryTracker
@@ -36,18 +42,51 @@ _ACTIVE_PROVIDER_OVERRIDE: ContextVar[tuple[str, str] | None] = ContextVar("dris
 def use_provider_override(provider_id: str, org_id: str):
     """Route ModelRouter calls in the current async task through one tenant-owned provider."""
     token = _ACTIVE_PROVIDER_OVERRIDE.set((provider_id, org_id))
-    try:
-        yield
-    finally:
-        _ACTIVE_PROVIDER_OVERRIDE.reset(token)
+    with use_tenant_context(org_id):
+        try:
+            yield
+        finally:
+            _ACTIVE_PROVIDER_OVERRIDE.reset(token)
 
 class ModelRouter:
-    def __init__(self, telemetry_tracker: Optional[TelemetryTracker] = None):
+    def __init__(
+        self,
+        telemetry_tracker: Optional[TelemetryTracker] = None,
+        max_budget_usd: Optional[float] = None,
+        max_model_calls: Optional[int] = None,
+    ):
         self.client = LLMClient()
         self.together_client = self.client  # backward compatibility
         self.prompt_compiler = PromptCompiler()
         self.telemetry = telemetry_tracker or TelemetryTracker()
         self.fallback_engine = DeterministicFallbackEngine()
+        self._explicit_budget_override = (max_budget_usd is not None) or (max_model_calls is not None)
+        resolved_budget = (
+            float(getattr(settings, "ANALYSIS_MAX_COST_USD", 2.50))
+            if max_budget_usd is None
+            else float(max_budget_usd)
+        )
+        self.budget_manager = BudgetManager(max_budget_usd=resolved_budget)
+        self.max_model_calls = (
+            int(getattr(settings, "ANALYSIS_MAX_MODEL_CALLS", 150))
+            if max_model_calls is None
+            else int(max_model_calls)
+        )
+
+    def _is_budget_exhausted(self) -> Optional[str]:
+        """Enforce hard per-audit USD and call-count budgets before any LLM dispatch."""
+        if not self._explicit_budget_override and not getattr(settings, "ENFORCE_HARD_BUDGET_CAP", True):
+            return None
+        td = getattr(self.telemetry, "telemetry", None)
+        if td is None:
+            return None
+        if self.max_model_calls > 0 and (td.model_calls_count or 0) >= self.max_model_calls:
+            return f"max_model_calls_reached ({td.model_calls_count}/{self.max_model_calls})"
+        if self.budget_manager.max_budget_usd > 0:
+            status = self.budget_manager.check_budget(td)
+            if status.is_exceeded:
+                return f"max_cost_usd_reached (${status.current_spent_usd:.4f}/${status.max_budget_usd:.4f})"
+        return None
 
     async def _generate_chat_completion(self, **kwargs: Any) -> Dict[str, Any]:
         """Use the explicitly selected tenant provider for this run, otherwise the platform client."""
@@ -112,10 +151,11 @@ class ModelRouter:
     ) -> None:
         from app.evidence.provenance import sha256_text
 
+        is_cache_hit = bool(response.get("cache_hit") or response.get("cached"))
         self.telemetry.record_call(
-            input_tokens=int(response.get("input_tokens") or 0),
-            output_tokens=int(response.get("output_tokens") or 0),
-            latency_ms=float(response.get("latency_ms") or 0),
+            input_tokens=0 if is_cache_hit else int(response.get("input_tokens") or 0),
+            output_tokens=0 if is_cache_hit else int(response.get("output_tokens") or 0),
+            latency_ms=0.0 if is_cache_hit else float(response.get("latency_ms") or 0),
             capability=capability,
             is_reasoning=is_reasoning,
             model=response.get("model") or model,
@@ -123,20 +163,58 @@ class ModelRouter:
             prompt_sha256=sha256_text(system_prompt + "\n" + user_prompt),
             prompt_template_sha256=sha256_text(system_prompt),
             agent_id=agent_id,
-            provider_cost_usd=response.get("provider_cost_usd"),
+            provider_cost_usd=0.0 if is_cache_hit else response.get("provider_cost_usd"),
         )
+
+    # Capabilities routed to the Frontier reasoning model under tiered_frontier mode.
+    FRONTIER_CAPABILITIES = frozenset({
+        "business_discovery",
+        "business_intelligence",
+        "intent_journey",
+        "category_product",
+        "business_model",
+        "semantic_strategist",
+        "seo_verification",
+        "geo_analysis",
+        "aeo_question_synthesis",
+        "aeo_analysis",
+        "cro_analysis",
+        "ux_conversion",
+        "content_analysis",
+        "content_intelligence",
+        "remediation_synthesis",
+        "roadmap_synthesis",
+        "synthesizer",
+        "critic",
+        "ai_search_simulation",
+        "cross_analyst",
+    })
+
+    def apply_page_budget(self, pages_count: int, depth_mode: Optional[str] = None):
+        """Scale audit budget and call limits dynamically from crawled page count (~₹20–₹30/page)."""
+        plan = BudgetManager.compute_audit_budget(pages_count, depth_mode=depth_mode)
+        if not self._explicit_budget_override:
+            self.budget_manager.max_budget_usd = plan.max_budget_usd
+            self.max_model_calls = plan.max_model_calls
+        return plan
 
     def _select_model(self, capability: str, model_tier: Optional[str] = None) -> str:
         """
-        Registry allowed_models win. Otherwise a short capability list uses the reasoning model.
+        Capability-based Frontier routing:
+        - AI_DEPTH_MODE=frontier_all routes all calls to model_reasoning.
+        - AI_DEPTH_MODE=tiered_frontier routes strategic capabilities and reasoning/judge
+          tiers to model_reasoning, keeping fast_slm for high-volume map/batch fanout.
         """
         creds = settings.get_llm_credentials()
+        depth_mode = (getattr(settings, "AI_DEPTH_MODE", "tiered_frontier") or "tiered_frontier").strip().lower()
         tier = (model_tier or "").strip()
-        if tier in ("reasoning_model", "judge_model", "reasoning"):
+        if depth_mode == "frontier_all":
+            return creds["model_reasoning"]
+        if tier in ("reasoning_model", "judge_model", "reasoning", "frontier"):
             return creds["model_reasoning"]
         if tier in ("fast_slm", "fast"):
             return creds["model_fast"]
-        if capability in ["synthesizer", "geo_analysis", "ai_search_simulation", "critic"]:
+        if capability in self.FRONTIER_CAPABILITIES:
             return creds["model_reasoning"]
         return creds["model_fast"]
 
@@ -168,6 +246,11 @@ class ModelRouter:
         """
         Generates free prose text (for reason passes) without forcing json_object response_format.
         """
+        budget_reason = self._is_budget_exhausted()
+        if budget_reason:
+            logger.warning("[ModelRouter][%s] Skipping generate_prose due to budget cap: %s", capability, budget_reason)
+            return ""
+
         model = self._select_model(capability)
         creds = settings.get_llm_credentials()
         fast_model = creds.get("model_fast") or GROQ_DEFAULT_FAST
@@ -238,6 +321,7 @@ class ModelRouter:
         model_tier: Optional[str] = None,
         max_tokens: Optional[int] = None,
         timeout_sec: Optional[int] = None,
+        evidence_max_tokens: Optional[int] = None,
     ) -> Dict[str, Any]:
         """
         Compiles prompt with 70B envelope, invokes active LLM provider, parses structured JSON,
@@ -246,6 +330,14 @@ class ModelRouter:
         a canned fallback audit (specialist agents must not invent results).
         """
         evidence_list = evidence_list if evidence_list is not None else []
+        budget_reason = self._is_budget_exhausted()
+        if budget_reason:
+            logger.warning("[ModelRouter][%s] Skipping generate_structured due to budget cap: %s", capability, budget_reason)
+            return {
+                "status": "budget_exceeded",
+                "unavailable_reason": budget_reason,
+                "claims": [],
+            }
         if not settings.has_active_llm_key and _ACTIVE_PROVIDER_OVERRIDE.get() is None:
             if not allow_fallback:
                 return {"status": "unavailable", "unavailable_reason": "no_llm_key", "claims": []}
@@ -259,13 +351,12 @@ class ModelRouter:
         creds = settings.get_llm_credentials()
         fast_model = creds.get("model_fast") or GROQ_DEFAULT_FAST
         tier = (model_tier or "").strip()
-        is_reasoning = tier in ("reasoning_model", "judge_model", "reasoning") or capability in [
-            "synthesizer", "geo_analysis", "ai_search_simulation", "critic"
-        ]
+        is_reasoning = (model == creds.get("model_reasoning")) or tier in ("reasoning_model", "judge_model", "reasoning", "frontier")
 
-        # Determine evidence token budget based on active provider (1600 for Groq's 8,000 TPM limit, 3000 for other providers)
+        # Evidence token budget: 2400 cap for Groq's 8k TPM free tier, full AI_EVIDENCE_MAX_TOKENS (12k) for Frontier providers
         active_prov = (getattr(self.client, "provider", "") or settings.get_active_provider()).lower()
-        evidence_budget = 1600 if active_prov == "groq" else 3000
+        default_ev_budget = 2400 if active_prov == "groq" else int(getattr(settings, "AI_EVIDENCE_MAX_TOKENS", 12000) or 12000)
+        evidence_budget = int(evidence_max_tokens) if evidence_max_tokens is not None else default_ev_budget
 
         # 1. Compile structured prompt with 70B envelope
         prompts = self.prompt_compiler.compile(

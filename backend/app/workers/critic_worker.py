@@ -32,27 +32,12 @@ class CognitiveCriticWorker(BaseCognitiveWorker):
                 "integrity_audit_summary": "No claims submitted for verification."
             }
 
-        # 1. Flatten all agent claims into atoms: {claim_id, statement, severity, evidence_refs, source_agent}
-        claim_atoms = []
-        cited_ev_ids = set()
-        for c in all_claims:
-            claim_atoms.append({
-                "claim_id": c.id,
-                "statement": c.statement,
-                "severity": c.severity.value,
-                "evidence_refs": c.evidence_refs,
-                "source_agent": c.agent_id
-            })
-            cited_ev_ids.update(c.evidence_refs)
-
-        # 2. Build critic packet with cited ev slices + raw text of those IDs only
-        focused_evidence = [
-            ev for ev in blackboard.evidence_store.get_all()
-            if ev.id in cited_ev_ids
-        ]
-        # If no evidence cited, provide empty slice
-        if not focused_evidence:
-            focused_evidence = blackboard.evidence_store.get_all()[:5]
+        # 1. Batch claims in groups of 20 so large 50–200 page audits never overflow context
+        #    or leave claims silently stuck in PENDING_VERIFICATION.
+        import asyncio
+        batch_size = 20
+        ev_by_id = {ev.id: ev for ev in blackboard.evidence_store.get_all()}
+        fallback_ev = blackboard.evidence_store.get_all()[:5]
 
         critic_prompt = load_prompt("critic")
         critic_card = (
@@ -69,25 +54,45 @@ class CognitiveCriticWorker(BaseCognitiveWorker):
             "Do not add strategy. Do not add numbers."
         )
 
-        claims_json = json.dumps(claim_atoms, ensure_ascii=False, indent=2)
-        task_contract = (
-            f"{critic_prompt or critic_card}\n\n"
-            f"<claims_to_audit>\n{claims_json}\n</claims_to_audit>"
-        )
+        # Skip claims already rejected by upstream integrity gate
+        auditable_claims = [c for c in all_claims if c.verification_status != VerificationStatus.REJECTED]
+        batches = [auditable_claims[i:i + batch_size] for i in range(0, len(auditable_claims), batch_size)]
+        sem = asyncio.Semaphore(3)
 
-        raw_result = await self.model_router.generate_structured(
-            capability="critic",
-            agent_role="Lead Adversarial Falsification Arbiter & Evidence Clerk",
-            task_contract=task_contract,
-            evidence_list=focused_evidence,
-            output_schema_desc=json.dumps(CriticOutput.model_json_schema(), indent=2),
-            site_facts=getattr(blackboard, "site_facts", None),
-            task_card=critic_card,
-            max_claims=len(claim_atoms)
-        )
+        async def _audit_batch(batch_claims: List[Any]) -> List[Dict[str, Any]]:
+            atoms = [
+                {
+                    "claim_id": c.id,
+                    "statement": c.statement,
+                    "severity": c.severity.value,
+                    "evidence_refs": c.evidence_refs,
+                    "source_agent": c.agent_id,
+                }
+                for c in batch_claims
+            ]
+            batch_ev_ids = {ref for c in batch_claims for ref in (c.evidence_refs or [])}
+            focused_ev = [ev_by_id[eid] for eid in batch_ev_ids if eid in ev_by_id] or fallback_ev
+            claims_json = json.dumps(atoms, ensure_ascii=False, indent=2)
+            task_contract = (
+                f"{critic_prompt or critic_card}\n\n"
+                f"<claims_to_audit>\n{claims_json}\n</claims_to_audit>"
+            )
+            async with sem:
+                raw_result = await self.model_router.generate_structured(
+                    capability="critic",
+                    agent_role="Lead Adversarial Falsification Arbiter & Evidence Clerk",
+                    task_contract=task_contract,
+                    evidence_list=focused_ev,
+                    output_schema_desc=json.dumps(CriticOutput.model_json_schema(), indent=2),
+                    site_facts=getattr(blackboard, "site_facts", None),
+                    task_card=critic_card,
+                    max_claims=len(atoms),
+                    model_tier="judge_model",
+                )
+            return list(raw_result.get("results", []) or []) if isinstance(raw_result, dict) else []
 
-        # Parse decisions
-        results_list = raw_result.get("results", [])
+        batch_outputs = await asyncio.gather(*[_audit_batch(b) for b in batches]) if batches else []
+        results_list = [r for sub in batch_outputs for r in sub]
         verified_ids = []
         rejected_claims = []
         deflated_claims = []
@@ -166,8 +171,10 @@ class CognitiveCriticWorker(BaseCognitiveWorker):
             "rejected_claims": rejected_claims,
             "deflated_claims": deflated_claims,
             "contradictions": contradictions,
+            "batches_executed": len(batches),
+            "total_audited": len(auditable_claims),
             "confidence_calibration_score": confidence_calibration_score,
-            "integrity_audit_summary": f"Audited {total_eval} claims: {verified_count} verified, {len(rejected_claims)} rejected, {len(deflated_claims)} severity deflated."
+            "integrity_audit_summary": f"Audited {total_eval} claims across {len(batches)} batch(es): {verified_count} verified, {len(rejected_claims)} rejected, {len(deflated_claims)} severity deflated."
         }
 
         blackboard.log_step("Adversarial Critic Falsification Completed (70B Blind)", self.worker_id, {

@@ -1,7 +1,14 @@
 """Compatibility re-export from app.workers."""
-from app.workers.queue import TaskQueue, task_queue
-from app.workers.audit_tasks import *  # noqa: F401, F403
-from app.workers.crawl_tasks import *  # noqa: F401, F403
-from app.workers.report_tasks import *  # noqa: F401, F403
+from app.workers.queue import DurableJobQueue, TaskQueue, task_queue
+from app.workers.audit_tasks import run_audit_task
+from app.workers.crawl_tasks import run_crawl_task
+from app.workers.report_tasks import run_report_task
 
-__all__ = ["TaskQueue", "task_queue"]
+__all__ = [
+    "DurableJobQueue",
+    "TaskQueue",
+    "task_queue",
+    "run_audit_task",
+    "run_crawl_task",
+    "run_report_task",
+]

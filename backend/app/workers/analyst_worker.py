@@ -19,10 +19,20 @@ class CognitiveAnalystWorker(BaseCognitiveWorker):
         task_context: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
         evidence_list = blackboard.evidence_store.get_all()
-        pages_summary = "\n".join([
-            f"• Route: {p.url} | Title: {p.title or 'Untitled'} | H1: {', '.join(p.h1) if p.h1 else 'None'} | Words: {p.word_count} | Schema: {', '.join(p.schema_types) if p.schema_types else 'None'}"
-            for p in blackboard.pages[:8]
-        ])
+        all_pages = blackboard.pages or []
+        pages_lines = [
+            f"• Route: {p.url} ({p.page_type}) | Title: {p.title or 'Untitled'} | H1: {', '.join(p.h1) if p.h1 else 'None'} | Sections: {len(getattr(p, 'sections', []) or [])} | Forms: {len(getattr(p, 'forms', []) or [])} | Words: {p.word_count} | Schema: {', '.join(p.schema_types) if p.schema_types else 'None'}"
+            for p in all_pages[:25]
+        ]
+        if len(all_pages) > 25:
+            by_type: Dict[str, int] = {}
+            for p in all_pages[25:]:
+                by_type[p.page_type or "general"] = by_type.get(p.page_type or "general", 0) + 1
+            pages_lines.append(
+                f"• (+{len(all_pages) - 25} additional crawled pages grouped by type: "
+                + ", ".join(f"{k}={v}" for k, v in sorted(by_type.items())) + ")"
+            )
+        pages_summary = "\n".join(pages_lines)
 
         # 1. Commercial Strategy, Positioning, ICP & Differentiation
         if capability_id in ["12_positioning", "13_icp_alignment", "14_value_prop_strength", "15_commercial_clarity", "16_competitive_differentiation"]:

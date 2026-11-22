@@ -194,13 +194,14 @@ def _bm25_score(query_tokens: List[str], doc_tokens: List[str], k1: float = 1.5,
 
 class RetrievedEvidenceChunk(object):
     """A scored, ranked evidence unit returned by the hybrid retriever."""
-    __slots__ = ("claim", "bm25_score", "semantic_score", "page_role_boost",
+    __slots__ = ("claim", "bm25_score", "semantic_score", "dense_score", "page_role_boost",
                  "claim_type_boost", "lexical_signal_boost", "final_score")
 
     def __init__(self, claim: AtomicClaim):
         self.claim = claim
         self.bm25_score: float = 0.0
         self.semantic_score: float = 0.0
+        self.dense_score: float = 0.0
         self.page_role_boost: float = 0.0
         self.claim_type_boost: float = 0.0
         self.lexical_signal_boost: float = 0.0
@@ -209,29 +210,139 @@ class RetrievedEvidenceChunk(object):
 
 class HybridRetriever:
     """
-    Multi-vector claim retriever.
+    True Hybrid RAG Retriever (Dense VectorStore E5 + BM25 + Knowledge Graph + RRF).
     Combines:
-      1. BM25 lexical scoring over (predicate + object) claim text
-      2. Semantic TF-IDF cosine similarity (drop-in: swap for embedding model later)
-      3. Page role boost: prioritises high-authority roles per QueryIntent
-      4. Claim type boost: prioritises FACT/CAPABILITY for commercial queries
-      5. Lexical signal boost: exact keyword matches on high-signal tokens
-    Returns top-k evidence chunks per query, ranked by Reciprocal Rank Fusion (RRF).
+      1. BM25 lexical scoring over Knowledge Graph claims & PageSection passages
+      2. Dense vector cosine search via SQLite VectorStore (E5 embeddings) when available
+      3. Jaccard token overlap semantic baseline
+      4. Page role & claim type re-ranking + Reciprocal Rank Fusion (RRF)
     """
 
-    TOP_K = 5
+    TOP_K = 6
 
-    def __init__(self, graph: WebsiteKnowledgeGraph):
+    def __init__(
+        self,
+        graph: WebsiteKnowledgeGraph,
+        vector_store: Optional[Any] = None,
+        embedding_service: Optional[Any] = None,
+        domain: Optional[str] = None,
+        analysis_id: Optional[str] = None,
+        pages: Optional[List[Any]] = None,
+    ):
         self.graph = graph
+        self.vector_store = vector_store
+        self.embedding_service = embedding_service
+        self.domain = (domain or getattr(graph, "domain", "") or "").replace("www.", "")
+        self.analysis_id = analysis_id
+        self._pages = list(pages or [])
+        self._query_vec_cache: Dict[str, Optional[List[float]]] = {}
+
+        # Combine Knowledge Graph claims + structured PageSection passages
+        self._all_claims: List[AtomicClaim] = list(graph.claims or [])
+        self._section_claims_added = 0
+        if self._pages:
+            self._append_page_section_claims()
+
         # Pre-compute per-claim token lists for BM25
         self._doc_tokens: Dict[str, List[str]] = {}
-        for c in graph.claims:
+        for c in self._all_claims:
             doc_text = f"{c.predicate} {c.object} {c.evidence.exact_sentence if c.evidence else ''}"
             self._doc_tokens[c.claim_id] = _tokenize(doc_text)
         self._avg_doc_len = sum(len(t) for t in self._doc_tokens.values()) / max(1, len(self._doc_tokens))
 
+    def _append_page_section_claims(self) -> None:
+        """Index structured PageSections into the retrieval corpus so RAG sees full section text."""
+        from app.crawl.knowledge.primitives import KieEvidence
+        existing_snippets = {
+            (c.evidence.url, (c.evidence.exact_sentence or "")[:120])
+            for c in self._all_claims
+            if c.evidence
+        }
+        for p in self._pages:
+            p_url = getattr(p, "url", "") or ""
+            p_role = self._page_role_for_url(p_url)
+            for idx, sec in enumerate(getattr(p, "sections", None) or []):
+                heading = (getattr(sec, "heading_text", None) or "").strip()
+                body = (getattr(sec, "body_text", None) or "").strip()
+                if len(body) < 30:
+                    continue
+                if (p_url, body[:120]) in existing_snippets:
+                    continue
+                sec_id = getattr(sec, "section_id", None) or f"sec_{idx}"
+                cid = f"sec_claim_{abs(hash((p_url, sec_id))) % 10**9}"
+                claim = AtomicClaim(
+                    claim_id=cid,
+                    subject=self.graph.brand,
+                    predicate=heading or (getattr(sec, "section_role", None) or "section"),
+                    object=body[:700],
+                    claim_type=KieClaimType.FACT,
+                    evidence=KieEvidence(
+                        evidence_id=f"kie_{cid}",
+                        url=p_url,
+                        page_role=p_role,
+                        section=heading or getattr(sec, "section_role", None) or "Section",
+                        exact_sentence=body[:700],
+                        strength=KieEvidenceStrength.HIGH,
+                    ),
+                )
+                self._all_claims.append(claim)
+                self._section_claims_added += 1
+
+    def _page_role_for_url(self, url: str) -> PageRole:
+        for pc in (getattr(self.graph, "page_classifications", None) or []):
+            if pc.url == url:
+                return getattr(pc, "page_role", PageRole.HOMEPAGE)
+        low = (url or "").lower()
+        if "/pricing" in low:
+            return PageRole.PRICING
+        if "/faq" in low:
+            return PageRole.FAQ
+        if "/about" in low:
+            return PageRole.ABOUT
+        if "/contact" in low:
+            return PageRole.CONTACT
+        if "/security" in low or "/privacy" in low:
+            return PageRole.SECURITY
+        if "/docs" in low or "/documentation" in low:
+            return PageRole.DOCUMENTATION
+        return PageRole.HOMEPAGE
+
+    def _dense_search(self, question: str, top_k: int = 8) -> List[Dict[str, Any]]:
+        """Query VectorStore with dense embeddings when available; fail silently to lexical."""
+        if not self.vector_store or not self.embedding_service or not self.domain:
+            return []
+        try:
+            # Skip embedding model initialization when no chunks are indexed for this domain
+            if hasattr(self.vector_store, "count_chunks") and self.vector_store.count_chunks(self.domain) == 0:
+                return []
+            q_vec = self._query_vec_cache.get(question)
+            if question not in self._query_vec_cache:
+                if hasattr(self.embedding_service, "embed_query"):
+                    q_vec = self.embedding_service.embed_query(question)
+                elif hasattr(self.embedding_service, "embed_text"):
+                    q_vec = self.embedding_service.embed_text(question)
+                elif hasattr(self.embedding_service, "embed_batch"):
+                    res = self.embedding_service.embed_batch([question])
+                    q_vec = res[0] if res else None
+                else:
+                    q_vec = None
+                self._query_vec_cache[question] = q_vec
+            if not q_vec:
+                return []
+            return self.vector_store.search_similar(
+                query_vector=q_vec,
+                domain=self.domain,
+                top_k=top_k,
+                analysis_id=self.analysis_id,
+            ) or []
+        except Exception:
+            return []
+
     def retrieve(self, question: str, plan: RetrievalPlan) -> List[RetrievedEvidenceChunk]:
-        if not self.graph.claims:
+        from app.crawl.knowledge.primitives import KieEvidence
+
+        dense_hits = self._dense_search(question, top_k=8)
+        if not self._all_claims and not dense_hits:
             return []
 
         query_tokens = _tokenize(question)
@@ -241,9 +352,22 @@ class HybridRetriever:
         if not topic_tokens:
             topic_tokens = query_tokens
 
-        chunks: List[RetrievedEvidenceChunk] = []
+        # Map dense hit scores by (url, prefix) and also synthesize chunks for dense-only passages
+        dense_by_url_prefix: Dict[str, Tuple[int, float]] = {}
+        dense_rank_by_url: Dict[str, Tuple[int, float]] = {}
+        for rank_idx, hit in enumerate(dense_hits, start=1):
+            h_url = str(hit.get("url") or "")
+            h_text = str(hit.get("text") or hit.get("chunk_text") or "")
+            h_score = float(hit.get("similarity") if hit.get("similarity") is not None else (hit.get("score") or 0.0))
+            if h_score < 0.20:
+                continue
+            dense_by_url_prefix[f"{h_url}|{h_text[:80].lower()}"] = (rank_idx, h_score)
+            if h_url not in dense_rank_by_url or h_score > dense_rank_by_url[h_url][1]:
+                dense_rank_by_url[h_url] = (rank_idx, h_score)
 
-        for claim in self.graph.claims:
+        lexical_candidates: List[RetrievedEvidenceChunk] = []
+
+        for claim in self._all_claims:
             chunk = RetrievedEvidenceChunk(claim)
             doc_tokens = self._doc_tokens.get(claim.claim_id, [])
             if not doc_tokens:
@@ -259,6 +383,13 @@ class HybridRetriever:
             union = q_set | d_set
             chunk.semantic_score = len(intersection) / max(1, len(union))
 
+            # 2b. Dense vector similarity score from VectorStore if matched
+            c_url = claim.evidence.url if claim.evidence else ""
+            c_sent = (claim.evidence.exact_sentence if claim.evidence else "") or claim.object
+            dense_match = dense_by_url_prefix.get(f"{c_url}|{c_sent[:80].lower()}") or dense_rank_by_url.get(c_url)
+            if dense_match:
+                chunk.dense_score = dense_match[1]
+
             # 3. Lexical signal boost (exact high-value tokens like $, soc, api)
             combined_lower = f"{claim.predicate} {claim.object}".lower()
             if plan.lexical_priority_signals:
@@ -266,15 +397,22 @@ class HybridRetriever:
                 chunk.lexical_signal_boost = hits * 0.30
 
             # ── Relevance Gate ──────────────────────────────────────────
-            # Calculate base topic relevance before any category or page role boosts.
             # Boosts are re-rankers ONLY and must never promote an off-topic chunk.
-            base_relevance = (chunk.bm25_score * 0.60) + (chunk.semantic_score * 0.40)
+            base_relevance = (
+                (chunk.bm25_score * 0.45)
+                + (chunk.semantic_score * 0.25)
+                + (chunk.dense_score * 0.30)
+                if chunk.dense_score > 0
+                else (chunk.bm25_score * 0.60) + (chunk.semantic_score * 0.40)
+            )
             has_topic_match = len(intersection) > 0
             has_lexical_signal = chunk.lexical_signal_boost > 0.0
+            has_strong_dense = chunk.dense_score >= 0.45
 
             passes_relevance_gate = (
-                (has_topic_match and base_relevance >= 0.10) or
-                (has_lexical_signal and (has_topic_match or base_relevance >= 0.04))
+                (has_topic_match and base_relevance >= 0.10)
+                or (has_lexical_signal and (has_topic_match or base_relevance >= 0.04))
+                or has_strong_dense
             )
             if not passes_relevance_gate:
                 continue
@@ -288,17 +426,67 @@ class HybridRetriever:
             if claim.claim_type in plan.priority_claim_types:
                 chunk.claim_type_boost = 0.25
 
-            # Final RRF-weighted score
             chunk.final_score = (
-                base_relevance * 0.65 +
-                chunk.page_role_boost * 0.15 +
-                chunk.claim_type_boost * 0.10 +
-                min(0.30, chunk.lexical_signal_boost) * 0.10
+                base_relevance * 0.65
+                + chunk.page_role_boost * 0.15
+                + chunk.claim_type_boost * 0.10
+                + min(0.30, chunk.lexical_signal_boost) * 0.10
             )
+            if chunk.final_score >= 0.12 or has_strong_dense:
+                lexical_candidates.append(chunk)
 
-            if chunk.final_score >= 0.12:
-                chunks.append(chunk)
+        # Promote high-scoring dense VectorStore passages not already represented in KG claims
+        seen_prefixes = {
+            (c.claim.evidence.url if c.claim.evidence else "", (c.claim.object or "")[:80].lower())
+            for c in lexical_candidates
+        }
+        for rank_idx, hit in enumerate(dense_hits, start=1):
+            h_score = float(hit.get("similarity") if hit.get("similarity") is not None else (hit.get("score") or 0.0))
+            h_url = str(hit.get("url") or "")
+            h_text = str(hit.get("text") or hit.get("chunk_text") or "").strip()
+            if h_score < 0.35 or len(h_text) < 25:
+                continue
+            if (h_url, h_text[:80].lower()) in seen_prefixes:
+                continue
+            sec_heading = str(hit.get("section_heading") or hit.get("section_id") or "Section").strip()
+            vec_cid = f"vec_{hit.get('id') or hit.get('chunk_id') or rank_idx}"
+            dense_claim = AtomicClaim(
+                claim_id=vec_cid,
+                subject=self.graph.brand,
+                predicate=sec_heading,
+                object=h_text[:700],
+                claim_type=KieClaimType.FACT,
+                evidence=KieEvidence(
+                    evidence_id=f"kie_{vec_cid}",
+                    url=h_url,
+                    page_role=self._page_role_for_url(h_url),
+                    section=sec_heading,
+                    exact_sentence=h_text[:700],
+                    strength=KieEvidenceStrength.HIGH,
+                ),
+            )
+            d_chunk = RetrievedEvidenceChunk(dense_claim)
+            d_chunk.dense_score = h_score
+            d_chunk.bm25_score = _bm25_score(topic_tokens, _tokenize(h_text), avg_len=self._avg_doc_len)
+            d_chunk.final_score = round(h_score * 0.70 + d_chunk.bm25_score * 0.20, 4)
+            lexical_candidates.append(d_chunk)
+            seen_prefixes.add((h_url, h_text[:80].lower()))
 
-        # Sort descending by final_score, return top-K (or empty list if no evidence passed the gate)
-        chunks.sort(key=lambda c: c.final_score, reverse=True)
-        return chunks[: self.TOP_K]
+        # Reciprocal Rank Fusion (RRF) combining lexical rank + dense rank
+        if not lexical_candidates:
+            return []
+        by_lex = sorted(lexical_candidates, key=lambda c: (c.bm25_score + c.semantic_score), reverse=True)
+        lex_rank = {c.claim.claim_id: i + 1 for i, c in enumerate(by_lex)}
+        by_dense = sorted(lexical_candidates, key=lambda c: c.dense_score, reverse=True)
+        dense_rank = {c.claim.claim_id: i + 1 for i, c in enumerate(by_dense) if c.dense_score > 0}
+
+        k_rrf = 60.0
+        for c in lexical_candidates:
+            rrf = 1.0 / (k_rrf + lex_rank.get(c.claim.claim_id, 999))
+            if c.claim.claim_id in dense_rank:
+                rrf += 1.2 / (k_rrf + dense_rank[c.claim.claim_id])
+            # Blend RRF rank signal with calibrated relevance score so threshold consumers stay consistent
+            c.final_score = round(c.final_score * 0.75 + (rrf * 15.0) * 0.25, 4)
+
+        lexical_candidates.sort(key=lambda c: c.final_score, reverse=True)
+        return lexical_candidates[: self.TOP_K]

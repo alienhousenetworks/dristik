@@ -51,9 +51,9 @@ class IndependentRetester:
     ) -> TestExecutionResult:
         cat = criterion.test_category
         html = post_deploy_data.get("html", "")
-        status_code = post_deploy_data.get("status_code", 200)
+        status_code = post_deploy_data.get("status_code")
         headers = post_deploy_data.get("headers", {})
-        ttfb = post_deploy_data.get("ttfb_ms", 180.0)
+        ttfb = post_deploy_data.get("ttfb_ms")
         robots_txt = post_deploy_data.get("robots_txt", "")
 
         if cat == TestCategory.METADATA:
@@ -71,7 +71,8 @@ class IndependentRetester:
 
         elif cat == TestCategory.INTERNAL_LINKS:
             target_link = post_deploy_data.get("target_link", "/")
-            target_resolves = post_deploy_data.get("target_resolves_200", True)
+            # Never assume 200 resolution when the post-deploy check did not measure it.
+            target_resolves = post_deploy_data.get("target_resolves_200") is True
             return self.registry.test_internal_links(html, target_link, target_resolves_200=target_resolves)
 
         elif cat == TestCategory.DOM_CONDITION:
@@ -89,11 +90,29 @@ class IndependentRetester:
             return self.registry.test_search_performance(robots_txt, bot_name="GPTBot")
 
         elif cat == TestCategory.PERFORMANCE:
+            if ttfb is None:
+                return TestExecutionResult(
+                    test_category=TestCategory.PERFORMANCE,
+                    name="ttfb_check",
+                    passed=False,
+                    observed_value=None,
+                    expected_condition=f"ttfb_ms <= {criterion.max_value or 300.0}",
+                    diagnostic_details="Post-deploy ttfb_ms was not measured; cannot pass performance check.",
+                )
             max_t = criterion.max_value or 300.0
             return self.registry.test_performance(ttfb, max_ttfb_ms=max_t)
 
         elif cat == TestCategory.HTTP_CONDITION:
             exp_status = int(criterion.min_value or 200)
+            if status_code is None:
+                return TestExecutionResult(
+                    test_category=TestCategory.HTTP_CONDITION,
+                    name="http_status_check",
+                    passed=False,
+                    observed_value=None,
+                    expected_condition=f"HTTP {exp_status}",
+                    diagnostic_details="Post-deploy status_code was not measured; cannot pass HTTP check.",
+                )
             return self.registry.test_http_condition(status_code=status_code, expected_status=exp_status, headers=headers)
 
         elif cat == TestCategory.VISUAL_LAYOUT:
@@ -124,10 +143,10 @@ class IndependentRetester:
         partially_fixed = False
 
         if not verification_passed:
-            # Check if partially fixed (e.g. improved but not fully matching criterion)
-            orig_val = original_evidence.get("defect_severity_score", 10)
-            new_val = new_evidence.get("defect_severity_score", 5)
-            if new_val < orig_val:
+            # Only mark PARTIALLY_FIXED when both baseline and retest measured a numeric defect score.
+            orig_val = original_evidence.get("defect_severity_score")
+            new_val = new_evidence.get("defect_severity_score")
+            if isinstance(orig_val, (int, float)) and isinstance(new_val, (int, float)) and new_val < orig_val:
                 partially_fixed = True
 
         state = (

@@ -26,6 +26,7 @@ from app.db.models.audit import (
     StageCheckpoint,
 )
 from app.core.constants import FORBIDDEN_TENANT_IDENTIFIERS
+from app.db.connection import get_unified_engine, is_postgres_url, resolve_default_sqlite_path
 from app.db.schema import SQLITE_SCHEMA
 
 logger = logging.getLogger(__name__)
@@ -35,12 +36,31 @@ class AuditRepository:
     """
     Thread-safe repository for persisting and resuming audits, checkpoints,
     evidence, claims, findings, and telemetry.
+    Supports both unified SQLite and PostgreSQL (when DATABASE_URL is postgresql://).
     """
 
-    def __init__(self, db_path: Optional[str] = None):
-        self.db_path = db_path or getattr(settings, "AUDIT_DATABASE_PATH", "data/dristik_audits.db")
+    def __init__(self, db_path: Optional[str] = None, database_url: Optional[str] = None):
+        self.database_url = database_url
+        self._use_postgres = bool(database_url and is_postgres_url(database_url)) or (
+            database_url is None and db_path is None and is_postgres_url()
+        )
+        self.db_path = db_path or resolve_default_sqlite_path(
+            getattr(settings, "AUDIT_DATABASE_PATH", "data/dristik_audits.db")
+        )
         self._lock = threading.RLock()
-        self._init_sqlite()
+        if self._use_postgres:
+            self._init_postgres()
+        else:
+            self._init_sqlite()
+
+    def _init_postgres(self) -> None:
+        from sqlalchemy import text
+        eng = get_unified_engine(self.database_url)
+        with self._lock, eng.begin() as conn:
+            for stmt in SQLITE_SCHEMA.strip().split(";"):
+                s = stmt.strip()
+                if s:
+                    conn.execute(text(s))
 
     def _init_sqlite(self) -> None:
         os.makedirs(os.path.dirname(os.path.abspath(self.db_path)), exist_ok=True)
@@ -48,17 +68,45 @@ class AuditRepository:
             with sqlite3.connect(self.db_path, check_same_thread=False, timeout=5.0) as conn:
                 conn.execute("PRAGMA journal_mode=WAL")
                 conn.execute("PRAGMA busy_timeout=5000")
+                # Migrate any pre-existing unified identity `audits` table BEFORE running
+                # SQLITE_SCHEMA indexes that reference `domain` or `workspace_id`.
+                self._migrate_sqlite(conn)
                 conn.executescript(SQLITE_SCHEMA)
                 self._migrate_sqlite(conn)
                 conn.commit()
 
     def _migrate_sqlite(self, conn: sqlite3.Connection) -> None:
-        """Applies backward-compatible column migrations for existing SQLite databases."""
+        """Applies backward-compatible column migrations for existing & unified SQLite databases."""
         try:
             cur = conn.execute("PRAGMA table_info(audits)")
             columns = {row[1] for row in cur.fetchall()}
-            if columns and "workspace_id" not in columns:
-                conn.execute("ALTER TABLE audits ADD COLUMN workspace_id TEXT")
+            if columns:
+                # Ensure unified compatibility between identity.store.audits and AuditRepository.audits
+                extra_cols = {
+                    "workspace_id": "TEXT",
+                    "domain": "TEXT DEFAULT ''",
+                    "progress": "INTEGER DEFAULT 0",
+                    "stage": "TEXT DEFAULT 'queued'",
+                    "max_pages": "INTEGER DEFAULT 1",
+                    "page_count": "INTEGER DEFAULT 0",
+                    "overall_score": "REAL",
+                    "score_overall": "REAL",
+                    "score_human": "REAL",
+                    "score_google": "REAL",
+                    "score_ai_readiness": "REAL",
+                    "score_ai_visibility": "REAL",
+                    "score_band": "TEXT",
+                    "started_at": "TEXT",
+                    "completed_at": "TEXT",
+                    "input_hash": "TEXT",
+                    "output_hash": "TEXT",
+                    "raw_report_json": "TEXT",
+                    "error_message": "TEXT",
+                    "updated_at": "TEXT",
+                }
+                for col, col_def in extra_cols.items():
+                    if col not in columns:
+                        conn.execute(f"ALTER TABLE audits ADD COLUMN {col} {col_def}")
                 conn.execute("CREATE INDEX IF NOT EXISTS idx_audits_org_workspace ON audits(org_id, workspace_id)")
         except Exception as e:
             logger.warning(f"Failed to check or alter audits table schema: {e}")
@@ -114,23 +162,28 @@ class AuditRepository:
 
         report_json = rep.model_dump_json() if rep and hasattr(rep, "model_dump_json") else None
 
+        now_iso = datetime.now(timezone.utc).isoformat()
+        started_iso = run.created_at.isoformat() if hasattr(run.created_at, "isoformat") else str(run.created_at or now_iso)
         sql = """
         INSERT INTO audits (
             analysis_id, org_id, workspace_id, user_id, website_url, domain, status, progress,
-            stage, max_pages, score_overall, score_human, score_google,
+            stage, max_pages, page_count, overall_score, score_overall, score_human, score_google,
             score_ai_readiness, score_ai_visibility, score_band, started_at,
-            completed_at, input_hash, output_hash, raw_report_json, error_message
+            completed_at, input_hash, output_hash, raw_report_json, error_message, created_at, updated_at
         ) VALUES (
             :analysis_id, :org_id, :workspace_id, :user_id, :website_url, :domain, :status, :progress,
-            :stage, :max_pages, :score_overall, :score_human, :score_google,
+            :stage, :max_pages, :page_count, :overall_score, :score_overall, :score_human, :score_google,
             :score_ai_readiness, :score_ai_visibility, :score_band, :started_at,
-            :completed_at, :input_hash, :output_hash, :raw_report_json, :error_message
+            :completed_at, :input_hash, :output_hash, :raw_report_json, :error_message, :created_at, :updated_at
         )
         ON CONFLICT(analysis_id) DO UPDATE SET
             workspace_id = COALESCE(excluded.workspace_id, audits.workspace_id),
+            domain = CASE WHEN excluded.domain != '' THEN excluded.domain ELSE audits.domain END,
             status = excluded.status,
             progress = excluded.progress,
             stage = excluded.stage,
+            page_count = excluded.page_count,
+            overall_score = excluded.overall_score,
             score_overall = excluded.score_overall,
             score_human = excluded.score_human,
             score_google = excluded.score_google,
@@ -140,7 +193,8 @@ class AuditRepository:
             completed_at = excluded.completed_at,
             output_hash = excluded.output_hash,
             raw_report_json = excluded.raw_report_json,
-            error_message = excluded.error_message
+            error_message = excluded.error_message,
+            updated_at = excluded.updated_at
         """
 
         params = {
@@ -154,18 +208,22 @@ class AuditRepository:
             "progress": progress_val,
             "stage": stage_val,
             "max_pages": max_pages_val,
+            "page_count": max_pages_val,
+            "overall_score": score_overall,
             "score_overall": score_overall,
             "score_human": score_human,
             "score_google": score_google,
             "score_ai_readiness": score_ai_read,
             "score_ai_visibility": score_ai_vis,
             "score_band": score_band_val,
-            "started_at": run.created_at.isoformat() if hasattr(run.created_at, "isoformat") else str(run.created_at),
+            "started_at": started_iso,
             "completed_at": run.completed_at.isoformat() if getattr(run, "completed_at", None) and hasattr(run.completed_at, "isoformat") else None,
             "input_hash": getattr(run, "input_hash", None),
             "output_hash": getattr(run, "output_hash", None),
             "raw_report_json": report_json,
             "error_message": getattr(run, "error", getattr(run, "error_message", None)),
+            "created_at": started_iso,
+            "updated_at": now_iso,
         }
 
         finding_rows = None
@@ -208,6 +266,36 @@ class AuditRepository:
         """
 
         with self._lock:
+            if self._use_postgres:
+                from sqlalchemy import text
+                with get_unified_engine(self.database_url).begin() as pg_conn:
+                    pg_conn.execute(text(sql), params)
+                    if finding_rows is not None:
+                        pg_conn.execute(
+                            text("DELETE FROM audit_findings WHERE analysis_id = :aid"),
+                            {"aid": run.analysis_id},
+                        )
+                        pg_find_sql = text(
+                            """
+                            INSERT INTO audit_findings (
+                                finding_id, analysis_id, category, severity, title, description,
+                                impact, recommendation, evidence_refs_json, claim_refs_json,
+                                verification_status, affected_urls_json, affected_url_count,
+                                root_cause_id, evidence_json, created_at
+                            ) VALUES (
+                                :c0, :c1, :c2, :c3, :c4, :c5, :c6, :c7,
+                                :c8, :c9, :c10, :c11, :c12, :c13, :c14, :c15
+                            )
+                            ON CONFLICT(finding_id) DO UPDATE SET
+                                severity = excluded.severity,
+                                title = excluded.title,
+                                description = excluded.description,
+                                recommendation = excluded.recommendation
+                            """
+                        )
+                        for frow in finding_rows:
+                            pg_conn.execute(pg_find_sql, {f"c{i}": v for i, v in enumerate(frow)})
+                return
             with self._get_conn() as conn:
                 conn.execute(sql, params)
                 if finding_rows is not None:
@@ -219,6 +307,20 @@ class AuditRepository:
     def get_run(self, analysis_id: str, org_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
         """Fetches an audit record by analysis_id, optionally verifying org_id ownership."""
         with self._lock:
+            if self._use_postgres:
+                from sqlalchemy import text
+                with get_unified_engine(self.database_url).connect() as pg_conn:
+                    if org_id:
+                        row = pg_conn.execute(
+                            text("SELECT * FROM audits WHERE analysis_id = :aid AND org_id = :org"),
+                            {"aid": analysis_id, "org": org_id},
+                        ).mappings().first()
+                    else:
+                        row = pg_conn.execute(
+                            text("SELECT * FROM audits WHERE analysis_id = :aid"),
+                            {"aid": analysis_id},
+                        ).mappings().first()
+                    return dict(row) if row else None
             with self._get_conn() as conn:
                 if org_id:
                     cur = conn.execute(
@@ -242,6 +344,20 @@ class AuditRepository:
 
         clean_org_id = org_id.strip()
         with self._lock:
+            if self._use_postgres:
+                from sqlalchemy import text
+                with get_unified_engine(self.database_url).connect() as pg_conn:
+                    if workspace_id:
+                        rows = pg_conn.execute(
+                            text("SELECT * FROM audits WHERE org_id = :org AND workspace_id = :ws ORDER BY created_at DESC LIMIT :lim"),
+                            {"org": clean_org_id, "ws": workspace_id, "lim": limit},
+                        ).mappings().all()
+                    else:
+                        rows = pg_conn.execute(
+                            text("SELECT * FROM audits WHERE org_id = :org ORDER BY created_at DESC LIMIT :lim"),
+                            {"org": clean_org_id, "lim": limit},
+                        ).mappings().all()
+                    return [dict(r) for r in rows]
             with self._get_conn() as conn:
                 if workspace_id:
                     cur = conn.execute(
@@ -376,7 +492,8 @@ class AuditRepository:
     # Crawl Pages, Evidence, Claims, and Findings Persistence
     # -------------------------------------------------------------------------
     def persist_crawl_pages(self, analysis_id: str, pages: List[PageEvidence]) -> None:
-        """Persists crawled page records."""
+        """Persists crawled page records including structured sections, forms, CTAs, nav, and footer."""
+        import hashlib
         now = datetime.now(timezone.utc).isoformat()
         sql = """
         INSERT OR REPLACE INTO audit_pages (
@@ -386,7 +503,32 @@ class AuditRepository:
         """
         rows = []
         for p in pages:
-            page_id = f"pg_{abs(hash(p.url)) % 100000000:08d}"
+            # Deterministic SHA-256 ID scoped by analysis_id + url so runs never collide across restarts
+            page_id = "pg_" + hashlib.sha256(f"{analysis_id}|{p.url}".encode("utf-8")).hexdigest()[:16]
+            sections_dump = [
+                s.model_dump(mode="json") if hasattr(s, "model_dump") else dict(s)
+                for s in (getattr(p, "sections", None) or [])
+            ]
+            meta_payload = {
+                "h1": p.h1,
+                "h2": p.h2,
+                "h3": p.h3,
+                "meta_description": p.meta_description,
+                "canonical_url": p.canonical_url,
+                "robots_meta": p.robots_meta,
+                "viewport": p.viewport,
+                "schema_types": p.schema_types,
+                "ctas": p.ctas,
+                "forms": getattr(p, "forms", []) or [],
+                "nav_items": getattr(p, "nav_items", []) or [],
+                "footer_info": getattr(p, "footer_info", {}) or {},
+                "sections": sections_dump,
+                "render_mode": getattr(p, "render_mode", "static"),
+                "render_status": getattr(p, "render_status", "static_ok"),
+                "render_error": getattr(p, "render_error", None),
+                "extraction_status": getattr(p, "extraction_status", "ok"),
+                "body_text": (p.body_text or "")[:50000],
+            }
             rows.append((
                 page_id,
                 analysis_id,
@@ -397,13 +539,66 @@ class AuditRepository:
                 p.readability_score,
                 p.ttfb_ms,
                 p.page_type,
-                json.dumps({"h1": p.h1, "schema_types": p.schema_types}),
+                json.dumps(meta_payload, ensure_ascii=False, default=str),
                 now,
             ))
         with self._lock:
             with self._get_conn() as conn:
                 conn.executemany(sql, rows)
                 conn.commit()
+
+    def load_crawl_pages(self, analysis_id: str) -> List[PageEvidence]:
+        """Reconstructs persisted PageEvidence objects (with sections, forms, CTAs, footer) after restart."""
+        from app.domain.models import PageSection
+        with self._lock:
+            with self._get_conn() as conn:
+                rows = conn.execute(
+                    """
+                    SELECT url, status_code, title, word_count, readability_score,
+                           ttfb_ms, page_type, raw_metadata_json
+                    FROM audit_pages WHERE analysis_id = ?
+                    ORDER BY rowid ASC
+                    """,
+                    (analysis_id,),
+                ).fetchall()
+        pages: List[PageEvidence] = []
+        for row in rows:
+            meta = {}
+            if row[7]:
+                try:
+                    meta = json.loads(row[7])
+                except Exception:
+                    meta = {}
+            raw_sections = meta.get("sections") or []
+            sections = [PageSection(**s) for s in raw_sections if isinstance(s, dict)]
+            pages.append(PageEvidence(
+                url=row[0],
+                status_code=row[1] or 200,
+                title=row[2],
+                word_count=row[3] or 0,
+                readability_score=row[4] or 0.0,
+                ttfb_ms=row[5] or 0.0,
+                page_type=row[6] or "general",
+                h1=meta.get("h1") or [],
+                h2=meta.get("h2") or [],
+                h3=meta.get("h3") or [],
+                meta_description=meta.get("meta_description"),
+                canonical_url=meta.get("canonical_url"),
+                robots_meta=meta.get("robots_meta"),
+                viewport=meta.get("viewport"),
+                schema_types=meta.get("schema_types") or [],
+                ctas=meta.get("ctas") or [],
+                forms=meta.get("forms") or [],
+                nav_items=meta.get("nav_items") or [],
+                footer_info=meta.get("footer_info") or {},
+                sections=sections,
+                render_mode=meta.get("render_mode") or "static",
+                render_status=meta.get("render_status") or "static_ok",
+                render_error=meta.get("render_error"),
+                extraction_status=meta.get("extraction_status") or "ok",
+                body_text=meta.get("body_text") or None,
+            ))
+        return pages
 
     def persist_evidence_items(self, analysis_id: str, evidence_items: List[Evidence]) -> None:
         """Persists DOM observations and external evidence records."""
@@ -429,7 +624,7 @@ class AuditRepository:
                 ev.analyzer or (ev.metadata or {}).get("source", "crawler"),
                 ev.url,
                 getattr(ev, "selector", None),
-                (ev.text or "")[:500],
+                (ev.text or "")[:4000],
                 getattr(ev, "hash", None),
                 getattr(ev, "raw_snapshot_id", None),
                 prov,
@@ -531,30 +726,11 @@ class AuditRepository:
                 conn.commit()
 
     def get_persisted_crawl_pages(self, analysis_id: str) -> List[PageEvidence]:
-        """Loads persisted crawl page records for an audit run."""
-        with self._lock:
-            with self._get_conn() as conn:
-                cur = conn.execute("SELECT * FROM audit_pages WHERE analysis_id = ? ORDER BY crawled_at ASC", (analysis_id,))
-                rows = [dict(r) for r in cur.fetchall()]
-
-        pages: List[PageEvidence] = []
-        for r in rows:
-            meta = json.loads(r.get("raw_metadata_json") or "{}")
-            pages.append(PageEvidence(
-                url=r["url"],
-                status_code=r.get("status_code", 200),
-                title=r.get("title"),
-                word_count=r.get("word_count", 0),
-                readability_score=r.get("readability_score", 0.0) or 0.0,
-                ttfb_ms=r.get("ttfb_ms", 0.0) or 0.0,
-                page_type=r.get("page_type") or "general",
-                h1=meta.get("h1", []),
-                schema_types=meta.get("schema_types", []),
-            ))
-        return pages
+        """Loads persisted crawl page records (including Phase-1 sections, forms, nav, footer & body_text)."""
+        return self.load_crawl_pages(analysis_id)
 
     def get_persisted_evidence_items(self, analysis_id: str) -> List[Evidence]:
-        """Loads persisted evidence records into immutable Evidence objects."""
+        """Loads persisted evidence records into immutable Evidence objects preserving SHA-256 digests."""
         with self._lock:
             with self._get_conn() as conn:
                 cur = conn.execute("SELECT * FROM audit_evidence WHERE analysis_id = ?", (analysis_id,))
@@ -563,6 +739,8 @@ class AuditRepository:
         evidence_items: List[Evidence] = []
         for r in rows:
             meta = json.loads(r.get("metadata_json") or "{}")
+            ev_hash = str(r.get("evidence_hash") or "").strip()
+            is_real_sha = len(ev_hash) == 64 and all(ch in "0123456789abcdef" for ch in ev_hash.lower())
             evidence_items.append(Evidence(
                 id=r["evidence_id"],
                 source_type=r.get("source_type") or "dom",
@@ -570,7 +748,8 @@ class AuditRepository:
                 selector=r.get("selector"),
                 text=r.get("text_extract"),
                 analyzer=r.get("source_name") or "crawler",
-                hash=r.get("evidence_hash") or "hash_persisted",
+                hash=ev_hash or "hash_persisted",
+                content_sha256=ev_hash if is_real_sha else None,
                 raw_snapshot_id=r.get("raw_snapshot_id"),
                 metadata=meta,
             ))

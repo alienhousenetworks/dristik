@@ -59,8 +59,21 @@ class BusinessUnderstandingOrchestrator:
         and builds the canonical SemanticBusinessRepresentation.
         """
         retriever = EvidenceRetriever(blackboard.evidence_store)
-        evidence_slice = retriever.retrieve_for_agent("business_intelligence", limit=35)
-        site_facts = getattr(blackboard, "site_facts", {}) or {}
+        evidence_slice = retriever.retrieve_for_agent("business_intelligence", limit=100)
+        # Ensure section-level and footer RAW evidence slices are always represented
+        seen_ev_ids = {ev.id for ev in evidence_slice}
+        for ev in blackboard.evidence_store.get_all():
+            if ev.source_type in ("page_section", "footer") and ev.id not in seen_ev_ids:
+                evidence_slice.append(ev)
+                seen_ev_ids.add(ev.id)
+                if len(evidence_slice) >= 140:
+                    break
+
+        site_facts = dict(getattr(blackboard, "site_facts", {}) or {})
+        full_site_dossier = await self._build_full_site_dossier(blackboard)
+        if full_site_dossier:
+            site_facts["full_site_dossier"] = full_site_dossier
+            blackboard.blackboard_state["full_site_dossier"] = full_site_dossier
 
         # 1. Run Cognitive Workers independently. A strategist JSON miss must not
         # wipe identity already produced by the other four agents.
@@ -199,6 +212,129 @@ class BusinessUnderstandingOrchestrator:
 
         return semantic_rep
 
+    async def _build_full_site_dossier(self, blackboard: CognitiveBlackboard) -> Dict[str, Any]:
+        """
+        Builds a full-website section-level dossier across ALL crawled pages.
+        - <= 15 pages: includes every page's structured PageSections, CTAs, forms, nav, and footer directly.
+        - > 15 pages: runs a batched fast-model map phase over overflow pages so pages 16..200 are never dropped.
+        """
+        import asyncio
+        pages = list(getattr(blackboard, "pages", None) or [])
+        if not pages:
+            return {}
+
+        def _page_digest_entry(p: Any, max_sections: int = 8, sec_chars: int = 450) -> Dict[str, Any]:
+            sections = getattr(p, "sections", None) or []
+            sec_summaries = [
+                {
+                    "id": s.section_id,
+                    "role": s.section_role,
+                    "heading": s.heading_text,
+                    "excerpt": (s.body_text or "")[:sec_chars],
+                    "ctas": (s.ctas or [])[:4],
+                }
+                for s in sections[:max_sections]
+            ]
+            footer = getattr(p, "footer_info", None) or {}
+            return {
+                "url": p.url,
+                "page_type": p.page_type,
+                "title": p.title,
+                "h1": (p.h1 or [])[:3],
+                "h2": (p.h2 or [])[:8],
+                "word_count": p.word_count,
+                "ctas": (p.ctas or [])[:8],
+                "forms_count": len(getattr(p, "forms", None) or []),
+                "schema_types": (p.schema_types or [])[:6],
+                "sections": sec_summaries,
+                "body_excerpt": None if sec_summaries else (p.body_text or "")[:1000],
+                "footer_contacts": {
+                    "emails": footer.get("emails", []),
+                    "social_links": footer.get("social_links", []),
+                    "copyright": footer.get("copyright"),
+                } if footer else None,
+            }
+
+        # Prioritize strategic core pages for full section detail
+        def _rank(p: Any) -> int:
+            pt = (getattr(p, "page_type", "") or "").lower()
+            if pt == "homepage":
+                return 0
+            if pt in ("pricing", "product", "services"):
+                return 1
+            if pt in ("about", "contact"):
+                return 2
+            return 3
+
+        ordered = sorted(pages, key=_rank)
+        core_pages = ordered[:15]
+        overflow_pages = ordered[15:]
+
+        core_entries = [_page_digest_entry(p) for p in core_pages]
+        overflow_digests: List[Dict[str, Any]] = []
+
+        # Map phase for large sites (>15 pages) using fast_slm in batches of 6 pages
+        if overflow_pages and self.model_router is not None:
+            batches = [overflow_pages[i:i + 6] for i in range(0, len(overflow_pages), 6)]
+            sem = asyncio.Semaphore(4)
+
+            async def _digest_batch(batch_idx: int, batch_pages: List[Any]) -> Dict[str, Any]:
+                compact_batch = [
+                    {
+                        "url": bp.url,
+                        "page_type": bp.page_type,
+                        "title": bp.title,
+                        "h1": (bp.h1 or [])[:2],
+                        "sections": [
+                            {"role": s.section_role, "heading": s.heading_text, "excerpt": (s.body_text or "")[:300]}
+                            for s in (getattr(bp, "sections", None) or [])[:5]
+                        ],
+                        "ctas": (bp.ctas or [])[:4],
+                    }
+                    for bp in batch_pages
+                ]
+                async with sem:
+                    try:
+                        res = await self.model_router.generate_structured(
+                            capability="page_section_digest",
+                            agent_role="Website Page Digest Extractor",
+                            task_contract=(
+                                "Summarize the commercial facts from these crawled pages: distinct offerings/products/services, "
+                                "target customer segments, pricing or proof points, and primary conversion actions. "
+                                "Report ONLY facts directly visible in the supplied pages."
+                            ),
+                            evidence_list=[],
+                            site_facts={"batch_pages": compact_batch},
+                            output_schema_desc=(
+                                '{"offerings":["string"],"audience_signals":["string"],'
+                                '"pricing_or_proof_signals":["string"],"urls_covered":["string"]}'
+                            ),
+                            model_tier="fast_slm",
+                            max_claims=0,
+                            max_tokens=1200,
+                        )
+                        if isinstance(res, dict) and res.get("status") not in ("unavailable", "budget_exceeded"):
+                            return res
+                    except Exception as exc:
+                        logger.debug("Overflow page digest batch %d fallback: %s", batch_idx, exc)
+                return {
+                    "urls_covered": [bp.url for bp in batch_pages],
+                    "titles": [bp.title for bp in batch_pages if bp.title],
+                    "h1s": [h for bp in batch_pages for h in (bp.h1 or [])[:1]],
+                }
+
+            overflow_digests = list(await asyncio.gather(*[_digest_batch(i, b) for i, b in enumerate(batches)]))
+        elif overflow_pages:
+            overflow_digests = [
+                {"urls_covered": [bp.url for bp in overflow_pages], "titles": [bp.title for bp in overflow_pages if bp.title][:30]}
+            ]
+
+        return {
+            "total_pages_analyzed": len(pages),
+            "core_pages_full_sections": core_entries,
+            "overflow_pages_digests": overflow_digests,
+        }
+
     async def _run_optional_agent(self, agent_name: str, fn, *args) -> Tuple[Optional[Any], Optional[str]]:
         try:
             return await fn(*args), None
@@ -240,8 +376,9 @@ class BusinessUnderstandingOrchestrator:
             evidence_list=evidence_slice,
             output_schema_desc=json.dumps(AgentDiscoveryOutput.model_json_schema(), indent=2),
             site_facts=site_facts,
-            task_card="Discover exact commercial operations from page evidence. Never assume from keywords.",
-            max_claims=0
+            task_card="Discover exact commercial operations from full-site page section evidence. Never assume from keywords.",
+            max_claims=0,
+            model_tier="reasoning_model",
         )
         payload = self._require_llm_payload(res, "Business Discovery Agent")
         return AgentDiscoveryOutput(**payload)
@@ -256,8 +393,9 @@ class BusinessUnderstandingOrchestrator:
             evidence_list=evidence_slice,
             output_schema_desc=json.dumps(AgentIntentJourneyOutput.model_json_schema(), indent=2),
             site_facts=site_facts,
-            task_card="Determine dynamic customer journey and commercial intent from DOM progression.",
-            max_claims=0
+            task_card="Determine dynamic customer journey and commercial intent from full-site DOM progression.",
+            max_claims=0,
+            model_tier="reasoning_model",
         )
         payload = self._require_llm_payload(res, "Intent & Journey Agent")
         return AgentIntentJourneyOutput(**payload)
@@ -272,8 +410,9 @@ class BusinessUnderstandingOrchestrator:
             evidence_list=evidence_slice,
             output_schema_desc=json.dumps(AgentCategoryProductOutput.model_json_schema(), indent=2),
             site_facts=site_facts,
-            task_card="Extract taxonomy semantically without keyword heuristics.",
-            max_claims=0
+            task_card="Extract taxonomy semantically from full-site sections without keyword heuristics.",
+            max_claims=0,
+            model_tier="reasoning_model",
         )
         payload = self._require_llm_payload(res, "Category & Product Agent")
         return AgentCategoryProductOutput(**payload)
@@ -289,7 +428,8 @@ class BusinessUnderstandingOrchestrator:
             output_schema_desc=json.dumps(AgentBusinessModelOutput.model_json_schema(), indent=2),
             site_facts=site_facts,
             task_card="Identify primary and secondary commercial mechanisms with confidence.",
-            max_claims=0
+            max_claims=0,
+            model_tier="reasoning_model",
         )
         payload = self._require_llm_payload(res, "Business Model Agent")
         return AgentBusinessModelOutput(**payload)
@@ -319,7 +459,8 @@ class BusinessUnderstandingOrchestrator:
             ),
             site_facts=site_facts,
             task_card="Audit architecture alignment, identify value prop friction and flag any contradictions.",
-            max_claims=0
+            max_claims=0,
+            model_tier="reasoning_model",
         )
         payload = self._require_llm_payload(res, "Semantic Strategist")
         return AgentSemanticStrategistOutput(**payload)

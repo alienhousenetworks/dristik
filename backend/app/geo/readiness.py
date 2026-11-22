@@ -880,7 +880,11 @@ async def enrich_geo_readiness_citations(
     domain: str,
     profile: Optional[Any] = None,
 ) -> GeoReadinessReport:
-    """Enriches citation passage rewrites with LLM when available."""
+    """Enriches citation passage rewrites and AI citation-gap commentary via Frontier AI.
+
+    Strictly preserves the separation between on-page GEO Readiness (extractability_score)
+    and measured live AI visibility (visibility_score).
+    """
     if not model_router or not getattr(report, "citation_passages", None):
         return report
     try:
@@ -898,7 +902,50 @@ async def enrich_geo_readiness_citations(
                 domain=domain,
                 profile=profile,
             )
-            report.citation_passages = enriched.model_dump()
+            dumped = enriched.model_dump()
+
+            # Frontier AI citation-readiness synthesis anchored strictly to measured readiness + passages
+            if hasattr(model_router, "generate_structured"):
+                import json as _json
+                dim_summary = [
+                    {
+                        "key": getattr(d, "key", None) or (d.get("key") if isinstance(d, dict) else ""),
+                        "score": getattr(d, "score", None) if not isinstance(d, dict) else d.get("score"),
+                        "is_measured": getattr(d, "is_measured", True) if not isinstance(d, dict) else d.get("is_measured", True),
+                    }
+                    for d in (getattr(report, "dimensions", None) or [])
+                ]
+                sample_passages = (dumped.get("passages") or [])[:8]
+                contract = (
+                    f"Brand: {brand_name} ({domain})\n"
+                    f"On-Page GEO Extractability Score: {getattr(report, 'extractability_score', None)}\n"
+                    f"Live AI Citation Visibility Score (separate metric): {getattr(report, 'visibility_score', None)}\n"
+                    f"GEO Dimensions:\n{_json.dumps(dim_summary, default=str)}\n\n"
+                    f"Observed Extractable Passages:\n{_json.dumps(sample_passages, default=str)[:3500]}\n\n"
+                    "Synthesize concise citation-readiness gaps and 3–5 concrete quotable-block improvements "
+                    "grounded ONLY in the brand's observed pages. Never confuse on-page readiness with live citation rank."
+                )
+                ai_geo = await model_router.generate_structured(
+                    capability="geo_analysis",
+                    agent_role="Principal GEO Citation-Readiness Strategist",
+                    task_contract=contract,
+                    evidence_list=[],
+                    output_schema_desc=(
+                        '{"citation_readiness_summary":"string",'
+                        '"top_citation_gaps":["string"],'
+                        '"quotable_block_recommendations":[{"target_url":"string","why":"string","suggested_structure":"string"}]}'
+                    ),
+                    allow_fallback=False,
+                    model_tier="reasoning_model",
+                )
+                if isinstance(ai_geo, dict) and str(ai_geo.get("status") or "").lower() not in ("unavailable", "budget_exceeded"):
+                    if ai_geo.get("citation_readiness_summary") or ai_geo.get("top_citation_gaps"):
+                        dumped["ai_citation_readiness_synthesis"] = {
+                            "summary": ai_geo.get("citation_readiness_summary", ""),
+                            "top_citation_gaps": ai_geo.get("top_citation_gaps") or [],
+                            "quotable_block_recommendations": ai_geo.get("quotable_block_recommendations") or [],
+                        }
+            report.citation_passages = dumped
     except Exception as exc:
         import logging
         logging.getLogger(__name__).warning("Failed to enrich citation rewrites with LLM: %s", exc)

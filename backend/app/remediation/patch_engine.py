@@ -337,7 +337,6 @@ class UniversalPatchEngine:
                 operation=PatchOperation.REPLACE,
                 before_snippet=None,
                 after_snippet=(
-                    f'<h1 class="hero-title">{niche or "[Your Category]"} for Modern Teams</h1>\n'
                     f'<p class="hero-subhead">{val_prop or "[Your value proposition]"}</p>'
                     if not hero_blocked else ""
                 ),
@@ -355,27 +354,32 @@ class UniversalPatchEngine:
         )
 
         # E. Next.js Metadata (Level 3 - Developer Required)
-        # Not blocked by profile — uses display_name gracefully
-        patches.append(
-            RemediationPatch(
-                patch_id=f"PATCH-{len(patches)+1:03d}",
-                finding_id="F-DEV-NEXTJS",
-                title="Next.js App Router Root Metadata & Dynamic OpenGraph",
-                category=Category.TECHNICAL_SEO,
-                risk_level=PatchRiskLevel.DEVELOPER_REQUIRED,
-                target_url=website_url,
-                target_file="src/app/layout.tsx",
-                operation=PatchOperation.UPDATE_FILE,
-                before_snippet="// export const metadata: Metadata = { title: 'Create Next App' }",
-                after_snippet=self._generate_nextjs_metadata_code(
-                    display_name, display_niche, display_vp, website_url
-                ),
-                explanation="Implements type-safe Next.js metadata API to handle SSR meta tags and prevent client-side hydration drops.",
-                confidence=0.94,
-                approval_status=PatchApprovalStatus.PENDING,
-                metadata_payload={"framework": "Next.js", "target_path": "src/app/layout.tsx"},
-            )
+        # Only when the crawl shows a Next.js site; other stacks must not get this patch.
+        _is_next = any(
+            "/_next/" in str(getattr(p, "raw_html", None) or "") or "__NEXT_DATA__" in str(getattr(p, "raw_html", None) or "")
+            for p in pages_list
         )
+        if _is_next:
+            patches.append(
+                RemediationPatch(
+                    patch_id=f"PATCH-{len(patches)+1:03d}",
+                    finding_id="F-DEV-NEXTJS",
+                    title="Next.js App Router Root Metadata & Dynamic OpenGraph",
+                    category=Category.TECHNICAL_SEO,
+                    risk_level=PatchRiskLevel.DEVELOPER_REQUIRED,
+                    target_url=website_url,
+                    target_file="src/app/layout.tsx",
+                    operation=PatchOperation.UPDATE_FILE,
+                    before_snippet="// export const metadata: Metadata = { title: 'Create Next App' }",
+                    after_snippet=self._generate_nextjs_metadata_code(
+                        display_name, display_niche, display_vp, website_url
+                    ),
+                    explanation="Implements type-safe Next.js metadata API to handle SSR meta tags and prevent client-side hydration drops.",
+                    confidence=0.94,
+                    approval_status=PatchApprovalStatus.PENDING,
+                    metadata_payload={"framework": "Next.js", "target_path": "src/app/layout.tsx"},
+                )
+            )
 
         # F. Security Headers (Level 3 - Developer Required)
         patches.append(

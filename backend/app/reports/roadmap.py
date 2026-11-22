@@ -177,11 +177,11 @@ class RoadmapBuilder:
         crawl_summary: Optional[Dict[str, Any]] = None,
     ) -> ExecutiveTopActionsPlan:
         """
-        Synthesizes a prioritized, defensible Top 10 Actions execution matrix for leadership.
-        Format: Priority (P0, P1, P2), Action, Impact, Effort, Expected outcome,
-        Estimated engineer-hours, Dependencies flow, and Automated retest criteria.
+        Synthesizes up to 10 prioritized, finding-anchored execution actions strictly from
+        verified findings (zero hardcoded boilerplate actions).
         """
-        if not findings:
+        actionable = [f for f in (findings or []) if not getattr(f, "held_from_executive", False)]
+        if not actionable:
             return ExecutiveTopActionsPlan(
                 actions=[],
                 total_engineer_hours=0,
@@ -189,167 +189,61 @@ class RoadmapBuilder:
                 validation_mode="automated_retest",
             )
 
-        # Find related finding references by theme
-        findings_map: Dict[str, Finding] = {}
-        for f in findings or []:
-            lowered = (f.title + " " + f.finding + " " + (f.description or "")).lower()
-            if "h1" in lowered or "positioning" in lowered or "headline" in lowered:
-                findings_map.setdefault("positioning", f)
-            if "taxonomy" in lowered or "service" in lowered or "entity" in lowered:
-                findings_map.setdefault("taxonomy", f)
-            if "schema" in lowered or "json-ld" in lowered or "structured data" in lowered:
-                findings_map.setdefault("schema", f)
-            if "duplicate" in lowered or "canonical" in lowered or "meta" in lowered:
-                findings_map.setdefault("duplicate_meta", f)
-            if "icp" in lowered or "audience" in lowered or "conversion" in lowered:
-                findings_map.setdefault("icp", f)
-            if "case study" in lowered or "trust" in lowered or "proof" in lowered or "testimonial" in lowered:
-                findings_map.setdefault("trust", f)
-            if "sitemap" in lowered or "robots" in lowered or "crawl" in lowered:
-                findings_map.setdefault("crawl", f)
-            if "answer" in lowered or "faq" in lowered or "question" in lowered or "citation" in lowered:
-                findings_map.setdefault("answerability", f)
-            if "vitals" in lowered or "ttfb" in lowered or "speed" in lowered or "performance" in lowered:
-                findings_map.setdefault("performance", f)
-            if "hierarchy" in lowered or "heading" in lowered or "h2" in lowered or "structure" in lowered:
-                findings_map.setdefault("hierarchy", f)
+        sev_weights = {"CRITICAL": 4, "HIGH": 3, "MEDIUM": 2, "LOW": 1, "INFO": 0}
+        ranked = sorted(
+            actionable,
+            key=lambda x: (
+                sev_weights.get(str(getattr(getattr(x, "severity", ""), "value", getattr(x, "severity", ""))).upper(), 0),
+                int(getattr(x, "priority", 5) or 5),
+                int(getattr(x, "impact", 5) or 5),
+            ),
+            reverse=True,
+        )
 
-        # Standard institutional actions with intent & finding tuning
-        actions: List[ExecutiveActionItem] = [
-            ExecutiveActionItem(
-                rank=1,
-                priority="P0",
-                action="Define service taxonomy",
-                impact="Very High",
-                effort="Low",
-                expected_outcome="Category clarity & unambiguous entity mapping",
-                estimated_engineer_hours=4,
-                dependencies=[],
-                validation="Automated retest: Taxonomy terms registered in DOM AST and canonical paths",
-                category=Category.GEO,
-                related_finding_id=findings_map.get("taxonomy", {}).finding_id if findings_map.get("taxonomy") else None,
-            ),
-            ExecutiveActionItem(
-                rank=2,
-                priority="P0",
-                action="Rewrite homepage positioning",
-                impact="Very High",
-                effort="Low",
-                expected_outcome="Improve visitor comprehension & instant value recognition",
-                estimated_engineer_hours=3,
-                dependencies=[],
-                validation="Automated retest: Homepage H1 & title contain explicit service category",
-                category=Category.UX_CONVERSION,
-                related_finding_id=findings_map.get("positioning", {}).finding_id if findings_map.get("positioning") else None,
-            ),
-            ExecutiveActionItem(
-                rank=3,
-                priority="P1",
-                action="Create service schema",
-                impact="High",
-                effort="Medium",
-                expected_outcome="Better entity understanding & AI knowledge graph ingestion",
-                estimated_engineer_hours=5,
-                dependencies=["Define service taxonomy"],
-                validation="Automated retest: Schema Validator verifies valid Service & Organization JSON-LD",
-                category=Category.SCHEMA,
-                related_finding_id=findings_map.get("schema", {}).finding_id if findings_map.get("schema") else None,
-            ),
-            ExecutiveActionItem(
-                rank=4,
-                priority="P1",
-                action="Fix metadata duplication",
-                impact="High",
-                effort="Low",
-                expected_outcome="Better page differentiation & clean SERP snippets",
-                estimated_engineer_hours=3,
-                dependencies=[],
-                validation="Automated retest: 100% unique <title> and meta descriptions across crawled URLs",
-                category=Category.ON_PAGE_SEO,
-                related_finding_id=findings_map.get("duplicate_meta", {}).finding_id if findings_map.get("duplicate_meta") else None,
-            ),
-            ExecutiveActionItem(
-                rank=5,
-                priority="P1",
-                action="Add ICP landing pages",
-                impact="High",
-                effort="Medium",
-                expected_outcome="Better commercial qualification & dedicated intent routes",
-                estimated_engineer_hours=6,
-                dependencies=["Define service taxonomy"],
-                validation="Automated retest: Target ICP paths return HTTP 200 with >400 words depth",
-                category=Category.CONTENT,
-                related_finding_id=findings_map.get("icp", {}).finding_id if findings_map.get("icp") else None,
-            ),
-            ExecutiveActionItem(
-                rank=6,
-                priority="P1",
-                action="Add case studies & proof points",
-                impact="High",
-                effort="Medium",
-                expected_outcome="Trust validation & decision confidence",
-                estimated_engineer_hours=5,
-                dependencies=["Add ICP landing pages"],
-                validation="Automated retest: Social proof elements and quantifiable metrics identified",
-                category=Category.TRUST_AUTHORITY,
-                related_finding_id=findings_map.get("trust", {}).finding_id if findings_map.get("trust") else None,
-            ),
-            ExecutiveActionItem(
-                rank=7,
-                priority="P2",
-                action="Configure sitemap & robots directives",
-                impact="Medium",
-                effort="Low",
-                expected_outcome="Crawlability & zero index waste",
-                estimated_engineer_hours=2,
-                dependencies=[],
-                validation="Automated retest: robots.txt allows AI/search bots; sitemap.xml returns 200",
-                category=Category.TECHNICAL_SEO,
-                related_finding_id=findings_map.get("crawl", {}).finding_id if findings_map.get("crawl") else None,
-            ),
-            ExecutiveActionItem(
-                rank=8,
-                priority="P2",
-                action="Format structured Q&A for answer engines",
-                impact="High",
-                effort="Medium",
-                expected_outcome="AI Search citation readiness & snippet extraction",
-                estimated_engineer_hours=4,
-                dependencies=["Define service taxonomy"],
-                validation="Automated retest: FAQPage schema or semantic Q&A blocks verified in AST",
-                category=Category.AI_SEARCH,
-                related_finding_id=findings_map.get("answerability", {}).finding_id if findings_map.get("answerability") else None,
-            ),
-            ExecutiveActionItem(
-                rank=9,
-                priority="P2",
-                action="Remediate TTFB & Core Web Vitals bottlenecks",
-                impact="Medium",
-                effort="Medium",
-                expected_outcome="Page experience & crawl budget optimization",
-                estimated_engineer_hours=4,
-                dependencies=[],
-                validation="Automated retest: Server response TTFB < 400ms across tested endpoints",
-                category=Category.TECHNICAL_SEO,
-                related_finding_id=findings_map.get("performance", {}).finding_id if findings_map.get("performance") else None,
-            ),
-            ExecutiveActionItem(
-                rank=10,
-                priority="P2",
-                action="Standardize semantic heading hierarchy",
-                impact="Medium",
-                effort="Low",
-                expected_outcome="Content scannability & assistive parsing integrity",
-                estimated_engineer_hours=2,
-                dependencies=[],
-                validation="Automated retest: DOM heading tree has single H1 and sequential H2/H3 levels",
-                category=Category.ON_PAGE_SEO,
-                related_finding_id=findings_map.get("hierarchy", {}).finding_id if findings_map.get("hierarchy") else None,
-            ),
-        ]
+        actions: List[ExecutiveActionItem] = []
+        seen_ids: set = set()
+        for f in ranked:
+            if f.finding_id in seen_ids:
+                continue
+            seen_ids.add(f.finding_id)
+            rank = len(actions) + 1
+            if rank > 10:
+                break
+
+            sev_str = str(getattr(getattr(f, "severity", ""), "value", getattr(f, "severity", ""))).upper()
+            priority = "P0" if sev_str in ("CRITICAL", "HIGH") else ("P1" if sev_str == "MEDIUM" else "P2")
+            impact_label = "Very High" if sev_str == "CRITICAL" else ("High" if sev_str == "HIGH" else "Medium")
+            eff_num = int(getattr(f, "effort", 4) or 4)
+            effort_label = "Low" if eff_num <= 3 else ("Medium" if eff_num <= 6 else "High")
+            hours = 2 if eff_num <= 3 else (4 if eff_num <= 6 else 6)
+
+            action_title = (f.title or f.finding or f"Resolve {f.finding_id}").strip()[:160]
+            outcome = (
+                getattr(f, "business_impact", None)
+                or getattr(f, "why_it_matters", None)
+                or f.recommendation
+                or f.description
+                or f"Resolves verified {sev_str} issue ({f.finding_id})."
+            ).strip()[:240]
+
+            actions.append(
+                ExecutiveActionItem(
+                    rank=rank,
+                    priority=priority,
+                    action=action_title,
+                    impact=impact_label,
+                    effort=effort_label,
+                    expected_outcome=outcome,
+                    estimated_engineer_hours=hours,
+                    dependencies=[],
+                    validation=_resolve_verification(f),
+                    category=f.category,
+                    related_finding_id=f.finding_id,
+                )
+            )
 
         total_hours = sum(a.estimated_engineer_hours for a in actions)
-        dependencies_flow = "Define service taxonomy → Create service schema → Add ICP landing pages → Add case studies"
+        dependencies_flow = " → ".join(a.action for a in actions[:4]) if actions else "No remediation actions required."
 
         return ExecutiveTopActionsPlan(
             actions=actions,

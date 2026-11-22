@@ -332,6 +332,7 @@ class CrawlerService:
                 return None, None, 0, (time.time() - start_time) * 1000, {}, 0, f"SSRF blocked render target: {reason}", None
 
         # Tier 1: Local High-Speed Playwright ($0 API cost, fast asset-blocked execution)
+        pw_failure_reason: Optional[str] = None
         if BrowserRenderService.is_available():
             try:
                 pw_html, pw_status, pw_ttfb, pw_headers, pw_err, pw_text, pw_perf = await BrowserRenderService.render_page(url)
@@ -353,12 +354,16 @@ class CrawlerService:
                         None,
                         pw_perf,
                     )
-            except Exception:
-                pass
+                if pw_err:
+                    pw_failure_reason = f"playwright:{pw_err}"
+                    logger.warning("[Crawler] Playwright render returned no HTML for %s: %s", url, pw_err)
+            except Exception as pw_exc:
+                pw_failure_reason = f"playwright:{type(pw_exc).__name__}:{pw_exc}"
+                logger.warning("[Crawler] Playwright render failed for %s: %s", url, pw_exc)
 
         # Tier 2: Cloud Firecrawl Dynamic Rendering Fallback
         if not settings.FIRECRAWL_API_KEY or not settings.FIRECRAWL_API_KEY.strip():
-            return None, None, 0, 0.0, {}, 0, "js_render_unavailable", None
+            return None, None, 0, 0.0, {}, 0, pw_failure_reason or "js_render_unavailable", None
 
         try:
             async with client.stream(
@@ -662,6 +667,7 @@ class CrawlerService:
                     raw_http_content = html_content
                     rendered_dom_content = None
                     rendering_disparity_data = None
+                    render_error_msg: Optional[str] = None
                     origin_http_ttfb_ms: Optional[float] = (
                         round(float(timing_data.get("origin_http_ttfb_ms")), 1)
                         if isinstance(timing_data, dict) and timing_data.get("origin_http_ttfb_ms") is not None
@@ -738,6 +744,10 @@ class CrawlerService:
                                 logger.warning("Rendering disparity analysis note: %s", disp_err)
                         elif embedded.get("word_count"):
                             render_mode = "embedded_cms"
+                            if js_err:
+                                render_error_msg = str(js_err)
+                        elif js_err:
+                            render_error_msg = str(js_err)
                     elif embedded.get("sources"):
                         render_mode = "embedded_cms"
 
@@ -798,6 +808,81 @@ class CrawlerService:
                     )
                     sec_res = analyze_security_headers(page_url, resp_headers, evidence_store)
 
+                    # Phase 1: Structured Page Sections, Forms, Navigation & Footer Extraction
+                    from app.crawl.analyzers.sections import (
+                        extract_footer_info,
+                        extract_forms_from_soup,
+                        extract_nav_items,
+                        extract_page_sections,
+                    )
+                    page_sections = extract_page_sections(soup, page_url=page_url)
+                    page_forms = extract_forms_from_soup(soup, page_url=page_url)
+                    page_nav_items = extract_nav_items(soup, page_url=page_url)
+                    page_footer_info = extract_footer_info(soup, page_url=page_url)
+
+                    # Register section-level and footer RAW evidence slices for full AI provenance
+                    for sec in page_sections:
+                        sec_text = f"{sec.heading_text}\n{sec.body_text}".strip() if sec.heading_text else sec.body_text
+                        evidence_store.add_evidence(
+                            source_type="page_section",
+                            analyzer="section_extractor",
+                            url=page_url,
+                            selector=sec.selector or sec.dom_tag,
+                            text=sec_text[:4000],
+                            value={
+                                "section_id": sec.section_id,
+                                "section_role": sec.section_role,
+                                "heading": sec.heading_text,
+                                "word_count": sec.word_count,
+                                "ctas": sec.ctas,
+                            },
+                            metadata={
+                                "section_id": sec.section_id,
+                                "section_role": sec.section_role,
+                                "heading_text": sec.heading_text,
+                                "section_sha256": sec.content_sha256,
+                            },
+                        )
+                    if page_footer_info and page_footer_info.get("text_excerpt"):
+                        evidence_store.add_evidence(
+                            source_type="footer",
+                            analyzer="section_extractor",
+                            url=page_url,
+                            selector="footer",
+                            text=page_footer_info["text_excerpt"][:2000],
+                            value={
+                                "emails": page_footer_info.get("emails", []),
+                                "phones": page_footer_info.get("phones", []),
+                                "social_links": page_footer_info.get("social_links", []),
+                                "legal_links": [l.get("label") for l in page_footer_info.get("legal_links", [])],
+                            },
+                            metadata={"section_role": "footer"},
+                        )
+
+                    # Merge CTAs from DOM, nav header CTAs, and form submit buttons (deduped)
+                    merged_ctas: List[str] = []
+                    seen_cta_keys = set()
+                    for cand in (
+                        list(dom_res.get("cta_candidates", []) or [])
+                        + [n["label"] for n in page_nav_items if n.get("is_cta") and n.get("label")]
+                        + [s for f in page_forms for s in (f.get("submit_ctas") or [])]
+                    ):
+                        clean_c = str(cand).strip()
+                        if clean_c and clean_c.lower() not in seen_cta_keys:
+                            seen_cta_keys.add(clean_c.lower())
+                            merged_ctas.append(clean_c)
+
+                    if render_error_msg and render_mode == "static":
+                        render_status = "js_render_failed"
+                    elif render_mode == "playwright_js":
+                        render_status = "playwright_ok"
+                    elif render_mode == "firecrawl_js":
+                        render_status = "firecrawl_ok"
+                    elif render_mode == "embedded_cms":
+                        render_status = "embedded_cms_ok"
+                    else:
+                        render_status = "static_ok"
+
                     # Extract newly found internal links
                     internal_links = links_res.get("internal_links", [])
                     for link in internal_links:
@@ -855,8 +940,15 @@ class CrawlerService:
                         stylesheets_count=dom_res.get("stylesheets_count", 0),
                         page_type=page_type,
                         body_text=(html_res.get("distilled_text") or html_res.get("visible_text") or "")[:100000] or None,
-                        ctas=dom_res.get("cta_candidates", [])[:8],
+                        ctas=merged_ctas[:30],
+                        forms=page_forms,
+                        sections=page_sections,
+                        nav_items=page_nav_items,
+                        footer_info=page_footer_info,
                         render_mode=render_mode,
+                        render_status=render_status,
+                        render_error=render_error_msg,
+                        extraction_status="ok" if (page_sections or w_cnt > 0) else "partial",
                         response_headers=dict(resp_headers or {}),
                         redirect_chain=redirect_chain,
                         is_redirected=bool(redirect_chain),
@@ -979,22 +1071,25 @@ class CrawlerService:
             discovered_urls=list(discovered_urls_pool),
         )
 
-        # Step D: Index page chunks into VectorStore without blocking the async event loop
+        # Step D: Index section-aware page chunks into VectorStore without blocking the async event loop
         def _index_page_vectors() -> None:
             from app.crawl.vector_store import vector_store
             from app.crawl.embeddings import embedding_service
             for page in crawled_pages:
-                chunks = self._chunk_page_content(page)
-                if chunks:
-                    vectors = embedding_service.embed_documents(chunks)
-                    vector_store.save_chunks(
-                        domain=base_domain,
-                        url=page.url,
-                        page_type=page.page_type,
-                        chunks=chunks,
-                        vectors=vectors,
-                        analysis_id=getattr(evidence_store, "run_id", None),
-                    )
+                chunk_records = self._chunk_page_sections(page)
+                if chunk_records:
+                    chunk_texts = [r["text"] for r in chunk_records]
+                    vectors = embedding_service.embed_documents(chunk_texts)
+                    if vectors and len(vectors) == len(chunk_texts):
+                        vector_store.save_chunks(
+                            domain=base_domain,
+                            url=page.url,
+                            page_type=page.page_type,
+                            chunks=chunk_texts,
+                            vectors=vectors,
+                            analysis_id=getattr(evidence_store, "run_id", None),
+                            chunk_metadata=chunk_records,
+                        )
 
         try:
             await asyncio.to_thread(_index_page_vectors)
@@ -1002,6 +1097,43 @@ class CrawlerService:
             logger.warning("[Crawler] VectorStore indexing error (non-fatal): %s", exc)
 
         return manifest
+
+    def _chunk_page_sections(self, page: PageEvidence, chunk_size_words: int = 350, overlap_words: int = 50) -> List[Dict[str, Any]]:
+        """Section-aware chunker preserving section_id and section_heading for Hybrid RAG."""
+        records: List[Dict[str, Any]] = []
+        sections = getattr(page, "sections", None) or []
+        if sections:
+            for sec in sections:
+                header_prefix = f"Title: {page.title or ''} | Section: {sec.heading_text or sec.section_role}".strip()
+                sec_body = f"{header_prefix}\n{sec.body_text}".strip()
+                words = sec_body.split()
+                if not words:
+                    continue
+                if len(words) <= chunk_size_words:
+                    records.append({
+                        "text": sec_body,
+                        "section_id": sec.section_id,
+                        "section_heading": sec.heading_text or sec.section_role,
+                    })
+                else:
+                    step = max(chunk_size_words - overlap_words, 1)
+                    i = 0
+                    while i < len(words):
+                        part = " ".join(words[i:i + chunk_size_words]).strip()
+                        if part:
+                            records.append({
+                                "text": part,
+                                "section_id": sec.section_id,
+                                "section_heading": sec.heading_text or sec.section_role,
+                            })
+                        i += step
+            return records
+
+        # Fallback when PageEvidence has no structured sections
+        return [
+            {"text": c, "section_id": None, "section_heading": None}
+            for c in self._chunk_page_content(page, chunk_size_words=chunk_size_words, overlap_words=overlap_words)
+        ]
 
     def _chunk_page_content(self, page: PageEvidence, chunk_size_words: int = 350, overlap_words: int = 50) -> List[str]:
         text_parts = []

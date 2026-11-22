@@ -1340,7 +1340,7 @@ class ValidationGate:
                     ]
                     if cat_defects:
                         deduction = sum(25.0 if "CRITICAL" in str(f.severity).upper() else 15.0 for f in cat_defects)
-                        cat_obj.score = max(35.0, 100.0 - deduction)
+                        cat_obj.score = max(0.0, 100.0 - deduction)
                         cat_obj.weighted_score = round((cat_obj.score * (cat_obj.weight or 0.0)) / w_scale, 2)
                         repairs_made.append(f"Rescored {cat_name} from 100.0 to {cat_obj.score} due to {len(cat_defects)} HIGH/CRITICAL finding(s).")
 

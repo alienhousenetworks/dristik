@@ -120,13 +120,9 @@ class FactualGroundingPipeline:
                 obs_val = matched_prod
                 is_grounded = True
 
-            # General policy / clinical claim
-            elif any(w in c_low for w in ["clinical", "tested", "guarantee", "return"]):
-                is_grounded = True
-                source_type = "POLICY_DOCUMENT"
-                ref_val = "Documented Policy"
-                obs_val = "Verified Policy Statement"
             else:
+                # A keyword such as "tested" or "return" is not a source. Without a catalog
+                # or page match the claim stays ungrounded.
                 is_grounded = False
                 discrepancy = "Claim lacks direct empirical source in product catalog or policy documents."
 

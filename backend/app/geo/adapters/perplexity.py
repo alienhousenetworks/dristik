@@ -28,6 +28,7 @@ class PerplexityAdapter(BaseGeoEngineAdapter):
     rate_limit_rpm = 120
     cost_per_1k_input_usd = 0.001
     cost_per_1k_output_usd = 0.001
+    cost_per_search_use_usd = 0.005  # Perplexity Sonar: $5 per 1,000 requests
     unsupported_features = [
         "Consumer Perplexity Pro Focus/Deep Research mode differs from standard Sonar API.",
     ]
@@ -105,7 +106,7 @@ class PerplexityAdapter(BaseGeoEngineAdapter):
                         testing_mode=GEOTestingMode.API_WITH_SEARCH,
                         prompt_tokens=p_tok,
                         completion_tokens=c_tok,
-                        estimated_cost_usd=self.estimate_cost_usd(p_tok, c_tok),
+                        estimated_cost_usd=self.estimate_cost_usd(p_tok, c_tok, search_uses=1),
                         tool_use_metadata={"search_grounded": True, "native_citations_count": len(citations)},
                     )
                 return EngineRawResponse(

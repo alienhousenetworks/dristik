@@ -15,13 +15,15 @@ CREATE TABLE IF NOT EXISTS audits (
     analysis_id TEXT PRIMARY KEY,
     org_id TEXT NOT NULL,
     workspace_id TEXT,
-    user_id TEXT NOT NULL,
+    user_id TEXT,
     website_url TEXT NOT NULL,
-    domain TEXT NOT NULL,
+    domain TEXT NOT NULL DEFAULT '',
     status TEXT NOT NULL,
     progress INTEGER NOT NULL DEFAULT 0,
     stage TEXT NOT NULL DEFAULT 'queued',
     max_pages INTEGER NOT NULL DEFAULT 1,
+    page_count INTEGER NOT NULL DEFAULT 0,
+    overall_score REAL,
     score_overall REAL,
     score_human REAL,
     score_google REAL,
@@ -34,7 +36,8 @@ CREATE TABLE IF NOT EXISTS audits (
     output_hash TEXT,
     raw_report_json TEXT,
     error_message TEXT,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_audits_org ON audits(org_id);

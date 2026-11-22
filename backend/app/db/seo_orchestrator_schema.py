@@ -12,10 +12,13 @@ from typing import Dict, List, Optional, Tuple
 
 def default_seo_db_path() -> str:
     try:
+        from app.db.connection import resolve_default_sqlite_path
         from app.core.config import settings
-        return getattr(settings, "AUDIT_DATABASE_PATH", None) or "data/dristik_audits.db"
+        return resolve_default_sqlite_path(
+            getattr(settings, "AUDIT_DATABASE_PATH", None) or "data/dristik_audits.db"
+        )
     except Exception:
-        return "data/dristik_audits.db"
+        return "data/dristik.db"
 
 
 SEO_ORCHESTRATOR_SQLITE_SCHEMA = """

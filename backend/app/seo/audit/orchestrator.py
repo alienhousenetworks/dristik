@@ -653,22 +653,191 @@ class SEOAuditOrchestrator:
             return {"evidence_count": len(self._evidence_records)}
 
         # --- Helper for connector-gated agents ---
+        _CONNECTOR_TO_AUTHORITY_PROVIDERS: Dict[str, List[str]] = {
+            "google_search_console": ["google_search_console"],
+            "google_analytics_4": ["google_analytics_4"],
+            "backlink_provider": ["ahrefs", "semrush", "majestic", "moz", "commoncrawl", "dataforseo"],
+            "keyword_serp_provider": ["dataforseo", "serpapi"],
+            "google_business_profile": ["google_business_profile"],
+            "bing_webmaster": ["bing_webmaster"],
+            "pagespeed_crux": ["pagespeed_crux"],
+        }
+        _CONNECTOR_CATEGORY: Dict[str, str] = {
+            "google_search_console": "SEARCH_PERFORMANCE",
+            "google_analytics_4": "SEARCH_PERFORMANCE",
+            "backlink_provider": "AUTHORITY_BACKLINKS",
+            "keyword_serp_provider": "SEARCH_PERFORMANCE",
+            "google_business_profile": "LOCAL_SEO",
+            "bing_webmaster": "SEARCH_PERFORMANCE",
+            "pagespeed_crux": "CORE_WEB_VITALS",
+        }
+
         def make_connector_runner(agent_id: str, connector_id: str, summary_label: str):
             async def _runner(ctx: Dict[str, Any]) -> Dict[str, Any]:
                 status = self.connectors.get_connector_status(connector_id, workspace_id=self.config.workspace_id)
-                if status.status != "CONNECTED":
+                provider_ids = _CONNECTOR_TO_AUTHORITY_PROVIDERS.get(connector_id, [connector_id])
+                category = _CONNECTOR_CATEGORY.get(connector_id, "TECHNICAL_SEO")
+
+                # Inspect ExternalAuthorityService for measured snapshots & findings across matching providers
+                ea_connected = False
+                ea_data_state = "NOT_CONNECTED"
+                ea_metrics: Dict[str, Any] = {}
+                ea_findings: List[Dict[str, Any]] = []
+                records_count = 0
+                matched_provider: Optional[str] = None
+
+                try:
+                    from app.connectors.authority.service import get_service
+
+                    svc = get_service()
+                    candidate_projects = [
+                        p for p in dict.fromkeys([self.config.org_id, self.config.workspace_id, "default"]) if p
+                    ]
+                    for proj_id in candidate_projects:
+                        conn_rows = {r.get("provider"): r for r in svc.store.public_connections(proj_id)}
+                        for pid in provider_ids:
+                            snap = svc.store.latest_snapshot(proj_id, pid, self.domain, 28)
+                            crow = conn_rows.get(pid)
+                            if (crow and crow.get("status") == "CONNECTED") or snap is not None:
+                                ea_connected = True
+                                matched_provider = pid
+                                if snap:
+                                    ea_data_state = str(snap.get("data_state") or "MEASURED")
+                                    summary = snap.get("summary") or {}
+                                    if isinstance(summary, dict) and isinstance(summary.get("totals"), dict):
+                                        ea_metrics.update(summary["totals"])
+                                    recs = svc.store.records_for_snapshot(snap["snapshot_id"])
+                                    records_count += len(recs)
+                                    # Build provider-scoped report findings deterministically from stored records
+                                    rep = svc.report(proj_id, self.domain, 28)
+                                    for rf in rep.get("findings") or []:
+                                        src_prov = str(rf.get("source_provider") or rf.get("provider") or "").lower()
+                                        if src_prov and src_prov not in provider_ids:
+                                            continue
+                                        if rf.get("data_state") not in (None, "MEASURED", "PARTIALLY_MEASURED"):
+                                            continue
+                                        sev_raw = str(rf.get("severity") or "MEDIUM").upper()
+                                        sev = sev_raw if sev_raw in ("CRITICAL", "HIGH", "MEDIUM", "LOW") else "MEDIUM"
+                                        affected = [str(u) for u in (rf.get("affected_urls") or [self.config.target_url]) if u]
+                                        ev_id = self._add_evidence(
+                                            url=affected[0],
+                                            check_id=str(rf.get("rule_id") or f"seo.connector.{connector_id}"),
+                                            source_type=f"connector:{pid}",
+                                            source_location=f"{pid}.snapshot",
+                                            observed_value=rf.get("observed_value", rf.get("metric_value", ea_metrics)),
+                                            expected_value=rf.get("expected_value"),
+                                            result="failed",
+                                            agent_id=agent_id,
+                                        )
+                                        ea_findings.append(
+                                            self._add_finding(
+                                                rule_id=str(rf.get("rule_id") or f"seo.connector.{connector_id}"),
+                                                category=category,
+                                                severity=sev,
+                                                title=str(rf.get("title") or f"{summary_label} Finding"),
+                                                description=str(rf.get("description") or rf.get("summary") or ""),
+                                                recommendation=str(rf.get("recommendation") or "Review live connector telemetry and remediate affected URLs."),
+                                                affected_urls=affected,
+                                                evidence_ids=[ev_id],
+                                                agent_id=agent_id,
+                                            )
+                                        )
+                                    # Deterministic record-level checks when snapshot has metrics but analyzer emitted 0 findings
+                                    if connector_id == "google_search_console" and not ea_findings:
+                                        for r in recs:
+                                            if r.get("metric") == "sitemap" and int((r.get("metadata") or {}).get("errors") or 0) > 0:
+                                                sm_url = str(r.get("url") or self.config.target_url)
+                                                err_cnt = int((r.get("metadata") or {}).get("errors") or 0)
+                                                ev_id = self._add_evidence(
+                                                    url=sm_url,
+                                                    check_id="seo.gsc.sitemap_errors",
+                                                    source_type="connector:google_search_console",
+                                                    source_location="webmasters.sitemaps.list",
+                                                    observed_value=err_cnt,
+                                                    expected_value=0,
+                                                    result="failed",
+                                                    agent_id=agent_id,
+                                                )
+                                                ea_findings.append(
+                                                    self._add_finding(
+                                                        rule_id="seo.gsc.sitemap_errors",
+                                                        category="SEARCH_PERFORMANCE",
+                                                        severity="HIGH",
+                                                        title=f"Google Search Console Reports {err_cnt} Sitemap Error(s)",
+                                                        description=f"GSC reports {err_cnt} error(s) in submitted sitemap {sm_url}.",
+                                                        recommendation="Fix malformed or unreachable URLs in the XML sitemap and resubmit in Google Search Console.",
+                                                        affected_urls=[sm_url],
+                                                        evidence_ids=[ev_id],
+                                                        agent_id=agent_id,
+                                                    )
+                                                )
+                                    break
+                        if ea_connected:
+                            break
+                except Exception as exc:
+                    logger.debug("ExternalAuthority lookup skipped for %s: %s", connector_id, exc)
+
+                # PageSpeed / CrUX LCP subpart analysis when connector is connected with CrUX/PSI metrics
+                if connector_id == "pagespeed_crux" and status.status == "CONNECTED":
+                    creds = self.connectors.get_decrypted_credentials(connector_id, workspace_id=self.config.workspace_id) or {}
+                    crux_lcp = creds.get("lcp_subparts") or creds.get("crux_metrics")
+                    if isinstance(crux_lcp, dict) and crux_lcp.get("lcp_ms"):
+                        from app.seo.analyzers.lcp_subparts import analyze_lcp_subparts
+                        lcp_diag = analyze_lcp_subparts(
+                            lcp_ms=float(crux_lcp.get("lcp_ms")),
+                            ttfb_ms=crux_lcp.get("ttfb_ms"),
+                            resource_load_delay_ms=crux_lcp.get("resource_load_delay_ms"),
+                            resource_load_duration_ms=crux_lcp.get("resource_load_duration_ms"),
+                            element_render_delay_ms=crux_lcp.get("element_render_delay_ms"),
+                        )
+                        ea_metrics["lcp_subparts"] = lcp_diag
+                        ea_data_state = "MEASURED"
+                        if lcp_diag.get("status") in ("needs_improvement", "poor"):
+                            ev_id = self._add_evidence(
+                                url=self.config.target_url,
+                                check_id="seo.cwv.lcp_subpart_bottleneck",
+                                source_type="connector:pagespeed_crux",
+                                source_location="crux.lcp_subparts",
+                                observed_value=lcp_diag,
+                                expected_value={"lcp_ms": "<= 2500"},
+                                result="failed",
+                                agent_id=agent_id,
+                            )
+                            ea_findings.append(
+                                self._add_finding(
+                                    rule_id="seo.cwv.lcp_subpart_bottleneck",
+                                    category="CORE_WEB_VITALS",
+                                    severity="HIGH" if lcp_diag.get("status") == "poor" else "MEDIUM",
+                                    title=f"CrUX LCP Bottleneck: {lcp_diag.get('primary_bottleneck')}",
+                                    description=f"Field LCP is {lcp_diag.get('lcp_ms')}ms; dominant subpart is {lcp_diag.get('primary_bottleneck')}.",
+                                    recommendation=str(lcp_diag.get("recommendation") or "Optimize the primary LCP subpart bottleneck."),
+                                    affected_urls=[self.config.target_url],
+                                    evidence_ids=[ev_id],
+                                    agent_id=agent_id,
+                                )
+                            )
+
+                is_connected = (status.status == "CONNECTED") or ea_connected
+                if not is_connected:
                     return {
                         "node_status": "DATA_UNAVAILABLE",
                         "connector": connector_id,
                         "status": "NOT_CONFIGURED",
+                        "data_state": "NOT_CONNECTED",
                         "message": f"{summary_label} unavailable: {connector_id} is not connected.",
                         "findings": [],
                     }
+
+                effective_state = ea_data_state if ea_data_state != "NOT_CONNECTED" else "CONNECTED_AWAITING_SYNC"
                 return {
                     "connector": connector_id,
+                    "provider_matched": matched_provider or connector_id,
                     "status": "CONNECTED",
+                    "data_state": effective_state,
                     "last_sync": status.last_sync_timestamp,
-                    "findings": [],
+                    "records_count": records_count,
+                    "metrics": ea_metrics,
+                    "findings": ea_findings,
                 }
             return _runner
 

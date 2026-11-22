@@ -28,7 +28,7 @@ for _candidate in (_backend_root / ".env", Path(".env").resolve(), Path("backend
 
 # Live Anthropic IDs (Claude 3 Haiku / 3.5 Sonnet were retired in 2026).
 ANTHROPIC_DEFAULT_FAST = "claude-haiku-4-5-20251001"
-ANTHROPIC_DEFAULT_REASONING = "claude-haiku-4-5-20251001"
+ANTHROPIC_DEFAULT_REASONING = "claude-sonnet-4-6"
 ANTHROPIC_FALLBACK_MODEL = "claude-sonnet-4-6"
 # Groq shut down llama-3.1-8b-instant and llama-3.3-70b-versatile for free/dev
 # tiers on 2026-08-16. Live replacements are openai/gpt-oss-* and qwen/qwen3.6-27b.
@@ -119,6 +119,11 @@ class Settings(BaseSettings):
     GROQ_MODEL_FAST: Optional[str] = None
     GROQ_MODEL_REASONING: Optional[str] = None
     GEMINI_MODEL: Optional[str] = None
+    GEMINI_MODEL_FAST: Optional[str] = None
+    GEMINI_MODEL_REASONING: Optional[str] = None
+    OPENAI_MODEL: Optional[str] = None
+    OPENAI_MODEL_FAST: Optional[str] = None
+    OPENAI_MODEL_REASONING: Optional[str] = None
     OPENROUTER_MODEL: Optional[str] = None
     OPENROUTER_MODEL_FAST: Optional[str] = None
     OPENROUTER_MODEL_REASONING: Optional[str] = None
@@ -335,11 +340,40 @@ class Settings(BaseSettings):
     SYSTEM_ADMIN_PASSWORD: str = "DristikAdmin1!"
     SYSTEM_ADMIN_NAME: str = "Dristik Admin"
     
-    # Budget & Cost Limits
-    ANALYSIS_MAX_COST_USD: float = 0.05
-    ANALYSIS_MAX_MODEL_CALLS: int = 25
-    ANALYSIS_MAX_REASONING_CALLS: int = 6
-    ANALYSIS_TIMEOUT_SECONDS: int = 180
+    # Budget & Cost Limits (Phase 2 dynamic ₹20–₹30/page Frontier AI budget scaling)
+    ENFORCE_HARD_BUDGET_CAP: bool = Field(default=True, description="Toggle hard USD/call-count enforcement in ModelRouter")
+    AI_DEPTH_MODE: str = Field(default="tiered_frontier", description="tiered_frontier (default) | frontier_all")
+    AI_SLICE_MAX_CHARS: int = Field(default=1200, ge=200, le=8000, description="Max chars per evidence slice sent to LLM")
+    AI_EVIDENCE_MAX_TOKENS: int = Field(default=12000, ge=1600, le=64000, description="Evidence token budget for non-Groq frontier providers")
+    AI_DEDUPLICATE_TEMPLATES: bool = Field(default=True, description="Cluster repetitive templates on large sites while keeping 100% deterministic coverage")
+    CRITIC_PROVIDER_OVERRIDE: Optional[str] = Field(default=None, description="Optional independent LLM provider for adversarial critic")
+    AUDIT_BASE_BUDGET_USD: float = Field(default=0.45, ge=0.0, description="Fixed site-level AI budget for Business Understanding, AEO 100-Q, Critic, Remediation")
+    AUDIT_PER_PAGE_USD_TIER1: float = Field(default=0.30, ge=0.0, description="Per-page AI budget for pages 1-20 (~₹25.5/page)")
+    AUDIT_PER_PAGE_USD_TIER2: float = Field(default=0.24, ge=0.0, description="Per-page AI budget for pages 21-50 (~₹20.4/page)")
+    AUDIT_PER_PAGE_USD_TIER3: float = Field(default=0.18, ge=0.0, description="Per-page AI budget for pages 51+ (~₹15.3/page volume taper)")
+    USD_TO_INR_RATE: float = Field(default=85.0, gt=0.0, description="USD to INR display conversion rate")
+    ANALYSIS_MAX_COST_USD: float = 2.50
+    ANALYSIS_MAX_MODEL_CALLS: int = 150
+    ANALYSIS_MAX_REASONING_CALLS: int = 40
+    ANALYSIS_TIMEOUT_SECONDS: int = 300
+
+    # GEO Live AI Citation Controls (100% env-controlled; absent keys stay NOT_CONFIGURED)
+    ANTHROPIC_SEARCH_MODEL: Optional[str] = None
+    ANTHROPIC_WEB_SEARCH_ENABLED: bool = True
+    ANTHROPIC_WEB_SEARCH_MAX_USES: int = Field(default=1, ge=1, le=5)
+    OPENAI_SEARCH_MODEL: Optional[str] = None
+    GEO_AUDIT_DEFAULT_BUDGET_USD: float = Field(default=1.00, ge=0.0)
+    GEO_AUDIT_MAX_LIVE_CALLS: int = Field(default=40, ge=1, le=1000)
+    GEO_MAX_PROMPTS_QUICK: int = Field(default=5, ge=1, le=100)
+    GEO_MAX_PROMPTS_STANDARD: int = Field(default=10, ge=1, le=200)
+    GEO_MAX_PROMPTS_DEEP: int = Field(default=18, ge=1, le=200)
+    GEO_CITATION_CACHE_TTL_HOURS: int = Field(default=24, ge=0, le=720)
+
+    # Unified Persistence & Optional Distributed Queue
+    UNIFIED_DATABASE_ENABLED: bool = True
+    REDIS_URL: Optional[str] = None
+    # Declared so the sandbox flag is configurable. Default keeps current behaviour (off).
+    USE_LLM_SANDBOX_SYNTHESIS: bool = True
     
     # Razorpay Payment Gateway Configuration
     RAZORPAY_KEY_ID: Optional[str] = Field(default=None, description="Razorpay Key ID (e.g. rzp_test_xxx or rzp_live_xxx)")
@@ -621,6 +655,8 @@ class Settings(BaseSettings):
         configured = []
         if self.ANTHROPIC_API_KEY or self.CLAUDE_API_KEY:
             configured.append("anthropic")
+        if self.OPENAI_API_KEY:
+            configured.append("openai")
         if self.GEMINI_API_KEY or self.GOOGLE_API_KEY:
             configured.append("gemini")
         if self.GROQ_API_KEY:
@@ -646,9 +682,11 @@ class Settings(BaseSettings):
         if prov != "auto" and prov != "":
             return prov
             
-        # Auto-selection priority: anthropic -> gemini -> groq -> openrouter -> together -> nvidia -> custom
+        # Auto-selection priority: anthropic -> openai -> gemini -> groq -> openrouter -> together -> nvidia -> custom
         if self.ANTHROPIC_API_KEY or self.CLAUDE_API_KEY:
             return "anthropic"
+        if self.OPENAI_API_KEY:
+            return "openai"
         if self.GEMINI_API_KEY or self.GOOGLE_API_KEY:
             return "gemini"
         if self.GROQ_API_KEY:
@@ -700,13 +738,30 @@ class Settings(BaseSettings):
                 }
             }
             
-        # 1. Google Gemini
+        # 1. OpenAI (Native)
+        elif provider == "openai":
+            api_key = self.OPENAI_API_KEY or self.LLM_API_KEY
+            base_url = self.LLM_BASE_URL or "https://api.openai.com/v1"
+            model_override = self.OPENAI_MODEL or self.LLM_MODEL
+            fast_model = self.OPENAI_MODEL_FAST or self.LLM_MODEL_FAST or model_override or "gpt-4.1-mini"
+            reasoning_model = self.OPENAI_MODEL_REASONING or self.LLM_MODEL_REASONING or model_override or "gpt-4.1"
+            return {
+                "provider": "openai",
+                "display_name": "OpenAI",
+                "api_key": api_key,
+                "base_url": base_url,
+                "model_fast": fast_model,
+                "model_reasoning": reasoning_model,
+                "extra_headers": {}
+            }
+
+        # 2. Google Gemini
         elif provider in ["gemini", "google"]:
             api_key = self.GEMINI_API_KEY or self.GOOGLE_API_KEY or self.LLM_API_KEY
             base_url = self.LLM_BASE_URL or "https://generativelanguage.googleapis.com/v1beta/openai"
-            model_override = self.LLM_MODEL or self.GEMINI_MODEL
-            fast_model = self.LLM_MODEL_FAST or model_override or "gemini-2.0-flash"
-            reasoning_model = self.LLM_MODEL_REASONING or model_override or "gemini-2.0-flash"
+            model_override = self.GEMINI_MODEL or self.LLM_MODEL
+            fast_model = self.GEMINI_MODEL_FAST or self.LLM_MODEL_FAST or model_override or "gemini-2.5-flash"
+            reasoning_model = self.GEMINI_MODEL_REASONING or self.LLM_MODEL_REASONING or model_override or "gemini-2.5-pro"
             return {
                 "provider": "gemini",
                 "display_name": "Google Gemini",
@@ -745,8 +800,8 @@ class Settings(BaseSettings):
             api_key = self.OPENROUTER_API_KEY or self.LLM_API_KEY
             base_url = self.LLM_BASE_URL or "https://openrouter.ai/api/v1"
             model_override = self.LLM_MODEL or self.OPENROUTER_MODEL
-            fast_model = self.OPENROUTER_MODEL_FAST or self.LLM_MODEL_FAST or model_override or "google/gemini-2.0-flash"
-            reasoning_model = self.OPENROUTER_MODEL_REASONING or self.LLM_MODEL_REASONING or model_override or "openai/gpt-4o"
+            fast_model = self.OPENROUTER_MODEL_FAST or self.LLM_MODEL_FAST or model_override or "google/gemini-2.5-flash"
+            reasoning_model = self.OPENROUTER_MODEL_REASONING or self.LLM_MODEL_REASONING or model_override or "anthropic/claude-sonnet-4-6"
             site_url = self.OPENROUTER_SITE_URL or "https://dristik.ai"
             site_name = self.OPENROUTER_SITE_NAME or "Dristik AI"
             return {

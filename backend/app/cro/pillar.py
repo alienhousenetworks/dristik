@@ -79,15 +79,18 @@ class CroPillar:
             if getattr(finding, "pillar", None) == "cro" or getattr(finding, "category", "") in self.domains
         ]
         count = len(cro_findings)
-        score = max(0.0, 100.0 - (count * 4.0))
-        grade = "A" if score >= 85 else "B" if score >= 70 else "C" if score >= 50 else "D"
+        # Finding volume is not a CRO measurement; stay NOT_MEASURED until calibrated CRO scoring runs.
         return PillarScoreResult(
             pillar_id=self.pillar_id,
-            score=round(score, 1),
-            grade=grade,
-            confidence=1.0,
+            score=0.0,
+            grade="N/A",
+            confidence=0.0,
             measured_findings_count=count,
-            metrics={"findings_count": count},
+            metrics={
+                "findings_count": count,
+                "score_status": "NOT_MEASURED",
+                "score_reason": "CRO score must come from calibrated UX/conversion scorecard, not finding count.",
+            },
         )
 
 

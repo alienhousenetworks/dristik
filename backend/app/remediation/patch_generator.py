@@ -91,6 +91,15 @@ class RemediationPatcher:
         base_domain = urlparse(website_url).netloc.lower() or "example.com"
         clean_origin = f"{urlparse(website_url).scheme or 'https'}://{base_domain}"
 
+        # sameAs only from links observed on crawled pages, never guessed from the brand name
+        _social = ("linkedin.com", "twitter.com", "x.com", "instagram.com", "facebook.com", "youtube.com", "github.com")
+        observed_same_as: List[str] = []
+        for _p in (pages or []):
+            for _l in (getattr(_p, "external_links", None) or []):
+                _s = str(_l.get("url") if isinstance(_l, dict) else _l).strip()
+                if _s and any(d in _s.lower() for d in _social) and _s not in observed_same_as:
+                    observed_same_as.append(_s)
+
         # Build page map for fast URL context lookup
         page_map: Dict[str, PageEvidence] = {}
         if pages:
@@ -326,7 +335,9 @@ class RemediationPatcher:
                             if sample_img:
                                 break
 
-                    sample_img = sample_img or "/assets/hero-banner.png"
+                    if not sample_img:
+                        p_idx -= 1  # no observed image: never invent a path
+                        continue
                     if "http" in sample_img:
                         sample_img = urlparse(sample_img).path or sample_img
 
@@ -396,10 +407,7 @@ class RemediationPatcher:
                         "name": biz_name,
                         "url": clean_origin,
                         "description": val_prop[:200],
-                        "sameAs": [
-                            f"https://www.linkedin.com/company/{_slug(biz_name)}",
-                            f"https://twitter.com/{_slug(biz_name)}"
-                        ]
+                        **({"sameAs": observed_same_as} if observed_same_as else {}),
                     },
                     {
                         "@type": "WebSite",

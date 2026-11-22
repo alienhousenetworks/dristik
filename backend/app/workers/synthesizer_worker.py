@@ -29,7 +29,12 @@ class CognitiveSynthesizerWorker(BaseCognitiveWorker):
         bp = blackboard.business_profile
         biz_name = bp.business_name if bp and bp.business_name not in ["Unknown", "Unknown Business", "Identified Platform"] else "the target enterprise"
 
-        # Construct verified claims packet
+        # Construct verified claims packet (prioritize CRITICAL/HIGH across all 4 pillars; up to 60 claims)
+        sev_order = {"CRITICAL": 0, "HIGH": 1, "MEDIUM": 2, "LOW": 3, "INFO": 4}
+        prioritized_claims = sorted(
+            verified_claims,
+            key=lambda c: (sev_order.get(c.severity.value, 3), -float(getattr(c, "impact", 5) or 5)),
+        )
         verified_claims_summary = [
             {
                 "claim_id": c.id,
@@ -39,7 +44,7 @@ class CognitiveSynthesizerWorker(BaseCognitiveWorker):
                 "evidence_refs": c.evidence_refs,
                 "recommendation": c.recommendation
             }
-            for c in verified_claims[:15]
+            for c in prioritized_claims[:60]
         ]
 
         # AI search bands
@@ -98,8 +103,8 @@ class CognitiveSynthesizerWorker(BaseCognitiveWorker):
 
         focused_evidence = [
             ev for ev in blackboard.evidence_store.get_all()
-            if any(ev.id in c.evidence_refs for c in verified_claims)
-        ][:15]
+            if any(ev.id in c.evidence_refs for c in prioritized_claims[:60])
+        ][:45]
 
         result = await self.model_router.generate_structured(
             capability="synthesizer",

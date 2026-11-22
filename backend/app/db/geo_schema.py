@@ -376,10 +376,14 @@ def _default_geo_db_path() -> str:
     env_path = os.getenv("DRISTIK_GEO_DB_PATH")
     if env_path:
         return env_path
-    base = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    data_dir = os.path.join(base, "data")
-    os.makedirs(data_dir, exist_ok=True)
-    return os.path.join(data_dir, "geo_enterprise.db")
+    try:
+        from app.db.connection import resolve_default_sqlite_path
+        return resolve_default_sqlite_path("data/geo_enterprise.db")
+    except Exception:
+        base = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        data_dir = os.path.join(base, "data")
+        os.makedirs(data_dir, exist_ok=True)
+        return os.path.join(data_dir, "geo_enterprise.db")
 
 
 def _now_iso() -> str:

@@ -57,15 +57,31 @@ class GeoPillar:
             if getattr(finding, "pillar", None) == "geo" or getattr(finding, "category", "") in self.domains
         ]
         count = len(geo_findings)
-        score = max(0.0, 100.0 - (count * 4.5))
-        grade = "A" if score >= 85 else "B" if score >= 70 else "C" if score >= 50 else "D"
+        geo_readiness = getattr(blackboard, "geo_readiness", None) if blackboard is not None else None
+        measured = getattr(geo_readiness, "extractability_score", None) if geo_readiness is not None else None
+        if isinstance(measured, (int, float)):
+            score = round(max(0.0, min(100.0, float(measured))), 1)
+            grade = "A" if score >= 85 else "B" if score >= 70 else "C" if score >= 50 else "D"
+            return PillarScoreResult(
+                pillar_id=self.pillar_id,
+                score=score,
+                grade=grade,
+                confidence=0.85,
+                measured_findings_count=count,
+                metrics={"findings_count": count, "score_status": "MEASURED", "source": "geo_readiness.extractability_score"},
+            )
+        # Finding volume is not a quality measurement; stay NOT_MEASURED until GEO readiness runs.
         return PillarScoreResult(
             pillar_id=self.pillar_id,
-            score=round(score, 1),
-            grade=grade,
-            confidence=1.0,
+            score=0.0,
+            grade="N/A",
+            confidence=0.0,
             measured_findings_count=count,
-            metrics={"findings_count": count},
+            metrics={
+                "findings_count": count,
+                "score_status": "NOT_MEASURED",
+                "score_reason": "GEO score must come from measured extractability/visibility, not finding count.",
+            },
         )
 
     def citation_models(self):

@@ -1966,6 +1966,24 @@ class FieldPerformanceMetrics(BaseModel):
     provenance_label: str = "NOT_CONFIGURED"
 
 
+class PageSection(BaseModel):
+    """Structured visible section extracted from a crawled page DOM."""
+    section_id: str
+    section_role: str = "body"  # hero | features | pricing | faq | testimonials | case_study | form | about | trust | footer | body
+    dom_tag: str = "section"
+    heading_level: Optional[str] = None  # h1 | h2 | h3 | None
+    heading_text: str = ""
+    body_text: str = ""
+    ctas: List[str] = Field(default_factory=list)
+    list_items: List[str] = Field(default_factory=list)
+    forms: List[Dict[str, Any]] = Field(default_factory=list)
+    tables: List[Dict[str, Any]] = Field(default_factory=list)
+    images: List[Dict[str, Any]] = Field(default_factory=list)
+    word_count: int = 0
+    selector: Optional[str] = None
+    content_sha256: Optional[str] = None
+
+
 class PageEvidence(BaseModel):
     url: str
     status_code: int = 200
@@ -2036,6 +2054,12 @@ class PageEvidence(BaseModel):
     origin_http_ttfb_ms: Optional[float] = None
     instrumentation_overhead_ms: Optional[float] = None
     ttfb_outlier_reason: Optional[str] = None
+    sections: List[PageSection] = Field(default_factory=list)
+    nav_items: List[Dict[str, Any]] = Field(default_factory=list)
+    footer_info: Dict[str, Any] = Field(default_factory=dict)
+    render_status: str = "static_ok"  # static_ok | playwright_ok | firecrawl_ok | embedded_cms_ok | js_render_failed
+    render_error: Optional[str] = None
+    extraction_status: str = "ok"  # ok | partial | failed
 
 class CopyIssue(BaseModel):
     area: str

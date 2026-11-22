@@ -19,15 +19,17 @@ spending live tokens), and all 17 canonical `geo.*` SSE events via EventStore.
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import logging
 import re
 import time
 from datetime import datetime, timezone
-from typing import Any, Callable, Coroutine, Dict, List, Optional
+from typing import Any, Callable, Coroutine, Dict, List, Optional, Tuple
 from urllib.parse import urlparse
 
 import httpx
 
+from app.core.config import settings
 from app.core.security.ssrf import is_safe_url
 from app.db.geo_schema import GEOStore, get_geo_store
 from app.domain.models import PageEvidence
@@ -122,6 +124,26 @@ def _parse_html_to_page_evidence(url: str, raw_html: str, status_code: int = 200
     )
 
 
+# Tenant-scoped TTL cache for live GEO prompt probes (prevents duplicate search surcharges on re-runs)
+_GEO_PROBE_CACHE: Dict[str, Tuple[float, EngineRawResponse]] = {}
+
+
+def _geo_probe_cache_key(
+    tenant_id: str, pid: str, model: str, locale: str, prompt_text: str, enable_search: bool
+) -> str:
+    raw = f"{tenant_id}|{pid.lower()}|{model}|{locale}|{'search' if enable_search else 'model'}|{prompt_text.strip().lower()}"
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
+def _resolve_mode_default_prompts(mode: str) -> int:
+    m = (mode or "standard").strip().lower()
+    if m in ("quick", "fast", "starter"):
+        return int(getattr(settings, "GEO_MAX_PROMPTS_QUICK", 5))
+    if m in ("deep", "enterprise", "full"):
+        return int(getattr(settings, "GEO_MAX_PROMPTS_DEEP", 18))
+    return int(getattr(settings, "GEO_MAX_PROMPTS_STANDARD", 10))
+
+
 class GEOAuditOrchestrator:
     """Central DAG orchestrator for enterprise GEO audits with real-time `geo.*` SSE events."""
 
@@ -142,8 +164,9 @@ class GEOAuditOrchestrator:
         platforms_requested: Optional[List[str]] = None,
         mode: str = "standard",
         repetitions: int = 1,
-        max_prompts: int = 18,
-        budget_usd: float = 5.0,
+        max_prompts: Optional[int] = None,
+        budget_usd: Optional[float] = None,
+        max_live_calls: Optional[int] = None,
         per_provider_budget_usd: Optional[Dict[str, float]] = None,
         allow_provider_fallback: bool = False,
         pii_redaction_enabled: bool = True,
@@ -158,6 +181,23 @@ class GEOAuditOrchestrator:
     ):
         self.store = store or get_geo_store()
         self.connectors = GEOConnectorManager(store=self.store)
+        resolved_max_prompts = (
+            _resolve_mode_default_prompts(mode)
+            if max_prompts is None
+            else int(max_prompts)
+        )
+        resolved_budget_usd = (
+            float(getattr(settings, "GEO_AUDIT_DEFAULT_BUDGET_USD", 1.00))
+            if budget_usd is None
+            else float(budget_usd)
+        )
+        self.max_live_calls = (
+            int(getattr(settings, "GEO_AUDIT_MAX_LIVE_CALLS", 40))
+            if max_live_calls is None
+            else int(max_live_calls)
+        )
+        max_prompts = resolved_max_prompts
+        budget_usd = resolved_budget_usd
         self.tenant_id = tenant_id
         self.target_url = target_url if "://" in target_url else f"https://{target_url}"
         parsed = urlparse(self.target_url)
@@ -458,30 +498,21 @@ class GEOAuditOrchestrator:
                     return
 
                 sem = asyncio.Semaphore(4)
+                budget_lock = asyncio.Lock()
+                live_calls_dispatched = 0
+                cache_ttl_sec = int(getattr(settings, "GEO_CITATION_CACHE_TTL_HOURS", 24) or 0) * 3600
 
                 async def _exec_one(prompt: GEOTestPrompt, pid: str, rep_num: int, client: httpx.AsyncClient) -> None:
-                    nonlocal total_spend, budget_paused
+                    nonlocal total_spend, budget_paused, live_calls_dispatched
                     if self._cancelled or budget_paused:
                         return
                     ad = adapters[pid]
-                    # Enforce per-audit and per-provider budgets before dispatch
-                    prov_cap = self.scope.per_provider_budget_usd.get(pid)
-                    if self.scope.budget_usd > 0 and total_spend >= self.scope.budget_usd:
-                        budget_paused = True
-                        self.audit.budget_paused = True
-                        return
-                    if prov_cap is not None and provider_spend.get(pid, 0.0) >= prov_cap:
-                        return
 
                     prompt_text = prompt.question
                     redacted_types: List[str] = []
                     if self.scope.pii_redaction_enabled:
                         prompt_text, redacted_types = redact_prompt_pii(prompt_text)
 
-                    self.events.emit(
-                        "geo.prompt.started",
-                        {"prompt_id": prompt.prompt_id, "platform_id": pid, "repetition": rep_num, "pii_redacted": redacted_types},
-                    )
                     req = EnginePromptRequest(
                         prompt=prompt_text,
                         locale=f"{prompt.language}-{prompt.market}",
@@ -491,27 +522,66 @@ class GEOAuditOrchestrator:
                         allow_fallback=self.scope.allow_provider_fallback,
                         repetition_number=rep_num,
                     )
-                    async with sem:
-                        raw: Optional[EngineRawResponse] = None
-                        for attempt in range(2):
-                            try:
-                                raw = await asyncio.wait_for(ad.execute_prompt(req, client=client), timeout=18.0)
-                                if raw.is_live or raw.status_code in (401, 403, 501):
-                                    break
-                            except Exception as exc:
-                                raw = EngineRawResponse(
-                                    engine_id=pid,
-                                    engine_name=ad.display_name,
-                                    model_version=ad.model,
-                                    requested_model=ad.model,
-                                    raw_content="",
-                                    status_code=504,
-                                    error=str(exc),
-                                    is_live=False,
-                                    testing_mode=ad.default_testing_mode,
-                                )
-                            if attempt == 0:
-                                await asyncio.sleep(0.1)
+
+                    # Tenant-scoped TTL cache (skipped when provider_overrides are injected for replay/tests)
+                    use_probe_cache = cache_ttl_sec > 0 and pid not in self.provider_overrides
+                    cache_key = _geo_probe_cache_key(
+                        self.tenant_id, pid, ad.model, req.locale, prompt_text, req.enable_search
+                    )
+                    cached_raw: Optional[EngineRawResponse] = None
+                    if use_probe_cache:
+                        entry = _GEO_PROBE_CACHE.get(cache_key)
+                        if entry and (time.monotonic() - entry[0]) <= cache_ttl_sec:
+                            cached_raw = entry[1].model_copy(update={"estimated_cost_usd": 0.0})
+
+                    if cached_raw is None:
+                        # Strict pre-dispatch budget & max_live_calls guard under lock so concurrent tasks can't overshoot
+                        async with budget_lock:
+                            prov_cap = self.scope.per_provider_budget_usd.get(pid)
+                            if self.scope.budget_usd > 0 and total_spend >= self.scope.budget_usd:
+                                budget_paused = True
+                                self.audit.budget_paused = True
+                                return
+                            if self.max_live_calls > 0 and live_calls_dispatched >= self.max_live_calls:
+                                budget_paused = True
+                                self.audit.budget_paused = True
+                                return
+                            if prov_cap is not None and provider_spend.get(pid, 0.0) >= prov_cap:
+                                return
+                            live_calls_dispatched += 1
+
+                    self.events.emit(
+                        "geo.prompt.started",
+                        {"prompt_id": prompt.prompt_id, "platform_id": pid, "repetition": rep_num, "pii_redacted": redacted_types},
+                    )
+                    if cached_raw is not None:
+                        raw = cached_raw
+                    else:
+                        async with sem:
+                            raw = None
+                            for attempt in range(2):
+                                try:
+                                    raw = await asyncio.wait_for(ad.execute_prompt(req, client=client), timeout=18.0)
+                                    if raw.is_live or raw.status_code in (401, 403, 501):
+                                        break
+                                except Exception as exc:
+                                    raw = EngineRawResponse(
+                                        engine_id=pid,
+                                        engine_name=ad.display_name,
+                                        model_version=ad.model,
+                                        requested_model=ad.model,
+                                        raw_content="",
+                                        status_code=504,
+                                        error=str(exc),
+                                        is_live=False,
+                                        testing_mode=ad.default_testing_mode,
+                                    )
+                                if attempt == 0:
+                                    await asyncio.sleep(0.1)
+                            if use_probe_cache and raw is not None and raw.is_live and not raw.error:
+                                if len(_GEO_PROBE_CACHE) >= 2000:
+                                    _GEO_PROBE_CACHE.pop(next(iter(_GEO_PROBE_CACHE)), None)
+                                _GEO_PROBE_CACHE[cache_key] = (time.monotonic(), raw)
 
                     assert raw is not None
                     run_status = GEODataQualityState.OBSERVED if (raw.is_live and raw.raw_content.strip()) else (

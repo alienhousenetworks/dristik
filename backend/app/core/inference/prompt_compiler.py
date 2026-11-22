@@ -28,8 +28,10 @@ class PromptCompiler:
     def __init__(self):
         self.global_policy = GLOBAL_POLICY
 
-    def format_evidence_slice(self, ev: Evidence) -> str:
-        """Formats an evidence slice into a concise, deterministic line with injection protection."""
+    def format_evidence_slice(self, ev: Evidence, slice_max_chars: Optional[int] = None) -> str:
+        """Formats an evidence slice into a deterministic line with injection protection."""
+        from app.core.config import settings
+        max_chars = int(slice_max_chars or getattr(settings, "AI_SLICE_MAX_CHARS", 1200) or 1200)
         url_part = f" url={ev.url}" if ev.url else ""
         kind_part = f" kind={ev.source_type or 'dom'}"
         sel_part = f" sel={ev.selector}" if ev.selector else ""
@@ -38,21 +40,23 @@ class PromptCompiler:
         text_clean = text_clean.replace("</evidence>", "[/evidence]").replace("<evidence>", "[evidence]")
         text_clean = text_clean.replace("</task>", "[/task]").replace("<task>", "[task]")
         text_clean = text_clean.replace("</site_facts>", "[/site_facts]").replace("<site_facts>", "[site_facts]")
-        if len(text_clean) > 200:
-            text_clean = text_clean[:197] + "..."
-        val_str = str(ev.value)[:100].replace("\n", " ") if ev.value is not None else ""
+        if len(text_clean) > max_chars:
+            text_clean = text_clean[: max(max_chars - 3, 1)] + "..."
+        val_cap = min(max_chars, 400)
+        val_str = str(ev.value)[:val_cap].replace("\n", " ") if ev.value is not None else ""
         val_part = f" val={val_str}" if val_str else ""
         return f"[{ev.id}]{url_part}{kind_part}{sel_part} text=\"{text_clean}\"{val_part}"
 
     def build_evidence_pack(
         self,
         evidence_list: List[Evidence],
-        max_tokens: int = 4000,
-        allowed_kinds: Optional[List[str]] = None
+        max_tokens: int = 12000,
+        allowed_kinds: Optional[List[str]] = None,
+        slice_max_chars: Optional[int] = None,
     ) -> str:
         """
-        Prioritizes hero, title, meta, and navigation evidence before general content,
-        respecting a hard token budget (~4 chars per token).
+        Prioritizes external, hero/title/meta, structured page sections, CTA/nav/pricing,
+        and schema/FAQ evidence while respecting a configurable token budget (~4 chars per token).
         """
         if not evidence_list:
             return "No direct DOM evidence slices provided."
@@ -68,7 +72,7 @@ class PromptCompiler:
             if filtered:
                 evidence_list = filtered
 
-        # Sort priority: meta/title/hero first, cta/nav second, schema third, general fourth
+        # Sort priority: external first, title/meta/h1/hero, page_section/footer, cta/nav/pricing, schema/faq, general
         def priority_key(ev: Evidence) -> int:
             st = (ev.source_type or "").lower()
             sel = (ev.selector or "").lower()
@@ -76,11 +80,13 @@ class PromptCompiler:
                 return -1
             if any(k in st or k in sel for k in ["title", "meta", "h1", "hero", "brand", "identity"]):
                 return 0
-            if any(k in st or k in sel for k in ["cta", "button", "nav", "pricing"]):
+            if st in ("page_section", "footer", "form"):
                 return 1
-            if any(k in st or k in sel for k in ["schema", "jsonld", "faq"]):
+            if any(k in st or k in sel for k in ["cta", "button", "nav", "pricing"]):
                 return 2
-            return 3
+            if any(k in st or k in sel for k in ["schema", "jsonld", "faq"]):
+                return 3
+            return 4
 
         sorted_ev = sorted(evidence_list, key=priority_key)
 
@@ -89,7 +95,7 @@ class PromptCompiler:
         current_chars = 0
 
         for ev in sorted_ev:
-            line = self.format_evidence_slice(ev)
+            line = self.format_evidence_slice(ev, slice_max_chars=slice_max_chars)
             line_len = len(line) + 1
             if current_chars + line_len > char_budget:
                 break

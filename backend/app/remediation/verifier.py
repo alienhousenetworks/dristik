@@ -50,7 +50,13 @@ class VerificationEngine:
                                 patch.after_snippet[:50] in html_content if patch.after_snippet else True
                             )
                         elif patch.operation == PatchOperation.INSERT_HEAD:
-                            verified = "canonical" in html_content or "description" in html_content
+                            # Require the actual injected tag/snippet, not a stray word in body copy.
+                            snippet = (patch.after_snippet or "").strip()
+                            if snippet:
+                                first_line = snippet.splitlines()[0].strip()
+                                verified = first_line in html_content
+                            else:
+                                verified = False
                         elif patch.after_snippet and patch.after_snippet[:60] in html_content:
                             verified = True
 

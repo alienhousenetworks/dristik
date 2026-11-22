@@ -473,12 +473,21 @@ CRO_CANONICAL_TABLES = (
 )
 
 
-def init_cro_schema(db_path: str = "data/dristik_enterprise.db") -> None:
+def _default_cro_db_path() -> str:
+    try:
+        from app.db.connection import resolve_default_sqlite_path
+        return resolve_default_sqlite_path("data/dristik_enterprise.db")
+    except Exception:
+        return "data/dristik_enterprise.db"
+
+
+def init_cro_schema(db_path: Optional[str] = None) -> None:
     """Idempotently initialize all 22 CRO entities + operational tables."""
-    parent = os.path.dirname(db_path)
+    resolved = db_path or _default_cro_db_path()
+    parent = os.path.dirname(resolved)
     if parent:
         os.makedirs(parent, exist_ok=True)
-    conn = sqlite3.connect(db_path)
+    conn = sqlite3.connect(resolved)
     try:
         conn.executescript(CRO_SQLITE_SCHEMA)
         conn.commit()
@@ -489,8 +498,8 @@ def init_cro_schema(db_path: str = "data/dristik_enterprise.db") -> None:
 class CROStore:
     """Tenant-isolated persistence repository for the canonical CRO data model."""
 
-    def __init__(self, db_path: str = "data/dristik_enterprise.db"):
-        self.db_path = db_path
+    def __init__(self, db_path: Optional[str] = None):
+        self.db_path = db_path or _default_cro_db_path()
         init_cro_schema(self.db_path)
 
     def _connect(self) -> sqlite3.Connection:
@@ -1470,8 +1479,9 @@ class CROStore:
 _default_store: Optional[CROStore] = None
 
 
-def get_cro_store(db_path: str = "data/dristik_enterprise.db") -> CROStore:
+def get_cro_store(db_path: Optional[str] = None) -> CROStore:
     global _default_store
-    if _default_store is None or _default_store.db_path != db_path:
-        _default_store = CROStore(db_path=db_path)
+    resolved = db_path or _default_cro_db_path()
+    if _default_store is None or _default_store.db_path != resolved:
+        _default_store = CROStore(db_path=resolved)
     return _default_store

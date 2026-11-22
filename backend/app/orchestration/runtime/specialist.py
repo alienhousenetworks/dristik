@@ -238,10 +238,11 @@ class SpecialistAgent(BaseAgent):
         has_det = "deterministic" in allowed
         has_llm_model = any(m in ("reasoning_model", "fast_slm", "judge_model") for m in allowed)
 
-        # Deterministic-first policy for hybrid agents: run deterministic telemetry first.
-        # Objective technical/structured-data/GEO/AEO checks do not spend LLM tokens when
-        # deterministic evaluation already completed or determined not_applicable.
-        _DETERMINISTIC_FIRST_DOMAINS = {"TECHNICAL_SEO", "STRUCTURED_DATA", "GEO", "AEO"}
+        # Hybrid measurement-then-AI policy (Phase 3):
+        # 1. Run deterministic telemetry first as Layer-0 ground truth (exit cleanly if not_applicable).
+        # 2. Whenever an LLM model is allowed, pass deterministic measurements into _llm_audit()
+        #    so AI verifies findings, eliminates false positives, and explains business impact.
+        #    Never silently short-circuit TECHNICAL_SEO / STRUCTURED_DATA / GEO / AEO before AI.
         if has_det:
             det = self._deterministic_audit(blackboard, evidence_slice)
             det_state = (det.get("observations") or {}).get("measurement_state")
@@ -250,11 +251,10 @@ class SpecialistAgent(BaseAgent):
                 self._store(blackboard, det)
                 return det
             if det_reason != "no_deterministic_check":
-                if self.definition.domain in _DETERMINISTIC_FIRST_DOMAINS or not has_llm_model:
+                if not has_llm_model:
                     self._store(blackboard, det)
                     return det
-                # Semantic/qualitative hybrid domain: augment deterministic facts with LLM reasoning if available
-                llm_res = await self._llm_audit(blackboard, evidence_slice)
+                llm_res = await self._llm_audit(blackboard, evidence_slice, deterministic_context=det)
                 if llm_res.get("status") == "completed":
                     result = self._merge(det, llm_res)
                     self._store(blackboard, result)
@@ -288,7 +288,13 @@ class SpecialistAgent(BaseAgent):
         missing = [d for d in deps if d not in results]
         return len(missing) == len(deps) and len(deps) > 0
 
-    async def _llm_audit(self, blackboard: CognitiveBlackboard, evidence_slice) -> Dict[str, Any]:
+    async def _llm_audit(
+        self,
+        blackboard: CognitiveBlackboard,
+        evidence_slice,
+        deterministic_context: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        import json as _json
         tool_bus = AgentToolBus(blackboard)
         biz_ctx = tool_bus.get_business_context()
 
@@ -300,6 +306,43 @@ class SpecialistAgent(BaseAgent):
             forbid_line = "Forbidden operations: " + ", ".join(forbidden) + ".\n"
 
         prior = self._prior_context(blackboard)
+        det_block = ""
+        if deterministic_context:
+            det_payload = {
+                "observations": deterministic_context.get("observations") or {},
+                "deterministic_claims": [
+                    (c.statement if hasattr(c, "statement") else str(c))
+                    for c in (deterministic_context.get("claims") or [])[:12]
+                ],
+            }
+            det_block = (
+                "\nLAYER-0 DETERMINISTIC MEASUREMENTS (verify against business context & DOM; flag false positives, "
+                "explain true business impact, and never fabricate new measurements):\n"
+                + _json.dumps(det_payload, ensure_ascii=False, default=str)[:3000]
+                + "\n"
+            )
+
+        # Attach domain-relevant Stage-1 deterministic analyzer findings when present
+        domain_pillar_map = {
+            "TECHNICAL_SEO": "seo",
+            "STRUCTURED_DATA": "seo",
+            "CONTENT": "seo",
+            "GEO": "geo",
+            "AEO": "aeo",
+            "AI_SEARCH": "aeo",
+            "EXPERIENCE": "cro",
+            "UX_CONVERSION": "cro",
+        }
+        stage1_pillar = domain_pillar_map.get(self.definition.domain)
+        if stage1_pillar:
+            stage1_res = tool_bus.get_deterministic_findings(pillar=stage1_pillar, limit=15)
+            if stage1_res.get("results"):
+                det_block += (
+                    "\nSTAGE-1 PYTHON ANALYZER FINDINGS FOR THIS PILLAR:\n"
+                    + _json.dumps(stage1_res["results"], ensure_ascii=False, default=str)[:3500]
+                    + "\n"
+                )
+
         # Do NOT embed `card` in `task_contract` here because PromptCompiler.compile()
         # already places `task_card` in system_prompt. Avoids 2x task-card token bloat.
         contract = (
@@ -308,6 +351,7 @@ class SpecialistAgent(BaseAgent):
             f"{forbid_line}"
             f"{tool_bus.available_tools_spec()}\n"
             f"BUSINESS & TECH CONTEXT: {biz_ctx}\n"
+            f"{det_block}"
             f"{prior}"
         )
 
@@ -439,7 +483,8 @@ class SpecialistAgent(BaseAgent):
             return {"agent_id": self.agent_id, "status": "unavailable", "unavailable_reason": "invalid_llm_payload", "claims": []}
 
         status = str(raw.get("status") or "completed").lower()
-        if status == "unavailable" or raw.get("unavailable_reason") == "no_llm_key":
+        # budget_exceeded is a router refusal, not a completed audit with zero claims.
+        if status in ("unavailable", "budget_exceeded") or raw.get("unavailable_reason") == "no_llm_key":
             return {
                 "agent_id": self.agent_id,
                 "status": "unavailable",

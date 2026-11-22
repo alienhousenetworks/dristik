@@ -18,7 +18,8 @@ _SCHEMA = Path(__file__).resolve().parent / "migrations" / "001_external_authori
 
 def default_db_path() -> str:
     from app.core.config import settings
-    return settings.EXTERNAL_AUTHORITY_DB_PATH
+    from app.db.connection import resolve_default_sqlite_path
+    return resolve_default_sqlite_path(settings.EXTERNAL_AUTHORITY_DB_PATH)
 
 
 class ExternalStore:

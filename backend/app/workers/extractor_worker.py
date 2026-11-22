@@ -24,11 +24,14 @@ class CognitiveExtractorWorker(BaseCognitiveWorker):
         task_context: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
         evidence_list = blackboard.evidence_store.get_all()
-        pages = blackboard.pages[:8]
-        pages_summary = "\n".join([
-            f"• URL: {p.url} | Title: {p.title or 'N/A'} | H1: {', '.join(p.h1)} | Words: {p.word_count} | Schema: {', '.join(p.schema_types)}"
-            for p in pages
-        ])
+        all_pages = blackboard.pages or []
+        pages_lines = [
+            f"• URL: {p.url} ({p.page_type}) | Title: {p.title or 'N/A'} | H1: {', '.join(p.h1)} | Sections: {len(getattr(p, 'sections', []) or [])} | Words: {p.word_count} | Schema: {', '.join(p.schema_types)}"
+            for p in all_pages[:25]
+        ]
+        if len(all_pages) > 25:
+            pages_lines.append(f"• (+{len(all_pages) - 25} additional crawled pages indexed in evidence store)")
+        pages_summary = "\n".join(pages_lines)
 
         contract = (
             "Extract an authoritative, high-precision semantic knowledge graph from the crawled website evidence:\n"

@@ -31,6 +31,7 @@ class OpenAISearchAdapter(BaseGeoEngineAdapter):
     rate_limit_rpm = 500
     cost_per_1k_input_usd = 0.00015
     cost_per_1k_output_usd = 0.00060
+    cost_per_search_use_usd = 0.025  # OpenAI Search preview: ~$25 per 1,000 search calls
     unsupported_features = [
         "Consumer ChatGPT memory/personalization is not replicated via API.",
         "Standard chat completions are API_MODEL_ONLY unless a web-search model is used.",
@@ -169,7 +170,9 @@ class OpenAISearchAdapter(BaseGeoEngineAdapter):
                 fallback_reason=fb_reason,
                 prompt_tokens=p_tok,
                 completion_tokens=c_tok,
-                estimated_cost_usd=self.estimate_cost_usd(p_tok, c_tok),
+                estimated_cost_usd=self.estimate_cost_usd(
+                    p_tok, c_tok, search_uses=1 if actual_mode == GEOTestingMode.API_WITH_SEARCH else 0
+                ),
                 tool_use_metadata={
                     "annotations_count": len(ann_urls),
                     "search_enabled": actual_mode == GEOTestingMode.API_WITH_SEARCH,

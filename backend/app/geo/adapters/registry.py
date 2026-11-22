@@ -116,7 +116,12 @@ def get_adapter(engine_id: str) -> Optional[BaseGeoEngineAdapter]:
             or getattr(settings, "OPENAI_API_KEY", "")
             or ""
         )
-        model = os.environ.get("AI_CITATION_CHATGPT_MODEL") or "openai/gpt-oss-20b"
+        model = (
+            os.environ.get("AI_CITATION_CHATGPT_MODEL")
+            or os.environ.get("OPENAI_SEARCH_MODEL")
+            or getattr(settings, "OPENAI_SEARCH_MODEL", None)
+            or "openai/gpt-oss-20b"
+        )
         return OpenAISearchAdapter(api_key=key, model=model)
 
     if eid in ["gemini", "google"]:
@@ -134,10 +139,17 @@ def get_adapter(engine_id: str) -> Optional[BaseGeoEngineAdapter]:
         key = (
             os.environ.get("AI_CITATION_CLAUDE_API_KEY")
             or os.environ.get("ANTHROPIC_API_KEY")
+            or os.environ.get("CLAUDE_API_KEY")
             or getattr(settings, "ANTHROPIC_API_KEY", "")
+            or getattr(settings, "CLAUDE_API_KEY", "")
             or ""
         )
-        model = os.environ.get("AI_CITATION_CLAUDE_MODEL") or "claude-3-5-haiku-20241022"
+        model = (
+            os.environ.get("AI_CITATION_CLAUDE_MODEL")
+            or os.environ.get("ANTHROPIC_SEARCH_MODEL")
+            or getattr(settings, "ANTHROPIC_SEARCH_MODEL", None)
+            or "claude-3-5-haiku-20241022"
+        )
         return ClaudeAdapter(api_key=key, model=model)
 
     if eid in ["grok", "xai"]:

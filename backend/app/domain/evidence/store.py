@@ -101,7 +101,7 @@ class EvidenceStore:
             collection_method=analyzer,
             scope=url,
             captured_at=fetched_at if isinstance(fetched_at, datetime) else datetime.now(timezone.utc),
-            provenance_type=ProvenanceType.RAW if source_type in ("dom", "http", "crawl", "html") else (
+            provenance_type=ProvenanceType.RAW if source_type in ("dom", "http", "crawl", "html", "page_section", "footer", "nav", "form") else (
                 ProvenanceType.MEASURED if source_type in ("measured", "perf", "performance", "crux") else (
                     ProvenanceType.EXTERNAL if source_type in ("external", "api", "gsc", "ga4") else ProvenanceType.DERIVED
                 )

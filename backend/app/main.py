@@ -29,6 +29,14 @@ async def lifespan(_app: FastAPI):
     except Exception as exc:
         logging.getLogger(__name__).info("external authority schema init skipped: %s", type(exc).__name__)
     try:
+        import app.workers.audit_tasks  # noqa: F401
+        import app.workers.crawl_tasks  # noqa: F401
+        import app.workers.report_tasks  # noqa: F401
+        from app.workers.queue import task_queue
+        await task_queue.start()
+    except Exception as exc:
+        logging.getLogger(__name__).warning("DurableJobQueue startup skipped: %s", exc)
+    try:
         from app.workers.scheduler import scheduler
         await scheduler.start()
     except Exception as exc:
@@ -39,6 +47,26 @@ async def lifespan(_app: FastAPI):
         await scheduler.stop()
     except Exception as exc:
         logging.getLogger(__name__).warning("Autonomous scheduler shutdown skipped: %s", exc)
+    try:
+        from app.workers.queue import task_queue
+        await task_queue.stop()
+    except Exception as exc:
+        logging.getLogger(__name__).warning("DurableJobQueue shutdown skipped: %s", exc)
+    try:
+        from app.crawl.browser import BrowserRenderService
+        await BrowserRenderService.shutdown()
+    except Exception as exc:
+        logging.getLogger(__name__).debug("BrowserRenderService shutdown skipped: %s", exc)
+    try:
+        from app.core.inference.llm_client import close_pooled_http_clients
+        await close_pooled_http_clients()
+    except Exception:
+        pass
+    try:
+        from app.db.connection import dispose_unified_engines
+        dispose_unified_engines()
+    except Exception:
+        pass
 
 
 

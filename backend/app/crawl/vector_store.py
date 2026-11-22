@@ -71,6 +71,10 @@ class VectorStore:
             columns = [row[1] for row in conn.execute("PRAGMA table_info(page_vector_chunks)").fetchall()]
             if "analysis_id" not in columns:
                 conn.execute("ALTER TABLE page_vector_chunks ADD COLUMN analysis_id TEXT")
+            if "section_id" not in columns:
+                conn.execute("ALTER TABLE page_vector_chunks ADD COLUMN section_id TEXT")
+            if "section_heading" not in columns:
+                conn.execute("ALTER TABLE page_vector_chunks ADD COLUMN section_heading TEXT")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_pvc_domain ON page_vector_chunks(domain)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_pvc_url ON page_vector_chunks(url)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_pvc_analysis ON page_vector_chunks(analysis_id)")
@@ -84,6 +88,7 @@ class VectorStore:
         chunks: List[str],
         vectors: List[List[float]],
         analysis_id: Optional[str] = None,
+        chunk_metadata: Optional[List[Dict[str, Any]]] = None,
     ) -> int:
         """
         Saves text chunks and their corresponding embedding vectors into the database.
@@ -91,17 +96,20 @@ class VectorStore:
         if not chunks or not vectors or len(chunks) != len(vectors):
             return 0
 
-        clean_domain = domain.lower().replace("https://", "").replace("http://", "").split("/")[0]
+        import hashlib
         import time
+        clean_domain = domain.lower().replace("https://", "").replace("http://", "").split("/")[0]
         now = time.time()
+        url_digest = hashlib.sha256(url.encode("utf-8")).hexdigest()[:12]
 
         rows = []
         for idx, (text, vec) in enumerate(zip(chunks, vectors)):
             if not text.strip() or not vec:
                 continue
             scope = analysis_id or clean_domain
-            chunk_id = f"{scope}_{hash(url)}_{idx}"
+            chunk_id = f"{scope}_{url_digest}_{idx}"
             blob = _pack_vector(vec)
+            meta = chunk_metadata[idx] if (chunk_metadata and idx < len(chunk_metadata) and isinstance(chunk_metadata[idx], dict)) else {}
             rows.append((
                 chunk_id,
                 clean_domain,
@@ -113,13 +121,15 @@ class VectorStore:
                 len(vec),
                 now,
                 analysis_id,
+                meta.get("section_id"),
+                meta.get("section_heading"),
             ))
 
         with self._get_connection() as conn:
             conn.executemany("""
                 INSERT OR REPLACE INTO page_vector_chunks 
-                (id, domain, url, page_type, chunk_index, chunk_text, vector, dimension, created_at, analysis_id)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                (id, domain, url, page_type, chunk_index, chunk_text, vector, dimension, created_at, analysis_id, section_id, section_heading)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, rows)
             conn.commit()
 
@@ -140,7 +150,7 @@ class VectorStore:
         if not query_vector:
             return []
 
-        query = "SELECT id, domain, url, page_type, chunk_index, chunk_text, vector FROM page_vector_chunks"
+        query = "SELECT id, domain, url, page_type, chunk_index, chunk_text, vector, section_id, section_heading FROM page_vector_chunks"
         params: List[Any] = []
         filters: List[str] = []
         if domain:
@@ -162,7 +172,7 @@ class VectorStore:
 
         scored_results: List[Tuple[float, Dict[str, Any]]] = []
         for row in rows:
-            chunk_id, r_domain, url, page_type, chunk_idx, chunk_text, vector_blob = row
+            chunk_id, r_domain, url, page_type, chunk_idx, chunk_text, vector_blob, sec_id, sec_heading = row
             chunk_vec = _unpack_vector(vector_blob)
             sim = _cosine_similarity(query_vector, chunk_vec)
             if sim >= min_score:
@@ -173,6 +183,8 @@ class VectorStore:
                     "page_type": page_type,
                     "chunk_index": chunk_idx,
                     "text": chunk_text,
+                    "section_id": sec_id,
+                    "section_heading": sec_heading,
                     "similarity": round(sim, 4)
                 }))
 

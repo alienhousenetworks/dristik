@@ -43,6 +43,48 @@ def default_ai_runner(system_prompt: str, user_payload: str, timeout_seconds: in
     raise ModelNotRun()
 
 
+def build_model_router_runner(
+    model_router: Any,
+    *,
+    capability: str = "seo_verification",
+    model_tier: str = "reasoning_model",
+) -> Runner:
+    """Build a live Runner backed by ModelRouter.generate_structured (fails closed with ModelNotRun when unavailable)."""
+    import asyncio
+    from concurrent.futures import ThreadPoolExecutor
+
+    def _run_coro(coro):
+        try:
+            asyncio.get_running_loop()
+            with ThreadPoolExecutor(max_workers=1) as pool:
+                return pool.submit(asyncio.run, coro).result()
+        except RuntimeError:
+            return asyncio.run(coro)
+
+    def _runner(system_prompt: str, user_payload: str, timeout_seconds: int) -> dict[str, Any]:
+        if model_router is None or not hasattr(model_router, "generate_structured"):
+            raise ModelNotRun()
+        coro = model_router.generate_structured(
+            capability=capability,
+            agent_role="Enterprise SEO Specialist",
+            task_contract=f"{system_prompt}\n\nEVIDENCE PACKET:\n{user_payload}",
+            evidence_list=[],
+            output_schema_desc='{"agent_id":"string","version":"string","status":"completed|partial","findings":[...]}',
+            allow_fallback=False,
+            model_tier=model_tier,
+            timeout_sec=int(timeout_seconds or 60),
+        )
+        res = _run_coro(coro)
+        if not isinstance(res, dict):
+            raise ModelNotRun()
+        status = str(res.get("status") or "").lower()
+        if status in ("unavailable", "budget_exceeded") or res.get("unavailable_reason"):
+            raise ModelNotRun()
+        return res
+
+    return _runner
+
+
 def _get(obj: Any, name: str, default: Any = None) -> Any:
     if obj is None:
         return default

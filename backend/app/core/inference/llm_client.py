@@ -13,6 +13,8 @@ Includes:
 - Multi-provider cascade (Groq -> Together -> OpenRouter -> Deterministic Fallback)
 """
 import asyncio
+from contextlib import contextmanager
+from contextvars import ContextVar
 import copy
 import hashlib
 import logging
@@ -25,6 +27,22 @@ from app.core.config import settings, Settings, ANTHROPIC_DEFAULT_FAST
 from app.core.inference.pricing import extract_provider_cost, provider_billed_usd
 
 logger = logging.getLogger("dristik.llm_client")
+
+_ACTIVE_TENANT_ID: ContextVar[str] = ContextVar("dristik_llm_tenant_id", default="__global__")
+
+
+def get_active_tenant_id() -> str:
+    return _ACTIVE_TENANT_ID.get() or "__global__"
+
+
+@contextmanager
+def use_tenant_context(tenant_id: Optional[str]):
+    """Bind tenant/org isolation scope for LLM response caching in the current async task."""
+    token = _ACTIVE_TENANT_ID.set(str(tenant_id or "__global__").strip() or "__global__")
+    try:
+        yield
+    finally:
+        _ACTIVE_TENANT_ID.reset(token)
 
 
 def _wants_json_response(response_format: Any) -> bool:
@@ -182,14 +200,21 @@ _GLOBAL_RATE_LIMITERS: Dict[str, TokenBucketRateLimiter] = {
     "anthropic": TokenBucketRateLimiter(rpm=getattr(settings, "ANTHROPIC_RPM", 15), tpm=getattr(settings, "ANTHROPIC_TPM", 40000)),
 }
 
-# Global in-flight concurrency semaphores to eliminate thundering herd against APIs
-_PROVIDER_SEMAPHORES: Dict[str, asyncio.Semaphore] = {}
+# Per-event-loop in-flight concurrency semaphores to avoid cross-loop binding issues
+_PROVIDER_SEMAPHORES: Dict[Tuple[int, str], asyncio.Semaphore] = {}
+# Per-event-loop pooled HTTP clients (persistent keep-alive connections)
+_POOLED_HTTP_CLIENTS: Dict[int, httpx.AsyncClient] = {}
 
 
 def get_provider_semaphore(provider: str) -> asyncio.Semaphore:
-    """Returns or lazily creates an asyncio.Semaphore for the specified provider."""
+    """Returns or lazily creates a per-loop asyncio.Semaphore for the specified provider."""
     prov = (provider or "unknown").lower()
-    if prov not in _PROVIDER_SEMAPHORES:
+    try:
+        lid = id(asyncio.get_running_loop())
+    except RuntimeError:
+        lid = 0
+    key = (lid, prov)
+    if key not in _PROVIDER_SEMAPHORES:
         concurrency = getattr(settings, "LLM_MAX_CONCURRENCY", 2)
         if prov == "groq":
             # Groq free/on-demand tier has a strict 8,000 TPM limit. Serializing requests prevents 429 storms.
@@ -198,12 +223,44 @@ def get_provider_semaphore(provider: str) -> asyncio.Semaphore:
             concurrency = max(1, getattr(settings, "LLM_MAX_CONCURRENCY", 2))
         else:
             concurrency = max(concurrency, 4)
-        _PROVIDER_SEMAPHORES[prov] = asyncio.Semaphore(concurrency)
-    return _PROVIDER_SEMAPHORES[prov]
+        _PROVIDER_SEMAPHORES[key] = asyncio.Semaphore(concurrency)
+    return _PROVIDER_SEMAPHORES[key]
 
-# Global in-memory exact-match response cache for idempotent LLM completions
+
+def _get_pooled_http_client() -> httpx.AsyncClient:
+    """Return a shared keep-alive httpx.AsyncClient scoped to the active event loop."""
+    try:
+        lid = id(asyncio.get_running_loop())
+    except RuntimeError:
+        lid = 0
+    client = _POOLED_HTTP_CLIENTS.get(lid)
+    if client is None or client.is_closed:
+        client = httpx.AsyncClient(
+            limits=httpx.Limits(max_connections=30, max_keepalive_connections=15),
+        )
+        _POOLED_HTTP_CLIENTS[lid] = client
+    return client
+
+
+async def close_pooled_http_clients() -> None:
+    """Close pooled HTTP clients cleanly on shutdown."""
+    clients = list(_POOLED_HTTP_CLIENTS.values())
+    _POOLED_HTTP_CLIENTS.clear()
+    for client in clients:
+        try:
+            if not client.is_closed:
+                await client.aclose()
+        except Exception:
+            pass
+
+
+# Global in-memory exact-match response cache for idempotent LLM completions (tenant-scoped by key)
 _RESPONSE_CACHE: Dict[str, Tuple[float, Dict[str, Any]]] = {}
 _RESPONSE_CACHE_MAX_ENTRIES = 1000
+
+
+def clear_response_cache() -> None:
+    _RESPONSE_CACHE.clear()
 
 
 def _get_cached_response(key: str) -> Optional[Dict[str, Any]]:
@@ -213,7 +270,9 @@ def _get_cached_response(key: str) -> Optional[Dict[str, Any]]:
         if time.time() - ts < ttl:
             res = copy.deepcopy(data)
             res["cached"] = True
+            res["cache_hit"] = True
             res["latency_ms"] = 0.0
+            res["provider_cost_usd"] = 0.0
             return res
         else:
             _RESPONSE_CACHE.pop(key, None)
@@ -410,85 +469,85 @@ class LLMClient:
         start_time = time.time()
         call_timeout = timeout or self.timeout
 
-        async with httpx.AsyncClient(timeout=call_timeout) as client:
-            try:
-                response = await client.post(endpoint, json=payload, headers=headers)
+        client = _get_pooled_http_client()
+        try:
+            response = await client.post(endpoint, json=payload, headers=headers, timeout=call_timeout)
 
-                # HTTP 429 Rate Limit
-                if response.status_code == 429:
-                    err_text = response.text
-                    try:
-                        err_json = response.json()
-                        err_msg = err_json.get("error", {}).get("message", err_text)
-                    except Exception:
-                        err_msg = err_text
+            # HTTP 429 Rate Limit
+            if response.status_code == 429:
+                err_text = response.text
+                try:
+                    err_json = response.json()
+                    err_msg = err_json.get("error", {}).get("message", err_text)
+                except Exception:
+                    err_msg = err_text
+                retry_sec = self._extract_retry_after(response, err_msg)
+                raise RateLimitException(
+                    f"LLM Provider '{provider}' returned HTTP 429 (Rate Limit): {err_msg}",
+                    retry_after_seconds=retry_sec
+                )
+
+            # HTTP 503 Service Unavailable / Overloaded
+            if response.status_code == 503:
+                err_text = response.text
+                raise RateLimitException(
+                    f"LLM Provider '{provider}' returned HTTP 503 (Overloaded): {err_text}",
+                    retry_after_seconds=3.0
+                )
+
+            # Drop request fields this endpoint does not accept, then retry once.
+            if response.status_code == 400:
+                err_lower = response.text.lower()
+                dropped = False
+                if "response_format" in err_lower or "json_object" in err_lower:
+                    payload.pop("response_format", None)
+                    dropped = True
+                if "reasoning_effort" in err_lower:
+                    payload.pop("reasoning_effort", None)
+                    if _wants_json_response(response_format):
+                        payload["chat_template_kwargs"] = {"enable_thinking": False}
+                    else:
+                        payload["chat_template_kwargs"] = {
+                            "enable_thinking": True,
+                            "low_effort": True,
+                        }
+                    dropped = True
+                elif any(token in err_lower for token in ("chat_template_kwargs", "enable_thinking", "low_effort")):
+                    payload.pop("chat_template_kwargs", None)
+                    dropped = True
+                if dropped:
+                    response = await client.post(endpoint, json=payload, headers=headers, timeout=call_timeout)
+
+            if response.status_code != 200:
+                err_text = response.text
+                try:
+                    err_json = response.json()
+                    err_msg = err_json.get("error", {}).get("message", err_text)
+                except Exception:
+                    err_msg = err_text
+                logger.error(
+                    "[LLMClient] Provider '%s' returned HTTP %d for model '%s': %s",
+                    provider, response.status_code, model, err_msg
+                )
+                if response.status_code in (400, 401, 403, 404, 413):
+                    raise NonRetryableLLMError(
+                        f"LLM Provider '{provider}' returned non-retryable HTTP {response.status_code}: {err_msg}",
+                        status_code=response.status_code,
+                    )
+                if response.status_code in (429, 503, 529):
                     retry_sec = self._extract_retry_after(response, err_msg)
                     raise RateLimitException(
-                        f"LLM Provider '{provider}' returned HTTP 429 (Rate Limit): {err_msg}",
-                        retry_after_seconds=retry_sec
+                        f"LLM Provider '{provider}' returned HTTP {response.status_code}: {err_msg}",
+                        retry_after_seconds=retry_sec,
                     )
-
-                # HTTP 503 Service Unavailable / Overloaded
-                if response.status_code == 503:
-                    err_text = response.text
-                    raise RateLimitException(
-                        f"LLM Provider '{provider}' returned HTTP 503 (Overloaded): {err_text}",
-                        retry_after_seconds=3.0
-                    )
-
-                # Drop request fields this endpoint does not accept, then retry once.
-                if response.status_code == 400:
-                    err_lower = response.text.lower()
-                    dropped = False
-                    if "response_format" in err_lower or "json_object" in err_lower:
-                        payload.pop("response_format", None)
-                        dropped = True
-                    if "reasoning_effort" in err_lower:
-                        payload.pop("reasoning_effort", None)
-                        if _wants_json_response(response_format):
-                            payload["chat_template_kwargs"] = {"enable_thinking": False}
-                        else:
-                            payload["chat_template_kwargs"] = {
-                                "enable_thinking": True,
-                                "low_effort": True,
-                            }
-                        dropped = True
-                    elif any(token in err_lower for token in ("chat_template_kwargs", "enable_thinking", "low_effort")):
-                        payload.pop("chat_template_kwargs", None)
-                        dropped = True
-                    if dropped:
-                        response = await client.post(endpoint, json=payload, headers=headers)
-
-                if response.status_code != 200:
-                    err_text = response.text
-                    try:
-                        err_json = response.json()
-                        err_msg = err_json.get("error", {}).get("message", err_text)
-                    except Exception:
-                        err_msg = err_text
-                    logger.error(
-                        "[LLMClient] Provider '%s' returned HTTP %d for model '%s': %s",
-                        provider, response.status_code, model, err_msg
-                    )
-                    if response.status_code in (400, 401, 403, 404, 413):
-                        raise NonRetryableLLMError(
-                            f"LLM Provider '{provider}' returned non-retryable HTTP {response.status_code}: {err_msg}",
-                            status_code=response.status_code,
-                        )
-                    if response.status_code in (429, 503, 529):
-                        retry_sec = self._extract_retry_after(response, err_msg)
-                        raise RateLimitException(
-                            f"LLM Provider '{provider}' returned HTTP {response.status_code}: {err_msg}",
-                            retry_after_seconds=retry_sec,
-                        )
-                    raise RuntimeError(
-                        f"LLM Provider '{provider}' returned HTTP {response.status_code}: {err_msg}"
-                    )
-                data = response.json()
-            except httpx.RequestError as e:
                 raise RuntimeError(
-                    f"Connection failed to LLM endpoint ({provider}): {_connection_failure_detail(e)}"
-                ) from e
+                    f"LLM Provider '{provider}' returned HTTP {response.status_code}: {err_msg}"
+                )
+            data = response.json()
+        except httpx.RequestError as e:
+            raise RuntimeError(
+                f"Connection failed to LLM endpoint ({provider}): {_connection_failure_detail(e)}"
+            ) from e
 
         choice = data.get("choices", [{}])[0]
         msg = choice.get("message", {}) or {}
@@ -524,21 +583,25 @@ class LLMClient:
         with randomized jitter on HTTP 429/503, and multi-provider cascade fallback:
         Primary (e.g. Groq) -> Fallback 1 (Anthropic/Together) -> Fallback 2 (OpenRouter).
         """
-        # Check in-memory exact-match cache for idempotent completions (temperature <= 0.2)
+        # Determine candidate provider sequence for cascade
+        primary_prov = self.provider or "groq"
+        tenant_scope = get_active_tenant_id()
+
+        # Check tenant-scoped exact-match cache for idempotent completions (temperature <= 0.2)
         cache_key = None
         if temperature <= 0.2 and getattr(settings, "ENABLE_LLM_RESPONSE_CACHE", True):
-            cache_payload = f"{model}:{system_prompt}:{user_prompt}:{temperature}:{str(response_format)}"
+            cache_payload = (
+                f"{tenant_scope}:{primary_prov}:{model}:{system_prompt}:{user_prompt}:{temperature}:{str(response_format)}"
+            )
             cache_key = hashlib.sha256(cache_payload.encode("utf-8")).hexdigest()
             cached_resp = _get_cached_response(cache_key)
             if cached_resp is not None:
-                logger.debug("[LLMClient] Response cache HIT for model '%s' (hash: %s...)", model, cache_key[:12])
+                logger.debug("[LLMClient] Response cache HIT for tenant '%s' model '%s' (hash: %s...)", tenant_scope, model, cache_key[:12])
                 return cached_resp
 
-        # Determine candidate provider sequence for cascade
-        primary_prov = self.provider or "groq"
         cascade_chain: List[str] = [primary_prov]
 
-        allow_cascade = getattr(settings, "ENABLE_CROSS_PROVIDER_CASCADE", True)
+        allow_cascade = bool(getattr(settings, "ENABLE_CROSS_PROVIDER_CASCADE", False))
         if allow_cascade:
             if primary_prov == "groq":
                 if (settings.ANTHROPIC_API_KEY or settings.CLAUDE_API_KEY) and "anthropic" not in cascade_chain:
@@ -605,7 +668,11 @@ class LLMClient:
                     "HTTP-Referer": settings.OPENROUTER_SITE_URL or "https://dristik.ai",
                     "X-Title": settings.OPENROUTER_SITE_NAME or "Dristik AI"
                 }
-                curr_model = "deepseek/deepseek-chat" if "reason" not in model.lower() else "openai/gpt-4o"
+                curr_model = (
+                    getattr(settings, "LLM_MODEL_REASONING", None)
+                    or getattr(settings, "LLM_MODEL", None)
+                    or "deepseek/deepseek-chat"
+                )
             elif current_prov == "groq":
                 curr_api_key = settings.GROQ_API_KEY
                 curr_base_url = getattr(settings, "GROQ_BASE_URL", None) or "https://api.groq.com/openai/v1"
