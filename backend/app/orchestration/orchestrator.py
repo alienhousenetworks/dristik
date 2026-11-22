@@ -2841,6 +2841,35 @@ class AnalysisOrchestrator:
                 logger.warning("Story summary score alignment note: %s", story_sync_err)
 
             # -------------------------------------------------------------
+            # Stage 7b: AI Report & Deck Narrative Synthesis (5 PDFs + 5 PPTXs)
+            # Runs strictly AFTER Critic (Stage 5), Synthesizer (Stage 6) & Remediation (Stage 7)
+            # -------------------------------------------------------------
+            try:
+                from app.reports.ai_report_narrator import (
+                    narrate_all_documents,
+                    sync_seo_chapter_narratives_map,
+                )
+                from app.seo.reporting.seo_book_renderer import CORE_CHAPTERS as _SEO_CORE_CHAPTERS
+
+                doc_narrs, overall_narr_mode, narr_tier = await narrate_all_documents(
+                    report=report,
+                    model_router=model_router,
+                    active_pillars=effective_pillars,
+                    audit_budget_usd=getattr(budget_plan, "max_budget_usd", None) if "budget_plan" in locals() else None,
+                )
+                report.document_narratives = doc_narrs
+                report.narrative_mode = overall_narr_mode
+                report.narrative_tier = narr_tier
+                report.chapter_narratives = sync_seo_chapter_narratives_map(
+                    doc_narrs.get("seo_pdf"),
+                    report.chapter_narratives,
+                    _SEO_CORE_CHAPTERS,
+                )
+                report.telemetry = telemetry_tracker.get_data()
+            except Exception as narr7b_err:
+                logger.warning("Stage 7b AI report narrative synthesis note: %s", narr7b_err)
+
+            # -------------------------------------------------------------
             # Enforce VALIDATION GATE with Certified Zero-Fake Check
             # -------------------------------------------------------------
             from app.reports.validation_gate import ValidationGate

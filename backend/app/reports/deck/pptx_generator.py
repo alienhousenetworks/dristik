@@ -82,6 +82,14 @@ class DeckPptxBuilderAgent:
                 # Default 3-cards / Executive split
                 self._render_cards_grid(slide, slide_bp, count=3)
 
+            # Attach presenter speaker notes (AI talking points) to native PowerPoint notes slide
+            if getattr(slide_bp, "speaker_notes", None):
+                try:
+                    notes_slide = slide.notes_slide
+                    notes_slide.notes_text_frame.text = str(slide_bp.speaker_notes)
+                except Exception as notes_err:
+                    logger.debug("Could not write speaker notes on slide %s: %s", slide_bp.slide_number, notes_err)
+
         out = io.BytesIO()
         prs.save(out)
         out.seek(0)
@@ -133,7 +141,9 @@ class DeckPptxBuilderAgent:
         tf.margin_top = tf.margin_bottom = tf.margin_left = tf.margin_right = 0
         p = tf.paragraphs[0]
         text_foot = bp.footer_text or "CONFIDENTIAL & PROPRIETARY // PREPARED FOR C-SUITE LEADERSHIP"
-        p.text = f"{text_foot}   |   SLIDE {bp.slide_number} OF {total}"
+        cited_ids = getattr(bp, "cited_finding_ids", None) or []
+        cite_suffix = f"   |   REFS: {', '.join(cited_ids[:4])}" if cited_ids else ""
+        p.text = f"{text_foot}{cite_suffix}   |   SLIDE {bp.slide_number} OF {total}"
         p.font.size = Pt(9)
         p.font.color.rgb = self.COLOR_TEXT_MUTED
 

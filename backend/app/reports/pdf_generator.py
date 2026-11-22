@@ -429,11 +429,13 @@ async def get_executive_deck(
 @router.get("/{analysis_id}/deck.pptx")
 async def get_presentation_deck_pptx(
     analysis_id: str,
+    mode: str = "standard",
     user: UserIdentity = Depends(get_current_user)
 ):
     """
-    Generates and streams the 76-slide PowerPoint (.pptx) presentation deck
-    created by the dedicated deck generation orchestrator.
+    Generates and streams the PowerPoint (.pptx) executive presentation deck.
+    Default `mode='standard'` delivers the condensed AI-narrated 12–20 / 25–40 slide story;
+    pass `mode='legacy_full'` to retain the legacy 76-slide deck during transition.
     """
     run = require_analysis(analysis_id, user)
     report = getattr(run, "report", None)
@@ -446,10 +448,12 @@ async def get_presentation_deck_pptx(
         )
 
     from app.agents.deck.coordinator import generate_executive_pptx_deck
-    pptx_bytes, blueprint = generate_executive_pptx_deck(report)
+    pptx_bytes, blueprint = generate_executive_pptx_deck(report, mode=mode)
 
     domain_clean = (report.domain or "executive_deck").replace("https://", "").replace("http://", "").split("/")[0]
-    filename = f"{domain_clean}_executive_deck_76_slides.pptx"
+    filename = f"{domain_clean}_executive_deck_{blueprint.total_slides}_slides.pptx"
+    doc_narr = (getattr(report, "document_narratives", None) or {}).get("executive_ppt") or {}
+    narr_mode = str(doc_narr.get("narrative_mode") or getattr(report, "narrative_mode", "deterministic_fallback"))
 
     return Response(
         content=pptx_bytes,
@@ -458,6 +462,7 @@ async def get_presentation_deck_pptx(
             "Content-Disposition": f'attachment; filename="{filename}"',
             "X-Dristik-Slide-Count": str(blueprint.total_slides),
             "X-Dristik-Dedup-Token": blueprint.dedup_verification_token,
+            "X-Dristik-Narrative-Mode": narr_mode,
         }
     )
 
@@ -1257,6 +1262,7 @@ async def get_section_pdf_report(
 async def get_section_pptx_deck(
     analysis_id: str,
     section_key: str,
+    mode: str = "standard",
     user: UserIdentity = Depends(get_current_user)
 ):
     """
@@ -1274,10 +1280,12 @@ async def get_section_pptx_deck(
         )
 
     from app.agents.deck.coordinator import generate_section_pptx_deck
-    pptx_bytes, blueprint = generate_section_pptx_deck(report, section_key)
+    pptx_bytes, blueprint = generate_section_pptx_deck(report, section_key, mode=mode)
 
     domain_clean = (report.domain or "website").replace("https://", "").replace("http://", "").split("/")[0]
     filename = f"{domain_clean}_{section_key.lower()}_audit_deck.pptx"
+    doc_narr = (getattr(report, "document_narratives", None) or {}).get(f"{section_key.lower()}_ppt") or {}
+    narr_mode = str(doc_narr.get("narrative_mode") or getattr(report, "narrative_mode", "deterministic_fallback"))
 
     return Response(
         content=pptx_bytes,
@@ -1286,6 +1294,7 @@ async def get_section_pptx_deck(
             "Content-Disposition": f'attachment; filename="{filename}"',
             "X-Dristik-Slide-Count": str(blueprint.total_slides),
             "X-Dristik-Section": section_key,
+            "X-Dristik-Narrative-Mode": narr_mode,
         }
     )
 

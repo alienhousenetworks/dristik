@@ -2965,7 +2965,46 @@ def build_adaptive_publication_document(
 
     initial_pages = compute_toc_pagination(manifest)
 
-    for ch_meta in manifest["chapters"]:
+    # Resolve Stage 7b validated AI narrative bundle for this PDF family (if present)
+    doc_narr_map = getattr(report, "document_narratives", None) or {}
+    family_to_key = {
+        "COMPLETE": "executive_pdf",
+        "EXECUTIVE": "executive_pdf",
+        "SEO": "seo_pdf",
+        "GEO": "geo_pdf",
+        "AEO": "aeo_pdf",
+        "CRO": "cro_pdf",
+    }
+    pdf_bundle_key = family_to_key.get(str(getattr(metadata, "family", "") or "").upper(), "executive_pdf")
+    pdf_bundle = doc_narr_map.get(pdf_bundle_key) if isinstance(doc_narr_map, dict) else None
+    bundle_mode = str(pdf_bundle.get("narrative_mode") if isinstance(pdf_bundle, dict) else getattr(report, "narrative_mode", "deterministic_fallback"))
+    if isinstance(pdf_bundle, dict) and pdf_bundle.get("executive_summary") and bundle_mode != "deterministic_fallback":
+        metadata.story_summary = str(pdf_bundle["executive_summary"])
+    front_matter = (
+        front_matter
+        + f'\n<div class="narrative-provenance-meta" style="margin-top:8px;font-size:11px;color:#475569;">'
+        f'<strong>Narrative Mode:</strong> {_esc(bundle_mode)} &nbsp;|&nbsp; '
+        f'<strong>Tier:</strong> {_esc(str(pdf_bundle.get("tier") if isinstance(pdf_bundle, dict) else getattr(report, "narrative_tier", "standard")))}'
+        f'</div>'
+    )
+    ai_chapters_list = (pdf_bundle.get("chapters") or []) if isinstance(pdf_bundle, dict) else []
+
+    def _match_ai_chapter(ch_id: str, ch_title: str, ch_idx: int) -> Optional[Dict[str, Any]]:
+        if not ai_chapters_list:
+            return None
+        for item in ai_chapters_list:
+            if str(item.get("chapter_id") or "").lower() == ch_id.lower():
+                return item
+        title_words = [w for w in re.split(r"\W+", (ch_title or "").lower()) if len(w) >= 4]
+        for item in ai_chapters_list:
+            ai_t = (item.get("title") or "").lower()
+            if any(w in ai_t for w in title_words):
+                return item
+        if ch_idx < len(ai_chapters_list):
+            return ai_chapters_list[ch_idx]
+        return None
+
+    for ch_idx, ch_meta in enumerate(manifest["chapters"]):
         part_name = ch_meta["part"]
         if part_name not in parts_dict:
             parts_dict[part_name] = PartSpec(
@@ -2978,6 +3017,35 @@ def build_adaptive_publication_document(
         ch_id = ch_meta["id"]
         builder_fn = builders.get(ch_id, lambda r, m: f"<p>{_esc(ch_meta['desc'])}</p>")
         ch_html = builder_fn(report, manifest)
+
+        # Inject validated, placeholder-hydrated AI chapter narrative (prose only; code owns layout/tables/charts)
+        matched_ai = _match_ai_chapter(ch_id, ch_meta["title"], ch_idx)
+        if matched_ai and bundle_mode in ("ai_full", "reduced"):
+            cited_pills = " ".join(
+                f'<span class="finding-ref-pill" style="display:inline-block;padding:1px 6px;margin-right:4px;'
+                f'background:#e2e8f0;border-radius:3px;font-size:10px;font-family:monospace;">{_esc(fid)}</span>'
+                for fid in (matched_ai.get("cited_finding_ids") or [])[:8]
+            )
+            takeaway_html = (
+                f'<p style="font-weight:600;color:#0f172a;margin:0 0 6px 0;">{_esc(matched_ai.get("executive_takeaway", ""))}</p>'
+                if matched_ai.get("executive_takeaway") else ""
+            )
+            body_html = (
+                f'<p style="margin:0 0 8px 0;line-height:1.55;">{_esc(matched_ai.get("body_md", ""))}</p>'
+                if matched_ai.get("body_md") else ""
+            )
+            why_html = (
+                f'<p style="margin:0 0 6px 0;font-style:italic;color:#334155;"><strong>Why this matters:</strong> {_esc(matched_ai.get("why_it_matters", ""))}</p>'
+                if matched_ai.get("why_it_matters") else ""
+            )
+            ai_block = (
+                '<div class="ai-chapter-narrative" style="background:#f8fafc;border-left:3px solid #0284c7;'
+                'padding:12px 14px;margin:0 0 14px 0;border-radius:4px;">'
+                f'{takeaway_html}{body_html}{why_html}'
+                f'<div style="margin-top:6px;font-size:10px;color:#475569;">Verified Citations: {cited_pills or "None"}</div>'
+                '</div>'
+            )
+            ch_html = ai_block + ch_html
 
         parts_dict[part_name].chapters.append(
             ChapterSpec(

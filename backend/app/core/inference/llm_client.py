@@ -577,6 +577,7 @@ class LLMClient:
         max_tokens: int = 3000,
         response_format: Any = "DEFAULT",
         timeout: Optional[int] = None,
+        provider_override: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Calls chat completion endpoint with token-bucket rate limiting, exponential backoff
@@ -584,7 +585,7 @@ class LLMClient:
         Primary (e.g. Groq) -> Fallback 1 (Anthropic/Together) -> Fallback 2 (OpenRouter).
         """
         # Determine candidate provider sequence for cascade
-        primary_prov = self.provider or "groq"
+        primary_prov = (provider_override or self.provider or "groq").strip().lower()
         tenant_scope = get_active_tenant_id()
 
         # Check tenant-scoped exact-match cache for idempotent completions (temperature <= 0.2)

@@ -3360,6 +3360,9 @@ class ExecutiveReport(BaseModel):
     indexation_intelligence: Optional[IndexationAuditRollup] = None
     local_seo: Optional[LocalSeoAuditReport] = None
     chapter_narratives: Dict[str, Dict[str, Any]] = Field(default_factory=dict)
+    document_narratives: Dict[str, Any] = Field(default_factory=dict)
+    narrative_mode: str = "deterministic_fallback"
+    narrative_tier: str = "standard"
     international_seo: Optional[InternationalSeoAuditReport] = None
     topical_authority: Optional[TopicalAuthorityAuditReport] = None
     ecommerce_seo: Optional[EcommerceSeoAuditReport] = None

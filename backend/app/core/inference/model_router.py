@@ -184,6 +184,7 @@ class ModelRouter:
         "content_intelligence",
         "remediation_synthesis",
         "roadmap_synthesis",
+        "report_narrative",
         "synthesizer",
         "critic",
         "ai_search_simulation",
@@ -198,14 +199,19 @@ class ModelRouter:
             self.max_model_calls = plan.max_model_calls
         return plan
 
-    def _select_model(self, capability: str, model_tier: Optional[str] = None) -> str:
+    def _select_model(
+        self,
+        capability: str,
+        model_tier: Optional[str] = None,
+        provider_override: Optional[str] = None,
+    ) -> str:
         """
         Capability-based Frontier routing:
         - AI_DEPTH_MODE=frontier_all routes all calls to model_reasoning.
         - AI_DEPTH_MODE=tiered_frontier routes strategic capabilities and reasoning/judge
           tiers to model_reasoning, keeping fast_slm for high-volume map/batch fanout.
         """
-        creds = settings.get_llm_credentials()
+        creds = settings.get_llm_credentials(provider_override=provider_override)
         depth_mode = (getattr(settings, "AI_DEPTH_MODE", "tiered_frontier") or "tiered_frontier").strip().lower()
         tier = (model_tier or "").strip()
         if depth_mode == "frontier_all":
@@ -322,6 +328,7 @@ class ModelRouter:
         max_tokens: Optional[int] = None,
         timeout_sec: Optional[int] = None,
         evidence_max_tokens: Optional[int] = None,
+        provider_override: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Compiles prompt with 70B envelope, invokes active LLM provider, parses structured JSON,
@@ -347,14 +354,14 @@ class ModelRouter:
                 additional_context=additional_context or ""
             )
 
-        model = self._select_model(capability, model_tier=model_tier)
-        creds = settings.get_llm_credentials()
+        model = self._select_model(capability, model_tier=model_tier, provider_override=provider_override)
+        creds = settings.get_llm_credentials(provider_override=provider_override)
         fast_model = creds.get("model_fast") or GROQ_DEFAULT_FAST
         tier = (model_tier or "").strip()
         is_reasoning = (model == creds.get("model_reasoning")) or tier in ("reasoning_model", "judge_model", "reasoning", "frontier")
 
         # Evidence token budget: 2400 cap for Groq's 8k TPM free tier, full AI_EVIDENCE_MAX_TOKENS (12k) for Frontier providers
-        active_prov = (getattr(self.client, "provider", "") or settings.get_active_provider()).lower()
+        active_prov = (provider_override or getattr(self.client, "provider", "") or settings.get_active_provider()).lower()
         default_ev_budget = 2400 if active_prov == "groq" else int(getattr(settings, "AI_EVIDENCE_MAX_TOKENS", 12000) or 12000)
         evidence_budget = int(evidence_max_tokens) if evidence_max_tokens is not None else default_ev_budget
 
@@ -393,7 +400,7 @@ class ModelRouter:
                 if current_model in tried_missing:
                     break
 
-                response = await self._generate_chat_completion(
+                call_kwargs = dict(
                     model=current_model,
                     system_prompt=prompts["system"],
                     user_prompt=user_prompt,
@@ -401,6 +408,9 @@ class ModelRouter:
                     max_tokens=max_tokens,
                     timeout=call_timeout,
                 )
+                if provider_override and _ACTIVE_PROVIDER_OVERRIDE.get() is None:
+                    call_kwargs["provider_override"] = provider_override
+                response = await self._generate_chat_completion(**call_kwargs)
 
                 self._record_llm_call(
                     response=response,

@@ -72,6 +72,8 @@ class SlideBlueprint(BaseModel):
     interpretation: Optional[str] = None  # Mandatory "Read: ..." takeaway line for exhibits
     grounded_assertion: Optional[str] = None  # Direct quantitative assertion derived from math engine
     lineage_evidence_tokens: List[str] = Field(default_factory=list)  # e.g. ["ev_001", "ext_004"]
+    cited_finding_ids: List[str] = Field(default_factory=list)
+    speaker_notes: Optional[str] = None
     footer_text: Optional[str] = None
 
 
