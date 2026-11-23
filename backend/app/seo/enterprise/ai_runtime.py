@@ -85,6 +85,31 @@ def build_model_router_runner(
     return _runner
 
 
+def resolve_live_ai_runner(
+    model_router: Any = None,
+    *,
+    capability: str = "seo_verification",
+    model_tier: str = "reasoning_model",
+) -> Runner:
+    """Resolve a live ModelRouter-backed runner unless deterministic_only mode is forced."""
+    try:
+        from app.core.config import settings
+        if str(getattr(settings, "AI_DEPTH_MODE", "") or "").lower() == "deterministic_only":
+            return default_ai_runner
+        if model_router is None:
+            from app.core.inference.router import ModelRouter
+            model_router = ModelRouter()
+        if model_router is not None and hasattr(model_router, "generate_structured"):
+            return build_model_router_runner(
+                model_router,
+                capability=capability,
+                model_tier=model_tier,
+            )
+    except Exception:
+        pass
+    return default_ai_runner
+
+
 def _get(obj: Any, name: str, default: Any = None) -> Any:
     if obj is None:
         return default

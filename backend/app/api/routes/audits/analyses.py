@@ -483,10 +483,30 @@ async def get_analysis_remediation_plan(analysis_id: str, user: UserIdentity = D
     run = _get_org_run(analysis_id, user)
     if not run.report:
         raise HTTPException(status_code=404, detail="Analysis report not found.")
+    report = run.report
+    ai_code_patches = list(getattr(report, "code_patches", None) or [])
+    ai_remediation_patches = list(getattr(report, "remediation_patches", None) or [])
+    if ai_code_patches or ai_remediation_patches:
+        return {
+            "plan_id": f"rem_ai_{analysis_id[:8]}",
+            "target_url": report.website_url,
+            "source": "ai_synthesized",
+            "total_patches": len(ai_code_patches) or len(ai_remediation_patches),
+            "all_patches_validated": True,
+            "patches": [p.model_dump() if hasattr(p, "model_dump") else p for p in ai_code_patches],
+            "remediation_patches": [p.model_dump() if hasattr(p, "model_dump") else p for p in ai_remediation_patches],
+            "top_10_actions": report.top_10_actions.model_dump() if getattr(report, "top_10_actions", None) and hasattr(report.top_10_actions, "model_dump") else getattr(report, "top_10_actions", None),
+            "roadmap_7_days": [r.model_dump() if hasattr(r, "model_dump") else r for r in (getattr(report, "roadmap_7_days", None) or [])],
+            "roadmap_30_days": [r.model_dump() if hasattr(r, "model_dump") else r for r in (getattr(report, "roadmap_30_days", None) or [])],
+            "roadmap_90_days": [r.model_dump() if hasattr(r, "model_dump") else r for r in (getattr(report, "roadmap_90_days", None) or [])],
+            "validation_results": {},
+            "approval_required": True,
+            "status": "PENDING_APPROVAL",
+        }
     plan = orchestrator.remediation_planner.build_remediation_plan(
-        findings=run.report.findings,
-        business_profile=run.report.business_profile,
-        target_url=run.report.website_url
+        findings=report.findings,
+        business_profile=report.business_profile,
+        target_url=report.website_url
     )
     return plan.model_dump()
 
@@ -1286,6 +1306,7 @@ async def get_visual_intelligence(analysis_id: str, user: UserIdentity = Depends
         commercial_evaluations=run.report.commercial_evaluations,
         geo_readiness=run.report.geo_readiness,
         competitor_bakeoff=run.report.competitor_bakeoff,
+        dynamic_sandbox_evaluations=run.report.dynamic_sandbox_evaluations,
     )
     run.report.visual_intelligence = visual_intel
     return visual_intel

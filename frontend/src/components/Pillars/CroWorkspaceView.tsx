@@ -3,6 +3,7 @@ import { ExecutiveReport, Finding } from '../../types';
 import { CroIntelligencePanel } from './CroIntelligencePanel';
 import { CroAnalyticsDashboard } from './CroAnalyticsDashboard';
 import { PillarShell } from '../ui';
+import { AiNarrativePanel } from '../ui/AiNarrativePanel';
 import { SectionExportButtons } from '../ui/SectionExportButtons';
 import {
   CroEnterpriseBundle,
@@ -95,24 +96,24 @@ function buildBundleFromExecutiveReport(report: ExecutiveReport, analysisId?: st
       category: 'ux_audit',
       subcategory: f.evidence_subtype || 'cro_observation',
       department: 'B',
-      agent_id: 'cro_saved_audit',
+      agent_id: (f as any).agent_id || 'cro_ai_specialist',
       title: f.title,
-      description: f.description,
-      root_cause: f.why_it_matters || 'Observed during site crawl.',
+      description: (f as any).detailed_diagnosis || f.description,
+      root_cause: (f as any).reasoning || f.why_it_matters || 'Observed during site crawl.',
       affected_urls: (f.evidence || []).map((e) => e.url).filter(Boolean) as string[],
       affected_elements: [],
       affected_journeys: [],
       affected_devices: ['desktop', 'mobile'],
       evidence_ids: f.evidence_refs || [],
-      source_type: 'heuristic_observation',
-      claim_boundary: 'Expert assessment (saved audit)',
+      source_type: (f as any).adversarial_reviewed ? 'ai_verified_finding' : 'ai_specialist_observation',
+      claim_boundary: f.verification_notes || 'AI-analyzed CRO finding',
       severity: String(f.severity || 'medium').toLowerCase(),
-      confidence: 0.75,
+      confidence: typeof f.confidence === 'number' ? f.confidence : 0.8,
       recommendation: f.recommendation,
       implementation_instructions: f.recommendation,
       owner_role: 'Product / Engineering',
       effort: f.effort && f.effort <= 1 ? 'low' : 'medium',
-      priority_score: 70,
+      priority_score: typeof f.priority === 'number' ? Math.round(f.priority * 10) : 70,
       acceptance_criteria: f.validation_criteria ? [f.validation_criteria] : [],
       limitations: [],
       status: 'open',
@@ -389,6 +390,12 @@ export function CroWorkspaceView({ report, analysisId }: CroWorkspaceViewProps) 
             croApi.listMonitoringAlerts(domain).catch(() => ({ items: [] })),
             croApi.listMonitoringSchedules(domain).catch(() => ({ items: [] })),
           ]);
+        const storeFindings = findingsR.items || [];
+        const seenFindingIds = new Set(storeFindings.map((f: any) => f.finding_id));
+        const mergedFindings = [
+          ...storeFindings,
+          ...fallbackBundle.findings.filter((f) => !seenFindingIds.has(f.finding_id)),
+        ];
         setLiveBundle({
           audit: detail.audit,
           scorecard: detail.scorecard || fallbackBundle.scorecard,
@@ -396,7 +403,7 @@ export function CroWorkspaceView({ report, analysisId }: CroWorkspaceViewProps) 
           department_artifacts: detail.department_artifacts || {},
           pages: pagesR.items || [],
           journeys: journeysR.items || [],
-          findings: findingsR.items || [],
+          findings: mergedFindings,
           ctas: ctasR.items || [],
           forms: formsR.items || [],
           funnels: funnelsR.items || [],
@@ -470,13 +477,20 @@ export function CroWorkspaceView({ report, analysisId }: CroWorkspaceViewProps) 
       onTab={(id) => setActiveTab(id as EnterpriseCroTab)}
     >
       {activeTab === 'overview' && (
-        <CroExecutiveDashboard
-          bundle={bundle}
-          domain={domain}
-          websiteUrl={websiteUrl}
-          onRefreshBundle={hydrateFromApi}
-          onNavigateTab={(t) => setActiveTab(t as EnterpriseCroTab)}
-        />
+        <div className="space-y-6">
+          <AiNarrativePanel
+            report={report}
+            bundleKey="cro_pdf"
+            title="CRO Enterprise AI Narrative & Verification"
+          />
+          <CroExecutiveDashboard
+            bundle={bundle}
+            domain={domain}
+            websiteUrl={websiteUrl}
+            onRefreshBundle={hydrateFromApi}
+            onNavigateTab={(t) => setActiveTab(t as EnterpriseCroTab)}
+          />
+        </div>
       )}
       {activeTab === 'journeys' && <CroJourneyAndPageExplorer bundle={bundle} mode="journeys" />}
       {activeTab === 'pages' && <CroJourneyAndPageExplorer bundle={bundle} mode="pages" />}

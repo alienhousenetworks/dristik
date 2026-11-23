@@ -27,6 +27,11 @@ export function toFindingRef(finding: Finding): AuditFindingRef {
     description: finding.description,
     action: finding.recommendation,
     priority: finding.priority,
+    verificationNotes: finding.verification_notes,
+    adversarialReviewed: Boolean((finding as any).adversarial_reviewed),
+    reasoning: (finding as any).reasoning,
+    businessImpact: finding.business_impact,
+    detailedDiagnosis: (finding as any).detailed_diagnosis || (finding as any).diagnosis,
   };
 }
 

@@ -50,6 +50,7 @@ from app.routers.cro_router import router as cro_enterprise_router
 from app.routers.geo_router import router as geo_enterprise_router
 from app.routers.seo_connectors_router import router as seo_connectors_router
 from app.routers.seo_unified_api_router import router as seo_unified_api_router
+from app.api.routes.intelligence.enterprise_platform import router as enterprise_platform_router
 
 # Mounted at both /api/v1 and /api.
 # The in-memory SCIM and SAML configure routes stay unmounted until they
@@ -98,6 +99,7 @@ _PREFIXED_ROUTERS = (
     seo_unified_api_router,
     cro_enterprise_router,
     geo_enterprise_router,
+    enterprise_platform_router,
 )
 
 

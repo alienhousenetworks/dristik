@@ -51,6 +51,10 @@ def render_ai_analysis_card(
     body = str(chapter_narrative.get("body_md") or chapter_narrative.get("ai_body_md") or "").strip()
     why = str(chapter_narrative.get("why_it_matters") or chapter_narrative.get("why_reader_should_care") or "").strip()
     cited = [str(fid) for fid in (chapter_narrative.get("cited_finding_ids") or []) if fid]
+    epistemic = [str(lbl) for lbl in (chapter_narrative.get("epistemic_labels") or []) if lbl]
+    audience = str(chapter_narrative.get("audience") or "").strip()
+    critic_summary = str(chapter_narrative.get("critic_summary") or "").strip()
+    validation_summary = str(chapter_narrative.get("validation_summary") or "").strip()
 
     if not (takeaway or body or why):
         return ""
@@ -64,14 +68,19 @@ def render_ai_analysis_card(
     cited_pills = " ".join(
         f'<span class="finding-ref-pill" style="display:inline-block;padding:1px 6px;margin-right:4px;'
         f'background:#e2e8f0;border-radius:3px;font-size:7pt;font-family:ui-monospace,monospace;color:#0f172a;">{_esc(fid)}</span>'
-        for fid in cited[:8]
+        for fid in cited
+    )
+    epistemic_pills = " ".join(
+        f'<span style="display:inline-block;padding:1px 6px;margin-right:4px;background:#eef2ff;'
+        f'border-radius:3px;font-size:7pt;font-weight:600;color:#3730a3;">{_esc(lbl)}</span>'
+        for lbl in epistemic
     )
 
     parts = [
         f'<div class="ai-chapter-narrative" style="background:#f8fafc;border:1px solid #cbd5e1;'
         f'border-left:4px solid {border_col};padding:13px 16px;margin:0 0 16px 0;border-radius:6px;break-inside:avoid;">',
         f'  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:7px;">',
-        f'    <span style="font-size:8.5pt;font-weight:800;letter-spacing:0.05em;color:#0f172a;text-transform:uppercase;">{_esc(title_prefix)}</span>',
+        f'    <span style="font-size:8.5pt;font-weight:800;letter-spacing:0.05em;color:#0f172a;text-transform:uppercase;">{_esc(title_prefix)}{(" · " + _esc(audience)) if audience else ""}</span>',
         f'    <span style="font-family:ui-monospace,monospace;font-size:7.5pt;font-weight:700;padding:2px 7px;border-radius:3px;background:{badge_bg};color:{badge_fg};">{badge_txt}</span>',
         f'  </div>',
     ]
@@ -81,6 +90,12 @@ def render_ai_analysis_card(
         parts.append(f'  <p style="font-size:9pt;color:#1e293b;margin:0 0 7px 0;line-height:1.55;">{_esc(sanitize_presentation_text(body))}</p>')
     if why:
         parts.append(f'  <p style="font-size:8.8pt;color:#334155;margin:0 0 7px 0;line-height:1.5;"><strong>Business Impact:</strong> {_esc(sanitize_presentation_text(why))}</p>')
+    if critic_summary:
+        parts.append(f'  <p style="font-size:8.2pt;color:#78350f;background:#fffbeb;padding:5px 8px;border-radius:4px;margin:0 0 6px 0;"><strong>Adversarial Critic Verification:</strong> {_esc(sanitize_presentation_text(critic_summary))}</p>')
+    if validation_summary:
+        parts.append(f'  <p style="font-size:8pt;color:#334155;margin:0 0 6px 0;"><strong>Validation:</strong> {_esc(sanitize_presentation_text(validation_summary))}</p>')
+    if epistemic_pills:
+        parts.append(f'  <div style="margin-top:5px;font-size:8pt;color:#475569;"><strong>Epistemic Basis:</strong> {epistemic_pills}</div>')
     if cited_pills:
         parts.append(f'  <div style="margin-top:7px;font-size:8pt;color:#475569;"><strong>Cited Findings:</strong> {cited_pills}</div>')
     parts.append('</div>')

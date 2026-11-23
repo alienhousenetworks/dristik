@@ -4,6 +4,7 @@ import { RealAiCitationTracker } from '../RealAiCitationTracker';
 import { GeoAeoTrendTracker } from '../GeoAeoTrendTracker';
 import { GeoKpiAnalytics } from './GeoKpiAnalytics';
 import { PillarShell, Card } from '../ui';
+import { AiNarrativePanel } from '../ui/AiNarrativePanel';
 import { SectionExportButtons } from '../ui/SectionExportButtons';
 import { ControlledRetrievalVisualizer } from './RagChunkVisualizer';
 import { GeoAuditBook } from '../../report/geoIndex/GeoAuditBook';
@@ -188,13 +189,101 @@ export function GeoWorkspaceView({
       onTab={(id) => setActiveSubTab(id as EnterpriseGeoTab)}
     >
       {(activeSubTab === 'overview' || activeSubTab === 'platforms') && (
-        <GeoExecutiveDashboard
-          bundle={bundle}
-          domain={domain}
-          websiteUrl={bundle.audit.website_url}
-          onRefreshBundle={refreshBundle}
-          onNavigateTab={(t) => setActiveSubTab(t as EnterpriseGeoTab)}
-        />
+        <div className="space-y-6">
+          <AiNarrativePanel
+            report={report}
+            bundleKey="geo_pdf"
+            title="GEO Enterprise AI Narrative & Citation Intelligence"
+          />
+          {(() => {
+            const cp = (report.geo_readiness as any)?.citation_passages;
+            const synth = cp?.ai_citation_readiness_synthesis;
+            const rewrites: any[] = Array.isArray(cp?.rewrite_recommendations) ? cp.rewrite_recommendations : [];
+            if (!synth && rewrites.length === 0) return null;
+            return (
+              <Card className="p-5 space-y-4">
+                <div>
+                  <div className="text-[11px] font-semibold uppercase tracking-wider text-indigo-700">
+                    LLM Citation Readiness Synthesis
+                  </div>
+                  <h3 className="text-base font-semibold text-ink">AI Passage &amp; Citation Gap Analysis</h3>
+                </div>
+                {synth?.summary && <p className="text-sm text-ink-700 leading-relaxed">{synth.summary}</p>}
+                {Array.isArray(synth?.top_citation_gaps) && synth.top_citation_gaps.length > 0 && (
+                  <div>
+                    <div className="text-xs font-semibold uppercase text-ink-500 mb-1.5">Top Citation Gaps</div>
+                    <ul className="list-disc pl-5 space-y-1 text-sm text-ink-700">
+                      {synth.top_citation_gaps.map((g: string, i: number) => (
+                        <li key={i}>{g}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                {Array.isArray(synth?.quotable_block_recommendations) && synth.quotable_block_recommendations.length > 0 && (
+                  <div className="space-y-2">
+                    <div className="text-xs font-semibold uppercase text-ink-500">Quotable Block Recommendations</div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      {synth.quotable_block_recommendations.map((rec: any, i: number) => (
+                        <div key={i} className="rounded-lg border border-line bg-paper-50 p-3 text-xs space-y-1">
+                          {rec.target_url && <div className="font-mono text-indigo-700 truncate">{rec.target_url}</div>}
+                          {rec.why && <div className="text-ink-700">{rec.why}</div>}
+                          {rec.suggested_structure && (
+                            <div className="text-ink-600">
+                              <span className="font-semibold">Structure: </span>
+                              {rec.suggested_structure}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {rewrites.length > 0 && (
+                  <div className="space-y-2">
+                    <div className="text-xs font-semibold uppercase text-ink-500">
+                      LLM-Enriched Passage Rewrites ({rewrites.length})
+                    </div>
+                    <div className="space-y-2.5">
+                      {rewrites.map((rw: any, i: number) => (
+                        <div key={rw.passage_id || i} className="rounded-lg border border-line p-3 text-xs space-y-1.5">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <span className="font-mono text-ink-500 truncate">{rw.url || `Passage #${i + 1}`}</span>
+                            {rw.score_before != null && rw.score_after != null && (
+                              <span className="rounded bg-emerald-100 px-2 py-0.5 font-mono font-semibold text-emerald-800">
+                                {rw.score_before} → {rw.score_after}
+                                {rw.estimated_score_improvement != null ? ` (+${rw.estimated_score_improvement})` : ''}
+                              </span>
+                            )}
+                          </div>
+                          {rw.current_passage && (
+                            <div className="text-ink-500">
+                              <span className="font-semibold text-ink-700">Current: </span>
+                              {rw.current_passage}
+                            </div>
+                          )}
+                          {rw.recommended_rewrite && (
+                            <div className="rounded bg-emerald-50/70 p-2 text-ink-900">
+                              <span className="font-semibold text-emerald-900">AI Rewrite: </span>
+                              {rw.recommended_rewrite}
+                            </div>
+                          )}
+                          {rw.why && <div className="text-ink-600">{rw.why}</div>}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </Card>
+            );
+          })()}
+          <GeoExecutiveDashboard
+            bundle={bundle}
+            domain={domain}
+            websiteUrl={bundle.audit.website_url}
+            onRefreshBundle={refreshBundle}
+            onNavigateTab={(t) => setActiveSubTab(t as EnterpriseGeoTab)}
+          />
+        </div>
       )}
 
       {(activeSubTab === 'prompts' || activeSubTab === 'prompt_lab') && (

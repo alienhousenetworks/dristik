@@ -1407,6 +1407,24 @@ export interface ExecutiveReport {
   topical_authority?: TopicalAuthorityAuditReport;
   geo_benchmark_report?: any;
   ai_citation_dashboard?: any;
+  chapter_narratives?: Record<string, any>;
+  document_narratives?: Record<string, any>;
+  narrative_mode?: string;
+  narrative_tier?: string;
+  deterministic_verifications?: Record<string, any>;
+  coverage_ledger?: {
+    deterministic_findings_total?: number;
+    deterministic_findings_ai_reviewed?: number;
+    confirmed_count?: number;
+    false_positive_count?: number;
+    downgraded_count?: number;
+    needs_context_count?: number;
+    ai_review_status?: string;
+  };
+  growth_opportunities?: Array<Record<string, any>>;
+  evidence_gaps?: Array<Record<string, any>>;
+  page_level_assessments?: Array<Record<string, any>>;
+  diagnostic_inventory?: Record<string, any>;
 }
 
 export type CompetitorType =

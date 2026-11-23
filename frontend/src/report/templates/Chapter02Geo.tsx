@@ -215,19 +215,46 @@ export function Chapter02Geo({
             </table>
           </div>
 
-          {/* 2.4 Factual Entity Attribution Recommendations */}
+          {/* 2.4 LLM Citation Readiness Synthesis & Factual Entity Attribution Recommendations */}
+          {geo.aiCitationReadinessSynthesis && (
+            <div className="p-3 border border-indigo-200 rounded bg-indigo-50/40 text-[8pt] space-y-2">
+              <div className="font-mono text-[7.5pt] font-bold uppercase text-indigo-800">
+                LLM Citation Readiness Synthesis
+              </div>
+              {geo.aiCitationReadinessSynthesis.summary && (
+                <p className="text-ink-700 font-sans leading-relaxed">{geo.aiCitationReadinessSynthesis.summary}</p>
+              )}
+              {geo.aiCitationReadinessSynthesis.topCitationGaps && geo.aiCitationReadinessSynthesis.topCitationGaps.length > 0 && (
+                <ul className="list-disc pl-4 space-y-0.5 text-ink-700">
+                  {geo.aiCitationReadinessSynthesis.topCitationGaps.map((g, i) => (
+                    <li key={i}>{g}</li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
           {geo.attributionRewrites.length > 0 && (
             <div className="space-y-3">
               <h3 className="font-mono text-[8.5pt] font-bold uppercase tracking-[0.04em] text-ink-700">
-                2.4 Factual Entity Attribution Recommendations
+                2.4 Factual Entity Attribution Recommendations ({geo.attributionRewrites.length})
               </h3>
               <p className="text-[7.5pt] text-ink-500 font-sans">
                 Transforms ambiguous marketing prose into attributed factual statements that RAG engines can directly extract into answer cards.
               </p>
 
               <div className="space-y-3">
-                {geo.attributionRewrites.slice(0, 2).map((rw, idx) => (
-                  <div key={idx} className="p-3 border border-line rounded bg-paper-100 text-[8.5pt] space-y-2">
+                {geo.attributionRewrites.map((rw, idx) => (
+                  <div key={rw.passageId || idx} className="p-3 border border-line rounded bg-paper-100 text-[8.5pt] space-y-2">
+                    {(rw.url || (rw.scoreBefore != null && rw.scoreAfter != null)) && (
+                      <div className="flex items-center justify-between text-[7pt] font-mono text-ink-500">
+                        <span>{rw.url || `Passage #${idx + 1}`}</span>
+                        {rw.scoreBefore != null && rw.scoreAfter != null && (
+                          <span className="font-bold text-good">
+                            Score: {rw.scoreBefore} → {rw.scoreAfter}
+                          </span>
+                        )}
+                      </div>
+                    )}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                       <div className="p-2.5 bg-bad/10 border border-bad/30 rounded">
                         <span className="font-mono text-[7.5pt] font-bold text-bad uppercase block mb-1">

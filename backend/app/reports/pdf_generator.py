@@ -526,8 +526,9 @@ async def get_enterprise_seo_assessment(
             detail="Report publication blocked by Publication Quality Gate failures. Evidence integrity checks must pass before release."
         )
     from app.seo.enterprise import build_enterprise_seo
+    from app.seo.enterprise.ai_runtime import resolve_live_ai_runner
 
-    return build_enterprise_seo(report).model_dump()
+    return build_enterprise_seo(report, ai_runner=resolve_live_ai_runner()).model_dump()
 
 
 @router.get("/{analysis_id}/seo-report")

@@ -27,7 +27,7 @@ export function Chapter03Aeo({
 }: Chapter03AeoProps) {
   const { aeo, meta, remediation } = report;
   const { liveObservation, readiness, auditedQuestions } = aeo;
-  const displayQuestions = auditedQuestions.slice(0, 8);
+  const displayQuestions = exhaustiveMode ? auditedQuestions : auditedQuestions.slice(0, 20);
   const questionCount = aeo.totalSandboxQuestions;
   const page2 = typeof pageNumber === 'number' ? pageNumber + 1 : pageNumber;
   const page3 = typeof pageNumber === 'number' ? pageNumber + 2 : pageNumber;
@@ -247,13 +247,22 @@ export function Chapter03Aeo({
 
             {aeo.commercialInquiries.length > 0 && (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
-                {aeo.commercialInquiries.slice(0, 2).map((item) => (
+                {aeo.commercialInquiries.map((item) => (
                   <div key={item.question_key} className="p-3 bg-paper-50 border border-line rounded text-[8pt] space-y-1.5">
                     <div className="flex items-center justify-between font-mono text-[7.5pt]">
                       <span className="font-bold text-ink">{item.question_title}</span>
                       <span className="text-ink-500">Score: {item.before_score}/10 → {effectiveAfterScore(item) ?? item.before_score}/10</span>
                     </div>
                     <p className="text-ink-600 italic font-sans">"{item.buyer_query}"</p>
+                    {item.before_answer && (
+                      <p className="text-[7.5pt] text-ink-600 font-sans"><strong>Observed:</strong> {item.before_answer}</p>
+                    )}
+                    {item.after_answer && (
+                      <p className="text-[7.5pt] text-good font-sans"><strong>Post-Patch:</strong> {item.after_answer}</p>
+                    )}
+                    {item.gap_analysis && (
+                      <p className="text-[7.5pt] text-ink-500 font-sans"><strong>Gap:</strong> {item.gap_analysis}</p>
+                    )}
                     <div className="pt-1 border-t border-line flex items-center justify-between text-[7.5pt] font-mono">
                       <span>Evidence: <strong>{item.before_evidence_status}</strong></span>
                       <span className={remediation.state === 'VERIFIED' ? 'text-good font-bold' : 'text-warn font-bold'}>

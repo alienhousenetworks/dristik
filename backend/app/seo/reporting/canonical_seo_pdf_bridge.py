@@ -79,6 +79,22 @@ LEGACY_REPORT_SECTION_KEYS = (
     "honest_scores",
     "crawl_summary",
     "scores",
+    "chapter_narratives",
+    "document_narratives",
+    "narrative_mode",
+    "narrative_tier",
+    "remediation_patches",
+    "code_patches",
+    "top_10_actions",
+    "deterministic_verifications",
+    "coverage_ledger",
+    "semantic_business",
+    "dynamic_sandbox_evaluations",
+    "ai_citation_dashboard",
+    "geo_benchmark_report",
+    "quality_gate_results",
+    "causal_diagnostic_chains",
+    "hypotheses_matrix",
 )
 
 
@@ -1039,6 +1055,9 @@ def enrich_report_for_pdf(
         pass
 
     try:
+        from app.scoring.canonical_scorecard import CanonicalScorecardEngine
+        canonical_card = CanonicalScorecardEngine.evaluate_from_report(target)
+        bundle["canonical_enterprise_scorecard"] = canonical_card.model_dump()
         object.__setattr__(target, "_unified_seo_bundle", bundle)
         object.__setattr__(target, "_seo_pdf_enriched", True)
         if parent_snapshot_meta is not None:

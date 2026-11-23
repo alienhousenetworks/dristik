@@ -596,7 +596,25 @@ def _format_finding_cards(findings: List[Any], limit: Optional[int] = None, deta
             if fid:
                 _DETAILED_CARDS_RENDERED.add(fid)
             enriched = PlainEnglishEngine.enrich_finding(finding, idx + 1)
-            cards.append(render_plain_english_finding_card(enriched))
+            card_html = render_plain_english_finding_card(enriched)
+            ver_notes = _finding_value(finding, "verification_notes")
+            det_diag = _finding_value(finding, "detailed_diagnosis") or _finding_value(finding, "diagnosis")
+            val_crit = _finding_value(finding, "validation_criteria") or _finding_value(finding, "acceptance_criteria")
+            ai_extra = []
+            if det_diag:
+                ai_extra.append(f'<div><strong>AI Deep Diagnosis:</strong> {_esc(det_diag)}</div>')
+            if ver_notes:
+                ai_extra.append(f'<div><strong>AI Adversarial Verification:</strong> {_esc(ver_notes)}</div>')
+            if val_crit:
+                ai_extra.append(f'<div><strong>Validation Criteria:</strong> {_esc(val_crit)}</div>')
+            if ai_extra:
+                card_html += (
+                    '<div style="margin:-4px 0 10px 0;padding:8px 12px;background:#f0f9ff;'
+                    'border:1px solid #bae6fd;border-radius:0 0 6px 6px;font-size:8pt;color:#0c4a6e;">'
+                    + "".join(ai_extra)
+                    + '</div>'
+                )
+            cards.append(card_html)
             continue
         title = _esc(_finding_value(finding, "title", _finding_value(finding, "name", "Finding title unavailable")))
         severity = _esc(str(_finding_value(finding, "severity", "Unclassified")).replace("_", " ").title())
@@ -1332,8 +1350,74 @@ def _build_ch_roadmap(report: Any, manifest: Dict[str, Any]) -> str:
         "<tr><td colspan='5'>No findings were recorded for this run. "
         "This does not establish that the site has no issues.</td></tr>"
     )
+    # Render AI-synthesized Top 10 Actions, 7/30/90-day Roadmaps, and Remediation Code Patches
+    ai_roadmap_blocks = []
+    top_10 = getattr(report, "top_10_actions", None)
+    top_actions = list(getattr(top_10, "actions", None) or []) if top_10 else []
+    if top_actions:
+        t10_rows = "".join(
+            f"<tr><td><strong>{getattr(a, 'rank', i)}</strong></td>"
+            f"<td><strong>{_esc(getattr(a, 'action', ''))}</strong>"
+            f"<div style='color:#475569;font-size:7.5pt;margin-top:2px;'>{_esc(getattr(a, 'expected_outcome', ''))}</div></td>"
+            f"<td>{_esc(getattr(a, 'priority', ''))}</td>"
+            f"<td>{_esc(getattr(a, 'effort', ''))} ({_esc(getattr(a, 'estimated_engineer_hours', '—'))}h)</td>"
+            f"<td>{_esc(getattr(a, 'validation', ''))}</td></tr>"
+            for i, a in enumerate(top_actions[:10], start=1)
+        )
+        ai_roadmap_blocks.append(f"""
+        <div class="card" style="margin-bottom:16px;">
+            <div class="card-kicker">AI EXECUTIVE PRIORITIES // TOP {len(top_actions[:10])} ACTIONS</div>
+            <div class="data-table-wrapper">
+                <table class="print-table">
+                    <thead><tr><th>#</th><th>Action &amp; Expected Outcome</th><th>Priority</th><th>Effort</th><th>Validation</th></tr></thead>
+                    <tbody>{t10_rows}</tbody>
+                </table>
+            </div>
+        </div>""")
+
+    horizon_sections = [
+        ("7-Day Immediate Wins", list(getattr(report, "roadmap_7_days", None) or [])),
+        ("30-Day Core Remediation", list(getattr(report, "roadmap_30_days", None) or [])),
+        ("90-Day Strategic Compounding", list(getattr(report, "roadmap_90_days", None) or [])),
+    ]
+    if any(items for _, items in horizon_sections):
+        h_html = []
+        for label, items in horizon_sections:
+            if not items:
+                continue
+            li_html = "".join(
+                f"<li style='margin-bottom:4px;'><strong>{_esc(getattr(it, 'title', None) or getattr(it, 'action', str(it)))}</strong>"
+                f"{(' — ' + _esc(getattr(it, 'description', ''))) if getattr(it, 'description', None) else ''}</li>"
+                for it in items
+            )
+            h_html.append(f"<div style='margin-bottom:10px;'><div style='font-weight:700;font-size:8.8pt;color:#0f172a;margin-bottom:4px;'>{label} ({len(items)})</div><ul style='margin:0;padding-left:18px;font-size:8.2pt;color:#334155;'>{li_html}</ul></div>")
+        ai_roadmap_blocks.append(
+            '<div class="card" style="margin-bottom:16px;"><div class="card-kicker">AI-SYNTHESIZED 7 / 30 / 90-DAY ROADMAP</div>'
+            + "".join(h_html) + '</div>'
+        )
+
+    ai_patches = list(getattr(report, "remediation_patches", None) or []) or list(getattr(report, "code_patches", None) or [])
+    if ai_patches:
+        p_rows = "".join(
+            f"<tr><td><strong>{_esc(getattr(p, 'title', None) or getattr(p, 'patch_id', f'Patch {i}'))}</strong></td>"
+            f"<td>{_esc(getattr(p, 'target_file', None) or getattr(p, 'patch_type', '—'))}</td>"
+            f"<td><pre style='white-space:pre-wrap;font-size:7pt;margin:0;max-height:110px;overflow:hidden;'>{_esc(str(getattr(p, 'diff', None) or getattr(p, 'code', None) or getattr(p, 'after_code', ''))[:600])}</pre></td></tr>"
+            for i, p in enumerate(ai_patches[:12], start=1)
+        )
+        ai_roadmap_blocks.append(f"""
+        <div class="card" style="margin-bottom:16px;">
+            <div class="card-kicker">AI-SYNTHESIZED REMEDIATION PATCHES ({len(ai_patches)})</div>
+            <div class="data-table-wrapper">
+                <table class="print-table">
+                    <thead><tr><th>Patch</th><th>Target</th><th>Implementation Diff / Code</th></tr></thead>
+                    <tbody>{p_rows}</tbody>
+                </table>
+            </div>
+        </div>""")
+
     return f"""
     {callout}
+    {"".join(ai_roadmap_blocks)}
     <div class="card" style="margin-bottom:16px;">
         <div class="card-kicker">REMEDIATION REGISTER // {len(findings)} FINDINGS</div>
         <p style="font-size:8.5pt;color:#334155;margin:4px 0 10px 0;">
@@ -1408,16 +1492,46 @@ def _build_ch_aeo_questions(report: Any, manifest: Dict[str, Any]) -> str:
     )
 
     questions = getattr(geo, "questions", []) or []
-    q_total = len(questions)
-    q_supp = sum(1 for q in questions if str(getattr(q, "status", "")).upper() in ("SUPPORTED", "PASS"))
+    sandbox_evals = list(getattr(report, "dynamic_sandbox_evaluations", None) or [])
+    comm_evals = list(getattr(report, "commercial_evaluations", None) or [])
+    q_total = len(sandbox_evals) or len(questions)
+    q_supp = (
+        sum(1 for q in sandbox_evals if str(getattr(q, "answerability_status", "")).upper() in ("ANSWERABLE", "SUPPORTED", "PASS"))
+        if sandbox_evals
+        else sum(1 for q in questions if str(getattr(q, "status", "")).upper() in ("SUPPORTED", "PASS"))
+    )
 
     rows = []
-    if questions:
-        for q in questions[:6]:
+    if sandbox_evals:
+        for q in sandbox_evals[:25]:
+            q_key = _esc(str(getattr(q, "facet", None) or getattr(q, "buyer_intent", "Query") or "Query"))
+            q_text = _esc(str(getattr(q, "generated_question", "") or "Commercial inquiry"))
+            st = str(getattr(q, "answerability_status", "PARTIAL") or "PARTIAL").upper()
+            rag_ans = str(getattr(q, "rag_answer", None) or getattr(q, "recommended_answer", None) or "")
+            gap = str(getattr(q, "gap_analysis", None) or "")
+            rec_sec = str(getattr(q, "section_update_recommendation", None) or "")
+            detail_parts = []
+            if rag_ans:
+                detail_parts.append(f"<strong>RAG Answer:</strong> {_esc(rag_ans[:260])}")
+            if gap:
+                detail_parts.append(f"<strong>Gap:</strong> {_esc(gap[:200])}")
+            if rec_sec:
+                detail_parts.append(f"<strong>Fix:</strong> {_esc(rec_sec[:180])}")
+            snip = "<br/>".join(detail_parts) or "Evaluated against crawled DOM."
+            rows.append(f"""
+            <tr style="border-bottom:1px solid #e2e8f0;font-size:7.5pt;">
+                <td style="padding:6px 8px;font-weight:600;color:#0f172a;">{q_key}</td>
+                <td style="padding:6px 8px;color:#334155;">{q_text}</td>
+                <td style="padding:6px 8px;text-align:center;"><span style="font-family:monospace;font-weight:700;color:{'#15803d' if st in ('ANSWERABLE','SUPPORTED','PASS') else '#b45309'};background:{'#dcfce7' if st in ('ANSWERABLE','SUPPORTED','PASS') else '#fef3c7'};padding:2px 6px;border-radius:2px;">{st}</span></td>
+                <td style="padding:6px 8px;color:#475569;">{snip}</td>
+            </tr>
+            """)
+    elif questions:
+        for q in questions:
             q_key = _esc(getattr(q, "question_key", "Query").replace("_", " ").title())
             q_text = _esc(getattr(q, "question", "Commercial inquiry"))
             st = str(getattr(q, "status", "SUPPORTED")).upper()
-            snip = _esc(str(getattr(q, "answer_snippet", getattr(q, "answer", "Direct definition present in crawlable DOM.")) or "Direct definition present in crawlable DOM.")[:120])
+            snip = _esc(str(getattr(q, "answer_snippet", getattr(q, "answer", "Direct definition present in crawlable DOM.")) or "Direct definition present in crawlable DOM.")[:220])
             rows.append(f"""
             <tr style="border-bottom:1px solid #e2e8f0;font-size:7.5pt;">
                 <td style="padding:6px 8px;font-weight:600;color:#0f172a;">{q_key}</td>
@@ -1431,10 +1545,32 @@ def _build_ch_aeo_questions(report: Any, manifest: Dict[str, Any]) -> str:
             '<tr style="font-size:7.5pt;"><td colspan="4" style="padding:8px;color:#64748b;font-style:italic;">No commercial question battery was evaluated for this run.</td></tr>'
         )
 
+    comm_block = ""
+    if comm_evals:
+        c_rows = "".join(
+            f"<tr style='border-bottom:1px solid #e2e8f0;font-size:7.5pt;'>"
+            f"<td style='padding:6px 8px;font-weight:600;'>{_esc(getattr(c, 'question_title', '') or getattr(c, 'buyer_query', ''))}</td>"
+            f"<td style='padding:6px 8px;text-align:center;font-family:monospace;'>{_esc(getattr(c, 'before_score', '—'))} → {_esc(getattr(c, 'after_score', '—'))}</td>"
+            f"<td style='padding:6px 8px;color:#475569;'>{_esc(str(getattr(c, 'before_answer', '') or '')[:180])}</td>"
+            f"<td style='padding:6px 8px;color:#15803d;'>{_esc(str(getattr(c, 'after_answer', '') or getattr(c, 'gap_analysis', '') or '')[:180])}</td></tr>"
+            for c in comm_evals
+        )
+        comm_block = f"""
+        <div class="card" style="margin-bottom: 14px;">
+            <div class="card-kicker">AI COMMERCIAL BUYER SIMULATIONS ({len(comm_evals)} BEFORE / AFTER EVALUATIONS)</div>
+            <div class="data-table-wrapper" style="margin-top:8px;">
+                <table class="print-table">
+                    <thead><tr><th>Commercial Inquiry</th><th>Score Uplift</th><th>Observed Answer</th><th>Post-Patch / Gap Analysis</th></tr></thead>
+                    <tbody>{c_rows}</tbody>
+                </table>
+            </div>
+        </div>"""
+
     amb_defense = "HIGH" if (q_total > 0 and q_supp == q_total) else ("MODERATE" if q_total > 0 and q_supp > 0 else ("LOW" if q_total > 0 else "NOT MEASURED"))
 
     return f"""
     {callout}
+    {comm_block}
 
     <div class="grid-3" style="margin-bottom: 14px;">
         <div class="card">
@@ -1902,24 +2038,52 @@ def _build_ch_geo_rewrites(report: Any, manifest: Dict[str, Any]) -> str:
     geo = getattr(report, "geo_readiness", None)
     passages = getattr(geo, "citation_passages", {}) if geo else {}
     raw_rewrites = []
+    ai_synth = None
     if isinstance(passages, dict):
         raw_rewrites = passages.get("rewrite_recommendations", []) or []
+        ai_synth = passages.get("ai_citation_readiness_synthesis")
     elif hasattr(passages, "rewrite_recommendations"):
         raw_rewrites = getattr(passages, "rewrite_recommendations", []) or []
+        ai_synth = getattr(passages, "ai_citation_readiness_synthesis", None)
 
     findings = [f for f in _all_report_findings(report, manifest) if _is_geo_finding(f) or "CONTENT" in str(_finding_value(f, "category", "")).upper()]
     callout = render_section_business_callout(
         generate_section_explanation("ch_geo_rewrites", "Factual Attribution Laboratory & Citable Rewrites", report, findings)
     )
 
+    synth_html = ""
+    if isinstance(ai_synth, dict) and (ai_synth.get("summary") or ai_synth.get("top_citation_gaps")):
+        gaps_li = "".join(f"<li>{_esc(g)}</li>" for g in (ai_synth.get("top_citation_gaps") or []))
+        blocks_li = "".join(
+            f"<li><strong>{_esc(b.get('target_url', ''))}</strong>: {_esc(b.get('why', ''))} — <em>{_esc(b.get('suggested_structure', ''))}</em></li>"
+            for b in (ai_synth.get("quotable_block_recommendations") or [])
+            if isinstance(b, dict)
+        )
+        synth_html = f"""
+        <div class="card" style="margin-bottom:14px;border-left:4px solid #4f46e5;background:#eef2ff;">
+            <div class="card-kicker">LLM CITATION READINESS SYNTHESIS</div>
+            <p style="font-size:8.5pt;color:#1e293b;margin:4px 0 8px 0;line-height:1.5;">{_esc(ai_synth.get('summary', ''))}</p>
+            {f'<div style="font-size:8pt;color:#334155;"><strong>Top Citation Gaps:</strong><ul style="margin:4px 0 6px 18px;">{gaps_li}</ul></div>' if gaps_li else ''}
+            {f'<div style="font-size:8pt;color:#334155;"><strong>Quotable Block Recommendations:</strong><ul style="margin:4px 0 0 18px;">{blocks_li}</ul></div>' if blocks_li else ''}
+        </div>"""
+
     rewrites_html = []
     if raw_rewrites:
         for rw in raw_rewrites:
-            cur = _esc(str(getattr(rw, "current_passage", rw.get("current_passage", "") if isinstance(rw, dict) else ""))[:140])
-            rec = _esc(str(getattr(rw, "recommended_rewrite", rw.get("recommended_rewrite", "") if isinstance(rw, dict) else ""))[:140])
-            why = _esc(str(getattr(rw, "why", rw.get("why", "Direct entity subject naming prevents RAG pronoun confusion.") if isinstance(rw, dict) else ""))[:120])
+            cur = _esc(str(getattr(rw, "current_passage", rw.get("current_passage", "") if isinstance(rw, dict) else "")))
+            rec = _esc(str(getattr(rw, "recommended_rewrite", rw.get("recommended_rewrite", "") if isinstance(rw, dict) else "")))
+            why = _esc(str(getattr(rw, "why", rw.get("why", "Direct entity subject naming prevents RAG pronoun confusion.") if isinstance(rw, dict) else "")))
+            s_before = getattr(rw, "score_before", rw.get("score_before") if isinstance(rw, dict) else None)
+            s_after = getattr(rw, "score_after", rw.get("score_after") if isinstance(rw, dict) else None)
+            impr = getattr(rw, "improvements", rw.get("improvements") if isinstance(rw, dict) else None) or []
+            score_badge = (
+                f'<span style="font-family:monospace;font-size:7pt;font-weight:700;background:#dcfce7;color:#166534;padding:2px 6px;border-radius:3px;">Score: {s_before} → {s_after}</span>'
+                if s_before is not None and s_after is not None else ""
+            )
+            impr_txt = f'<div style="font-size:7.2pt;color:#334155;margin-top:4px;"><strong>Improvements:</strong> {_esc("; ".join(str(x) for x in impr))}</div>' if impr else ""
             rewrites_html.append(
                 f'<div class="card" style="margin-bottom:8px;padding:10px 14px;break-inside:avoid;background:#f8fafc;">'
+                f'  {f"<div style=margin-bottom:6px;>{score_badge}</div>" if score_badge else ""}'
                 f'  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">'
                 f'    <div style="background:#fff1f2;border:1px solid #fecdd3;padding:8px 10px;border-radius:4px;">'
                 f'      <span style="font-family:monospace;font-size:7pt;font-weight:700;color:#b91c1c;display:block;margin-bottom:3px;">OBSERVED UNCITED PROSE (AMBIGUOUS):</span>'
@@ -1931,6 +2095,7 @@ def _build_ch_geo_rewrites(report: Any, manifest: Dict[str, Any]) -> str:
                 f'    </div>'
                 f'  </div>'
                 f'  <div style="font-size:7.5pt;color:#64748b;margin-top:6px;"><strong>Extraction Benefit:</strong> {why}</div>'
+                f'  {impr_txt}'
                 f'</div>'
             )
     else:
@@ -1942,6 +2107,7 @@ def _build_ch_geo_rewrites(report: Any, manifest: Dict[str, Any]) -> str:
 
     return f"""
     {callout}
+    {synth_html}
 
     <div class="card" style="margin-bottom: 14px;">
         <div class="card-kicker">FACTUAL ATTRIBUTION &amp; PASSAGE REWRITE LABORATORY</div>
@@ -2548,18 +2714,18 @@ def _build_ch_cro_experiments(report: Any, manifest: Dict[str, Any]) -> str:
         generate_section_explanation("ch_cro_experiments", "Behavioral Analytics & Statistical Experimentation Roadmap", report, findings)
     )
 
-    # Render 10-Dimension Scorecard SVG
-    score_res = CroScoringEngine.evaluate(
-        value_prop_score=80.0,
-        visual_score=85.0,
-        cta_score=75.0,
-        form_score=85.0,
-        a11y_score=90.0,
-        trust_score=75.0,
-        checkout_score=80.0,
-        analytics_connected=False,
-    )
-    scorecard_svg = cro_ten_dimension_scorecard_svg([d.model_dump() for d in score_res.dimensions])
+    # Render 10-Dimension Scorecard SVG from real merged cro_audit.intelligence (zero hardcoded fake scores)
+    cro_audit_obj = getattr(report, "cro_audit", None)
+    cro_intel = getattr(cro_audit_obj, "intelligence", None) if cro_audit_obj else None
+    real_dims = []
+    if isinstance(cro_intel, dict):
+        tds = cro_intel.get("ten_dimension_scorecard")
+        if isinstance(tds, dict) and isinstance(tds.get("dimensions"), list):
+            real_dims = tds["dimensions"]
+    if real_dims:
+        scorecard_svg = cro_ten_dimension_scorecard_svg(real_dims)
+    else:
+        scorecard_svg = '<div class="card" style="padding:10px;color:#64748b;font-size:8pt;font-style:italic;">10-dimension CRO scorecard was not measured for this run.</div>'
 
     return f"""
     {callout}
@@ -3019,28 +3185,67 @@ def build_adaptive_publication_document(
     bundle_mode = str(pdf_bundle.get("narrative_mode") if isinstance(pdf_bundle, dict) else getattr(report, "narrative_mode", "deterministic_fallback"))
     if isinstance(pdf_bundle, dict) and pdf_bundle.get("executive_summary") and bundle_mode != "deterministic_fallback":
         metadata.story_summary = str(pdf_bundle["executive_summary"])
+    from app.scoring.canonical_scorecard import (
+        CanonicalScorecardEngine,
+        render_canonical_scorecard_html,
+    )
+    _canon_card = CanonicalScorecardEngine.evaluate_from_report(report)
+    _canon_html = render_canonical_scorecard_html(
+        _canon_card,
+        pillar_filter=str(getattr(metadata, "family", "") or "COMPLETE"),
+    )
+    cov_ledger = getattr(report, "coverage_ledger", None) or {}
+    qgr = getattr(report, "quality_gate_results", None) or {}
+    critic_gate = qgr.get("critic_gate") if isinstance(qgr, dict) else None
+    ai_prov_bits = [
+        f'<strong>Narrative Mode:</strong> {_esc(bundle_mode)}',
+        f'<strong>Tier:</strong> {_esc(str(pdf_bundle.get("tier") if isinstance(pdf_bundle, dict) else getattr(report, "narrative_tier", "standard")))}',
+    ]
+    if isinstance(cov_ledger, dict) and cov_ledger.get("deterministic_findings_total"):
+        ai_prov_bits.append(
+            f'<strong>Stage-1b AI Verified:</strong> {cov_ledger.get("deterministic_findings_ai_reviewed", 0)}/{cov_ledger.get("deterministic_findings_total", 0)}'
+        )
+    if isinstance(critic_gate, dict) and critic_gate.get("verified_count") is not None:
+        ai_prov_bits.append(f'<strong>Critic Gate Verified:</strong> {critic_gate.get("verified_count", 0)}')
     front_matter = (
         front_matter
+        + "\n"
+        + _canon_html
         + f'\n<div class="narrative-provenance-meta" style="margin-top:8px;font-size:11px;color:#475569;">'
-        f'<strong>Narrative Mode:</strong> {_esc(bundle_mode)} &nbsp;|&nbsp; '
-        f'<strong>Tier:</strong> {_esc(str(pdf_bundle.get("tier") if isinstance(pdf_bundle, dict) else getattr(report, "narrative_tier", "standard")))}'
-        f'</div>'
+        + " &nbsp;|&nbsp; ".join(ai_prov_bits)
+        + '</div>'
     )
-    ai_chapters_list = (pdf_bundle.get("chapters") or []) if isinstance(pdf_bundle, dict) else []
+    # Pool primary bundle chapters PLUS pillar-specific bundles for COMPLETE/EXECUTIVE books
+    ai_chapters_list: List[Dict[str, Any]] = list((pdf_bundle.get("chapters") or []) if isinstance(pdf_bundle, dict) else [])
+    if str(getattr(metadata, "family", "") or "").upper() in ("COMPLETE", "EXECUTIVE") and isinstance(doc_narr_map, dict):
+        seen_cids = {str(c.get("chapter_id") or "").lower() for c in ai_chapters_list if isinstance(c, dict)}
+        for pillar_bkey in ("seo_pdf", "geo_pdf", "aeo_pdf", "cro_pdf"):
+            pb = doc_narr_map.get(pillar_bkey)
+            if isinstance(pb, dict):
+                for ch_item in (pb.get("chapters") or []):
+                    if isinstance(ch_item, dict):
+                        cid_low = str(ch_item.get("chapter_id") or "").lower()
+                        if cid_low and cid_low not in seen_cids:
+                            seen_cids.add(cid_low)
+                            ai_chapters_list.append(ch_item)
+    legacy_ch_narr = getattr(report, "chapter_narratives", None) or {}
 
     def _match_ai_chapter(ch_id: str, ch_title: str, ch_idx: int) -> Optional[Dict[str, Any]]:
-        if not ai_chapters_list:
-            return None
-        for item in ai_chapters_list:
-            if str(item.get("chapter_id") or "").lower() == ch_id.lower():
-                return item
-        title_words = [w for w in re.split(r"\W+", (ch_title or "").lower()) if len(w) >= 4]
-        for item in ai_chapters_list:
-            ai_t = (item.get("title") or "").lower()
-            if any(w in ai_t for w in title_words):
-                return item
-        if ch_idx < len(ai_chapters_list):
-            return ai_chapters_list[ch_idx]
+        if ai_chapters_list:
+            for item in ai_chapters_list:
+                if str(item.get("chapter_id") or "").lower() == ch_id.lower():
+                    return item
+            title_words = [w for w in re.split(r"\W+", (ch_title or "").lower()) if len(w) >= 4]
+            for item in ai_chapters_list:
+                ai_t = (item.get("title") or "").lower()
+                if any(w in ai_t for w in title_words):
+                    return item
+            if ch_idx < len(ai_chapters_list):
+                return ai_chapters_list[ch_idx]
+        if isinstance(legacy_ch_narr, dict):
+            direct = legacy_ch_narr.get(ch_id) or legacy_ch_narr.get(ch_id.replace("ch_", ""))
+            if isinstance(direct, dict):
+                return direct
         return None
 
     for ch_idx, ch_meta in enumerate(manifest["chapters"]):

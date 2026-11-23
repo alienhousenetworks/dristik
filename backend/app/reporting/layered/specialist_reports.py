@@ -49,98 +49,69 @@ class SpecialistReportBuilder:
         build_func = builder_map.get(discipline, self._build_seo)
         return build_func(domain, audit_id, score, findings, benchmarks, diagnostics, now)
 
+    def _actions_from_findings(self, findings: list[dict]) -> list[dict]:
+        actions: list[dict] = []
+        for f in (findings or [])[:10]:
+            if not isinstance(f, dict):
+                continue
+            rec = f.get("recommendation") or f.get("recommended_fix") or f.get("title")
+            if not rec:
+                continue
+            actions.append({
+                "action": str(rec),
+                "priority": str(f.get("severity") or "MEDIUM").upper(),
+                "effort": str(f.get("effort") or "MEDIUM"),
+                "impact": str(f.get("business_impact") or "HIGH"),
+            })
+        return actions
+
     def _build_seo(
         self, domain: str, audit_id: str, score: float, findings: list[dict], benchmarks: Optional[list], diagnostics: Optional[dict], now
     ) -> SpecialistReportData:
         summary = (
-            f"SEO Intelligence analysis for {domain} achieved a baseline score of {score:.1f}/100. "
-            f"Core crawl indexation and metadata hygiene are sound, but opportunities exist in internal link "
-            f"equity flow and long-tail transactional landing page architecture."
+            f"SEO Intelligence analysis for {domain} recorded a score of {score:.1f}/100 across "
+            f"{len(findings)} evidence-backed finding(s)."
         )
-        b_tables = benchmarks or [
-            {"metric": "Indexable Page Ratio", "target_domain": "96.4%", "industry_benchmark": "92.0%", "status": "OUTPERFORMING"},
-            {"metric": "Title Tag Compliance", "target_domain": "88.2%", "industry_benchmark": "95.0%", "status": "ATTENTION_REQUIRED"},
-            {"metric": "Internal Broken Link Rate", "target_domain": "0.8%", "industry_benchmark": "0.5%", "status": "WITHIN_TOLERANCE"},
-        ]
-        diag = diagnostics or {
-            "canonical_status_distribution": {"self_canonical": 112, "cross_domain": 0, "missing": 8},
-            "sitemap_coverage": "100%",
-            "redirect_chains_detected": 1,
-        }
-        actions = [
-            {"action": "Resolve missing canonical tags on pagination URLs", "priority": "P1", "effort": "LOW", "impact": "HIGH"},
-            {"action": "Restructure primary navigation breadcrumbs for hierarchical equity", "priority": "P2", "effort": "MEDIUM", "impact": "MEDIUM"},
-        ]
-        return self._package(SpecialistDiscipline.SEO, domain, audit_id, summary, findings, b_tables, diag, actions, now)
+        return self._package(
+            SpecialistDiscipline.SEO, domain, audit_id, summary, findings,
+            benchmarks or [], diagnostics or {}, self._actions_from_findings(findings), now,
+        )
 
     def _build_geo(
         self, domain: str, audit_id: str, score: float, findings: list[dict], benchmarks: Optional[list], diagnostics: Optional[dict], now
     ) -> SpecialistReportData:
         summary = (
-            f"Generative Engine Optimization (GEO) diagnostic scored {score:.1f}/100. Entity resolution across "
-            f"AI knowledge bases is moderately defined, though authoritative citation frequency in major LLM answer "
-            f"engines requires stronger structured brand credentials and third-party entity disambiguation."
+            f"Generative Engine Optimization (GEO) analysis for {domain} recorded a score of {score:.1f}/100 "
+            f"across {len(findings)} evidence-backed finding(s)."
         )
-        b_tables = benchmarks or [
-            {"metric": "AI Answer Recommendation Rate", "target_domain": "42.0%", "industry_benchmark": "65.0%", "status": "UNDERPERFORMING"},
-            {"metric": "Entity Clarity Index", "target_domain": "78.0%", "industry_benchmark": "80.0%", "status": "PARITY"},
-            {"metric": "Citation Domain Authority", "target_domain": "64.0/100", "industry_benchmark": "72.0/100", "status": "GROWTH_LEVER"},
-        ]
-        diag = diagnostics or {
-            "ai_crawler_access": {"GPTBot": "ALLOWED", "PerplexityBot": "ALLOWED", "GoogleOther": "ALLOWED"},
-            "wikidata_entity_bound": True,
-            "unambiguous_brand_citations": 142,
-        }
-        actions = [
-            {"action": "Deploy comprehensive Organization and SameAs Schema bindings", "priority": "P1", "effort": "LOW", "impact": "HIGH"},
-            {"action": "Build factual brand authority citations on industry reference databases", "priority": "P2", "effort": "MEDIUM", "impact": "HIGH"},
-        ]
-        return self._package(SpecialistDiscipline.GEO, domain, audit_id, summary, findings, b_tables, diag, actions, now)
+        return self._package(
+            SpecialistDiscipline.GEO, domain, audit_id, summary, findings,
+            benchmarks or [], diagnostics or {}, self._actions_from_findings(findings), now,
+        )
 
     def _build_aeo(
         self, domain: str, audit_id: str, score: float, findings: list[dict], benchmarks: Optional[list], diagnostics: Optional[dict], now
     ) -> SpecialistReportData:
         summary = (
-            f"Answer Engine Optimization (AEO) diagnostic scored {score:.1f}/100. While technical answer passages exist, "
-            f"syntactic density and directness fall below the 35-word threshold preferred by voice and AI summarizers."
+            f"Answer Engine Optimization (AEO) analysis for {domain} recorded a score of {score:.1f}/100 "
+            f"across {len(findings)} evidence-backed finding(s)."
         )
-        b_tables = benchmarks or [
-            {"metric": "Direct Answer Extractability", "target_domain": "58.0%", "industry_benchmark": "75.0%", "status": "ATTENTION_REQUIRED"},
-            {"metric": "Commercial Question Coverage", "target_domain": "62.0%", "industry_benchmark": "85.0%", "status": "OPPORTUNITY_GAP"},
-        ]
-        diag = diagnostics or {
-            "faq_schema_valid": True,
-            "mean_answer_passage_word_count": 54,
-            "syntactic_clarity_grade": "Grade 9.2",
-        }
-        actions = [
-            {"action": "Embed 30-word summary answers directly beneath commercial H2 headers", "priority": "P1", "effort": "LOW", "impact": "HIGH"},
-            {"action": "Author authoritative answers for top 15 unanswered customer queries", "priority": "P2", "effort": "MEDIUM", "impact": "HIGH"},
-        ]
-        return self._package(SpecialistDiscipline.AEO, domain, audit_id, summary, findings, b_tables, diag, actions, now)
+        return self._package(
+            SpecialistDiscipline.AEO, domain, audit_id, summary, findings,
+            benchmarks or [], diagnostics or {}, self._actions_from_findings(findings), now,
+        )
 
     def _build_cro(
         self, domain: str, audit_id: str, score: float, findings: list[dict], benchmarks: Optional[list], diagnostics: Optional[dict], now
     ) -> SpecialistReportData:
         summary = (
-            f"Conversion Rate Optimization (CRO) intelligence scored {score:.1f}/100. Primary landing page value "
-            f"propositions are clear, but form field friction and visual hierarchy on mobile viewports degrade user completion."
+            f"Conversion Rate Optimization (CRO) analysis for {domain} recorded a score of {score:.1f}/100 "
+            f"across {len(findings)} evidence-backed finding(s)."
         )
-        b_tables = benchmarks or [
-            {"metric": "Primary CTA Visibility", "target_domain": "95.0%", "industry_benchmark": "90.0%", "status": "OUTPERFORMING"},
-            {"metric": "Form Input Friction Score", "target_domain": "6.2 fields", "industry_benchmark": "3.5 fields", "status": "HIGH_FRICTION"},
-            {"metric": "Trust Signal Density", "target_domain": "Moderate", "industry_benchmark": "High", "status": "GROWTH_LEVER"},
-        ]
-        diag = diagnostics or {
-            "accessible_labels_present": False,
-            "cta_above_the_fold": True,
-            "cart_friction_tested": True,
-        }
-        actions = [
-            {"action": "Reduce inquiry form requirements from 7 to 3 essential fields", "priority": "P1", "effort": "LOW", "impact": "HIGH"},
-            {"action": "Place client logos and security certifications directly adjacent to CTA", "priority": "P2", "effort": "LOW", "impact": "MEDIUM"},
-        ]
-        return self._package(SpecialistDiscipline.CRO, domain, audit_id, summary, findings, b_tables, diag, actions, now)
+        return self._package(
+            SpecialistDiscipline.CRO, domain, audit_id, summary, findings,
+            benchmarks or [], diagnostics or {}, self._actions_from_findings(findings), now,
+        )
 
     def _build_competitive(
         self, domain: str, audit_id: str, score: float, findings: list[dict], benchmarks: Optional[list], diagnostics: Optional[dict], now

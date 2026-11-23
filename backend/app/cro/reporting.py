@@ -340,12 +340,20 @@ def build_cro_publication_document(report: Any, intel: Optional[CroIntelligenceR
         crawl_scope_summary=snap.crawl_scope_summary,
         composite_score_reference=comp_ref,
     )
-    cro_provenance_bar = render_snapshot_provenance_bar(
-        snap,
-        section_key="cro",
-        section_label="CRO",
-        section_score=score,
-        section_findings_count=len(intel.findings),
+    from app.scoring.canonical_scorecard import (
+        CanonicalScorecardEngine,
+        render_canonical_scorecard_html,
+    )
+    _cro_canonical_card = CanonicalScorecardEngine.evaluate_from_report(report)
+    cro_provenance_bar = (
+        render_snapshot_provenance_bar(
+            snap,
+            section_key="cro",
+            section_label="CRO",
+            section_score=score,
+            section_findings_count=len(intel.findings),
+        )
+        + render_canonical_scorecard_html(_cro_canonical_card, pillar_filter="CRO")
     )
 
     cov = intel.coverage or {}

@@ -142,6 +142,59 @@ class CommercialBakeoffEngine:
                 f"Deploying transparent pricing structures and explicit ICP landing pages represents the highest-leverage opportunity to capture commercial retrieval."
             )
 
+        if self.model_router and hasattr(self.model_router, "generate_structured") and items:
+            try:
+                import json as _json
+                payload_items = [
+                    {
+                        "question_key": it.question_key,
+                        "question_title": it.question_title,
+                        "winner": it.winner,
+                        "target_score": it.target_score,
+                        "competitor_score": it.competitor_score,
+                        "target_answer": (it.target_answer or "")[:400],
+                        "competitor_answer": (it.competitor_answer or "")[:400],
+                    }
+                    for it in items
+                ]
+                ai_res = await self.model_router.generate_structured(
+                    capability="competitive_analysis",
+                    agent_role="Enterprise Competitive Intelligence Strategist",
+                    task_contract=(
+                        f"Compare {target_name} vs {comp_name} ({comp_domain}) across these commercial buyer inquiries. "
+                        "Ground every reason_competitor_won, answerability_gap, commercial_takeaway, and executive_takeaway "
+                        "strictly in the observed target_answer and competitor_answer text.\n"
+                        f"INQUIRIES:\n{_json.dumps(payload_items)}"
+                    ),
+                    evidence_list=[],
+                    output_schema_desc=(
+                        '{"executive_takeaway":"string","items":[{"question_key":"string","commercial_takeaway":"string",'
+                        '"reason_competitor_won":"string|null","answerability_gap":"string|null"}]}'
+                    ),
+                    model_tier="reasoning_model",
+                    allow_fallback=True,
+                )
+                if isinstance(ai_res, dict):
+                    if ai_res.get("executive_takeaway"):
+                        exec_takeaway = str(ai_res["executive_takeaway"]).strip()
+                    by_key = {
+                        str(x.get("question_key")): x
+                        for x in (ai_res.get("items") or [])
+                        if isinstance(x, dict) and x.get("question_key")
+                    }
+                    for it in items:
+                        upd = by_key.get(it.question_key)
+                        if not upd:
+                            continue
+                        if upd.get("commercial_takeaway"):
+                            it.commercial_takeaway = str(upd["commercial_takeaway"]).strip()
+                        if upd.get("reason_competitor_won"):
+                            it.reason_competitor_won = str(upd["reason_competitor_won"]).strip()
+                        if upd.get("answerability_gap"):
+                            it.answerability_gap = str(upd["answerability_gap"]).strip()
+            except Exception:
+                pass
+
         return CompetitorBakeoffResult(
             competitor_domain=comp_domain,
             status="AVAILABLE",

@@ -32,6 +32,85 @@ class CausalReasoningEngine:
     crawl summary, AI search evaluations, competitor bake-off) to isolate primary bottlenecks.
     """
 
+    async def analyze_root_causes_ai(
+        self,
+        claims: List[Claim],
+        business_profile: BusinessProfile,
+        findings: Optional[List[Finding]] = None,
+        ai_search_evaluations: Optional[List[Any]] = None,
+        competitor_bakeoff: Optional[Any] = None,
+        crawl_summary: Optional[Dict[str, Any]] = None,
+        observatory_records: Optional[List[Any]] = None,
+        competitive_graph: Optional[Any] = None,
+        model_router: Any = None,
+    ) -> List[CausalDiagnosticChain]:
+        baseline = self.analyze_root_causes(
+            claims=claims,
+            business_profile=business_profile,
+            findings=findings,
+            ai_search_evaluations=ai_search_evaluations,
+            competitor_bakeoff=competitor_bakeoff,
+            crawl_summary=crawl_summary,
+            observatory_records=observatory_records,
+            competitive_graph=competitive_graph,
+        )
+        if not model_router or not hasattr(model_router, "generate_structured"):
+            return baseline
+        try:
+            import json as _json
+            claim_snips = [
+                {
+                    "id": getattr(c, "id", ""),
+                    "category": str(getattr(c, "category", "")),
+                    "severity": str(getattr(c, "severity", "")),
+                    "statement": str(getattr(c, "statement", ""))[:260],
+                }
+                for c in (claims or [])[:25]
+            ]
+            baseline_dump = [b.model_dump() for b in baseline[:6]]
+            biz_name = getattr(business_profile, "business_name", "Target Site") if business_profile else "Target Site"
+            ai_res = await model_router.generate_structured(
+                capability="causal_reasoning",
+                agent_role="Principal Systems & Growth Causal Analyst",
+                task_contract=(
+                    f"Refine and ground these root-cause diagnostic chains for {biz_name} strictly from the observed claims. "
+                    "Replace generic boilerplate with site-specific causal mechanisms, business consequences, and verification rules.\n"
+                    f"OBSERVED_CLAIMS:\n{_json.dumps(claim_snips)}\n"
+                    f"BASELINE_CHAINS:\n{_json.dumps(baseline_dump)}"
+                ),
+                evidence_list=[],
+                output_schema_desc=(
+                    '{"chains":[{"chain_id":"string","inferred_root_cause":"string",'
+                    '"business_consequence":"string","prescribed_remediation":"string",'
+                    '"expected_mechanism":"string","verification_method":"string"}]}'
+                ),
+                model_tier="reasoning_model",
+                allow_fallback=True,
+            )
+            if isinstance(ai_res, dict) and isinstance(ai_res.get("chains"), list):
+                by_id = {
+                    str(c.get("chain_id")): c
+                    for c in ai_res["chains"]
+                    if isinstance(c, dict) and c.get("chain_id")
+                }
+                for b in baseline:
+                    upd = by_id.get(getattr(b, "chain_id", ""))
+                    if not upd:
+                        continue
+                    for field_name in (
+                        "inferred_root_cause",
+                        "business_consequence",
+                        "prescribed_remediation",
+                        "expected_mechanism",
+                        "verification_method",
+                    ):
+                        val = upd.get(field_name)
+                        if isinstance(val, str) and val.strip() and hasattr(b, field_name):
+                            setattr(b, field_name, val.strip())
+        except Exception:
+            pass
+        return baseline
+
     def analyze_root_causes(
         self,
         claims: List[Claim],

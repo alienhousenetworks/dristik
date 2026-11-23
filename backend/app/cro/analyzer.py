@@ -70,6 +70,45 @@ def generate_agentic_cta_rewrite(text: str, business_profile: Optional[Any] = No
     
     return f"Start with {raw.title()} Today"
 
+
+async def generate_agentic_cta_rewrites_ai(
+    ctas: List[str],
+    business_profile: Optional[Any] = None,
+    model_router: Any = None,
+) -> Dict[str, str]:
+    """Batch-generate grounded, conversion-focused CTA rewrites via ModelRouter with deterministic fallback."""
+    unique_ctas = list(dict.fromkeys(c.strip() for c in (ctas or []) if c and c.strip()))
+    fallback = {c: generate_agentic_cta_rewrite(c, business_profile) for c in unique_ctas}
+    if not unique_ctas or not model_router or not hasattr(model_router, "generate_structured"):
+        return fallback
+    try:
+        import json as _json
+        biz = {
+            "name": getattr(business_profile, "business_name", "") if business_profile else "",
+            "niche": getattr(business_profile, "niche", "") if business_profile else "",
+            "value_prop": getattr(business_profile, "value_proposition", "") if business_profile else "",
+            "audience": getattr(business_profile, "target_audience", "") if business_profile else "",
+        }
+        res = await model_router.generate_structured(
+            capability="cro_analysis",
+            agent_role="Enterprise CRO Copywriter",
+            task_contract=(
+                "Rewrite each weak/generic CTA into a specific, high-intent, benefit-driven CTA tailored to the business.\n"
+                f"BUSINESS: {_json.dumps(biz)}\nCTAS: {_json.dumps(unique_ctas[:20])}"
+            ),
+            evidence_list=[],
+            output_schema_desc='{"rewrites":[{"original":"string","recommended":"string"}]}',
+            model_tier="fast_slm",
+            allow_fallback=True,
+        )
+        if isinstance(res, dict) and isinstance(res.get("rewrites"), list):
+            for row in res["rewrites"]:
+                if isinstance(row, dict) and row.get("original") and row.get("recommended"):
+                    fallback[str(row["original"]).strip()] = str(row["recommended"]).strip()
+    except Exception:
+        pass
+    return fallback
+
 CTA_REWRITE_SUGGESTIONS = {
     "submit": "Claim Your Strategy Report / Complete Registration",
     "click here": "Explore Solution & Pricing",

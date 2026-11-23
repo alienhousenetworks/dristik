@@ -166,6 +166,12 @@ export const seoApi = {
   getHistory: (auditId: string) =>
     api<SeoAuditHistory>(`/api/v1/seo/audits/${encodeURIComponent(auditId)}/history`),
 
+  getAgents: (auditId: string) =>
+    api<Record<string, any>>(`/api/v1/seo/audits/${encodeURIComponent(auditId)}/agents`),
+
+  getEvidence: (auditId: string) =>
+    api<Record<string, any>>(`/api/v1/seo/audits/${encodeURIComponent(auditId)}/evidence`),
+
   listConnectors: (workspaceId?: string) =>
     api<SeoConnectorStatus[]>(
       workspaceId ? `/api/v1/seo/connectors?workspace_id=${encodeURIComponent(workspaceId)}` : '/api/v1/seo/connectors'

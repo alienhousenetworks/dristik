@@ -34,6 +34,11 @@ class AeoPillar:
                 res = await agent.run(blackboard)
                 if isinstance(res, list):
                     findings.extend(res)
+                elif isinstance(res, dict):
+                    for item in (res.get("findings") or []):
+                        findings.append(item)
+                    if hasattr(blackboard, "blackboard_state") and isinstance(blackboard.blackboard_state, dict):
+                        blackboard.blackboard_state.setdefault("aeo_agent_results", {})[agent_id] = res
         return findings
 
     def calculate_pillar_score(

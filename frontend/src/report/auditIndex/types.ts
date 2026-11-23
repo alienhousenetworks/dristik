@@ -22,6 +22,11 @@ export interface AuditFindingRef {
   description?: string;
   action?: string;
   priority?: number;
+  verificationNotes?: string;
+  adversarialReviewed?: boolean;
+  reasoning?: string;
+  businessImpact?: string;
+  detailedDiagnosis?: string;
 }
 
 export interface AuditedCheck {

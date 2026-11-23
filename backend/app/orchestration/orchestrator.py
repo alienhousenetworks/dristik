@@ -159,7 +159,8 @@ class AnalysisOrchestrator:
         self.remediation_planner = RemediationPlanner()
         self.narrative_gen = NarrativeGenerator()
         self.roadmap_builder = RoadmapBuilder()
-        self.bakeoff_engine = CommercialBakeoffEngine()
+        self.model_router = ModelRouter()
+        self.bakeoff_engine = CommercialBakeoffEngine(model_router=self.model_router)
         # Manual pillar, section, and node runs are queued per audit so the HTTP
         # request can return before a model call finishes. One worker per audit
         # keeps those runs from overlapping each other.
@@ -170,7 +171,6 @@ class AnalysisOrchestrator:
         self.timelines: Dict[str, WebsiteIntelligenceTimeline] = {}
         from app.db.repository import get_audit_repository
         self.repository = get_audit_repository()
-        self.model_router = ModelRouter()
 
     def create_run(
         self,
@@ -681,8 +681,73 @@ class AnalysisOrchestrator:
                 summary="Host variant probe did not complete. www, apex, and protocol variants were not measured.",
             )
 
+        # Emit structured findings from Stage-1 analyzers that previously returned report objects only
+        # so ALL of them pass through Stage-1b _verify_deterministic_findings_with_ai().
+        extra_det_findings: List[Finding] = []
+        if meta_rollup_rep and (
+            getattr(meta_rollup_rep, "missing_title_count", 0) > 0
+            or getattr(meta_rollup_rep, "duplicate_title_count", 0) > 0
+            or getattr(meta_rollup_rep, "missing_meta_description_count", 0) > 0
+        ):
+            extra_det_findings.append(Finding(
+                finding_id="det_meta_rollup_001",
+                title="Metadata Hygiene Defects Detected (Missing/Duplicate Titles or Meta Descriptions)",
+                category=Category.ON_PAGE_SEO,
+                severity=Severity.HIGH if getattr(meta_rollup_rep, "missing_title_count", 0) > 0 else Severity.MEDIUM,
+                description=(
+                    f"Meta rollup detected {getattr(meta_rollup_rep, 'missing_title_count', 0)} missing titles, "
+                    f"{getattr(meta_rollup_rep, 'duplicate_title_count', 0)} duplicate titles, and "
+                    f"{getattr(meta_rollup_rep, 'missing_meta_description_count', 0)} missing meta descriptions."
+                ),
+                recommendation="Author unique, intent-aligned title tags (50-60 chars) and meta descriptions (140-155 chars) for every indexable URL.",
+                affected_urls=[website_url],
+                confidence=0.9,
+            ))
+        if schema_validation_rep and (
+            getattr(schema_validation_rep, "invalid_schema_count", 0) > 0
+            or getattr(schema_validation_rep, "pages_without_schema", 0) > 0
+        ):
+            extra_det_findings.append(Finding(
+                finding_id="det_schema_validation_001",
+                title="Structured Data Coverage & Rich Result Validation Gaps",
+                category=Category.STRUCTURED_DATA,
+                severity=Severity.HIGH if getattr(schema_validation_rep, "invalid_schema_count", 0) > 0 else Severity.MEDIUM,
+                description=(
+                    f"Schema validation recorded {getattr(schema_validation_rep, 'invalid_schema_count', 0)} invalid JSON-LD blocks "
+                    f"and {getattr(schema_validation_rep, 'pages_without_schema', 0)} pages lacking structured data."
+                ),
+                recommendation="Fix schema validation errors and deploy complete Organization, BreadcrumbList, and page-type JSON-LD markup.",
+                affected_urls=[website_url],
+                confidence=0.9,
+            ))
+        if security_audit_rep and getattr(security_audit_rep, "missing_headers", None):
+            missing_hdrs = list(getattr(security_audit_rep, "missing_headers", None) or [])
+            if missing_hdrs:
+                extra_det_findings.append(Finding(
+                    finding_id="det_security_headers_001",
+                    title="HTTP Security Hardening Headers Missing",
+                    category=Category.TECHNICAL_SEO,
+                    severity=Severity.LOW,
+                    description=f"Response headers for {website_url} are missing: {', '.join(str(h) for h in missing_hdrs[:8])}.",
+                    recommendation="Configure HSTS, Content-Security-Policy, X-Content-Type-Options, and Referrer-Policy at the edge/CDN.",
+                    affected_urls=[website_url],
+                    confidence=0.95,
+                ))
+        if host_and_redirects_rep and getattr(host_and_redirects_rep, "proper_301_consolidation", True) is False:
+            extra_det_findings.append(Finding(
+                finding_id="det_host_redirects_001",
+                title="Host / Protocol Redirect Consolidation Defect",
+                category=Category.TECHNICAL_SEO,
+                severity=Severity.HIGH,
+                description=str(getattr(host_and_redirects_rep, "summary", None) or "Host variants (www/apex/HTTP) do not cleanly 301-consolidate to a single canonical host."),
+                recommendation="Enforce single-hop 301 redirects from all non-canonical host and protocol variants to the canonical HTTPS origin.",
+                affected_urls=[website_url],
+                confidence=0.9,
+            ))
+
         analyzer_finding_groups = [
             [cro_finding] if cro_finding is not None else [],
+            extra_det_findings,
             can_findings,
             http_findings,
             heading_findings,
@@ -2258,10 +2323,11 @@ class AnalysisOrchestrator:
             model_router.set_active_stage("causal_reasoning", "Causal Reasoning & Bottlenecks")
             model_router.set_active_sub_stage("causal_bottlenecks", "Causal Graph & Bottleneck Isolation")
             await self._emit_event(analysis_id, "specialist_execution", 88, "Causal Reasoning Engine isolating primary root-cause growth bottlenecks...")
-            bottlenecks = self.causal_engine.analyze_root_causes(
+            bottlenecks = await self.causal_engine.analyze_root_causes_ai(
                 claims=current_claims,
                 business_profile=blackboard.business_profile,
                 crawl_summary=manifest.crawl_health if manifest else None,
+                model_router=model_router,
             )
             blackboard.blackboard_state["root_causes"] = [b.model_dump() for b in bottlenecks]
             controller.mark_node_status("node_causal_bottlenecks", GraphNodeStatus.COMPLETED)
@@ -2730,7 +2796,7 @@ class AnalysisOrchestrator:
                                 url=pg_url,
                                 page_type="homepage" if idx_p == 0 else "landing",
                             )
-                            snaps, _elems, inters = await asyncio.wait_for(
+                            inters, _elems, snaps = await asyncio.wait_for(
                                 bt_engine.audit_page(
                                     tenant_id=str(getattr(run, "org_id", None) or "default"),
                                     audit_id=analysis_id,
@@ -2766,10 +2832,16 @@ class AnalysisOrchestrator:
                     browser_tests=cro_browser_summary,
                 ).model_dump()
                 journey_eval = evaluate_conversion_journey(eval_pages, blackboard.business_profile)
-                rebuilt_cro_intel["conversion_journey"] = journey_eval
-                rebuilt_cro_intel["journey_stages"] = journey_eval["journey_stages"]
-                rebuilt_cro_intel["dropoff_friction_points"] = journey_eval["dropoff_friction_points"]
-                cro_audit_rep.intelligence = rebuilt_cro_intel
+                existing_cro_intel = (
+                    dict(cro_audit_rep.intelligence)
+                    if isinstance(getattr(cro_audit_rep, "intelligence", None), dict)
+                    else {}
+                )
+                merged_cro_intel = {**existing_cro_intel, **rebuilt_cro_intel}
+                merged_cro_intel["conversion_journey"] = journey_eval
+                merged_cro_intel["journey_stages"] = journey_eval["journey_stages"]
+                merged_cro_intel["dropoff_friction_points"] = journey_eval["dropoff_friction_points"]
+                cro_audit_rep.intelligence = merged_cro_intel
             except Exception as cro_intel_err:
                 logger.info("CRO intelligence rebuild kept the pre-analytics snapshot: %s", cro_intel_err)
 
@@ -3036,6 +3108,10 @@ class AnalysisOrchestrator:
                 derived_intelligence=derived_intel_metrics,
                 geo_benchmark_report=geo_bench_report,
                 ai_citation_dashboard=ai_citation_dash,
+                deterministic_verifications=dict(blackboard.blackboard_state.get("deterministic_verifications") or {}),
+                coverage_ledger=blackboard.blackboard_state.get("coverage_ledger"),
+                growth_opportunities=list(blackboard.blackboard_state.get("opportunities") or []),
+                evidence_gaps=list(blackboard.blackboard_state.get("evidence_gaps") or []),
             )
 
             # Phase 2 — Build Claim Ledger with strict source provenance

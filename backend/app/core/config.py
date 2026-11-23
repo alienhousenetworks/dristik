@@ -450,6 +450,41 @@ class Settings(BaseSettings):
     WORDPRESS_CLIENT_SECRET: Optional[str] = None
     GOOGLE_APPLICATION_CREDENTIALS: Optional[str] = None
     GA4_PROPERTY_ID: Optional[str] = None
+    GA4_BIGQUERY_PROJECT_ID: Optional[str] = None
+    GA4_BIGQUERY_DATASET: Optional[str] = None
+    GSC_SITE_URL: Optional[str] = None
+
+    # Session Replay & Behavioral Heatmaps (Zero-Fake Policy: unset => NOT_CONNECTED)
+    POSTHOG_API_KEY: Optional[str] = None
+    POSTHOG_PROJECT_ID: Optional[str] = None
+    POSTHOG_HOST: str = "https://app.posthog.com"
+    CLARITY_API_TOKEN: Optional[str] = None
+    CLARITY_PROJECT_ID: Optional[str] = None
+
+    # Experimentation Platforms (GrowthBook / PostHog Experiments)
+    GROWTHBOOK_API_KEY: Optional[str] = None
+    GROWTHBOOK_API_HOST: str = "https://api.growthbook.io"
+    GROWTHBOOK_CLIENT_KEY: Optional[str] = None
+
+    # Ecommerce & CRM Reconciliation Credentials
+    SHOPIFY_STORE_DOMAIN: Optional[str] = None
+    SHOPIFY_ACCESS_TOKEN: Optional[str] = None
+    SHOPIFY_WEBHOOK_SECRET: Optional[str] = None
+    WOOCOMMERCE_URL: Optional[str] = None
+    WOOCOMMERCE_CONSUMER_KEY: Optional[str] = None
+    WOOCOMMERCE_CONSUMER_SECRET: Optional[str] = None
+    WOOCOMMERCE_WEBHOOK_SECRET: Optional[str] = None
+    HUBSPOT_API_KEY: Optional[str] = None
+    STRIPE_API_KEY: Optional[str] = None
+    STRIPE_WEBHOOK_SECRET: Optional[str] = None
+
+    # Privacy, Retention, Security & Ingestion Governance
+    CREDENTIAL_ENCRYPTION_KEY: Optional[str] = None
+    INGEST_RATE_LIMIT_PER_MIN: int = 600
+    INGEST_MAX_PAYLOAD_BYTES: int = 262144
+    BEHAVIORAL_RETENTION_DAYS: int = 90
+    DATA_FRESHNESS_SLA_HOURS: int = 24
+    DEFAULT_BASE_CURRENCY: str = "INR"
 
     # ------------------------------------------------------------------
     # External Authority & Entity Intelligence

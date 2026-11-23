@@ -75,7 +75,7 @@ export function AppendixLedger({
           </p>
 
           <div className="space-y-4">
-            {appendices.findings.slice(0, 4).map((f) => (
+            {appendices.findings.map((f) => (
               <FindingEditorialCard key={f.id} finding={f} theme={theme} />
             ))}
           </div>
@@ -134,7 +134,7 @@ export function AppendixLedger({
             </div>
 
             <div className="space-y-4">
-              {appendices.patches.slice(0, 3).map((patch) => (
+              {appendices.patches.map((patch) => (
                 <div key={patch.patch_id} className="report-avoid-break p-4 border border-line rounded bg-paper-50 space-y-2 text-[8pt]">
                   <div className="flex items-center justify-between pb-2 border-b border-line">
                     <div>
@@ -308,6 +308,18 @@ function FindingEditorialCard({
         </p>
       )}
 
+      {finding.detailedDiagnosis && (
+        <p className="text-[8pt] text-ink-700 font-sans">
+          <strong>AI Deep Diagnosis:</strong> {finding.detailedDiagnosis}
+        </p>
+      )}
+
+      {finding.verificationNotes && (
+        <div className="p-2 rounded bg-indigo-50/70 border border-indigo-200 text-[7.5pt] text-indigo-950 font-sans">
+          <strong>AI Adversarial Verification:</strong> {finding.verificationNotes}
+        </div>
+      )}
+
       {finding.recommendation && (
         <p className="text-[8pt] text-ink font-sans">
           <strong>Remediation:</strong> {finding.recommendation}
@@ -364,9 +376,9 @@ function FindingEditorialCard({
           <div>
             <strong className="text-ink">How to re-check: </strong>
             <span className="font-mono text-[7pt] text-ink-600">
-              {headerFinding
+              {finding.validationCriteria || finding.acceptanceCriteria || (headerFinding
                 ? 'Re-fetch the URL and confirm the named response header. Do not treat a missing header as an indexing block.'
-                : 'Re-fetch the URL and confirm this selector and snippet. This card records the observation. It is not a closed-loop retest.'}
+                : 'Re-fetch the URL and confirm this selector and snippet. This card records the observation. It is not a closed-loop retest.')}
             </span>
           </div>
         </div>

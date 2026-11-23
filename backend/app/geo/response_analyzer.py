@@ -45,6 +45,42 @@ NEGATIVE_CONTEXT_RE = re.compile(
 COMPARATIVE_RE = re.compile(r"\b(?:vs\.?|versus|compared\s+to|comparison|whereas|unlike|while)\b", re.I)
 
 
+async def analyze_response_with_ai_judge(
+    response_text: str,
+    brand_name: str,
+    approved_facts: Optional[Dict[str, Any]] = None,
+    model_router: Any = None,
+) -> Dict[str, Any]:
+    """Semantic LLM judge for verbatim AI responses (framing, conditional recommendations, hallucinations)."""
+    if not response_text or not model_router or not hasattr(model_router, "generate_structured"):
+        return {"ai_judged": False}
+    try:
+        import json as _json
+        res = await model_router.generate_structured(
+            capability="geo_analysis",
+            agent_role="GEO Semantic Response & Hallucination Judge",
+            task_contract=(
+                f"Evaluate how this verbatim AI answer represents brand '{brand_name}' against approved_facts. "
+                "Classify sentiment (positive|neutral|negative|mixed), recommendation_intent (strong|conditional|none|anti), "
+                "comparative_framing, and list any factual hallucinations or omissions.\n"
+                f"APPROVED_FACTS: {_json.dumps(approved_facts or {})}\n"
+                f"AI_RESPONSE:\n{response_text[:3000]}"
+            ),
+            evidence_list=[],
+            output_schema_desc=(
+                '{"sentiment":"positive|neutral|negative|mixed","recommendation_intent":"strong|conditional|none|anti",'
+                '"comparative_framing":"string","hallucinations":["string"],"summary":"string"}'
+            ),
+            model_tier="reasoning_model",
+            allow_fallback=True,
+        )
+        if isinstance(res, dict):
+            return {"ai_judged": True, **res}
+    except Exception:
+        pass
+    return {"ai_judged": False}
+
+
 def _norm_host(url_or_domain: str) -> str:
     raw = (url_or_domain or "").strip().lower()
     if not raw:

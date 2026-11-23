@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { ExecutiveReport, Finding } from '../../types';
 import { SearchConsoleAttributionView } from '../SearchConsoleAttributionView';
 import { PillarShell } from '../ui';
+import { AiNarrativePanel } from '../ui/AiNarrativePanel';
 import { SectionExportButtons } from '../ui/SectionExportButtons';
 import { SeoExecutiveOverview } from './seo/SeoExecutiveOverview';
 import { SeoExecutiveDashboard } from './seo/SeoExecutiveDashboard';
@@ -95,6 +96,14 @@ export function SeoWorkspaceView({
     }).catch(() => {});
     seoApi.getLinkGraph(effectiveAuditId).then((res) => {
       if (res && Array.isArray(res.nodes)) setBackendGraph(res);
+    }).catch(() => {});
+    seoApi.getAgents(effectiveAuditId).then((res) => {
+      if (res && (Array.isArray(res.agent_results) || Array.isArray(res.agents))) {
+        setAssessment((prev) => ({
+          ...(prev || ({} as any)),
+          agent_results: res.agent_results || res.agents,
+        }));
+      }
     }).catch(() => {});
   };
 
@@ -226,6 +235,11 @@ export function SeoWorkspaceView({
     >
       {activeTab === 'overview' && (
         <div className="space-y-6">
+          <AiNarrativePanel
+            report={report}
+            bundleKey="seo_pdf"
+            title="SEO Enterprise AI Narrative & Finding Verification"
+          />
           <div className="flex items-center justify-between border-b border-line pb-3">
             <span className="text-xs uppercase font-bold text-ink-500 tracking-wider">Overview Presentation Mode:</span>
             <div className="flex items-center border border-line rounded-lg p-0.5 bg-paper-subtle">

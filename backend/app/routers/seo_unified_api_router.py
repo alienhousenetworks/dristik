@@ -179,7 +179,9 @@ def _resolve_audit_bundle(audit_id: str, user: UserIdentity) -> Dict[str, Any]:
     domain = str(rep_dict.get("domain") or urlparse(getattr(run, "website_url", "")).netloc or "")
     ws_id = getattr(run, "workspace_id", None) or ws_default
 
-    enterprise_obj = build_enterprise_seo(report)
+    from app.seo.enterprise.ai_runtime import resolve_live_ai_runner
+
+    enterprise_obj = build_enterprise_seo(report, ai_runner=resolve_live_ai_runner())
     assessment = enterprise_obj.model_dump()
 
     from app.seo.reporting.canonical_seo_pdf_bridge import (

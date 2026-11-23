@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { ExecutiveReport } from '../../types';
 import { PillarShell, Card } from '../ui';
+import { AiNarrativePanel } from '../ui/AiNarrativePanel';
 import { SectionExportButtons } from '../ui/SectionExportButtons';
 import {
   Bot,
@@ -180,10 +181,13 @@ export function AeoWorkspaceView({ report, analysisId, onOpenPatchPack }: AeoWor
       : '—';
 
   const rep = report as any;
-  const discoveredUrls: number = rep.discovery_frontier?.discovered_count ?? 505;
+  const discoveredUrls: number =
+    rep.discovery_frontier?.discovered_count ??
+    report.crawl_manifest?.total_pages_discovered ??
+    (report.crawl_manifest?.pages?.length || rep.pages?.length || 0);
   const inspectedUrls: number =
     rep.discovery_frontier?.inspected_count ??
-    (report.crawl_manifest?.pages?.length || rep.pages?.length || 5);
+    (report.crawl_manifest?.pages?.length || rep.pages?.length || 0);
   const isRepresentativeSample = inspectedUrls < discoveredUrls;
 
   // Filtered Questions
@@ -264,6 +268,12 @@ export function AeoWorkspaceView({ report, analysisId, onOpenPatchPack }: AeoWor
           ───────────────────────────────────────────────────────────── */}
       {activeSubTab === 'overview' && (
         <div className="space-y-6">
+          <AiNarrativePanel
+            report={report}
+            bundleKey="aeo_pdf"
+            title="AEO Enterprise AI Narrative & Grounding Verification"
+          />
+
           {/* Provenance & Sampling Alert Banner */}
           <div className="p-4 rounded-xl border border-line bg-paper-50 flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div className="space-y-1">
@@ -272,7 +282,7 @@ export function AeoWorkspaceView({ report, analysisId, onOpenPatchPack }: AeoWor
                   Audit Provenance
                 </span>
                 <span className="text-xs text-ink-500 font-mono">
-                  Domain: {report.domain || 'perforacare.com'} · Mode: Multi-Mode HTTP/DOM
+                  Domain: {report.domain || 'Target Domain'} · Mode: Multi-Mode HTTP/DOM
                 </span>
               </div>
               <p className="text-xs text-ink-600">
@@ -925,72 +935,134 @@ export function AeoWorkspaceView({ report, analysisId, onOpenPatchPack }: AeoWor
       {/* ─────────────────────────────────────────────────────────────
           SUB-TAB 5: LIVE AI VISIBILITY & CITATIONS
           ───────────────────────────────────────────────────────────── */}
-      {activeSubTab === 'live_visibility' && (
-        <div className="space-y-6">
-          <Card className="p-5 space-y-4">
-            <div className="flex items-center justify-between border-b border-line pb-3">
-              <div className="flex items-center gap-2">
-                <Activity className="w-4 h-4 text-ink-700" />
-                <h3 className="font-sans text-lg text-ink font-semibold">
-                  Live AI Engine Citation Testing
-                </h3>
+      {activeSubTab === 'live_visibility' && (() => {
+        const scorecard = (report as any).ai_visibility_scorecard;
+        const commEvals: any[] = Array.isArray(report.commercial_evaluations) ? report.commercial_evaluations : [];
+        const searchMatrix: any[] = Array.isArray(report.ai_search_matrix) ? report.ai_search_matrix : [];
+        const bakeoff = report.competitor_bakeoff;
+        const isMeasured = Boolean(scorecard && (scorecard.status === 'MEASURED' || (scorecard.queries_executed ?? 0) > 0));
+        const engineBreakdown: any[] = Array.isArray(scorecard?.engine_breakdown)
+          ? scorecard.engine_breakdown
+          : Array.isArray(scorecard?.engines)
+            ? scorecard.engines
+            : [];
+        return (
+          <div className="space-y-6">
+            <Card className="p-5 space-y-4">
+              <div className="flex items-center justify-between border-b border-line pb-3">
+                <div className="flex items-center gap-2">
+                  <Activity className="w-4 h-4 text-ink-700" />
+                  <h3 className="font-sans text-lg text-ink font-semibold">
+                    Live AI Engine Citation Testing
+                  </h3>
+                </div>
+                <span className={`text-xs font-mono font-bold px-2 py-0.5 rounded ${isMeasured ? 'bg-good/10 text-good' : 'bg-warn/10 text-warn'}`}>
+                  {isMeasured
+                    ? `MEASURED · ${scorecard?.queries_executed ?? 0} live queries`
+                    : 'Status: Credentials Required'}
+                </span>
               </div>
-              <span className="text-xs font-mono font-bold px-2 py-0.5 rounded bg-warn/10 text-warn">
-                Status: Credentials Required
-              </span>
-            </div>
 
-            {/* Zero Synthetic Data Banner */}
-            <div className="p-4 rounded-xl border border-warn/30 bg-warn/5 space-y-2 text-xs">
-              <div className="flex items-center gap-2 font-mono text-xs font-bold text-warn">
-                <AlertTriangle className="w-4 h-4" />
-                <span>Zero Synthetic Data Notice</span>
-              </div>
-              <p className="text-ink-700 leading-relaxed">
-                Live citation testing executes actual API queries against Perplexity, OpenAI Search, Claude, and Gemini. When connectors or credentials are not configured for this analysis run, Dristik displays an explicit <code className="font-bold">CREDENTIALS_NOT_CONFIGURED</code> status rather than fabricating simulated citation percentages.
-              </p>
-            </div>
-
-            {/* Multi-Engine Adapter Grid */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
-              {[
-                { engine: 'Perplexity AI', status: 'STANDBY', note: 'Sonar Pro / Search API' },
-                { engine: 'OpenAI ChatGPT', status: 'STANDBY', note: 'ChatGPT Search Connector' },
-                { engine: 'Anthropic Claude', status: 'STANDBY', note: 'Claude Web Citations' },
-                { engine: 'Google Gemini', status: 'STANDBY', note: 'Grounding with Google Search' },
-              ].map((item, idx) => (
-                <div key={idx} className="p-4 rounded-xl border border-line bg-paper-50 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="font-semibold text-ink">{item.engine}</span>
-                    <span className="font-mono text-[9px] px-1.5 py-0.5 rounded bg-paper-200 text-ink-600 font-bold">
-                      {item.status}
-                    </span>
+              {isMeasured ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
+                  {(engineBreakdown.length > 0 ? engineBreakdown : [
+                    { engine: 'Overall Live Visibility', citation_rate_pct: scorecard?.citation_rate_pct, mention_rate_pct: scorecard?.mention_rate_pct, queries_executed: scorecard?.queries_executed },
+                  ]).map((item: any, idx: number) => (
+                    <div key={idx} className="p-4 rounded-xl border border-line bg-paper-50 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="font-semibold text-ink">{item.engine || item.name || `Engine ${idx + 1}`}</span>
+                        <span className="font-mono text-[9px] px-1.5 py-0.5 rounded bg-good/10 text-good font-bold">
+                          MEASURED
+                        </span>
+                      </div>
+                      <div className="text-lg font-mono font-bold text-ink">
+                        {item.citation_rate_pct != null ? `${Math.round(item.citation_rate_pct)}% cited` : 'Measured'}
+                      </div>
+                      <p className="text-[11px] text-ink-500 font-mono">
+                        Mentions: {item.mention_rate_pct != null ? `${Math.round(item.mention_rate_pct)}%` : '—'} · Queries: {item.queries_executed ?? '—'}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="p-4 rounded-xl border border-warn/30 bg-warn/5 space-y-2 text-xs">
+                  <div className="flex items-center gap-2 font-mono text-xs font-bold text-warn">
+                    <AlertTriangle className="w-4 h-4" />
+                    <span>Zero Synthetic Data Notice</span>
                   </div>
-                  <p className="text-[11px] text-ink-500 font-mono">{item.note}</p>
+                  <p className="text-ink-700 leading-relaxed">
+                    Live citation testing executes actual API queries against Perplexity, OpenAI Search, Claude, and Gemini. Configure API connectors to capture live engine citations.
+                  </p>
                 </div>
-              ))}
-            </div>
+              )}
 
-            {/* Citation Evaluation Protocol */}
-            <div className="p-4 rounded-xl border border-line bg-paper-100/50 space-y-2 text-xs">
-              <h4 className="font-semibold text-ink">Citation Verification Logic</h4>
-              <p className="text-ink-600">
-                Each live response is parsed to verify two distinct criteria:
-              </p>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
-                <div className="p-3 rounded bg-paper border border-line space-y-1">
-                  <span className="font-mono text-[10px] text-ink-500 uppercase font-bold">1. Brand Mention</span>
-                  <p className="text-ink-700">Does the model state the brand name as a direct solution?</p>
+              {commEvals.length > 0 && (
+                <div className="space-y-2 pt-2">
+                  <h4 className="text-sm font-semibold text-ink">
+                    Canonical Commercial Buyer Evaluations ({commEvals.length})
+                  </h4>
+                  <div className="space-y-2">
+                    {commEvals.map((ev: any, idx: number) => (
+                      <div key={ev.question_key || idx} className="p-3 rounded-lg border border-line bg-paper-50 text-xs space-y-1">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="font-semibold text-ink">{ev.question_title || ev.buyer_query}</span>
+                          <span className="font-mono text-indigo-700">
+                            Before: {ev.before_score ?? '—'} → After: {ev.after_score ?? '—'}
+                            {ev.delta != null ? ` (+${ev.delta})` : ''}
+                          </span>
+                        </div>
+                        {ev.before_answer && <div className="text-ink-600"><span className="font-semibold">Observed: </span>{ev.before_answer}</div>}
+                        {ev.after_answer && <div className="text-emerald-800"><span className="font-semibold">Post-Patch: </span>{ev.after_answer}</div>}
+                        {ev.gap_analysis && <div className="text-ink-500">{ev.gap_analysis}</div>}
+                      </div>
+                    ))}
+                  </div>
                 </div>
-                <div className="p-3 rounded bg-paper border border-line space-y-1">
-                  <span className="font-mono text-[10px] text-ink-500 uppercase font-bold">2. Direct Citation Link</span>
-                  <p className="text-ink-700">Does the response link to the customer&apos;s verified domain URL?</p>
+              )}
+
+              {searchMatrix.length > 0 && (
+                <div className="space-y-2 pt-2">
+                  <h4 className="text-sm font-semibold text-ink">
+                    AI Search Query Matrix ({searchMatrix.length})
+                  </h4>
+                  <div className="space-y-2">
+                    {searchMatrix.map((row: any, idx: number) => (
+                      <div key={idx} className="p-3 rounded-lg border border-line text-xs space-y-1">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="font-semibold text-ink">{row.query}</span>
+                          <span className="font-mono text-ink-600">Score: {row.score ?? '—'} · Citation Prob: {row.citation_probability ?? '—'}</span>
+                        </div>
+                        {row.gap_analysis && <div className="text-ink-600">{row.gap_analysis}</div>}
+                        {row.recommended_remediation && <div className="text-indigo-700">{row.recommended_remediation}</div>}
+                      </div>
+                    ))}
+                  </div>
                 </div>
-              </div>
-            </div>
-          </Card>
-        </div>
-      )}
+              )}
+
+              {bakeoff && Array.isArray((bakeoff as any).evaluations) && (bakeoff as any).evaluations.length > 0 && (
+                <div className="space-y-2 pt-2">
+                  <h4 className="text-sm font-semibold text-ink">
+                    Competitor Answer Bake-Off vs {(bakeoff as any).competitor_domain}
+                  </h4>
+                  <div className="space-y-2">
+                    {(bakeoff as any).evaluations.map((ev: any, idx: number) => (
+                      <div key={idx} className="p-3 rounded-lg border border-line bg-paper-50 text-xs space-y-1">
+                        <div className="flex items-center justify-between">
+                          <span className="font-semibold text-ink">{ev.query || ev.question}</span>
+                          <span className="font-mono font-bold text-indigo-700">Winner: {ev.winner}</span>
+                        </div>
+                        {ev.reason_competitor_won && <div className="text-ink-600">{ev.reason_competitor_won}</div>}
+                        {ev.commercial_takeaway && <div className="text-ink-700">{ev.commercial_takeaway}</div>}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </Card>
+          </div>
+        );
+      })()}
 
       {/* ─────────────────────────────────────────────────────────────
           SUB-TAB 6: AI REFERRAL ANALYTICS & COMMERCIAL ATTRIBUTION

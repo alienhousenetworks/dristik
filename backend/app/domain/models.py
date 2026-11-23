@@ -3363,6 +3363,10 @@ class ExecutiveReport(BaseModel):
     document_narratives: Dict[str, Any] = Field(default_factory=dict)
     narrative_mode: str = "deterministic_fallback"
     narrative_tier: str = "standard"
+    deterministic_verifications: Dict[str, Dict[str, Any]] = Field(default_factory=dict)
+    coverage_ledger: Optional[Dict[str, Any]] = None
+    growth_opportunities: List[Dict[str, Any]] = Field(default_factory=list)
+    evidence_gaps: List[Dict[str, Any]] = Field(default_factory=list)
     international_seo: Optional[InternationalSeoAuditReport] = None
     topical_authority: Optional[TopicalAuthorityAuditReport] = None
     ecommerce_seo: Optional[EcommerceSeoAuditReport] = None

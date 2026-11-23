@@ -52,6 +52,14 @@ export interface NormalizedFinding {
   businessImpact?: string;
   recommendation?: string;
   verificationNotes?: string;
+  adversarialReviewed?: boolean;
+  reasoning?: string;
+  detailedDiagnosis?: string;
+  conciseSummary?: string;
+  whyItMatters?: string;
+  businessContext?: string;
+  validationCriteria?: string;
+  acceptanceCriteria?: string;
   codePatch?: CodePatch;
   subObservations?: string[];
 }
@@ -295,10 +303,27 @@ export interface NormalizedReport {
       perplexityBot: string;
     };
     attributionRewrites: Array<{
+      passageId?: string;
+      url?: string;
       currentPassage: string;
       recommendedRewrite: string;
       why?: string;
+      improvements?: string[];
+      scoreBefore?: number | null;
+      scoreAfter?: number | null;
+      estimatedScoreImprovement?: number | null;
     }>;
+    aiCitationReadinessSynthesis?: {
+      summary?: string;
+      topCitationGaps?: string[];
+      quotableBlockRecommendations?: Array<{
+        targetUrl?: string;
+        why?: string;
+        suggestedStructure?: string;
+      }>;
+    };
+    aiCitationDashboard?: Record<string, any>;
+    geoBenchmarkReport?: Record<string, any>;
     questions: Array<{
       key: string;
       question: string;
@@ -350,6 +375,9 @@ export interface NormalizedReport {
     totalSandboxQuestions: number;
     allSandboxEvaluations: DynamicSandboxQuestionEvaluation[];
     auditedQuestions: NormalizedQuestionRecord[];
+    aiSearchMatrix?: Array<Record<string, any>>;
+    fiveDimensionAiVisibility?: Record<string, any>;
+    kieGraphSummary?: Record<string, any>;
   };
 
   // Chapter 04: Competitive Intelligence & Entity Knowledge Graph
@@ -488,7 +516,27 @@ export interface NormalizedReport {
   appendices: {
     findings: NormalizedFinding[];
     patches: CodePatch[];
+    remediationPatches?: Array<Record<string, any>>;
     evidenceLedger: NormalizedEvidenceItem[];
+  };
+
+  // Enterprise AI Narratives, Verification & Strategic Synthesis
+  aiIntelligence?: {
+    narrativeMode?: string;
+    narrativeTier?: string;
+    documentNarratives: Record<string, any>;
+    chapterNarratives: Record<string, any>;
+    coverageLedger?: Record<string, any>;
+    deterministicVerifications?: Record<string, any>;
+    criticGate?: Record<string, any>;
+    contradictionReport?: Record<string, any>;
+    semanticBusiness?: Record<string, any>;
+    exploratoryHypotheses?: Finding[];
+    hypothesesMatrix?: Array<Record<string, any>>;
+    causalDiagnosticChains?: Array<Record<string, any>>;
+    whatsappSummary?: string;
+    growthOpportunities?: Array<Record<string, any>>;
+    evidenceGaps?: Array<Record<string, any>>;
   };
 }
 
@@ -608,6 +656,14 @@ export function normalizeExecutiveReport(report: ExecutiveReport): NormalizedRep
       businessImpact: f.business_impact,
       recommendation: f.recommendation,
       verificationNotes: f.verification_notes,
+      adversarialReviewed: Boolean((f as any).adversarial_reviewed),
+      reasoning: (f as any).reasoning,
+      detailedDiagnosis: (f as any).detailed_diagnosis || (f as any).diagnosis,
+      conciseSummary: (f as any).concise_summary,
+      whyItMatters: (f as any).why_it_matters,
+      businessContext: (f as any).business_context,
+      validationCriteria: (f as any).validation_criteria,
+      acceptanceCriteria: (f as any).acceptance_criteria,
       codePatch: f.code_patch || (report.code_patches || []).find((p) => p.patch_id === (f as any).patch_id),
       subObservations: f.sub_observations,
     };
@@ -872,10 +928,31 @@ export function normalizeExecutiveReport(report: ExecutiveReport): NormalizedRep
         perplexityBot: (report.crawl_manifest?.robots_txt_content || '').includes('PerplexityBot') ? 'Explicit Directive Declared' : 'Default Permitted',
       },
       attributionRewrites: ((geoReadiness?.citation_passages?.rewrite_recommendations || []) as any[]).map((rw) => ({
+        passageId: rw.passage_id,
+        url: rw.url,
         currentPassage: rw.current_passage || '',
         recommendedRewrite: rw.recommended_rewrite || '',
         why: rw.why,
+        improvements: Array.isArray(rw.improvements) ? rw.improvements : [],
+        scoreBefore: finiteNumber(rw.score_before),
+        scoreAfter: finiteNumber(rw.score_after),
+        estimatedScoreImprovement: finiteNumber(rw.estimated_score_improvement),
       })).filter((rw) => rw.recommendedRewrite && rw.recommendedRewrite !== rw.currentPassage),
+      aiCitationReadinessSynthesis: geoReadiness?.citation_passages?.ai_citation_readiness_synthesis
+        ? {
+            summary: geoReadiness.citation_passages.ai_citation_readiness_synthesis.summary,
+            topCitationGaps: geoReadiness.citation_passages.ai_citation_readiness_synthesis.top_citation_gaps || [],
+            quotableBlockRecommendations: (
+              geoReadiness.citation_passages.ai_citation_readiness_synthesis.quotable_block_recommendations || []
+            ).map((rec: any) => ({
+              targetUrl: rec.target_url,
+              why: rec.why,
+              suggestedStructure: rec.suggested_structure,
+            })),
+          }
+        : undefined,
+      aiCitationDashboard: (report as any).ai_citation_dashboard || undefined,
+      geoBenchmarkReport: (report as any).geo_benchmark_report || undefined,
       questions: ((geoReadiness?.questions || []) as any[]).map((q) => ({
         key: q.question_key || '',
         question: q.question || '',
@@ -922,6 +999,9 @@ export function normalizeExecutiveReport(report: ExecutiveReport): NormalizedRep
       totalSandboxQuestions: sandboxEvals.length,
       allSandboxEvaluations: sandboxEvals,
       auditedQuestions,
+      aiSearchMatrix: (report.ai_search_matrix || []) as any[],
+      fiveDimensionAiVisibility: (report as any).five_dimension_ai_visibility || undefined,
+      kieGraphSummary: (report as any).kie_graph_summary || undefined,
     },
 
     competitive: {
@@ -1073,6 +1153,12 @@ export function normalizeExecutiveReport(report: ExecutiveReport): NormalizedRep
         outcome: act.expected_outcome || '',
         validation: act.validation || '',
         findingId: act.related_finding_id,
+        evidenceId: (act as any).evidence_id,
+        affectedRoutes: Array.isArray((act as any).affected_routes) ? (act as any).affected_routes : undefined,
+        observed: (act as any).observed,
+        remediationSteps: Array.isArray((act as any).remediation_steps) ? (act as any).remediation_steps : undefined,
+        verificationRule: (act as any).verification_rule,
+        expectedEffect: (act as any).expected_effect,
       })),
       roadmapNow: report.roadmap_7_days || [],
       roadmapNext: report.roadmap_30_days || [],
@@ -1100,7 +1186,26 @@ export function normalizeExecutiveReport(report: ExecutiveReport): NormalizedRep
     appendices: {
       findings: normalizedFindings,
       patches: report.code_patches || [],
+      remediationPatches: (report.remediation_patches || []) as any[],
       evidenceLedger: evidenceList,
+    },
+
+    aiIntelligence: {
+      narrativeMode: (report as any).narrative_mode,
+      narrativeTier: (report as any).narrative_tier,
+      documentNarratives: (report as any).document_narratives || {},
+      chapterNarratives: (report as any).chapter_narratives || {},
+      coverageLedger: (report as any).coverage_ledger || undefined,
+      deterministicVerifications: (report as any).deterministic_verifications || undefined,
+      criticGate: (report as any).quality_gate_results?.critic_gate || undefined,
+      contradictionReport: (report as any).quality_gate_results?.contradiction_report || undefined,
+      semanticBusiness: (report as any).semantic_business || undefined,
+      exploratoryHypotheses: report.exploratory_hypotheses || [],
+      hypothesesMatrix: (report.hypotheses_matrix || []) as any[],
+      causalDiagnosticChains: (report.causal_diagnostic_chains || []) as any[],
+      whatsappSummary: report.whatsapp_summary,
+      growthOpportunities: (report as any).growth_opportunities || [],
+      evidenceGaps: (report as any).evidence_gaps || [],
     },
   };
 }

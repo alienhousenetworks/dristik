@@ -127,7 +127,17 @@ def _specialist_copy(rep: Any) -> Dict[str, Any]:
         "hook": text("hook_3sec", "hook"),
         "geo_snippet": text("geo_snippet", "snippet"),
         "primary_cta": text("primary_cta", "cta"),
+        "secondary_cta": text("secondary_cta"),
+        "supporting_points": list(_get_val(sug, "supporting_points") or []),
         "analysis": analysis,
+        "what_works": str(_get_val(copy, "what_works") or "").strip(),
+        "issues": list(_get_val(copy, "issues") or []),
+        "voice": str(_get_val(copy, "voice") or "").strip(),
+        "clarity": _get_val(copy, "clarity"),
+        "persuasion": _get_val(copy, "persuasion"),
+        "audience_fit": _get_val(copy, "audience_fit"),
+        "cta_quality": _get_val(copy, "cta_quality"),
+        "specialist_insights": _get_val(copy, "specialist_insights") or {},
         "body_rewrite": text("body_rewrite", "full_rewrite", collapse=False),
         "sections": sections,
         "faqs": faqs,
@@ -162,6 +172,10 @@ def normalize_finding(finding: Any, index: int = 1) -> Dict[str, Any]:
     sev = str(enriched.get("severity", "Medium")).upper()
     sev_cap = sev.capitalize()
     enriched["priority"] = sev_cap
+    enriched["verification_notes"] = _get_val(finding, "verification_notes") or ""
+    enriched["adversarial_reviewed"] = bool(_get_val(finding, "adversarial_reviewed"))
+    enriched["detailed_diagnosis"] = _get_val(finding, "detailed_diagnosis") or _get_val(finding, "diagnosis") or ""
+    enriched["reasoning"] = _get_val(finding, "reasoning") or ""
     if enriched.get("lifecycle_status") in ("Open Defect", "OPEN"):
         enriched["lifecycle_status"] = "Open"
     if "high" in str(enriched.get("confidence", "")).lower():

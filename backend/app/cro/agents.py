@@ -167,6 +167,10 @@ async def _run_cro_frontier_reasoning(
             refs = [fallback_ref]
         if not refs:
             continue
+        biz_impact = str(item.get("business_impact") or "").strip()
+        rec_text = str(item.get("recommendation") or "").strip()
+        if biz_impact and biz_impact not in rec_text:
+            rec_text = f"{rec_text} (Business impact: {biz_impact})".strip() if rec_text else f"Business impact: {biz_impact}"
         claim_obj = Claim(
             id=f"clm_cro_{uuid.uuid4().hex[:10]}",
             agent_id=agent_id,
@@ -175,7 +179,7 @@ async def _run_cro_frontier_reasoning(
             statement=stmt,
             evidence_refs=refs,
             confidence=max(0.4, min(0.95, float(item.get("confidence") or 0.80))),
-            recommendation=str(item.get("recommendation") or "").strip() or None,
+            recommendation=rec_text or None,
             verification_status=VerificationStatus.PENDING_VERIFICATION,
         )
         if getattr(blackboard, "claim_registry", None) is not None:

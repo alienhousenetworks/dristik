@@ -304,6 +304,21 @@ async def get_canonical_audit_record(
         "finding_counts": severity_summary,
         "scorecard": scorecard,
         "report_version": "enterprise_v4.2",
+        "narrative_mode": getattr(report, "narrative_mode", None) if report else None,
+        "narrative_tier": getattr(report, "narrative_tier", None) if report else None,
+        "document_narratives": (getattr(report, "document_narratives", None) or {}) if report else {},
+        "chapter_narratives": (getattr(report, "chapter_narratives", None) or {}) if report else {},
+        "coverage_ledger": getattr(report, "coverage_ledger", None) if report else None,
+        "commercial_evaluations": [
+            c.model_dump() if hasattr(c, "model_dump") else c
+            for c in ((getattr(report, "commercial_evaluations", None) or []) if report else [])
+        ],
+        "dynamic_sandbox_evaluations": [
+            d.model_dump() if hasattr(d, "model_dump") else d
+            for d in ((getattr(report, "dynamic_sandbox_evaluations", None) or []) if report else [])
+        ],
+        "five_dimension_ai_visibility": getattr(report, "five_dimension_ai_visibility", None) if report else None,
+        "kie_graph_summary": getattr(report, "kie_graph_summary", None) if report else None,
     }
 
 
