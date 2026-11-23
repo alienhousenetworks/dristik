@@ -37,6 +37,7 @@ class PatchApplicationResult(BaseModel):
     provider: ConnectorType
     applied_at: str
     target_resource: str
+    execution_mode: str = "PREVIEW_ONLY"  # PREVIEW_ONLY | LIVE
     diff_summary: Optional[Dict[str, Any]] = None
     pr_url: Optional[str] = None
     pr_number: Optional[int] = None

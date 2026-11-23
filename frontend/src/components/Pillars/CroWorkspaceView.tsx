@@ -54,7 +54,7 @@ const WEIGHTED_DIM_META: Array<[string, string, number]> = [
 ];
 
 /** Builds an honest, zero-fabrication canonical bundle from a saved ExecutiveReport before/without a live /api/v1/cro audit. */
-function buildBundleFromExecutiveReport(report: ExecutiveReport, analysisId?: string): CroEnterpriseBundle {
+export function buildBundleFromExecutiveReport(report: ExecutiveReport, analysisId?: string): CroEnterpriseBundle {
   const croAudit = report.cro_audit;
   const intel = (croAudit?.intelligence || {}) as Record<string, any>;
   const domain = (report.domain || report.website_url || '').replace(/^https?:\/\//, '').replace(/\/$/, '');
@@ -103,12 +103,12 @@ function buildBundleFromExecutiveReport(report: ExecutiveReport, analysisId?: st
       affected_urls: (f.evidence || []).map((e) => e.url).filter(Boolean) as string[],
       affected_elements: [],
       affected_journeys: [],
-      affected_devices: ['desktop', 'mobile'],
+      affected_devices: Array.isArray((f as any).affected_devices) ? (f as any).affected_devices : [],
       evidence_ids: f.evidence_refs || [],
       source_type: (f as any).adversarial_reviewed ? 'ai_verified_finding' : 'ai_specialist_observation',
       claim_boundary: f.verification_notes || 'AI-analyzed CRO finding',
       severity: String(f.severity || 'medium').toLowerCase(),
-      confidence: typeof f.confidence === 'number' ? f.confidence : 0.8,
+      confidence: typeof f.confidence === 'number' ? f.confidence : null,
       recommendation: f.recommendation,
       implementation_instructions: f.recommendation,
       owner_role: 'Product / Engineering',
@@ -128,13 +128,13 @@ function buildBundleFromExecutiveReport(report: ExecutiveReport, analysisId?: st
     target_audience: report.business_profile?.target_audience || 'unknown',
     journey_position: i === 0 ? 'entry' : 'evaluation',
     importance: i === 0 ? 'critical' : 'medium',
-    http_status: p.status_code ?? 200,
+    http_status: p.status_code ?? null,
     title: p.title,
     h1: Array.isArray(p.h1) ? p.h1[0] : p.h1,
     subheadline: null,
     word_count: p.word_count || 0,
     rendered_dom_verified: !!p.rendered,
-    device_coverage: ['desktop'],
+    device_coverage: Array.isArray(p.device_coverage) ? p.device_coverage : [],
     functional_test_status: 'not_tested',
     primary_cta: croAudit?.cta_analysis?.hero_cta_text || null,
     cta_count: Array.isArray(p.ctas) ? p.ctas.length : 0,
@@ -146,7 +146,7 @@ function buildBundleFromExecutiveReport(report: ExecutiveReport, analysisId?: st
     performance_metrics: {},
   }));
 
-  const ctas = (croAudit?.cta_analysis?.ctas || []).map((c, idx) => ({
+  const ctas = (croAudit?.cta_analysis?.ctas || []).map((c: any, idx: number) => ({
     element_id: `cta_${idx}`,
     url: c.page_url,
     text: c.cta_text,
@@ -156,8 +156,8 @@ function buildBundleFromExecutiveReport(report: ExecutiveReport, analysisId?: st
     intent_category: c.intent_category.toLowerCase(),
     section: c.placement_zone.toLowerCase(),
     device: 'desktop',
-    clickable: true,
-    interaction_result: 'observed_in_crawl',
+    clickable: typeof c.interaction_test?.passed === 'boolean' ? c.interaction_test.passed : null,
+    interaction_result: c.interaction_test?.status || 'not_tested',
   }));
 
   const formAudit = report.form_audit || croAudit?.form_friction;
@@ -168,7 +168,7 @@ function buildBundleFromExecutiveReport(report: ExecutiveReport, analysisId?: st
     field_count: f.input_count,
     required_fields: f.required_fields_count ?? 0,
     missing_labels: f.missing_labels_count,
-    validation_state: f.validation_messages_present ? 'passed' : 'warning',
+    validation_state: 'not_tested',
     submission_test_state: 'not_tested',
     qualification_tradeoff_note: 'Review field necessity against sales qualification requirements.',
   }));
@@ -180,8 +180,8 @@ function buildBundleFromExecutiveReport(report: ExecutiveReport, analysisId?: st
     stage: st.stage_id || 'discovery',
     url: st.matched_urls?.[0] || null,
     expected_interaction: 'Progress toward primary conversion goal',
-    technical_status: st.status === 'OBSERVED' ? 'passed' : 'not_tested',
-    technical_notes: st.status === 'OBSERVED' ? 'Matched in crawl sample' : 'Not observed in crawl sample',
+    technical_status: st.status === 'OBSERVED' ? 'observed' : 'not_tested',
+    technical_notes: st.status === 'OBSERVED' ? 'Journey stage was observed in the crawl sample; functional success was not established.' : 'Journey stage was not observed in the crawl sample.',
     behavioral_status: 'unmeasured',
     behavioral_metrics: {},
   }));
@@ -201,7 +201,7 @@ function buildBundleFromExecutiveReport(report: ExecutiveReport, analysisId?: st
       pages_audited: pages.length,
       findings_count: findings.length,
       critical_findings_count: findings.filter((f) => f.severity === 'critical').length,
-      qa_status: 'passed_with_warnings',
+      qa_status: 'not_certified',
       methodology_version: 'dristik_cro_v2.0',
       limitations: ['Viewing saved multi-pillar report snapshot. Run Enterprise CRO Audit for full 11-stage DAG persistence and 14-profile PDF publishing.'],
       created_at: report.generated_at || new Date().toISOString(),
@@ -222,10 +222,10 @@ function buildBundleFromExecutiveReport(report: ExecutiveReport, analysisId?: st
         { metric: 'Revenue Per Visitor (RPV)', formula: 'Attributed Revenue / Eligible Unique Visitors', value: null, status: 'data_unavailable' },
         { metric: 'Form Completion Rate', formula: 'Valid Form Submissions / Form Starts * 100', value: null, status: 'data_unavailable' },
       ],
-      scope_coverage_pct: pages.length ? 100 : 0,
-      evidence_coverage_pct: 100,
-      confidence: 0.7,
-      analytics_completeness_pct: 0,
+      scope_coverage_pct: null,
+      evidence_coverage_pct: null,
+      confidence: null,
+      analytics_completeness_pct: null,
       disclosures: [
         'CRO Experience Score, Conversion Measurement Score, and Measured Business Performance are kept strictly separate.',
         'Disconnected analytics metrics remain Unavailable (never coerced to zero).',

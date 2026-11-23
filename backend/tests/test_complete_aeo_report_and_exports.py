@@ -436,3 +436,60 @@ def test_all_new_csv_exports():
     assert "EV-DOM-0001" in ledger_csv
     assert "FIRST_PARTY_CRAWL" in ledger_csv
 
+
+def test_aeo_intelligence_suite_wired_and_api_exposed():
+    """Verify the 5 non-redundant AEO intelligence engines are wired and exposed via API."""
+    import uuid
+    from unittest.mock import MagicMock
+    from app.aeo.intelligence import run_aeo_intelligence_suite
+    from app.main import app
+    from app.orchestration.orchestrator import orchestrator
+
+    # Empty pages must fail closed with NOT_MEASURED
+    empty = run_aeo_intelligence_suite(domain="acme.com", brand_name="Acme Corp", pages=[])
+    assert empty["status"] == "NOT_MEASURED"
+    assert empty["summary"]["avg_answer_completeness_pct"] is None
+    assert empty["summary"]["voice_testing_status"] == "VOICE_SURFACE_UNTESTED"
+
+    # Wired API endpoints
+    client = TestClient(app)
+    signup = client.post("/api/v1/auth/signup", json={
+        "full_name": "AEO Intel Owner",
+        "email": f"aeo_intel_{uuid.uuid4().hex[:8]}@example.com",
+        "password": "OwnerPass1",
+        "organization_name": "AEO Intel Org",
+    })
+    assert signup.status_code == 200, signup.text
+
+    report = _make_dummy_aeo_report()
+    mock_run = MagicMock()
+    mock_run.report = report
+    mock_run.org_id = signup.json()["user"]["org_id"]
+    mock_run.analysis_id = "analysis_aeo_test_001"
+    mock_run.domain = "acme.com"
+    mock_run.website_url = "https://acme.com"
+
+    original_get_run = orchestrator.get_run
+    orchestrator.get_run = MagicMock(return_value=mock_run)
+    try:
+        res_intel = client.get("/api/v1/reports/analysis_aeo_test_001/aeo-intelligence")
+        assert res_intel.status_code == 200
+        intel = res_intel.json()
+        assert intel["status"] == "MEASURED"
+        assert intel["analysis_id"] == "analysis_aeo_test_001"
+        assert intel["summary"]["total_questions"] > 0
+        assert intel["summary"]["voice_testing_status"] == "VOICE_SURFACE_UNTESTED"
+        assert "question_universe" in intel
+        assert "question_page_graph" in intel
+        assert "answer_completeness" in intel
+        assert "passage_extractability" in intel
+        assert "conversational_voice" in intel
+
+        res_analytics = client.get("/api/v1/reports/analysis_aeo_test_001/aeo-analytics")
+        assert res_analytics.status_code == 200
+        analytics = res_analytics.json()
+        assert analytics["aeo_intelligence_summary"]["total_questions"] == intel["summary"]["total_questions"]
+    finally:
+        orchestrator.get_run = original_get_run
+
+

@@ -195,6 +195,8 @@ def analyze_dom_structure(soup: BeautifulSoup, url: str, evidence_store: Evidenc
     stylesheets = soup.find_all("link", rel=lambda x: x and "stylesheet" in (x if isinstance(x, list) else [x]))
     stylesheets_count = len(stylesheets)
 
+    from app.domain.evidence.rule_catalog import is_skip_link
+
     buttons = soup.find_all(["button", "a"])
     cta_candidates: List[str] = []
     for b in buttons:
@@ -205,6 +207,10 @@ def analyze_dom_structure(soup: BeautifulSoup, url: str, evidence_store: Evidenc
         if (b.get("id") or "") in {"mobile-menu-btn"}:
             continue
         txt = re.sub(r"\s+", " ", heading_text(b)).strip()
+        href = str(b.get("href") or "")
+        cls_str = " ".join(b.get("class") or []) if isinstance(b.get("class"), list) else str(b.get("class") or "")
+        if is_skip_link(txt, href, cls_str):
+            continue
         lowered = txt.lower()
         if not txt or len(txt) > 40 or len(txt) < 2:
             continue

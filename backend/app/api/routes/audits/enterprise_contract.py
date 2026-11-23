@@ -291,6 +291,14 @@ async def get_canonical_audit_record(
         and float(getattr(p, "load_time_ms", None) or getattr(p, "ttfb_ms", 0.0)) > 0
     ]
 
+    canonical_scorecard_payload = None
+    if report is not None:
+        try:
+            from app.domain.scoring.canonical_scorecard import CanonicalScorecardEngine
+            canonical_scorecard_payload = CanonicalScorecardEngine.evaluate_from_report(report).model_dump(mode="json")
+        except Exception:
+            canonical_scorecard_payload = getattr(report, "canonical_scorecard", None)
+
     return {
         "audit_id": run.analysis_id,
         "target_domain": getattr(report, "domain", None) or urlparse(run.website_url).netloc.replace("www.", ""),
@@ -303,6 +311,7 @@ async def get_canonical_audit_record(
         "ttfb_summary": compute_ttfb_summary(ttfb_samples),
         "finding_counts": severity_summary,
         "scorecard": scorecard,
+        "canonical_scorecard": canonical_scorecard_payload,
         "report_version": "enterprise_v4.2",
         "narrative_mode": getattr(report, "narrative_mode", None) if report else None,
         "narrative_tier": getattr(report, "narrative_tier", None) if report else None,

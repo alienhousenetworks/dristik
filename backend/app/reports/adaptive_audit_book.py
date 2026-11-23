@@ -264,20 +264,13 @@ def build_publication_manifest(
             "title": "AI Crawler Directives & /llms.txt Health",
             "desc": "Robots.txt access rules for GPTBot, PerplexityBot, ClaudeBot, and agentic documentation manifests.",
         })
-        geo_passages = getattr(getattr(report, "geo_readiness", None), "citation_passages", None) or {}
-        geo_rewrites = (
-            geo_passages.get("rewrite_recommendations", [])
-            if isinstance(geo_passages, dict)
-            else getattr(geo_passages, "rewrite_recommendations", [])
-        ) or []
-        if geo_rewrites:
-            chapters.append({
-                "id": "ch_geo_rewrites",
-                "num": "04",
-                "part": "PART II: CONTENT EXTRACTABILITY",
-                "title": "Factual Attribution Laboratory & Citable Rewrites",
-                "desc": "Attribution rewrites transforming ambiguous text into directly citable entity statements.",
-            })
+        chapters.append({
+            "id": "ch_geo_rewrites",
+            "num": "04",
+            "part": "PART II: CONTENT EXTRACTABILITY",
+            "title": "Factual Attribution Laboratory & Citable Rewrites",
+            "desc": "Attribution rewrites transforming ambiguous text into directly citable entity statements.",
+        })
     elif family == "CRO":
         chapters.append({
             "id": "ch_cro_value_prop",
@@ -534,7 +527,7 @@ from app.report_finding_registry import (
 )
 
 
-# Finding IDs whose full card was already rendered in the current book (reset per build).
+# Finding IDs whose full card was already rendered in the current book (fallback when no context passed).
 _DETAILED_CARDS_RENDERED: set = set()
 
 _GEO_CANONICAL_CATS = {
@@ -576,45 +569,28 @@ def _all_report_findings(report: Any, manifest: Optional[Dict[str, Any]] = None)
     return base
 
 
-def _format_finding_cards(findings: List[Any], limit: Optional[int] = None, detailed: bool = False, dedupe: bool = True) -> str:
-    """Use short chapter references; reserve full plain-English narratives for the findings register."""
+def _format_finding_cards(findings: List[Any], limit: Optional[int] = None, detailed: bool = True, dedupe: bool = True, render_ctx: Optional[Dict[str, Any]] = None) -> str:
+    """Render findings. Defaults to full 5-point actionable finding cards with scoped deduplication."""
     cards = []
     target_findings = findings if limit is None else findings[:limit]
+    rendered_set = render_ctx.setdefault("_rendered_finding_cards", set()) if render_ctx is not None else _DETAILED_CARDS_RENDERED
     for idx, finding in enumerate(target_findings):
         if detailed:
+            from app.reports.five_point_card_renderer import (
+                render_finding_cross_reference,
+                render_five_point_finding_card,
+            )
             fid = str(_finding_value(finding, "finding_id", _finding_value(finding, "id", "")) or "")
-            if dedupe and fid and fid in _DETAILED_CARDS_RENDERED:
-                # Full card already printed in an earlier chapter: reference it instead of repeating it.
-                title = _esc(_finding_value(finding, "title", "Finding"))
+            if dedupe and fid and fid in rendered_set:
+                # Full card already printed in its owning chapter: render 1-line cross-reference.
                 cards.append(
-                    '<div class="card finding-reference" style="margin:6px 0;padding:9px 12px;break-inside:avoid;">'
-                    f'<div style="font-size:9pt;font-weight:700;color:#0f172a;">{title}</div>'
-                    f'<div style="font-size:7.5pt;color:#64748b;margin-top:3px;">{_esc(fid)} · full detail appears in an earlier chapter and the findings register</div>'
-                    '</div>'
+                    f'<ul class="finding-xref-list" style="margin:3px 0;padding-left:16px;">'
+                    f'{render_finding_cross_reference(finding)}</ul>'
                 )
                 continue
             if fid:
-                _DETAILED_CARDS_RENDERED.add(fid)
-            enriched = PlainEnglishEngine.enrich_finding(finding, idx + 1)
-            card_html = render_plain_english_finding_card(enriched)
-            ver_notes = _finding_value(finding, "verification_notes")
-            det_diag = _finding_value(finding, "detailed_diagnosis") or _finding_value(finding, "diagnosis")
-            val_crit = _finding_value(finding, "validation_criteria") or _finding_value(finding, "acceptance_criteria")
-            ai_extra = []
-            if det_diag:
-                ai_extra.append(f'<div><strong>AI Deep Diagnosis:</strong> {_esc(det_diag)}</div>')
-            if ver_notes:
-                ai_extra.append(f'<div><strong>AI Adversarial Verification:</strong> {_esc(ver_notes)}</div>')
-            if val_crit:
-                ai_extra.append(f'<div><strong>Validation Criteria:</strong> {_esc(val_crit)}</div>')
-            if ai_extra:
-                card_html += (
-                    '<div style="margin:-4px 0 10px 0;padding:8px 12px;background:#f0f9ff;'
-                    'border:1px solid #bae6fd;border-radius:0 0 6px 6px;font-size:8pt;color:#0c4a6e;">'
-                    + "".join(ai_extra)
-                    + '</div>'
-                )
-            cards.append(card_html)
+                rendered_set.add(fid)
+            cards.append(render_five_point_finding_card(finding))
             continue
         title = _esc(_finding_value(finding, "title", _finding_value(finding, "name", "Finding title unavailable")))
         severity = _esc(str(_finding_value(finding, "severity", "Unclassified")).replace("_", " ").title())
@@ -684,7 +660,7 @@ def _build_ch_brief(report: Any, manifest: Dict[str, Any]) -> str:
                 {radar_svg or '<p class="small">Insufficient category scores for radar chart.</p>'}
             </div>
             <div class="card">
-                <div class="card-kicker">RECORDED FINDING SEVERITY DISTRIBUTION</div>
+                <div class="card-kicker">VERIFIED FINDING SEVERITY DISTRIBUTION</div>
                 <div style="margin-top:12px;">{sev_svg}</div>
             </div>
         </div>
@@ -821,6 +797,38 @@ def _build_ch_seo(report: Any, manifest: Dict[str, Any]) -> str:
         generate_section_explanation("ch_seo", "Technical SEO & Crawl Architecture", report, findings, {"pages_crawled": pages_count})
     )
 
+    # Render vector diagnostic visual charts from seo_chapter_visuals when data is present
+    charts_block = ""
+    try:
+        from app.seo.reporting.seo_chapter_visuals import (
+            _http_bars, _ttfb_bars, _title_bars, _canonical_bars, _schema_bars, _svg
+        )
+        ch_charts = []
+        http_b = _http_bars(report)
+        if http_b:
+            ch_charts.append(_svg("HTTP Status Distribution", "Status codes across sampled crawl", http_b))
+        ttfb_b = _ttfb_bars(report)
+        if ttfb_b:
+            ch_charts.append(_svg("Crawl Response Latency (TTFB)", "Time to first byte distribution", ttfb_b))
+        title_b = _title_bars(report)
+        if title_b:
+            ch_charts.append(_svg("Title Tag Length & Presence", "Page title conformance", title_b))
+        canon_b = _canonical_bars(report)
+        if canon_b:
+            ch_charts.append(_svg("Canonical Link Directives", "Self-referential vs cross-domain canonicals", canon_b))
+        schema_b = _schema_bars(report)
+        if schema_b:
+            ch_charts.append(_svg("Structured Data Deployments", "JSON-LD schema type coverage", schema_b))
+
+        if ch_charts:
+            chart_cols = "".join(f'<div class="card" style="text-align:center;">{c}</div>' for c in ch_charts[:4])
+            charts_block = f'<div class="grid-2" style="margin-bottom:16px;">{chart_cols}</div>'
+    except Exception:
+        charts_block = ""
+
+    from app.reports.pdf_evidence_blocks import render_page_evidence_table
+    seo_ev_table = render_page_evidence_table(pages, title="Sampled Crawl & Discoverability Evidence Ledger", max_rows=8)
+
     return f"""
     {callout}
 
@@ -842,8 +850,11 @@ def _build_ch_seo(report: Any, manifest: Dict[str, Any]) -> str:
         </div>
     </div>
 
+    {charts_block}
+    {seo_ev_table}
+
     <h3 style="font-size: 12pt; margin: 16px 0 8px 0; color: #0f172a;">Technical Discoverability Findings ({len(findings)})</h3>
-    {_format_finding_cards(findings, limit=None)}
+    {_format_finding_cards(findings, limit=None, detailed=True, dedupe=True, render_ctx=manifest)}
     """
 
 
@@ -1198,7 +1209,7 @@ def _build_ch_aeo(report: Any, manifest: Dict[str, Any]) -> str:
     </div>
 
     <h3 style="font-size: 12pt; margin: 16px 0 8px 0; color: #0f172a;">Answer Engine Visibility Findings ({len(findings)})</h3>
-    {_format_finding_cards(findings, limit=None)}
+    {_format_finding_cards(findings, limit=None, detailed=True, dedupe=True, render_ctx=manifest)}
     """
 
 
@@ -1208,8 +1219,38 @@ def _build_ch_competitive(report: Any, manifest: Dict[str, Any]) -> str:
         generate_section_explanation("ch_competitive", "Competitive Digital Visibility", report, findings)
     )
 
+    bakeoff = getattr(report, "competitor_bakeoff", None)
+    bakeoff_rows = []
+    if bakeoff and hasattr(bakeoff, "competitors"):
+        for comp in getattr(bakeoff, "competitors", []) or []:
+            c_name = _esc(getattr(comp, "domain", getattr(comp, "name", "Competitor")))
+            c_score = getattr(comp, "overall_score", getattr(comp, "score", "—"))
+            c_aeo = getattr(comp, "aeo_score", "—")
+            c_seo = getattr(comp, "seo_score", "—")
+            bakeoff_rows.append(f"""
+            <tr style="border-bottom:1px solid #e2e8f0;font-size:7.5pt;">
+                <td style="padding:6px 8px;font-weight:600;color:#0f172a;">{c_name}</td>
+                <td style="padding:6px 8px;text-align:center;font-weight:700;">{c_score}</td>
+                <td style="padding:6px 8px;text-align:center;">{c_seo}</td>
+                <td style="padding:6px 8px;text-align:center;">{c_aeo}</td>
+            </tr>""")
+
+    bakeoff_table = ""
+    if bakeoff_rows:
+        bakeoff_table = f"""
+        <div class="card" style="margin-bottom:16px;">
+            <div class="card-kicker">COMPETITIVE BENCHMARK MATRIX</div>
+            <div class="data-table-wrapper" style="margin-top:6px;">
+                <table class="print-table">
+                    <thead><tr><th>Domain</th><th>Overall Score</th><th>Technical SEO</th><th>AEO / AI Visibility</th></tr></thead>
+                    <tbody>{''.join(bakeoff_rows)}</tbody>
+                </table>
+            </div>
+        </div>"""
+
     return f"""
     {callout}
+    {bakeoff_table}
 
     <div class="card" style="margin-bottom: 16px;">
         <div class="card-kicker">COMPARISON COVERAGE</div>
@@ -1219,7 +1260,7 @@ def _build_ch_competitive(report: Any, manifest: Dict[str, Any]) -> str:
     </div>
 
     <h3 style="font-size: 12pt; margin: 16px 0 8px 0; color: #0f172a;">Competitive Differentiation Findings ({len(findings)})</h3>
-    {_format_finding_cards(findings, limit=None)}
+    {_format_finding_cards(findings, limit=None, detailed=True, dedupe=True, render_ctx=manifest)}
     """
 
 
@@ -1238,15 +1279,22 @@ def _build_ch_conversion(report: Any, manifest: Dict[str, Any]) -> str:
         cta_label = getattr(cta_analysis, "hero_cta_text", None)
     cta_summary = f'Primary CTA detected: "{_esc(cta_label)}"' if cta_label else "Interactive buttons, forms, and conversion paths audited"
 
+    form_audit = getattr(report, "form_audit", None)
+    form_count = getattr(form_audit, "total_forms", 0) if form_audit else 0
+    form_friction = getattr(form_audit, "friction_level", "OPTIMAL") if form_audit else "NOT ASSESSED"
+
     findings = [f for f in _report_findings(report) if "CONV" in str(getattr(f, "category", "")).upper() or "UX" in str(getattr(f, "category", "")).upper() or "CRO" in str(getattr(f, "category", "")).upper()]
     callout = render_section_business_callout(
         generate_section_explanation("ch_conversion", "Conversion Rate Optimization (CRO)", report, findings)
     )
 
+    from app.reports.pdf_evidence_blocks import render_page_evidence_table
+    cro_ev_table = render_page_evidence_table(pages, title="CRO Surface & Template Audit Evidence", max_rows=8)
+
     return f"""
     {callout}
 
-    <div class="grid-2" style="margin-bottom: 16px;">
+    <div class="grid-3" style="margin-bottom: 16px;">
         <div class="card">
             <div class="card-kicker">VALUE PROPOSITION &amp; HERO CLARITY</div>
             <div class="card-title">Above-the-Fold Messaging</div>
@@ -1257,10 +1305,17 @@ def _build_ch_conversion(report: Any, manifest: Dict[str, Any]) -> str:
             <div class="card-title">Action Prompts &amp; Friction</div>
             <p style="font-size: 8pt; color: #475569;">{cta_summary}. High-intent verbs paired with reassurance microcopy maximize submit rates.</p>
         </div>
+        <div class="card">
+            <div class="card-kicker">FORM ERGONOMICS &amp; FUNNELS</div>
+            <div class="card-title">{form_count} Forms Audited ({form_friction})</div>
+            <p style="font-size: 8pt; color: #475569;">Field count, auto-focus, validation states, and accessibility across key conversion paths.</p>
+        </div>
     </div>
 
+    {cro_ev_table}
+
     <h3 style="font-size: 12pt; margin: 16px 0 8px 0; color: #0f172a;">Conversion Ergonomics Findings ({len(findings)})</h3>
-    {_format_finding_cards(findings, limit=None)}
+    {_format_finding_cards(findings, limit=None, detailed=True, dedupe=True, render_ctx=manifest)}
     """
 
 
@@ -2900,24 +2955,10 @@ def build_adaptive_publication_document(
     """
     _DETAILED_CARDS_RENDERED.clear()
     family = detect_report_family(report, report_type)
-    manifest = build_publication_manifest(
-        report,
-        family,
-        title_override=title_override,
-        subtitle_override=subtitle_override,
-        classification_override=classification,
-    )
 
-    scores = getattr(report, "scores", None)
-    score_val = validate_score(getattr(scores, "overall_score", None))
-    score_display = f"{score_val:.1f}" if score_val is not None else "NOT MEASURED"
-    grade_val = str((getattr(scores, "overall_grade", None) or getattr(scores, "grade", None)) if score_val is not None else "NOT GRADED")
-
-    manifest_obj = getattr(report, "crawl_manifest", None)
-    pages = getattr(manifest_obj, "pages", []) or getattr(report, "page_reports", []) or []
-    pages_count = len(pages) if pages else None
-    manifest["pages_crawled"] = pages_count
-
+    ent_geo = None
+    ent_geo_findings = []
+    ent_geo_html = ""
     if family in ("GEO", "COMPLETE", "HYBRID"):
         try:
             from app.geo.reporting.builder import (
@@ -2926,11 +2967,35 @@ def build_adaptive_publication_document(
             )
             ent_geo = load_latest_enterprise_geo_dataset(report)
             if ent_geo:
-                manifest["_enterprise_geo"] = ent_geo
-                manifest["_enterprise_geo_findings"] = list(ent_geo.get("findings") or [])
-                manifest["_enterprise_geo_html"] = render_enterprise_geo_dossier_fragment(ent_geo)
+                ent_geo_findings = list(ent_geo.get("findings") or [])
+                ent_geo_html = render_enterprise_geo_dossier_fragment(ent_geo)
+                if hasattr(report, "_enterprise_geo_findings"):
+                    setattr(report, "_enterprise_geo_findings", ent_geo_findings)
         except Exception:
             pass
+
+    manifest = build_publication_manifest(
+        report,
+        family,
+        title_override=title_override,
+        subtitle_override=subtitle_override,
+        classification_override=classification,
+    )
+    if ent_geo:
+        manifest["_enterprise_geo"] = ent_geo
+        manifest["_enterprise_geo_findings"] = ent_geo_findings
+        manifest["_enterprise_geo_html"] = ent_geo_html
+
+    from app.domain.scoring.canonical_scorecard import CanonicalScorecardEngine
+    card = CanonicalScorecardEngine.evaluate_from_report(report)
+    score_val = card.composite_health_score
+    score_display = f"{score_val:.1f}" if score_val is not None else "NOT MEASURED"
+    grade_val = card.composite_grade if score_val is not None else "NOT GRADED"
+
+    manifest_obj = getattr(report, "crawl_manifest", None)
+    pages = getattr(manifest_obj, "pages", []) or getattr(report, "page_reports", []) or []
+    pages_count = len(pages) if pages else None
+    manifest["pages_crawled"] = pages_count
 
     findings = _all_report_findings(report, manifest)
 
@@ -3185,7 +3250,7 @@ def build_adaptive_publication_document(
     bundle_mode = str(pdf_bundle.get("narrative_mode") if isinstance(pdf_bundle, dict) else getattr(report, "narrative_mode", "deterministic_fallback"))
     if isinstance(pdf_bundle, dict) and pdf_bundle.get("executive_summary") and bundle_mode != "deterministic_fallback":
         metadata.story_summary = str(pdf_bundle["executive_summary"])
-    from app.scoring.canonical_scorecard import (
+    from app.domain.scoring.canonical_scorecard import (
         CanonicalScorecardEngine,
         render_canonical_scorecard_html,
     )

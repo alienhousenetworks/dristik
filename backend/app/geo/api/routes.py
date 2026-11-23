@@ -451,3 +451,362 @@ async def generate_remediation_pack_endpoint(req: AeoRemediationRequest):
         raise HTTPException(status_code=500, detail=f"Failed to synthesize AEO remediation pack: {str(exc)}")
 
 
+# ============================================================================
+# GeoLook-Integrated Endpoints (Phases 1–5): Access Diagnostics, Draft Linter,
+# Search Demand Mining, Manual Sampling & Declarative Verification
+# ============================================================================
+
+class AccessDiagnosticsRequest(BaseModel):
+    website_url: str
+    robots_txt: str = ""
+    pages: List[Dict[str, Any]] = Field(default_factory=list)
+    has_sitemap: bool = False
+    sitemap_urls: List[str] = Field(default_factory=list)
+    has_llms_txt: bool = False
+    run_live_ua_probe: bool = False
+    run_live_llms_check: bool = False
+    quotability_score: Optional[float] = None
+
+
+@router.post("/access-diagnostics")
+async def access_diagnostics_endpoint(req: AccessDiagnosticsRequest):
+    """Run RFC 9309 robots, optional active WAF AI-UA probing, llms.txt validation, and 4-layer dependency chain."""
+    from app.geo.agent_readiness import validate_llms_txt
+    from app.geo.dependency_chain import evaluate_dependency_chain
+    from app.geo.intelligence.crawler_accessibility import CrawlerAccessibilityEngine
+
+    ua_probe_res: Dict[str, Any] = {"ai_ua_probe": {}, "ai_ua_blocked": []}
+    if req.run_live_ua_probe:
+        ua_probe_res = await CrawlerAccessibilityEngine.probe_ai_user_agents(
+            root_url=req.website_url, robots_txt=req.robots_txt
+        )
+
+    llms_check: Optional[Dict[str, Any]] = None
+    has_llms = req.has_llms_txt
+    if req.run_live_llms_check:
+        llms_check = await validate_llms_txt(req.website_url, robots_txt=req.robots_txt)
+        has_llms = bool(llms_check.get("present"))
+
+    crawler_report = CrawlerAccessibilityEngine.evaluate_crawler_access(
+        robots_txt=req.robots_txt,
+        ai_ua_probe=ua_probe_res.get("ai_ua_probe"),
+    )
+    chain = evaluate_dependency_chain(
+        pages=req.pages,
+        robots_txt=req.robots_txt,
+        has_sitemap=req.has_sitemap,
+        sitemap_urls=req.sitemap_urls,
+        has_llms_txt=has_llms,
+        llms_txt_check=llms_check,
+        ai_ua_blocked=ua_probe_res.get("ai_ua_blocked") or [],
+        quotability_score=req.quotability_score,
+    )
+    return {
+        "crawler_accessibility": crawler_report.model_dump(),
+        "llms_txt_validation": llms_check,
+        "dependency_chain": chain.model_dump(),
+    }
+
+
+class DraftLintRequest(BaseModel):
+    text: str
+    verified_numbers: List[str] = Field(default_factory=list)
+    verified_facts_text: str = ""
+    unconfirmed_competitors: List[str] = Field(default_factory=list)
+
+
+@router.post("/draft-lint")
+async def draft_lint_endpoint(req: DraftLintRequest):
+    """Run fabrication-risk linting on any GEO/AEO content draft before approval or publishing."""
+    from app.geo.draft_linter import lint_draft
+
+    return lint_draft(
+        req.text,
+        verified_numbers=req.verified_numbers,
+        verified_facts_text=req.verified_facts_text,
+        unconfirmed_competitors=req.unconfirmed_competitors,
+    ).model_dump()
+
+
+class DemandMineRequest(BaseModel):
+    brand_name: str
+    category: str = ""
+    competitors: List[str] = Field(default_factory=list)
+    market: str = "global"
+    previous_first_seen: Dict[str, str] = Field(default_factory=dict)
+
+
+@router.post("/demand-mine")
+async def demand_mine_endpoint(req: DemandMineRequest):
+    """Mine real buyer-intent search autocomplete suggestions with rising-demand snapshot diffing."""
+    from app.geo.demand_miner import mine_search_demand
+
+    snap = await mine_search_demand(
+        brand_name=req.brand_name,
+        category=req.category,
+        competitors=req.competitors,
+        market=req.market,
+        previous_first_seen=req.previous_first_seen,
+    )
+    return snap.model_dump()
+
+
+class ManualSheetImportRequest(BaseModel):
+    tenant_id: str = "default"
+    brand_name: str
+    brand_aliases: List[str] = Field(default_factory=list)
+    competitors: Dict[str, List[str]] = Field(default_factory=dict)
+    own_domain: str = ""
+    session_mode: str = "incognito"
+    market: str = "global"
+    sheet_markdown: str
+
+
+@router.post("/manual-samples/import")
+async def manual_samples_import_endpoint(req: ManualSheetImportRequest):
+    """Import manual/browser AI answer sheet, compute visibility metrics, and extract competitor source gaps."""
+    from app.geo.offpage_network import compute_competitor_source_gap
+    from app.geo.sampling_manual import aggregate_manual_samples, import_sampling_sheet
+
+    samples = import_sampling_sheet(
+        req.sheet_markdown,
+        tenant_id=req.tenant_id,
+        brand_name=req.brand_name,
+        brand_aliases=req.brand_aliases,
+        competitors=req.competitors,
+        own_domain=req.own_domain,
+        session_mode=req.session_mode,
+        market=req.market,
+    )
+    return {
+        "imported_count": len(samples),
+        "samples": [s.model_dump() for s in samples],
+        "metrics": aggregate_manual_samples(samples),
+        "source_gap": compute_competitor_source_gap(
+            samples, brand_name=req.brand_name, own_host=req.own_domain
+        ),
+    }
+
+
+class DeclarativeCheckRequest(BaseModel):
+    check_expr: str
+    audit_context: Dict[str, Any]
+    metrics_context: Optional[Dict[str, Any]] = None
+    baseline_value: Optional[Any] = None
+    previous_passed: bool = False
+    audited_at: Optional[str] = None
+    verified_at: Optional[str] = None
+
+
+@router.post("/verification/declarative-check")
+async def declarative_check_endpoint(req: DeclarativeCheckRequest):
+    """Run a declarative verification checker and freshness guard check."""
+    from app.geo.reporting.freshness_guard import check_delivery_freshness
+    from app.geo.verification_engine import run_declarative_check
+
+    check_res = run_declarative_check(
+        req.check_expr,
+        audit_context=req.audit_context,
+        metrics_context=req.metrics_context,
+        baseline_value=req.baseline_value,
+        previous_passed=req.previous_passed,
+    )
+    freshness = (
+        check_delivery_freshness(audited_at=req.audited_at, verified_at=req.verified_at).model_dump()
+        if req.audited_at
+        else None
+    )
+    return {"check": check_res.model_dump(), "freshness": freshness}
+
+
+# ── Phase 2: SRO (Selection Rate Optimization) ──────────────────────────────
+
+class SROAnalyzeRequest(BaseModel):
+    target_url: str = Field(..., min_length=4, max_length=2000)
+    keyword: str = Field(..., min_length=1, max_length=250)
+    country: str = Field(default="US", min_length=2, max_length=2)
+    brand_name: Optional[str] = Field(default=None, max_length=120)
+    competitor_urls: List[str] = Field(default_factory=list, max_length=5)
+    engines: Optional[List[str]] = None
+    use_llm_synthesis: bool = Field(default=False)
+    synthesis_model: Optional[str] = Field(default=None, max_length=120)
+
+
+class BulkSROItem(BaseModel):
+    url: str = Field(..., min_length=4, max_length=2000)
+    keyword: str = Field(..., min_length=1, max_length=250)
+
+
+class BulkSRORequest(BaseModel):
+    items: List[BulkSROItem] = Field(..., min_length=1, max_length=5)
+    country: str = Field(default="US", min_length=2, max_length=2)
+
+
+@router.post("/sro/analyze")
+async def analyze_sro_endpoint(req: SROAnalyzeRequest):
+    """Run provider-independent Selection Rate Optimization across configured AI providers."""
+    from app.geo.sro import sro_engine
+
+    res = await sro_engine.analyze(
+        target_url=req.target_url,
+        keyword=req.keyword,
+        country=req.country.upper(),
+        brand_name=req.brand_name,
+        competitor_urls=req.competitor_urls,
+        engines=req.engines,
+        use_llm_synthesis=req.use_llm_synthesis,
+        synthesis_model=req.synthesis_model,
+    )
+    return res.model_dump(mode="json")
+
+
+@router.post("/sro/bulk")
+async def bulk_sro_endpoint(req: BulkSRORequest):
+    """SSE-streamed bulk SRO analysis across up to 5 (url, keyword) pairs."""
+    import json
+    from fastapi.responses import StreamingResponse
+    from app.geo.sro import sro_engine
+
+    async def _gen():
+        yield f"event: start\ndata: {json.dumps({'total': len(req.items)})}\n\n"
+        for idx, item in enumerate(req.items):
+            yield f"event: progress\ndata: {json.dumps({'index': idx, 'url': item.url, 'keyword': item.keyword, 'stage': 'analyzing'})}\n\n"
+            res = await sro_engine.analyze(
+                target_url=item.url,
+                keyword=item.keyword,
+                country=req.country.upper(),
+            )
+            yield f"event: result\ndata: {json.dumps({'index': idx, 'result': res.model_dump(mode='json')})}\n\n"
+        yield f"event: complete\ndata: {json.dumps({'total': len(req.items)})}\n\n"
+
+    return StreamingResponse(_gen(), media_type="text/event-stream")
+
+
+# ── Phase 3: Rank Signal (Controlled A/B Passage Experiments) ───────────────
+
+class RankSignalRunRequest(BaseModel):
+    signal_id: str = Field(..., min_length=2, max_length=8)
+    keyword: str = Field(..., min_length=1, max_length=250)
+    target_url: str = Field(..., min_length=4, max_length=2000)
+    passages: List[Dict[str, str]] = Field(
+        default_factory=list,
+        description="List of {origin, url, text} passages (or omit to fetch target_url)",
+    )
+    judge_model: str = Field(default="gemini-2.0-flash")
+    rewrite_model: str = Field(default="gemini-2.0-flash")
+    max_trials: int = Field(default=40, ge=20, le=40)
+    is_byok: bool = Field(default=False)
+    byok_max_usd: Optional[float] = Field(default=None, ge=0.05, le=5.0)
+
+
+@router.get("/rank-signal/catalog")
+async def rank_signal_catalog_endpoint():
+    """Return frozen 15-signal Rank Signal catalog (S00-S14) with credit pricing."""
+    from app.geo.rank_signal import (
+        BYOK_DEFAULT_MAX_USD,
+        CATALOG_VERSION,
+        CREDIT_COST_FULL_SUITE,
+        FEATURE_CATALOG,
+        RUN_ORDER,
+        credit_cost_for_signal,
+    )
+
+    return {
+        "catalog_version": CATALOG_VERSION,
+        "run_order": RUN_ORDER,
+        "full_suite_credits": CREDIT_COST_FULL_SUITE,
+        "byok_default_max_usd": BYOK_DEFAULT_MAX_USD,
+        "signals": [
+            {
+                "id": s.id,
+                "name": s.name,
+                "build": s.build,
+                "expected": s.expected,
+                "feature": s.feature,
+                "credits": credit_cost_for_signal(s),
+                "note": s.note,
+            }
+            for s in FEATURE_CATALOG
+        ],
+    }
+
+
+@router.post("/rank-signal/run")
+async def rank_signal_run_endpoint(req: RankSignalRunRequest):
+    """SSE-streamed controlled A/B Rank Signal trial runner with credit accounting."""
+    import json
+    from fastapi.responses import StreamingResponse
+    from app.geo.rank_signal import extract_passages, rank_signal_runner
+    from app.geo.sro import fetch_page_snapshot
+
+    raw_texts = [
+        (p.get("origin") or "target", p.get("url") or req.target_url, p.get("text") or "")
+        for p in req.passages
+        if (p.get("text") or "").strip()
+    ]
+    if not raw_texts:
+        snap = await fetch_page_snapshot(req.target_url)
+        if snap.content_preview:
+            raw_texts.append(("target", req.target_url, snap.content_preview))
+
+    passages = extract_passages(raw_texts, keyword=req.keyword)
+
+    async def _gen():
+        async for ev_type, payload in rank_signal_runner.run_stream(
+            signal_id=req.signal_id,
+            keyword=req.keyword,
+            target_url=req.target_url,
+            passages=passages,
+            judge_model=req.judge_model,
+            rewrite_model=req.rewrite_model,
+            max_trials=req.max_trials,
+            is_byok=req.is_byok,
+            byok_max_usd=req.byok_max_usd,
+        ):
+            yield f"event: {ev_type}\ndata: {json.dumps(payload)}\n\n"
+
+    return StreamingResponse(_gen(), media_type="text/event-stream")
+
+
+# ── Phase 5: Competitor Battlecards & Interactive Persona Fan-Out ───────────
+
+class BattlecardsRequest(BaseModel):
+    brand_name: str = Field(..., min_length=1, max_length=120)
+    competitors: List[str] = Field(..., min_length=1, max_length=20)
+    responses: List[Dict[str, Any]] = Field(default_factory=list)
+
+
+class PersonaFanoutRequest(BaseModel):
+    core_prompt: str = Field(..., min_length=3, max_length=500)
+    personas: List[str] = Field(..., min_length=1, max_length=12)
+    brand_name: str = Field(default="")
+
+
+@router.post("/battlecards")
+async def generate_battlecards_endpoint(req: BattlecardsRequest):
+    """Synthesize competitor battlecards strictly from observed AI responses."""
+    from app.geo.battlecards import CompetitorBattlecardGenerator
+
+    rep = CompetitorBattlecardGenerator.generate(
+        brand_name=req.brand_name,
+        competitors=req.competitors,
+        responses=req.responses,
+    )
+    return rep.model_dump(mode="json")
+
+
+@router.post("/persona-fanout")
+async def generate_persona_fanout_endpoint(req: PersonaFanoutRequest):
+    """Generate persona-angled buyer prompt variants (zero LLM cost)."""
+    from app.geo.battlecards import generate_persona_fanout_prompts
+
+    variants = generate_persona_fanout_prompts(
+        core_prompt=req.core_prompt,
+        personas=req.personas,
+        brand_name=req.brand_name,
+    )
+    return {"core_prompt": req.core_prompt, "count": len(variants), "variants": variants}
+
+
+
+

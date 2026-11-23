@@ -123,17 +123,44 @@ class CompetitiveIntelligenceEngine:
         )
         target_dims["technical"] = target_tech_score
 
-        # Target GEO baseline from commercial evals
-        target_prompts_tested = len(commercial_evaluations or [])
-        target_prompts_won = sum(1 for e in (commercial_evaluations or []) if (e.before_score or 0) >= 7)
-        target_geo_score, _ = geo_metrics_calculator.compute_geo_score(
-            competitor_id="target",
-            competitor_domain=clean_target,
-            total_prompts_tested=target_prompts_tested,
-            prompt_mentions=target_prompts_won,
-            citations_count=target_prompts_won,
-            audit_id=audit_id,
-        )
+        # Target GEO baseline from real live observatory records (never proxy from commercial_evaluations)
+        target_prompts_tested = 0
+        target_mentions = 0
+        target_citations = 0
+        if observatory_records:
+            target_prompts_tested = len(observatory_records)
+            for rec in observatory_records:
+                cited = rec.get("cited_domains") or rec.get("citations") or []
+                if any(clean_target in str(c).lower() for c in cited):
+                    target_citations += 1
+                mentioned = rec.get("mentioned_brands") or rec.get("brand_mentioned") or False
+                if isinstance(mentioned, bool) and mentioned:
+                    target_mentions += 1
+                elif isinstance(mentioned, (list, tuple)) and any(clean_target in str(b).lower() or target_brand.lower() in str(b).lower() for b in mentioned):
+                    target_mentions += 1
+
+        if target_prompts_tested > 0:
+            target_geo_score, _ = geo_metrics_calculator.compute_geo_score(
+                competitor_id="target",
+                competitor_domain=clean_target,
+                total_prompts_tested=target_prompts_tested,
+                prompt_mentions=target_mentions,
+                citations_count=target_citations,
+                audit_id=audit_id,
+            )
+        else:
+            target_geo_score = DimensionScore(
+                dimension="geo",
+                score=None,
+                confidence=EvidenceConfidence.UNMEASURED,
+                status="UNMEASURED",
+                evidence_count=0,
+                key_metrics={
+                    "reason": "GEO / AI answer engine visibility unmeasured. No live prompt execution records available.",
+                    "mention_rate_pct": None,
+                    "citation_rate_pct": None,
+                },
+            )
         target_dims["geo"] = target_geo_score
 
         # Target Search baseline: never fabricate Search Visibility from technical_score or 70
@@ -178,24 +205,43 @@ class CompetitiveIntelligenceEngine:
             dims["technical"] = tech_dim
             c_evidence.extend(tech_ev)
 
-            # Dimension B: GEO / AI Visibility
-            # Inspect observatory records if available for this competitor
+            # Dimension B: GEO / AI Visibility from live observatory records
+            comp_prompts_tested = len(observatory_records) if observatory_records else 0
             comp_citations = 0
+            comp_mentions = 0
             if observatory_records:
                 for rec in observatory_records:
-                    cited = rec.get("competitors_cited") or []
+                    cited = rec.get("competitors_cited") or rec.get("cited_domains") or rec.get("citations") or []
                     for c_rec in cited:
                         if comp_domain in str(c_rec).lower():
                             comp_citations += 1
+                    mentioned = rec.get("competitors_mentioned") or rec.get("mentioned_brands") or []
+                    if isinstance(mentioned, (list, tuple)) and any(comp_domain in str(m).lower() or c_brand.lower() in str(m).lower() for m in mentioned):
+                        comp_mentions += 1
 
-            geo_dim, geo_ev = geo_metrics_calculator.compute_geo_score(
-                competitor_id=c_id,
-                competitor_domain=comp_domain,
-                total_prompts_tested=target_prompts_tested if target_prompts_tested > 0 else 6,
-                prompt_mentions=comp_citations,
-                citations_count=comp_citations,
-                audit_id=audit_id,
-            )
+            if comp_prompts_tested > 0:
+                geo_dim, geo_ev = geo_metrics_calculator.compute_geo_score(
+                    competitor_id=c_id,
+                    competitor_domain=comp_domain,
+                    total_prompts_tested=comp_prompts_tested,
+                    prompt_mentions=comp_mentions,
+                    citations_count=comp_citations,
+                    audit_id=audit_id,
+                )
+            else:
+                geo_dim = DimensionScore(
+                    dimension="geo",
+                    score=None,
+                    confidence=EvidenceConfidence.UNMEASURED,
+                    status="UNMEASURED",
+                    evidence_count=0,
+                    key_metrics={
+                        "reason": f"GEO visibility unmeasured for {comp_domain}; no live AI engine prompt runs.",
+                        "mention_rate_pct": None,
+                        "citation_rate_pct": None,
+                    },
+                )
+                geo_ev = []
             dims["geo"] = geo_dim
             c_evidence.extend(geo_ev)
 

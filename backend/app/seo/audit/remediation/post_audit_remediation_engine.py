@@ -181,7 +181,7 @@ class PostAuditRemediationEngine:
             seo_impact = "Weakened document outline clarity and accessibility semantics."
             business_impact = "Reduced topical clarity for visitors and search crawlers."
             recommended_fix = "Render one visible, descriptive semantic <h1> element representing the page topic."
-            implementation = self._generate_h1_fix(platform, conf)
+            implementation = self._generate_h1_fix(platform, conf, urls)
             owner, dept, effort = "Frontend Developer", "Engineering", "45 minutes"
             acceptance = "Rendered DOM contains at least one visible, descriptive <h1> element (ideally 1)."
             verify = "Re-crawl affected URLs and assert rendered DOM querySelectorAll('h1').length == 1."
@@ -205,7 +205,7 @@ class PostAuditRemediationEngine:
             seo_impact = "Prevents search crawlers from discovering or indexing eligible commercial pages."
             business_impact = "Direct loss of organic search visibility for blocked URLs."
             recommended_fix = "Align robots.txt, meta robots, X-Robots-Tag headers, and XML sitemap entries with canonical indexable URLs."
-            implementation = self._generate_indexability_fix(platform, conf)
+            implementation = self._generate_indexability_fix(platform, conf, urls)
             owner, dept, effort = "DevOps / Backend Engineer", "Engineering", "1 hour"
             acceptance = "Target URLs return HTTP 200 without unintended noindex and appear cleanly in XML sitemap."
             verify = "Fetch robots.txt, sitemap.xml, HTTP X-Robots-Tag, and meta robots on affected URLs."
@@ -229,7 +229,7 @@ class PostAuditRemediationEngine:
             seo_impact = "Reduces machine entity clarity and eligibility for Google Rich Results."
             business_impact = "Missed SERP visual enhancements (Product, Breadcrumb, Organization, Article)."
             recommended_fix = "Inject valid JSON-LD grounded strictly in visible page content."
-            implementation = self._generate_schema_fix(platform, conf)
+            implementation = self._generate_schema_fix(platform, conf, urls)
             owner, dept, effort = "SEO Engineer", "Engineering", "1 hour"
             acceptance = "JSON-LD parses cleanly with 0 syntax errors and includes all required properties for its @type."
             verify = "Re-crawl URL, parse application/ld+json blocks, and run SchemaValidator with 0 errors."
@@ -440,7 +440,18 @@ class PostAuditRemediationEngine:
             stack_confidence=conf,
         )
 
-    def _generate_h1_fix(self, platform: PlatformType, conf: str) -> ImplementationDirective:
+    def _domain_and_brand(self, urls: Optional[List[str]] = None) -> tuple[str, str]:
+        from urllib.parse import urlparse
+        sample = (urls or [""])[0] if urls else ""
+        host = urlparse(sample).netloc if sample else ""
+        if not host and sample and "://" not in sample:
+            host = sample.split("/")[0]
+        origin = f"https://{host}" if host else "/"
+        brand = host.replace("www.", "").split(".")[0].capitalize() if host else "Site Brand"
+        return origin, brand
+
+    def _generate_h1_fix(self, platform: PlatformType, conf: str, urls: Optional[List[str]] = None) -> ImplementationDirective:
+        sample_url = (urls[0] if urls else "").lower()
         if platform == PlatformType.NEXTJS_REACT:
             return ImplementationDirective(
                 platform=platform,
@@ -453,14 +464,32 @@ class PostAuditRemediationEngine:
                 stack_confidence=conf,
             )
         if platform == PlatformType.SHOPIFY:
-            return ImplementationDirective(
-                platform=platform,
-                target_file_pattern="sections/main-product.liquid",
-                code_diff_snippet=(
+            if "/products/" in sample_url:
+                target_file = "sections/main-product.liquid"
+                diff = (
                     "- <div class=\"product__title\">{{ product.title }}</div>\n"
                     "+ <h1 class=\"product__title\">{{ product.title }}</h1>"
-                ),
-                instructions="Wrap the primary title in a single <h1> in main-product.liquid.",
+                )
+                instr = "Wrap the product title in a single <h1> in sections/main-product.liquid."
+            elif "/collections/" in sample_url:
+                target_file = "sections/main-collection-banner.liquid"
+                diff = (
+                    "- <h2 class=\"collection-hero__title\">{{ collection.title }}</h2>\n"
+                    "+ <h1 class=\"collection-hero__title\">{{ collection.title }}</h1>"
+                )
+                instr = "Wrap the collection title in a single <h1> in sections/main-collection-banner.liquid."
+            else:
+                target_file = "sections/image-banner.liquid (or homepage hero section)"
+                diff = (
+                    "- <h2 class=\"banner__heading\">{{ section.settings.heading }}</h2>\n"
+                    "+ <h1 class=\"banner__heading\">{{ section.settings.heading }}</h1>"
+                )
+                instr = "Ensure the page hero section renders exactly one visible <h1> matching the page topic."
+            return ImplementationDirective(
+                platform=platform,
+                target_file_pattern=target_file,
+                code_diff_snippet=diff,
+                instructions=instr,
                 stack_confidence=conf,
             )
         if platform == PlatformType.DJANGO:
@@ -480,7 +509,7 @@ class PostAuditRemediationEngine:
         )
 
     def _generate_canonical_fix(self, platform: PlatformType, conf: str, sample_url: str) -> ImplementationDirective:
-        href = sample_url or "https://example.com/canonical-path/"
+        href = sample_url or "{{ canonical_url }}"
         if platform == PlatformType.NEXTJS_REACT:
             return ImplementationDirective(
                 platform=platform,
@@ -513,14 +542,16 @@ class PostAuditRemediationEngine:
             stack_confidence=conf,
         )
 
-    def _generate_indexability_fix(self, platform: PlatformType, conf: str) -> ImplementationDirective:
+    def _generate_indexability_fix(self, platform: PlatformType, conf: str, urls: Optional[List[str]] = None) -> ImplementationDirective:
+        origin, _ = self._domain_and_brand(urls)
+        sitemap_line = f"Sitemap: {origin.rstrip('/')}/sitemap.xml\n" if origin.startswith("http") else "Sitemap: /sitemap.xml\n"
         return ImplementationDirective(
             platform=platform,
             target_file_pattern="public/robots.txt & sitemap.xml",
             code_diff_snippet=(
                 "User-agent: *\n"
                 "Allow: /\n"
-                "Sitemap: https://yourdomain.com/sitemap.xml\n"
+                f"{sitemap_line}"
                 "# Ensure production routes do NOT emit X-Robots-Tag: noindex"
             ),
             instructions="Verify robots.txt permits crawling of production routes, remove accidental noindex headers, and include only 200 OK canonical URLs in sitemap.xml.",
@@ -549,14 +580,15 @@ class PostAuditRemediationEngine:
             stack_confidence=conf,
         )
 
-    def _generate_schema_fix(self, platform: PlatformType, conf: str) -> ImplementationDirective:
+    def _generate_schema_fix(self, platform: PlatformType, conf: str, urls: Optional[List[str]] = None) -> ImplementationDirective:
+        origin, brand = self._domain_and_brand(urls)
         snippet = (
             "+ <script type=\"application/ld+json\">\n"
             "+ {\n"
             "+   \"@context\": \"https://schema.org\",\n"
             "+   \"@type\": \"Organization\",\n"
-            "+   \"name\": \"Verified Brand Name\",\n"
-            "+   \"url\": \"https://yourdomain.com\"\n"
+            f"+   \"name\": \"{brand}\",\n"
+            f"+   \"url\": \"{origin}\"\n"
             "+ }\n"
             "+ </script>"
         )

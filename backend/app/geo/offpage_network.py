@@ -188,4 +188,78 @@ class OffPageCitationNetworkAnalyzer:
         )
 
 
+def compute_competitor_source_gap(
+    samples: List[Any],
+    *,
+    brand_name: str,
+    own_host: str = "",
+    min_hits: int = 2,
+) -> Dict[str, Any]:
+    """Compute GeoLook-style competitor-context source gaps:
+    domains cited >= `min_hits` times in answers mentioning rivals that never appear
+    in answers mentioning the target brand, plus each rival's strongest engine.
+    """
+    own_clean = clean_domain(own_host) if own_host else ""
+    unprompted = [s for s in samples if not getattr(s, "brand_in_question", False)]
+
+    brand_domains: Set[str] = set()
+    rival_domains: Dict[str, Dict[str, int]] = {}
+    rival_engine_hits: Dict[str, Dict[str, int]] = {}
+    engine_totals: Dict[str, int] = {}
+
+    for s in unprompted:
+        eff = s.effective_analysis() if hasattr(s, "effective_analysis") else getattr(s, "automated_result", s)
+        plat = getattr(s, "platform", "unknown")
+        engine_totals[plat] = engine_totals.get(plat, 0) + 1
+        doms = list(getattr(eff, "cited_domains", []) or [])
+        if getattr(eff, "brand_mentioned", False):
+            brand_domains.update(doms)
+        for comp in getattr(eff, "competitors_mentioned", []) or []:
+            if comp == brand_name:
+                continue
+            rival_engine_hits.setdefault(comp, {})
+            rival_engine_hits[comp][plat] = rival_engine_hits[comp].get(plat, 0) + 1
+            rival_domains.setdefault(comp, {})
+            for d in doms:
+                if d and d != own_clean:
+                    rival_domains[comp][d] = rival_domains[comp].get(d, 0) + 1
+
+    gap_counts: Dict[str, int] = {}
+    rivals_summary: List[Dict[str, Any]] = []
+    for comp, dom_map in rival_domains.items():
+        for d, cnt in dom_map.items():
+            if d not in brand_domains:
+                gap_counts[d] = gap_counts.get(d, 0) + cnt
+        eng_rates = sorted(
+            [
+                {"platform": p, "rate": round(h / max(engine_totals.get(p, 1), 1), 3), "hits": h}
+                for p, h in rival_engine_hits.get(comp, {}).items()
+            ],
+            key=lambda x: -x["rate"],
+        )
+        rivals_summary.append(
+            {
+                "competitor": comp,
+                "strongest_engines": eng_rates[:3],
+                "top_sources": [
+                    {"domain": d, "hits": h, "covered_by_brand": d in brand_domains}
+                    for d, h in sorted(dom_map.items(), key=lambda x: -x[1])[:6]
+                ],
+            }
+        )
+
+    source_gap = [
+        {"domain": d, "competitor_hits": h}
+        for d, h in sorted(gap_counts.items(), key=lambda x: -x[1])
+        if h >= min_hits
+    ][:15]
+
+    return {
+        "brand_name": brand_name,
+        "unprompted_samples": len(unprompted),
+        "source_gap_hitlist": source_gap,
+        "rivals": rivals_summary,
+    }
+
+
 offpage_network_analyzer = OffPageCitationNetworkAnalyzer()

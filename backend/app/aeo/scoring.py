@@ -216,6 +216,11 @@ class AeoMetricsCalculator:
         n_pages = len(page_reports)
         if n_pages > 0:
             # Only calculate a dimension when its underlying observations are present.
+            known_crawlability = [
+                getattr(p, "crawlable", None) if getattr(p, "crawlable", None) is not None
+                else getattr(p, "is_crawlable", None)
+                for p in page_reports
+            ]
             known_statuses = [getattr(p, "status_code", None) for p in page_reports]
             known_indexability = [getattr(p, "is_indexable", None) for p in page_reports]
             known_schema_validity = [getattr(p, "schema_valid", None) for p in page_reports]
@@ -223,9 +228,9 @@ class AeoMetricsCalculator:
             known_url_stability = [getattr(p, "url_stability_verified", None) for p in page_reports]
 
             crawl_score = (
-                round(sum(1 for code in known_statuses if isinstance(code, int) and 200 <= code < 400)
-                      / sum(1 for code in known_statuses if isinstance(code, int)) * 100.0, 1)
-                if any(isinstance(code, int) for code in known_statuses) else None
+                round(sum(1 for value in known_crawlability if value is True)
+                      / sum(1 for value in known_crawlability if isinstance(value, bool)) * 100.0, 1)
+                if any(isinstance(value, bool) for value in known_crawlability) else None
             )
             index_score = (
                 round(sum(1 for value in known_indexability if value is True)
@@ -336,7 +341,7 @@ class AeoMetricsCalculator:
         )
 
         # -------------------------------------------------------------
-        # Pillar D: Business Outcomes
+        # Pillar D: Business Outcomes (AiReferralEngine + GA4/GSC)
         # -------------------------------------------------------------
         lr = getattr(report, "lifecycle_revenue", None)
         ga4 = getattr(lr, "ga4", None) if lr else None
@@ -344,21 +349,70 @@ class AeoMetricsCalculator:
         ga4_connected = bool(getattr(ga4, "is_connected", False)) if ga4 else False
         gsc_connected = bool(getattr(gsc, "is_connected", False)) if gsc else False
 
-        if ga4_connected or gsc_connected:
+        # Pull observed first-party AI referral attribution if tenant/domain data exists
+        ai_ref_summary = getattr(report, "ai_referral_summary", None)
+        if ai_ref_summary is None:
+            org_id = getattr(report, "org_id", None) or getattr(report, "tenant_id", None)
+            domain_val = getattr(report, "domain", None) or getattr(report, "website_url", None)
+            if org_id and domain_val:
+                try:
+                    from urllib.parse import urlparse
+                    from app.analytics.ai_referral_engine import AiReferralEngine
+                    clean_dom = (urlparse(str(domain_val)).netloc or str(domain_val)).lower().removeprefix("www.")
+                    if clean_dom:
+                        ai_ref_summary = AiReferralEngine.get_dashboard_summary(org_id=str(org_id), domain=clean_dom)
+                except Exception:
+                    ai_ref_summary = None
+
+        ai_ref_sessions: Optional[int] = None
+        ai_ref_conversions: Optional[int] = None
+        ai_ref_assisted: Optional[int] = None
+        ai_ref_revenue: Optional[float] = None
+        ai_ref_conv_rate: Optional[float] = None
+        ai_ref_measured = False
+
+        if ai_ref_summary is not None:
+            summary_status = getattr(ai_ref_summary, "status", None) or (
+                ai_ref_summary.get("status") if isinstance(ai_ref_summary, dict) else None
+            )
+            if summary_status == "MEASURED":
+                s_cnt = getattr(ai_ref_summary, "ai_referred_sessions", None) if not isinstance(ai_ref_summary, dict) else ai_ref_summary.get("ai_referred_sessions")
+                c_cnt = getattr(ai_ref_summary, "ai_attributed_conversions", None) if not isinstance(ai_ref_summary, dict) else ai_ref_summary.get("ai_attributed_conversions")
+                a_cnt = getattr(ai_ref_summary, "ai_assisted_conversions", None) if not isinstance(ai_ref_summary, dict) else ai_ref_summary.get("ai_assisted_conversions")
+                rev = getattr(ai_ref_summary, "ai_attributed_revenue", None) if not isinstance(ai_ref_summary, dict) else ai_ref_summary.get("ai_attributed_revenue")
+                if s_cnt and s_cnt > 0:
+                    ai_ref_measured = True
+                    ai_ref_sessions = int(s_cnt)
+                    ai_ref_conversions = int(c_cnt or 0)
+                    ai_ref_assisted = int(a_cnt or 0)
+                    ai_ref_revenue = round(float(rev or 0.0), 2)
+                    ai_ref_conv_rate = round((ai_ref_conversions / ai_ref_sessions) * 100.0, 2)
+
+        if ai_ref_measured or ga4_connected or gsc_connected:
             visits = getattr(gsc, "clicks", None) if gsc_connected else None
-            conv_rate = getattr(ga4, "conversion_rate", None) if ga4_connected else None
+            conv_rate = ai_ref_conv_rate if ai_ref_measured else (getattr(ga4, "conversion_rate", None) if ga4_connected else None)
+            d_state = (
+                EvidenceState.VERIFIED
+                if ai_ref_measured
+                else (EvidenceState.SAMPLE_VERIFIED if (visits is not None or conv_rate is not None) else EvidenceState.DATA_UNAVAILABLE)
+            )
+            sources_used = []
+            if ai_ref_measured:
+                sources_used.append("first-party AI Referral Engine (observed referrer/UTM/AIO sessions & reconciled conversions)")
+            if ga4_connected or gsc_connected:
+                sources_used.append("connected GA4 / Search Console telemetry")
             pillar_d = BusinessOutcomesPillar(
                 answer_page_visits=visits,
-                ai_referral_sessions=None,
-                qualified_leads=None,
-                assisted_conversions=None,
-                attributed_revenue=None,
+                ai_referral_sessions=ai_ref_sessions,
+                qualified_leads=ai_ref_conversions,
+                assisted_conversions=ai_ref_assisted,
+                attributed_revenue=ai_ref_revenue,
                 ai_referral_conversion_rate_pct=conv_rate,
-                state=EvidenceState.SAMPLE_VERIFIED if (visits is not None or conv_rate is not None) else EvidenceState.DATA_UNAVAILABLE,
-                notes="Derived from connected GA4 / Search Console telemetry.",
+                state=d_state,
+                notes=f"Derived from {' and '.join(sources_used)}. Lower-bound observed counts; unobservable visits are not estimated.",
             )
         else:
-            # In absence of Google Analytics / Search Console OAuth credentials, report DATA_UNAVAILABLE
+            # In absence of first-party AI referral telemetry or GA4/GSC OAuth credentials, report DATA_UNAVAILABLE
             pillar_d = BusinessOutcomesPillar(
                 answer_page_visits=None,
                 ai_referral_sessions=None,
@@ -367,7 +421,7 @@ class AeoMetricsCalculator:
                 attributed_revenue=None,
                 ai_referral_conversion_rate_pct=None,
                 state=EvidenceState.DATA_UNAVAILABLE,
-                notes="Requires authenticated Google Analytics 4 or Search Console connector. Zero synthetic conversions reported.",
+                notes="Requires first-party AI Referral SDK telemetry or authenticated Google Analytics 4 / Search Console connector. Zero synthetic conversions reported.",
             )
 
         # -------------------------------------------------------------
@@ -486,13 +540,17 @@ class AeoMetricsCalculator:
             MetricScore(
                 name="AI Referral Conversion Rate",
                 code="AEO-MET-10",
-                value=None,
+                value=ai_ref_conv_rate if ai_ref_measured else None,
                 unit="%",
-                numerator=None,
-                denominator=None,
+                numerator=ai_ref_conversions if ai_ref_measured else None,
+                denominator=ai_ref_sessions if ai_ref_measured else None,
                 formula="Attributed conversions ÷ eligible AI referral sessions",
-                state=EvidenceState.DATA_UNAVAILABLE,
-                notes="Requires Google Analytics 4 integration.",
+                state=EvidenceState.VERIFIED if ai_ref_measured else EvidenceState.DATA_UNAVAILABLE,
+                notes=(
+                    "Computed from observed first-party AI referral sessions and reconciled conversions."
+                    if ai_ref_measured
+                    else "Requires first-party AI Referral SDK telemetry or Google Analytics 4 integration."
+                ),
             ),
         ]
 

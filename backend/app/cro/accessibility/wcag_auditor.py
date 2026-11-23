@@ -784,46 +784,24 @@ class DeepWcagAuditor:
             # PRINCIPLE 4: ROBUST
             # =================================================================
 
-            # 4.1.1 Duplicate DOM Element IDs
-            all_ids = [el.get("id").strip() for el in soup.find_all(attrs={"id": True}) if el.get("id") and el.get("id").strip()]
-            seen_ids = set()
-            dup_ids = set()
-            for x in all_ids:
-                if x in seen_ids:
-                    dup_ids.add(x)
-                else:
-                    seen_ids.add(x)
-
-            if dup_ids:
-                record_result(
-                    "WCAG_4_1_1_DUPLICATE_ID", False,
-                    WcagViolation(
-                        rule_id="WCAG_4_1_1_DUPLICATE_ID",
-                        wcag_criterion="4.1.1 Parsing",
-                        level="A",
-                        principle="Robust",
-                        category="duplicate_id",
-                        severity=Severity.MEDIUM,
-                        impact=ImpactLevel.LOW,
-                        description=f"Duplicate DOM element ID(s) detected on {url}: {', '.join(list(dup_ids)[:4])}.",
-                        selector=f"#{list(dup_ids)[0]}",
-                        snippet=f"id='{list(dup_ids)[0]}'",
-                        url=url,
-                        recommendation="Ensure all element ID attributes are globally unique within each page document."
-                    ),
-                    principle="Robust", category="duplicate_id"
-                )
-            else:
-                record_result("WCAG_4_1_1_DUPLICATE_ID", True, principle="Robust", category="duplicate_id")
+            # Note: WCAG 4.1.1 Parsing was removed/obsoleted in WCAG 2.2.
+            # Do not emit WCAG 4.1.1 violations when auditing against WCAG 2.2.
+            # (If duplicate IDs are ever audited under legacy 2.1, SVG <defs>/<clipPath>/<mask>/
+            # <linearGradient>/<radialGradient>/<symbol> IDs must be excluded.)
 
             # 4.1.2 Button Accessible Names
             buttons = soup.find_all("button")
             nameless_buttons = []
             for b in buttons:
                 text = b.get_text(strip=True)
-                aria_lbl = b.get("aria-label") or b.get("aria-labelledby") or b.get("title")
-                has_img_alt = any(img.get("alt") for img in b.find_all("img") if img.get("alt"))
-                if not text and not aria_lbl and not has_img_alt:
+                aria_lbl = (b.get("aria-label") or "").strip() or (b.get("aria-labelledby") or "").strip() or (b.get("title") or "").strip()
+                has_img_alt = any((img.get("alt") or "").strip() for img in b.find_all("img"))
+                has_svg_title = any(
+                    bool(t.get_text(strip=True))
+                    for svg in b.find_all("svg")
+                    for t in svg.find_all("title")
+                )
+                if not text and not aria_lbl and not has_img_alt and not has_svg_title:
                     nameless_buttons.append(str(b)[:80])
 
             if nameless_buttons:

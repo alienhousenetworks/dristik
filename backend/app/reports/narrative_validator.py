@@ -40,6 +40,158 @@ _ALLOWED_DOMAIN_TOKENS = re.compile(
 )
 _SENTENCE_SPLIT_RE = re.compile(r"(?<=[.!?])\s+|\n+")
 _REQUIRED_LABELS = ("UNKNOWN (Requires GA4)", "NOT_MEASURED", "AI_INTERPRETATION")
+_LEAKED_TOKEN_RE = re.compile(
+    r"\[\[chapter_ref:[^\]]*\]\]|\[\s*\]|yourdomain\.com|Verified Brand Name|Epistemic Basis:\s*UNKNOWN",
+    re.IGNORECASE,
+)
+
+# Universal site-wide over-generalization patterns rewritten when crawl is sampled
+# or when a finding affects only a subset of inspected pages.
+_UNIVERSAL_SCOPE_REWRITES: Tuple[Tuple[re.Pattern[str], str, str], ...] = (
+    (re.compile(r"\buniversal(?:ly)?\s+across\s+the\s+(?:web)?site\b", re.IGNORECASE), "observed on affected inspected pages", "observed across the inspected sample"),
+    (re.compile(r"\bacross\s+the\s+entire\s+(?:web)?site\b", re.IGNORECASE), "across the affected inspected pages", "across the inspected sample"),
+    (re.compile(r"\bthe\s+entire\s+(?:web)?site\b", re.IGNORECASE), "the affected inspected pages", "the inspected sample"),
+    (re.compile(r"\bthe\s+whole\s+(?:web)?site\b", re.IGNORECASE), "the affected inspected pages", "the inspected sample"),
+    (re.compile(r"\bsite[- ]wide\b", re.IGNORECASE), "on affected inspected pages", "across the inspected sample"),
+    (re.compile(r"\bevery\s+(?:single\s+)?page\b", re.IGNORECASE), "the affected inspected pages", "every inspected page"),
+    (re.compile(r"\bnone\s+of\s+the\s+(?:site\s+|website\s+)?(?:pages|urls)\b", re.IGNORECASE), "none of the affected inspected pages", "none of the inspected pages"),
+    (re.compile(r"\ball\s+(?:site\s+|website\s+)?(?:pages|urls)\b", re.IGNORECASE), "the affected inspected pages", "the inspected pages"),
+)
+
+
+def _match_case(original: str, replacement: str) -> str:
+    if original and original[0].isupper() and replacement:
+        return replacement[0].upper() + replacement[1:]
+    return replacement
+
+
+def enforce_scope_grounding(
+    text: str,
+    *,
+    affected_count: Optional[int] = None,
+    crawled_count: Optional[int] = None,
+    discovered_count: Optional[int] = None,
+) -> Tuple[str, int]:
+    """Qualify universal/site-wide claims when evidence only covers a sample or subset of pages.
+
+    Returns ``(grounded_text, rewrites_count)``. When ``crawled_count >= discovered_count``
+    and the finding covers all crawled pages (or is audit-wide on a full crawl), universal
+    phrasing is left untouched.
+    """
+    if not text:
+        return "", 0
+    is_partial_finding = (
+        affected_count is not None
+        and crawled_count is not None
+        and crawled_count > 0
+        and 0 < affected_count < crawled_count
+    )
+    is_sampled_crawl = (
+        crawled_count is not None
+        and discovered_count is not None
+        and discovered_count > crawled_count
+    )
+    if not is_partial_finding and not is_sampled_crawl:
+        return text, 0
+
+    updated = text
+    total_rewrites = 0
+    for pattern, partial_rep, sample_rep in _UNIVERSAL_SCOPE_REWRITES:
+        rep = partial_rep if is_partial_finding else sample_rep
+        updated, count = pattern.subn(lambda m, r=rep: _match_case(m.group(0), r), updated)
+        total_rewrites += count
+    return updated, total_rewrites
+
+
+def strip_leaked_tokens(text: str) -> str:
+    """Remove leaked internal tokens, empty citation brackets, and forbidden placeholders."""
+    if not text:
+        return ""
+    cleaned = _LEAKED_TOKEN_RE.sub("", str(text))
+    cleaned = re.sub(r"\s{2,}", " ", cleaned).strip()
+    return cleaned
+
+
+def verify_finding_ai_blocks(
+    finding: Any,
+    valid_evidence_ids: Optional[Set[str]] = None,
+    *,
+    crawled_count: Optional[int] = None,
+    discovered_count: Optional[int] = None,
+) -> Dict[str, Any]:
+    """Verify a finding's AI blocks (understanding, analysis, fix_prompt, connector_effect) against evidence.
+
+    - Ensures at least one valid evidence ID backs the finding.
+    - Strips leaked tokens/placeholders and enforces fix_prompt <= 60 words.
+    - Enforces connector-off honesty: when needs_connector is set, removes ungrounded 'impact confirmed' claims.
+    - Qualifies site-wide/universal claims when crawl is sampled or finding only affects a subset of pages.
+    """
+    issues: List[str] = []
+    ev_ids: Set[str] = set()
+    for key in ("evidence_ids", "evidence_refs"):
+        vals = finding.get(key) if isinstance(finding, dict) else getattr(finding, key, None)
+        if isinstance(vals, (list, tuple, set)):
+            ev_ids.update(str(v).strip() for v in vals if v)
+    for ev in ((finding.get("evidence") if isinstance(finding, dict) else getattr(finding, "evidence", None)) or []):
+        eid = ev.get("evidence_id") if isinstance(ev, dict) else getattr(ev, "evidence_id", None)
+        if eid:
+            ev_ids.add(str(eid).strip())
+
+    if not ev_ids:
+        issues.append("missing_evidence_id")
+    elif valid_evidence_ids is not None:
+        invalid = sorted(ev_ids - valid_evidence_ids)
+        if invalid:
+            issues.append(f"unknown_evidence_ids:{','.join(invalid)}")
+
+    def _get_f(k: str) -> Any:
+        return finding.get(k) if isinstance(finding, dict) else getattr(finding, k, None)
+
+    def _set_f(k: str, v: Any) -> None:
+        if isinstance(finding, dict):
+            finding[k] = v
+        else:
+            try:
+                setattr(finding, k, v)
+            except Exception:
+                pass
+
+    affected_urls = _get_f("affected_urls")
+    affected_count = len(affected_urls) if isinstance(affected_urls, (list, tuple, set)) and affected_urls else None
+
+    for field in ("ai_understanding", "ai_analysis", "fix_prompt"):
+        raw = str(_get_f(field) or "").strip()
+        if not raw:
+            issues.append(f"empty_{field}")
+            continue
+        cleaned = strip_leaked_tokens(raw)
+        if field in ("ai_understanding", "ai_analysis"):
+            cleaned, scope_fixes = enforce_scope_grounding(
+                cleaned,
+                affected_count=affected_count,
+                crawled_count=crawled_count,
+                discovered_count=discovered_count,
+            )
+            if scope_fixes:
+                issues.append(f"scope_overgeneralization_qualified:{field}:{scope_fixes}")
+        if field == "fix_prompt":
+            words = cleaned.split()
+            if len(words) > 60:
+                cleaned = " ".join(words[:60])
+                issues.append("fix_prompt_truncated_to_60_words")
+        _set_f(field, cleaned)
+
+    ce = _get_f("connector_effect")
+    if isinstance(ce, dict) and ce.get("needs_connector"):
+        ana = str(_get_f("ai_analysis") or "")
+        if re.search(r"\bimpact\s+confirmed\b", ana, re.IGNORECASE):
+            ana = re.sub(r"\bimpact\s+confirmed\b", "impact unconfirmed without connector", ana, flags=re.IGNORECASE)
+            _set_f("ai_analysis", ana)
+            issues.append("connector_off_impact_claim_softened")
+
+    verified_state = "VERIFIED" if not any(i.startswith(("missing_evidence", "unknown_evidence")) for i in issues) else "UNVERIFIED"
+    _set_f("verified_state", verified_state)
+    return {"verified_state": verified_state, "evidence_ids": sorted(ev_ids), "issues": issues}
 
 
 class NarrativeValidationReport(BaseModel):
@@ -49,6 +201,7 @@ class NarrativeValidationReport(BaseModel):
     unknown_placeholders: List[str] = Field(default_factory=list)
     invalid_finding_ids: List[str] = Field(default_factory=list)
     sentences_removed: int = 0
+    scope_overgeneralizations_fixed: int = 0
     chapters_dropped: int = 0
     slides_dropped: int = 0
     bullets_trimmed: int = 0
@@ -121,6 +274,16 @@ def build_scorecard_vars(report: Any) -> Dict[str, str]:
             pillar_counts["cro"] += 1
 
     pages_crawled = len(getattr(manifest, "pages", None) or getattr(report, "page_reports", None) or [])
+    pages_discovered = max(
+        int(getattr(manifest, "total_pages_discovered", 0) or getattr(report, "discovered_urls_count", 0) or 0),
+        pages_crawled,
+    )
+    is_sampled = pages_discovered > pages_crawled and pages_crawled > 0
+    scope_phrase = (
+        f"the {pages_crawled} inspected pages (out of {pages_discovered} discovered)"
+        if is_sampled
+        else f"all {pages_crawled} inspected pages"
+    )
     sandbox = getattr(report, "dynamic_sandbox_evaluations", None) or []
     aeo_gaps = sum(1 for q in sandbox if not getattr(q, "is_answerable", False))
     patches_count = len(getattr(report, "code_patches", None) or [])
@@ -165,6 +328,11 @@ def build_scorecard_vars(report: Any) -> Dict[str, str]:
         "count.aeo_findings": str(pillar_counts["aeo"]),
         "count.cro_findings": str(pillar_counts["cro"]),
         "count.pages_crawled": str(pages_crawled),
+        "count.pages_discovered": str(pages_discovered),
+        "crawl.crawled": str(pages_crawled),
+        "crawl.discovered": str(pages_discovered),
+        "crawl.is_sampled": "true" if is_sampled else "false",
+        "crawl.scope_phrase": scope_phrase,
         "count.aeo_questions": str(len(sandbox)) if sandbox else "NOT_MEASURED",
         "count.aeo_gaps": str(aeo_gaps) if sandbox else "NOT_MEASURED",
         "count.code_patches": str(patches_count),
@@ -228,6 +396,21 @@ def _sanitize_and_hydrate_text(
         if "{{" in hydrated or "}}" in hydrated:
             report.sentences_removed += 1
             continue
+
+        # 4. Qualify site-wide/universal claims when crawl is sampled
+        if scorecard_vars.get("crawl.is_sampled") == "true":
+            try:
+                _crawled = int(scorecard_vars.get("crawl.crawled") or 0)
+                _discovered = int(scorecard_vars.get("crawl.discovered") or 0)
+            except ValueError:
+                _crawled, _discovered = 0, 0
+            hydrated, scope_fixes = enforce_scope_grounding(
+                hydrated,
+                crawled_count=_crawled,
+                discovered_count=_discovered,
+            )
+            if scope_fixes:
+                report.scope_overgeneralizations_fixed += scope_fixes
 
         for lbl in _REQUIRED_LABELS:
             if lbl in hydrated and lbl not in report.preserved_labels_found:

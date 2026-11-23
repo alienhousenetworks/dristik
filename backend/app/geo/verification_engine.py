@@ -18,6 +18,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 import httpx
+from pydantic import BaseModel, Field
 
 from app.core.security.ssrf import is_safe_url
 from app.geo.models import (
@@ -26,6 +27,118 @@ from app.geo.models import (
     GEOTaskStatus,
     GEOVerification,
 )
+
+
+class DeclarativeCheckResult(BaseModel):
+    check_expr: str
+    passed: Optional[bool] = None  # None -> requires manual confirmation or missing data
+    status: str  # PASS | FAIL | MANUAL | REGRESSED
+    detail: str
+    baseline_value: Optional[Any] = None
+    current_value: Optional[Any] = None
+    target_value: Optional[Any] = None
+    auto_reopen_task: bool = False
+    observed_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+
+
+def run_declarative_check(
+    check_expr: str,
+    *,
+    audit_context: Dict[str, Any],
+    metrics_context: Optional[Dict[str, Any]] = None,
+    baseline_value: Optional[Any] = None,
+    previous_passed: bool = False,
+) -> DeclarativeCheckResult:
+    """Evaluate declarative GeoLook-style acceptance expressions against live audit/metrics snapshots.
+
+    Supported expressions:
+      - site.no_ai_bot_block
+      - site.no_ai_ua_block
+      - site.llms_txt_valid
+      - site.sitemap_clean
+      - pages.no_noindex
+      - pages.quotable
+      - external.any:<domain1,domain2>
+      - published.url_live:<url>
+    """
+    expr = (check_expr or "").strip()
+    site = audit_context.get("site") or audit_context
+    metrics = metrics_context or {}
+
+    passed: Optional[bool] = None
+    detail = f"Unknown declarative checker '{expr}'"
+    cur: Any = None
+    target: Any = None
+
+    if expr == "site.no_ai_bot_block":
+        blocked = list(site.get("ai_bots_blocked") or [])
+        cur, target = len(blocked), 0
+        passed = len(blocked) == 0
+        detail = "robots.txt allows all tracked AI crawlers" if passed else f"Still blocked: {', '.join(blocked)}"
+    elif expr == "site.no_ai_ua_block":
+        blocked = list(site.get("ai_ua_blocked") or [])
+        cur, target = len(blocked), 0
+        passed = len(blocked) == 0
+        detail = "WAF/CDN allows all probed AI crawler UAs" if passed else f"WAF still blocking: {', '.join(blocked)}"
+    elif expr == "site.llms_txt_valid":
+        lch = site.get("llms_txt_check") or {}
+        if not lch:
+            passed = None
+            detail = "No llms.txt validation snapshot available"
+        else:
+            nbad = len(lch.get("broken") or []) + len(lch.get("robots_blocked") or [])
+            cur, target = nbad, 0
+            passed = bool(lch.get("present", True)) and nbad == 0
+            detail = "All sampled llms.txt links returned 200 and are robots-allowed" if passed else f"{nbad} broken or robots-blocked link(s) in llms.txt"
+    elif expr == "site.sitemap_clean":
+        noisy = site.get("sitemap_noisy_urls")
+        if noisy is None:
+            passed = None
+            detail = "No sitemap hygiene snapshot available"
+        else:
+            n = len(noisy) if isinstance(noisy, list) else int(noisy)
+            cur, target = n, 0
+            passed = n == 0
+            detail = "Sitemap contains no noisy parameter/search/pagination URLs" if passed else f"{n} noisy URL(s) still in sitemap"
+    elif expr == "pages.no_noindex":
+        cnt = int(site.get("noindex_pages_count", 0))
+        cur, target = cnt, 0
+        passed = cnt == 0
+        detail = "Zero content pages carry noindex" if passed else f"{cnt} page(s) still carry noindex"
+    elif expr == "pages.quotable":
+        cnt = int(site.get("pages_without_quotable_passage", 0))
+        base = int(baseline_value) if baseline_value is not None else max(cnt, 1)
+        tgt = int(base * 0.5)
+        cur, target = cnt, tgt
+        passed = cnt <= tgt
+        detail = f"{cnt} page(s) lack quotable passages (baseline {base}, target <= {tgt})"
+    elif expr.startswith("external.any:"):
+        targets = [d.strip().lower().removeprefix("www.") for d in expr.split(":", 1)[1].split(",") if d.strip()]
+        cited = [str(d).lower().removeprefix("www.") for d in (metrics.get("cited_domains") or [])]
+        hits = [t for t in targets if any(c == t or c.endswith("." + t) for c in cited)]
+        cur, target = len(hits), 1
+        passed = bool(hits)
+        detail = f"Cited on target external domain(s): {', '.join(hits)}" if passed else f"None of {len(targets)} target domains cited yet"
+    elif expr.startswith("published.url_live:"):
+        target_url = expr.split(":", 1)[1].strip()
+        live_map = site.get("published_url_statuses") or {}
+        code = live_map.get(target_url)
+        cur, target = code, 200
+        passed = code == 200
+        detail = f"{target_url} verified live (HTTP 200)" if passed else f"{target_url} returned HTTP {code}"
+
+    auto_reopen = bool(previous_passed and passed is False)
+    status = "REGRESSED" if auto_reopen else ("PASS" if passed is True else ("FAIL" if passed is False else "MANUAL"))
+    return DeclarativeCheckResult(
+        check_expr=expr,
+        passed=passed,
+        status=status,
+        detail=detail,
+        baseline_value=baseline_value,
+        current_value=cur,
+        target_value=target,
+        auto_reopen_task=auto_reopen,
+    )
 
 
 def _extract_jsonld_types(html_text: str) -> List[str]:

@@ -19,10 +19,19 @@ class DeterministicFindingEngine:
 
     def __init__(self):
         self._finding_counter = 0
+        self.passed_checks: List[Dict[str, Any]] = []
 
     def _next_finding_id(self) -> str:
         self._finding_counter += 1
         return f"FND_{self._finding_counter:03d}"
+
+    def _record_pass(self, rule_id: str, url: Optional[str], detail: str) -> None:
+        self.passed_checks.append({
+            "rule_id": rule_id,
+            "url": url or "",
+            "status": "PASS",
+            "detail": detail,
+        })
 
     def evaluate(
         self,
@@ -31,8 +40,9 @@ class DeterministicFindingEngine:
     ) -> List[Finding]:
         """
         Evaluate all deterministic rules against store observations.
-        Returns list of finalized Layer 2 Finding objects.
+        Returns list of finalized Layer 2 Finding objects (defects only; passes go to self.passed_checks).
         """
+        self.passed_checks = []
         findings: List[Finding] = []
 
         # Rule 1: TITLE_DUPLICATE_001
@@ -53,13 +63,24 @@ class DeterministicFindingEngine:
         # Rule 6: STATUS_4XX_5XX_001
         findings.extend(self._check_http_errors(store))
 
-        # Rule 7: SCHEMA_MISSING_001
-        findings.extend(self._check_missing_schema(store))
+        # Rule 7: SCHEMA_MISSING_001 (reads existing JSON-LD before claiming none)
+        findings.extend(self._check_missing_schema(store, manifest))
 
-        # Rule 8: SLOW_TTFB_001
+        # Rule 8: TTFB_P1 (800ms P1 threshold; ignores <= 0ms unmeasured)
         findings.extend(self._check_slow_ttfb(store))
 
-        return findings
+        # Rule 9: Canonical audit (when crawled pages are available)
+        if manifest and getattr(manifest, "pages", None):
+            from app.seo.analyzers.canonical_auditor import CanonicalAuditor
+            _, canon_findings = CanonicalAuditor().audit(list(manifest.pages))
+            findings.extend(canon_findings)
+
+        # Guard: passes must NEVER be returned in findings[]
+        return [
+            f for f in findings
+            if str(getattr(f, "status", "")).upper() not in ("PASS", "PASSED")
+            and str(getattr(f, "classification", "")).upper() not in ("PASS", "PASSED", "PASSED_CHECK")
+        ]
 
     def _check_duplicate_titles(self, store: EvidenceStore) -> List[Finding]:
         title_obs = store.get_observations_by_attribute("title")
@@ -356,15 +377,40 @@ class DeterministicFindingEngine:
                 pass
         return findings
 
-    def _check_missing_schema(self, store: EvidenceStore) -> List[Finding]:
+    def _check_missing_schema(
+        self,
+        store: EvidenceStore,
+        manifest: Optional[CrawlManifest] = None,
+    ) -> List[Finding]:
         schema_obs = store.get_observations_by_attribute("schema_types")
+        # Build lookup of existing JSON-LD from manifest pages so we never claim "none"
+        # when Organization / WebSite / Product JSON-LD is already present.
+        pages_with_jsonld: set[str] = set()
+        if manifest and getattr(manifest, "pages", None):
+            for p in manifest.pages:
+                if getattr(p, "raw_schema", None) or getattr(p, "schema_types", None):
+                    if getattr(p, "url", None):
+                        pages_with_jsonld.add(str(p.url).rstrip("/").lower())
+        raw_schema_obs = store.get_observations_by_attribute("raw_schema")
+        for ro in raw_schema_obs:
+            if ro.value and ro.url:
+                pages_with_jsonld.add(str(ro.url).rstrip("/").lower())
+
         findings: List[Finding] = []
         for o in schema_obs:
+            norm_url = str(o.url or "").rstrip("/").lower()
+            if norm_url and norm_url in pages_with_jsonld:
+                self._record_pass("SCHEMA_MISSING_001", o.url, "JSON-LD structured data present.")
+                continue
             is_empty = False
             if not o.value:
                 is_empty = True
             elif isinstance(o.value, list) and len(o.value) == 0:
                 is_empty = True
+
+            if not is_empty:
+                self._record_pass("SCHEMA_MISSING_001", o.url, f"Detected schema types: {o.value}")
+                continue
 
             if is_empty:
                 fid = self._next_finding_id()
@@ -390,7 +436,7 @@ class DeterministicFindingEngine:
                         what_to_change="Deploy valid Schema.org JSON-LD in the document head.",
                         why="Structured data enables rich snippet generation and accurate AI engine knowledge graph entity extraction.",
                         how_to_change="Embed `<script type='application/ld+json'>` defining the entity.",
-                        example='<script type="application/ld+json">{"@context":"https://schema.org","@type":"Organization","name":"Acme"}</script>',
+                        example='<script type="application/ld+json">{"@context":"https://schema.org","@type":"Organization","name":"Brand"}</script>',
                         target_file="index.html",
                     ),
                     evidence=[
@@ -413,30 +459,36 @@ class DeterministicFindingEngine:
         for o in ttfb_obs:
             try:
                 ttfb_val = float(o.value)
-                if ttfb_val > 1200.0:
+                if ttfb_val <= 0.0:
+                    continue
+                if ttfb_val <= 800.0:
+                    self._record_pass("TTFB_P1", o.url, f"TTFB {ttfb_val:.0f}ms <= 800ms")
+                    continue
+                if ttfb_val > 800.0:
                     fid = self._next_finding_id()
                     ev_ids = [o.evidence_id]
+                    sev = Severity.CRITICAL if ttfb_val > 1800.0 else Severity.HIGH
                     f = Finding(
                         finding_id=fid,
-                        rule_id="SLOW_TTFB_001",
+                        rule_id="TTFB_P1",
                         evidence_ids=ev_ids,
                         evidence_refs=ev_ids,
                         category=Category.TECHNICAL_SEO,
-                        severity=Severity.HIGH,
+                        severity=sev,
                         classification=FindingClassification.VERIFIED_DEFECT,
                         confidence=1.0,
                         confidence_label=EvidenceConfidence.CONFIRMED,
                         confidence_rubric=RubricConfidence.VERIFIED,
                         title=f"Excessive Server Response Time (TTFB: {ttfb_val:.0f}ms) on {o.url or 'Page'}",
-                        description=f"Measured server Time-to-First-Byte was {ttfb_val:.0f}ms, exceeding Google's 800ms recommended threshold.",
-                        recommendation="Enable edge caching (CDN) or optimize backend database queries to bring TTFB below 600ms.",
+                        description=f"Measured server Time-to-First-Byte was {ttfb_val:.0f}ms, exceeding the 800ms P1 threshold.",
+                        recommendation="Enable edge caching (CDN) or optimize backend database queries to bring TTFB below 800ms.",
                         grounded_recommendation=GroundedRecommendation(
                             recommendation_id=f"REC_{fid}",
                             underlying_finding_id=fid,
                             underlying_evidence_ids=ev_ids,
                             what_to_change="Optimize origin latency or configure edge cache headers.",
                             why="Slow initial byte delivery impairs Core Web Vitals and increases crawl budget exhaustion.",
-                            how_to_change="Deploy Cloudflare or fast origin caching headers.",
+                            how_to_change="Deploy CDN edge caching or optimize slow server/app hooks.",
                             example="Cache-Control: public, max-age=3600, s-maxage=86400",
                             target_file="nginx.conf / edge CDN",
                         ),

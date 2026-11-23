@@ -471,6 +471,9 @@ class AnalysisOrchestrator:
         value_prop = getattr(business_profile, "value_proposition", None) or ""
         schema_desc = (
             '{"analyses":[{"finding_id":"string (MUST match an input finding_id)",'
+            '"ai_understanding":"string (2-3 plain-English sentences: what is happening and why, citing evidence IDs)",'
+            '"ai_analysis":"string (3-5 sentences: business impact, likely root cause, confidence level, and what is NOT known)",'
+            '"fix_prompt":"string (<=60 words, paste-ready Claude Code/Cursor prompt referencing exact template/URL)",'
             '"detailed_diagnosis":"string (2-3 concrete sentences citing observed URLs/elements from evidence)",'
             '"why_it_matters":"string (business, conversion, or organic visibility impact for this specific brand)",'
             '"recommendation":"string (concrete, actionable engineering/content fix for this site)",'
@@ -554,6 +557,9 @@ class AnalysisOrchestrator:
                 why = str(item.get("why_it_matters") or "").strip()
                 rec = str(item.get("recommendation") or "").strip()
                 val = str(item.get("validation_criteria") or "").strip()
+                ai_und = str(item.get("ai_understanding") or diag or "").strip()
+                ai_ana = str(item.get("ai_analysis") or why or "").strip()
+                fix_p = str(item.get("fix_prompt") or rec or "").strip()
                 updated = False
                 if diag:
                     target.description = diag
@@ -574,6 +580,19 @@ class AnalysisOrchestrator:
                     target.validation_criteria = val
                     target.acceptance_criteria = val
                     updated = True
+                if ai_und:
+                    target.ai_understanding = ai_und
+                    updated = True
+                if ai_ana:
+                    target.ai_analysis = ai_ana
+                    updated = True
+                if fix_p:
+                    # Enforce <= 60 words for paste-ready Claude Code/Cursor prompt
+                    words = fix_p.split()
+                    target.fix_prompt = " ".join(words[:60])
+                    updated = True
+                from app.report_finding_registry import resolve_connector_verdict
+                target.connector_effect = resolve_connector_verdict(target)
                 if updated:
                     if not target.agent_id:
                         target.agent_id = "ai.finding_analyst"
@@ -2994,6 +3013,21 @@ class AnalysisOrchestrator:
             controller.mark_node_status("node_final_report_assembly", GraphNodeStatus.RUNNING)
             controller.log_activity("node_final_report_assembly", "running", "report.assemble", "Assembling executive report and enforcing Validation Gate...")
 
+            aeo_intelligence_rep = None
+            try:
+                from app.aeo.intelligence import run_aeo_intelligence_suite
+                bp = blackboard.business_profile
+                aeo_products = (list(getattr(bp, "products", None) or []) + list(getattr(bp, "services", None) or [])) if bp else []
+                aeo_intelligence_rep = run_aeo_intelligence_suite(
+                    domain=domain,
+                    brand_name=(getattr(bp, "business_name", None) if bp else None) or domain,
+                    category=(getattr(bp, "industry", None) or getattr(bp, "niche", None) or "") if bp else "",
+                    pages=(manifest.pages if manifest and getattr(manifest, "pages", None) else blackboard.pages),
+                    products=aeo_products or None,
+                )
+            except Exception as aeo_intel_err:
+                logger.warning("AEO intelligence suite failed for %s: %s", analysis_id, type(aeo_intel_err).__name__)
+
             report = ExecutiveReport(
                 chapter_narratives=chapter_narratives_map,
                 report_id=report_uuid,
@@ -3017,6 +3051,7 @@ class AnalysisOrchestrator:
                 geo_readiness=geo_readiness,
                 ai_visibility_scorecard=ai_visibility_scorecard,
                 agent_readiness=agent_readiness,
+                aeo_intelligence=aeo_intelligence_rep,
                 commercial_evaluations=blackboard.commercial_evaluations,
                 dynamic_sandbox_evaluations=getattr(blackboard, "dynamic_sandbox_evaluations", []),
                 kie_graph_summary=kie_summary,
@@ -3318,6 +3353,13 @@ class AnalysisOrchestrator:
                     "section": "Evidence gaps & uncorroborated claims",
                     "reason": f"{len(blackboard.blackboard_state['evidence_gaps'])} marketing or audit claim(s) lacked corroborating evidence and are flagged as unverified.",
                 })
+
+            # Seal canonical enterprise scorecard before persistence so API, UI, PDFs, and PPTX share one source of truth.
+            try:
+                from app.domain.scoring.canonical_scorecard import CanonicalScorecardEngine
+                CanonicalScorecardEngine.evaluate_from_report(report, force_recompute=True)
+            except Exception as _cs_err:
+                logger.warning("Canonical scorecard seal skipped for %s: %s", analysis_id, _cs_err)
 
             # Persist a validated report in a non-terminal state first. Only mark the
             # audit completed after the manifest is sealed and the terminal state is durable.

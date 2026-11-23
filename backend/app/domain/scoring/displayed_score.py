@@ -180,41 +180,18 @@ def _live_citation(payload: dict, honest: dict) -> Optional[float]:
 
 
 def displayed_composite(report: Any) -> Optional[float]:
-    """Return the dossier composite, or None when the report has no measured pillars."""
+    """Return the canonical enterprise composite score, or None when no pillars are measured."""
     payload = _as_report(report)
     if not payload:
         return None
-    scores = payload.get("scores") or {}
-    honest = payload.get("honest_scores") or {}
-    categories = scores.get("category_scores") or {}
-    geo = payload.get("geo_readiness") or {}
-
-    def category_score(key: str) -> Optional[float]:
-        category = categories.get(key) or {}
-        if not isinstance(category, dict) or category.get("status") == "NOT_MEASURED":
-            return None
-        status = str(category.get("status") or "MEASURED").upper()
-        if status in {"NOT_MEASURED", "UNAVAILABLE", "NOT_CONNECTED", "NOT_CONFIGURED", "SIMULATION_ONLY"}:
-            return None
-        return _score(category.get("score"))
-
-    live = _live_citation(payload, honest if isinstance(honest, dict) else {})
-    pillars = [
-        (0.30, _score(honest.get("google_score")) if _score(honest.get("google_score")) is not None else category_score("TECHNICAL_SEO")),
-        (0.25, _score(geo.get("extractability_score")) if _score(geo.get("extractability_score")) is not None else (
-            _score(honest.get("ai_readiness_score")) if _score(honest.get("ai_readiness_score")) is not None else category_score("GEO")
-        )),
-        (0.25, live),
-        (0.20, _score(honest.get("human_score")) if _score(honest.get("human_score")) is not None else category_score("UX_CONVERSION")),
-    ]
-    measured = [(weight, score) for weight, score in pillars if score is not None]
-    if not measured:
-        return None
-    weight_sum = sum(weight for weight, _ in measured)
-    if weight_sum <= 0:
-        return None
-    composite = sum(score * (weight / weight_sum) for weight, score in measured)
-    return _round_to(composite, 1)
+    try:
+        from app.domain.scoring.canonical_scorecard import CanonicalScorecardEngine
+        card = CanonicalScorecardEngine.evaluate_from_report(report)
+        return card.composite_health_score
+    except Exception:
+        # Fallback to direct sealed overall_score if available
+        scores = payload.get("scores") or {}
+        return _score(scores.get("overall_score"))
 
 
 def compute_ttfb_summary(samples: list[float]) -> dict[str, Any]:

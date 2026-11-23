@@ -337,22 +337,10 @@ def _score_citation_readiness(passage_res) -> GeoDimensionScore:
 def _ai_bots_allowed(robots_content: Optional[str]) -> bool:
     if not robots_content:
         return True
-    txt = robots_content.lower()
-    ai_bots = ("gptbot", "claudebot", "perplexitybot", "google-extended")
-    current_agents: List[str] = []
-    for raw_line in txt.splitlines():
-        line = raw_line.split("#", 1)[0].strip()
-        if not line:
-            current_agents = []
-            continue
-        if line.startswith("user-agent:"):
-            agent = line.split(":", 1)[1].strip()
-            current_agents.append(agent)
-        elif line.startswith("disallow:"):
-            path = line.split(":", 1)[1].strip()
-            if path == "/" and any(bot in ag for ag in current_agents for bot in ai_bots):
-                return False
-    return True
+    from app.crawl.robots import evaluate_robots
+
+    ai_bots = ("GPTBot", "OAI-SearchBot", "ClaudeBot", "PerplexityBot", "Google-Extended")
+    return all(evaluate_robots(robots_content, "/", user_agent=bot).allowed for bot in ai_bots)
 
 
 def _score_retrieval_accessibility(
@@ -615,12 +603,68 @@ def evaluate_geo_readiness(
     language: Optional[str] = None,
     extended_questions: bool = False,
     entity_graph: Optional[EntityGraphReport] = None,
+    business_presence_mode: str = "website",  # website | offsite_only | hybrid
 ) -> GeoReadinessReport:
     profile = profile or BusinessProfile()
     name = profile.business_name if profile.business_name not in ("Unknown", "Unknown Business", "") else ""
     if not name:
         host = urlparse(website_url or "").netloc.replace("www.", "")
         name = host.split(".")[0].capitalize() if host else "the company"
+
+    mode = (business_presence_mode or "website").strip().lower()
+    if mode == "offsite_only" or (not pages and not (website_url or "").strip()):
+        visibility_is_measured = visibility_measured and visibility_score is not None
+        dim_scores: Dict[str, GeoDimensionScore] = {
+            GeoDimensionKey.RETRIEVAL_ACCESSIBILITY.value: GeoDimensionScore(
+                key=GeoDimensionKey.RETRIEVAL_ACCESSIBILITY.value,
+                label="Retrieval accessibility (offsite-only: n/a)",
+                score=None,
+                band="unmeasured",
+                confidence=0.0,
+                summary="Off-site-only brand mode: own-website crawl, llms.txt, and on-site schema are not applicable (n/a, not 0).",
+                evidence_notes=["business_presence_mode=offsite_only"],
+                is_measured=False,
+                measurement_note="Not applicable for off-site-only brands without an owned website.",
+            ),
+            GeoDimensionKey.LIVE_AI_CITATIONS.value: GeoDimensionScore(
+                key=GeoDimensionKey.LIVE_AI_CITATIONS.value,
+                label="Live AI citations & brand mentions (external channels)",
+                score=round(float(visibility_score), 1) if visibility_is_measured else None,
+                band=_band(float(visibility_score)) if visibility_is_measured else "unmeasured",
+                confidence=0.85 if visibility_is_measured else 0.0,
+                summary=(
+                    f"Off-site brand visibility measured across external AI channels ({visibility_score:.1f}/100)."
+                    if visibility_is_measured
+                    else "Run live or manual AI sampling to measure off-site brand visibility."
+                ),
+                evidence_notes=["business_presence_mode=offsite_only", "own_site_citation=n/a"],
+                is_measured=visibility_is_measured,
+                measurement_note=None if visibility_is_measured else "Configure live AI engines or import manual samples.",
+            ),
+        }
+        return GeoReadinessReport(
+            visibility_status="MEASURED" if visibility_is_measured else "NOT_CONFIGURED",
+            visibility_message=visibility_detail or (
+                "Off-site-only mode: own-site citation is n/a; visibility is evaluated across third-party channels."
+            ),
+            entity_name=name,
+            questions_total=0,
+            questions_supported=0,
+            questions_partial=0,
+            questions_unsupported=0,
+            questions_conflicting=0,
+            headline=(
+                f"{name} evaluated in off-site-only mode (no owned website required). "
+                "Own-site technical checks are marked n/a; prioritize third-party citation channels and brand fact consistency."
+            ),
+            questions=[],
+            dimensions=[],
+            dimension_scores=dim_scores,
+            schema_types=[],
+            market_country=(country or "Global").strip() or "Global",
+            market_language=(language or "en").strip() or "en",
+            extractability_score=None,
+        )
 
     if not pages:
         visibility_is_measured = visibility_measured and visibility_score is not None

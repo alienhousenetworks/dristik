@@ -13,6 +13,7 @@ from urllib.parse import urlparse
 
 import httpx
 
+from app.crawl.robots import evaluate_robots
 from app.domain.models import AgentReadinessReport, AgentReadinessSignal, CrawlManifest, PageEvidence
 from app.core.security.ssrf import is_safe_url
 
@@ -25,76 +26,47 @@ def _signal(key: str, status: str, summary: str) -> AgentReadinessSignal:
     return AgentReadinessSignal(key=key, status=status, summary=summary)
 
 
-def _robots_signal(manifest: Optional[CrawlManifest]) -> AgentReadinessSignal:
+def _robots_signal(manifest: Optional[CrawlManifest], page_path: str = "/") -> AgentReadinessSignal:
     if manifest is None or manifest.robots_txt_found is None:
         return _signal("ai_bot_robots", "NOT_MEASURED", "robots.txt was not fetched on this crawl.")
     if not manifest.robots_txt_found:
         return _signal("ai_bot_robots", "MISSING", "No robots.txt was found. AI crawler policy is unpublished.")
-    text = (manifest.robots_txt_content or "").lower()
+    text = manifest.robots_txt_content or ""
     if not text.strip():
         return _signal("ai_bot_robots", "NOT_MEASURED", "robots.txt was reported present but its body was not stored.")
 
-    # RFC 9309 Group parser: specific bot groups take precedence over '*'
-    groups: dict[str, list[tuple[str, str]]] = {}
-    current_agents: list[str] = []
-
-    for raw in text.splitlines():
-        line = raw.split("#", 1)[0].strip()
-        if not line or ":" not in line:
-            continue
-        key, value = [part.strip() for part in line.split(":", 1)]
-        if key == "user-agent":
-            current_agents.append(value)
-            if value not in groups:
-                groups[value] = []
-        elif key in ("allow", "disallow"):
-            for agent in current_agents:
-                groups[agent].append((key, value))
-        else:
-            current_agents = []
-
-    # Check search bots and training bots individually
-    wildcard_rules = groups.get("*", [])
-    wildcard_blocked = any(k == "disallow" and v in ("/", "/*") for k, v in wildcard_rules)
-
-    blocked_search = []
-    allowed_search = []
-    for bot in _AI_SEARCH_BOTS:
-        bot_rules = groups.get(bot)
-        if bot_rules is not None:
-            if any(k == "disallow" and v in ("/", "/*") for k, v in bot_rules):
-                blocked_search.append(bot)
-            elif any(k == "allow" and v in ("/", "/*") for k, v in bot_rules):
-                allowed_search.append(bot)
-        elif wildcard_blocked:
+    target_path = page_path if page_path.startswith("/") else f"/{page_path}"
+    blocked_search: List[str] = []
+    allowed_search_explicit: List[str] = []
+    for bot in sorted(_AI_SEARCH_BOTS):
+        dec = evaluate_robots(text, target_path, user_agent=bot)
+        if not dec.allowed:
             blocked_search.append(bot)
+        elif dec.matched_group and dec.matched_group.lower() != "*":
+            allowed_search_explicit.append(bot)
 
-    blocked_training = []
-    for bot in _AI_TRAINING_BOTS:
-        bot_rules = groups.get(bot)
-        if bot_rules is not None:
-            if any(k == "disallow" and v in ("/", "/*") for k, v in bot_rules):
-                blocked_training.append(bot)
-        elif wildcard_blocked:
-            blocked_training.append(bot)
+    blocked_training = [
+        bot for bot in sorted(_AI_TRAINING_BOTS)
+        if not evaluate_robots(text, target_path, user_agent=bot).allowed
+    ]
 
-    if allowed_search and not any(groups.get(bot) and any(k == "disallow" and v in ("/", "/*") for k, v in groups[bot]) for bot in _AI_SEARCH_BOTS):
+    if allowed_search_explicit and not blocked_search:
         return _signal(
             "ai_bot_robots",
             "PRESENT",
-            f"robots.txt permits AI search crawlers ({', '.join(sorted(allowed_search))}) overriding general rules.",
+            f"robots.txt permits AI search crawlers ({', '.join(allowed_search_explicit)}) overriding general rules.",
         )
-    elif blocked_search:
+    if blocked_search:
         return _signal(
             "ai_bot_robots",
             "MISSING",
-            f"robots.txt disallows search crawlers: {', '.join(sorted(blocked_search))}.",
+            f"robots.txt disallows search crawlers: {', '.join(blocked_search)}.",
         )
-    elif blocked_training:
+    if blocked_training:
         return _signal(
             "ai_bot_robots",
             "PRESENT",
-            f"robots.txt permits AI search bots while selectively restricting training bots ({', '.join(sorted(blocked_training)[:3])}).",
+            f"robots.txt permits AI search bots while selectively restricting training bots ({', '.join(blocked_training[:3])}).",
         )
 
     return _signal(
@@ -139,27 +111,104 @@ def _definition_signal(pages: List[PageEvidence]) -> AgentReadinessSignal:
     )
 
 
-async def _llms_txt_signal(website_url: str) -> AgentReadinessSignal:
+async def validate_llms_txt(
+    website_url: str,
+    robots_txt: str = "",
+    max_links: int = 6,
+) -> dict:
+    """Fetch /llms.txt, sample linked same-site URLs for HTTP 200 health, and check robots contradictions."""
     parsed = urlparse(website_url if "://" in website_url else f"https://{website_url}")
     if not parsed.netloc:
-        return _signal("llms_txt", "NOT_MEASURED", "No host was available to request /llms.txt.")
+        return {"present": False, "status": "NOT_MEASURED", "reason": "No host available"}
+    root_host = parsed.netloc.lower().removeprefix("www.")
     target = f"{parsed.scheme or 'https'}://{parsed.netloc}/llms.txt"
     safe, reason = is_safe_url(target)
     if not safe:
-        return _signal("llms_txt", "NOT_MEASURED", f"/llms.txt was not requested: {reason}")
+        return {"present": False, "status": "NOT_MEASURED", "reason": reason}
+
+    try:
+        async with httpx.AsyncClient(timeout=6.0, follow_redirects=True) as client:
+            resp = await client.get(target, headers={"User-Agent": "Dristik-Intelligence-Bot/2.0"})
+            if resp.status_code != 200:
+                return {
+                    "present": False,
+                    "status": "MISSING" if resp.status_code == 404 else "NOT_MEASURED",
+                    "http_status": resp.status_code,
+                    "url": target,
+                }
+            body = resp.text[:200_000]
+            urls: List[str] = []
+            for u in re.findall(r"https?://[^\s)\]>\"'`]+", body):
+                u = u.rstrip(".,;:")
+                h = urlparse(u).netloc.lower().removeprefix("www.")
+                if (h == root_host or h.endswith("." + root_host)) and u not in urls:
+                    urls.append(u)
+
+            broken: List[dict] = []
+            robots_blocked: List[dict] = []
+            sample = urls[:max_links]
+            for u in sample:
+                if robots_txt:
+                    denied = [
+                        b for b in ("GPTBot", "ClaudeBot", "PerplexityBot")
+                        if not evaluate_robots(robots_txt, u, user_agent=b).allowed
+                    ]
+                    if denied:
+                        robots_blocked.append({"url": u, "bots": denied})
+                u_safe, _ = is_safe_url(u)
+                if not u_safe:
+                    continue
+                try:
+                    lr = await client.head(u, headers={"User-Agent": "Dristik-Intelligence-Bot/2.0"})
+                    if lr.status_code == 405:
+                        lr = await client.get(u, headers={"User-Agent": "Dristik-Intelligence-Bot/2.0"})
+                    if lr.status_code != 200:
+                        broken.append({"url": u, "status": lr.status_code})
+                except Exception as exc:
+                    broken.append({"url": u, "status": 0, "error": str(exc)[:120]})
+
+            return {
+                "present": True,
+                "status": "PRESENT",
+                "http_status": 200,
+                "url": target,
+                "total_links": len(urls),
+                "checked": len(sample),
+                "broken": broken,
+                "robots_blocked": robots_blocked,
+            }
+    except Exception as exc:
+        return {"present": False, "status": "NOT_MEASURED", "reason": str(exc)}
+
+
+async def _llms_file_signal(website_url: str, filename: str, signal_key: str) -> AgentReadinessSignal:
+    parsed = urlparse(website_url if "://" in website_url else f"https://{website_url}")
+    if not parsed.netloc:
+        return _signal(signal_key, "NOT_MEASURED", f"No host was available to request /{filename}.")
+    target = f"{parsed.scheme or 'https'}://{parsed.netloc}/{filename}"
+    safe, reason = is_safe_url(target)
+    if not safe:
+        return _signal(signal_key, "NOT_MEASURED", f"/{filename} was not requested: {reason}")
     try:
         async with httpx.AsyncClient(timeout=6.0, follow_redirects=True) as client:
             response = await client.head(target, headers={"User-Agent": "Dristik-Intelligence-Bot/2.0"})
             if response.status_code == 405:
                 response = await client.get(target, headers={"User-Agent": "Dristik-Intelligence-Bot/2.0"})
     except Exception as exc:
-        return _signal("llms_txt", "NOT_MEASURED", f"/llms.txt request failed: {exc}")
+        return _signal(signal_key, "NOT_MEASURED", f"/{filename} request failed: {exc}")
     if response.status_code == 200 and len(response.content or b"") >= 0:
-        # HEAD often has an empty body. 200 is enough to say the URL exists.
-        return _signal("llms_txt", "PRESENT", f"{target} returned HTTP {response.status_code}.")
+        return _signal(signal_key, "PRESENT", f"{target} returned HTTP {response.status_code}.")
     if response.status_code == 404:
-        return _signal("llms_txt", "MISSING", f"{target} returned HTTP 404.")
-    return _signal("llms_txt", "NOT_MEASURED", f"{target} returned HTTP {response.status_code}, which is not a presence check.")
+        return _signal(signal_key, "MISSING", f"{target} returned HTTP 404.")
+    return _signal(signal_key, "NOT_MEASURED", f"{target} returned HTTP {response.status_code}, which is not a presence check.")
+
+
+async def _llms_txt_signal(website_url: str, robots_txt: str = "") -> AgentReadinessSignal:
+    return await _llms_file_signal(website_url, "llms.txt", "llms_txt")
+
+
+async def _llms_full_txt_signal(website_url: str) -> AgentReadinessSignal:
+    return await _llms_file_signal(website_url, "llms-full.txt", "llms_full_txt")
 
 
 def _score(signals: List[AgentReadinessSignal]) -> Optional[float]:
@@ -175,11 +224,14 @@ async def evaluate_agent_readiness(
     pages: List[PageEvidence],
     manifest: Optional[CrawlManifest] = None,
 ) -> AgentReadinessReport:
+    parsed = urlparse(website_url if "://" in website_url else f"https://{website_url}")
+    page_path = (parsed.path or "/") + (f"?{parsed.query}" if parsed.query else "")
     signals = [
-        _robots_signal(manifest),
+        _robots_signal(manifest, page_path=page_path),
         _faq_signal(pages),
         _definition_signal(pages),
         await _llms_txt_signal(website_url),
+        await _llms_full_txt_signal(website_url),
     ]
     score = _score(signals)
     present = sum(1 for s in signals if s.status == "PRESENT")

@@ -530,6 +530,36 @@ class Finding(BaseModel):
     severity_justification: Optional[str] = None
     root_cause_status: str = "confirmed"  # confirmed, strongly_supported, hypothesized, diagnostic_gap
 
+    # Canonical 5-Point Pipeline Fields (Single Source of Truth across all 6 PDFs)
+    owning_chapter: Optional[str] = Field(
+        default=None,
+        description="Single canonical chapter that renders this finding in full (seo, geo, aeo, cro, crawl).",
+    )
+    algo_trace: List[Dict[str, Any]] = Field(
+        default_factory=list,
+        description="Structured rule engine trace rows: [{rule_id, input, threshold, observed, status}].",
+    )
+    ai_understanding: Optional[str] = Field(
+        default=None,
+        description="Block 3: 2-3 sentences explaining what the AI believes is happening and why.",
+    )
+    ai_analysis: Optional[str] = Field(
+        default=None,
+        description="Block 4: 3-5 sentences covering business impact, root cause, confidence, and what is unknown.",
+    )
+    fix_prompt: Optional[str] = Field(
+        default=None,
+        description="Block 5: Paste-ready Claude Code / Cursor fix prompt (<= 60 words).",
+    )
+    connector_effect: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description="Connector verdict: {resolves_issue: YES|PARTIAL|CANNOT_CONFIRM, needs_connector: str|None, why: str}.",
+    )
+    verified_state: str = Field(
+        default="VERIFIED",
+        description="Canonical verification state: VERIFIED | UNVERIFIED | UNMEASURED.",
+    )
+
     # Mandatory Plain-English Structured Fields
     plain_english_summary: Optional[str] = Field(default=None, description="Everyday language explanation for business owners.")
     what_was_checked: Optional[str] = Field(default=None, description="The test Dristik actually performed.")
@@ -2481,6 +2511,8 @@ class ClickDepthReport(BaseModel):
     pages_by_depth: Dict[str, List[str]] = Field(default_factory=dict)
     depth_distribution_pct: Dict[str, float] = Field(default_factory=dict)
     high_depth_warning_count: int = 0
+    link_graph_edges: int = 0
+    status: str = "MEASURED"
 
 class OrphanPageReport(BaseModel):
     total_sitemap_urls: int = 0
@@ -2489,6 +2521,8 @@ class OrphanPageReport(BaseModel):
     orphan_count: int = 0
     orphan_percentage: float = 0.0
     summary: str = ""
+    link_graph_edges: int = 0
+    status: str = "MEASURED"
 
 class AnchorTextAudit(BaseModel):
     total_links_analyzed: int = 0
@@ -3323,6 +3357,7 @@ class ExecutiveReport(BaseModel):
     geo_readiness: Optional[GeoReadinessReport] = None
     ai_visibility_scorecard: Optional[AiVisibilityScorecard] = None
     agent_readiness: Optional[AgentReadinessReport] = None
+    aeo_intelligence: Optional[Dict[str, Any]] = None
     contradictions: List[ContradictionReport] = Field(default_factory=list)
     exploratory_hypotheses: List[Finding] = Field(default_factory=list)
     hypotheses_matrix: List[HypothesisMatrixItem] = Field(default_factory=list)
@@ -3379,6 +3414,7 @@ class ExecutiveReport(BaseModel):
     page_level_assessments: List[PageLevelAssessment] = Field(default_factory=list)
     consistency_report: Optional[ConsistencyAuditReport] = None
     quality_gate_results: Optional[Dict[str, Any]] = None
+    canonical_scorecard: Optional[Dict[str, Any]] = None
     canonical_crawl_inventory: Optional[CrawlInventory] = None
     url_registry: Optional[CanonicalUrlRegistry] = None
     root_cause_links: List[RootCauseLink] = Field(default_factory=list)

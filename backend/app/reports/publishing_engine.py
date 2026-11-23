@@ -1615,8 +1615,12 @@ class PublicationHtmlRenderer:
             ch_html_list = []
             for ch in part.chapters:
                 ch_page = (resolved_pages or {}).get(ch.id, ch.page_number)
-                # Invisible text marker preserved in Chromium PDF text layer (1pt near-transparent; 0pt is dropped)
-                ch_marker = f'<span class="chapter-marker" style="position:absolute;font-size:1pt;line-height:1pt;color:rgba(255,255,255,0.01);pointer-events:none;user-select:none;">[[chapter_ref:{ch.id.lower()}:ch_{ch.num}]]</span>'
+                # Emit invisible chapter marker ONLY during pass 1 (when resolved_pages is None)
+                # so [[chapter_ref:...]] tokens never leak into the final rendered PDF text layer.
+                if resolved_pages is None:
+                    ch_marker = f'<span class="chapter-marker" style="position:absolute;font-size:1pt;line-height:1pt;color:rgba(255,255,255,0.01);pointer-events:none;user-select:none;">[[chapter_ref:{ch.id.lower()}:ch_{ch.num}]]</span>'
+                else:
+                    ch_marker = f'<span class="chapter-marker" data-chapter-ref="{_esc(ch.id.lower())}:ch_{_esc(ch.num)}"></span>'
 
                 ch_html_list.append(f"""
                 <section class="chapter-start" id="{_esc(ch.id)}">

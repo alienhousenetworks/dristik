@@ -11,6 +11,7 @@ import logging
 from typing import Any, Dict, List, Optional
 
 from app.domain.enums import Category, Severity
+from app.domain.evidence.rule_catalog import is_non_html_utility_url
 from app.domain.models import CrawlManifest, Finding, FindingEvidence
 from app.evidence.models import EvidenceRef
 
@@ -29,16 +30,28 @@ class SitemapOrphanAnalyzer:
     """
 
     def analyze(self, manifest: CrawlManifest) -> Dict[str, Any]:
-        orphan_urls = manifest.orphan_urls or []
-        sitemap_urls = manifest.sitemap_urls or []
-        total_discovered = manifest.total_pages_discovered or len(manifest.pages or [])
+        crawled_pages = manifest.pages or []
+        total_edges = sum(
+            len([lnk for lnk in (getattr(p, "internal_links", None) or []) if not is_non_html_utility_url(lnk)])
+            for p in crawled_pages
+        )
+        raw_orphans = manifest.orphan_urls or []
+        orphan_urls = [u for u in raw_orphans if not is_non_html_utility_url(u)]
+        sitemap_urls = [u for u in (manifest.sitemap_urls or []) if not is_non_html_utility_url(u)]
         findings: List[Finding] = []
+
+        # Never assert orphan pages if the crawled link graph has 0 edges
+        if crawled_pages and total_edges == 0:
+            orphan_urls = []
+            orphan_status = "UNMEASURED"
+        else:
+            orphan_status = "MEASURED"
 
         orphan_count = len(orphan_urls)
         sitemap_count = len(sitemap_urls)
         orphan_ratio = (orphan_count / max(sitemap_count, 1)) if sitemap_count > 0 else 0.0
 
-        if orphan_count > 0:
+        if orphan_status == "MEASURED" and orphan_count > 0:
             sample_orphans = orphan_urls[:10]
             severity = Severity.HIGH if orphan_count > 5 or orphan_ratio > 0.15 else Severity.MEDIUM
             ev_hash = _compute_hash({"orphan_urls": orphan_urls, "sitemap_count": sitemap_count})
@@ -174,6 +187,8 @@ class SitemapOrphanAnalyzer:
             ))
 
         summary = {
+            "status": orphan_status,
+            "link_graph_edges": total_edges,
             "sitemap_urls_count": sitemap_count,
             "orphan_urls_count": orphan_count,
             "dirty_sitemap_urls_count": len(dirty_sitemap_urls),

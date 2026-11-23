@@ -205,3 +205,93 @@ def validate_final_report(report: Any, manifest: Any | None = None) -> dict[str,
         "checked_at": __import__("datetime").datetime.now(__import__("datetime").timezone.utc).isoformat(),
         "gate_version": "final-report-integrity-v1",
     }
+
+
+_FORBIDDEN_PDF_TOKENS = (
+    ("chapter_ref_leak", re.compile(r"\[\[chapter_ref:[^\]]*\]\]", re.IGNORECASE)),
+    ("placeholder_domain", re.compile(r"\byourdomain\.com\b", re.IGNORECASE)),
+    ("placeholder_brand", re.compile(r"\bVerified Brand Name\b", re.IGNORECASE)),
+    ("epistemic_unknown", re.compile(r"Epistemic Basis:\s*UNKNOWN\b", re.IGNORECASE)),
+    ("empty_citation_brackets", re.compile(r"\[\s*\]")),
+)
+
+_FIVE_POINT_MARKERS = (
+    "1. Finding:",
+    "2. Algorithm Analysis",
+    "3. AI Understanding:",
+    "4. AI Analysis:",
+    "5. Fix Plan (Prompt):",
+    "Fix resolves issue:",
+)
+
+
+def validate_pdf_release_gates(
+    pdf_artifacts: dict[str, dict[str, Any]],
+    *,
+    max_master_pages: int = 22,
+) -> dict[str, Any]:
+    """Enforce Phase 5 release gates across all rendered PDF publications (Master + 5 pillars).
+
+    Each value in `pdf_artifacts` is a dict with:
+      - composite_score: float | None
+      - finding_count: int
+      - html: str (rendered HTML/text of the PDF)
+      - page_count: int | None (optional; checked against max_master_pages for 'master')
+      - chapters: list[dict] (optional; [{chapter_id, owned_finding_count, html}])
+    """
+    blockers: list[str] = []
+    if not pdf_artifacts:
+        raise ValueError("PDF release gate failed: no PDF artifacts supplied")
+
+    scores = {
+        name: round(float(meta["composite_score"]), 1)
+        for name, meta in pdf_artifacts.items()
+        if meta.get("composite_score") is not None
+    }
+    if len(set(scores.values())) > 1:
+        blockers.append(f"composite score mismatch across PDFs: {scores}")
+
+    counts = {
+        name: int(meta["finding_count"])
+        for name, meta in pdf_artifacts.items()
+        if meta.get("finding_count") is not None
+    }
+    if len(set(counts.values())) > 1:
+        blockers.append(f"finding count mismatch across PDFs: {counts}")
+
+    for name, meta in pdf_artifacts.items():
+        body = str(meta.get("html") or "")
+        for tok_name, pattern in _FORBIDDEN_PDF_TOKENS:
+            if pattern.search(body):
+                blockers.append(f"{name}: leaked/placeholder token detected ({tok_name})")
+
+        # Verify every 5-point finding card contains all 5 blocks + connector verdict
+        if "five-point-finding-card" in body:
+            for marker in _FIVE_POINT_MARKERS:
+                if marker not in body:
+                    blockers.append(f"{name}: missing 5-point card block '{marker}'")
+
+        # Verify no chapter claims 'no defects' while owning findings
+        for ch in (meta.get("chapters") or []):
+            owned_cnt = int(ch.get("owned_finding_count") or 0)
+            ch_html = str(ch.get("html") or "")
+            if owned_cnt > 0 and re.search(r"\b(?:no defects|0 defects|zero defects)\b", ch_html, re.IGNORECASE):
+                blockers.append(
+                    f"{name}/{ch.get('chapter_id', 'chapter')}: claims no defects while owning {owned_cnt} finding(s)"
+                )
+
+        if name == "master" and meta.get("page_count") is not None:
+            pg = int(meta["page_count"])
+            if pg > max_master_pages:
+                blockers.append(f"master PDF page count {pg} exceeds budget of {max_master_pages} pages")
+
+    if blockers:
+        raise ValueError("PDF release gates failed: " + " | ".join(blockers))
+
+    return {
+        "status": "PASS",
+        "pdfs_checked": sorted(pdf_artifacts.keys()),
+        "composite_score": next(iter(scores.values()), None),
+        "finding_count": next(iter(counts.values()), None),
+        "blockers": [],
+    }

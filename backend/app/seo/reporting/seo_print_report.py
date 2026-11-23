@@ -1451,8 +1451,7 @@ class SeoPrintReportRenderer:
         findings_content = self._render_chapter_findings(num_str, report) if num_str != "19" else ""
 
         return f"""
-        <section id="{sec_id}" class="chapter-start report-section">
-            <span class="chapter-marker" style="display:inline; font-size: 0pt; color: transparent; line-height: 0;">[[chapter_ref:{sec_id}:ch_{num_str}]]</span>
+        <section id="{sec_id}" class="chapter-start report-section" data-chapter-ref="{sec_id}:ch_{num_str}">
             <div class="page-running-header">
                 <span class="brand-tag">DRISTIK AI</span>
                 <span>Complete SEO Master Audit &amp; Remediation Report</span>
@@ -1565,17 +1564,16 @@ class SeoPrintReportRenderer:
     def _render_sec_01(self, report: ExecutiveReport) -> str:
         from app.domain.scoring.displayed_score import displayed_composite
         from app.reports.snapshot_provenance import format_audit_execution_metadata
+        from app.report_finding_registry import canonicalize_report_findings
         snap = format_audit_execution_metadata(report)
         seo_pillar_score = snap.score_for_section("seo")
         comp_score = displayed_composite(report)
-        score_val = (
-            seo_pillar_score
-            if seo_pillar_score is not None
-            else (comp_score if comp_score is not None else (getattr(report.scores, "overall_score", None) if getattr(report, "scores", None) else None))
-        )
+        score_val = seo_pillar_score if seo_pillar_score is not None else comp_score
+        score_gauge_label = "SEO Pillar Health" if seo_pillar_score is not None else "Site Health Score"
         score_gauge_svg = render_svg_score_gauge(score_val, size=130)
 
-        findings_count = len(report.findings)
+        canonical_findings = canonicalize_report_findings(report)
+        findings_count = len(canonical_findings)
         
         manifest = getattr(report, "crawl_manifest", None)
         canon_inv = get_canonical_crawl_inventory(manifest, report)
@@ -1689,7 +1687,7 @@ class SeoPrintReportRenderer:
         <div style="display: flex; gap: 6mm; align-items: center; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 4mm 6mm; margin-bottom: 5mm;">
             <div style="flex-shrink: 0; text-align: center;">
                 {score_gauge_svg}
-                <div style="font-size: 8pt; font-weight: 700; color: #64748b; margin-top: 1mm;">Site Health Score</div>
+                <div style="font-size: 8pt; font-weight: 700; color: #64748b; margin-top: 1mm;">{score_gauge_label}</div>
             </div>
             <div style="flex-grow: 1;">
                 <div class="kpi-grid" style="margin-bottom: 0;">
@@ -4293,7 +4291,7 @@ class SeoPrintReportRenderer:
                 <div class="lifecycle-node verified-step">
                     <span class="lifecycle-circle">5</span>
                     <h6>Verified</h6>
-                    <span>Certified &amp; ledger logged</span>
+                    <span>Closed-Loop Validated</span>
                 </div>
             </div>
         </div>

@@ -828,7 +828,10 @@ class SEOAuditOrchestrator:
                         "findings": [],
                     }
 
-                effective_state = ea_data_state if ea_data_state != "NOT_CONNECTED" else "CONNECTED_AWAITING_SYNC"
+                if records_count == 0 and not ea_metrics:
+                    effective_state = "CONNECTED_NOT_MEASURED"
+                else:
+                    effective_state = ea_data_state if ea_data_state != "NOT_CONNECTED" else "CONNECTED_AWAITING_SYNC"
                 return {
                     "connector": connector_id,
                     "provider_matched": matched_provider or connector_id,

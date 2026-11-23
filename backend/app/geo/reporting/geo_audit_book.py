@@ -251,11 +251,10 @@ def _stored_line(label: str, value: Any) -> str:
 
 
 def _finding_card(finding: Any) -> str:
-    """Render complete finding card preserving ALL old and new GEO finding fields."""
-    from app.reports.plain_english_engine import PlainEnglishEngine, render_plain_english_finding_card
+    """Render unified 5-point finding card shared with the Master Book."""
+    from app.reports.five_point_card_renderer import render_five_point_finding_card
 
-    enriched = PlainEnglishEngine.enrich_finding(finding)
-    return render_plain_english_finding_card(enriched)
+    return render_five_point_finding_card(finding)
 
 
 def _rate_text(label: str, count: int, denominator: int, rate: Any) -> str:
@@ -606,11 +605,16 @@ def render_geo_audit_book(report: Any) -> str:
         render_snapshot_provenance_bar,
     )
 
+    from app.domain.scoring.canonical_scorecard import (
+        CanonicalScorecardEngine,
+        render_canonical_scorecard_html,
+    )
     snap = format_audit_execution_metadata(report)
-    score_val = geo_cover_figure(report)
-    if score_val is None and snap.score_for_section("geo") is not None:
-        score_val = int(round(snap.score_for_section("geo")))
+    canon_card = CanonicalScorecardEngine.evaluate_from_report(report)
+    canon_geo = snap.score_for_section("geo")
+    score_val = int(round(canon_geo)) if canon_geo is not None else geo_cover_figure(report)
     score_disp = f"{score_val}" if score_val is not None else "—"
+    canon_geo_html = render_canonical_scorecard_html(canon_card, pillar_filter="GEO")
     story = _esc(_get(report, "story_summary", "") or "Comprehensive Generative Engine Optimization audit.")
     rights = _esc(_get(report, "what_site_gets_right", "") or "No strengths recorded in executive summary.")
     holding = _esc(_get(report, "what_is_holding_it_back", "") or "Direct passage extraction gaps and competitor comparison presence.")
@@ -619,7 +623,7 @@ def render_geo_audit_book(report: Any) -> str:
         snap,
         section_key="geo",
         section_label="GEO",
-        section_score=float(score_val) if score_val is not None else snap.score_for_section("geo"),
+        section_score=canon_geo if canon_geo is not None else (float(score_val) if score_val is not None else None),
         section_findings_count=snap.findings_for_section("geo"),
     )
 
@@ -633,6 +637,7 @@ def render_geo_audit_book(report: Any) -> str:
             <span>SCOPE: <strong>{_esc(snap.crawl_scope_summary)}</strong></span>
         </div>
         {geo_provenance_bar}
+        {canon_geo_html}
         <div class="exec-scorecard-grid">
             <div class="kpi-score-card">
                 <span class="kpi-label">STORED EXTRACTABILITY SCORE</span>

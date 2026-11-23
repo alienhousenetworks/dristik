@@ -1055,7 +1055,7 @@ def enrich_report_for_pdf(
         pass
 
     try:
-        from app.scoring.canonical_scorecard import CanonicalScorecardEngine
+        from app.domain.scoring.canonical_scorecard import CanonicalScorecardEngine
         canonical_card = CanonicalScorecardEngine.evaluate_from_report(target)
         bundle["canonical_enterprise_scorecard"] = canonical_card.model_dump()
         object.__setattr__(target, "_unified_seo_bundle", bundle)

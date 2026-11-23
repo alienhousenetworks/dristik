@@ -51,7 +51,11 @@ def render_ai_analysis_card(
     body = str(chapter_narrative.get("body_md") or chapter_narrative.get("ai_body_md") or "").strip()
     why = str(chapter_narrative.get("why_it_matters") or chapter_narrative.get("why_reader_should_care") or "").strip()
     cited = [str(fid) for fid in (chapter_narrative.get("cited_finding_ids") or []) if fid]
-    epistemic = [str(lbl) for lbl in (chapter_narrative.get("epistemic_labels") or []) if lbl]
+    epistemic = [
+        str(lbl).strip()
+        for lbl in (chapter_narrative.get("epistemic_labels") or [])
+        if lbl and str(lbl).strip().upper() != "UNKNOWN"
+    ]
     audience = str(chapter_narrative.get("audience") or "").strip()
     critic_summary = str(chapter_narrative.get("critic_summary") or "").strip()
     validation_summary = str(chapter_narrative.get("validation_summary") or "").strip()

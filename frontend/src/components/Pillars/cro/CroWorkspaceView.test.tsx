@@ -1,7 +1,7 @@
 import React from 'react';
 import { afterEach, describe, it, expect, vi } from 'vitest';
 import { cleanup, render, screen, fireEvent } from '@testing-library/react';
-import { CroWorkspaceView } from '../CroWorkspaceView';
+import { CroWorkspaceView, buildBundleFromExecutiveReport } from '../CroWorkspaceView';
 
 vi.mock('../../../services/croApi', async () => {
   const actual = await vi.importActual<any>('../../../services/croApi');
@@ -140,5 +140,35 @@ describe('CroWorkspaceView Enterprise Workspace', () => {
     render(<CroWorkspaceView report={mockReport} analysisId="anl_cro_1" />);
     fireEvent.click(screen.getByRole('tab', { name: /Monitoring & 14 Reports/i }));
     expect(screen.getByText(/14 Profiles · 65-Section Book/i)).toBeTruthy();
+  });
+
+  it('does not assume HTTP success or device coverage', () => {
+    const bundle = buildBundleFromExecutiveReport({
+      ...mockReport,
+      page_reports: [
+        {
+          url: 'https://acme-saas.com/',
+          title: 'Acme',
+        },
+      ],
+    } as any);
+
+    expect(bundle.pages[0].http_status).toBeNull();
+    expect(bundle.pages[0].device_coverage).toEqual([]);
+  });
+
+  it('does not claim a CTA was clicked during a crawl', () => {
+    const bundle = buildBundleFromExecutiveReport(mockReport);
+
+    expect(bundle.ctas[0].clickable).toBeNull();
+    expect(bundle.ctas[0].interaction_result).toBe('not_tested');
+  });
+
+  it('does not claim saved CRO snapshot was QA certified', () => {
+    const bundle = buildBundleFromExecutiveReport(mockReport);
+
+    expect(bundle.audit.qa_status).toBe('not_certified');
+    expect(bundle.scorecard.scope_coverage_pct).toBeNull();
+    expect(bundle.scorecard.evidence_coverage_pct).toBeNull();
   });
 });

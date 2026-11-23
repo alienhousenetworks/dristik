@@ -18,6 +18,65 @@ export function GeoRemediationVerificationWorkspace({
   const [actionMsg, setActionMsg] = useState<string | null>(null);
   const [deployRef, setDeployRef] = useState('release-geo-fix-01');
   const [verifyHtml, setVerifyHtml] = useState('');
+  const [sroKeyword, setSroKeyword] = useState('');
+  const [sroResult, setSroResult] = useState<Record<string, any> | null>(null);
+  const [sroRunning, setSroRunning] = useState(false);
+  const [rsSignal, setRsSignal] = useState('S06');
+  const [rsResult, setRsResult] = useState<Record<string, any> | null>(null);
+  const [rsRunning, setRsRunning] = useState(false);
+
+  const handleRunSro = async () => {
+    if (!sroKeyword.trim()) return;
+    setSroRunning(true);
+    try {
+      const targetUrl = bundle.audit.domain.startsWith('http')
+        ? bundle.audit.domain
+        : `https://${bundle.audit.domain}`;
+      const res = await fetch('/api/v1/geo-pipeline/sro/analyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ target_url: targetUrl, keyword: sroKeyword.trim() }),
+      });
+      if (res.ok) setSroResult(await res.json());
+    } finally {
+      setSroRunning(false);
+    }
+  };
+
+  const handleRunRankSignal = async () => {
+    if (!sroKeyword.trim()) return;
+    setRsRunning(true);
+    setRsResult(null);
+    try {
+      const targetUrl = bundle.audit.domain.startsWith('http')
+        ? bundle.audit.domain
+        : `https://${bundle.audit.domain}`;
+      const res = await fetch('/api/v1/geo-pipeline/rank-signal/run', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          signal_id: rsSignal,
+          keyword: sroKeyword.trim(),
+          target_url: targetUrl,
+          max_trials: 20,
+        }),
+      });
+      const text = await res.text();
+      const lines = text.split('\n');
+      for (let i = lines.length - 1; i >= 0; i--) {
+        if (lines[i].startsWith('data: ')) {
+          try {
+            setRsResult(JSON.parse(lines[i].slice(6)));
+            break;
+          } catch {
+            // ignore partial line
+          }
+        }
+      }
+    } finally {
+      setRsRunning(false);
+    }
+  };
 
   const tasks = bundle.remediation_pack?.tasks || [];
   const verifications = bundle.verifications || [];
@@ -157,6 +216,77 @@ export function GeoRemediationVerificationWorkspace({
                   </div>
                 </div>
               ))}
+            </div>
+          )}
+        </Card>
+
+        <Card className="p-5 space-y-4">
+          <div>
+            <h4 className="font-sans font-bold text-ink text-sm">SRO Selection Rate &amp; Rank Signal A/B Experiment Lab</h4>
+            <p className="text-xs text-ink-500">
+              Measure Gemini grounding word-budget share (SRO) and run credit-native paired A/B passage experiments (code-built signals: 1 credit, LLM signals: 2 credits, unused trials refunded on early stop).
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2 text-xs">
+            <input
+              type="text"
+              value={sroKeyword}
+              onChange={(e) => setSroKeyword(e.target.value)}
+              placeholder="Target buyer keyword (e.g. best enterprise crm)"
+              className="flex-1 min-w-[220px] px-3 py-1.5 rounded border border-line bg-white"
+            />
+            <button
+              type="button"
+              disabled={sroRunning || !sroKeyword.trim()}
+              onClick={handleRunSro}
+              className="px-3 py-1.5 rounded bg-ink text-white font-mono disabled:opacity-50"
+            >
+              {sroRunning ? 'Running SRO...' : 'Run SRO Analysis'}
+            </button>
+            <select
+              value={rsSignal}
+              onChange={(e) => setRsSignal(e.target.value)}
+              className="px-2 py-1.5 rounded border border-line bg-white font-mono"
+            >
+              <option value="S05">S05: Bullet List (1 cr)</option>
+              <option value="S06">S06: Freshness Clause (1 cr)</option>
+              <option value="S12">S12: Question Heading (1 cr)</option>
+              <option value="S13">S13: Bold Query Terms (1 cr)</option>
+              <option value="S00">S00: Placebo Calibration (2 cr)</option>
+              <option value="S02">S02: Specific Number/Stat (2 cr)</option>
+              <option value="S04">S04: Named Source (2 cr)</option>
+            </select>
+            <button
+              type="button"
+              disabled={rsRunning || !sroKeyword.trim()}
+              onClick={handleRunRankSignal}
+              className="px-3 py-1.5 rounded bg-pine text-white font-mono disabled:opacity-50"
+            >
+              {rsRunning ? 'Testing Signal...' : 'Run Rank Signal A/B'}
+            </button>
+          </div>
+          {sroResult && (
+            <div className="p-3 rounded border border-line bg-paper-50 text-xs space-y-1">
+              <div className="font-mono font-bold text-ink">
+                SRO Score: {sroResult.overall_score ?? 'NOT_CONFIGURED'} · Gemini Selection Rate: {sroResult.grounding?.selection_rate_pct ?? 'N/A'}% ({sroResult.data_quality_state})
+              </div>
+              <p className="text-ink-700">{sroResult.summary}</p>
+            </div>
+          )}
+          {rsResult && (
+            <div className="p-3 rounded border border-line bg-paper-50 text-xs space-y-1">
+              {rsResult.message ? (
+                <p className="text-bad font-mono">{rsResult.message}</p>
+              ) : (
+                <>
+                  <div className="font-mono font-bold text-ink">
+                    {rsResult.signal_id} ({rsResult.signal_name}) · Verdict: {rsResult.verdict} · Wins: {rsResult.wins}/{rsResult.n_valid}
+                  </div>
+                  <div className="font-mono text-[10px] text-ink-600">
+                    95% CI: [{rsResult.ci_lo}, {rsResult.ci_hi}] · Credits charged: {rsResult.credits?.charged_credits} (refunded: {rsResult.credits?.refunded_credits})
+                  </div>
+                </>
+              )}
             </div>
           )}
         </Card>

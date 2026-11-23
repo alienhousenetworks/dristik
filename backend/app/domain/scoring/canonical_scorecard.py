@@ -109,6 +109,11 @@ def _valid_score(val: Any) -> Optional[float]:
     return round(max(0.0, min(100.0, num)), 1)
 
 
+def _connection_only_status(connected: bool) -> str:
+    """Connection proves availability, not measurement or performance."""
+    return "CONNECTED_NOT_MEASURED" if connected else "NOT_CONNECTED"
+
+
 class CrawlCoverageFunnel(BaseModel):
     """Explicit 5-stage URL accounting — discovering 505 URLs never implies 505 audited."""
     discovered_urls: int = 0
@@ -301,6 +306,17 @@ class CanonicalScorecardEngine:
             else:
                 p_status = "PARTIAL"
 
+            # Strict Zero-Fake rule: AEO requires live answer engine execution to produce a measured health score
+            if pillar == "AEO":
+                has_live_exec = any(
+                    c.capability_id in ("multi_engine_execution", "citation_extraction") and c.status == "MEASURED"
+                    for c in resolved_caps
+                )
+                if not has_live_exec:
+                    p_health = None
+                    p_status = "UNMEASURED"
+                    disclosures.append("AEO: Live answer engines not queried; overall AEO health score is UNMEASURED.")
+
             pillars[pillar] = PillarCanonicalScore(
                 pillar=pillar,
                 pillar_weight=p_weight,
@@ -360,11 +376,25 @@ class CanonicalScorecardEngine:
         return card.seal()
 
     @classmethod
-    def evaluate_from_report(cls, report: Any) -> CanonicalEnterpriseScorecard:
+    def evaluate_from_report(cls, report: Any, *, force_recompute: bool = False) -> CanonicalEnterpriseScorecard:
         """Deterministically builds the canonical scorecard from any sealed ExecutiveReport or dict."""
-        cached = getattr(report, "_canonical_enterprise_scorecard", None)
-        if isinstance(cached, CanonicalEnterpriseScorecard):
-            return cached
+        if not force_recompute:
+            cached = getattr(report, "_canonical_enterprise_scorecard", None)
+            if isinstance(cached, CanonicalEnterpriseScorecard):
+                return cached
+            existing_payload = _get(report, "canonical_scorecard")
+            if isinstance(existing_payload, CanonicalEnterpriseScorecard):
+                return existing_payload
+            if isinstance(existing_payload, dict) and existing_payload.get("methodology_version") == METHODOLOGY_VERSION:
+                try:
+                    hydrated = CanonicalEnterpriseScorecard.model_validate(existing_payload)
+                    try:
+                        object.__setattr__(report, "_canonical_enterprise_scorecard", hydrated)
+                    except Exception:
+                        pass
+                    return hydrated
+                except Exception:
+                    pass
 
         audit_run_id = str(
             _get(report, "analysis_id")
@@ -416,6 +446,9 @@ class CanonicalScorecardEngine:
 
         ext_auth = _get(report, "external_authority")
         ext_connected = bool(ext_auth) and str(_get(ext_auth, "status", "") or "").upper() in {"MEASURED", "CONNECTED", "PARTIALLY_MEASURED"}
+        ext_status = str(_get(ext_auth, "status", "") or "").upper()
+        ext_authority_score = _valid_score(_get(ext_auth, "authority_score"))
+        ext_authority_measured = (ext_status == "MEASURED" and ext_authority_score is not None)
         gsc = _get(report, "google_performance")
         gsc_connected = bool(gsc) and bool(_get(gsc, "gsc_connected", False) or _get(gsc, "is_connected", False))
         ga4_connected = bool(gsc) and bool(_get(gsc, "ga4_connected", False))
@@ -426,6 +459,7 @@ class CanonicalScorecardEngine:
         ai_runs = int(_get(ai_card, "successful_runs", 0) or 0) if ai_card else 0
         ai_cit_rate = _valid_score(_get(ai_card, "citation_rate_pct")) if ai_runs > 0 else None
         ai_mention_rate = _valid_score(_get(ai_card, "mention_rate_pct")) if ai_runs > 0 else None
+        answer_accuracy = _valid_score(_get(ai_card, "entity_accuracy_pct")) if ai_runs > 0 else None
 
         cro_score = _cat_val("UX_CONVERSION", "CRO", "EXPERIENCE")
         ai_ref = _get(report, "ai_referral_analytics")
@@ -487,25 +521,38 @@ class CanonicalScorecardEngine:
             ),
             CapabilityAssessment(
                 capability_id="backlink_intelligence", pillar="SEO", weight=10.0,
-                status="MEASURED" if ext_connected else "NOT_CONNECTED",
-                acceptance_passed=ext_connected,
-                measured_score=_valid_score(_get(ext_auth, "authority_score")) if ext_connected else None,
+                status="MEASURED" if ext_authority_measured else _connection_only_status(ext_connected),
+                acceptance_passed=ext_authority_measured,
+                measured_score=ext_authority_score if ext_authority_measured else None,
                 provider=_get(ext_auth, "provider"),
-                note="" if ext_connected else "Backlink provider not connected",
+                note="" if ext_authority_measured else "Backlink provider connection does not establish measured authority.",
             ),
             CapabilityAssessment(
                 capability_id="search_analytics", pillar="SEO", weight=5.0,
-                status="MEASURED" if gsc_connected else "NOT_CONNECTED",
-                acceptance_passed=gsc_connected,
-                measured_score=100.0 if gsc_connected else None,
+                status=_connection_only_status(gsc_connected),
+                acceptance_passed=False,
+                measured_score=None,
                 provider="Google Search Console",
-                note="" if gsc_connected else "GSC not connected",
+                evidence_count=0,
+                note=(
+                    "GSC is connected, but provider measurements have not "
+                    "been independently validated in this scorecard."
+                    if gsc_connected
+                    else "GSC not connected"
+                ),
             ),
             CapabilityAssessment(
                 capability_id="historical_and_verification", pillar="SEO", weight=5.0,
-                status="MEASURED" if hist_connected else "UNMEASURED",
-                acceptance_passed=hist_connected,
-                measured_score=100.0 if hist_connected else None,
+                status=_connection_only_status(hist_connected),
+                acceptance_passed=False,
+                measured_score=None,
+                evidence_count=0,
+                note=(
+                    "Historical data is available or connected, but "
+                    "verified improvement measurements are not established."
+                    if hist_connected
+                    else "Historical comparison data unavailable"
+                ),
             ),
             # GEO
             CapabilityAssessment(
@@ -536,10 +583,16 @@ class CanonicalScorecardEngine:
             ),
             CapabilityAssessment(
                 capability_id="source_authority", pillar="GEO", weight=10.0,
-                status="MEASURED" if ext_connected else "NOT_CONNECTED",
-                acceptance_passed=ext_connected,
-                measured_score=_valid_score(_get(ext_auth, "authority_score")) if ext_connected else None,
-                note="" if ext_connected else "External authority connector not connected",
+                status=_connection_only_status(ext_connected),
+                acceptance_passed=False,
+                measured_score=None,
+                evidence_count=0,
+                note=(
+                    "Authority source is connected, but verified authority "
+                    "measurements are not established here."
+                    if ext_connected
+                    else "External authority connector not connected"
+                ),
             ),
             CapabilityAssessment(
                 capability_id="ai_retrieval_testing", pillar="GEO", weight=15.0,
@@ -551,9 +604,11 @@ class CanonicalScorecardEngine:
             ),
             CapabilityAssessment(
                 capability_id="competitor_intelligence", pillar="GEO", weight=10.0,
-                status="MEASURED" if ai_runs > 0 else "UNMEASURED",
-                acceptance_passed=ai_runs > 0,
-                measured_score=ai_mention_rate,
+                status="UNMEASURED",
+                acceptance_passed=False,
+                measured_score=None,
+                evidence_count=0,
+                note="Brand mentions alone do not measure competitor visibility.",
             ),
             CapabilityAssessment(
                 capability_id="citation_monitoring_and_verification", pillar="GEO", weight=10.0,
@@ -564,15 +619,19 @@ class CanonicalScorecardEngine:
             # AEO
             CapabilityAssessment(
                 capability_id="question_universe", pillar="AEO", weight=15.0,
-                status="MEASURED" if crawled > 0 else "UNMEASURED",
-                acceptance_passed=crawled > 0,
-                measured_score=geo_extract if geo_extract is not None else (seo_onpage if crawled > 0 else None),
+                status="UNMEASURED",
+                acceptance_passed=False,
+                measured_score=None,
+                evidence_count=0,
+                note="A crawl alone does not prove that a structured answer-engine question universe was generated and validated.",
             ),
             CapabilityAssessment(
                 capability_id="prompt_classification", pillar="AEO", weight=10.0,
-                status="MEASURED" if crawled > 0 else "UNMEASURED",
-                acceptance_passed=crawled > 0,
-                measured_score=geo_extract if geo_extract is not None else (seo_onpage if crawled > 0 else None),
+                status="UNMEASURED",
+                acceptance_passed=False,
+                measured_score=None,
+                evidence_count=0,
+                note="Requires question-level intent classification evidence; crawl coverage is not a substitute.",
             ),
             CapabilityAssessment(
                 capability_id="multi_engine_execution", pillar="AEO", weight=20.0,
@@ -597,16 +656,24 @@ class CanonicalScorecardEngine:
             ),
             CapabilityAssessment(
                 capability_id="answer_accuracy", pillar="AEO", weight=10.0,
-                status="MEASURED" if ai_runs > 0 else "UNMEASURED",
-                acceptance_passed=ai_runs > 0,
-                measured_score=_valid_score(_get(ai_card, "entity_accuracy_pct")) if ai_runs > 0 else None,
+                status="MEASURED" if answer_accuracy is not None else "UNMEASURED",
+                acceptance_passed=answer_accuracy is not None,
+                measured_score=answer_accuracy,
+                evidence_count=ai_runs if answer_accuracy is not None else 0,
+                note="" if answer_accuracy is not None else "No measured answer-accuracy result is available.",
             ),
             CapabilityAssessment(
                 capability_id="ai_referral_analytics", pillar="AEO", weight=10.0,
-                status="MEASURED" if ai_ref_connected else "NOT_CONNECTED",
-                acceptance_passed=ai_ref_connected,
-                measured_score=100.0 if ai_ref_connected else None,
-                note="" if ai_ref_connected else "AI referral analytics not connected",
+                status=_connection_only_status(ai_ref_connected),
+                acceptance_passed=False,
+                measured_score=None,
+                evidence_count=0,
+                note=(
+                    "AI referral analytics is connected, but actual referral "
+                    "and conversion measurements are not established."
+                    if ai_ref_connected
+                    else "AI referral analytics not connected"
+                ),
             ),
             CapabilityAssessment(
                 capability_id="historical_citation_persistence", pillar="AEO", weight=5.0,
@@ -624,31 +691,35 @@ class CanonicalScorecardEngine:
             ),
             CapabilityAssessment(
                 capability_id="session_replay", pillar="CRO", weight=10.0,
-                status="MEASURED" if replay_connected else "NOT_CONNECTED",
-                acceptance_passed=replay_connected,
-                measured_score=100.0 if replay_connected else None,
-                note="" if replay_connected else "Session replay provider not connected",
+                status=_connection_only_status(replay_connected),
+                acceptance_passed=False,
+                measured_score=None,
+                evidence_count=0,
+                note="Connection is not proof of measured user behaviour.",
             ),
             CapabilityAssessment(
                 capability_id="heatmaps", pillar="CRO", weight=10.0,
-                status="MEASURED" if heatmap_connected else "NOT_CONNECTED",
-                acceptance_passed=heatmap_connected,
-                measured_score=100.0 if heatmap_connected else None,
-                note="" if heatmap_connected else "Heatmap telemetry not connected",
+                status=_connection_only_status(heatmap_connected),
+                acceptance_passed=False,
+                measured_score=None,
+                evidence_count=0,
+                note="Connection is not proof of collected heatmap data.",
             ),
             CapabilityAssessment(
                 capability_id="funnel_analytics", pillar="CRO", weight=15.0,
-                status="MEASURED" if ga4_connected else "NOT_CONNECTED",
-                acceptance_passed=ga4_connected,
-                measured_score=100.0 if ga4_connected else None,
-                note="" if ga4_connected else "GA4 / conversion funnel not connected",
+                status=_connection_only_status(ga4_connected),
+                acceptance_passed=False,
+                measured_score=None,
+                evidence_count=0,
+                note="GA4 connection is not proof of a measured conversion funnel.",
             ),
             CapabilityAssessment(
                 capability_id="revenue_attribution", pillar="CRO", weight=15.0,
-                status="MEASURED" if (ga4_connected and ai_ref_connected) else "NOT_CONNECTED",
-                acceptance_passed=bool(ga4_connected and ai_ref_connected),
-                measured_score=100.0 if (ga4_connected and ai_ref_connected) else None,
-                note="" if (ga4_connected and ai_ref_connected) else "Revenue attribution not reconciled",
+                status=_connection_only_status(ga4_connected and ai_ref_connected),
+                acceptance_passed=False,
+                measured_score=None,
+                evidence_count=0,
+                note="Reconciliation requires connected analytics and conversion tracking with validated records.",
             ),
             CapabilityAssessment(
                 capability_id="form_intelligence", pillar="CRO", weight=10.0,
@@ -658,10 +729,11 @@ class CanonicalScorecardEngine:
             ),
             CapabilityAssessment(
                 capability_id="ab_experiments", pillar="CRO", weight=10.0,
-                status="MEASURED" if exp_connected else "NOT_CONNECTED",
-                acceptance_passed=exp_connected,
-                measured_score=100.0 if exp_connected else None,
-                note="" if exp_connected else "Experimentation provider not connected",
+                status=_connection_only_status(exp_connected),
+                acceptance_passed=False,
+                measured_score=None,
+                evidence_count=0,
+                note="Experimentation provider connection does not prove executed or statistically significant tests.",
             ),
             CapabilityAssessment(
                 capability_id="mobile_intelligence", pillar="CRO", weight=5.0,
@@ -671,9 +743,11 @@ class CanonicalScorecardEngine:
             ),
             CapabilityAssessment(
                 capability_id="remediation_and_verification", pillar="CRO", weight=10.0,
-                status="MEASURED" if hist_connected else "UNMEASURED",
-                acceptance_passed=hist_connected,
-                measured_score=100.0 if hist_connected else None,
+                status=_connection_only_status(hist_connected),
+                acceptance_passed=False,
+                measured_score=None,
+                evidence_count=0,
+                note="Requires independently verified remediation outcomes.",
             ),
         ]
 
@@ -685,6 +759,14 @@ class CanonicalScorecardEngine:
         )
         try:
             object.__setattr__(report, "_canonical_enterprise_scorecard", card)
+        except Exception:
+            pass
+        try:
+            dumped = card.model_dump(mode="json")
+            if isinstance(report, dict):
+                report["canonical_scorecard"] = dumped
+            elif hasattr(report, "canonical_scorecard"):
+                setattr(report, "canonical_scorecard", dumped)
         except Exception:
             pass
         return card

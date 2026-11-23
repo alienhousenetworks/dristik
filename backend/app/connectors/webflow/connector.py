@@ -17,6 +17,8 @@ from app.connectors.base.permissions import ConnectorSecurityGuard
 from app.remediation.rollback import rollback_engine
 
 class WebflowConnector(BaseConnector):
+    execution_mode = "PREVIEW_ONLY"
+
     def __init__(self, credentials: ConnectorCredentials):
         super().__init__(credentials)
         self.site_id = credentials.api_url or "webflow-site-id"

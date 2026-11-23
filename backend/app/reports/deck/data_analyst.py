@@ -24,12 +24,27 @@ class DeckDataAnalystAgent:
     def populate_data(self, blueprint: DeckBlueprint, report: ExecutiveReport) -> DeckBlueprint:
         domain = report.domain or report.website_url.replace("https://", "").replace("http://", "").split("/")[0]
         scores = report.scores
-        measured_overall = float(scores.overall_score) if scores and scores.overall_score is not None else None
-        grade = scores.grade if scores and scores.grade else "—"
+        from app.domain.scoring.canonical_scorecard import CanonicalScorecardEngine
+        from app.domain.scoring.displayed_score import rating_for_displayed
+
+        canon_card = CanonicalScorecardEngine.evaluate_from_report(report)
+        measured_overall = (
+            float(canon_card.composite_health_score)
+            if canon_card.composite_health_score is not None
+            else (float(scores.overall_score) if scores and scores.overall_score is not None else None)
+        )
+        canon_grade, _ = rating_for_displayed(measured_overall)
+        grade = canon_card.composite_grade if canon_card.composite_health_score is not None else canon_grade
         score_label = f"{measured_overall:.1f}/100" if measured_overall is not None else "Unmeasured"
         cat_scores = scores.category_scores if scores and scores.category_scores else {}
 
         def _category_score(key: str) -> Optional[float]:
+            pillar_map = {"GEO": "GEO", "AEO": "AEO", "UX_CONVERSION": "CRO", "CRO": "CRO"}
+            mapped_pillar = pillar_map.get(key.upper())
+            if mapped_pillar and mapped_pillar in canon_card.pillars:
+                p_score = canon_card.pillars[mapped_pillar].measured_health_score
+                if p_score is not None:
+                    return float(p_score)
             val = cat_scores.get(key)
             if val is None:
                 return None

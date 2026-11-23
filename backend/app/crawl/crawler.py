@@ -65,6 +65,8 @@ def compute_ttfb_stats(pages: List[Any]) -> TtfbStats:
         else:
             u = str(getattr(p, "url", None) or f"https://example.com/page-{idx + 1}")
             v = round(float(getattr(p, "ttfb_ms", 0.0) or 0.0), 1)
+        if v <= 0.0:
+            continue
         measurements[u] = v
         vals.append(v)
 
@@ -1209,10 +1211,18 @@ class CrawlerService:
         ttfb_stats = compute_ttfb_stats(crawled_pages)
         avg_ttfb = ttfb_stats.mean_ms
 
-        # Orphan detection: Sitemap URLs that receive 0 internal links from crawled pages
-        s_urls = list(sitemap_urls or [])
-        internal_destinations = {link for p in crawled_pages for link in p.internal_links}
-        orphan_urls = [u for u in s_urls if u not in internal_destinations and u != base_url]
+        # Orphan detection: Sitemap HTML URLs that receive 0 internal links from crawled pages.
+        # Never assert orphans if the crawled link graph has 0 edges, and never flag utility files.
+        from app.domain.evidence.rule_catalog import is_non_html_utility_url
+        s_urls = [u for u in (sitemap_urls or []) if not is_non_html_utility_url(u)]
+        internal_destinations = {
+            link for p in crawled_pages for link in (p.internal_links or [])
+            if not is_non_html_utility_url(link)
+        }
+        if internal_destinations:
+            orphan_urls = [u for u in s_urls if u not in internal_destinations and u != base_url]
+        else:
+            orphan_urls = []
 
         # Redirect chains collection
         all_redirect_chains = [

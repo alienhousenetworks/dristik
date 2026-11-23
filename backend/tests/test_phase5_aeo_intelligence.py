@@ -264,13 +264,22 @@ def test_phase5_6_live_answer_evaluation():
         brand_name="Perfora",
         tested_queries=tested_queries,
         expected_facts={"cost": "$29"},
+        tracked_competitors=["Oral-B", "Philips"],
     )
 
     assert report.total_questions_tested == 2
     assert report.direct_answer_rate_pct == 100.0
     assert report.citation_correctness_rate_pct == 50.0  # 1 out of 2 cited first-party canonical
-    # Oral-B detected as competitor in Q-02
+    # Oral-B detected as competitor when explicitly tracked
     assert "Oral-B" in report.results[1].competitors_present_in_answer
+
+    # Without tracked_competitors, no hardcoded oral-care brands leak into unrelated evaluations
+    report_no_comps = LiveAnswerEvaluationEngine.evaluate_live_answers(
+        domain="example.com",
+        brand_name="Acme",
+        tested_queries=tested_queries,
+    )
+    assert report_no_comps.results[1].competitors_present_in_answer == []
 
 
 # ============================================================================
@@ -394,10 +403,25 @@ def test_phase5_10_aeo_remediation_lifecycle():
         }
     ]
 
+    # 1. Without brand_facts: never fabricate guarantees or clinical claims
+    ungrounded_report: AeoRemediationReport = AeoRemediationEngine.generate_remediation_plan(
+        domain="perfora.co",
+        brand_name="Perfora",
+        unanswered_questions=unanswered,
+    )
+    assert ungrounded_report.total_remediations_generated == 1
+    ungrounded_prop = ungrounded_report.proposals[0]
+    assert ungrounded_prop.status == RemediationTaskStatus.PROPOSED
+    assert "30-day money-back" not in ungrounded_prop.drafted_answer_block
+    assert "clinical backing" not in ungrounded_prop.recommended_faq_schema_patch
+    assert "[CONFIRM_WITH_BRAND_FACTS:" in ungrounded_prop.drafted_answer_block
+
+    # 2. With verified brand_facts: emit grounded copy verbatim
     report: AeoRemediationReport = AeoRemediationEngine.generate_remediation_plan(
         domain="perfora.co",
         brand_name="Perfora",
         unanswered_questions=unanswered,
+        brand_facts={"return_policy": "30-day money-back guarantee on all electric toothbrushes."},
     )
 
     assert report.total_remediations_generated == 1
@@ -410,3 +434,59 @@ def test_phase5_10_aeo_remediation_lifecycle():
     updated_page_text = "Return policy: Perfora offers an unconditional 30-day money-back guarantee on all electric toothbrushes."
     verified_proposal = AeoRemediationEngine.verify_retest(proposal, updated_page_text)
     assert verified_proposal.status == RemediationTaskStatus.VERIFIED_FIXED
+
+
+def test_phase0_pillar_d_wires_ai_referral_summary():
+    from types import SimpleNamespace
+    from app.aeo.scoring import AeoMetricsCalculator
+    from app.analytics.ai_referral_engine import AiReferralDashboardSummary
+    from app.domain.enums import EvidenceState
+
+    measured_report = SimpleNamespace(
+        geo_readiness=None,
+        page_reports=[],
+        ai_visibility_scorecard=None,
+        lifecycle_revenue=None,
+        ai_referral_summary=AiReferralDashboardSummary(
+            org_id="org_1",
+            domain="example.com",
+            status="MEASURED",
+            ai_referred_sessions=40,
+            ai_attributed_conversions=6,
+            ai_assisted_conversions=3,
+            ai_attributed_revenue=12000.0,
+        ),
+    )
+    scorecard = AeoMetricsCalculator.calculate(measured_report)
+    pillar_d = scorecard.pillar_d_business_outcomes
+    assert pillar_d.state == EvidenceState.VERIFIED
+    assert pillar_d.ai_referral_sessions == 40
+    assert pillar_d.qualified_leads == 6
+    assert pillar_d.assisted_conversions == 3
+    assert pillar_d.attributed_revenue == 12000.0
+    assert pillar_d.ai_referral_conversion_rate_pct == 15.0
+
+    met_10 = next(m for m in scorecard.core_metrics if m.code == "AEO-MET-10")
+    assert met_10.state == EvidenceState.VERIFIED
+    assert met_10.value == 15.0
+    assert met_10.numerator == 6
+    assert met_10.denominator == 40
+
+    # Zero-fabrication check: unmeasured stays None / DATA_UNAVAILABLE
+    unmeasured_report = SimpleNamespace(
+        geo_readiness=None,
+        page_reports=[],
+        ai_visibility_scorecard=None,
+        lifecycle_revenue=None,
+        ai_referral_summary=AiReferralDashboardSummary(
+            org_id="org_1",
+            domain="example.com",
+            status="NO_OBSERVED_SESSIONS",
+        ),
+    )
+    sc_empty = AeoMetricsCalculator.calculate(unmeasured_report)
+    assert sc_empty.pillar_d_business_outcomes.state == EvidenceState.DATA_UNAVAILABLE
+    assert sc_empty.pillar_d_business_outcomes.ai_referral_sessions is None
+    met_10_empty = next(m for m in sc_empty.core_metrics if m.code == "AEO-MET-10")
+    assert met_10_empty.value is None
+    assert met_10_empty.state == EvidenceState.DATA_UNAVAILABLE

@@ -873,13 +873,20 @@ class PlainEnglishEngine:
                 "timestamp": str(e_ts),
             })
 
-        # Confidence & Limitations
+        # Grounded Confidence Basis (Empirical machine observation basis, never invented percentages)
         raw_conf = _get_val(finding, "confidence_label") or _get_val(finding, "confidence_rubric") or _get_val(finding, "confidence")
-        conf_str = str(getattr(raw_conf, "value", raw_conf) or "High (90%)").capitalize()
-        if "certain" in conf_str.lower() or "strong" in conf_str.lower() or conf_str.replace(".", "").isdigit():
-            conf_str = "High (95% Verified)"
-        elif "likely" in conf_str.lower() or "medium" in conf_str.lower():
-            conf_str = "Medium (Likely)"
+        has_dom_evidence = any(
+            str(ev.get("source_type") or ev.get("source") or "").lower() in ("dom", "html", "crawl", "http_header")
+            for ev in evidence_list
+        )
+        if has_dom_evidence or len(affected_urls) > 0:
+            conf_str = "DOM Grounded (Verified)"
+        elif str(getattr(raw_conf, "value", raw_conf) or "").lower() in ("certain", "strong", "high", "rule_verified"):
+            conf_str = "Rule Verified"
+        elif "provider" in str(getattr(raw_conf, "value", raw_conf) or "").lower():
+            conf_str = "Provider Grounded"
+        else:
+            conf_str = "Inferred Observation"
 
         limitations = cls._clean_internal_text(_get_val(finding, "limitations") or _get_val(finding, "data_limitations"))
         if not limitations:
@@ -1460,7 +1467,11 @@ def render_section_business_callout(exp: SectionBusinessExplanation) -> str:
     Renders the compact "What this means for your business" executive callout card.
     Visually distinct, high contrast, and print-ready.
     """
-    if exp.evidence_status == "DEFECTS_FOUND":
+    has_defects = (
+        exp.evidence_status == "DEFECTS_FOUND"
+        or (getattr(exp, "pages_affected", 0) or 0) > 0
+    )
+    if has_defects:
         accent = "#334155"
         badge_bg = "#f1f5f9"
         badge_color = "#991b1b"

@@ -5,7 +5,7 @@ Provides actual keyword rankings, impressions, clicks, CTR, and competitor keywo
 """
 import os
 import json
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 from typing import List, Dict, Any, Optional
 from pydantic import BaseModel, Field
 
@@ -89,7 +89,7 @@ class GscSecurityAndManualActions(BaseModel):
 class SearchConsoleAttributionReport(BaseModel):
     domain: str
     is_connected: bool
-    status: str = "unavailable"  # "authenticated" | "unavailable" | "sync_error"
+    status: str = "unavailable"  # "authenticated" | "unavailable" | "sync_error" | "MEASURED" | "NOT_CONNECTED"
     reason: Optional[str] = "not_connected"
     total_monthly_clicks: int = 0
     total_monthly_impressions: int = 0
@@ -111,6 +111,15 @@ class SearchConsoleAttributionReport(BaseModel):
     estimated_traffic_leakage_inr: Optional[float] = None
     connection_status_message: Optional[str] = None
     provenance: Dict[str, Any] = Field(default_factory=dict)
+    # Structured 2026 enterprise audit fields
+    property: Optional[str] = None
+    date_range: Optional[Dict[str, str]] = None
+    retrieved_at: Optional[str] = None
+    row_count: int = 0
+    metrics: Optional[Dict[str, Optional[float]]] = None
+    rows: List[Dict[str, Any]] = Field(default_factory=list)
+    evidence_ids: List[str] = Field(default_factory=list)
+    limitations: List[str] = Field(default_factory=list)
 
 class SearchConsoleEngine:
     """
@@ -181,6 +190,7 @@ class SearchConsoleEngine:
                     raise
         except Exception as exc:
             expired = "401" in str(exc)
+            now_iso = datetime.now(timezone.utc).isoformat()
             return SearchConsoleAttributionReport(
                 domain=target_domain,
                 is_connected=not expired,
@@ -194,6 +204,14 @@ class SearchConsoleEngine:
                     else f"Google Search Console is connected. The property query did not succeed: {exc}"
                 ),
                 provenance={"source": "google_search_console", "status": "sync_error", "reason": str(exc)},
+                property=f"sc-domain:{target_domain}",
+                date_range={"start": (date.today() - timedelta(days=30)).isoformat(), "end": (date.today() - timedelta(days=2)).isoformat()},
+                retrieved_at=now_iso,
+                row_count=0,
+                metrics={"clicks": None, "impressions": None, "ctr": None, "average_position": None},
+                rows=[],
+                evidence_ids=[],
+                limitations=[f"Sync error encountered while querying Google Search Console: {exc}"],
             )
 
         rows = payload.get("rows") or []
@@ -234,6 +252,11 @@ class SearchConsoleEngine:
             ))
         count = max(1, len(keywords))
         property_url = str(payload.get("_property") or target_domain)
+        avg_pos = round(pos_sum / count, 1) if keywords else 0.0
+        avg_ctr = round((total_clicks / max(1, total_impressions)) * 100, 2)
+        now_iso = datetime.now(timezone.utc).isoformat()
+        start_d = (date.today() - timedelta(days=30)).isoformat()
+        end_d = (date.today() - timedelta(days=2)).isoformat()
         return SearchConsoleAttributionReport(
             domain=target_domain,
             is_connected=True,
@@ -241,8 +264,8 @@ class SearchConsoleEngine:
             reason=None,
             total_monthly_clicks=total_clicks,
             total_monthly_impressions=total_impressions,
-            average_ctr=round((total_clicks / max(1, total_impressions)) * 100, 2),
-            average_position=round(pos_sum / count, 1) if keywords else 0.0,
+            average_ctr=avg_ctr,
+            average_position=avg_pos,
             top_ranking_keywords=keywords,
             causal_chains=chains,
             estimated_traffic_leakage_inr=0.0,
@@ -253,6 +276,19 @@ class SearchConsoleEngine:
                 "date_range": "28d",
                 "status": "authenticated",
             },
+            property=property_url,
+            date_range={"start": start_d, "end": end_d},
+            retrieved_at=now_iso,
+            row_count=len(rows),
+            metrics={
+                "clicks": float(total_clicks),
+                "impressions": float(total_impressions),
+                "ctr": avg_ctr,
+                "average_position": avg_pos,
+            },
+            rows=rows[:100],
+            evidence_ids=[f"ev_gsc_{target_domain}_{now_iso[:10]}"],
+            limitations=[],
         )
 
     def generate_search_attribution(
@@ -282,13 +318,6 @@ class SearchConsoleEngine:
                     "traffic_consequence": "Suppresses potential impressions and organic clicks in search engines",
                     "conversion_opportunity": "Remediating this unlocks qualified search visits and conversion pipeline"
                 })
-        if not chains:
-            chains.append({
-                "technical_problem": "Unverified schema markup and metadata hierarchy",
-                "search_visibility_impact": f"Search engines cannot deterministically extract entities for {target_domain}",
-                "traffic_consequence": "Suppresses organic snippet click-through rate and SERP rich results",
-                "conversion_opportunity": "Remediating structured data unlocks high-intent commercial visitors"
-            })
 
         # User OAuth tokens are not service-account JSON. Query them directly.
         if isinstance(creds, dict) and creds.get("type") == "oauth2":
@@ -406,6 +435,7 @@ class SearchConsoleEngine:
                 except Exception:
                     sitemaps_report.status = "UNAVAILABLE"
 
+                now_iso = datetime.now(timezone.utc).isoformat()
                 return SearchConsoleAttributionReport(
                     domain=target_domain,
                     is_connected=True,
@@ -429,9 +459,23 @@ class SearchConsoleEngine:
                         "property": site_url,
                         "date_range": "30d",
                         "status": "authenticated"
-                    }
+                    },
+                    property=site_url,
+                    date_range={"start": start_d.strftime("%Y-%m-%d"), "end": end_d.strftime("%Y-%m-%d")},
+                    retrieved_at=now_iso,
+                    row_count=len(rows),
+                    metrics={
+                        "clicks": float(total_clicks),
+                        "impressions": float(total_impressions),
+                        "ctr": avg_ctr,
+                        "average_position": avg_pos,
+                    },
+                    rows=rows[:100],
+                    evidence_ids=[f"ev_gsc_{target_domain}_{now_iso[:10]}"],
+                    limitations=[],
                 )
             except Exception as e:
+                now_iso = datetime.now(timezone.utc).isoformat()
                 # Connected with credentials, awaiting data sync or handling token
                 return SearchConsoleAttributionReport(
                     domain=target_domain,
@@ -451,10 +495,19 @@ class SearchConsoleEngine:
                         "source": "google_search_console",
                         "status": "sync_error",
                         "reason": str(e)
-                    }
+                    },
+                    property=f"sc-domain:{target_domain}",
+                    date_range=None,
+                    retrieved_at=now_iso,
+                    row_count=0,
+                    metrics={"clicks": None, "impressions": None, "ctr": None, "average_position": None},
+                    rows=[],
+                    evidence_ids=[],
+                    limitations=[f"Sync error encountered while querying Google Search Console: {str(e)}"],
                 )
 
         # WHEN NOT CONNECTED: Honest, transparent state (ZERO fake metrics)
+        now_iso = datetime.now(timezone.utc).isoformat()
         return SearchConsoleAttributionReport(
             domain=target_domain,
             is_connected=False,
@@ -473,7 +526,15 @@ class SearchConsoleEngine:
                 "source": "google_search_console",
                 "status": "unavailable",
                 "reason": "not_connected"
-            }
+            },
+            property=f"sc-domain:{target_domain}",
+            date_range=None,
+            retrieved_at=now_iso,
+            row_count=0,
+            metrics={"clicks": None, "impressions": None, "ctr": None, "average_position": None},
+            rows=[],
+            evidence_ids=[],
+            limitations=["Google Search Console is not connected. Private search impressions, query positions, and organic clicks are unmeasured."],
         )
 
 search_console_engine = SearchConsoleEngine()

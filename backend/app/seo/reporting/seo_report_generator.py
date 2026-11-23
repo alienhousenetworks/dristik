@@ -261,7 +261,9 @@ class CompleteSeoReportGenerator:
         score_color = "#64748b" if score_val is None else ("#10b981" if score_val >= 75 else ("#f59e0b" if score_val >= 50 else "#ef4444"))
         
         pages_crawled = len(report.page_reports)
-        findings_count = len(report.findings)
+        from app.report_finding_registry import canonicalize_report_findings
+        canonical_findings = canonicalize_report_findings(report)
+        findings_count = len(canonical_findings)
 
         manifest = getattr(report, "crawl_manifest", None)
         canon_inv = get_canonical_crawl_inventory(manifest, report)

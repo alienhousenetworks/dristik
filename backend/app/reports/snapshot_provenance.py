@@ -198,58 +198,34 @@ def _normalize_severity_label(raw: Any) -> str:
 
 
 def _resolve_section_scores(report: Any) -> Dict[str, Optional[float]]:
-    scores = _get(report, "scores")
-    honest = _get(report, "honest_scores")
-    cat_scores = _get(scores, "category_scores") or {}
-    geo_readiness = _get(report, "geo_readiness")
-    cro_audit = _get(report, "cro_audit")
+    """Resolves pillar scores strictly from the single source of truth: CanonicalScorecardEngine."""
+    try:
+        from app.domain.scoring.canonical_scorecard import CanonicalScorecardEngine
+        card = CanonicalScorecardEngine.evaluate_from_report(report)
+        
+        seo_p = card.pillars.get("SEO")
+        geo_p = card.pillars.get("GEO")
+        aeo_p = card.pillars.get("AEO")
+        cro_p = card.pillars.get("CRO")
 
-    # SEO: canonical weighted SEO composite across measured SEO categories (single source of truth)
-    seo = (
-        validate_score(_get(scores, "seo_score"))
-        or _compute_weighted_seo_score(cat_scores)
-        or _resolve_category_score(cat_scores, "TECHNICAL_SEO", "ON_PAGE_SEO")
-        or validate_score(_get(honest, "google_score"))
-        or validate_score(_get(honest, "honest_google_search"))
-    )
+        seo = seo_p.measured_health_score if seo_p and seo_p.status in ("MEASURED", "PARTIAL") else None
+        geo = geo_p.measured_health_score if geo_p and geo_p.status in ("MEASURED", "PARTIAL") else None
+        aeo = aeo_p.measured_health_score if aeo_p and aeo_p.status in ("MEASURED", "PARTIAL") else None
+        cro = cro_p.measured_health_score if cro_p and cro_p.status in ("MEASURED", "PARTIAL") else None
+    except Exception:
+        scores = _get(report, "scores")
+        cat_scores = _get(scores, "category_scores") or {}
+        seo = validate_score(_get(scores, "seo_score")) or _resolve_category_score(cat_scores, "TECHNICAL_SEO", "SEO")
+        geo = validate_score(_get(scores, "geo_score")) or _resolve_category_score(cat_scores, "GEO")
+        aeo = validate_score(_get(scores, "aeo_score")) or _resolve_category_score(cat_scores, "AEO")
+        cro = validate_score(_get(scores, "cro_score")) or _resolve_category_score(cat_scores, "UX_CONVERSION", "CRO")
 
-    # GEO
-    geo = (
-        validate_score(_get(scores, "geo_score"))
-        or validate_score(_get(scores, "website_geo_readiness_score"))
-        or _resolve_category_score(cat_scores, "GEO", "AI_SEARCH")
-        or validate_score(_get(geo_readiness, "extractability_score"))
-        or validate_score(_get(honest, "ai_readiness_score"))
-        or validate_score(_get(honest, "honest_ai_readiness"))
-    )
-
-    # AEO
-    schema_cross = _get(geo_readiness, "schema_crosscheck") or {}
-    schema_quality = validate_score(schema_cross.get("quality_score")) if isinstance(schema_cross, dict) else None
-    aeo = (
-        validate_score(_get(scores, "aeo_score"))
-        or validate_score(_get(scores, "aeo_readiness_score"))
-        or _resolve_category_score(cat_scores, "AEO", "AI_SEARCH")
-        or schema_quality
-        or _resolve_category_score(cat_scores, "SCHEMA")
-        or validate_score(_get(geo_readiness, "extractability_score"))
-    )
-
-    # CRO
-    cro = (
-        validate_score(_get(scores, "cro_score"))
-        or validate_score(_get(cro_audit, "overall_cro_score"))
-        or _resolve_category_score(cat_scores, "UX_CONVERSION", "CRO")
-        or validate_score(_get(honest, "human_score"))
-        or validate_score(_get(honest, "honest_human_experience"))
-    )
-
-    # Crawl
-    crawl = _resolve_category_score(cat_scores, "TECHNICAL_SEO")
-    if crawl is None:
-        crawl = seo
+    # Crawl is part of SEO technical infrastructure
+    crawl = seo
 
     # Competitors
+    scores = _get(report, "scores")
+    cat_scores = _get(scores, "category_scores") or {}
     comp = (
         validate_score(_get(scores, "competitor_score"))
         or _resolve_category_score(cat_scores, "COMPETITIVE_INTELLIGENCE", "COMPETITIVE")
@@ -367,20 +343,30 @@ def format_audit_execution_metadata(report: Any, *, use_cache: bool = True) -> A
     configuration_summary = f"{policy_pack} · Pillars: {pillars_str} · {budget_str} · {REPORT_VERSION_DEFAULT}"
 
     scores = _get(report, "scores")
-    from app.domain.scoring.displayed_score import displayed_composite
-    comp_score = displayed_composite(report)
-    composite_score = comp_score if comp_score is not None else validate_score(_get(scores, "overall_score"))
-    if composite_score is not None:
-        composite_score_display = f"{composite_score:.1f} / 100"
+    try:
+        from app.domain.scoring.canonical_scorecard import CanonicalScorecardEngine
+        card = CanonicalScorecardEngine.evaluate_from_report(report)
+        composite_score = card.composite_health_score
+        composite_grade = card.composite_grade
+    except Exception:
+        composite_score = validate_score(_get(scores, "overall_score"))
         raw_grade = _get(scores, "overall_grade") or _get(scores, "grade")
         composite_grade = str(raw_grade) if raw_grade and str(raw_grade) not in {"—", "-", "N/A"} else "NOT GRADED"
+
+    if composite_score is not None:
+        composite_score_display = f"{composite_score:.1f} / 100"
     else:
         composite_score_display = "NOT MEASURED"
         composite_grade = "NOT GRADED"
 
     section_scores = _resolve_section_scores(report)
 
-    all_findings = list(_get(report, "findings") or [])
+    from app.report_finding_registry import canonicalize_report_findings
+    raw_findings = list(_get(report, "findings") or [])
+    ent_geo_f = _get(report, "_enterprise_geo_findings") or _get(report, "enterprise_geo_findings")
+    if ent_geo_f and isinstance(ent_geo_f, list):
+        raw_findings.extend(ent_geo_f)
+    all_findings = canonicalize_report_findings(raw_findings)
     total_findings_count = len(all_findings)
     section_findings_counts = {
         key: sum(1 for f in all_findings if _matches_section(f, key))
@@ -476,7 +462,7 @@ def render_snapshot_provenance_bar(
         if section_findings_count is not None and (sec_count > meta.total_findings_count or sec_count != canonical_sec_count):
             findings_line = f"{sec_count} {sec_label_disp} specialist findings · {meta.total_findings_count} unified executive findings"
         else:
-            findings_line = f"{sec_count} in {sec_label_disp} ({meta.total_findings_count} total execution findings)"
+            findings_line = f"{sec_count} issues in {sec_label_disp} ({meta.total_findings_count} total audit findings)"
         sec_val = section_score if section_score is not None else meta.score_for_section(section_key)
         sec_score_line = f"{sec_val:.1f} / 100" if sec_val is not None else "NOT MEASURED"
         extra_cell = (

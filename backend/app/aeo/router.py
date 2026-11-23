@@ -13,6 +13,7 @@ from app.identity.authorizer import UserIdentity
 from app.identity.deps import get_current_user
 from app.aeo.scoring import AeoMetricsCalculator
 from app.aeo.analytics_history import aeo_analytics_history_store
+from app.aeo.intelligence import run_aeo_intelligence_from_report
 from app.aeo.reporting import (
     aeo_report_generator,
     generate_aeo_remediation_csv,
@@ -82,7 +83,23 @@ async def get_aeo_analytics(analysis_id: str, user: UserIdentity = Depends(get_c
         "unified_total_score": None,
         "unified_total_score_reason": "Content readiness, technical eligibility, observed answer visibility and business outcomes are independent measurements and must not be conflated.",
     }
+    payload["aeo_intelligence_summary"] = run_aeo_intelligence_from_report(report).get("summary")
     return payload
+
+
+@router.get("/{analysis_id}/aeo-intelligence")
+async def get_aeo_intelligence(analysis_id: str, user: UserIdentity = Depends(get_current_user)):
+    """Return Question Universe, Question-Page Graph, Answer Completeness, Passage Extractability, and Voice Readiness."""
+    run = require_analysis(analysis_id, user)
+    report = getattr(run, "report", None)
+    if not report:
+        raise HTTPException(status_code=400, detail="AEO intelligence is unavailable until the analysis report has been synthesized.")
+    payload = run_aeo_intelligence_from_report(report)
+    return {
+        "analysis_id": analysis_id,
+        "domain": getattr(report, "domain", None),
+        **payload,
+    }
 
 
 @router.get("/{analysis_id}/aeo-analytics/history")

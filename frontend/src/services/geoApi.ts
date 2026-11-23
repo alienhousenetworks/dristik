@@ -56,9 +56,9 @@ export interface GeoPlatformRecord {
   active_model: string;
   testing_mode: string;
   capabilities?: Record<string, any>;
-  prompts_attempted: number;
+  prompts_attempted: number | null;
   prompts_succeeded: number;
-  prompts_failed: number;
+  prompts_failed: number | null;
   mention_count: number;
   recommendation_count: number;
   citation_count: number;
@@ -68,7 +68,7 @@ export interface GeoPlatformRecord {
   sentiment_breakdown: Record<string, number>;
   accuracy_rate_pct: number | null;
   last_tested_at?: string | null;
-  total_cost_usd: number;
+  total_cost_usd: number | null;
   limitations: string[];
   data_quality_state: string;
 }
@@ -112,8 +112,8 @@ export interface GeoResponseRecord {
   brand_mentioned: boolean;
   brand_recommended: boolean;
   brand_cited: boolean;
-  inaccurate_claims_count: number;
-  analysis_confidence: number;
+  inaccurate_claims_count: number | null;
+  analysis_confidence: number | null;
 }
 
 export interface GeoMentionRecord {
@@ -283,16 +283,16 @@ export interface GeoEnterpriseBundle {
     readiness_score: number | null;
     methodology_composite_score: number | null;
     qa_status: string;
-    budget_usd: number;
-    spent_usd: number;
-    budget_paused: boolean;
+    budget_usd: number | null;
+    spent_usd: number | null;
+    budget_paused: boolean | null;
     platforms_configured: string[];
     platforms_tested: string[];
     platforms_unconfigured: string[];
     prompts_planned: number;
-    prompts_executed: number;
+    prompts_executed: number | null;
     prompts_succeeded: number;
-    prompts_failed: number;
+    prompts_failed: number | null;
     limitations: string[];
     methodology_version: string;
     created_at: string;
@@ -441,6 +441,18 @@ export const geoApi = {
   reportDownloadUrl: (reportId: string) => `/api/v1/geo/reports/${encodeURIComponent(reportId)}/download`,
 };
 
+function getGeoGrade(score: number | null): string {
+  if (score == null || !Number.isFinite(score)) {
+    return 'Unmeasured';
+  }
+  if (score >= 90) return 'A+';
+  if (score >= 80) return 'A';
+  if (score >= 70) return 'B';
+  if (score >= 60) return 'C';
+  if (score >= 40) return 'D';
+  return 'F';
+}
+
 /** Honest zero-fabrication adapter from saved ExecutiveReport when no standalone /api/v1/geo audit exists yet. */
 export function buildGeoBundleFromExecutiveReport(report: ExecutiveReport, analysisId?: string): GeoEnterpriseBundle {
   const domain = (report.domain || report.website_url || '').replace(/^https?:\/\//, '').replace(/\/$/, '');
@@ -461,30 +473,41 @@ export function buildGeoBundleFromExecutiveReport(report: ExecutiveReport, analy
     { id: 'deepseek', name: 'DeepSeek' },
   ].map(({ id, name }) => {
     const recs = obsRecords.filter((r) => String(r.engine_id || r.engine || '').toLowerCase().includes(id));
-    const n = recs.length;
-    const mCount = recs.filter((r) => r.brand_mentioned).length;
-    const cCount = recs.filter((r) => r.brand_cited).length;
-    const recCount = recs.filter((r) => r.position_prominence === 'PRIMARY_RECOMMENDATION').length;
+    const successfulRecords = recs.filter((r) => {
+      const status = String(r.execution_status || r.status || '').toUpperCase();
+      const hasResponse = Boolean(String(r.verbatim_answer || '').trim());
+      return status === 'SUCCEEDED' || status === 'SUCCESS' || (!status && hasResponse);
+    });
+    const mCount = successfulRecords.filter((r) => r.brand_mentioned === true).length;
+    const cCount = successfulRecords.filter((r) => r.brand_cited === true).length;
+    const recCount = successfulRecords.filter((r) => r.position_prominence === 'PRIMARY_RECOMMENDATION').length;
+    const successCount = successfulRecords.length;
+    const testingMode = successfulRecords.find((r) => r.testing_mode)?.testing_mode || (id === 'perplexity' ? 'API_WITH_SEARCH' : 'NOT_RECORDED');
+
     return {
       platform_id: id,
       display_name: name,
-      active_model: recs[0]?.model_version || 'Not configured',
-      testing_mode: id === 'perplexity' ? 'API_WITH_SEARCH' : 'API_MODEL_ONLY',
-      prompts_attempted: n,
-      prompts_succeeded: n,
-      prompts_failed: 0,
+      active_model: successfulRecords[0]?.model_version || 'Not recorded',
+      testing_mode: testingMode,
+      prompts_attempted: null,
+      prompts_succeeded: successCount,
+      prompts_failed: null,
       mention_count: mCount,
       recommendation_count: recCount,
       citation_count: cCount,
-      mention_rate_pct: n > 0 ? Math.round((mCount / n) * 1000) / 10 : null,
-      recommendation_rate_pct: n > 0 ? Math.round((recCount / n) * 1000) / 10 : null,
-      citation_rate_pct: n > 0 ? Math.round((cCount / n) * 1000) / 10 : null,
+      mention_rate_pct: successCount > 0 ? Math.round((mCount / successCount) * 1000) / 10 : null,
+      recommendation_rate_pct: successCount > 0 ? Math.round((recCount / successCount) * 1000) / 10 : null,
+      citation_rate_pct: successCount > 0 ? Math.round((cCount / successCount) * 1000) / 10 : null,
       sentiment_breakdown: {},
       accuracy_rate_pct: null,
-      last_tested_at: recs[0]?.timestamp || null,
-      total_cost_usd: 0,
-      limitations: n === 0 ? ['Platform not queried in this saved audit; run Enterprise GEO Audit with credentials.'] : [],
-      data_quality_state: n > 0 ? 'OBSERVED' : 'NOT_CONFIGURED',
+      last_tested_at: successfulRecords[0]?.timestamp || null,
+      total_cost_usd: null,
+      limitations: [
+        ...(successCount === 0 ? ['No successful response observations available for this platform.'] : []),
+        'Attempted and failed prompt totals require the original execution log.',
+        'Cost is not calculated from saved response observations.',
+      ],
+      data_quality_state: successCount > 0 ? 'OBSERVED' : 'NOT_CONFIGURED',
     };
   });
 
@@ -507,7 +530,7 @@ export function buildGeoBundleFromExecutiveReport(report: ExecutiveReport, analy
       competitor_references: [],
       evidence_ids: f.evidence_refs || [],
       severity: String(f.severity || 'medium').toLowerCase(),
-      confidence: 0.8,
+      confidence: typeof f.confidence === 'number' ? f.confidence : null,
       business_impact: f.why_it_matters || '',
       recommendation: f.recommendation,
       acceptance_criteria: f.validation_criteria ? [f.validation_criteria] : [],
@@ -517,13 +540,13 @@ export function buildGeoBundleFromExecutiveReport(report: ExecutiveReport, analy
     }));
 
   const dimensions: GeoDimensionScore[] = [
-    { dimension_key: 'measured_ai_visibility', dimension_name: 'Measured AI visibility', scorecard_group: 'observed_performance', proposed_weight_pct: 20, score: measured ? (vCard?.mention_rate_pct ?? null) : null, grade: measured ? 'B' : 'Unmeasured', status: measured ? 'OBSERVED' : 'NOT_CONFIGURED', sample_size: vCard?.successful_runs || 0, evidence_ids: [], notes: [] },
-    { dimension_key: 'citation_visibility_quality', dimension_name: 'Citation visibility and quality', scorecard_group: 'observed_performance', proposed_weight_pct: 20, score: measured ? (vCard?.citation_rate_pct ?? null) : null, grade: measured ? 'C' : 'Unmeasured', status: measured ? 'OBSERVED' : 'NOT_CONFIGURED', sample_size: vCard?.successful_runs || 0, evidence_ids: [], notes: [] },
-    { dimension_key: 'brand_entity_consistency', dimension_name: 'Brand entity consistency', scorecard_group: 'readiness_optimization', proposed_weight_pct: 15, score: readinessVal != null ? Math.round(readinessVal) : null, grade: readinessVal != null ? 'B' : 'Unmeasured', status: readinessVal != null ? 'OBSERVED' : 'NOT_TESTED', sample_size: (report.page_reports || []).length, evidence_ids: [], notes: [] },
-    { dimension_key: 'content_information_quality', dimension_name: 'Content and information quality', scorecard_group: 'readiness_optimization', proposed_weight_pct: 15, score: readinessVal != null ? Math.round(readinessVal) : null, grade: readinessVal != null ? 'B' : 'Unmeasured', status: readinessVal != null ? 'OBSERVED' : 'NOT_TESTED', sample_size: (report.page_reports || []).length, evidence_ids: [], notes: [] },
+    { dimension_key: 'measured_ai_visibility', dimension_name: 'Measured AI visibility', scorecard_group: 'observed_performance', proposed_weight_pct: 20, score: measured ? (vCard?.mention_rate_pct ?? null) : null, grade: getGeoGrade(measured ? (vCard?.mention_rate_pct ?? null) : null), status: measured ? 'OBSERVED' : 'NOT_CONFIGURED', sample_size: vCard?.successful_runs || 0, evidence_ids: [], notes: [] },
+    { dimension_key: 'citation_visibility_quality', dimension_name: 'Citation visibility and quality', scorecard_group: 'observed_performance', proposed_weight_pct: 20, score: measured ? (vCard?.citation_rate_pct ?? null) : null, grade: getGeoGrade(measured ? (vCard?.citation_rate_pct ?? null) : null), status: measured ? 'OBSERVED' : 'NOT_CONFIGURED', sample_size: vCard?.successful_runs || 0, evidence_ids: [], notes: [] },
+    { dimension_key: 'brand_entity_consistency', dimension_name: 'Brand entity consistency', scorecard_group: 'readiness_optimization', proposed_weight_pct: 15, score: readinessVal != null ? Math.round(readinessVal) : null, grade: getGeoGrade(readinessVal != null ? Math.round(readinessVal) : null), status: readinessVal != null ? 'OBSERVED' : 'NOT_TESTED', sample_size: (report.page_reports || []).length, evidence_ids: [], notes: [] },
+    { dimension_key: 'content_information_quality', dimension_name: 'Content and information quality', scorecard_group: 'readiness_optimization', proposed_weight_pct: 15, score: readinessVal != null ? Math.round(readinessVal) : null, grade: getGeoGrade(readinessVal != null ? Math.round(readinessVal) : null), status: readinessVal != null ? 'OBSERVED' : 'NOT_TESTED', sample_size: (report.page_reports || []).length, evidence_ids: [], notes: [] },
     { dimension_key: 'external_reputation_coverage', dimension_name: 'External reputation and source coverage', scorecard_group: 'readiness_optimization', proposed_weight_pct: 15, score: null, grade: 'Unmeasured', status: 'NOT_TESTED', sample_size: 0, evidence_ids: [], notes: [] },
     { dimension_key: 'competitive_positioning_coverage', dimension_name: 'Competitive positioning and coverage', scorecard_group: 'observed_performance', proposed_weight_pct: 10, score: null, grade: 'Unmeasured', status: 'NOT_CONFIGURED', sample_size: 0, evidence_ids: [], notes: [] },
-    { dimension_key: 'technical_retrieval_readiness', dimension_name: 'Technical and retrieval readiness', scorecard_group: 'readiness_optimization', proposed_weight_pct: 5, score: report.per_engine_geo?.ai_bot_directives?.robots_measured ? 85 : null, grade: report.per_engine_geo?.ai_bot_directives?.robots_measured ? 'A' : 'Unmeasured', status: report.per_engine_geo?.ai_bot_directives?.robots_measured ? 'OBSERVED' : 'NOT_TESTED', sample_size: (report.page_reports || []).length, evidence_ids: [], notes: [] },
+    { dimension_key: 'technical_retrieval_readiness', dimension_name: 'Technical and retrieval readiness', scorecard_group: 'readiness_optimization', proposed_weight_pct: 5, score: null, grade: 'Unmeasured', status: 'NOT_TESTED', sample_size: 0, evidence_ids: [], notes: ['Robots directives alone do not establish a complete retrieval-readiness score.'] },
   ];
 
   const responses: GeoResponseRecord[] = obsRecords.map((r, i) => ({
@@ -532,7 +555,7 @@ export function buildGeoBundleFromExecutiveReport(report: ExecutiveReport, analy
     prompt_id: r.query_id || `q_${i}`,
     platform_id: r.engine_id || 'unknown',
     model_version: r.model_version || 'unknown',
-    testing_mode: 'API_MODEL_ONLY',
+    testing_mode: r.testing_mode || 'NOT_RECORDED',
     response_text: r.verbatim_answer || '',
     response_hash: '',
     raw_citations: r.cited_url ? [r.cited_url] : [],
@@ -544,15 +567,15 @@ export function buildGeoBundleFromExecutiveReport(report: ExecutiveReport, analy
     brand_mentioned: Boolean(r.brand_mentioned),
     brand_recommended: r.position_prominence === 'PRIMARY_RECOMMENDATION',
     brand_cited: Boolean(r.brand_cited),
-    inaccurate_claims_count: r.claim_accuracy === 'HALLUCINATED' ? 1 : 0,
-    analysis_confidence: 0.85,
+    inaccurate_claims_count: r.claim_accuracy === 'HALLUCINATED' ? 1 : (r.claim_accuracy ? 0 : null),
+    analysis_confidence: typeof r.analysis_confidence === 'number' ? r.analysis_confidence : null,
   }));
 
   const pages: GeoPageRecord[] = (report.page_reports || []).map((p: any, idx: number) => ({
     page_id: `pg_${idx + 1}`,
     url: p.url || `https://${domain}/`,
     page_type: p.page_type || (idx === 0 ? 'homepage' : 'general'),
-    http_status: p.status_code ?? 200,
+    http_status: p.status_code ?? null,
     title: p.title || '',
     main_topic: (Array.isArray(p.h1) ? p.h1[0] : p.h1) || p.title || '',
     relevant_audience: report.business_profile?.target_audience || 'Evaluators',
@@ -575,22 +598,22 @@ export function buildGeoBundleFromExecutiveReport(report: ExecutiveReport, analy
       brand_name: brand,
       mode: 'saved_snapshot',
       status: measured ? 'completed' : 'partial',
-      publication_status: measured ? 'READY_TO_PUBLISH' : 'PARTIAL',
+      publication_status: 'DRAFT_NOT_CERTIFIED',
       current_stage: 'completed',
       observed_performance_score: measured ? (vCard?.mention_rate_pct ?? null) : null,
       readiness_score: readinessVal != null ? Math.round(readinessVal * 10) / 10 : null,
       methodology_composite_score: null,
-      qa_status: measured ? 'passed' : 'partial',
-      budget_usd: 5.0,
-      spent_usd: 0,
-      budget_paused: false,
+      qa_status: 'not_certified',
+      budget_usd: null,
+      spent_usd: null,
+      budget_paused: null,
       platforms_configured: vCard?.engines_queried || [],
       platforms_tested: vCard?.engines_queried || [],
       platforms_unconfigured: platforms.filter((p) => p.prompts_succeeded === 0).map((p) => p.platform_id),
       prompts_planned: (report.ai_search_matrix || []).length,
-      prompts_executed: vCard?.successful_runs || 0,
-      prompts_succeeded: vCard?.successful_runs || 0,
-      prompts_failed: vCard?.failed_runs || 0,
+      prompts_executed: null,
+      prompts_succeeded: typeof vCard?.successful_runs === 'number' ? vCard.successful_runs : 0,
+      prompts_failed: typeof vCard?.failed_runs === 'number' ? vCard.failed_runs : null,
       limitations: [
         'Viewing hydrated snapshot from saved ExecutiveReport. Launch an Enterprise GEO Audit to run the full 9-department DAG, consolidated remediation pack, and 10-profile PDF engine.',
       ],
@@ -707,3 +730,49 @@ export function buildGeoBundleFromExecutiveReport(report: ExecutiveReport, analy
     report_profiles: GEO_DEFAULT_REPORT_PROFILES,
   };
 }
+
+// ============================================================================
+// GeoLook-Integrated GEO/AEO Pipeline API Helpers (Phases 1–5)
+// ============================================================================
+
+async function postGeoPipeline<T>(path: string, body: Record<string, unknown>): Promise<T> {
+  const res = await fetch(`/geo-pipeline${path}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    throw new Error(`GEO pipeline request ${path} failed (HTTP ${res.status})`);
+  }
+  return res.json() as Promise<T>;
+}
+
+export const geoPipelineApi = {
+  runAccessDiagnostics: (payload: Record<string, unknown>) =>
+    postGeoPipeline('/access-diagnostics', payload),
+  lintDraft: (payload: {
+    text: string;
+    verified_numbers?: string[];
+    verified_facts_text?: string;
+    unconfirmed_competitors?: string[];
+  }) => postGeoPipeline('/draft-lint', payload),
+  mineSearchDemand: (payload: {
+    brand_name: string;
+    category?: string;
+    competitors?: string[];
+    market?: string;
+    previous_first_seen?: Record<string, string>;
+  }) => postGeoPipeline('/demand-mine', payload),
+  importManualSamples: (payload: {
+    tenant_id?: string;
+    brand_name: string;
+    brand_aliases?: string[];
+    competitors?: Record<string, string[]>;
+    own_domain?: string;
+    session_mode?: string;
+    market?: string;
+    sheet_markdown: string;
+  }) => postGeoPipeline('/manual-samples/import', payload),
+  runDeclarativeCheck: (payload: Record<string, unknown>) =>
+    postGeoPipeline('/verification/declarative-check', payload),
+};

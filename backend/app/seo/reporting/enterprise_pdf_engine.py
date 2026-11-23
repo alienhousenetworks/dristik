@@ -409,11 +409,13 @@ class EnterprisePdfEngine:
             else:
                 status_label = "NO_ISSUE_IN_SAMPLE"
 
+            ev_conf = scorecard.get("confidence_vectors", {}).get("evidence_confidence_pct")
+            conf_display = f"{ev_conf:.1f}% verified" if (ev_conf is not None and ev_conf > 0) else ("DOM Grounded" if crawled > 0 else "UNMEASURED")
             health = {
                 "status": status_label,
                 "score": dim_score,
                 "coverage_pct": scorecard.get("confidence_vectors", {}).get("audit_coverage_pct", round((crawled / max(discovered, 1)) * 100, 1)),
-                "confidence": f"{scorecard.get('confidence_vectors', {}).get('evidence_confidence_pct', 100.0)}% verified",
+                "confidence": conf_display,
                 "connector_status": f"{req_conn}: CONNECTED" if req_conn else "First-party crawl & DOM",
             }
             tested = (
@@ -940,7 +942,7 @@ class EnterprisePdfEngine:
         # app_I: Epistemic limitations & integrity seal
         lim_items = "".join(f"<li>{_esc(l)}</li>" for l in (ctx["limitations"] or ["Only crawled URLs and connected providers were evaluated; missing external sources are excluded without penalty."]))
         qa = ctx.get("qa") or {}
-        qa_status = _esc(_get(qa, "status") or "CERTIFIED")
+        qa_status = _esc(_get(qa, "status") or "NOT_CERTIFIED")
         return f"<ul>{lim_items}</ul><p><strong>QA Certification Status:</strong> <code>{qa_status}</code></p>"
 
     def render_publication(
@@ -976,7 +978,7 @@ class EnterprisePdfEngine:
         has_crawl_cov = cov["urls_discovered"] > 0 or cov["urls_crawled"] > 0
         fmt_cov = lambda n: f"{n} URLs" if has_crawl_cov else "Not measured"
         qa = ctx.get("qa") or {}
-        qa_status = str(_get(qa, "status") or "CERTIFIED")
+        qa_status = str(_get(qa, "status") or "NOT_CERTIFIED").upper()
         tasks_by_finding = {t.get("finding_id"): t for t in ctx["tasks"]}
 
         # Dimension scorecard table rows
@@ -1033,7 +1035,7 @@ class EnterprisePdfEngine:
         <h3>1. Executive Interpretation</h3>
         <p>{_esc(anatomy.executive_interpretation)}</p>
         <h3>2. Health Overview</h3>
-        <p><span class="badge {st_badge}">{_esc(status_str)}</span> · Score: <strong>{_esc(h_ov.get('score') if h_ov.get('score') is not None else 'Unmeasured')}</strong> · Coverage: <strong>{_esc(h_ov.get('coverage_pct'))}%</strong> · Confidence: <strong>{_esc(h_ov.get('confidence'))}</strong> · Source: <code>{_esc(h_ov.get('connector_status'))}</code></p>
+        <p><span class="badge {st_badge}">{_esc(status_str.replace('_', ' '))}</span> · Score: <strong>{_esc(h_ov.get('score') if h_ov.get('score') is not None else 'Unmeasured')}</strong> · Coverage: <strong>{_esc(h_ov.get('coverage_pct'))}%</strong> · Confidence: <strong>{_esc(h_ov.get('confidence'))}</strong> · Source: <code>{_esc(h_ov.get('connector_status'))}</code></p>
         {telemetry_html}
         <h3>3. What Was Tested</h3>
         <p>{_esc(anatomy.what_was_tested)}</p>
@@ -1059,10 +1061,15 @@ class EnterprisePdfEngine:
 """)
 
         draft_banner = ""
-        if qa_status == "BLOCKED_INTEGRITY_FAILURE":
+        if qa_status in {"NOT_CERTIFIED", "BLOCKED_INTEGRITY_FAILURE", "FAILED", "REJECTED"}:
+            reasons = _get(qa, "blocking_reasons") or []
+            if qa_status == "NOT_CERTIFIED" and not reasons:
+                reasons = ["No QA certification report was supplied."]
             draft_banner = (
-                '<div class="qa-banner-blocked"><strong>DRAFT — UNCERTIFIED PUBLICATION:</strong> '
-                f"Blocked by Independent QA Gate ({_esc('; '.join(_get(qa, 'blocking_reasons') or []))})</div>"
+                '<div class="qa-banner-blocked">'
+                '<strong>DRAFT — NOT CERTIFIED:</strong> '
+                f"{_esc('; '.join(reasons))}"
+                '</div>'
             )
         elif qa_status == "PARTIAL_DISCLOSED":
             draft_banner = (

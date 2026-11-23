@@ -87,8 +87,7 @@ class LiveAnswerEvaluationEngine:
 
         clean_domain = domain.lower().replace("www.", "")
         facts = expected_facts or {}
-        default_competitors = ["Oral-B", "Colgate", "Philips", "Quip", "Crest"]
-        competitor_pool = tracked_competitors if tracked_competitors is not None else default_competitors
+        competitor_pool = list(tracked_competitors) if tracked_competitors is not None else []
 
         for item in tested_queries:
             qid = item.get("question_id", "Q-001")

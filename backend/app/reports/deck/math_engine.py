@@ -55,14 +55,22 @@ class DeterministicMetricEngine:
     def compute_bundle(self, report: ExecutiveReport) -> MetricBundle:
         domain = report.domain or report.website_url.replace("https://", "").replace("http://", "").split("/")[0]
         
-        # 1. Overall Score & Category Scores
+        # 1. Overall Score & Category Scores (Canonical Enterprise Scorecard single source of truth)
         scores = report.scores
-        overall_score = float(scores.overall_score) if scores and scores.overall_score is not None else 0.0
-        has_overall_val = scores is not None and scores.overall_score is not None
+        from app.domain.scoring.canonical_scorecard import CanonicalScorecardEngine
         from app.domain.scoring.displayed_score import rating_for_displayed
+
+        canon_card = CanonicalScorecardEngine.evaluate_from_report(report)
+        canon_overall = canon_card.composite_health_score
+        if canon_overall is not None:
+            overall_score = float(canon_overall)
+            has_overall_val = True
+        else:
+            overall_score = float(scores.overall_score) if scores and scores.overall_score is not None else 0.0
+            has_overall_val = scores is not None and scores.overall_score is not None
         canon_grade, canon_health = rating_for_displayed(overall_score if has_overall_val else None)
-        grade = scores.grade if scores and scores.grade else canon_grade
-        health_label = scores.health_label if scores and scores.health_label else canon_health
+        grade = canon_card.composite_grade if canon_overall is not None and canon_card.composite_grade else canon_grade
+        health_label = canon_health
 
         cat_scores: Dict[str, float] = {}
         cat_gaps: Dict[str, float] = {}
@@ -135,12 +143,17 @@ class DeterministicMetricEngine:
         post_remediation_score = round(min(100.0, overall_score + potential_gain), 1)
 
         # 5. Generative AI Answer Engine Readiness Ratio
-        geo_score = cat_scores.get("GEO")
+        geo_pillar = canon_card.pillars.get("GEO")
+        geo_score = (
+            float(geo_pillar.measured_health_score)
+            if geo_pillar is not None and geo_pillar.measured_health_score is not None
+            else cat_scores.get("GEO")
+        )
         geo_ratio = round(geo_score / 100.0, 2) if geo_score is not None else 0.0
 
         # 6. Detailed Metric Objects with Formulas
         metrics: Dict[str, CalculatedMetric] = {}
-        has_overall = scores is not None and scores.overall_score is not None
+        has_overall = has_overall_val
         metrics["overall_score"] = CalculatedMetric(
             key="overall_score",
             label="Overall Audit Composite Score",

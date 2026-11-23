@@ -94,3 +94,87 @@ def test_same_report_yields_identical_seal_across_all_5_pdf_views():
         assert c1.scorecard_sha256[:16] in html_block
         assert "505" in html_block
         assert "NOT ENOUGH DATA" in html_block
+
+
+def test_connected_integrations_do_not_receive_performance_100():
+    report = {
+        "analysis_id": "phase1-connector-test",
+        "domain": "example.com",
+        "crawl_manifest": {
+            "total_pages_discovered": 0,
+            "pages": [],
+        },
+        "google_performance": {
+            "gsc_connected": True,
+            "ga4_connected": True,
+        },
+        "ai_referral_analytics": {"status": "CONNECTED"},
+        "session_replay_summary": {"status": "CONNECTED"},
+        "heatmap_summary": {"status": "CONNECTED"},
+        "experiments_summary": {"status": "CONNECTED"},
+        "historical_comparison": {"status": "COMPARABLE"},
+        "external_authority": {"status": "CONNECTED", "provider": "Ahrefs"},
+    }
+    card = CanonicalScorecardEngine.evaluate_from_report(report)
+    all_caps = [
+        cap
+        for pillar in card.pillars.values()
+        for cap in pillar.capabilities
+    ]
+    connector_capabilities = {
+        "search_analytics",
+        "historical_and_verification",
+        "ai_referral_analytics",
+        "session_replay",
+        "heatmaps",
+        "funnel_analytics",
+        "revenue_attribution",
+        "ab_experiments",
+        "source_authority",
+        "remediation_and_verification",
+        "backlink_intelligence",
+    }
+    for cap in all_caps:
+        if cap.capability_id in connector_capabilities:
+            assert cap.measured_score is None, f"{cap.capability_id} had score {cap.measured_score}"
+            assert cap.acceptance_passed is False, f"{cap.capability_id} passed acceptance"
+            assert cap.status in ("CONNECTED_NOT_MEASURED", "NOT_CONNECTED", "UNMEASURED")
+
+
+def test_crawl_alone_does_not_pass_aeo_question_universe_or_classification():
+    report = {
+        "analysis_id": "phase1-aeo-crawl-test",
+        "domain": "example.com",
+        "crawl_manifest": {
+            "total_pages_discovered": 10,
+            "pages": [{"url": "https://example.com/p1"}],
+        },
+        "geo_readiness": {"extractability_score": 80.0},
+    }
+    card = CanonicalScorecardEngine.evaluate_from_report(report)
+    aeo_caps = {cap.capability_id: cap for cap in card.pillars["AEO"].capabilities}
+    assert aeo_caps["question_universe"].status == "UNMEASURED"
+    assert aeo_caps["question_universe"].acceptance_passed is False
+    assert aeo_caps["question_universe"].measured_score is None
+
+    assert aeo_caps["prompt_classification"].status == "UNMEASURED"
+    assert aeo_caps["prompt_classification"].acceptance_passed is False
+    assert aeo_caps["prompt_classification"].measured_score is None
+
+
+def test_brand_mentions_alone_do_not_pass_competitor_intelligence():
+    report = {
+        "analysis_id": "phase1-comp-test",
+        "domain": "example.com",
+        "ai_visibility_scorecard": {
+            "successful_runs": 10,
+            "mention_rate_pct": 50.0,
+            "citation_rate_pct": 30.0,
+        },
+    }
+    card = CanonicalScorecardEngine.evaluate_from_report(report)
+    geo_caps = {cap.capability_id: cap for cap in card.pillars["GEO"].capabilities}
+    assert geo_caps["competitor_intelligence"].status == "UNMEASURED"
+    assert geo_caps["competitor_intelligence"].acceptance_passed is False
+    assert geo_caps["competitor_intelligence"].measured_score is None
+

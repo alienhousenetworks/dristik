@@ -1321,25 +1321,19 @@ export function AeoWorkspaceView({ report, analysisId, onOpenPatchPack }: AeoWor
               </div>
             </div>
 
-            {/* Before / After Diff Visualizer Preview */}
+            {/* Live Verification Evidence State (no hardcoded sample diffs) */}
             <div className="border border-line rounded-xl overflow-hidden text-xs">
               <div className="p-3 bg-paper-100 border-b border-line flex items-center justify-between font-mono text-[11px]">
-                <span className="font-semibold text-ink">Verification Inspection: /pages/faqs</span>
-                <span className="text-good font-bold">✓ VERIFIED_FIXED</span>
+                <span className="font-semibold text-ink">Verification Inspection</span>
+                <span className="text-ink-500 font-semibold">AWAITING LIVE RECRAWL</span>
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-line font-mono text-[11px]">
-                <div className="p-3 bg-bad/5 space-y-1">
-                  <span className="text-bad font-bold block uppercase text-[10px]">Original Evidence Snapshot</span>
-                  <pre className="text-ink-700 whitespace-pre-wrap">
-                    {`<!-- Missing Declarative Answer Block -->\n<div class="faq-item">\n  <h3>Do your toothbrushes have a warranty?</h3>\n  <p>Yes, all items are covered under our policy.</p>\n</div>`}
-                  </pre>
-                </div>
-                <div className="p-3 bg-good/5 space-y-1">
-                  <span className="text-good font-bold block uppercase text-[10px]">Recrawled Post-Patch Snapshot</span>
-                  <pre className="text-ink-700 whitespace-pre-wrap">
-                    {`<!-- Patched H2 + 50-word Declarative Block -->\n<h2>Do your toothbrushes have a warranty?</h2>\n<p>Perfora electric toothbrushes include a 1-year comprehensive replacement warranty against manufacturing defects nationwide.</p>`}
-                  </pre>
-                </div>
+              <div className="p-4 bg-paper-50 text-ink-600 space-y-1.5">
+                <p className="font-medium text-ink">
+                  No post-deployment verification snapshots have been recorded for this domain yet.
+                </p>
+                <p className="text-[11px] text-ink-500">
+                  Deploy an approved answer block or schema patch, then run a live verification re-crawl in the GEO/AEO Verification Queue to capture real before/after DOM diffs and regression status.
+                </p>
               </div>
             </div>
           </Card>

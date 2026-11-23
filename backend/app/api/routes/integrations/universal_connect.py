@@ -1586,9 +1586,42 @@ async def mcp_json_rpc(request: Request, background_tasks: BackgroundTasks, user
             domain = args.get("domain")
             if not isinstance(domain, str) or not domain.strip():
                 raise HTTPException(status_code=400, detail="domain is required.")
-            payload = _citation_tracking_unavailable_payload(
-                domain, args.get("queries"), args.get("engines")
-            )
+            from app.geo.adapters.registry import get_adapter, get_available_adapters
+
+            requested_engines = args.get("engines") or []
+            adapters = [get_adapter(e) for e in requested_engines] if requested_engines else get_available_adapters()
+            configured = [a for a in adapters if a and a.is_configured()]
+            queries = [q for q in (args.get("queries") or []) if isinstance(q, str) and q.strip()]
+            if not configured or not queries:
+                payload = _citation_tracking_unavailable_payload(domain, args.get("queries"), args.get("engines"))
+            else:
+                import asyncio
+                clean_dom = domain.strip().lower().replace("https://", "").replace("http://", "").split("/")[0].removeprefix("www.")
+                country = str(args.get("country") or "US").upper()[:2]
+
+                async def _probe(ad: Any, q_text: str) -> Dict[str, Any]:
+                    res = await ad.execute_prompt({"prompt": q_text, "market": country, "enable_search": True})
+                    cits = list(res.citations or [])
+                    cited = any(clean_dom in c.lower() for c in cits)
+                    return {
+                        "engine": ad.engine_id,
+                        "query": q_text,
+                        "country": country,
+                        "is_live": res.is_live,
+                        "testing_mode": res.testing_mode.value if hasattr(res.testing_mode, "value") else str(res.testing_mode),
+                        "is_cited": cited,
+                        "citations": cits[:15],
+                        "error": res.error,
+                    }
+
+                results = list(await asyncio.gather(*[_probe(ad, q) for q in queries[:5] for ad in configured[:4]]))
+                payload = {
+                    "status": "MEASURED",
+                    "domain": clean_dom,
+                    "country": country,
+                    "engines_queried": [a.engine_id for a in configured[:4]],
+                    "results": results,
+                }
             result = {"content": [{"type": "text", "text": _json(payload)}], "structuredContent": payload}
         elif name == "dristik_provider_invoke":
             if not _mcp_authorized(user, "provider.invoke", "mission:create"):

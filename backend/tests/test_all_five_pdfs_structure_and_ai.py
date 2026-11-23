@@ -277,7 +277,7 @@ def test_p2_and_p4_compact_manifest_and_boardroom_pptx_compile():
     assert "ch_competitive" not in [c["id"] for c in complete_man["chapters"]]
 
     geo_man = build_publication_manifest(rep, "GEO")
-    assert "ch_geo_rewrites" not in [c["id"] for c in geo_man["chapters"]]
+    assert "ch_geo_rewrites" in [c["id"] for c in geo_man["chapters"]]
 
     bp = DeckBlueprint(
         domain="perforacare.com",

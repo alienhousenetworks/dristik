@@ -1240,6 +1240,45 @@ export interface GoogleChannelPayload {
   landing_pages?: Array<{ page?: string; sessions?: number; key_events?: number | null }>;
 }
 
+export interface CanonicalPillarScorecard {
+  pillar: string;
+  pillar_weight: number;
+  capability_completeness_score: number;
+  evidence_coverage_score: number;
+  measured_health_score: number | null;
+  optimization_effectiveness_score?: number | null;
+  status: string;
+  measured_capabilities?: number;
+  total_capabilities?: number;
+  unmeasured_capabilities?: string[];
+}
+
+export interface CanonicalCrawlCoverageFunnel {
+  discovered_urls: number;
+  crawled_urls: number;
+  rendered_urls: number;
+  inspected_urls: number;
+  tested_urls: number;
+  crawl_coverage_pct?: number;
+  render_coverage_pct?: number;
+  inspection_coverage_pct?: number;
+  test_coverage_pct?: number;
+}
+
+export interface CanonicalEnterpriseScorecard {
+  methodology_version: string;
+  audit_run_id: string;
+  domain: string;
+  composite_health_score: number | null;
+  composite_grade: string;
+  capability_completeness_score: number;
+  evidence_coverage_score: number;
+  optimization_effectiveness_score: number | null;
+  crawl_coverage: CanonicalCrawlCoverageFunnel;
+  pillars: Record<string, CanonicalPillarScorecard>;
+  scorecard_hash?: string;
+}
+
 export interface ExecutiveReport {
   quality_gate_results?: Record<string, unknown>;
 
@@ -1375,6 +1414,7 @@ export interface ExecutiveReport {
   exploratory_hypotheses?: Finding[];
   hypotheses_matrix?: HypothesisMatrixItem[];
   scoring_rubric_version?: string;
+  canonical_scorecard?: CanonicalEnterpriseScorecard | null;
   visual_intelligence?: VisualIntelligencePayload;
   evidence_ledger?: Record<string, EvidenceLedgerItem>;
   integrity_repairs_log?: Array<{ timestamp: string; action: string; description: string; auditable: boolean; }>;

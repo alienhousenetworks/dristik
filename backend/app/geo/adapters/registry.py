@@ -11,6 +11,7 @@ from typing import Any, Dict, List, Optional
 
 from app.core.config import settings
 from app.geo.adapters.base import BaseGeoEngineAdapter
+from app.geo.adapters.brightdata import BrightDataConsumerAdapter, PROVIDER_DEFAULTS as BRIGHTDATA_PROVIDERS
 from app.geo.adapters.claude import ClaudeAdapter
 from app.geo.adapters.copilot import CopilotAdapter
 from app.geo.adapters.deepseek import DeepSeekAdapter
@@ -177,6 +178,10 @@ def get_adapter(engine_id: str) -> Optional[BaseGeoEngineAdapter]:
         model = os.environ.get("AI_CITATION_LLAMA_MODEL") or "llama-3.3-70b-versatile"
         return GroqAdapter(api_key=key, model=model)
 
+    if eid in BRIGHTDATA_PROVIDERS:
+        key = os.environ.get("BRIGHT_DATA_KEY") or getattr(settings, "BRIGHT_DATA_KEY", "") or ""
+        return BrightDataConsumerAdapter(provider_id=eid, api_key=key)
+
     return None
 
 
@@ -197,6 +202,9 @@ def get_available_adapters() -> List[BaseGeoEngineAdapter]:
     perp_active = os.environ.get("AI_CITATION_PERPLEXITY_ACTIVE", "false").lower() in ("true", "1", "yes")
     if perp_active or os.environ.get("PERPLEXITY_API_KEY"):
         all_adapters.append(get_adapter("perplexity"))
+    if os.environ.get("BRIGHT_DATA_KEY") or getattr(settings, "BRIGHT_DATA_KEY", None):
+        for bd_id in BRIGHTDATA_PROVIDERS:
+            all_adapters.append(get_adapter(bd_id))
     return [a for a in all_adapters if a and a.is_configured()]
 
 

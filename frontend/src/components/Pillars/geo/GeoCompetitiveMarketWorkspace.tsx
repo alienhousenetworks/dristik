@@ -10,9 +10,40 @@ interface GeoCompetitiveMarketWorkspaceProps {
 
 export function GeoCompetitiveMarketWorkspace({ bundle, mode }: GeoCompetitiveMarketWorkspaceProps) {
   const [selectedEntity, setSelectedEntity] = useState<string | null>(null);
+  const [battlecards, setBattlecards] = useState<Array<Record<string, any>>>([]);
+  const [bcLoading, setBcLoading] = useState(false);
+  const [bcError, setBcError] = useState<string | null>(null);
   const comp = bundle.department_artifacts?.department_g || {};
   const market = bundle.department_artifacts?.department_h || {};
   const rows: Array<Record<string, any>> = comp.comparison_table || [];
+
+  const handleGenerateBattlecards = async () => {
+    setBcLoading(true);
+    setBcError(null);
+    try {
+      const comps = rows.filter((r) => !r.is_target_brand).map((r) => r.entity_name);
+      const res = await fetch('/api/v1/geo-pipeline/battlecards', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          brand_name: bundle.audit.brand_name,
+          competitors: comps.length > 0 ? comps : (bundle.scope?.competitors || []),
+          responses: (bundle.responses || []).map((r) => ({
+            prompt: r.prompt_id,
+            answer: r.response_text,
+            sources: [],
+          })),
+        }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      setBattlecards(data.battlecards || []);
+    } catch (err: any) {
+      setBcError(err?.message || 'Could not generate battlecards.');
+    } finally {
+      setBcLoading(false);
+    }
+  };
 
   if (mode === 'markets') {
     const byMarket = market.by_market || {};
@@ -142,6 +173,57 @@ export function GeoCompetitiveMarketWorkspace({ bundle, mode }: GeoCompetitiveMa
           )}
         </Card>
       )}
+
+      <Card className="p-5 space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h4 className="font-sans font-bold text-ink text-sm">AI Competitor Battlecards</h4>
+            <p className="text-xs text-ink-500">
+              Synthesizes side-by-side strengths, weaknesses, and winning prompts strictly from observed AI answers.
+            </p>
+          </div>
+          <button
+            type="button"
+            disabled={bcLoading}
+            onClick={handleGenerateBattlecards}
+            className="px-3 py-1.5 rounded bg-ink text-white font-mono text-xs disabled:opacity-50"
+          >
+            {bcLoading ? 'Synthesizing...' : 'Build Battlecards'}
+          </button>
+        </div>
+        {bcError && <p className="text-xs text-bad font-mono">{bcError}</p>}
+        {battlecards.length > 0 && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+            {battlecards.map((bc) => (
+              <div key={bc.competitor} className="p-4 rounded border border-line bg-paper-50 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-ink">{bc.competitor}</span>
+                  <span className="font-mono text-[10px] uppercase px-2 py-0.5 rounded bg-white border border-line">
+                    {bc.sentiment} · {bc.mention_count} mentions
+                  </span>
+                </div>
+                <p className="text-ink-700">{bc.summary}</p>
+                {bc.strengths?.length > 0 && (
+                  <div>
+                    <div className="font-mono text-[10px] uppercase text-pine font-bold">Observed Strengths</div>
+                    <ul className="list-disc pl-4 text-ink-700">
+                      {bc.strengths.map((s: string, i: number) => <li key={i}>{s}</li>)}
+                    </ul>
+                  </div>
+                )}
+                {bc.weaknesses?.length > 0 && (
+                  <div>
+                    <div className="font-mono text-[10px] uppercase text-bad font-bold">Observed Weaknesses</div>
+                    <ul className="list-disc pl-4 text-ink-700">
+                      {bc.weaknesses.map((w: string, i: number) => <li key={i}>{w}</li>)}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
     </div>
   );
 }

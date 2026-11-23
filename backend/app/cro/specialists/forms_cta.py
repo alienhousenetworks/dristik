@@ -40,7 +40,17 @@ def run_department_e(ctx: CROAuditContext) -> CROAgentOutput:
     evidence_ids: List[str] = []
     limitations: List[str] = []
 
-    ctas = [e for e in ctx.elements if e.element_category == "cta"]
+    from app.domain.evidence.rule_catalog import is_skip_link
+
+    ctas = [
+        e for e in ctx.elements
+        if e.element_category == "cta"
+        and not is_skip_link(
+            e.text or "",
+            str((e.attributes or {}).get("href", "")),
+            str((e.attributes or {}).get("classes", "")),
+        )
+    ]
     forms = [e for e in ctx.elements if e.element_category == "form"]
     primary_goal = next((g for g in ctx.goals if g.goal_type == "primary"), ctx.goals[0] if ctx.goals else None)
 

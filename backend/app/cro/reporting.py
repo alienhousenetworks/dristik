@@ -340,7 +340,7 @@ def build_cro_publication_document(report: Any, intel: Optional[CroIntelligenceR
         crawl_scope_summary=snap.crawl_scope_summary,
         composite_score_reference=comp_ref,
     )
-    from app.scoring.canonical_scorecard import (
+    from app.domain.scoring.canonical_scorecard import (
         CanonicalScorecardEngine,
         render_canonical_scorecard_html,
     )

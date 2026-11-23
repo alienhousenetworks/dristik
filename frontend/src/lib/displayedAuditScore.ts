@@ -56,6 +56,59 @@ export function alignDisplayedStory(
 }
 
 export function buildDisplayedScore(report: ExecutiveReport): AuthoritativeScore {
+  const canonical = report.canonical_scorecard;
+  if (canonical && canonical.pillars && typeof canonical.pillars === 'object') {
+    const pillarScore = (key: string): number | null => {
+      const p = canonical.pillars[key];
+      if (!p) return null;
+      const st = String(p.status || '').toUpperCase();
+      if (st !== 'MEASURED' && st !== 'PARTIAL') return null;
+      return finiteNumber(p.measured_health_score);
+    };
+    const pillarWeight = (key: string, fallback: number): number => {
+      const w = finiteNumber(canonical.pillars[key]?.pillar_weight);
+      return w != null && w > 0 ? w / 100 : fallback;
+    };
+    const seo = pillarScore('SEO');
+    const geo = pillarScore('GEO');
+    const aeo = pillarScore('AEO');
+    const cro = pillarScore('CRO');
+    const pillars: PillarInput[] = [
+      {
+        ...REPORT_PILLARS.technical,
+        nominalWeight: pillarWeight('SEO', 0.25),
+        rawScore: seo,
+        status: seo == null ? 'NOT_MEASURED' : 'MEASURED',
+      },
+      {
+        ...REPORT_PILLARS.geo,
+        nominalWeight: pillarWeight('GEO', 0.25),
+        rawScore: geo,
+        status: geo == null ? 'NOT_MEASURED' : 'MEASURED',
+      },
+      {
+        ...REPORT_PILLARS.aeo,
+        nominalWeight: pillarWeight('AEO', 0.25),
+        rawScore: aeo,
+        status: aeo == null ? 'NOT_MEASURED' : 'LIVE_MEASURED',
+      },
+      {
+        ...REPORT_PILLARS.cro,
+        nominalWeight: pillarWeight('CRO', 0.25),
+        rawScore: cro,
+        status: cro == null ? 'NOT_MEASURED' : 'MEASURED',
+      },
+    ];
+    const built = buildAuthoritativeScore(pillars);
+    const canonicalComposite = finiteNumber(canonical.composite_health_score);
+    return {
+      ...built,
+      composite: canonicalComposite,
+      grade: canonicalComposite != null && canonical.composite_grade ? canonical.composite_grade : built.grade,
+      formula: canonical.methodology_version || 'dristik_enterprise_v4.0',
+    };
+  }
+
   const scores = report.scores;
   const honest = report.honest_scores;
   const categoryScore = (key: string): number | null => {

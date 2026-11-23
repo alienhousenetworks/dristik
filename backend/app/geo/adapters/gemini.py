@@ -9,6 +9,7 @@ from __future__ import annotations
 import re
 import time
 from typing import Any, Dict, List, Optional
+from urllib.parse import urlparse
 import httpx
 
 from app.geo.adapters.base import BaseGeoEngineAdapter, EnginePromptRequest, EngineRawResponse
@@ -17,6 +18,95 @@ from app.geo.models import GEOTestingMode
 GEMINI_OPENAI_URL = "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"
 GEMINI_NATIVE_BASE = "https://generativelanguage.googleapis.com/v1beta/models"
 DEFAULT_TIMEOUT_SECONDS = 14.0
+
+
+def _clean_host(url_or_domain: str) -> str:
+    raw = (url_or_domain or "").strip().lower()
+    if not raw:
+        return ""
+    try:
+        parsed = urlparse(raw if "://" in raw else f"https://{raw}")
+        return (parsed.hostname or "").removeprefix("www.")
+    except Exception:
+        return raw.removeprefix("www.").split("/")[0]
+
+
+def parse_grounding_supports(gm: Dict[str, Any]) -> Dict[str, Any]:
+    """Parse Gemini groundingMetadata into normalized chunks and segment-level supports."""
+    raw_chunks = gm.get("groundingChunks") or []
+    chunks: List[Dict[str, str]] = []
+    for ch in raw_chunks:
+        if isinstance(ch, dict):
+            web = ch.get("web") or {}
+            chunks.append({
+                "uri": str(web.get("uri") or "").strip(),
+                "title": str(web.get("title") or "").strip(),
+            })
+
+    raw_supports = gm.get("groundingSupports") or []
+    supports: List[Dict[str, Any]] = []
+    for s in raw_supports:
+        if not isinstance(s, dict):
+            continue
+        seg = s.get("segment") or {}
+        supports.append({
+            "start_index": int(seg.get("startIndex") or 0),
+            "end_index": int(seg.get("endIndex") or 0),
+            "text": str(seg.get("text") or ""),
+            "chunk_indices": [int(i) for i in (s.get("groundingChunkIndices") or []) if isinstance(i, int)],
+            "confidence_scores": [float(c) for c in (s.get("confidenceScores") or []) if isinstance(c, (int, float))],
+        })
+
+    return {
+        "chunks": chunks,
+        "supports": supports,
+        "web_search_queries": [str(q) for q in (gm.get("webSearchQueries") or []) if q],
+    }
+
+
+def compute_selection_rate(
+    target_url: str,
+    chunks: List[Dict[str, str]],
+    supports: List[Dict[str, Any]],
+) -> Dict[str, Any]:
+    """Compute exact grounding word-budget share (Selection Rate) attributed to target_url."""
+    target_host = _clean_host(target_url)
+    target_indices: List[int] = []
+    if target_host:
+        for idx, ch in enumerate(chunks):
+            ch_host = _clean_host(ch.get("uri", ""))
+            title_host = _clean_host(ch.get("title", ""))
+            if (
+                ch_host == target_host
+                or ch_host.endswith(f".{target_host}")
+                or title_host == target_host
+                or title_host.endswith(f".{target_host}")
+            ):
+                target_indices.append(idx)
+
+    target_set = set(target_indices)
+    target_snippets: List[str] = []
+    total_words = 0
+    target_words = 0
+    for sup in supports:
+        text = (sup.get("text") or "").strip()
+        words = len(text.split()) if text else 0
+        total_words += words
+        if any(i in target_set for i in (sup.get("chunk_indices") or [])):
+            if text:
+                target_snippets.append(text)
+            target_words += words
+
+    selection_rate = round(target_words / total_words, 4) if total_words > 0 else 0.0
+    return {
+        "target_url_found": len(target_indices) > 0,
+        "target_chunk_indices": target_indices,
+        "target_snippets": target_snippets,
+        "total_grounding_words": total_words,
+        "target_grounding_words": target_words,
+        "selection_rate": selection_rate,
+        "selection_rate_pct": round(selection_rate * 100.0, 1),
+    }
 
 
 class GeminiAdapter(BaseGeoEngineAdapter):
@@ -99,18 +189,14 @@ class GeminiAdapter(BaseGeoEngineAdapter):
                         parts = (cand.get("content") or {}).get("parts") or []
                         content = "".join(str(p.get("text", "")) for p in parts if isinstance(p, dict))
                         gm = cand.get("groundingMetadata") or {}
-                        chunks = gm.get("groundingChunks") or []
-                        grounding_urls = [
-                            str((ch.get("web") or {}).get("uri", "")).strip()
-                            for ch in chunks
-                            if isinstance(ch, dict) and (ch.get("web") or {}).get("uri")
-                        ]
+                        parsed_gm = parse_grounding_supports(gm)
+                        grounding_urls = [c["uri"] for c in parsed_gm["chunks"] if c["uri"]]
                         inline = re.findall(r"https?://[^\s\)\],>'\"]+", content)
                         citations = list(dict.fromkeys(grounding_urls + inline))
                         usage = data.get("usageMetadata") or {}
                         p_tok = int(usage.get("promptTokenCount") or 0)
                         c_tok = int(usage.get("candidatesTokenCount") or 0)
-                        search_used = bool(grounding_urls or (gm.get("webSearchQueries") or []))
+                        search_used = bool(grounding_urls or parsed_gm["web_search_queries"])
                         actual_mode = GEOTestingMode.API_WITH_SEARCH if search_used else GEOTestingMode.API_MODEL_ONLY
                         return EngineRawResponse(
                             engine_id=self.engine_id,
@@ -130,8 +216,10 @@ class GeminiAdapter(BaseGeoEngineAdapter):
                                 p_tok, c_tok, search_uses=1 if search_used else 0
                             ),
                             tool_use_metadata={
-                                "web_search_queries": gm.get("webSearchQueries") or [],
+                                "web_search_queries": parsed_gm["web_search_queries"],
                                 "grounding_chunks_count": len(grounding_urls),
+                                "grounding_chunks": parsed_gm["chunks"],
+                                "grounding_supports": parsed_gm["supports"],
                                 "search_executed": search_used,
                             },
                         )

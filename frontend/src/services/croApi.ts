@@ -40,7 +40,7 @@ export interface CroThreeScorecard {
   evidence_coverage_pct?: number | null;
   confidence?: number | null;
   data_freshness?: string;
-  analytics_completeness_pct?: number;
+  analytics_completeness_pct?: number | null;
   disclosures: string[];
 }
 

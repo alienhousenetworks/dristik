@@ -75,7 +75,7 @@ class AeoScorecardEngine:
     @classmethod
     def _grade(cls, val: Optional[float]) -> str:
         if val is None:
-            return "N/A"
+            return "UNMEASURED"
         if val >= 85:
             return "A"
         elif val >= 70:

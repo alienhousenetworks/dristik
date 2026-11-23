@@ -178,7 +178,8 @@ def normalize_finding(finding: Any, index: int = 1) -> Dict[str, Any]:
     enriched["reasoning"] = _get_val(finding, "reasoning") or ""
     if enriched.get("lifecycle_status") in ("Open Defect", "OPEN"):
         enriched["lifecycle_status"] = "Open"
-    if "high" in str(enriched.get("confidence", "")).lower():
+    conf_raw = str(enriched.get("confidence", "")).lower()
+    if any(k in conf_raw for k in ("high", "verified", "grounded", "certain", "strong")):
         enriched["confidence"] = "High"
     enriched["finding_title"] = enriched.get("title", "")
     return enriched
@@ -2568,10 +2569,12 @@ def build_seo_book_context(report: Any, page_numbers: Optional[Dict[str, int]] =
     }
 
     # Report meta
+    analysis_id_val = str(_get_val(report, "analysis_id") or run_id)
     report_dict = {
         "domain": domain,
-        "run_id": run_id,
-        "audit_date": audit_date,
+        "run_id": analysis_id_val,
+        "analysis_id": analysis_id_val,
+        "report_id": str(_get_val(report, "report_id") or run_id),
         "scope_label": (
             f"Sampled Audit (Discovery Coverage: {discovery_coverage_display} · Sample Coverage: {sample_coverage_display})"
             if urls_discovered and urls_discovered > pages_crawled

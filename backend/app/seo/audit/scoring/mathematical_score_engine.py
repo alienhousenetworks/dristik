@@ -414,9 +414,32 @@ class MathematicalScoreEngine:
             ]
             if ttfb_values:
                 avg_ttfb = sum(ttfb_values) / len(ttfb_values)
+                ttfb_passed = (avg_ttfb <= 800.0)
                 checks_by_dim["performance_mobile"].append(
-                    MetricCheck(check_id="perf.ttfb_threshold", weight=1.5, passed=(avg_ttfb <= 800.0))
+                    MetricCheck(check_id="perf.ttfb_threshold", weight=1.5, passed=ttfb_passed)
                 )
+                if not ttfb_passed:
+                    # Enforce zero-unexplained-penalty: every failed check MUST have an evidence-backed finding
+                    has_perf_finding = any(
+                        "perf" in str(f.get("rule_id") or f.get("finding_id") or "").lower() or
+                        "ttfb" in str(f.get("title") or f.get("finding_id") or "").lower() or
+                        str(f.get("category") or "").upper() in ("PERFORMANCE", "SPEED")
+                        for f in findings
+                    )
+                    if not has_perf_finding:
+                        findings.append({
+                            "finding_id": "FINDING-PERF-TTFB-001",
+                            "rule_id": "seo.performance.slow_ttfb",
+                            "title": f"Excessive Server Response Time (Average TTFB {avg_ttfb:.0f}ms)",
+                            "category": "PERFORMANCE",
+                            "severity": "HIGH",
+                            "root_cause": f"Average server response time ({avg_ttfb:.0f}ms) exceeds the recommended 800ms threshold for crawl efficiency and Core Web Vitals.",
+                            "remediation": "Optimize server-side execution, database query latency, and enable full-page edge CDN caching to lower TTFB below 800ms.",
+                            "affected_urls": [p.get("url") for p in pages if float(p.get("ttfb_ms") or 0) > 800.0][:5] or ([pages[0].get("url")] if pages else []),
+                            "verification_status": "VERIFIED",
+                            "lifecycle_state": "OPEN",
+                            "confidence": "HIGH",
+                        })
             viewport_measured = [p for p in pages if "has_viewport" in p or "mobile_viewport" in p]
             if viewport_measured:
                 vp_ok = all(bool(p.get("has_viewport", p.get("mobile_viewport"))) for p in viewport_measured)

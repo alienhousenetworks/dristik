@@ -99,6 +99,12 @@ class Settings(BaseSettings):
     PERPLEXITY_API_KEY: Optional[str] = Field(default=None, description="Perplexity API Key")
     XAI_API_KEY: Optional[str] = Field(default=None, description="xAI Grok API Key")
     MOONSHOT_API_KEY: Optional[str] = Field(default=None, description="Moonshot Kimi API Key")
+    BRIGHT_DATA_KEY: Optional[str] = Field(default=None, description="Opt-in Bright Data API Key for consumer AI surface & country-scoped tracking")
+    BRIGHT_DATA_DATASET_CHATGPT: Optional[str] = None
+    BRIGHT_DATA_DATASET_PERPLEXITY: Optional[str] = None
+    BRIGHT_DATA_DATASET_GEMINI: Optional[str] = None
+    BRIGHT_DATA_DATASET_GOOGLE_AI: Optional[str] = None
+    ENABLE_AGENT_DISCOVERY: bool = Field(default=False, description="Opt-in /llms.txt, /llms-full.txt, and Accept: text/markdown discovery routes")
     
     # Generic Overrides (Optional)
     LLM_API_KEY: Optional[str] = Field(default=None, description="Generic LLM API Key override")

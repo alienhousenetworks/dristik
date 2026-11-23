@@ -413,15 +413,29 @@ async def start_analysis(
     return run
 
 
+def _ensure_canonical_scorecard(report: Any) -> None:
+    if report is None or getattr(report, "canonical_scorecard", None) is not None:
+        return
+    try:
+        from app.domain.scoring.canonical_scorecard import CanonicalScorecardEngine
+        CanonicalScorecardEngine.evaluate_from_report(report)
+    except Exception:
+        pass
+
+
 @router.get("/{analysis_id}", response_model=AnalysisRun)
 async def get_analysis_status(analysis_id: str, user: UserIdentity = Depends(get_current_user)):
-    return _get_org_run(analysis_id, user)
+    run = _get_org_run(analysis_id, user)
+    if run.report is not None:
+        _ensure_canonical_scorecard(run.report)
+    return run
 
 @router.get("/{analysis_id}/report", response_model=ExecutiveReport)
 async def get_analysis_report(analysis_id: str, user: UserIdentity = Depends(get_current_user)):
     run = _get_org_run(analysis_id, user)
     if not run.report:
         raise HTTPException(status_code=400, detail="Report is not ready yet or analysis is still in progress.")
+    _ensure_canonical_scorecard(run.report)
     return run.report
 
 

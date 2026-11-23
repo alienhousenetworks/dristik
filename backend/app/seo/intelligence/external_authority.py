@@ -55,15 +55,18 @@ class ExternalAuthorityEngine:
 
         ref_domains = api_data.get("referring_domains")
         total_links = api_data.get("total_backlinks")
-        dofollow = api_data.get("dofollow_ratio", 0.75)
-        anchors = api_data.get("top_anchors", [])
-        new_links = api_data.get("new_links_30d", 0)
-        lost_links = api_data.get("lost_links_30d", 0)
-        tox = api_data.get("toxicity_score", 5.0)
+        dofollow = api_data.get("dofollow_ratio")
+        anchors = api_data.get("top_anchors") or []
+        new_links = api_data.get("new_links_30d")
+        lost_links = api_data.get("lost_links_30d")
+        tox = api_data.get("toxicity_score")
 
+        dofollow_text = f" ({dofollow * 100:.1f}% dofollow)" if dofollow is not None else ""
+        ref_text = f"{ref_domains:,}" if ref_domains is not None else "unmeasured"
+        total_text = f"{total_links:,}" if total_links is not None else "unmeasured"
         statement = (
-            f"Backlink profile verified via {provider_name}: {ref_domains:,} referring domains, "
-            f"{total_links:,} total links ({dofollow * 100:.1f}% dofollow)."
+            f"Backlink profile verified via {provider_name}: {ref_text} referring domains, "
+            f"{total_text} total links{dofollow_text}."
         )
 
         return BacklinkProfile(

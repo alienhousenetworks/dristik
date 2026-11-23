@@ -28,7 +28,7 @@ class SpecialistReportBuilder:
         discipline: SpecialistDiscipline,
         domain: str,
         audit_id: str,
-        score: float = 75.0,
+        score: Optional[float] = None,
         findings: Optional[list[dict[str, Any]]] = None,
         benchmarks: Optional[list[dict[str, Any]]] = None,
         diagnostics: Optional[dict[str, Any]] = None,
@@ -49,6 +49,11 @@ class SpecialistReportBuilder:
         build_func = builder_map.get(discipline, self._build_seo)
         return build_func(domain, audit_id, score, findings, benchmarks, diagnostics, now)
 
+    def _score_label(self, score: Optional[float]) -> str:
+        if score is None:
+            return "not measured"
+        return f"{score:.1f}/100"
+
     def _actions_from_findings(self, findings: list[dict]) -> list[dict]:
         actions: list[dict] = []
         for f in (findings or [])[:10]:
@@ -66,11 +71,11 @@ class SpecialistReportBuilder:
         return actions
 
     def _build_seo(
-        self, domain: str, audit_id: str, score: float, findings: list[dict], benchmarks: Optional[list], diagnostics: Optional[dict], now
+        self, domain: str, audit_id: str, score: Optional[float], findings: list[dict], benchmarks: Optional[list], diagnostics: Optional[dict], now
     ) -> SpecialistReportData:
         summary = (
-            f"SEO Intelligence analysis for {domain} recorded a score of {score:.1f}/100 across "
-            f"{len(findings)} evidence-backed finding(s)."
+            f"SEO Intelligence analysis for {domain}: {self._score_label(score)}. "
+            f"{len(findings)} supplied finding(s) were included."
         )
         return self._package(
             SpecialistDiscipline.SEO, domain, audit_id, summary, findings,
@@ -78,11 +83,11 @@ class SpecialistReportBuilder:
         )
 
     def _build_geo(
-        self, domain: str, audit_id: str, score: float, findings: list[dict], benchmarks: Optional[list], diagnostics: Optional[dict], now
+        self, domain: str, audit_id: str, score: Optional[float], findings: list[dict], benchmarks: Optional[list], diagnostics: Optional[dict], now
     ) -> SpecialistReportData:
         summary = (
-            f"Generative Engine Optimization (GEO) analysis for {domain} recorded a score of {score:.1f}/100 "
-            f"across {len(findings)} evidence-backed finding(s)."
+            f"Generative Engine Optimization (GEO) analysis for {domain}: {self._score_label(score)}. "
+            f"{len(findings)} supplied finding(s) were included."
         )
         return self._package(
             SpecialistDiscipline.GEO, domain, audit_id, summary, findings,
@@ -90,11 +95,11 @@ class SpecialistReportBuilder:
         )
 
     def _build_aeo(
-        self, domain: str, audit_id: str, score: float, findings: list[dict], benchmarks: Optional[list], diagnostics: Optional[dict], now
+        self, domain: str, audit_id: str, score: Optional[float], findings: list[dict], benchmarks: Optional[list], diagnostics: Optional[dict], now
     ) -> SpecialistReportData:
         summary = (
-            f"Answer Engine Optimization (AEO) analysis for {domain} recorded a score of {score:.1f}/100 "
-            f"across {len(findings)} evidence-backed finding(s)."
+            f"Answer Engine Optimization (AEO) analysis for {domain}: {self._score_label(score)}. "
+            f"{len(findings)} supplied finding(s) were included."
         )
         return self._package(
             SpecialistDiscipline.AEO, domain, audit_id, summary, findings,
@@ -102,11 +107,11 @@ class SpecialistReportBuilder:
         )
 
     def _build_cro(
-        self, domain: str, audit_id: str, score: float, findings: list[dict], benchmarks: Optional[list], diagnostics: Optional[dict], now
+        self, domain: str, audit_id: str, score: Optional[float], findings: list[dict], benchmarks: Optional[list], diagnostics: Optional[dict], now
     ) -> SpecialistReportData:
         summary = (
-            f"Conversion Rate Optimization (CRO) analysis for {domain} recorded a score of {score:.1f}/100 "
-            f"across {len(findings)} evidence-backed finding(s)."
+            f"Conversion Rate Optimization (CRO) analysis for {domain}: {self._score_label(score)}. "
+            f"{len(findings)} supplied finding(s) were included."
         )
         return self._package(
             SpecialistDiscipline.CRO, domain, audit_id, summary, findings,
@@ -114,73 +119,72 @@ class SpecialistReportBuilder:
         )
 
     def _build_competitive(
-        self, domain: str, audit_id: str, score: float, findings: list[dict], benchmarks: Optional[list], diagnostics: Optional[dict], now
+        self, domain: str, audit_id: str, score: Optional[float], findings: list[dict], benchmarks: Optional[list], diagnostics: Optional[dict], now
     ) -> SpecialistReportData:
-        summary = (
-            f"Competitive Intelligence diagnostic scored {score:.1f}/100. Benchmark comparison against the primary "
-            f"competitor cohort reveals competitive parity in technical architecture, but competitors hold a notable "
-            f"lead in commercial question depth and authoritative citation volume."
+        actual_benchmarks = list(benchmarks or [])
+        actual_diagnostics = dict(diagnostics or {})
+        measured_count = sum(
+            1 for item in actual_benchmarks
+            if isinstance(item, dict) and item.get("status") == "MEASURED"
         )
-        b_tables = benchmarks or [
-            {"metric": "Competitor Displacement Index", "target_domain": "54.0/100", "cohort_leader": "78.0/100", "status": "DEFICIT"},
-            {"metric": "Keyword & Intent Overlap", "target_domain": "68.0%", "cohort_leader": "82.0%", "status": "GROWTH_SPACE"},
-        ]
-        diag = diagnostics or {
-            "benchmark_competitors_approved": ["comp-a.com", "comp-b.com"],
-            "unmet_intent_clusters": 12,
-            "backlink_quality_ratio": 1.2,
-        }
-        actions = [
-            {"action": "Target 8 commercial query gaps currently dominated by Competitor A", "priority": "P1", "effort": "MEDIUM", "impact": "HIGH"},
-            {"action": "Replicate competitor structured product comparison table layout", "priority": "P2", "effort": "LOW", "impact": "MEDIUM"},
-        ]
-        return self._package(SpecialistDiscipline.COMPETITIVE, domain, audit_id, summary, findings, b_tables, diag, actions, now)
+        summary = (
+            f"Competitive intelligence analysis for {domain}. "
+            f"Score: {self._score_label(score)}. "
+            f"{measured_count} supplied benchmark(s) are marked measured. "
+            f"{len(findings)} finding(s) supplied. "
+            "Competitor comparisons are limited to the supplied dataset."
+        )
+        actions = self._actions_from_findings(findings)
+        return self._package(
+            SpecialistDiscipline.COMPETITIVE, domain, audit_id, summary, findings,
+            actual_benchmarks, actual_diagnostics, actions, now,
+        )
 
     def _build_tech(
-        self, domain: str, audit_id: str, score: float, findings: list[dict], benchmarks: Optional[list], diagnostics: Optional[dict], now
+        self, domain: str, audit_id: str, score: Optional[float], findings: list[dict], benchmarks: Optional[list], diagnostics: Optional[dict], now
     ) -> SpecialistReportData:
-        summary = (
-            f"Technical Infrastructure Intelligence scored {score:.1f}/100. Server response times (TTFB) and DOM "
-            f"rendering efficiency meet standard operational benchmarks with minimal blocking script overhead."
+        actual_benchmarks = list(benchmarks or [])
+        actual_diagnostics = dict(diagnostics or {})
+        measured_count = sum(
+            1 for item in actual_benchmarks
+            if isinstance(item, dict) and item.get("status") == "MEASURED"
         )
-        b_tables = benchmarks or [
-            {"metric": "Median TTFB", "target_domain": "180ms", "industry_benchmark": "300ms", "status": "EXCELLENT"},
-            {"metric": "Total Page Payload", "target_domain": "1.4MB", "industry_benchmark": "2.2MB", "status": "OPTIMAL"},
-            {"metric": "Mobile Responsive Layout", "target_domain": "100%", "industry_benchmark": "100%", "status": "PASS"},
-        ]
-        diag = diagnostics or {
-            "http_version": "HTTP/2",
-            "tls_version": "TLS 1.3",
-            "gzip_brotli_enabled": True,
-            "render_blocking_scripts": 1,
-        }
-        actions = [
-            {"action": "Defer non-critical third-party analytics script loading", "priority": "P2", "effort": "LOW", "impact": "MEDIUM"},
-            {"action": "Implement AVIF image encoding for homepage hero assets", "priority": "P3", "effort": "LOW", "impact": "LOW"},
-        ]
-        return self._package(SpecialistDiscipline.TECH_INFRASTRUCTURE, domain, audit_id, summary, findings, b_tables, diag, actions, now)
+        summary = (
+            f"Technical infrastructure analysis for {domain}. "
+            f"Score: {self._score_label(score)}. "
+            f"{measured_count} supplied technical benchmark(s) are marked measured. "
+            f"{len(findings)} finding(s) supplied. "
+            "No unprovided server or performance measurements have been assumed."
+        )
+        actions = self._actions_from_findings(findings)
+        return self._package(
+            SpecialistDiscipline.TECH_INFRASTRUCTURE, domain, audit_id, summary, findings,
+            actual_benchmarks, actual_diagnostics, actions, now,
+        )
 
     def _build_remediation(
-        self, domain: str, audit_id: str, score: float, findings: list[dict], benchmarks: Optional[list], diagnostics: Optional[dict], now
+        self, domain: str, audit_id: str, score: Optional[float], findings: list[dict], benchmarks: Optional[list], diagnostics: Optional[dict], now
     ) -> SpecialistReportData:
+        actual_benchmarks = list(benchmarks or [])
+        actual_diagnostics = dict(diagnostics or {})
+        verified_fix_metrics = [
+            item for item in actual_benchmarks
+            if isinstance(item, dict)
+            and item.get("metric") == "Verified Fix Rate"
+            and item.get("status") == "MEASURED"
+        ]
         summary = (
-            f"Remediation & Verification Intelligence scored {score:.1f}/100. Zero-trust independent verification "
-            f"confirms a high patch readiness rate, with universal connectors configured for safe staging deployment."
+            f"Remediation and verification analysis for {domain}. "
+            f"Score: {self._score_label(score)}. "
+            f"{len(verified_fix_metrics)} verified-fix metric(s) supplied. "
+            f"{len(findings)} finding(s) supplied. "
+            "Deployment and verification status must be based on recorded outcomes."
         )
-        b_tables = benchmarks or [
-            {"metric": "Verified Fix Rate", "target_domain": "82.5%", "industry_benchmark": "60.0%", "status": "SUPERIOR"},
-            {"metric": "Regression Incidence Rate", "target_domain": "0.0%", "industry_benchmark": "4.5%", "status": "ZERO_REGRESSION"},
-        ]
-        diag = diagnostics or {
-            "open_remediation_tasks": len(findings),
-            "governance_approval_tier": "CHANGE_CODE_LOGIC",
-            "connector_status": "Shopify / React Active",
-        }
-        actions = [
-            {"action": "Promote validated metadata patches from staging to production", "priority": "P1", "effort": "LOW", "impact": "HIGH"},
-            {"action": "Trigger independent retest verification upon deployment confirmation", "priority": "P1", "effort": "LOW", "impact": "HIGH"},
-        ]
-        return self._package(SpecialistDiscipline.REMEDIATION_VERIFICATION, domain, audit_id, summary, findings, b_tables, diag, actions, now)
+        actions = self._actions_from_findings(findings)
+        return self._package(
+            SpecialistDiscipline.REMEDIATION_VERIFICATION, domain, audit_id, summary, findings,
+            actual_benchmarks, actual_diagnostics, actions, now,
+        )
 
     def _package(
         self,

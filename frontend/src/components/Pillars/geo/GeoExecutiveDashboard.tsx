@@ -269,8 +269,8 @@ export function GeoExecutiveDashboard({
                   </p>
                 )}
                 <div className="text-[10px] font-mono text-ink-500 flex justify-between pt-1 border-t border-line/60">
-                  <span>Runs: {p.prompts_succeeded}/{p.prompts_attempted}</span>
-                  <span>Cost: ${p.total_cost_usd.toFixed(4)}</span>
+                  <span>Runs: {p.prompts_succeeded}/{p.prompts_attempted ?? '—'}</span>
+                  <span>Cost: {p.total_cost_usd != null ? `$${p.total_cost_usd.toFixed(4)}` : 'Unmeasured'}</span>
                 </div>
               </div>
             );

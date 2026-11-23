@@ -91,8 +91,14 @@ def run_department_b(ctx: CROAuditContext) -> CROAgentOutput:
             continue
         for btn in soup.find_all(["button", "a"]):
             txt = btn.get_text(strip=True)
-            aria = btn.get("aria-label") or btn.get("aria-labelledby") or btn.get("title")
-            if not txt and not aria:
+            aria = (btn.get("aria-label") or "").strip() or (btn.get("aria-labelledby") or "").strip() or (btn.get("title") or "").strip()
+            has_img_alt = any((img.get("alt") or "").strip() for img in btn.find_all("img"))
+            has_svg_title = any(
+                bool(t.get_text(strip=True))
+                for svg in btn.find_all("svg")
+                for t in svg.find_all("title")
+            )
+            if not txt and not aria and not has_img_alt and not has_svg_title:
                 inaccessible_controls.append(f"{pg.url} ({btn.name})")
         if re.search(r"outline\s*:\s*(?:none|0)", html, re.I):
             inaccessible_controls.append(f"{pg.url} (outline:none focus suppression)")

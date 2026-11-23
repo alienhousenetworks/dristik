@@ -57,31 +57,56 @@ class AeoRemediationEngine:
         domain: str,
         brand_name: str,
         unanswered_questions: List[Dict[str, Any]],  # {"id": str, "question": str, "category": str, "target_url": Optional[str]}
+        brand_facts: Optional[Dict[str, Any]] = None,
     ) -> AeoRemediationReport:
         proposals: List[AeoRemediationProposal] = []
+        facts = brand_facts or {}
 
         for idx, item in enumerate(unanswered_questions):
             qid = item.get("id", f"AEO-Q-{idx + 1:03d}")
             q_text = item.get("question", "")
             cat = item.get("category", "General")
             target_url = item.get("target_url") or f"https://{domain}/faq"
+            q_low = q_text.lower()
 
-            # 1. Draft concise 50-word answer block
+            # Resolve grounded fact from supplied brand_facts; never fabricate guarantees or clinical claims.
+            grounded_fact: Optional[str] = None
+            for fk, fv in facts.items():
+                if not fv:
+                    continue
+                fk_norm = fk.lower().replace("_", " ")
+                if fk_norm in q_low or any(tok in q_low for tok in fk_norm.split() if len(tok) > 3):
+                    grounded_fact = str(fv).strip()
+                    break
+
+            if grounded_fact:
+                answer_body = f"{brand_name}: {grounded_fact} Official reference: https://{domain}."
+                schema_answer_text = answer_body
+            else:
+                answer_body = (
+                    f"[CONFIRM_WITH_BRAND_FACTS: Provide a verified 40-60 word declarative answer for "
+                    f"'{q_text}' on {brand_name} ({cat}) with exact figures/policy terms from {domain}.]"
+                )
+                schema_answer_text = (
+                    f"[CONFIRM_WITH_BRAND_FACTS: Verified answer for '{q_text}' must match visible HTML copy on {domain}.]"
+                )
+
+            # 1. Direct-answer section block (visible static HTML; never hidden behind JS-only accordions)
             draft_text = (
-                f"<h2>{q_text}</h2>\n"
-                f"<p>{brand_name} provides comprehensive solutions for {cat.lower()}. "
-                f"All products are manufactured to rigorous safety standards, offering 30-day money-back guarantees "
-                f"and fast nationwide delivery. For full details and pricing, visit our official catalog on {domain}.</p>"
+                f"<section class=\"direct-answer\" data-question-id=\"{qid}\">\n"
+                f"  <h2>{q_text}</h2>\n"
+                f"  <p>{answer_body}</p>\n"
+                f"</section>"
             )
 
-            # 2. Schema Patch
+            # 2. Optional Question JSON-LD patch (only valid when visible HTML matches verbatim)
             schema_patch = {
                 "@context": "https://schema.org",
                 "@type": "Question",
                 "name": q_text,
                 "acceptedAnswer": {
                     "@type": "Answer",
-                    "text": f"{brand_name} offers verified solutions for this query with transparent pricing and clinical backing on {domain}.",
+                    "text": schema_answer_text,
                 },
             }
 
@@ -92,10 +117,10 @@ class AeoRemediationEngine:
                     question_text=q_text,
                     target_destination_url=target_url,
                     information_gap_summary=f"No direct declarative passage answering '{q_text}' was found on the site.",
-                    required_answer_structure="H2 question header + 40–60 word declarative answer block with explicit subject naming.",
+                    required_answer_structure="Visible static H2 question header + 40–60 word grounded declarative answer block with explicit subject naming and verifiable evidence.",
                     drafted_answer_block=draft_text,
                     recommended_faq_schema_patch=json.dumps(schema_patch, indent=2),
-                    source_material_needed="Product specification sheet, current price list, and warranty documentation.",
+                    source_material_needed="Verified first-party brand facts, specifications, or published policy terms.",
                     status=RemediationTaskStatus.PROPOSED,
                 )
             )

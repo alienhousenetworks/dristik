@@ -2547,12 +2547,17 @@ def render_aeo_audit_book(report: Any) -> str:
         render_snapshot_provenance_bar,
     )
 
+    from app.domain.scoring.canonical_scorecard import (
+        CanonicalScorecardEngine,
+        render_canonical_scorecard_html,
+    )
     snap = format_audit_execution_metadata(report)
+    canon_card = CanonicalScorecardEngine.evaluate_from_report(report)
+    canon_aeo = snap.score_for_section("aeo")
     # Executive Intelligence Dossier
-    extractability_val = aeo_cover_figure(report)
-    if extractability_val is None and snap.score_for_section("aeo") is not None:
-        extractability_val = int(round(snap.score_for_section("aeo")))
+    extractability_val = int(round(canon_aeo)) if canon_aeo is not None else aeo_cover_figure(report)
     extractability_disp = f"{extractability_val}" if extractability_val is not None else "—"
+    canon_aeo_html = render_canonical_scorecard_html(canon_card, pillar_filter="AEO")
     story = _esc(_get(report, "story_summary", "") or "Comprehensive answer engine optimization and extraction audit.")
     rights = _esc(_get(report, "what_site_gets_right", "") or "No strengths recorded in executive summary.")
     holding = _esc(_get(report, "what_is_holding_it_back", "") or "Direct answer passage gaps and entity disambiguation opportunities.")
@@ -2561,7 +2566,7 @@ def render_aeo_audit_book(report: Any) -> str:
         snap,
         section_key="aeo",
         section_label="AEO",
-        section_score=float(extractability_val) if extractability_val is not None else snap.score_for_section("aeo"),
+        section_score=canon_aeo if canon_aeo is not None else (float(extractability_val) if extractability_val is not None else None),
         section_findings_count=snap.findings_for_section("aeo"),
     )
 
@@ -2575,6 +2580,7 @@ def render_aeo_audit_book(report: Any) -> str:
             <span>SCOPE: <strong>{_esc(snap.crawl_scope_summary)}</strong></span>
         </div>
         {aeo_provenance_bar}
+        {canon_aeo_html}
         <div class="exec-scorecard-grid">
             <div class="kpi-score-card">
                 <span class="kpi-label">STORED EXTRACTABILITY SCORE</span>

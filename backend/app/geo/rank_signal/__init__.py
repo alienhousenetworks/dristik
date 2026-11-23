@@ -1,0 +1,56 @@
+"""Rank Signal — Controlled A/B Passage Optimization Engine for Dristik."""
+from app.geo.rank_signal.stats import (
+    CHECKPOINTS,
+    MAX_TRIALS,
+    Posterior,
+    StatVerdict,
+    posterior,
+    verdict,
+)
+from app.geo.rank_signal.features import (
+    CATALOG_VERSION,
+    FEATURE_CATALOG,
+    RUN_ORDER,
+    Passage,
+    SignalContext,
+    SignalDef,
+    check_pair,
+    extract_passages,
+    get_signal,
+    is_eligible,
+)
+from app.geo.rank_signal.runner import (
+    BYOK_DEFAULT_MAX_USD,
+    CREDIT_COST_CODE_SIGNAL,
+    CREDIT_COST_FULL_SUITE,
+    CREDIT_COST_LLM_SIGNAL,
+    RankSignalRunner,
+    credit_cost_for_signal,
+    rank_signal_runner,
+)
+
+__all__ = [
+    "CHECKPOINTS",
+    "MAX_TRIALS",
+    "Posterior",
+    "StatVerdict",
+    "posterior",
+    "verdict",
+    "CATALOG_VERSION",
+    "FEATURE_CATALOG",
+    "RUN_ORDER",
+    "Passage",
+    "SignalContext",
+    "SignalDef",
+    "check_pair",
+    "extract_passages",
+    "get_signal",
+    "is_eligible",
+    "BYOK_DEFAULT_MAX_USD",
+    "CREDIT_COST_CODE_SIGNAL",
+    "CREDIT_COST_LLM_SIGNAL",
+    "CREDIT_COST_FULL_SUITE",
+    "RankSignalRunner",
+    "credit_cost_for_signal",
+    "rank_signal_runner",
+]

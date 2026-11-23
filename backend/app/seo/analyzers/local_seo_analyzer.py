@@ -30,14 +30,26 @@ _LOCAL_URL_PATTERNS = [
 ]
 
 _PHONE_NORM_RE = re.compile(r"[^\d+]")
+_PHONE_VALID_RE = re.compile(r"^(?:\+?\d[\d\s().-]{7,18}\d)$")
 
 
 def _normalize_phone(phone: str) -> str:
-    """Normalize phone number to digits only or +digits."""
-    digits = _PHONE_NORM_RE.sub("", phone)
-    if digits.startswith("1") and len(digits) == 11:
-        digits = digits[1:]
-    return digits
+    """Validate and normalize a real phone number; reject IDs/timestamps/non-phone tokens."""
+    raw = (phone or "").strip()
+    if raw.lower().startswith("tel:"):
+        raw = raw[4:].strip()
+    if not raw or not _PHONE_VALID_RE.match(raw):
+        return ""
+    digits = _PHONE_NORM_RE.sub("", raw)
+    digits_only = digits.lstrip("+")
+    # Reject implausible lengths or repeating/sequential dummy numbers (e.g. 0000000000, 1234567890)
+    if not (10 <= len(digits_only) <= 15):
+        return ""
+    if len(set(digits_only)) <= 2:
+        return ""
+    if digits_only.startswith("1") and len(digits_only) == 11:
+        digits_only = digits_only[1:]
+    return digits_only
 
 
 def _normalize_address(addr: str) -> str:
@@ -241,8 +253,15 @@ def analyze_local_seo(
     else:
         schema_completeness = 0.0
 
-    # Determine overall status
-    is_local_intent = bool(local_schema_found or local_landing_pages or gbp_urls or has_map_embed or len(all_phones) > 0)
+    # Determine overall status: gate strictly on LocalBusiness signals or physical address
+    # (a bare customer-support phone number on a D2C e-commerce store does NOT imply Local SEO).
+    is_local_intent = bool(
+        local_schema_found
+        or bool(all_addresses)
+        or local_landing_pages
+        or gbp_urls
+        or has_map_embed
+    )
     
     if not is_local_intent:
         overall_status = "NOT_APPLICABLE"
@@ -283,11 +302,22 @@ def analyze_local_seo(
                 evidence=[
                     FindingEvidence(
                         source="crawler_nap_extractor",
-                        value=f"Found {len(phone_conflicts)} phone variants: {', '.join(p['phone'] for p in phone_conflicts[:3])}",
-                        snippet=f"Found {len(phone_conflicts)} phone variants: {', '.join(p['phone'] for p in phone_conflicts[:3])}",
+                        value=f"Phone '{p_conf['phone']}' observed on {u}",
+                        snippet=f"Phone '{p_conf['phone']}' observed on {u} ({p_conf['occurrences']} occurrence(s))",
                         url=u,
                     )
-                    for u in conflict_urls
+                    for p_conf in phone_conflicts
+                    for u in dict.fromkeys(
+                        url for url in (p_conf.get("pages") or [])
+                        if isinstance(url, str) and url.strip() and not url.startswith("schema:")
+                    )
+                ] or [
+                    FindingEvidence(
+                        source="crawler_nap_extractor",
+                        value=f"Found {len(phone_conflicts)} phone variants: {', '.join(p['phone'] for p in phone_conflicts[:3])}",
+                        snippet=f"Found {len(phone_conflicts)} phone variants: {', '.join(p['phone'] for p in phone_conflicts[:3])}",
+                        url=home_url,
+                    )
                 ],
                 recommendation=(
                     "Standardize a single authoritative phone number across your website header, footer, contact page, "

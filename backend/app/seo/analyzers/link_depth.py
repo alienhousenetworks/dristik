@@ -9,6 +9,7 @@ from collections import deque, defaultdict
 from urllib.parse import urlparse
 from app.domain.models import PageEvidence, ClickDepthReport, OrphanPageReport, AnchorTextAudit, Finding, FindingEvidence
 from app.domain.enums import Category, Severity
+from app.domain.evidence.rule_catalog import is_non_html_utility_url
 
 
 _GENERIC_ANCHOR_PATTERNS = [
@@ -38,10 +39,20 @@ class LinkDepthAnalyzer:
                 total_pages_analyzed=0
             )
 
+        # Filter out non-HTML utility URLs (sitemap.xml, robots.txt, static assets)
+        html_pages = [p for p in pages if p.url and not is_non_html_utility_url(p.url)]
+        if not html_pages:
+            return ClickDepthReport(
+                homepage_url=homepage_url or "",
+                total_pages_analyzed=0,
+                link_graph_edges=0,
+                status="UNMEASURED",
+            )
+
         # Identify homepage
         if not homepage_url:
-            homepage_candidate = pages[0].url
-            for p in pages:
+            homepage_candidate = html_pages[0].url
+            for p in html_pages:
                 path = urlparse(p.url).path.strip("/")
                 if path in ("", "index.html", "index.php"):
                     homepage_candidate = p.url
@@ -55,21 +66,32 @@ class LinkDepthAnalyzer:
         inlink_counts: Dict[str, int] = defaultdict(int)
         all_crawled = set()
 
-        for p in pages:
+        for p in html_pages:
             src = _normalize_url(p.url)
             all_crawled.add(src)
             p.outlinks_internal_count = len(p.internal_links or [])
             p.outlinks_external_count = len(p.external_links or [])
             for link in (p.internal_links or []):
+                if is_non_html_utility_url(link):
+                    continue
                 tgt = _normalize_url(link)
                 if tgt and tgt != src:
                     graph[src].add(tgt)
                     inlink_counts[tgt] += 1
 
         # Populate inlinks_count on PageEvidence objects
-        for p in pages:
+        for p in html_pages:
             src = _normalize_url(p.url)
             p.inlinks_count = inlink_counts.get(src, 0)
+
+        total_edges = sum(len(targets) for targets in graph.values())
+        if total_edges == 0:
+            return ClickDepthReport(
+                homepage_url=clean_home,
+                total_pages_analyzed=len(all_crawled),
+                link_graph_edges=0,
+                status="UNMEASURED",
+            )
 
         # BFS shortest-path from homepage
         depths: Dict[str, int] = {}
@@ -135,7 +157,9 @@ class LinkDepthAnalyzer:
             max_click_depth=max_d,
             pages_by_depth=pages_by_depth,
             depth_distribution_pct=dist_pct,
-            high_depth_warning_count=len(d4_plus)
+            high_depth_warning_count=len(d4_plus),
+            link_graph_edges=total_edges,
+            status="MEASURED",
         )
 
     @staticmethod
@@ -144,17 +168,19 @@ class LinkDepthAnalyzer:
         sitemap_urls: List[str],
         homepage_url: Optional[str] = None
     ) -> OrphanPageReport:
-        if not sitemap_urls:
+        html_sitemap_urls = [u for u in (sitemap_urls or []) if not is_non_html_utility_url(u)]
+        if not html_sitemap_urls:
             return OrphanPageReport(
                 total_sitemap_urls=0,
                 total_crawled_urls=len(pages),
                 orphan_urls=[],
                 orphan_count=0,
                 orphan_percentage=0.0,
+                link_graph_edges=0,
+                status="UNMEASURED",
                 summary=(
-                    f"Orphan page detection unmeasured: No XML sitemap was provided or discovered "
-                    f"to cross-reference against the {len(pages)}-page crawl sample. Comprehensive orphan analysis "
-                    f"requires sitemap.xml or Google Search Console index export."
+                    f"Orphan page detection unmeasured: No indexable HTML sitemap URLs were provided or discovered "
+                    f"to cross-reference against the {len(pages)}-page crawl sample."
                 )
             )
 
@@ -162,20 +188,41 @@ class LinkDepthAnalyzer:
 
         # Calculate inlink counts across internal pages
         inlinks: Dict[str, int] = defaultdict(int)
+        total_edges = 0
         for p in pages:
+            if not p.url or is_non_html_utility_url(p.url):
+                continue
             src = _normalize_url(p.url)
             for link in (p.internal_links or []):
+                if is_non_html_utility_url(link):
+                    continue
                 tgt = _normalize_url(link)
                 if tgt and tgt != src:
                     inlinks[tgt] += 1
+                    total_edges += 1
+
+        if total_edges == 0:
+            return OrphanPageReport(
+                total_sitemap_urls=len(html_sitemap_urls),
+                total_crawled_urls=len(pages),
+                orphan_urls=[],
+                orphan_count=0,
+                orphan_percentage=0.0,
+                link_graph_edges=0,
+                status="UNMEASURED",
+                summary=(
+                    "Orphan page detection UNMEASURED: internal link graph contains 0 edges across the crawl sample. "
+                    "No orphan defect can be asserted without an extracted link graph."
+                ),
+            )
 
         orphan_urls = []
-        for s_url in sitemap_urls:
+        for s_url in html_sitemap_urls:
             clean_s = _normalize_url(s_url)
             if clean_s != clean_home and inlinks.get(clean_s, 0) == 0:
                 orphan_urls.append(s_url)
 
-        total_sitemap = len(sitemap_urls)
+        total_sitemap = len(html_sitemap_urls)
         orphan_count = len(orphan_urls)
         orphan_pct = round((orphan_count / max(1, total_sitemap)) * 100, 1)
 
@@ -192,7 +239,9 @@ class LinkDepthAnalyzer:
             orphan_urls=orphan_urls,
             orphan_count=orphan_count,
             orphan_percentage=orphan_pct,
-            summary=summary
+            summary=summary,
+            link_graph_edges=total_edges,
+            status="MEASURED",
         )
 
     @staticmethod
@@ -251,7 +300,7 @@ class LinkDepthAnalyzer:
     ) -> List[Finding]:
         findings: List[Finding] = []
 
-        if cd.depth_4_plus_count > 0:
+        if cd.status != "UNMEASURED" and cd.depth_4_plus_count > 0:
             findings.append(Finding(
                 finding_id="finding_excessive_click_depth",
                 category=Category.TECHNICAL_SEO,
@@ -279,7 +328,7 @@ class LinkDepthAnalyzer:
                 priority=6
             ))
 
-        if orphans.orphan_count > 0:
+        if orphans.status != "UNMEASURED" and orphans.orphan_count > 0:
             findings.append(Finding(
                 finding_id="finding_orphan_sitemap_pages",
                 category=Category.TECHNICAL_SEO,

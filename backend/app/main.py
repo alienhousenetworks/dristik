@@ -5,7 +5,7 @@ Enterprise-grade autonomous website intelligence & growth auditor API Gateway.
 from contextlib import asynccontextmanager
 import logging
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.router import mount_http
@@ -266,12 +266,74 @@ async def health_check():
 
 
 @app.get("/", tags=["Root"])
-async def root():
+async def root(request: Request):
+    accept = (request.headers.get("accept") or "").lower()
+    if getattr(settings, "ENABLE_AGENT_DISCOVERY", False) and "text/markdown" in accept:
+        from fastapi.responses import PlainTextResponse
+        return PlainTextResponse(
+            f"# {settings.APP_NAME}\n\n"
+            f"> Autonomous Website Intelligence & Growth Auditor (SEO, GEO, AEO, CRO) v{settings.APP_VERSION}.\n\n"
+            f"- OpenAPI docs: `/docs`\n"
+            f"- Agent index: `/llms.txt` and `/llms-full.txt`\n"
+            f"- MCP endpoint: `/mcp`\n",
+            media_type="text/markdown; charset=utf-8",
+            headers={
+                "Link": '</llms.txt>; rel="llms-txt", </llms-full.txt>; rel="llms-full-txt"',
+                "Vary": "Accept",
+            },
+        )
     return {
         "message": "Welcome to Dristik AI — Autonomous Website Intelligence & Growth Auditor",
         "documentation": "/docs",
         "version": settings.APP_VERSION
     }
+
+
+@app.get("/llms.txt", tags=["Agent Discovery"])
+async def llms_txt_endpoint():
+    from fastapi import HTTPException
+    from fastapi.responses import PlainTextResponse
+    if not getattr(settings, "ENABLE_AGENT_DISCOVERY", False):
+        raise HTTPException(status_code=404, detail="Agent discovery is disabled on this deployment.")
+    body = (
+        f"# {settings.APP_NAME}\n\n"
+        f"> Enterprise SEO, GEO, AEO, and CRO Website Intelligence Platform.\n\n"
+        "## Capabilities\n"
+        "- `/api/v1/reports/{analysis_id}/aeo-intelligence`: Question Universe, Question-Page Graph, Answer Completeness, Passage Extractability, Voice Readiness\n"
+        "- `/api/v1/geo-pipeline/sro/analyze`: Selection Rate Optimization (Gemini groundingSupports + cross-platform citations)\n"
+        "- `/api/v1/geo-pipeline/rank-signal/catalog`: 15-signal controlled A/B passage optimization catalog\n"
+        "- `/api/v1/geo-pipeline/battlecards`: Evidence-grounded competitor battlecards\n"
+        "- `/mcp`: Authenticated Model Context Protocol server\n"
+        "- `/llms-full.txt`: Extended product and API reference\n"
+    )
+    return PlainTextResponse(body, media_type="text/markdown; charset=utf-8")
+
+
+@app.get("/llms-full.txt", tags=["Agent Discovery"])
+async def llms_full_txt_endpoint():
+    from fastapi import HTTPException
+    from fastapi.responses import PlainTextResponse
+    if not getattr(settings, "ENABLE_AGENT_DISCOVERY", False):
+        raise HTTPException(status_code=404, detail="Agent discovery is disabled on this deployment.")
+    body = (
+        f"# {settings.APP_NAME} — Full Agent Reference\n\n"
+        f"Version: {settings.APP_VERSION}\n\n"
+        "## Core Endpoints\n"
+        "- `GET /api/v1/reports/{analysis_id}/aeo-intelligence`\n"
+        "- `GET /api/v1/reports/{analysis_id}/aeo-analytics`\n"
+        "- `POST /api/v1/geo-pipeline/sro/analyze`\n"
+        "- `POST /api/v1/geo-pipeline/sro/bulk` (SSE)\n"
+        "- `GET /api/v1/geo-pipeline/rank-signal/catalog`\n"
+        "- `POST /api/v1/geo-pipeline/rank-signal/run` (SSE)\n"
+        "- `POST /api/v1/geo-pipeline/battlecards`\n"
+        "- `POST /api/v1/geo-pipeline/persona-fanout`\n"
+        "- `POST /mcp` (Streamable HTTP MCP server)\n\n"
+        "## CLI\n"
+        "- `python -m app.cli audit <url> --json --min-score <n>` (exit code 3 below threshold)\n"
+        "- `python -m app.cli check \"<prompt>\" --brand <name> --country US --json`\n"
+        "- `python -m app.cli sro <url> --keyword \"<kw>\" --json`\n"
+    )
+    return PlainTextResponse(body, media_type="text/markdown; charset=utf-8")
 
 
 if __name__ == "__main__":

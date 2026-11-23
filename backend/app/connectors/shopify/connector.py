@@ -17,6 +17,8 @@ from app.connectors.base.permissions import ConnectorSecurityGuard
 from app.remediation.rollback import rollback_engine
 
 class ShopifyConnector(BaseConnector):
+    execution_mode = "PREVIEW_ONLY"
+
     def __init__(self, credentials: ConnectorCredentials):
         super().__init__(credentials)
         self.shop_url = credentials.api_url or "https://mystore.myshopify.com"
