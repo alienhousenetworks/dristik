@@ -88,7 +88,7 @@ from app.core.constants import FORBIDDEN_TENANT_IDENTIFIERS
 
 from app.aeo.analytics_history import aeo_analytics_history_store
 from app.aeo.scoring import AeoMetricsCalculator
-from app.domain.models import AnalysisRun, ExecutiveReport, CrawlManifest, FindingEvidence
+from app.domain.models import AnalysisRun, ExecutiveReport, CrawlManifest, Finding, FindingEvidence
 from app.db.models import StageCheckpoint
 from app.domain.enums import AnalysisStage, Category, Severity
 from app.domain.capability import CAPABILITY_REGISTRY
